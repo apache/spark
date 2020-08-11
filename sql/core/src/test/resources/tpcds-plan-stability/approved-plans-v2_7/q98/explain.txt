@@ -58,15 +58,13 @@ Sort [i_category#3 ASC NULLS FIRST, i_class#4 ASC NULLS FIRST, i_item_id#5 ASC N
                            +- *(3) BroadcastHashJoin [ss_sold_date_sk#14], [d_date_sk#15], Inner, BuildRight, false
                               :- *(3) Project [ss_sold_date_sk#14, ss_ext_sales_price#11, i_item_id#5, i_item_desc#6, i_current_price#7, i_class#4, i_category#3]
                               :  +- *(3) BroadcastHashJoin [ss_item_sk#12], [i_item_sk#13], Inner, BuildRight, false
-                              :     :- *(3) Project [ss_sold_date_sk#14, ss_item_sk#12, ss_ext_sales_price#11]
-                              :     :  +- *(3) Filter (isnotnull(ss_item_sk#12) AND isnotnull(ss_sold_date_sk#14))
-                              :     :     +- *(3) ColumnarToRow
-                              :     :        +- FileScan parquet default.store_sales[ss_sold_date_sk#14,ss_item_sk#12,ss_ext_sales_price#11] Batched: true, DataFilters: [isnotnull(ss_item_sk#12), isnotnull(ss_sold_date_sk#14)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_sold_date_sk)], ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_ext_sales_price:decimal(7,2)>
-                              :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#79]
-                              :        +- *(1) Project [i_item_sk#13, i_item_id#5, i_item_desc#6, i_current_price#7, i_class#4, i_category#3]
-                              :           +- *(1) Filter (i_category#3 IN (Sports,Books,Home) AND isnotnull(i_item_sk#13))
-                              :              +- *(1) ColumnarToRow
-                              :                 +- FileScan parquet default.item[i_item_sk#13,i_item_id#5,i_item_desc#6,i_current_price#7,i_class#4,i_category#3] Batched: true, DataFilters: [i_category#3 IN (Sports,Books,Home), isnotnull(i_item_sk#13)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [In(i_category, [Sports,Books,Home]), IsNotNull(i_item_sk)], ReadSchema: struct<i_item_sk:int,i_item_id:string,i_item_desc:string,i_current_price:decimal(7,2),i_class:str...
+                              :     :- *(3) Filter (isnotnull(ss_item_sk#12) AND isnotnull(ss_sold_date_sk#14))
+                              :     :  +- *(3) ColumnarToRow
+                              :     :     +- FileScan parquet default.store_sales[ss_sold_date_sk#14,ss_item_sk#12,ss_ext_sales_price#11] Batched: true, DataFilters: [isnotnull(ss_item_sk#12), isnotnull(ss_sold_date_sk#14)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_sold_date_sk)], ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_ext_sales_price:decimal(7,2)>
+                              :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#79]
+                              :        +- *(1) Filter (i_category#3 IN (Sports,Books,Home) AND isnotnull(i_item_sk#13))
+                              :           +- *(1) ColumnarToRow
+                              :              +- FileScan parquet default.item[i_item_sk#13,i_item_id#5,i_item_desc#6,i_current_price#7,i_class#4,i_category#3] Batched: true, DataFilters: [i_category#3 IN (Sports,Books,Home), isnotnull(i_item_sk#13)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [In(i_category, [Sports,Books,Home]), IsNotNull(i_item_sk)], ReadSchema: struct<i_item_sk:int,i_item_id:string,i_item_desc:string,i_current_price:decimal(7,2),i_class:str...
                               +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#80]
                                  +- *(2) Project [d_date_sk#15]
                                     +- *(2) Filter (((isnotnull(d_date#16) AND (d_date#16 >= 10644)) AND (d_date#16 <= 10674)) AND isnotnull(d_date_sk#15))

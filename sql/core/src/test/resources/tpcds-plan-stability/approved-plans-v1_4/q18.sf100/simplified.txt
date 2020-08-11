@@ -20,11 +20,10 @@ TakeOrderedAndProject [agg1,agg2,agg3,agg4,agg5,agg6,agg7,ca_country,ca_county,c
                                       BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                                         Project [cd_dep_count,cs_bill_customer_sk,cs_coupon_amt,cs_item_sk,cs_list_price,cs_net_profit,cs_quantity,cs_sales_price,cs_sold_date_sk]
                                           BroadcastHashJoin [cd_demo_sk,cs_bill_cdemo_sk]
-                                            Project [cs_bill_cdemo_sk,cs_bill_customer_sk,cs_coupon_amt,cs_item_sk,cs_list_price,cs_net_profit,cs_quantity,cs_sales_price,cs_sold_date_sk]
-                                              Filter [cs_bill_cdemo_sk,cs_bill_customer_sk,cs_item_sk,cs_sold_date_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.catalog_sales [cs_bill_cdemo_sk,cs_bill_customer_sk,cs_coupon_amt,cs_item_sk,cs_list_price,cs_net_profit,cs_quantity,cs_sales_price,cs_sold_date_sk]
+                                            Filter [cs_bill_cdemo_sk,cs_bill_customer_sk,cs_item_sk,cs_sold_date_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.catalog_sales [cs_bill_cdemo_sk,cs_bill_customer_sk,cs_coupon_amt,cs_item_sk,cs_list_price,cs_net_profit,cs_quantity,cs_sales_price,cs_sold_date_sk]
                                             InputAdapter
                                               BroadcastExchange #3
                                                 WholeStageCodegen (1)
@@ -44,11 +43,10 @@ TakeOrderedAndProject [agg1,agg2,agg3,agg4,agg5,agg6,agg7,ca_country,ca_county,c
                                     InputAdapter
                                       BroadcastExchange #5
                                         WholeStageCodegen (3)
-                                          Project [i_item_id,i_item_sk]
-                                            Filter [i_item_sk]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet default.item [i_item_id,i_item_sk]
+                                          Filter [i_item_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.item [i_item_id,i_item_sk]
                     InputAdapter
                       WholeStageCodegen (12)
                         Sort [c_customer_sk]
@@ -73,19 +71,17 @@ TakeOrderedAndProject [agg1,agg2,agg3,agg4,agg5,agg6,agg7,ca_country,ca_county,c
                                                     InputAdapter
                                                       BroadcastExchange #8
                                                         WholeStageCodegen (6)
-                                                          Project [ca_address_sk,ca_country,ca_county,ca_state]
-                                                            Filter [ca_address_sk,ca_state]
-                                                              ColumnarToRow
-                                                                InputAdapter
-                                                                  Scan parquet default.customer_address [ca_address_sk,ca_country,ca_county,ca_state]
+                                                          Filter [ca_address_sk,ca_state]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet default.customer_address [ca_address_sk,ca_country,ca_county,ca_state]
                                     InputAdapter
                                       WholeStageCodegen (10)
                                         Sort [cd_demo_sk]
                                           InputAdapter
                                             Exchange [cd_demo_sk] #9
                                               WholeStageCodegen (9)
-                                                Project [cd_demo_sk]
-                                                  Filter [cd_demo_sk]
-                                                    ColumnarToRow
-                                                      InputAdapter
-                                                        Scan parquet default.customer_demographics [cd_demo_sk]
+                                                Filter [cd_demo_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.customer_demographics [cd_demo_sk]

@@ -19,11 +19,10 @@ TakeOrderedAndProject [order count ,total net profit ,total shipping cost ]
                                     BroadcastHashJoin [wr_order_number,ws_order_number]
                                       Project [ws_ext_ship_cost,ws_net_profit,ws_order_number,ws_ship_addr_sk,ws_ship_date_sk,ws_web_site_sk]
                                         BroadcastHashJoin [ws_order_number,ws_order_number,ws_warehouse_sk,ws_warehouse_sk]
-                                          Project [ws_ext_ship_cost,ws_net_profit,ws_order_number,ws_ship_addr_sk,ws_ship_date_sk,ws_warehouse_sk,ws_web_site_sk]
-                                            Filter [ws_ship_addr_sk,ws_ship_date_sk,ws_web_site_sk]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet default.web_sales [ws_ext_ship_cost,ws_net_profit,ws_order_number,ws_ship_addr_sk,ws_ship_date_sk,ws_warehouse_sk,ws_web_site_sk]
+                                          Filter [ws_ship_addr_sk,ws_ship_date_sk,ws_web_site_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.web_sales [ws_ext_ship_cost,ws_net_profit,ws_order_number,ws_ship_addr_sk,ws_ship_date_sk,ws_warehouse_sk,ws_web_site_sk]
                                           InputAdapter
                                             BroadcastExchange #3
                                               WholeStageCodegen (1)

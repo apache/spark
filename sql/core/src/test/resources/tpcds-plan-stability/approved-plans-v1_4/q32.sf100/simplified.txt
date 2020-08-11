@@ -25,11 +25,10 @@ CollectLimit
                                 HashAggregate [cs_ext_discount_amt,cs_item_sk] [count,count,sum,sum]
                                   Project [cs_ext_discount_amt,cs_item_sk]
                                     BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                                      Project [cs_ext_discount_amt,cs_item_sk,cs_sold_date_sk]
-                                        Filter [cs_item_sk,cs_sold_date_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.catalog_sales [cs_ext_discount_amt,cs_item_sk,cs_sold_date_sk]
+                                      Filter [cs_item_sk,cs_sold_date_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.catalog_sales [cs_ext_discount_amt,cs_item_sk,cs_sold_date_sk]
                                       InputAdapter
                                         BroadcastExchange #4
                                           WholeStageCodegen (2)
@@ -38,10 +37,9 @@ CollectLimit
                                                 ColumnarToRow
                                                   InputAdapter
                                                     Scan parquet default.date_dim [d_date,d_date_sk]
-            Project [cs_ext_discount_amt,cs_item_sk,cs_sold_date_sk]
-              Filter [cs_ext_discount_amt,cs_item_sk,cs_sold_date_sk]
-                ColumnarToRow
-                  InputAdapter
-                    Scan parquet default.catalog_sales [cs_ext_discount_amt,cs_item_sk,cs_sold_date_sk]
+            Filter [cs_ext_discount_amt,cs_item_sk,cs_sold_date_sk]
+              ColumnarToRow
+                InputAdapter
+                  Scan parquet default.catalog_sales [cs_ext_discount_amt,cs_item_sk,cs_sold_date_sk]
         InputAdapter
           ReusedExchange [d_date_sk] #4

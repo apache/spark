@@ -12,19 +12,17 @@ TakeOrderedAndProject [i_item_id,inv_after,inv_before,w_warehouse_name]
                       BroadcastHashJoin [i_item_sk,inv_item_sk]
                         Project [inv_date_sk,inv_item_sk,inv_quantity_on_hand,w_warehouse_name]
                           BroadcastHashJoin [inv_warehouse_sk,w_warehouse_sk]
-                            Project [inv_date_sk,inv_item_sk,inv_quantity_on_hand,inv_warehouse_sk]
-                              Filter [inv_date_sk,inv_item_sk,inv_warehouse_sk]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet default.inventory [inv_date_sk,inv_item_sk,inv_quantity_on_hand,inv_warehouse_sk]
+                            Filter [inv_date_sk,inv_item_sk,inv_warehouse_sk]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.inventory [inv_date_sk,inv_item_sk,inv_quantity_on_hand,inv_warehouse_sk]
                             InputAdapter
                               BroadcastExchange #2
                                 WholeStageCodegen (1)
-                                  Project [w_warehouse_name,w_warehouse_sk]
-                                    Filter [w_warehouse_sk]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.warehouse [w_warehouse_name,w_warehouse_sk]
+                                  Filter [w_warehouse_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.warehouse [w_warehouse_name,w_warehouse_sk]
                         InputAdapter
                           BroadcastExchange #3
                             WholeStageCodegen (2)
@@ -36,8 +34,7 @@ TakeOrderedAndProject [i_item_id,inv_after,inv_before,w_warehouse_name]
                     InputAdapter
                       BroadcastExchange #4
                         WholeStageCodegen (3)
-                          Project [d_date,d_date_sk]
-                            Filter [d_date,d_date_sk]
-                              ColumnarToRow
-                                InputAdapter
-                                  Scan parquet default.date_dim [d_date,d_date_sk]
+                          Filter [d_date,d_date_sk]
+                            ColumnarToRow
+                              InputAdapter
+                                Scan parquet default.date_dim [d_date,d_date_sk]

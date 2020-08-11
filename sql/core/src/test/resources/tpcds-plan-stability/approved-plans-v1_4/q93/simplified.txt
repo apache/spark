@@ -15,11 +15,10 @@ TakeOrderedAndProject [ss_customer_sk,sumsales]
                       InputAdapter
                         BroadcastExchange #2
                           WholeStageCodegen (1)
-                            Project [sr_item_sk,sr_reason_sk,sr_return_quantity,sr_ticket_number]
-                              Filter [sr_item_sk,sr_reason_sk,sr_ticket_number]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet default.store_returns [sr_item_sk,sr_reason_sk,sr_return_quantity,sr_ticket_number]
+                            Filter [sr_item_sk,sr_reason_sk,sr_ticket_number]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.store_returns [sr_item_sk,sr_reason_sk,sr_return_quantity,sr_ticket_number]
                   InputAdapter
                     BroadcastExchange #3
                       WholeStageCodegen (2)

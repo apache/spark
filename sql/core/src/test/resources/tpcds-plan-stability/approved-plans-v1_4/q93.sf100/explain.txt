@@ -59,10 +59,9 @@ TakeOrderedAndProject(limit=100, orderBy=[sumsales#1 ASC NULLS FIRST,ss_customer
                :  +- Exchange hashpartitioning(sr_item_sk#12, sr_ticket_number#13, 5), true, [id=#52]
                :     +- *(2) Project [sr_item_sk#12, sr_ticket_number#13, sr_return_quantity#6]
                :        +- *(2) BroadcastHashJoin [sr_reason_sk#9], [cast(r_reason_sk#10 as bigint)], Inner, BuildRight, false
-               :           :- *(2) Project [sr_item_sk#12, sr_reason_sk#9, sr_ticket_number#13, sr_return_quantity#6]
-               :           :  +- *(2) Filter ((isnotnull(sr_item_sk#12) AND isnotnull(sr_ticket_number#13)) AND isnotnull(sr_reason_sk#9))
-               :           :     +- *(2) ColumnarToRow
-               :           :        +- FileScan parquet default.store_returns[sr_item_sk#12,sr_reason_sk#9,sr_ticket_number#13,sr_return_quantity#6] Batched: true, DataFilters: [isnotnull(sr_item_sk#12), isnotnull(sr_ticket_number#13), isnotnull(sr_reason_sk#9)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number), IsNotNull(sr_reason_sk)], ReadSchema: struct<sr_item_sk:bigint,sr_reason_sk:bigint,sr_ticket_number:bigint,sr_return_quantity:int>
+               :           :- *(2) Filter ((isnotnull(sr_item_sk#12) AND isnotnull(sr_ticket_number#13)) AND isnotnull(sr_reason_sk#9))
+               :           :  +- *(2) ColumnarToRow
+               :           :     +- FileScan parquet default.store_returns[sr_item_sk#12,sr_reason_sk#9,sr_ticket_number#13,sr_return_quantity#6] Batched: true, DataFilters: [isnotnull(sr_item_sk#12), isnotnull(sr_ticket_number#13), isnotnull(sr_reason_sk#9)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number), IsNotNull(sr_reason_sk)], ReadSchema: struct<sr_item_sk:bigint,sr_reason_sk:bigint,sr_ticket_number:bigint,sr_return_quantity:int>
                :           +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#53]
                :              +- *(1) Project [r_reason_sk#10]
                :                 +- *(1) Filter ((isnotnull(r_reason_desc#11) AND (r_reason_desc#11 = reason 28)) AND isnotnull(r_reason_sk#10))

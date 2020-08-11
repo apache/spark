@@ -30,11 +30,10 @@ TakeOrderedAndProject [Excess Discount Amount ]
                                           HashAggregate [ws_ext_discount_amt,ws_item_sk] [count,count,sum,sum]
                                             Project [ws_ext_discount_amt,ws_item_sk]
                                               BroadcastHashJoin [d_date_sk,ws_sold_date_sk]
-                                                Project [ws_ext_discount_amt,ws_item_sk,ws_sold_date_sk]
-                                                  Filter [ws_item_sk,ws_sold_date_sk]
-                                                    ColumnarToRow
-                                                      InputAdapter
-                                                        Scan parquet default.web_sales [ws_ext_discount_amt,ws_item_sk,ws_sold_date_sk]
+                                                Filter [ws_item_sk,ws_sold_date_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.web_sales [ws_ext_discount_amt,ws_item_sk,ws_sold_date_sk]
                                                 InputAdapter
                                                   BroadcastExchange #5
                                                     WholeStageCodegen (2)
@@ -43,10 +42,9 @@ TakeOrderedAndProject [Excess Discount Amount ]
                                                           ColumnarToRow
                                                             InputAdapter
                                                               Scan parquet default.date_dim [d_date,d_date_sk]
-                      Project [ws_ext_discount_amt,ws_item_sk,ws_sold_date_sk]
-                        Filter [ws_ext_discount_amt,ws_item_sk,ws_sold_date_sk]
-                          ColumnarToRow
-                            InputAdapter
-                              Scan parquet default.web_sales [ws_ext_discount_amt,ws_item_sk,ws_sold_date_sk]
+                      Filter [ws_ext_discount_amt,ws_item_sk,ws_sold_date_sk]
+                        ColumnarToRow
+                          InputAdapter
+                            Scan parquet default.web_sales [ws_ext_discount_amt,ws_item_sk,ws_sold_date_sk]
                   InputAdapter
                     ReusedExchange [d_date_sk] #5

@@ -18,49 +18,44 @@ TakeOrderedAndProject [order count ,total net profit ,total shipping cost ]
                                   BroadcastHashJoin [d_date_sk,ws_ship_date_sk]
                                     BroadcastHashJoin [wr_order_number,ws_order_number]
                                       BroadcastHashJoin [ws_order_number,ws_order_number]
-                                        Project [ws_ext_ship_cost,ws_net_profit,ws_order_number,ws_ship_addr_sk,ws_ship_date_sk,ws_web_site_sk]
-                                          Filter [ws_ship_addr_sk,ws_ship_date_sk,ws_web_site_sk]
-                                            ColumnarToRow
-                                              InputAdapter
-                                                Scan parquet default.web_sales [ws_ext_ship_cost,ws_net_profit,ws_order_number,ws_ship_addr_sk,ws_ship_date_sk,ws_web_site_sk]
+                                        Filter [ws_ship_addr_sk,ws_ship_date_sk,ws_web_site_sk]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet default.web_sales [ws_ext_ship_cost,ws_net_profit,ws_order_number,ws_ship_addr_sk,ws_ship_date_sk,ws_web_site_sk]
                                         InputAdapter
                                           BroadcastExchange #3
                                             WholeStageCodegen (2)
                                               Project [ws_order_number]
                                                 BroadcastHashJoin [ws_order_number,ws_order_number,ws_warehouse_sk,ws_warehouse_sk]
-                                                  Project [ws_order_number,ws_warehouse_sk]
-                                                    Filter [ws_order_number,ws_warehouse_sk]
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet default.web_sales [ws_order_number,ws_warehouse_sk]
+                                                  Filter [ws_order_number,ws_warehouse_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.web_sales [ws_order_number,ws_warehouse_sk]
                                                   InputAdapter
                                                     BroadcastExchange #4
                                                       WholeStageCodegen (1)
-                                                        Project [ws_order_number,ws_warehouse_sk]
-                                                          Filter [ws_order_number,ws_warehouse_sk]
-                                                            ColumnarToRow
-                                                              InputAdapter
-                                                                Scan parquet default.web_sales [ws_order_number,ws_warehouse_sk]
+                                                        Filter [ws_order_number,ws_warehouse_sk]
+                                                          ColumnarToRow
+                                                            InputAdapter
+                                                              Scan parquet default.web_sales [ws_order_number,ws_warehouse_sk]
                                       InputAdapter
                                         BroadcastExchange #5
                                           WholeStageCodegen (5)
                                             Project [wr_order_number]
                                               BroadcastHashJoin [wr_order_number,ws_order_number]
-                                                Project [wr_order_number]
-                                                  Filter [wr_order_number]
-                                                    ColumnarToRow
-                                                      InputAdapter
-                                                        Scan parquet default.web_returns [wr_order_number]
+                                                Filter [wr_order_number]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.web_returns [wr_order_number]
                                                 InputAdapter
                                                   BroadcastExchange #6
                                                     WholeStageCodegen (4)
                                                       Project [ws_order_number]
                                                         BroadcastHashJoin [ws_order_number,ws_order_number,ws_warehouse_sk,ws_warehouse_sk]
-                                                          Project [ws_order_number,ws_warehouse_sk]
-                                                            Filter [ws_order_number,ws_warehouse_sk]
-                                                              ColumnarToRow
-                                                                InputAdapter
-                                                                  Scan parquet default.web_sales [ws_order_number,ws_warehouse_sk]
+                                                          Filter [ws_order_number,ws_warehouse_sk]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet default.web_sales [ws_order_number,ws_warehouse_sk]
                                                           InputAdapter
                                                             ReusedExchange [ws_order_number,ws_warehouse_sk] #4
                                     InputAdapter

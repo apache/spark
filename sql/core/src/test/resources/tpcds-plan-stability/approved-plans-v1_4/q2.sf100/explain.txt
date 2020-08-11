@@ -146,11 +146,10 @@ Sort [d_week_seq1#12 ASC NULLS FIRST], true
          :           :              :     +- *(2) Filter isnotnull(cs_sold_date_sk#64)
          :           :              :        +- *(2) ColumnarToRow
          :           :              :           +- FileScan parquet default.catalog_sales[cs_sold_date_sk#64,cs_ext_sales_price#65] Batched: true, DataFilters: [isnotnull(cs_sold_date_sk#64)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cs_sold_date_sk)], ReadSchema: struct<cs_sold_date_sk:int,cs_ext_sales_price:decimal(7,2)>
-         :           :              +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#165]
-         :           :                 +- *(3) Project [d_date_sk#39, d_week_seq#35, d_day_name#38]
-         :           :                    +- *(3) Filter (isnotnull(d_date_sk#39) AND isnotnull(d_week_seq#35))
-         :           :                       +- *(3) ColumnarToRow
-         :           :                          +- FileScan parquet default.date_dim[d_date_sk#39,d_week_seq#35,d_day_name#38] Batched: true, DataFilters: [isnotnull(d_date_sk#39), isnotnull(d_week_seq#35)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_date_sk), IsNotNull(d_week_seq)], ReadSchema: struct<d_date_sk:int,d_week_seq:int,d_day_name:string>
+         :           :              +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#165]
+         :           :                 +- *(3) Filter (isnotnull(d_date_sk#39) AND isnotnull(d_week_seq#35))
+         :           :                    +- *(3) ColumnarToRow
+         :           :                       +- FileScan parquet default.date_dim[d_date_sk#39,d_week_seq#35,d_day_name#38] Batched: true, DataFilters: [isnotnull(d_date_sk#39), isnotnull(d_week_seq#35)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_date_sk), IsNotNull(d_week_seq)], ReadSchema: struct<d_date_sk:int,d_week_seq:int,d_day_name:string>
          :           +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#166]
          :              +- *(5) Project [d_week_seq#36]
          :                 +- *(5) Filter ((isnotnull(d_year#37) AND (d_year#37 = 2001)) AND isnotnull(d_week_seq#36))

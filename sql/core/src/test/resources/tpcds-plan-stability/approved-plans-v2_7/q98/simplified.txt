@@ -20,19 +20,17 @@ WholeStageCodegen (7)
                                       BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
                                         Project [i_category,i_class,i_current_price,i_item_desc,i_item_id,ss_ext_sales_price,ss_sold_date_sk]
                                           BroadcastHashJoin [i_item_sk,ss_item_sk]
-                                            Project [ss_ext_sales_price,ss_item_sk,ss_sold_date_sk]
-                                              Filter [ss_item_sk,ss_sold_date_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.store_sales [ss_ext_sales_price,ss_item_sk,ss_sold_date_sk]
+                                            Filter [ss_item_sk,ss_sold_date_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.store_sales [ss_ext_sales_price,ss_item_sk,ss_sold_date_sk]
                                             InputAdapter
                                               BroadcastExchange #4
                                                 WholeStageCodegen (1)
-                                                  Project [i_category,i_class,i_current_price,i_item_desc,i_item_id,i_item_sk]
-                                                    Filter [i_category,i_item_sk]
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet default.item [i_category,i_class,i_current_price,i_item_desc,i_item_id,i_item_sk]
+                                                  Filter [i_category,i_item_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.item [i_category,i_class,i_current_price,i_item_desc,i_item_id,i_item_sk]
                                         InputAdapter
                                           BroadcastExchange #5
                                             WholeStageCodegen (2)

@@ -13,27 +13,24 @@ TakeOrderedAndProject [(fri_sales1 / fri_sales2),(mon_sales1 / mon_sales2),(sat_
                         HashAggregate [d_day_name,d_week_seq,ss_sales_price,ss_store_sk] [sum,sum,sum,sum,sum,sum,sum,sum,sum,sum,sum,sum,sum,sum]
                           Project [d_day_name,d_week_seq,ss_sales_price,ss_store_sk]
                             BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
-                              Project [ss_sales_price,ss_sold_date_sk,ss_store_sk]
-                                Filter [ss_sold_date_sk,ss_store_sk]
-                                  ColumnarToRow
-                                    InputAdapter
-                                      Scan parquet default.store_sales [ss_sales_price,ss_sold_date_sk,ss_store_sk]
+                              Filter [ss_sold_date_sk,ss_store_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.store_sales [ss_sales_price,ss_sold_date_sk,ss_store_sk]
                               InputAdapter
                                 BroadcastExchange #2
                                   WholeStageCodegen (1)
-                                    Project [d_date_sk,d_day_name,d_week_seq]
-                                      Filter [d_date_sk,d_week_seq]
-                                        ColumnarToRow
-                                          InputAdapter
-                                            Scan parquet default.date_dim [d_date_sk,d_day_name,d_week_seq]
+                                    Filter [d_date_sk,d_week_seq]
+                                      ColumnarToRow
+                                        InputAdapter
+                                          Scan parquet default.date_dim [d_date_sk,d_day_name,d_week_seq]
                 InputAdapter
                   BroadcastExchange #3
                     WholeStageCodegen (3)
-                      Project [s_store_id,s_store_name,s_store_sk]
-                        Filter [s_store_id,s_store_sk]
-                          ColumnarToRow
-                            InputAdapter
-                              Scan parquet default.store [s_store_id,s_store_name,s_store_sk]
+                      Filter [s_store_id,s_store_sk]
+                        ColumnarToRow
+                          InputAdapter
+                            Scan parquet default.store [s_store_id,s_store_name,s_store_sk]
             InputAdapter
               BroadcastExchange #4
                 WholeStageCodegen (4)
@@ -56,21 +53,19 @@ TakeOrderedAndProject [(fri_sales1 / fri_sales2),(mon_sales1 / mon_sales2),(sat_
                               HashAggregate [d_day_name,d_week_seq,ss_sales_price,ss_store_sk] [sum,sum,sum,sum,sum,sum,sum,sum,sum,sum,sum,sum]
                                 Project [d_day_name,d_week_seq,ss_sales_price,ss_store_sk]
                                   BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
-                                    Project [ss_sales_price,ss_sold_date_sk,ss_store_sk]
-                                      Filter [ss_sold_date_sk,ss_store_sk]
-                                        ColumnarToRow
-                                          InputAdapter
-                                            Scan parquet default.store_sales [ss_sales_price,ss_sold_date_sk,ss_store_sk]
+                                    Filter [ss_sold_date_sk,ss_store_sk]
+                                      ColumnarToRow
+                                        InputAdapter
+                                          Scan parquet default.store_sales [ss_sales_price,ss_sold_date_sk,ss_store_sk]
                                     InputAdapter
                                       ReusedExchange [d_date_sk,d_day_name,d_week_seq] #2
                       InputAdapter
                         BroadcastExchange #7
                           WholeStageCodegen (7)
-                            Project [s_store_id,s_store_sk]
-                              Filter [s_store_id,s_store_sk]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet default.store [s_store_id,s_store_sk]
+                            Filter [s_store_id,s_store_sk]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.store [s_store_id,s_store_sk]
                   InputAdapter
                     BroadcastExchange #8
                       WholeStageCodegen (8)

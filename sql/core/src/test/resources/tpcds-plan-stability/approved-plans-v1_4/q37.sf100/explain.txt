@@ -84,7 +84,6 @@ TakeOrderedAndProject(limit=100, orderBy=[i_item_id#1 ASC NULLS FIRST], output=[
                :                       +- FileScan parquet default.date_dim[d_date_sk#6,d_date#8] Batched: true, DataFilters: [isnotnull(d_date#8), (d_date#8 >= 10988), (d_date#8 <= 11048), isnotnull(d_date_sk#6)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-02-01), LessThanOrEqual(d_date,2000-04-01), Is..., ReadSchema: struct<d_date_sk:int,d_date:date>
                +- *(6) Sort [cs_item_sk#11 ASC NULLS FIRST], false, 0
                   +- Exchange hashpartitioning(cs_item_sk#11, 5), true, [id=#79]
-                     +- *(5) Project [cs_item_sk#11]
-                        +- *(5) Filter isnotnull(cs_item_sk#11)
-                           +- *(5) ColumnarToRow
-                              +- FileScan parquet default.catalog_sales[cs_item_sk#11] Batched: true, DataFilters: [isnotnull(cs_item_sk#11)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cs_item_sk)], ReadSchema: struct<cs_item_sk:int>
+                     +- *(5) Filter isnotnull(cs_item_sk#11)
+                        +- *(5) ColumnarToRow
+                           +- FileScan parquet default.catalog_sales[cs_item_sk#11] Batched: true, DataFilters: [isnotnull(cs_item_sk#11)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cs_item_sk)], ReadSchema: struct<cs_item_sk:int>

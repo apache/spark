@@ -18,11 +18,10 @@ TakeOrderedAndProject [i_category,i_class,lochierarchy,rank_within_parent,total_
                                   BroadcastHashJoin [i_item_sk,ws_item_sk]
                                     Project [ws_item_sk,ws_net_paid]
                                       BroadcastHashJoin [d_date_sk,ws_sold_date_sk]
-                                        Project [ws_item_sk,ws_net_paid,ws_sold_date_sk]
-                                          Filter [ws_item_sk,ws_sold_date_sk]
-                                            ColumnarToRow
-                                              InputAdapter
-                                                Scan parquet default.web_sales [ws_item_sk,ws_net_paid,ws_sold_date_sk]
+                                        Filter [ws_item_sk,ws_sold_date_sk]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet default.web_sales [ws_item_sk,ws_net_paid,ws_sold_date_sk]
                                         InputAdapter
                                           BroadcastExchange #3
                                             WholeStageCodegen (1)
@@ -34,8 +33,7 @@ TakeOrderedAndProject [i_category,i_class,lochierarchy,rank_within_parent,total_
                                     InputAdapter
                                       BroadcastExchange #4
                                         WholeStageCodegen (2)
-                                          Project [i_category,i_class,i_item_sk]
-                                            Filter [i_item_sk]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet default.item [i_category,i_class,i_item_sk]
+                                          Filter [i_item_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.item [i_category,i_class,i_item_sk]

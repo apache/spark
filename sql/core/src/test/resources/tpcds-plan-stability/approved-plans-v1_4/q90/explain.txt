@@ -119,10 +119,9 @@ TakeOrderedAndProject(limit=100, orderBy=[am_pm_ratio#1 ASC NULLS FIRST], output
       :              :  +- *(4) BroadcastHashJoin [ws_sold_time_sk#6], [t_time_sk#7], Inner, BuildRight, false
       :              :     :- *(4) Project [ws_sold_time_sk#6, ws_web_page_sk#10]
       :              :     :  +- *(4) BroadcastHashJoin [ws_ship_hdemo_sk#8], [hd_demo_sk#9], Inner, BuildRight, false
-      :              :     :     :- *(4) Project [ws_sold_time_sk#6, ws_ship_hdemo_sk#8, ws_web_page_sk#10]
-      :              :     :     :  +- *(4) Filter ((isnotnull(ws_ship_hdemo_sk#8) AND isnotnull(ws_sold_time_sk#6)) AND isnotnull(ws_web_page_sk#10))
-      :              :     :     :     +- *(4) ColumnarToRow
-      :              :     :     :        +- FileScan parquet default.web_sales[ws_sold_time_sk#6,ws_ship_hdemo_sk#8,ws_web_page_sk#10] Batched: true, DataFilters: [isnotnull(ws_ship_hdemo_sk#8), isnotnull(ws_sold_time_sk#6), isnotnull(ws_web_page_sk#10)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)], ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
+      :              :     :     :- *(4) Filter ((isnotnull(ws_ship_hdemo_sk#8) AND isnotnull(ws_sold_time_sk#6)) AND isnotnull(ws_web_page_sk#10))
+      :              :     :     :  +- *(4) ColumnarToRow
+      :              :     :     :     +- FileScan parquet default.web_sales[ws_sold_time_sk#6,ws_ship_hdemo_sk#8,ws_web_page_sk#10] Batched: true, DataFilters: [isnotnull(ws_ship_hdemo_sk#8), isnotnull(ws_sold_time_sk#6), isnotnull(ws_web_page_sk#10)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)], ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
       :              :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#61]
       :              :     :        +- *(1) Project [hd_demo_sk#9]
       :              :     :           +- *(1) Filter ((isnotnull(hd_dep_count#13) AND (hd_dep_count#13 = 6)) AND isnotnull(hd_demo_sk#9))
@@ -148,10 +147,9 @@ TakeOrderedAndProject(limit=100, orderBy=[am_pm_ratio#1 ASC NULLS FIRST], output
                         :  +- *(9) BroadcastHashJoin [ws_sold_time_sk#6], [t_time_sk#7], Inner, BuildRight, false
                         :     :- *(9) Project [ws_sold_time_sk#6, ws_web_page_sk#10]
                         :     :  +- *(9) BroadcastHashJoin [ws_ship_hdemo_sk#8], [hd_demo_sk#9], Inner, BuildRight, false
-                        :     :     :- *(9) Project [ws_sold_time_sk#6, ws_ship_hdemo_sk#8, ws_web_page_sk#10]
-                        :     :     :  +- *(9) Filter ((isnotnull(ws_ship_hdemo_sk#8) AND isnotnull(ws_sold_time_sk#6)) AND isnotnull(ws_web_page_sk#10))
-                        :     :     :     +- *(9) ColumnarToRow
-                        :     :     :        +- FileScan parquet default.web_sales[ws_sold_time_sk#6,ws_ship_hdemo_sk#8,ws_web_page_sk#10] Batched: true, DataFilters: [isnotnull(ws_ship_hdemo_sk#8), isnotnull(ws_sold_time_sk#6), isnotnull(ws_web_page_sk#10)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)], ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
+                        :     :     :- *(9) Filter ((isnotnull(ws_ship_hdemo_sk#8) AND isnotnull(ws_sold_time_sk#6)) AND isnotnull(ws_web_page_sk#10))
+                        :     :     :  +- *(9) ColumnarToRow
+                        :     :     :     +- FileScan parquet default.web_sales[ws_sold_time_sk#6,ws_ship_hdemo_sk#8,ws_web_page_sk#10] Batched: true, DataFilters: [isnotnull(ws_ship_hdemo_sk#8), isnotnull(ws_sold_time_sk#6), isnotnull(ws_web_page_sk#10)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)], ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
                         :     :     +- ReusedExchange [hd_demo_sk#9], BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#61]
                         :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#67]
                         :        +- *(7) Project [t_time_sk#7]

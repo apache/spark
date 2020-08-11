@@ -6,11 +6,10 @@ TakeOrderedAndProject [i_brand,i_current_price,i_item_desc,i_wholesale_cost,reve
           BroadcastHashJoin [i_item_sk,ss_item_sk]
             Project [revenue,s_store_name,ss_item_sk,ss_store_sk]
               BroadcastHashJoin [s_store_sk,ss_store_sk]
-                Project [s_store_name,s_store_sk]
-                  Filter [s_store_sk]
-                    ColumnarToRow
-                      InputAdapter
-                        Scan parquet default.store [s_store_name,s_store_sk]
+                Filter [s_store_sk]
+                  ColumnarToRow
+                    InputAdapter
+                      Scan parquet default.store [s_store_name,s_store_sk]
                 InputAdapter
                   BroadcastExchange #1
                     WholeStageCodegen (3)
@@ -22,11 +21,10 @@ TakeOrderedAndProject [i_brand,i_current_price,i_item_desc,i_wholesale_cost,reve
                                 HashAggregate [ss_item_sk,ss_sales_price,ss_store_sk] [sum,sum]
                                   Project [ss_item_sk,ss_sales_price,ss_store_sk]
                                     BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
-                                      Project [ss_item_sk,ss_sales_price,ss_sold_date_sk,ss_store_sk]
-                                        Filter [ss_item_sk,ss_sold_date_sk,ss_store_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.store_sales [ss_item_sk,ss_sales_price,ss_sold_date_sk,ss_store_sk]
+                                      Filter [ss_item_sk,ss_sold_date_sk,ss_store_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.store_sales [ss_item_sk,ss_sales_price,ss_sold_date_sk,ss_store_sk]
                                       InputAdapter
                                         BroadcastExchange #3
                                           WholeStageCodegen (1)
@@ -38,11 +36,10 @@ TakeOrderedAndProject [i_brand,i_current_price,i_item_desc,i_wholesale_cost,reve
             InputAdapter
               BroadcastExchange #4
                 WholeStageCodegen (4)
-                  Project [i_brand,i_current_price,i_item_desc,i_item_sk,i_wholesale_cost]
-                    Filter [i_item_sk]
-                      ColumnarToRow
-                        InputAdapter
-                          Scan parquet default.item [i_brand,i_current_price,i_item_desc,i_item_sk,i_wholesale_cost]
+                  Filter [i_item_sk]
+                    ColumnarToRow
+                      InputAdapter
+                        Scan parquet default.item [i_brand,i_current_price,i_item_desc,i_item_sk,i_wholesale_cost]
         InputAdapter
           BroadcastExchange #5
             WholeStageCodegen (8)
@@ -58,10 +55,9 @@ TakeOrderedAndProject [i_brand,i_current_price,i_item_desc,i_wholesale_cost,reve
                                 HashAggregate [ss_item_sk,ss_sales_price,ss_store_sk] [sum,sum]
                                   Project [ss_item_sk,ss_sales_price,ss_store_sk]
                                     BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
-                                      Project [ss_item_sk,ss_sales_price,ss_sold_date_sk,ss_store_sk]
-                                        Filter [ss_sold_date_sk,ss_store_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.store_sales [ss_item_sk,ss_sales_price,ss_sold_date_sk,ss_store_sk]
+                                      Filter [ss_sold_date_sk,ss_store_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.store_sales [ss_item_sk,ss_sales_price,ss_sold_date_sk,ss_store_sk]
                                       InputAdapter
                                         ReusedExchange [d_date_sk] #3

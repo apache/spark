@@ -20,11 +20,10 @@ TakeOrderedAndProject [channel,id,profit,returns,sales]
                                       BroadcastHashJoin [s_store_sk,ss_store_sk]
                                         Project [ss_ext_sales_price,ss_net_profit,ss_store_sk]
                                           BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
-                                            Project [ss_ext_sales_price,ss_net_profit,ss_sold_date_sk,ss_store_sk]
-                                              Filter [ss_sold_date_sk,ss_store_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.store_sales [ss_ext_sales_price,ss_net_profit,ss_sold_date_sk,ss_store_sk]
+                                            Filter [ss_sold_date_sk,ss_store_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.store_sales [ss_ext_sales_price,ss_net_profit,ss_sold_date_sk,ss_store_sk]
                                             InputAdapter
                                               BroadcastExchange #3
                                                 WholeStageCodegen (1)
@@ -36,11 +35,10 @@ TakeOrderedAndProject [channel,id,profit,returns,sales]
                                         InputAdapter
                                           BroadcastExchange #4
                                             WholeStageCodegen (2)
-                                              Project [s_store_sk]
-                                                Filter [s_store_sk]
-                                                  ColumnarToRow
-                                                    InputAdapter
-                                                      Scan parquet default.store [s_store_sk]
+                                              Filter [s_store_sk]
+                                                ColumnarToRow
+                                                  InputAdapter
+                                                    Scan parquet default.store [s_store_sk]
                           InputAdapter
                             BroadcastExchange #5
                               WholeStageCodegen (7)
@@ -53,11 +51,10 @@ TakeOrderedAndProject [channel,id,profit,returns,sales]
                                             BroadcastHashJoin [d_date_sk,sr_returned_date_sk]
                                               Project [s_store_sk,sr_net_loss,sr_return_amt,sr_returned_date_sk]
                                                 BroadcastHashJoin [s_store_sk,sr_store_sk]
-                                                  Project [sr_net_loss,sr_return_amt,sr_returned_date_sk,sr_store_sk]
-                                                    Filter [sr_returned_date_sk,sr_store_sk]
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet default.store_returns [sr_net_loss,sr_return_amt,sr_returned_date_sk,sr_store_sk]
+                                                  Filter [sr_returned_date_sk,sr_store_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.store_returns [sr_net_loss,sr_return_amt,sr_returned_date_sk,sr_store_sk]
                                                   InputAdapter
                                                     ReusedExchange [s_store_sk] #4
                                               InputAdapter
@@ -74,11 +71,10 @@ TakeOrderedAndProject [channel,id,profit,returns,sales]
                                       HashAggregate [cs_call_center_sk,cs_ext_sales_price,cs_net_profit] [sum,sum,sum,sum]
                                         Project [cs_call_center_sk,cs_ext_sales_price,cs_net_profit]
                                           BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                                            Project [cs_call_center_sk,cs_ext_sales_price,cs_net_profit,cs_sold_date_sk]
-                                              Filter [cs_sold_date_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.catalog_sales [cs_call_center_sk,cs_ext_sales_price,cs_net_profit,cs_sold_date_sk]
+                                            Filter [cs_sold_date_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.catalog_sales [cs_call_center_sk,cs_ext_sales_price,cs_net_profit,cs_sold_date_sk]
                                             InputAdapter
                                               ReusedExchange [d_date_sk] #3
                             BroadcastExchange #8
@@ -90,11 +86,10 @@ TakeOrderedAndProject [channel,id,profit,returns,sales]
                                         HashAggregate [cr_net_loss,cr_return_amount] [sum,sum,sum,sum]
                                           Project [cr_net_loss,cr_return_amount]
                                             BroadcastHashJoin [cr_returned_date_sk,d_date_sk]
-                                              Project [cr_net_loss,cr_return_amount,cr_returned_date_sk]
-                                                Filter [cr_returned_date_sk]
-                                                  ColumnarToRow
-                                                    InputAdapter
-                                                      Scan parquet default.catalog_returns [cr_net_loss,cr_return_amount,cr_returned_date_sk]
+                                              Filter [cr_returned_date_sk]
+                                                ColumnarToRow
+                                                  InputAdapter
+                                                    Scan parquet default.catalog_returns [cr_net_loss,cr_return_amount,cr_returned_date_sk]
                                               InputAdapter
                                                 ReusedExchange [d_date_sk] #3
                     WholeStageCodegen (23)
@@ -109,21 +104,19 @@ TakeOrderedAndProject [channel,id,profit,returns,sales]
                                       BroadcastHashJoin [wp_web_page_sk,ws_web_page_sk]
                                         Project [ws_ext_sales_price,ws_net_profit,ws_web_page_sk]
                                           BroadcastHashJoin [d_date_sk,ws_sold_date_sk]
-                                            Project [ws_ext_sales_price,ws_net_profit,ws_sold_date_sk,ws_web_page_sk]
-                                              Filter [ws_sold_date_sk,ws_web_page_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.web_sales [ws_ext_sales_price,ws_net_profit,ws_sold_date_sk,ws_web_page_sk]
+                                            Filter [ws_sold_date_sk,ws_web_page_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.web_sales [ws_ext_sales_price,ws_net_profit,ws_sold_date_sk,ws_web_page_sk]
                                             InputAdapter
                                               ReusedExchange [d_date_sk] #3
                                         InputAdapter
                                           BroadcastExchange #11
                                             WholeStageCodegen (17)
-                                              Project [wp_web_page_sk]
-                                                Filter [wp_web_page_sk]
-                                                  ColumnarToRow
-                                                    InputAdapter
-                                                      Scan parquet default.web_page [wp_web_page_sk]
+                                              Filter [wp_web_page_sk]
+                                                ColumnarToRow
+                                                  InputAdapter
+                                                    Scan parquet default.web_page [wp_web_page_sk]
                           InputAdapter
                             BroadcastExchange #12
                               WholeStageCodegen (22)
@@ -136,11 +129,10 @@ TakeOrderedAndProject [channel,id,profit,returns,sales]
                                             BroadcastHashJoin [d_date_sk,wr_returned_date_sk]
                                               Project [wp_web_page_sk,wr_net_loss,wr_return_amt,wr_returned_date_sk]
                                                 BroadcastHashJoin [wp_web_page_sk,wr_web_page_sk]
-                                                  Project [wr_net_loss,wr_return_amt,wr_returned_date_sk,wr_web_page_sk]
-                                                    Filter [wr_returned_date_sk,wr_web_page_sk]
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet default.web_returns [wr_net_loss,wr_return_amt,wr_returned_date_sk,wr_web_page_sk]
+                                                  Filter [wr_returned_date_sk,wr_web_page_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.web_returns [wr_net_loss,wr_return_amt,wr_returned_date_sk,wr_web_page_sk]
                                                   InputAdapter
                                                     ReusedExchange [wp_web_page_sk] #11
                                               InputAdapter

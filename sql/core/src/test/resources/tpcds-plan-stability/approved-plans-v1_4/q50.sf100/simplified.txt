@@ -17,27 +17,24 @@ TakeOrderedAndProject [30 days ,31 - 60 days ,61 - 90 days ,91 - 120 days ,>120 
                                 BroadcastHashJoin [s_store_sk,ss_store_sk]
                                   Project [ss_customer_sk,ss_item_sk,ss_sold_date_sk,ss_store_sk,ss_ticket_number]
                                     BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
-                                      Project [ss_customer_sk,ss_item_sk,ss_sold_date_sk,ss_store_sk,ss_ticket_number]
-                                        Filter [ss_customer_sk,ss_item_sk,ss_sold_date_sk,ss_store_sk,ss_ticket_number]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.store_sales [ss_customer_sk,ss_item_sk,ss_sold_date_sk,ss_store_sk,ss_ticket_number]
+                                      Filter [ss_customer_sk,ss_item_sk,ss_sold_date_sk,ss_store_sk,ss_ticket_number]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.store_sales [ss_customer_sk,ss_item_sk,ss_sold_date_sk,ss_store_sk,ss_ticket_number]
                                       InputAdapter
                                         BroadcastExchange #3
                                           WholeStageCodegen (1)
-                                            Project [d_date_sk]
-                                              Filter [d_date_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.date_dim [d_date_sk]
+                                            Filter [d_date_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.date_dim [d_date_sk]
                                   InputAdapter
                                     BroadcastExchange #4
                                       WholeStageCodegen (2)
-                                        Project [s_city,s_company_id,s_county,s_state,s_store_name,s_store_sk,s_street_name,s_street_number,s_street_type,s_suite_number,s_zip]
-                                          Filter [s_store_sk]
-                                            ColumnarToRow
-                                              InputAdapter
-                                                Scan parquet default.store [s_city,s_company_id,s_county,s_state,s_store_name,s_store_sk,s_street_name,s_street_number,s_street_type,s_suite_number,s_zip]
+                                        Filter [s_store_sk]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet default.store [s_city,s_company_id,s_county,s_state,s_store_name,s_store_sk,s_street_name,s_street_number,s_street_type,s_suite_number,s_zip]
                   InputAdapter
                     WholeStageCodegen (7)
                       Sort [sr_customer_sk,sr_item_sk,sr_ticket_number]
@@ -54,8 +51,7 @@ TakeOrderedAndProject [30 days ,31 - 60 days ,61 - 90 days ,91 - 120 days ,>120 
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.date_dim [d_date_sk,d_moy,d_year]
-                                  Project [sr_customer_sk,sr_item_sk,sr_returned_date_sk,sr_ticket_number]
-                                    Filter [sr_customer_sk,sr_item_sk,sr_returned_date_sk,sr_ticket_number]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.store_returns [sr_customer_sk,sr_item_sk,sr_returned_date_sk,sr_ticket_number]
+                                  Filter [sr_customer_sk,sr_item_sk,sr_returned_date_sk,sr_ticket_number]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.store_returns [sr_customer_sk,sr_item_sk,sr_returned_date_sk,sr_ticket_number]

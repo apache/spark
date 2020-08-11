@@ -67,10 +67,9 @@ TakeOrderedAndProject(limit=100, orderBy=[count(1)#1 ASC NULLS FIRST], output=[c
                :  +- *(4) BroadcastHashJoin [ss_sold_time_sk#2], [t_time_sk#3], Inner, BuildRight, false
                :     :- *(4) Project [ss_sold_time_sk#2, ss_store_sk#6]
                :     :  +- *(4) BroadcastHashJoin [ss_hdemo_sk#4], [hd_demo_sk#5], Inner, BuildRight, false
-               :     :     :- *(4) Project [ss_sold_time_sk#2, ss_hdemo_sk#4, ss_store_sk#6]
-               :     :     :  +- *(4) Filter ((isnotnull(ss_hdemo_sk#4) AND isnotnull(ss_sold_time_sk#2)) AND isnotnull(ss_store_sk#6))
-               :     :     :     +- *(4) ColumnarToRow
-               :     :     :        +- FileScan parquet default.store_sales[ss_sold_time_sk#2,ss_hdemo_sk#4,ss_store_sk#6] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#4), isnotnull(ss_sold_time_sk#2), isnotnull(ss_store_sk#6)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+               :     :     :- *(4) Filter ((isnotnull(ss_hdemo_sk#4) AND isnotnull(ss_sold_time_sk#2)) AND isnotnull(ss_store_sk#6))
+               :     :     :  +- *(4) ColumnarToRow
+               :     :     :     +- FileScan parquet default.store_sales[ss_sold_time_sk#2,ss_hdemo_sk#4,ss_store_sk#6] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#4), isnotnull(ss_sold_time_sk#2), isnotnull(ss_store_sk#6)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
                :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#66]
                :     :        +- *(1) Project [hd_demo_sk#5]
                :     :           +- *(1) Filter ((isnotnull(hd_dep_count#10) AND (hd_dep_count#10 = 7)) AND isnotnull(hd_demo_sk#5))

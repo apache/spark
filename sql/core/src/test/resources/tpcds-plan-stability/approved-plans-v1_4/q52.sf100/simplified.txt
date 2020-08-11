@@ -9,11 +9,10 @@ TakeOrderedAndProject [brand,brand_id,d_year,ext_price]
                 BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
                   Project [i_brand,i_brand_id,ss_ext_sales_price,ss_sold_date_sk]
                     BroadcastHashJoin [i_item_sk,ss_item_sk]
-                      Project [ss_ext_sales_price,ss_item_sk,ss_sold_date_sk]
-                        Filter [ss_item_sk,ss_sold_date_sk]
-                          ColumnarToRow
-                            InputAdapter
-                              Scan parquet default.store_sales [ss_ext_sales_price,ss_item_sk,ss_sold_date_sk]
+                      Filter [ss_item_sk,ss_sold_date_sk]
+                        ColumnarToRow
+                          InputAdapter
+                            Scan parquet default.store_sales [ss_ext_sales_price,ss_item_sk,ss_sold_date_sk]
                       InputAdapter
                         BroadcastExchange #2
                           WholeStageCodegen (1)

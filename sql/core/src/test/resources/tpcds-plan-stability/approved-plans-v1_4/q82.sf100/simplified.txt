@@ -44,8 +44,7 @@ TakeOrderedAndProject [i_current_price,i_item_desc,i_item_id]
                         InputAdapter
                           Exchange [ss_item_sk] #5
                             WholeStageCodegen (5)
-                              Project [ss_item_sk]
-                                Filter [ss_item_sk]
-                                  ColumnarToRow
-                                    InputAdapter
-                                      Scan parquet default.store_sales [ss_item_sk]
+                              Filter [ss_item_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.store_sales [ss_item_sk]

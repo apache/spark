@@ -23,11 +23,10 @@ WholeStageCodegen (14)
                                             BroadcastHashJoin [i_item_sk,inv_item_sk]
                                               Project [d_moy,inv_item_sk,inv_quantity_on_hand,inv_warehouse_sk]
                                                 BroadcastHashJoin [d_date_sk,inv_date_sk]
-                                                  Project [inv_date_sk,inv_item_sk,inv_quantity_on_hand,inv_warehouse_sk]
-                                                    Filter [inv_date_sk,inv_item_sk,inv_warehouse_sk]
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet default.inventory [inv_date_sk,inv_item_sk,inv_quantity_on_hand,inv_warehouse_sk]
+                                                  Filter [inv_date_sk,inv_item_sk,inv_warehouse_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.inventory [inv_date_sk,inv_item_sk,inv_quantity_on_hand,inv_warehouse_sk]
                                                   InputAdapter
                                                     BroadcastExchange #4
                                                       WholeStageCodegen (1)
@@ -39,19 +38,17 @@ WholeStageCodegen (14)
                                               InputAdapter
                                                 BroadcastExchange #5
                                                   WholeStageCodegen (2)
-                                                    Project [i_item_sk]
-                                                      Filter [i_item_sk]
-                                                        ColumnarToRow
-                                                          InputAdapter
-                                                            Scan parquet default.item [i_item_sk]
+                                                    Filter [i_item_sk]
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet default.item [i_item_sk]
                                           InputAdapter
                                             BroadcastExchange #6
                                               WholeStageCodegen (3)
-                                                Project [w_warehouse_name,w_warehouse_sk]
-                                                  Filter [w_warehouse_sk]
-                                                    ColumnarToRow
-                                                      InputAdapter
-                                                        Scan parquet default.warehouse [w_warehouse_name,w_warehouse_sk]
+                                                Filter [w_warehouse_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.warehouse [w_warehouse_name,w_warehouse_sk]
             InputAdapter
               WholeStageCodegen (12)
                 Sort [i_item_sk,w_warehouse_sk]
@@ -71,11 +68,10 @@ WholeStageCodegen (14)
                                             BroadcastHashJoin [i_item_sk,inv_item_sk]
                                               Project [d_moy,inv_item_sk,inv_quantity_on_hand,inv_warehouse_sk]
                                                 BroadcastHashJoin [d_date_sk,inv_date_sk]
-                                                  Project [inv_date_sk,inv_item_sk,inv_quantity_on_hand,inv_warehouse_sk]
-                                                    Filter [inv_date_sk,inv_item_sk,inv_warehouse_sk]
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet default.inventory [inv_date_sk,inv_item_sk,inv_quantity_on_hand,inv_warehouse_sk]
+                                                  Filter [inv_date_sk,inv_item_sk,inv_warehouse_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.inventory [inv_date_sk,inv_item_sk,inv_quantity_on_hand,inv_warehouse_sk]
                                                   InputAdapter
                                                     BroadcastExchange #9
                                                       WholeStageCodegen (7)

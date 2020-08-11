@@ -88,32 +88,28 @@ TakeOrderedAndProject(limit=100, orderBy=[c_customer_id#3 ASC NULLS FIRST], outp
       :     :     :  +- *(6) BroadcastHashJoin [c_current_cdemo_sk#14], [cd_demo_sk#13], Inner, BuildRight, false
       :     :     :     :- *(6) Project [c_customer_id#3, c_current_cdemo_sk#14, c_current_hdemo_sk#16, c_first_name#5, c_last_name#4]
       :     :     :     :  +- *(6) BroadcastHashJoin [c_current_addr_sk#7], [ca_address_sk#8], Inner, BuildRight, false
-      :     :     :     :     :- *(6) Project [c_customer_id#3, c_current_cdemo_sk#14, c_current_hdemo_sk#16, c_current_addr_sk#7, c_first_name#5, c_last_name#4]
-      :     :     :     :     :  +- *(6) Filter ((isnotnull(c_current_addr_sk#7) AND isnotnull(c_current_cdemo_sk#14)) AND isnotnull(c_current_hdemo_sk#16))
-      :     :     :     :     :     +- *(6) ColumnarToRow
-      :     :     :     :     :        +- FileScan parquet default.customer[c_customer_id#3,c_current_cdemo_sk#14,c_current_hdemo_sk#16,c_current_addr_sk#7,c_first_name#5,c_last_name#4] Batched: true, DataFilters: [isnotnull(c_current_addr_sk#7), isnotnull(c_current_cdemo_sk#14), isnotnull(c_current_hdemo_sk#..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(c_current_addr_sk), IsNotNull(c_current_cdemo_sk), IsNotNull(c_current_hdemo_sk)], ReadSchema: struct<c_customer_id:string,c_current_cdemo_sk:int,c_current_hdemo_sk:int,c_current_addr_sk:int,c...
+      :     :     :     :     :- *(6) Filter ((isnotnull(c_current_addr_sk#7) AND isnotnull(c_current_cdemo_sk#14)) AND isnotnull(c_current_hdemo_sk#16))
+      :     :     :     :     :  +- *(6) ColumnarToRow
+      :     :     :     :     :     +- FileScan parquet default.customer[c_customer_id#3,c_current_cdemo_sk#14,c_current_hdemo_sk#16,c_current_addr_sk#7,c_first_name#5,c_last_name#4] Batched: true, DataFilters: [isnotnull(c_current_addr_sk#7), isnotnull(c_current_cdemo_sk#14), isnotnull(c_current_hdemo_sk#..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(c_current_addr_sk), IsNotNull(c_current_cdemo_sk), IsNotNull(c_current_hdemo_sk)], ReadSchema: struct<c_customer_id:string,c_current_cdemo_sk:int,c_current_hdemo_sk:int,c_current_addr_sk:int,c...
       :     :     :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#71]
       :     :     :     :        +- *(1) Project [ca_address_sk#8]
       :     :     :     :           +- *(1) Filter ((isnotnull(ca_city#6) AND (ca_city#6 = Edgewood)) AND isnotnull(ca_address_sk#8))
       :     :     :     :              +- *(1) ColumnarToRow
       :     :     :     :                 +- FileScan parquet default.customer_address[ca_address_sk#8,ca_city#6] Batched: true, DataFilters: [isnotnull(ca_city#6), (ca_city#6 = Edgewood), isnotnull(ca_address_sk#8)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ca_city), EqualTo(ca_city,Edgewood), IsNotNull(ca_address_sk)], ReadSchema: struct<ca_address_sk:int,ca_city:string>
-      :     :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#72]
-      :     :     :        +- *(2) Project [cd_demo_sk#13]
-      :     :     :           +- *(2) Filter isnotnull(cd_demo_sk#13)
-      :     :     :              +- *(2) ColumnarToRow
-      :     :     :                 +- FileScan parquet default.customer_demographics[cd_demo_sk#13] Batched: true, DataFilters: [isnotnull(cd_demo_sk#13)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cd_demo_sk)], ReadSchema: struct<cd_demo_sk:int>
-      :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#73]
-      :     :        +- *(3) Project [hd_demo_sk#15, hd_income_band_sk#12]
-      :     :           +- *(3) Filter (isnotnull(hd_demo_sk#15) AND isnotnull(hd_income_band_sk#12))
-      :     :              +- *(3) ColumnarToRow
-      :     :                 +- FileScan parquet default.household_demographics[hd_demo_sk#15,hd_income_band_sk#12] Batched: true, DataFilters: [isnotnull(hd_demo_sk#15), isnotnull(hd_income_band_sk#12)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(hd_demo_sk), IsNotNull(hd_income_band_sk)], ReadSchema: struct<hd_demo_sk:int,hd_income_band_sk:int>
+      :     :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#72]
+      :     :     :        +- *(2) Filter isnotnull(cd_demo_sk#13)
+      :     :     :           +- *(2) ColumnarToRow
+      :     :     :              +- FileScan parquet default.customer_demographics[cd_demo_sk#13] Batched: true, DataFilters: [isnotnull(cd_demo_sk#13)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cd_demo_sk)], ReadSchema: struct<cd_demo_sk:int>
+      :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#73]
+      :     :        +- *(3) Filter (isnotnull(hd_demo_sk#15) AND isnotnull(hd_income_band_sk#12))
+      :     :           +- *(3) ColumnarToRow
+      :     :              +- FileScan parquet default.household_demographics[hd_demo_sk#15,hd_income_band_sk#12] Batched: true, DataFilters: [isnotnull(hd_demo_sk#15), isnotnull(hd_income_band_sk#12)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(hd_demo_sk), IsNotNull(hd_income_band_sk)], ReadSchema: struct<hd_demo_sk:int,hd_income_band_sk:int>
       :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#74]
       :        +- *(4) Project [ib_income_band_sk#11]
       :           +- *(4) Filter ((((isnotnull(ib_lower_bound#9) AND isnotnull(ib_upper_bound#10)) AND (ib_lower_bound#9 >= 38128)) AND (ib_upper_bound#10 <= 88128)) AND isnotnull(ib_income_band_sk#11))
       :              +- *(4) ColumnarToRow
       :                 +- FileScan parquet default.income_band[ib_income_band_sk#11,ib_lower_bound#9,ib_upper_bound#10] Batched: true, DataFilters: [isnotnull(ib_lower_bound#9), isnotnull(ib_upper_bound#10), (ib_lower_bound#9 >= 38128), ..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ib_lower_bound), IsNotNull(ib_upper_bound), GreaterThanOrEqual(ib_lower_bound,38128), ..., ReadSchema: struct<ib_income_band_sk:int,ib_lower_bound:int,ib_upper_bound:int>
-      +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#75]
-         +- *(5) Project [sr_cdemo_sk#17]
-            +- *(5) Filter isnotnull(sr_cdemo_sk#17)
-               +- *(5) ColumnarToRow
-                  +- FileScan parquet default.store_returns[sr_cdemo_sk#17] Batched: true, DataFilters: [isnotnull(sr_cdemo_sk#17)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(sr_cdemo_sk)], ReadSchema: struct<sr_cdemo_sk:bigint>
+      +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#75]
+         +- *(5) Filter isnotnull(sr_cdemo_sk#17)
+            +- *(5) ColumnarToRow
+               +- FileScan parquet default.store_returns[sr_cdemo_sk#17] Batched: true, DataFilters: [isnotnull(sr_cdemo_sk#17)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(sr_cdemo_sk)], ReadSchema: struct<sr_cdemo_sk:bigint>

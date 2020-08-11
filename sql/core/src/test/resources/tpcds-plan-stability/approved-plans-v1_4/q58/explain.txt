@@ -212,22 +212,19 @@ TakeOrderedAndProject(limit=100, orderBy=[item_id#1 ASC NULLS FIRST,ss_item_rev#
       :     :              +- *(4) BroadcastHashJoin [ss_sold_date_sk#22], [d_date_sk#23], Inner, BuildRight, false
       :     :                 :- *(4) Project [ss_sold_date_sk#22, ss_ext_sales_price#18, i_item_id#17]
       :     :                 :  +- *(4) BroadcastHashJoin [ss_item_sk#19], [i_item_sk#20], Inner, BuildRight, false
-      :     :                 :     :- *(4) Project [ss_sold_date_sk#22, ss_item_sk#19, ss_ext_sales_price#18]
-      :     :                 :     :  +- *(4) Filter (isnotnull(ss_item_sk#19) AND isnotnull(ss_sold_date_sk#22))
-      :     :                 :     :     +- *(4) ColumnarToRow
-      :     :                 :     :        +- FileScan parquet default.store_sales[ss_sold_date_sk#22,ss_item_sk#19,ss_ext_sales_price#18] Batched: true, DataFilters: [isnotnull(ss_item_sk#19), isnotnull(ss_sold_date_sk#22)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_sold_date_sk)], ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_ext_sales_price:decimal(7,2)>
-      :     :                 :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#139]
-      :     :                 :        +- *(1) Project [i_item_sk#20, i_item_id#17]
-      :     :                 :           +- *(1) Filter (isnotnull(i_item_sk#20) AND isnotnull(i_item_id#17))
-      :     :                 :              +- *(1) ColumnarToRow
-      :     :                 :                 +- FileScan parquet default.item[i_item_sk#20,i_item_id#17] Batched: true, DataFilters: [isnotnull(i_item_sk#20), isnotnull(i_item_id#17)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_item_id)], ReadSchema: struct<i_item_sk:int,i_item_id:string>
+      :     :                 :     :- *(4) Filter (isnotnull(ss_item_sk#19) AND isnotnull(ss_sold_date_sk#22))
+      :     :                 :     :  +- *(4) ColumnarToRow
+      :     :                 :     :     +- FileScan parquet default.store_sales[ss_sold_date_sk#22,ss_item_sk#19,ss_ext_sales_price#18] Batched: true, DataFilters: [isnotnull(ss_item_sk#19), isnotnull(ss_sold_date_sk#22)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_sold_date_sk)], ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_ext_sales_price:decimal(7,2)>
+      :     :                 :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#139]
+      :     :                 :        +- *(1) Filter (isnotnull(i_item_sk#20) AND isnotnull(i_item_id#17))
+      :     :                 :           +- *(1) ColumnarToRow
+      :     :                 :              +- FileScan parquet default.item[i_item_sk#20,i_item_id#17] Batched: true, DataFilters: [isnotnull(i_item_sk#20), isnotnull(i_item_id#17)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_item_id)], ReadSchema: struct<i_item_sk:int,i_item_id:string>
       :     :                 +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#140]
       :     :                    +- *(3) Project [d_date_sk#23]
       :     :                       +- *(3) BroadcastHashJoin [d_date#21], [d_date#21#134], LeftSemi, BuildRight, false
-      :     :                          :- *(3) Project [d_date_sk#23, d_date#21]
-      :     :                          :  +- *(3) Filter isnotnull(d_date_sk#23)
-      :     :                          :     +- *(3) ColumnarToRow
-      :     :                          :        +- FileScan parquet default.date_dim[d_date_sk#23,d_date#21] Batched: true, DataFilters: [isnotnull(d_date_sk#23)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_date_sk)], ReadSchema: struct<d_date_sk:int,d_date:date>
+      :     :                          :- *(3) Filter isnotnull(d_date_sk#23)
+      :     :                          :  +- *(3) ColumnarToRow
+      :     :                          :     +- FileScan parquet default.date_dim[d_date_sk#23,d_date#21] Batched: true, DataFilters: [isnotnull(d_date_sk#23)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_date_sk)], ReadSchema: struct<d_date_sk:int,d_date:date>
       :     :                          +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, date, true]),false), [id=#141]
       :     :                             +- *(2) Project [d_date#21 AS d_date#21#134]
       :     :                                +- *(2) Filter (isnotnull(d_week_seq#24) AND (d_week_seq#24 = Subquery scalar-subquery#4, [id=#142]))
@@ -247,18 +244,16 @@ TakeOrderedAndProject(limit=100, orderBy=[item_id#1 ASC NULLS FIRST,ss_item_rev#
       :                       +- *(8) BroadcastHashJoin [cs_sold_date_sk#88], [d_date_sk#23], Inner, BuildRight, false
       :                          :- *(8) Project [cs_sold_date_sk#88, cs_ext_sales_price#86, i_item_id#17]
       :                          :  +- *(8) BroadcastHashJoin [cs_item_sk#87], [i_item_sk#20], Inner, BuildRight, false
-      :                          :     :- *(8) Project [cs_sold_date_sk#88, cs_item_sk#87, cs_ext_sales_price#86]
-      :                          :     :  +- *(8) Filter (isnotnull(cs_item_sk#87) AND isnotnull(cs_sold_date_sk#88))
-      :                          :     :     +- *(8) ColumnarToRow
-      :                          :     :        +- FileScan parquet default.catalog_sales[cs_sold_date_sk#88,cs_item_sk#87,cs_ext_sales_price#86] Batched: true, DataFilters: [isnotnull(cs_item_sk#87), isnotnull(cs_sold_date_sk#88)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cs_item_sk), IsNotNull(cs_sold_date_sk)], ReadSchema: struct<cs_sold_date_sk:int,cs_item_sk:int,cs_ext_sales_price:decimal(7,2)>
-      :                          :     +- ReusedExchange [i_item_sk#20, i_item_id#17], BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#139]
+      :                          :     :- *(8) Filter (isnotnull(cs_item_sk#87) AND isnotnull(cs_sold_date_sk#88))
+      :                          :     :  +- *(8) ColumnarToRow
+      :                          :     :     +- FileScan parquet default.catalog_sales[cs_sold_date_sk#88,cs_item_sk#87,cs_ext_sales_price#86] Batched: true, DataFilters: [isnotnull(cs_item_sk#87), isnotnull(cs_sold_date_sk#88)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cs_item_sk), IsNotNull(cs_sold_date_sk)], ReadSchema: struct<cs_sold_date_sk:int,cs_item_sk:int,cs_ext_sales_price:decimal(7,2)>
+      :                          :     +- ReusedExchange [i_item_sk#20, i_item_id#17], BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#139]
       :                          +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#146]
       :                             +- *(7) Project [d_date_sk#23]
       :                                +- *(7) BroadcastHashJoin [d_date#21], [d_date#21#135], LeftSemi, BuildRight, false
-      :                                   :- *(7) Project [d_date_sk#23, d_date#21]
-      :                                   :  +- *(7) Filter isnotnull(d_date_sk#23)
-      :                                   :     +- *(7) ColumnarToRow
-      :                                   :        +- FileScan parquet default.date_dim[d_date_sk#23,d_date#21] Batched: true, DataFilters: [isnotnull(d_date_sk#23)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_date_sk)], ReadSchema: struct<d_date_sk:int,d_date:date>
+      :                                   :- *(7) Filter isnotnull(d_date_sk#23)
+      :                                   :  +- *(7) ColumnarToRow
+      :                                   :     +- FileScan parquet default.date_dim[d_date_sk#23,d_date#21] Batched: true, DataFilters: [isnotnull(d_date_sk#23)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_date_sk)], ReadSchema: struct<d_date_sk:int,d_date:date>
       :                                   +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, date, true]),false), [id=#147]
       :                                      +- *(6) Project [d_date#21 AS d_date#21#135]
       :                                         +- *(6) Filter (isnotnull(d_week_seq#24) AND (d_week_seq#24 = ReusedSubquery Subquery scalar-subquery#4, [id=#142]))
@@ -274,18 +269,16 @@ TakeOrderedAndProject(limit=100, orderBy=[item_id#1 ASC NULLS FIRST,ss_item_rev#
                         +- *(13) BroadcastHashJoin [ws_sold_date_sk#112], [d_date_sk#23], Inner, BuildRight, false
                            :- *(13) Project [ws_sold_date_sk#112, ws_ext_sales_price#110, i_item_id#17]
                            :  +- *(13) BroadcastHashJoin [ws_item_sk#111], [i_item_sk#20], Inner, BuildRight, false
-                           :     :- *(13) Project [ws_sold_date_sk#112, ws_item_sk#111, ws_ext_sales_price#110]
-                           :     :  +- *(13) Filter (isnotnull(ws_item_sk#111) AND isnotnull(ws_sold_date_sk#112))
-                           :     :     +- *(13) ColumnarToRow
-                           :     :        +- FileScan parquet default.web_sales[ws_sold_date_sk#112,ws_item_sk#111,ws_ext_sales_price#110] Batched: true, DataFilters: [isnotnull(ws_item_sk#111), isnotnull(ws_sold_date_sk#112)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ws_item_sk), IsNotNull(ws_sold_date_sk)], ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_ext_sales_price:decimal(7,2)>
-                           :     +- ReusedExchange [i_item_sk#20, i_item_id#17], BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#139]
+                           :     :- *(13) Filter (isnotnull(ws_item_sk#111) AND isnotnull(ws_sold_date_sk#112))
+                           :     :  +- *(13) ColumnarToRow
+                           :     :     +- FileScan parquet default.web_sales[ws_sold_date_sk#112,ws_item_sk#111,ws_ext_sales_price#110] Batched: true, DataFilters: [isnotnull(ws_item_sk#111), isnotnull(ws_sold_date_sk#112)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ws_item_sk), IsNotNull(ws_sold_date_sk)], ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_ext_sales_price:decimal(7,2)>
+                           :     +- ReusedExchange [i_item_sk#20, i_item_id#17], BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#139]
                            +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#151]
                               +- *(12) Project [d_date_sk#23]
                                  +- *(12) BroadcastHashJoin [d_date#21], [d_date#21#136], LeftSemi, BuildRight, false
-                                    :- *(12) Project [d_date_sk#23, d_date#21]
-                                    :  +- *(12) Filter isnotnull(d_date_sk#23)
-                                    :     +- *(12) ColumnarToRow
-                                    :        +- FileScan parquet default.date_dim[d_date_sk#23,d_date#21] Batched: true, DataFilters: [isnotnull(d_date_sk#23)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_date_sk)], ReadSchema: struct<d_date_sk:int,d_date:date>
+                                    :- *(12) Filter isnotnull(d_date_sk#23)
+                                    :  +- *(12) ColumnarToRow
+                                    :     +- FileScan parquet default.date_dim[d_date_sk#23,d_date#21] Batched: true, DataFilters: [isnotnull(d_date_sk#23)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_date_sk)], ReadSchema: struct<d_date_sk:int,d_date:date>
                                     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, date, true]),false), [id=#152]
                                        +- *(11) Project [d_date#21 AS d_date#21#136]
                                           +- *(11) Filter (isnotnull(d_week_seq#24) AND (d_week_seq#24 = ReusedSubquery Subquery scalar-subquery#4, [id=#142]))

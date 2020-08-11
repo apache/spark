@@ -21,32 +21,28 @@ TakeOrderedAndProject [30 days ,31 - 60 days ,61 - 90 days ,91 - 120 days ,>120 
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.date_dim [d_date_sk,d_month_seq]
-                              Project [ws_ship_date_sk,ws_ship_mode_sk,ws_sold_date_sk,ws_warehouse_sk,ws_web_site_sk]
-                                Filter [ws_ship_date_sk,ws_ship_mode_sk,ws_warehouse_sk,ws_web_site_sk]
-                                  ColumnarToRow
-                                    InputAdapter
-                                      Scan parquet default.web_sales [ws_ship_date_sk,ws_ship_mode_sk,ws_sold_date_sk,ws_warehouse_sk,ws_web_site_sk]
+                              Filter [ws_ship_date_sk,ws_ship_mode_sk,ws_warehouse_sk,ws_web_site_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.web_sales [ws_ship_date_sk,ws_ship_mode_sk,ws_sold_date_sk,ws_warehouse_sk,ws_web_site_sk]
                           InputAdapter
                             BroadcastExchange #3
                               WholeStageCodegen (2)
-                                Project [web_name,web_site_sk]
-                                  Filter [web_site_sk]
-                                    ColumnarToRow
-                                      InputAdapter
-                                        Scan parquet default.web_site [web_name,web_site_sk]
+                                Filter [web_site_sk]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet default.web_site [web_name,web_site_sk]
                       InputAdapter
                         BroadcastExchange #4
                           WholeStageCodegen (3)
-                            Project [sm_ship_mode_sk,sm_type]
-                              Filter [sm_ship_mode_sk]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet default.ship_mode [sm_ship_mode_sk,sm_type]
+                            Filter [sm_ship_mode_sk]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.ship_mode [sm_ship_mode_sk,sm_type]
                   InputAdapter
                     BroadcastExchange #5
                       WholeStageCodegen (4)
-                        Project [w_warehouse_name,w_warehouse_sk]
-                          Filter [w_warehouse_sk]
-                            ColumnarToRow
-                              InputAdapter
-                                Scan parquet default.warehouse [w_warehouse_name,w_warehouse_sk]
+                        Filter [w_warehouse_sk]
+                          ColumnarToRow
+                            InputAdapter
+                              Scan parquet default.warehouse [w_warehouse_name,w_warehouse_sk]

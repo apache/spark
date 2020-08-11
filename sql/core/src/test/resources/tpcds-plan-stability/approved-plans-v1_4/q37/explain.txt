@@ -80,8 +80,7 @@ TakeOrderedAndProject(limit=100, orderBy=[i_item_id#1 ASC NULLS FIRST], output=[
                :           +- *(2) Filter (((isnotnull(d_date#8) AND (d_date#8 >= 10988)) AND (d_date#8 <= 11048)) AND isnotnull(d_date_sk#6))
                :              +- *(2) ColumnarToRow
                :                 +- FileScan parquet default.date_dim[d_date_sk#6,d_date#8] Batched: true, DataFilters: [isnotnull(d_date#8), (d_date#8 >= 10988), (d_date#8 <= 11048), isnotnull(d_date_sk#6)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-02-01), LessThanOrEqual(d_date,2000-04-01), Is..., ReadSchema: struct<d_date_sk:int,d_date:date>
-               +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#78]
-                  +- *(3) Project [cs_item_sk#11]
-                     +- *(3) Filter isnotnull(cs_item_sk#11)
-                        +- *(3) ColumnarToRow
-                           +- FileScan parquet default.catalog_sales[cs_item_sk#11] Batched: true, DataFilters: [isnotnull(cs_item_sk#11)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cs_item_sk)], ReadSchema: struct<cs_item_sk:int>
+               +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#78]
+                  +- *(3) Filter isnotnull(cs_item_sk#11)
+                     +- *(3) ColumnarToRow
+                        +- FileScan parquet default.catalog_sales[cs_item_sk#11] Batched: true, DataFilters: [isnotnull(cs_item_sk#11)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cs_item_sk)], ReadSchema: struct<cs_item_sk:int>

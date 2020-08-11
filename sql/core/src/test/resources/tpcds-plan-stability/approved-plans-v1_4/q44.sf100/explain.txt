@@ -181,9 +181,8 @@ TakeOrderedAndProject(limit=100, orderBy=[rnk#3 ASC NULLS FIRST], output=[rnk#3,
       :     :                             :  +- ReusedSubquery Subquery scalar-subquery#4, [id=#83]
       :     :                             +- *(5) HashAggregate(keys=[ss_item_sk#23], functions=[avg(UnscaledValue(ss_net_profit#17))], output=[item_sk#11, rank_col#12, avg(ss_net_profit#17)#41])
       :     :                                +- ReusedExchange [ss_item_sk#23, sum#92, count#93], Exchange hashpartitioning(ss_item_sk#23, 5), true, [id=#87]
-      :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#94]
-      :        +- *(8) Project [i_item_sk#15, i_product_name#13]
-      :           +- *(8) Filter isnotnull(i_item_sk#15)
-      :              +- *(8) ColumnarToRow
-      :                 +- FileScan parquet default.item[i_item_sk#15,i_product_name#13] Batched: true, DataFilters: [isnotnull(i_item_sk#15)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(i_item_sk)], ReadSchema: struct<i_item_sk:int,i_product_name:string>
-      +- ReusedExchange [i_item_sk#16, i_product_name#14], BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#94]
+      :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#94]
+      :        +- *(8) Filter isnotnull(i_item_sk#15)
+      :           +- *(8) ColumnarToRow
+      :              +- FileScan parquet default.item[i_item_sk#15,i_product_name#13] Batched: true, DataFilters: [isnotnull(i_item_sk#15)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(i_item_sk)], ReadSchema: struct<i_item_sk:int,i_product_name:string>
+      +- ReusedExchange [i_item_sk#16, i_product_name#14], BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#94]

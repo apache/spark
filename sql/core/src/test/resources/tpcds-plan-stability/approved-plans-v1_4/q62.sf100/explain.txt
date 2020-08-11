@@ -84,22 +84,18 @@ TakeOrderedAndProject(limit=100, orderBy=[substr(w_warehouse_name, 1, 20)#6 ASC 
                :     :     :     :     +- *(1) Filter (((isnotnull(d_month_seq#17) AND (d_month_seq#17 >= 1200)) AND (d_month_seq#17 <= 1211)) AND isnotnull(d_date_sk#18))
                :     :     :     :        +- *(1) ColumnarToRow
                :     :     :     :           +- FileScan parquet default.date_dim[d_date_sk#18,d_month_seq#17] Batched: true, DataFilters: [isnotnull(d_month_seq#17), (d_month_seq#17 >= 1200), (d_month_seq#17 <= 1211), isnotnull(d..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1200), LessThanOrEqual(d_month_seq,1211),..., ReadSchema: struct<d_date_sk:int,d_month_seq:int>
-               :     :     :     +- *(5) Project [ws_sold_date_sk#16, ws_ship_date_sk#15, ws_web_site_sk#23, ws_ship_mode_sk#21, ws_warehouse_sk#19]
-               :     :     :        +- *(5) Filter (((isnotnull(ws_warehouse_sk#19) AND isnotnull(ws_ship_mode_sk#21)) AND isnotnull(ws_web_site_sk#23)) AND isnotnull(ws_ship_date_sk#15))
-               :     :     :           +- *(5) ColumnarToRow
-               :     :     :              +- FileScan parquet default.web_sales[ws_sold_date_sk#16,ws_ship_date_sk#15,ws_web_site_sk#23,ws_ship_mode_sk#21,ws_warehouse_sk#19] Batched: true, DataFilters: [isnotnull(ws_warehouse_sk#19), isnotnull(ws_ship_mode_sk#21), isnotnull(ws_web_site_sk#23)..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ws_warehouse_sk), IsNotNull(ws_ship_mode_sk), IsNotNull(ws_web_site_sk), IsNotNull(ws_..., ReadSchema: struct<ws_sold_date_sk:int,ws_ship_date_sk:int,ws_web_site_sk:int,ws_ship_mode_sk:int,ws_warehous...
-               :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#112]
-               :     :        +- *(2) Project [web_site_sk#24, web_name#8]
-               :     :           +- *(2) Filter isnotnull(web_site_sk#24)
-               :     :              +- *(2) ColumnarToRow
-               :     :                 +- FileScan parquet default.web_site[web_site_sk#24,web_name#8] Batched: true, DataFilters: [isnotnull(web_site_sk#24)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(web_site_sk)], ReadSchema: struct<web_site_sk:int,web_name:string>
-               :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#113]
-               :        +- *(3) Project [sm_ship_mode_sk#22, sm_type#7]
-               :           +- *(3) Filter isnotnull(sm_ship_mode_sk#22)
-               :              +- *(3) ColumnarToRow
-               :                 +- FileScan parquet default.ship_mode[sm_ship_mode_sk#22,sm_type#7] Batched: true, DataFilters: [isnotnull(sm_ship_mode_sk#22)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(sm_ship_mode_sk)], ReadSchema: struct<sm_ship_mode_sk:int,sm_type:string>
-               +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#114]
-                  +- *(4) Project [w_warehouse_sk#20, w_warehouse_name#14]
-                     +- *(4) Filter isnotnull(w_warehouse_sk#20)
-                        +- *(4) ColumnarToRow
-                           +- FileScan parquet default.warehouse[w_warehouse_sk#20,w_warehouse_name#14] Batched: true, DataFilters: [isnotnull(w_warehouse_sk#20)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(w_warehouse_sk)], ReadSchema: struct<w_warehouse_sk:int,w_warehouse_name:string>
+               :     :     :     +- *(5) Filter (((isnotnull(ws_warehouse_sk#19) AND isnotnull(ws_ship_mode_sk#21)) AND isnotnull(ws_web_site_sk#23)) AND isnotnull(ws_ship_date_sk#15))
+               :     :     :        +- *(5) ColumnarToRow
+               :     :     :           +- FileScan parquet default.web_sales[ws_sold_date_sk#16,ws_ship_date_sk#15,ws_web_site_sk#23,ws_ship_mode_sk#21,ws_warehouse_sk#19] Batched: true, DataFilters: [isnotnull(ws_warehouse_sk#19), isnotnull(ws_ship_mode_sk#21), isnotnull(ws_web_site_sk#23)..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ws_warehouse_sk), IsNotNull(ws_ship_mode_sk), IsNotNull(ws_web_site_sk), IsNotNull(ws_..., ReadSchema: struct<ws_sold_date_sk:int,ws_ship_date_sk:int,ws_web_site_sk:int,ws_ship_mode_sk:int,ws_warehous...
+               :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#112]
+               :     :        +- *(2) Filter isnotnull(web_site_sk#24)
+               :     :           +- *(2) ColumnarToRow
+               :     :              +- FileScan parquet default.web_site[web_site_sk#24,web_name#8] Batched: true, DataFilters: [isnotnull(web_site_sk#24)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(web_site_sk)], ReadSchema: struct<web_site_sk:int,web_name:string>
+               :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#113]
+               :        +- *(3) Filter isnotnull(sm_ship_mode_sk#22)
+               :           +- *(3) ColumnarToRow
+               :              +- FileScan parquet default.ship_mode[sm_ship_mode_sk#22,sm_type#7] Batched: true, DataFilters: [isnotnull(sm_ship_mode_sk#22)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(sm_ship_mode_sk)], ReadSchema: struct<sm_ship_mode_sk:int,sm_type:string>
+               +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#114]
+                  +- *(4) Filter isnotnull(w_warehouse_sk#20)
+                     +- *(4) ColumnarToRow
+                        +- FileScan parquet default.warehouse[w_warehouse_sk#20,w_warehouse_name#14] Batched: true, DataFilters: [isnotnull(w_warehouse_sk#20)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(w_warehouse_sk)], ReadSchema: struct<w_warehouse_sk:int,w_warehouse_name:string>

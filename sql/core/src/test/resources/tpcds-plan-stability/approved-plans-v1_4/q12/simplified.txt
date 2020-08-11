@@ -17,19 +17,17 @@ TakeOrderedAndProject [i_category,i_class,i_current_price,i_item_desc,i_item_id,
                                 BroadcastHashJoin [d_date_sk,ws_sold_date_sk]
                                   Project [i_category,i_class,i_current_price,i_item_desc,i_item_id,ws_ext_sales_price,ws_sold_date_sk]
                                     BroadcastHashJoin [i_item_sk,ws_item_sk]
-                                      Project [ws_ext_sales_price,ws_item_sk,ws_sold_date_sk]
-                                        Filter [ws_item_sk,ws_sold_date_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.web_sales [ws_ext_sales_price,ws_item_sk,ws_sold_date_sk]
+                                      Filter [ws_item_sk,ws_sold_date_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.web_sales [ws_ext_sales_price,ws_item_sk,ws_sold_date_sk]
                                       InputAdapter
                                         BroadcastExchange #3
                                           WholeStageCodegen (1)
-                                            Project [i_category,i_class,i_current_price,i_item_desc,i_item_id,i_item_sk]
-                                              Filter [i_category,i_item_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.item [i_category,i_class,i_current_price,i_item_desc,i_item_id,i_item_sk]
+                                            Filter [i_category,i_item_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.item [i_category,i_class,i_current_price,i_item_desc,i_item_id,i_item_sk]
                                   InputAdapter
                                     BroadcastExchange #4
                                       WholeStageCodegen (2)

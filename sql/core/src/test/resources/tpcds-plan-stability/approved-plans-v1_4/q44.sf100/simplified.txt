@@ -60,10 +60,9 @@ TakeOrderedAndProject [best_performing,rnk,worst_performing]
             InputAdapter
               BroadcastExchange #6
                 WholeStageCodegen (8)
-                  Project [i_item_sk,i_product_name]
-                    Filter [i_item_sk]
-                      ColumnarToRow
-                        InputAdapter
-                          Scan parquet default.item [i_item_sk,i_product_name]
+                  Filter [i_item_sk]
+                    ColumnarToRow
+                      InputAdapter
+                        Scan parquet default.item [i_item_sk,i_product_name]
         InputAdapter
           ReusedExchange [i_item_sk,i_product_name] #6

@@ -56,10 +56,9 @@ TakeOrderedAndProject(limit=100, orderBy=[d_year#4 ASC NULLS FIRST,sum_agg#3 DES
             +- *(3) BroadcastHashJoin [ss_sold_date_sk#9], [d_date_sk#8], Inner, BuildRight, false
                :- *(3) Project [ss_sold_date_sk#9, ss_ext_sales_price#7, i_brand_id#6, i_brand#5]
                :  +- *(3) BroadcastHashJoin [ss_item_sk#10], [i_item_sk#11], Inner, BuildRight, false
-               :     :- *(3) Project [ss_sold_date_sk#9, ss_item_sk#10, ss_ext_sales_price#7]
-               :     :  +- *(3) Filter (isnotnull(ss_sold_date_sk#9) AND isnotnull(ss_item_sk#10))
-               :     :     +- *(3) ColumnarToRow
-               :     :        +- FileScan parquet default.store_sales[ss_sold_date_sk#9,ss_item_sk#10,ss_ext_sales_price#7] Batched: true, DataFilters: [isnotnull(ss_sold_date_sk#9), isnotnull(ss_item_sk#10)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_sold_date_sk), IsNotNull(ss_item_sk)], ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_ext_sales_price:decimal(7,2)>
+               :     :- *(3) Filter (isnotnull(ss_sold_date_sk#9) AND isnotnull(ss_item_sk#10))
+               :     :  +- *(3) ColumnarToRow
+               :     :     +- FileScan parquet default.store_sales[ss_sold_date_sk#9,ss_item_sk#10,ss_ext_sales_price#7] Batched: true, DataFilters: [isnotnull(ss_sold_date_sk#9), isnotnull(ss_item_sk#10)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_sold_date_sk), IsNotNull(ss_item_sk)], ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_ext_sales_price:decimal(7,2)>
                :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#75]
                :        +- *(1) Project [i_item_sk#11, i_brand_id#6, i_brand#5]
                :           +- *(1) Filter ((isnotnull(i_manufact_id#12) AND (i_manufact_id#12 = 128)) AND isnotnull(i_item_sk#11))

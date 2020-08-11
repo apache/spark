@@ -25,29 +25,26 @@ TakeOrderedAndProject [cs_qty,other_chan_qty,other_chan_sales_price,other_chan_w
                                                 InputAdapter
                                                   Exchange [ss_item_sk,ss_ticket_number] #2
                                                     WholeStageCodegen (1)
-                                                      Project [ss_customer_sk,ss_item_sk,ss_quantity,ss_sales_price,ss_sold_date_sk,ss_ticket_number,ss_wholesale_cost]
-                                                        Filter [ss_customer_sk,ss_item_sk,ss_sold_date_sk]
-                                                          ColumnarToRow
-                                                            InputAdapter
-                                                              Scan parquet default.store_sales [ss_customer_sk,ss_item_sk,ss_quantity,ss_sales_price,ss_sold_date_sk,ss_ticket_number,ss_wholesale_cost]
+                                                      Filter [ss_customer_sk,ss_item_sk,ss_sold_date_sk]
+                                                        ColumnarToRow
+                                                          InputAdapter
+                                                            Scan parquet default.store_sales [ss_customer_sk,ss_item_sk,ss_quantity,ss_sales_price,ss_sold_date_sk,ss_ticket_number,ss_wholesale_cost]
                                             WholeStageCodegen (4)
                                               Sort [sr_item_sk,sr_ticket_number]
                                                 InputAdapter
                                                   Exchange [sr_item_sk,sr_ticket_number] #3
                                                     WholeStageCodegen (3)
-                                                      Project [sr_item_sk,sr_ticket_number]
-                                                        Filter [sr_item_sk,sr_ticket_number]
-                                                          ColumnarToRow
-                                                            InputAdapter
-                                                              Scan parquet default.store_returns [sr_item_sk,sr_ticket_number]
+                                                      Filter [sr_item_sk,sr_ticket_number]
+                                                        ColumnarToRow
+                                                          InputAdapter
+                                                            Scan parquet default.store_returns [sr_item_sk,sr_ticket_number]
                                     InputAdapter
                                       BroadcastExchange #4
                                         WholeStageCodegen (5)
-                                          Project [d_date_sk,d_year]
-                                            Filter [d_date_sk,d_year]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet default.date_dim [d_date_sk,d_year]
+                                          Filter [d_date_sk,d_year]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.date_dim [d_date_sk,d_year]
                 InputAdapter
                   WholeStageCodegen (14)
                     Sort [cs_customer_sk,cs_item_sk,cs_sold_year]
@@ -68,21 +65,19 @@ TakeOrderedAndProject [cs_qty,other_chan_qty,other_chan_sales_price,other_chan_w
                                                   InputAdapter
                                                     Exchange [cs_item_sk,cs_order_number] #6
                                                       WholeStageCodegen (8)
-                                                        Project [cs_bill_customer_sk,cs_item_sk,cs_order_number,cs_quantity,cs_sales_price,cs_sold_date_sk,cs_wholesale_cost]
-                                                          Filter [cs_bill_customer_sk,cs_item_sk,cs_sold_date_sk]
-                                                            ColumnarToRow
-                                                              InputAdapter
-                                                                Scan parquet default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_order_number,cs_quantity,cs_sales_price,cs_sold_date_sk,cs_wholesale_cost]
+                                                        Filter [cs_bill_customer_sk,cs_item_sk,cs_sold_date_sk]
+                                                          ColumnarToRow
+                                                            InputAdapter
+                                                              Scan parquet default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_order_number,cs_quantity,cs_sales_price,cs_sold_date_sk,cs_wholesale_cost]
                                               WholeStageCodegen (11)
                                                 Sort [cr_item_sk,cr_order_number]
                                                   InputAdapter
                                                     Exchange [cr_item_sk,cr_order_number] #7
                                                       WholeStageCodegen (10)
-                                                        Project [cr_item_sk,cr_order_number]
-                                                          Filter [cr_item_sk,cr_order_number]
-                                                            ColumnarToRow
-                                                              InputAdapter
-                                                                Scan parquet default.catalog_returns [cr_item_sk,cr_order_number]
+                                                        Filter [cr_item_sk,cr_order_number]
+                                                          ColumnarToRow
+                                                            InputAdapter
+                                                              Scan parquet default.catalog_returns [cr_item_sk,cr_order_number]
                                       InputAdapter
                                         ReusedExchange [d_date_sk,d_year] #4
         InputAdapter
@@ -105,20 +100,18 @@ TakeOrderedAndProject [cs_qty,other_chan_qty,other_chan_sales_price,other_chan_w
                                           InputAdapter
                                             Exchange [ws_item_sk,ws_order_number] #9
                                               WholeStageCodegen (16)
-                                                Project [ws_bill_customer_sk,ws_item_sk,ws_order_number,ws_quantity,ws_sales_price,ws_sold_date_sk,ws_wholesale_cost]
-                                                  Filter [ws_bill_customer_sk,ws_item_sk,ws_sold_date_sk]
-                                                    ColumnarToRow
-                                                      InputAdapter
-                                                        Scan parquet default.web_sales [ws_bill_customer_sk,ws_item_sk,ws_order_number,ws_quantity,ws_sales_price,ws_sold_date_sk,ws_wholesale_cost]
+                                                Filter [ws_bill_customer_sk,ws_item_sk,ws_sold_date_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.web_sales [ws_bill_customer_sk,ws_item_sk,ws_order_number,ws_quantity,ws_sales_price,ws_sold_date_sk,ws_wholesale_cost]
                                       WholeStageCodegen (19)
                                         Sort [wr_item_sk,wr_order_number]
                                           InputAdapter
                                             Exchange [wr_item_sk,wr_order_number] #10
                                               WholeStageCodegen (18)
-                                                Project [wr_item_sk,wr_order_number]
-                                                  Filter [wr_item_sk,wr_order_number]
-                                                    ColumnarToRow
-                                                      InputAdapter
-                                                        Scan parquet default.web_returns [wr_item_sk,wr_order_number]
+                                                Filter [wr_item_sk,wr_order_number]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.web_returns [wr_item_sk,wr_order_number]
                               InputAdapter
                                 ReusedExchange [d_date_sk,d_year] #4

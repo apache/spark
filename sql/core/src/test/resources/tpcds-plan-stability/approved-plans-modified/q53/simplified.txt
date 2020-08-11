@@ -28,11 +28,10 @@ TakeOrderedAndProject [avg_quarterly_sales,i_manufact_id,sum_sales]
                                             InputAdapter
                                               BroadcastExchange #3
                                                 WholeStageCodegen (1)
-                                                  Project [ss_item_sk,ss_sales_price,ss_sold_date_sk,ss_store_sk]
-                                                    Filter [ss_item_sk,ss_sold_date_sk,ss_store_sk]
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet default.store_sales [ss_item_sk,ss_sales_price,ss_sold_date_sk,ss_store_sk]
+                                                  Filter [ss_item_sk,ss_sold_date_sk,ss_store_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.store_sales [ss_item_sk,ss_sales_price,ss_sold_date_sk,ss_store_sk]
                                         InputAdapter
                                           BroadcastExchange #4
                                             WholeStageCodegen (2)
@@ -44,8 +43,7 @@ TakeOrderedAndProject [avg_quarterly_sales,i_manufact_id,sum_sales]
                                     InputAdapter
                                       BroadcastExchange #5
                                         WholeStageCodegen (3)
-                                          Project [s_store_sk]
-                                            Filter [s_store_sk]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet default.store [s_store_sk]
+                                          Filter [s_store_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.store [s_store_sk]

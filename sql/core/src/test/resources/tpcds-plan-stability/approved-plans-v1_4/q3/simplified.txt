@@ -17,11 +17,10 @@ TakeOrderedAndProject [brand,brand_id,d_year,sum_agg]
                       InputAdapter
                         BroadcastExchange #2
                           WholeStageCodegen (1)
-                            Project [ss_ext_sales_price,ss_item_sk,ss_sold_date_sk]
-                              Filter [ss_item_sk,ss_sold_date_sk]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet default.store_sales [ss_ext_sales_price,ss_item_sk,ss_sold_date_sk]
+                            Filter [ss_item_sk,ss_sold_date_sk]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.store_sales [ss_ext_sales_price,ss_item_sk,ss_sold_date_sk]
                   InputAdapter
                     BroadcastExchange #3
                       WholeStageCodegen (2)

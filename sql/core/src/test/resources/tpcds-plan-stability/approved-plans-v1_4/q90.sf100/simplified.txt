@@ -15,11 +15,10 @@ TakeOrderedAndProject [am_pm_ratio]
                             BroadcastHashJoin [hd_demo_sk,ws_ship_hdemo_sk]
                               Project [ws_ship_hdemo_sk,ws_sold_time_sk]
                                 BroadcastHashJoin [wp_web_page_sk,ws_web_page_sk]
-                                  Project [ws_ship_hdemo_sk,ws_sold_time_sk,ws_web_page_sk]
-                                    Filter [ws_ship_hdemo_sk,ws_sold_time_sk,ws_web_page_sk]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.web_sales [ws_ship_hdemo_sk,ws_sold_time_sk,ws_web_page_sk]
+                                  Filter [ws_ship_hdemo_sk,ws_sold_time_sk,ws_web_page_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.web_sales [ws_ship_hdemo_sk,ws_sold_time_sk,ws_web_page_sk]
                                   InputAdapter
                                     BroadcastExchange #2
                                       WholeStageCodegen (1)
@@ -57,11 +56,10 @@ TakeOrderedAndProject [am_pm_ratio]
                               BroadcastHashJoin [hd_demo_sk,ws_ship_hdemo_sk]
                                 Project [ws_ship_hdemo_sk,ws_sold_time_sk]
                                   BroadcastHashJoin [wp_web_page_sk,ws_web_page_sk]
-                                    Project [ws_ship_hdemo_sk,ws_sold_time_sk,ws_web_page_sk]
-                                      Filter [ws_ship_hdemo_sk,ws_sold_time_sk,ws_web_page_sk]
-                                        ColumnarToRow
-                                          InputAdapter
-                                            Scan parquet default.web_sales [ws_ship_hdemo_sk,ws_sold_time_sk,ws_web_page_sk]
+                                    Filter [ws_ship_hdemo_sk,ws_sold_time_sk,ws_web_page_sk]
+                                      ColumnarToRow
+                                        InputAdapter
+                                          Scan parquet default.web_sales [ws_ship_hdemo_sk,ws_sold_time_sk,ws_web_page_sk]
                                     InputAdapter
                                       ReusedExchange [wp_web_page_sk] #2
                                 InputAdapter

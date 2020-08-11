@@ -12,27 +12,24 @@ WholeStageCodegen (6)
                       BroadcastHashJoin [cd_demo_sk,cd_education_status,cd_marital_status,ss_cdemo_sk,ss_sales_price]
                         Project [ss_addr_sk,ss_cdemo_sk,ss_net_profit,ss_quantity,ss_sales_price,ss_sold_date_sk]
                           BroadcastHashJoin [s_store_sk,ss_store_sk]
-                            Project [ss_addr_sk,ss_cdemo_sk,ss_net_profit,ss_quantity,ss_sales_price,ss_sold_date_sk,ss_store_sk]
-                              Filter [ss_addr_sk,ss_cdemo_sk,ss_net_profit,ss_sales_price,ss_sold_date_sk,ss_store_sk]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet default.store_sales [ss_addr_sk,ss_cdemo_sk,ss_net_profit,ss_quantity,ss_sales_price,ss_sold_date_sk,ss_store_sk]
+                            Filter [ss_addr_sk,ss_cdemo_sk,ss_net_profit,ss_sales_price,ss_sold_date_sk,ss_store_sk]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.store_sales [ss_addr_sk,ss_cdemo_sk,ss_net_profit,ss_quantity,ss_sales_price,ss_sold_date_sk,ss_store_sk]
                             InputAdapter
                               BroadcastExchange #2
                                 WholeStageCodegen (1)
-                                  Project [s_store_sk]
-                                    Filter [s_store_sk]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.store [s_store_sk]
+                                  Filter [s_store_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.store [s_store_sk]
                         InputAdapter
                           BroadcastExchange #3
                             WholeStageCodegen (2)
-                              Project [cd_demo_sk,cd_education_status,cd_marital_status]
-                                Filter [cd_demo_sk,cd_education_status,cd_marital_status]
-                                  ColumnarToRow
-                                    InputAdapter
-                                      Scan parquet default.customer_demographics [cd_demo_sk,cd_education_status,cd_marital_status]
+                              Filter [cd_demo_sk,cd_education_status,cd_marital_status]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.customer_demographics [cd_demo_sk,cd_education_status,cd_marital_status]
                     InputAdapter
                       BroadcastExchange #4
                         WholeStageCodegen (3)

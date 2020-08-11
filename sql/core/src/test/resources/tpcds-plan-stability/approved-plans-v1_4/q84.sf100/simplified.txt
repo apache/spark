@@ -14,11 +14,10 @@ TakeOrderedAndProject [c_customer_id,customer_id,customername]
                           BroadcastHashJoin [c_current_hdemo_sk,hd_demo_sk]
                             Project [c_current_cdemo_sk,c_current_hdemo_sk,c_customer_id,c_first_name,c_last_name]
                               BroadcastHashJoin [c_current_addr_sk,ca_address_sk]
-                                Project [c_current_addr_sk,c_current_cdemo_sk,c_current_hdemo_sk,c_customer_id,c_first_name,c_last_name]
-                                  Filter [c_current_addr_sk,c_current_cdemo_sk,c_current_hdemo_sk]
-                                    ColumnarToRow
-                                      InputAdapter
-                                        Scan parquet default.customer [c_current_addr_sk,c_current_cdemo_sk,c_current_hdemo_sk,c_customer_id,c_first_name,c_last_name]
+                                Filter [c_current_addr_sk,c_current_cdemo_sk,c_current_hdemo_sk]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet default.customer [c_current_addr_sk,c_current_cdemo_sk,c_current_hdemo_sk,c_customer_id,c_first_name,c_last_name]
                                 InputAdapter
                                   BroadcastExchange #3
                                     WholeStageCodegen (1)
@@ -40,18 +39,15 @@ TakeOrderedAndProject [c_customer_id,customer_id,customername]
                                                 ColumnarToRow
                                                   InputAdapter
                                                     Scan parquet default.income_band [ib_income_band_sk,ib_lower_bound,ib_upper_bound]
-                                      Project [hd_demo_sk,hd_income_band_sk]
-                                        Filter [hd_demo_sk,hd_income_band_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.household_demographics [hd_demo_sk,hd_income_band_sk]
-                  Project [cd_demo_sk]
-                    Filter [cd_demo_sk]
-                      ColumnarToRow
-                        InputAdapter
-                          Scan parquet default.customer_demographics [cd_demo_sk]
-        Project [sr_cdemo_sk]
-          Filter [sr_cdemo_sk]
-            ColumnarToRow
-              InputAdapter
-                Scan parquet default.store_returns [sr_cdemo_sk]
+                                      Filter [hd_demo_sk,hd_income_band_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.household_demographics [hd_demo_sk,hd_income_band_sk]
+                  Filter [cd_demo_sk]
+                    ColumnarToRow
+                      InputAdapter
+                        Scan parquet default.customer_demographics [cd_demo_sk]
+        Filter [sr_cdemo_sk]
+          ColumnarToRow
+            InputAdapter
+              Scan parquet default.store_returns [sr_cdemo_sk]

@@ -389,10 +389,9 @@ BroadcastNestedLoopJoin BuildRight, Inner
 :  :  :  :  :  :  :              :  +- *(4) BroadcastHashJoin [ss_store_sk#21], [s_store_sk#22], Inner, BuildRight, false
 :  :  :  :  :  :  :              :     :- *(4) Project [ss_hdemo_sk#19, ss_store_sk#21]
 :  :  :  :  :  :  :              :     :  +- *(4) BroadcastHashJoin [ss_sold_time_sk#17], [t_time_sk#18], Inner, BuildRight, false
-:  :  :  :  :  :  :              :     :     :- *(4) Project [ss_sold_time_sk#17, ss_hdemo_sk#19, ss_store_sk#21]
-:  :  :  :  :  :  :              :     :     :  +- *(4) Filter ((isnotnull(ss_hdemo_sk#19) AND isnotnull(ss_sold_time_sk#17)) AND isnotnull(ss_store_sk#21))
-:  :  :  :  :  :  :              :     :     :     +- *(4) ColumnarToRow
-:  :  :  :  :  :  :              :     :     :        +- FileScan parquet default.store_sales[ss_sold_time_sk#17,ss_hdemo_sk#19,ss_store_sk#21] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#19), isnotnull(ss_sold_time_sk#17), isnotnull(ss_store_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+:  :  :  :  :  :  :              :     :     :- *(4) Filter ((isnotnull(ss_hdemo_sk#19) AND isnotnull(ss_sold_time_sk#17)) AND isnotnull(ss_store_sk#21))
+:  :  :  :  :  :  :              :     :     :  +- *(4) ColumnarToRow
+:  :  :  :  :  :  :              :     :     :     +- FileScan parquet default.store_sales[ss_sold_time_sk#17,ss_hdemo_sk#19,ss_store_sk#21] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#19), isnotnull(ss_sold_time_sk#17), isnotnull(ss_store_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
 :  :  :  :  :  :  :              :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#81]
 :  :  :  :  :  :  :              :     :        +- *(1) Project [t_time_sk#18]
 :  :  :  :  :  :  :              :     :           +- *(1) Filter ((((isnotnull(t_hour#23) AND isnotnull(t_minute#24)) AND (t_hour#23 = 8)) AND (t_minute#24 >= 30)) AND isnotnull(t_time_sk#18))
@@ -418,10 +417,9 @@ BroadcastNestedLoopJoin BuildRight, Inner
 :  :  :  :  :  :                    :  +- *(9) BroadcastHashJoin [ss_store_sk#21], [s_store_sk#22], Inner, BuildRight, false
 :  :  :  :  :  :                    :     :- *(9) Project [ss_hdemo_sk#19, ss_store_sk#21]
 :  :  :  :  :  :                    :     :  +- *(9) BroadcastHashJoin [ss_sold_time_sk#17], [t_time_sk#18], Inner, BuildRight, false
-:  :  :  :  :  :                    :     :     :- *(9) Project [ss_sold_time_sk#17, ss_hdemo_sk#19, ss_store_sk#21]
-:  :  :  :  :  :                    :     :     :  +- *(9) Filter ((isnotnull(ss_hdemo_sk#19) AND isnotnull(ss_sold_time_sk#17)) AND isnotnull(ss_store_sk#21))
-:  :  :  :  :  :                    :     :     :     +- *(9) ColumnarToRow
-:  :  :  :  :  :                    :     :     :        +- FileScan parquet default.store_sales[ss_sold_time_sk#17,ss_hdemo_sk#19,ss_store_sk#21] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#19), isnotnull(ss_sold_time_sk#17), isnotnull(ss_store_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+:  :  :  :  :  :                    :     :     :- *(9) Filter ((isnotnull(ss_hdemo_sk#19) AND isnotnull(ss_sold_time_sk#17)) AND isnotnull(ss_store_sk#21))
+:  :  :  :  :  :                    :     :     :  +- *(9) ColumnarToRow
+:  :  :  :  :  :                    :     :     :     +- FileScan parquet default.store_sales[ss_sold_time_sk#17,ss_hdemo_sk#19,ss_store_sk#21] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#19), isnotnull(ss_sold_time_sk#17), isnotnull(ss_store_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
 :  :  :  :  :  :                    :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#87]
 :  :  :  :  :  :                    :     :        +- *(6) Project [t_time_sk#18]
 :  :  :  :  :  :                    :     :           +- *(6) Filter ((((isnotnull(t_hour#23) AND isnotnull(t_minute#24)) AND (t_hour#23 = 9)) AND (t_minute#24 < 30)) AND isnotnull(t_time_sk#18))
@@ -439,10 +437,9 @@ BroadcastNestedLoopJoin BuildRight, Inner
 :  :  :  :  :                    :  +- *(14) BroadcastHashJoin [ss_store_sk#21], [s_store_sk#22], Inner, BuildRight, false
 :  :  :  :  :                    :     :- *(14) Project [ss_hdemo_sk#19, ss_store_sk#21]
 :  :  :  :  :                    :     :  +- *(14) BroadcastHashJoin [ss_sold_time_sk#17], [t_time_sk#18], Inner, BuildRight, false
-:  :  :  :  :                    :     :     :- *(14) Project [ss_sold_time_sk#17, ss_hdemo_sk#19, ss_store_sk#21]
-:  :  :  :  :                    :     :     :  +- *(14) Filter ((isnotnull(ss_hdemo_sk#19) AND isnotnull(ss_sold_time_sk#17)) AND isnotnull(ss_store_sk#21))
-:  :  :  :  :                    :     :     :     +- *(14) ColumnarToRow
-:  :  :  :  :                    :     :     :        +- FileScan parquet default.store_sales[ss_sold_time_sk#17,ss_hdemo_sk#19,ss_store_sk#21] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#19), isnotnull(ss_sold_time_sk#17), isnotnull(ss_store_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+:  :  :  :  :                    :     :     :- *(14) Filter ((isnotnull(ss_hdemo_sk#19) AND isnotnull(ss_sold_time_sk#17)) AND isnotnull(ss_store_sk#21))
+:  :  :  :  :                    :     :     :  +- *(14) ColumnarToRow
+:  :  :  :  :                    :     :     :     +- FileScan parquet default.store_sales[ss_sold_time_sk#17,ss_hdemo_sk#19,ss_store_sk#21] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#19), isnotnull(ss_sold_time_sk#17), isnotnull(ss_store_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
 :  :  :  :  :                    :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#91]
 :  :  :  :  :                    :     :        +- *(11) Project [t_time_sk#18]
 :  :  :  :  :                    :     :           +- *(11) Filter ((((isnotnull(t_hour#23) AND isnotnull(t_minute#24)) AND (t_hour#23 = 9)) AND (t_minute#24 >= 30)) AND isnotnull(t_time_sk#18))
@@ -460,10 +457,9 @@ BroadcastNestedLoopJoin BuildRight, Inner
 :  :  :  :                    :  +- *(19) BroadcastHashJoin [ss_store_sk#21], [s_store_sk#22], Inner, BuildRight, false
 :  :  :  :                    :     :- *(19) Project [ss_hdemo_sk#19, ss_store_sk#21]
 :  :  :  :                    :     :  +- *(19) BroadcastHashJoin [ss_sold_time_sk#17], [t_time_sk#18], Inner, BuildRight, false
-:  :  :  :                    :     :     :- *(19) Project [ss_sold_time_sk#17, ss_hdemo_sk#19, ss_store_sk#21]
-:  :  :  :                    :     :     :  +- *(19) Filter ((isnotnull(ss_hdemo_sk#19) AND isnotnull(ss_sold_time_sk#17)) AND isnotnull(ss_store_sk#21))
-:  :  :  :                    :     :     :     +- *(19) ColumnarToRow
-:  :  :  :                    :     :     :        +- FileScan parquet default.store_sales[ss_sold_time_sk#17,ss_hdemo_sk#19,ss_store_sk#21] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#19), isnotnull(ss_sold_time_sk#17), isnotnull(ss_store_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+:  :  :  :                    :     :     :- *(19) Filter ((isnotnull(ss_hdemo_sk#19) AND isnotnull(ss_sold_time_sk#17)) AND isnotnull(ss_store_sk#21))
+:  :  :  :                    :     :     :  +- *(19) ColumnarToRow
+:  :  :  :                    :     :     :     +- FileScan parquet default.store_sales[ss_sold_time_sk#17,ss_hdemo_sk#19,ss_store_sk#21] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#19), isnotnull(ss_sold_time_sk#17), isnotnull(ss_store_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
 :  :  :  :                    :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#95]
 :  :  :  :                    :     :        +- *(16) Project [t_time_sk#18]
 :  :  :  :                    :     :           +- *(16) Filter ((((isnotnull(t_hour#23) AND isnotnull(t_minute#24)) AND (t_hour#23 = 10)) AND (t_minute#24 < 30)) AND isnotnull(t_time_sk#18))
@@ -481,10 +477,9 @@ BroadcastNestedLoopJoin BuildRight, Inner
 :  :  :                    :  +- *(24) BroadcastHashJoin [ss_store_sk#21], [s_store_sk#22], Inner, BuildRight, false
 :  :  :                    :     :- *(24) Project [ss_hdemo_sk#19, ss_store_sk#21]
 :  :  :                    :     :  +- *(24) BroadcastHashJoin [ss_sold_time_sk#17], [t_time_sk#18], Inner, BuildRight, false
-:  :  :                    :     :     :- *(24) Project [ss_sold_time_sk#17, ss_hdemo_sk#19, ss_store_sk#21]
-:  :  :                    :     :     :  +- *(24) Filter ((isnotnull(ss_hdemo_sk#19) AND isnotnull(ss_sold_time_sk#17)) AND isnotnull(ss_store_sk#21))
-:  :  :                    :     :     :     +- *(24) ColumnarToRow
-:  :  :                    :     :     :        +- FileScan parquet default.store_sales[ss_sold_time_sk#17,ss_hdemo_sk#19,ss_store_sk#21] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#19), isnotnull(ss_sold_time_sk#17), isnotnull(ss_store_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+:  :  :                    :     :     :- *(24) Filter ((isnotnull(ss_hdemo_sk#19) AND isnotnull(ss_sold_time_sk#17)) AND isnotnull(ss_store_sk#21))
+:  :  :                    :     :     :  +- *(24) ColumnarToRow
+:  :  :                    :     :     :     +- FileScan parquet default.store_sales[ss_sold_time_sk#17,ss_hdemo_sk#19,ss_store_sk#21] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#19), isnotnull(ss_sold_time_sk#17), isnotnull(ss_store_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
 :  :  :                    :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#99]
 :  :  :                    :     :        +- *(21) Project [t_time_sk#18]
 :  :  :                    :     :           +- *(21) Filter ((((isnotnull(t_hour#23) AND isnotnull(t_minute#24)) AND (t_hour#23 = 10)) AND (t_minute#24 >= 30)) AND isnotnull(t_time_sk#18))
@@ -502,10 +497,9 @@ BroadcastNestedLoopJoin BuildRight, Inner
 :  :                    :  +- *(29) BroadcastHashJoin [ss_store_sk#21], [s_store_sk#22], Inner, BuildRight, false
 :  :                    :     :- *(29) Project [ss_hdemo_sk#19, ss_store_sk#21]
 :  :                    :     :  +- *(29) BroadcastHashJoin [ss_sold_time_sk#17], [t_time_sk#18], Inner, BuildRight, false
-:  :                    :     :     :- *(29) Project [ss_sold_time_sk#17, ss_hdemo_sk#19, ss_store_sk#21]
-:  :                    :     :     :  +- *(29) Filter ((isnotnull(ss_hdemo_sk#19) AND isnotnull(ss_sold_time_sk#17)) AND isnotnull(ss_store_sk#21))
-:  :                    :     :     :     +- *(29) ColumnarToRow
-:  :                    :     :     :        +- FileScan parquet default.store_sales[ss_sold_time_sk#17,ss_hdemo_sk#19,ss_store_sk#21] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#19), isnotnull(ss_sold_time_sk#17), isnotnull(ss_store_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+:  :                    :     :     :- *(29) Filter ((isnotnull(ss_hdemo_sk#19) AND isnotnull(ss_sold_time_sk#17)) AND isnotnull(ss_store_sk#21))
+:  :                    :     :     :  +- *(29) ColumnarToRow
+:  :                    :     :     :     +- FileScan parquet default.store_sales[ss_sold_time_sk#17,ss_hdemo_sk#19,ss_store_sk#21] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#19), isnotnull(ss_sold_time_sk#17), isnotnull(ss_store_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
 :  :                    :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#103]
 :  :                    :     :        +- *(26) Project [t_time_sk#18]
 :  :                    :     :           +- *(26) Filter ((((isnotnull(t_hour#23) AND isnotnull(t_minute#24)) AND (t_hour#23 = 11)) AND (t_minute#24 < 30)) AND isnotnull(t_time_sk#18))
@@ -523,10 +517,9 @@ BroadcastNestedLoopJoin BuildRight, Inner
 :                    :  +- *(34) BroadcastHashJoin [ss_store_sk#21], [s_store_sk#22], Inner, BuildRight, false
 :                    :     :- *(34) Project [ss_hdemo_sk#19, ss_store_sk#21]
 :                    :     :  +- *(34) BroadcastHashJoin [ss_sold_time_sk#17], [t_time_sk#18], Inner, BuildRight, false
-:                    :     :     :- *(34) Project [ss_sold_time_sk#17, ss_hdemo_sk#19, ss_store_sk#21]
-:                    :     :     :  +- *(34) Filter ((isnotnull(ss_hdemo_sk#19) AND isnotnull(ss_sold_time_sk#17)) AND isnotnull(ss_store_sk#21))
-:                    :     :     :     +- *(34) ColumnarToRow
-:                    :     :     :        +- FileScan parquet default.store_sales[ss_sold_time_sk#17,ss_hdemo_sk#19,ss_store_sk#21] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#19), isnotnull(ss_sold_time_sk#17), isnotnull(ss_store_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+:                    :     :     :- *(34) Filter ((isnotnull(ss_hdemo_sk#19) AND isnotnull(ss_sold_time_sk#17)) AND isnotnull(ss_store_sk#21))
+:                    :     :     :  +- *(34) ColumnarToRow
+:                    :     :     :     +- FileScan parquet default.store_sales[ss_sold_time_sk#17,ss_hdemo_sk#19,ss_store_sk#21] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#19), isnotnull(ss_sold_time_sk#17), isnotnull(ss_store_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
 :                    :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#107]
 :                    :     :        +- *(31) Project [t_time_sk#18]
 :                    :     :           +- *(31) Filter ((((isnotnull(t_hour#23) AND isnotnull(t_minute#24)) AND (t_hour#23 = 11)) AND (t_minute#24 >= 30)) AND isnotnull(t_time_sk#18))
@@ -544,10 +537,9 @@ BroadcastNestedLoopJoin BuildRight, Inner
                   :  +- *(39) BroadcastHashJoin [ss_store_sk#21], [s_store_sk#22], Inner, BuildRight, false
                   :     :- *(39) Project [ss_hdemo_sk#19, ss_store_sk#21]
                   :     :  +- *(39) BroadcastHashJoin [ss_sold_time_sk#17], [t_time_sk#18], Inner, BuildRight, false
-                  :     :     :- *(39) Project [ss_sold_time_sk#17, ss_hdemo_sk#19, ss_store_sk#21]
-                  :     :     :  +- *(39) Filter ((isnotnull(ss_hdemo_sk#19) AND isnotnull(ss_sold_time_sk#17)) AND isnotnull(ss_store_sk#21))
-                  :     :     :     +- *(39) ColumnarToRow
-                  :     :     :        +- FileScan parquet default.store_sales[ss_sold_time_sk#17,ss_hdemo_sk#19,ss_store_sk#21] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#19), isnotnull(ss_sold_time_sk#17), isnotnull(ss_store_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+                  :     :     :- *(39) Filter ((isnotnull(ss_hdemo_sk#19) AND isnotnull(ss_sold_time_sk#17)) AND isnotnull(ss_store_sk#21))
+                  :     :     :  +- *(39) ColumnarToRow
+                  :     :     :     +- FileScan parquet default.store_sales[ss_sold_time_sk#17,ss_hdemo_sk#19,ss_store_sk#21] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#19), isnotnull(ss_sold_time_sk#17), isnotnull(ss_store_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
                   :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#111]
                   :     :        +- *(36) Project [t_time_sk#18]
                   :     :           +- *(36) Filter ((((isnotnull(t_hour#23) AND isnotnull(t_minute#24)) AND (t_hour#23 = 12)) AND (t_minute#24 < 30)) AND isnotnull(t_time_sk#18))

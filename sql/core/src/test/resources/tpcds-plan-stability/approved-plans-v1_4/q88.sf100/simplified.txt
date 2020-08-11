@@ -17,11 +17,10 @@ BroadcastNestedLoopJoin
                                 BroadcastHashJoin [s_store_sk,ss_store_sk]
                                   Project [ss_hdemo_sk,ss_store_sk]
                                     BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
-                                      Project [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
-                                        Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.store_sales [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                                      Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.store_sales [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                                       InputAdapter
                                         BroadcastExchange #2
                                           WholeStageCodegen (1)
@@ -59,11 +58,10 @@ BroadcastNestedLoopJoin
                                   BroadcastHashJoin [s_store_sk,ss_store_sk]
                                     Project [ss_hdemo_sk,ss_store_sk]
                                       BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
-                                        Project [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
-                                          Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
-                                            ColumnarToRow
-                                              InputAdapter
-                                                Scan parquet default.store_sales [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                                        Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet default.store_sales [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                                         InputAdapter
                                           BroadcastExchange #7
                                             WholeStageCodegen (6)
@@ -89,11 +87,10 @@ BroadcastNestedLoopJoin
                                 BroadcastHashJoin [s_store_sk,ss_store_sk]
                                   Project [ss_hdemo_sk,ss_store_sk]
                                     BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
-                                      Project [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
-                                        Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.store_sales [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                                      Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.store_sales [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                                       InputAdapter
                                         BroadcastExchange #10
                                           WholeStageCodegen (11)
@@ -119,11 +116,10 @@ BroadcastNestedLoopJoin
                               BroadcastHashJoin [s_store_sk,ss_store_sk]
                                 Project [ss_hdemo_sk,ss_store_sk]
                                   BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
-                                    Project [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
-                                      Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
-                                        ColumnarToRow
-                                          InputAdapter
-                                            Scan parquet default.store_sales [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                                    Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                                      ColumnarToRow
+                                        InputAdapter
+                                          Scan parquet default.store_sales [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                                     InputAdapter
                                       BroadcastExchange #13
                                         WholeStageCodegen (16)
@@ -149,11 +145,10 @@ BroadcastNestedLoopJoin
                             BroadcastHashJoin [s_store_sk,ss_store_sk]
                               Project [ss_hdemo_sk,ss_store_sk]
                                 BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
-                                  Project [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
-                                    Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.store_sales [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                                  Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.store_sales [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                                   InputAdapter
                                     BroadcastExchange #16
                                       WholeStageCodegen (21)
@@ -179,11 +174,10 @@ BroadcastNestedLoopJoin
                           BroadcastHashJoin [s_store_sk,ss_store_sk]
                             Project [ss_hdemo_sk,ss_store_sk]
                               BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
-                                Project [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
-                                  Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
-                                    ColumnarToRow
-                                      InputAdapter
-                                        Scan parquet default.store_sales [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                                Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet default.store_sales [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                                 InputAdapter
                                   BroadcastExchange #19
                                     WholeStageCodegen (26)
@@ -209,11 +203,10 @@ BroadcastNestedLoopJoin
                         BroadcastHashJoin [s_store_sk,ss_store_sk]
                           Project [ss_hdemo_sk,ss_store_sk]
                             BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
-                              Project [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
-                                Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
-                                  ColumnarToRow
-                                    InputAdapter
-                                      Scan parquet default.store_sales [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                              Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.store_sales [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                               InputAdapter
                                 BroadcastExchange #22
                                   WholeStageCodegen (31)
@@ -239,11 +232,10 @@ BroadcastNestedLoopJoin
                       BroadcastHashJoin [s_store_sk,ss_store_sk]
                         Project [ss_hdemo_sk,ss_store_sk]
                           BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
-                            Project [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
-                              Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet default.store_sales [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                            Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.store_sales [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                             InputAdapter
                               BroadcastExchange #25
                                 WholeStageCodegen (36)
