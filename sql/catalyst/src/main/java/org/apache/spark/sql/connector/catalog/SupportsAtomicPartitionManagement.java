@@ -21,7 +21,6 @@ import java.util.Map;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException;
 import org.apache.spark.sql.catalyst.analysis.PartitionAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
@@ -35,8 +34,6 @@ import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
  *     add an array of partitions and any data they contain to the table
  * ${@link #dropPartitions}:
  *     remove an array of partitions and any data they contain from the table
- * ${@link #replacePartitionMetadatas}:
- *     point an array of partitions to new locations, which will swap location's data for the other
  *
  * @since 3.1.0
  */
@@ -62,18 +59,6 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
       return true;
     } catch (NoSuchPartitionsException e) {
       return false;
-    }
-  }
-
-  @Override
-  default void replacePartitionMetadata(
-      InternalRow ident,
-      Map<String, String> properties)
-      throws NoSuchPartitionException, UnsupportedOperationException {
-    try {
-      replacePartitionMetadatas(new InternalRow[]{ident}, new Map[]{properties});
-    } catch (NoSuchPartitionsException e) {
-      throw new NoSuchPartitionException(e.getMessage());
     }
   }
 
@@ -104,20 +89,4 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
    */
   void dropPartitions(
       InternalRow[] idents) throws NoSuchPartitionsException;
-
-  /**
-   * Replace the partition metadata of the existing partitions atomically.
-   * <p>
-   * If any partition doesn't exists,
-   * the operation of replacePartitionMetadatas need to be safely rolled back.
-   *
-   * @param idents the partition identifier of the existing partitions
-   * @param properties the new metadata of the partitions
-   * @throws NoSuchPartitionsException If any partition identifier to alter doesn't exist
-   * @throws UnsupportedOperationException If partition property is not supported
-   */
-  void replacePartitionMetadatas(
-      InternalRow[] idents,
-      Map<String, String>[] properties)
-      throws NoSuchPartitionsException, UnsupportedOperationException;
 }

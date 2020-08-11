@@ -19,8 +19,6 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, PartitionsAlreadyExistException}
@@ -122,58 +120,6 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
     assertThrows[NoSuchPartitionsException](
       partTable.dropPartitions(partIdents))
     assert(partTable.partitionExists(partIdent))
-
-    partTable.dropPartition(partIdent)
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
-  }
-
-  test("replacePartitionMetadatas") {
-    val table = catalog.loadTable(ident)
-    val partTable = new InMemoryAtomicPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
-
-    val partIdents = Array(InternalRow.apply("3"), InternalRow.apply("4"))
-    partTable.createPartitions(
-      partIdents,
-      Array(new util.HashMap[String, String](), new util.HashMap[String, String]()))
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).nonEmpty)
-
-    partTable.replacePartitionMetadatas(
-      partIdents,
-      Array(Map("paramKey" -> "paramValue").asJava, Map("paramKey1" -> "paramValue1").asJava))
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).nonEmpty)
-    assert(partTable.partitionExists(InternalRow.apply("3")))
-    assert(!partTable.loadPartitionMetadata(InternalRow.apply("3")).isEmpty)
-    assert(partTable.loadPartitionMetadata(InternalRow.apply("3")).get("paramKey") == "paramValue")
-    assert(partTable.partitionExists(InternalRow.apply("4")))
-    assert(!partTable.loadPartitionMetadata(InternalRow.apply("4")).isEmpty)
-    assert(
-      partTable.loadPartitionMetadata(InternalRow.apply("4")).get("paramKey1") == "paramValue1")
-
-    partTable.dropPartitions(partIdents)
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
-  }
-
-  test("replacePartitionMetadatas failed if partition not exists") {
-    val table = catalog.loadTable(ident)
-    val partTable = new InMemoryAtomicPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
-
-    val partIdent = InternalRow.apply("4")
-    partTable.createPartition(partIdent, new util.HashMap[String, String]())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).nonEmpty)
-
-    val partIdents = Array(InternalRow.apply("3"), InternalRow.apply("4"))
-    assertThrows[NoSuchPartitionsException](
-    partTable.replacePartitionMetadatas(
-      partIdents,
-      Array(Map("paramKey" -> "paramValue").asJava, Map("paramKey1" -> "paramValue1").asJava)))
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).nonEmpty)
-    assert(partTable.partitionExists(partIdent))
-    assert(partTable.loadPartitionMetadata(partIdent).isEmpty)
-    assert(!partTable.partitionExists(InternalRow.apply("3")))
 
     partTable.dropPartition(partIdent)
     assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
