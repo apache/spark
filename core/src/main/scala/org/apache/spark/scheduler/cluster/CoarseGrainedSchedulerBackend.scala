@@ -582,7 +582,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         )
       }.unzip
     }
-    TaskSchedulerImpl.calculateSlots(scheduler, cpus, resources)
+    TaskSchedulerImpl.calculateAvailableSlots(scheduler, cpus, resources)
   }
 
   // this function is for testing only

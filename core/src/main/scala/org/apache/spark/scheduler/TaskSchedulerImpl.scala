@@ -446,14 +446,16 @@ private[spark] class TaskSchedulerImpl(
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
     for (taskSet <- sortedTaskSets) {
+      // we only need to calculate available slots if using barrier scheduling, otherwise the
+      // value is -1
       val availableSlots = if (taskSet.isBarrier) {
         val availableResourcesAmount = availableResources.map { resourceMap =>
           // note that the addresses here have been expanded according to the numParts
           resourceMap.map { case (name, addresses) => (name, addresses.length) }
         }
-        calculateSlots(this, availableCpus, availableResourcesAmount)
+        calculateAvailableSlots(this, availableCpus, availableResourcesAmount)
       } else {
-        Int.MaxValue
+        -1
       }
       // Skip the barrier taskSet if the available slots are less than the number of pending tasks.
       if (taskSet.isBarrier && availableSlots < taskSet.numTasks) {
@@ -951,7 +953,7 @@ private[spark] object TaskSchedulerImpl {
    *                           map, it maps from the resource name to its amount.
    * @return the number of max task slots
    */
-  def calculateSlots(
+  def calculateAvailableSlots(
       scheduler: TaskSchedulerImpl,
       availableCpus: Array[Int],
       availableResources: Array[Map[String, Int]]): Int = {
