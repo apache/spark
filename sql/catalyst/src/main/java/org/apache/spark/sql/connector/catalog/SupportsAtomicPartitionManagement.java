@@ -21,7 +21,9 @@ import java.util.Map;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException;
+import org.apache.spark.sql.catalyst.analysis.PartitionAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
 
 /**
@@ -30,9 +32,9 @@ import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
  * These APIs are used to modify table partition or partition metadata,
  * they will change the table data as well.
  * ${@link #createPartitions}:
- *     add an array of partitions and any data that their location contains to the table
+ *     add an array of partitions and any data they contain to the table
  * ${@link #dropPartitions}:
- *     remove an array of partitions and any data they contains from the table
+ *     remove an array of partitions and any data they contain from the table
  * ${@link #replacePartitionMetadatas}:
  *     point an array of partitions to new locations, which will swap location's data for the other
  *
@@ -40,6 +42,40 @@ import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
  */
 @Experimental
 public interface SupportsAtomicPartitionManagement extends SupportsPartitionManagement {
+
+  @Override
+  default void createPartition(
+      InternalRow ident,
+      Map<String, String> properties)
+      throws PartitionAlreadyExistsException, UnsupportedOperationException {
+    try {
+      createPartitions(new InternalRow[]{ident}, new Map[]{properties});
+    } catch (PartitionsAlreadyExistException e) {
+      throw new PartitionAlreadyExistsException(e.getMessage());
+    }
+  }
+
+  @Override
+  default boolean dropPartition(InternalRow ident) {
+    try {
+      dropPartitions(new InternalRow[]{ident});
+      return true;
+    } catch (NoSuchPartitionsException e) {
+      return false;
+    }
+  }
+
+  @Override
+  default void replacePartitionMetadata(
+      InternalRow ident,
+      Map<String, String> properties)
+      throws NoSuchPartitionException, UnsupportedOperationException {
+    try {
+      replacePartitionMetadatas(new InternalRow[]{ident}, new Map[]{properties});
+    } catch (NoSuchPartitionsException e) {
+      throw new NoSuchPartitionException(e.getMessage());
+    }
+  }
 
   /**
    * Create an array of partitions atomically in table.

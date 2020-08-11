@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.StructType;
  * These APIs are used to modify table partition identifier or partition metadata.
  * In some cases, they will change the table data as well.
  * ${@link #createPartition}:
- *     add a partition and any data that its location contains to the table
+ *     add a partition and any data it contains to the table
  * ${@link #dropPartition}:
  *     remove a partition and any data it contains from the table
  * ${@link #replacePartitionMetadata}:
