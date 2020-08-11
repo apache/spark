@@ -688,7 +688,7 @@ class MasterSuite extends SparkFunSuite
   }
 
   // TODO(SPARK-32250): Enable the test back. It is flaky in GitHub Actions.
-  ignore("SPARK-27510: Master should avoid dead loop while launching executor failed in Worker") {
+  test("SPARK-27510: Master should avoid dead loop while launching executor failed in Worker") {
     val master = makeAliveMaster()
     var worker: MockExecutorLaunchFailWorker = null
     try {
