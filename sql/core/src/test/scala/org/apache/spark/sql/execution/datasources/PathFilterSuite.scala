@@ -144,7 +144,7 @@ class PathFilterSuite
             }
         }
     }
-  
+
     test("SPARK-31962: when modifiedBefore specified with a future date," +
         " multiple files, both valid") {
         withTempDir { dir =>
