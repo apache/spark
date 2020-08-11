@@ -53,8 +53,8 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
   }
 
   test("Avoid spill in partial aggregation" ) {
-    withSQLConf((SQLConf.SKIP_PARTIAL_AGGREGATE_ENABLED.key, "true"),
-      (SQLConf.SKIP_PARTIAL_AGGREGATE_MINROWS.key, "2")) {
+    withSQLConf((SQLConf.SKIP_PARTIAL_AGGREGATE_ENABLED.key -> "true"),
+      (SQLConf.SKIP_PARTIAL_AGGREGATE_MINROWS.key -> "2")) {
       // Create Dataframes
       val data = Seq(("James", 1), ("James", 1), ("Phil", 1))
       val aggDF = data.toDF("name", "values").groupBy("name").sum("values")
@@ -73,9 +73,9 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test(s"Distinct: Partial aggregation should happen for" +
-    s" HashAggregate nodes performing partial Aggregate operations " ) {
-    withSQLConf((SQLConf.SKIP_PARTIAL_AGGREGATE_ENABLED.key, "true")) {
+  test(s"Distinct: Partial aggregation should happen for " +
+    "HashAggregate nodes performing partial Aggregate operations " ) {
+    withSQLConf((SQLConf.SKIP_PARTIAL_AGGREGATE_ENABLED.key -> "true")) {
       val aggDF = testData2.select(sumDistinct($"a"), sum($"b"))
       val aggNodes = aggDF.queryExecution.executedPlan.collect {
         case h: HashAggregateExec => h

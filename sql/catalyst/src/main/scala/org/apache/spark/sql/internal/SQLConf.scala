@@ -2202,15 +2202,22 @@ object SQLConf {
       .internal()
       .doc("Number of records after which aggregate operator checks if " +
         "partial aggregation phase can be avoided")
+      .version("3.1.0")
       .longConf
       .createWithDefault(100000)
 
   val SKIP_PARTIAL_AGGREGATE_AGGREGATE_RATIO =
   buildConf("spark.sql.aggregate.skipPartialAggregate.aggregateRatio")
       .internal()
-      .doc("Ratio of number of records present in map of Aggregate operator" +
-        "to the total number of records processed by the Aggregate operator")
+      .doc("Ratio beyond which the partial aggregation is skipped." +
+        "This is computed by taking the ratio of number of records present" +
+        " in map of Aggregate operator to the total number of records processed" +
+        " by the Aggregate operator.")
+      .version("3.1.0")
       .doubleConf
+      .checkValue(ratio => ratio > 0 && ratio < 1, "Invalid value for " +
+        "spark.sql.aggregate.skipPartialAggregate.aggregateRatio. Valid value needs" +
+        " to be between 0 and 1" )
       .createWithDefault(0.5)
 
   val SKIP_PARTIAL_AGGREGATE_ENABLED =
@@ -2219,8 +2226,9 @@ object SQLConf {
       .doc("When enabled, the partial aggregation is skipped when the following" +
         "two conditions are met. 1. When the total number of records processed is greater" +
         s"than threshold defined by ${SKIP_PARTIAL_AGGREGATE_MINROWS.key} 2. When the ratio" +
-        "of recornd count in map to the total records is less that value defined by " +
+        "of record count in map to the total records is less that value defined by " +
         s"${SKIP_PARTIAL_AGGREGATE_AGGREGATE_RATIO.key}")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
 
