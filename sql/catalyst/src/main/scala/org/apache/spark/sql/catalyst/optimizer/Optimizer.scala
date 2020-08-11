@@ -151,7 +151,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // - Call CombineUnions again in Batch("Operator Optimizations"),
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
-      SplitAggregateWithExpand ::,
+      SplitAggregateWithExpand,
       CombineUnions) ::
     Batch("OptimizeLimitZero", Once,
       OptimizeLimitZero) ::
