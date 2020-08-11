@@ -21,6 +21,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.execution.datasources.{FileIndexFilter, ModifiedAfterFilter, ModifiedBeforeFilter, PathGlobFilter}
 
 object PathFilterFactory {
   PathFilterStrategies.register(ModifiedAfterFilter)

@@ -143,13 +143,23 @@ When both `modifiedBefore` and `modifiedAfter` are specified together, files hav
 last modified timestamps within the resulting time range are the only files
 allowed to load.
 <br/><br/>
-Both options expect a timestamp in the following format: `YYYY-MM-DDTHH:mm:ss`.<br/>
+To load files with paths matching a given modified time range while keeping the behavior of partition discovery,
+you can use:
 
-<b>Example</b> - <i>Load files between 6/1 and 7/1 time range:</i><br/>
-`spark`<br/>
-`.read` <br/>
-` .format("csv")`<br/>
-` .option('modifiedBefore','2020-07-01T08:33:05`)<br/>
-` .option('modifiedAfter','2020-06-01T08:33:05`)<br/>
-` .option('timeZone','PST`)<br/>
-          
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% include_example load_with_modified_time_filter scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% include_example load_with_modified_time_filter  java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% include_example load_with_modified_time_filter  python/sql/datasource.py %}
+</div>
+
+<div data-lang="r"  markdown="1">
+{% include_example load_with_modified_time_filter  r/RSparkSQLExample.R %}
+</div>
+</div>

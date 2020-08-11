@@ -116,11 +116,11 @@ class DataFrameReader(OptionUtils):
                 It does not change the behavior of partition discovery.
             * ``modifiedBefore``: an optional timestamp to only include files with
                 modification times occurring before the specified time.  The provided timestamp
-                must be in the following format:  YYYY-MM-DDTHH:mm:ss
+                must be in the following format: YYYY-MM-DDTHH:mm:ss
                 Example: 2020-06-01T13:00:00
             * ``modifiedAfter``: an optional timestamp to only include files with
                 modification times occurring after the specified time.  The provided timestamp
-                must be in the following format:  YYYY-MM-DDTHH:mm:ss
+                must be in the following format: YYYY-MM-DDTHH:mm:ss
                 Example: 2020-06-01T13:00:00
         """
         self._jreader = self._jreader.option(key, to_str(value))
@@ -148,11 +148,11 @@ class DataFrameReader(OptionUtils):
                 It does not change the behavior of partition discovery.
             * ``modifiedBefore``: an optional timestamp to only include files with
                 modification times occurring before the specified time.  The provided timestamp
-                must be in the following format:  YYYY-MM-DDTHH:mm:ss
+                must be in the following format: YYYY-MM-DDTHH:mm:ss
                 Example: 2020-06-01T13:00:00
             * ``modifiedAfter``: an optional timestamp to only include files with
                 modification times occurring after the specified time.  The provided timestamp
-                must be in the following format:  YYYY-MM-DDTHH:mm:ss
+                must be in the following format: YYYY-MM-DDTHH:mm:ss
                 Example: 2020-06-01T13:00:00
         """
         for k in options:
@@ -281,11 +281,11 @@ class DataFrameReader(OptionUtils):
                                It does not change the behavior of `partition discovery`_.
         :param modifiedBefore: an optional timestamp to only include files with
                     modification times occurring before the specified time.  The provided timestamp
-                    must be in the following format:  YYYY-MM-DDTHH:mm:ss
+                    must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param modifiedAfter: an optional timestamp to only include files with
                     modification times occurring after the specified time.  The provided timestamp
-                    must be in the following format:  YYYY-MM-DDTHH:mm:ss
+                    must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
@@ -369,11 +369,11 @@ class DataFrameReader(OptionUtils):
                                It does not change the behavior of `partition discovery`_.
         :param modifiedBefore: an optional timestamp to only include files with
                     modification times occurring before the specified time.  The provided timestamp
-                    must be in the following format:  YYYY-MM-DDTHH:mm:ss
+                    must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param modifiedAfter: an optional timestamp to only include files with
                     modification times occurring after the specified time.  The provided timestamp
-                    must be in the following format:  YYYY-MM-DDTHH:mm:ss
+                    must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
@@ -415,11 +415,11 @@ class DataFrameReader(OptionUtils):
                                It does not change the behavior of `partition discovery`_.
         :param modifiedBefore: an optional timestamp to only include files with
                     modification times occurring before the specified time.  The provided timestamp
-                    must be in the following format:  YYYY-MM-DDTHH:mm:ss
+                    must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param modifiedAfter: an optional timestamp to only include files with
                     modification times occurring after the specified time.  The provided timestamp
-                    must be in the following format:  YYYY-MM-DDTHH:mm:ss
+                    must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
@@ -562,11 +562,11 @@ class DataFrameReader(OptionUtils):
                                It does not change the behavior of `partition discovery`_.
         :param modifiedBefore: an optional timestamp to only include files with
                     modification times occurring before the specified time.  The provided timestamp
-                    must be in the following format:  YYYY-MM-DDTHH:mm:ss
+                    must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param modifiedAfter: an optional timestamp to only include files with
                     modification times occurring after the specified time.  The provided timestamp
-                    must be in the following format:  YYYY-MM-DDTHH:mm:ss
+                    must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
@@ -635,11 +635,11 @@ class DataFrameReader(OptionUtils):
                                It does not change the behavior of `partition discovery`_.
         :param modifiedBefore: an optional timestamp to only include files with
                     modification times occurring before the specified time.  The provided timestamp
-                    must be in the following format:  YYYY-MM-DDTHH:mm:ss
+                    must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param modifiedAfter: an optional timestamp to only include files with
                     modification times occurring after the specified time.  The provided timestamp
-                    must be in the following format:  YYYY-MM-DDTHH:mm:ss
+                    must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.

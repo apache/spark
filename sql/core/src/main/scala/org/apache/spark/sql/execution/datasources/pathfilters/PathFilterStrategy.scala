@@ -21,10 +21,11 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.datasources.FileIndexFilter
 
 abstract class PathFilterStrategy(sparkSession: SparkSession,
-                                  conf: Configuration,
-                                  options: Map[String, String])
+        conf: Configuration,
+        options: Map[String, String])
     extends FileIndexFilter {
   def accept(path: Path): Boolean
   def accept(fileStatus: FileStatus): Boolean
