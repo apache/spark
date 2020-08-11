@@ -1915,4 +1915,22 @@ package object config {
       .version("3.0.1")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val OPTMIZED_ASYNC_EVENT_QUEUE_SIZE_THRESHOLD =
+    ConfigBuilder("spark.set.optmized.event.queue.threshold")
+      .doc("Percentage threshold of async event Queue size that can be increased " +
+        "before dropping event from the queue")
+      .version("3.1.0")
+      .intConf
+      .checkValue(v => v > 0 && v < 100, "The percentage should be positive.")
+      .createWithDefault(10)
+
+  private[spark] val OPTMIZED_ASYNC_EVENT_QUEUE =
+    ConfigBuilder("spark.set.optmized.event.queue")
+      .doc("Comma seperated optimized variable size linked blocking queue " +
+        "for example --conf spark.set.optmized.event.queue=appStatus,executorManagement,eventLog " +
+        "In this case these 3 queues will have variable size linked blocking queue.")
+      .version("3.1.0")
+      .stringConf
+      .createWithDefault("")
 }

@@ -17,14 +17,16 @@
 
 package org.apache.spark.scheduler
 
-import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import com.codahale.metrics.{Gauge, Timer}
+import com.rabbitmq.client.impl.VariableLinkedBlockingQueue
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -57,7 +59,29 @@ private class AsyncEventQueue(
     queueSize
   }
 
-  private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](capacity)
+  private val (eventQueue, newQueueType): (BlockingQueue[SparkListenerEvent], Boolean) =
+    if (conf.get(OPTMIZED_ASYNC_EVENT_QUEUE).contains(name)) {
+    (new VariableLinkedBlockingQueue[SparkListenerEvent](capacity), true)
+  } else {
+    (new LinkedBlockingQueue[SparkListenerEvent](capacity), false)
+  }
+
+  private val queueSizeThreshold: Int = conf.get(OPTMIZED_ASYNC_EVENT_QUEUE_SIZE_THRESHOLD)
+
+  private lazy val maxSizeQueue: Int = if (newQueueType) {
+    capacity + (capacity * queueSizeThreshold)/100
+  } else {
+    capacity
+  }
+
+  // For testing only.
+  @volatile var newQueueCapacity: Int = capacity
+
+  @volatile private var startCheckQueueCapacityThread: Boolean = true
+
+  // scheduler thread to monitor the Queue Size for variable size event Queue
+  private lazy val checkQueueCapacityThread =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor(s"checkQueueCapacity-$name")
 
   // Keep the event count separately, so that waitUntilEmpty() can be implemented properly;
   // this allows that method to return only when the events in the queue have been fully
@@ -94,6 +118,65 @@ private class AsyncEventQueue(
     setDaemon(true)
     override def run(): Unit = Utils.tryOrStopSparkContext(sc) {
       dispatch()
+    }
+  }
+
+  private def addEventToQueue(event: SparkListenerEvent): Boolean = {
+    eventQueue match {
+      case variableSizeQueue: VariableLinkedBlockingQueue[SparkListenerEvent] =>
+        if (!variableSizeQueue.offer(event)) {
+          synchronized {
+            setQueueCapacity()
+          }
+          variableSizeQueue.offer(event)
+        } else {
+          true
+        }
+      case fixedSizedQueue: LinkedBlockingQueue[SparkListenerEvent] =>
+        fixedSizedQueue.offer(event)
+      case _ => false
+    }
+  }
+
+  // Helper method to set the initial capacity for
+  // VariableLinkedBlockingQueue.
+  private def setQueueInitialCapacity(): Unit = {
+    eventQueue match {
+      case queue: VariableLinkedBlockingQueue[SparkListenerEvent] =>
+        val queueSize = queue.size()
+        // If the size of queue is less than 10 percent of the initial capacity
+        // than set the initial capacity to the queue
+        val diffInitialCapacity = if (queueSize < capacity) {
+          ((capacity - queueSize)/capacity) * 100
+        } else {
+          0
+        }
+        if (diffInitialCapacity > MIN_SIZE_QUEUE_THRESHOLD_PERCENTAGE && queueSize == 0) {
+          queue.setCapacity(capacity)
+          newQueueCapacity = capacity
+        }
+    }
+  }
+
+  // Helper method to set new capacity for VariableLinkedBlockingQueue
+  private def setQueueCapacity(): Unit = {
+    eventQueue match {
+      case queue: VariableLinkedBlockingQueue[SparkListenerEvent] =>
+        val currentSizeQueue = queue.size
+        val newQueSize = currentSizeQueue + (currentSizeQueue * queueSizeThreshold) / 100
+        if (newQueSize <= maxSizeQueue && newQueSize > capacity) {
+          queue.setCapacity(newQueSize)
+          newQueueCapacity = newQueSize
+        }
+        if (startCheckQueueCapacityThread) {
+          startCheckQueueCapacityThread = false
+          checkQueueCapacityThread.scheduleWithFixedDelay(new Runnable {
+            override def run(): Unit = Utils.tryLogNonFatalError {
+              setQueueInitialCapacity
+            }
+          }, CHECK_QUEUE_SIZE_SCHEDULER_INTERVAL,
+            CHECK_QUEUE_SIZE_SCHEDULER_INTERVAL, TimeUnit.MINUTES)
+        }
     }
   }
 
@@ -155,7 +238,7 @@ private class AsyncEventQueue(
     }
 
     eventCount.incrementAndGet()
-    if (eventQueue.offer(event)) {
+    if (addEventToQueue(event)) {
       return
     }
 
@@ -215,4 +298,8 @@ private object AsyncEventQueue {
   val POISON_PILL = new SparkListenerEvent() { }
 
   val LOGGING_INTERVAL = 60 * 1000
+
+  val MIN_SIZE_QUEUE_THRESHOLD_PERCENTAGE = 10
+
+  val CHECK_QUEUE_SIZE_SCHEDULER_INTERVAL = 10
 }

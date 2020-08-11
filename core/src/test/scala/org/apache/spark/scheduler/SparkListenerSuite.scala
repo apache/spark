@@ -599,6 +599,52 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(bus.getQueueCapacity(EVENT_LOG_QUEUE) == Some(2))
   }
 
+  test("test Optimized Async Event Queue for event drop") {
+    val conf = new SparkConf(false)
+      .set(LISTENER_BUS_EVENT_QUEUE_CAPACITY, 2)
+      .set(OPTMIZED_ASYNC_EVENT_QUEUE_SIZE_THRESHOLD, 50)
+      .set(OPTMIZED_ASYNC_EVENT_QUEUE, "shared")
+    val bus = new LiveListenerBus(conf)
+
+    val listenerStarted = new Semaphore(0)
+    val listenerWait = new Semaphore(0)
+
+    bus.addToSharedQueue(new SparkListener {
+      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+        listenerStarted.release()
+        listenerWait.acquire()
+      }
+    })
+
+    bus.start(mockSparkContext, mockMetricsSystem)
+
+    // Post a message to the listener bus and wait for processing to begin:
+    bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
+    listenerStarted.acquire()
+    assert(sharedQueueSize(bus) === 0)
+    assert(numDroppedEvents(bus) === 0)
+
+    bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
+    assert(sharedQueueSize(bus) === 1)
+    assert(numDroppedEvents(bus) === 0)
+    
+    bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
+    assert(sharedQueueSize(bus) === 2)
+    assert(bus.getOptimizedQueueCapacity(SHARED_QUEUE) == Some(2))
+    assert(numDroppedEvents(bus) === 0)
+
+    // The queue is now full, so any additional events posted to the listener
+    // size of the queue will increase to 50% of existing size and prevent event drop
+    bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
+    assert(sharedQueueSize(bus) === 3)
+    assert(bus.getOptimizedQueueCapacity(SHARED_QUEUE) == Some(3))
+    assert(numDroppedEvents(bus) === 0)
+
+    // Allow the remaining events to be processed so we can stop the listener bus:
+    listenerWait.release(4)
+    bus.stop()
+  }
+
   /**
    * Assert that the given list of numbers has an average that is greater than zero.
    */
