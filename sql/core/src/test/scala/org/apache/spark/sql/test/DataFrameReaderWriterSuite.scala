@@ -395,7 +395,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       .load("/test")
 
     assert(LastOptions.parameters("intOpt") == "56")
-    assert(!LastOptions.parameters.contains("path"))
+    assert(LastOptions.parameters("path") == "/test")
 
     LastOptions.clear()
     spark.read

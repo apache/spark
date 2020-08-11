@@ -250,17 +250,22 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "parameters. Either remove the path option or put it into the load() parameters.")
     }
 
+    val updatedPaths = if (paths.length == 1) {
+      option("path", paths.head)
+      Seq.empty
+    } else {
+      paths
+    }
+
     DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).map { provider =>
       val catalogManager = sparkSession.sessionState.catalogManager
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         source = provider, conf = sparkSession.sessionState.conf)
-      val pathsOption = if (paths.isEmpty) {
+      val pathsOption = if (updatedPaths.isEmpty) {
         None
-      } else if (paths.length == 1) {
-        Some("path" -> paths.head)
       } else {
         val objectMapper = new ObjectMapper()
-        Some("paths" -> objectMapper.writeValueAsString(paths.toArray))
+        Some("paths" -> objectMapper.writeValueAsString(updatedPaths.toArray))
       }
 
       val finalOptions = sessionOptions ++ extraOptions.originalMap ++ pathsOption
@@ -288,9 +293,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
             sparkSession,
             DataSourceV2Relation.create(table, catalog, ident, dsOptions))
 
-        case _ => loadV1Source(paths: _*)
+        case _ => loadV1Source(updatedPaths: _*)
       }
-    }.getOrElse(loadV1Source(paths: _*))
+    }.getOrElse(loadV1Source(updatedPaths: _*))
   }
 
   private def loadV1Source(paths: String*) = {
