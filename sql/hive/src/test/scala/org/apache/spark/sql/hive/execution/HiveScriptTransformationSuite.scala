@@ -122,7 +122,8 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       ("Bob", 16, 176),
       ("Alice", 32, 164),
       ("David", 60, 192),
-      ("Amy", 24, 180)).toDF("name", "age", "height")
+      ("Amy", 24, 180)
+    ).toDF("name", "age", "height")
 
     checkAnswer(
       rowsDf,
@@ -187,13 +188,13 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
   testBasicInputDataTypesWith(hiveIOSchema, "hive serde")
 
-  test("SPARK-32106: TRANSFORM supports complex data types type (hive serde)") {
+  test("SPARK-32400: TRANSFORM supports complex data types type (hive serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
       val df = Seq(
         (1, "1", Array(0, 1, 2), Map("a" -> 1)),
-        (2, "2", Array(3, 4, 5), Map("b" -> 2)))
-        .toDF("a", "b", "c", "d")
+        (2, "2", Array(3, 4, 5), Map("b" -> 2))
+      ).toDF("a", "b", "c", "d")
         .select('a, 'b, 'c, 'd, struct('a, 'b).as("e"))
       df.createTempView("v")
 
@@ -220,13 +221,13 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     }
   }
 
-  test("SPARK-32106: TRANSFORM supports complex data types end to end (hive serde)") {
+  test("SPARK-32400: TRANSFORM supports complex data types end to end (hive serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
       val df = Seq(
         (1, "1", Array(0, 1, 2), Map("a" -> 1)),
-        (2, "2", Array(3, 4, 5), Map("b" -> 2)))
-        .toDF("a", "b", "c", "d")
+        (2, "2", Array(3, 4, 5), Map("b" -> 2))
+      ).toDF("a", "b", "c", "d")
         .select('a, 'b, 'c, 'd, struct('a, 'b).as("e"))
       df.createTempView("v")
 
@@ -241,13 +242,13 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     }
   }
 
-  test("SPARK-32106: TRANSFORM doesn't support CalenderIntervalType/UserDefinedType (hive serde)") {
+  test("SPARK-32400: TRANSFORM doesn't support CalenderIntervalType/UserDefinedType (hive serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
       val df = Seq(
         (1, new CalendarInterval(7, 1, 1000), new TestUDT.MyDenseVector(Array(1, 2, 3))),
-        (1, new CalendarInterval(7, 1, 1000), new TestUDT.MyDenseVector(Array(1, 2, 3))))
-        .toDF("a", "b", "c")
+        (1, new CalendarInterval(7, 1, 1000), new TestUDT.MyDenseVector(Array(1, 2, 3)))
+      ).toDF("a", "b", "c")
       df.createTempView("v")
 
       val e1 = intercept[SparkException] {
@@ -261,8 +262,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           ioschema = hiveIOSchema)
         SparkPlanTest.executePlan(plan, hiveContext)
       }.getMessage
-      assert(e1.contains(
-        "CalendarIntervalType cannot be converted to Hive TypeInfo"))
+      assert(e1.contains("interval cannot be converted to Hive TypeInfo"))
 
       val e2 = intercept[SparkException] {
         val plan = createScriptTransformationExec(
@@ -275,19 +275,18 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           ioschema = hiveIOSchema)
         SparkPlanTest.executePlan(plan, hiveContext)
       }.getMessage
-      assert(e2.contains("org.apache.spark.sql.types.TestUDT$MyDenseVectorUDT") &&
-        e2.contains("cannot be converted to Hive TypeInfo"))
+      assert(e2.contains("array<double> cannot be converted to Hive TypeInfo"))
     }
   }
 
-  test("SPARK-32106: TRANSFORM doesn't support" +
+  test("SPARK-32400: TRANSFORM doesn't support" +
     " CalenderIntervalType/UserDefinedType end to end (hive serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
       val df = Seq(
         (1, new CalendarInterval(7, 1, 1000), new TestUDT.MyDenseVector(Array(1, 2, 3))),
-        (1, new CalendarInterval(7, 1, 1000), new TestUDT.MyDenseVector(Array(1, 2, 3))))
-        .toDF("a", "b", "c")
+        (1, new CalendarInterval(7, 1, 1000), new TestUDT.MyDenseVector(Array(1, 2, 3)))
+      ).toDF("a", "b", "c")
       df.createTempView("v")
 
       val e1 = intercept[SparkException] {
@@ -297,8 +296,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             |FROM v
           """.stripMargin).collect()
       }.getMessage
-      assert(e1.contains(
-        "CalendarIntervalType cannot be converted to Hive TypeInfo"))
+      assert(e1.contains("interval cannot be converted to Hive TypeInfo"))
 
       val e2 = intercept[SparkException] {
         sql(
@@ -307,8 +305,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             |FROM v
           """.stripMargin).collect()
       }.getMessage
-      assert(e2.contains("org.apache.spark.sql.types.TestUDT$MyDenseVectorUDT") &&
-        e2.contains("cannot be converted to Hive TypeInfo"))
+      assert(e2.contains("array<double> cannot be converted to Hive TypeInfo"))
     }
   }
 }

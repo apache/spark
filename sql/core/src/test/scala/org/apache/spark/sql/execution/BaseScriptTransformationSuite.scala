@@ -198,7 +198,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   }
 
   def testBasicInputDataTypesWith(serde: ScriptTransformationIOSchema, testName: String): Unit = {
-    test(s"SPARK-32106: TRANSFORM should support basic data types as input ($testName)") {
+    test(s"SPARK-32400: TRANSFORM should support basic data types as input ($testName)") {
       assume(TestUtils.testCommandAvailable("python"))
       withTempView("v") {
         val df = Seq(
@@ -247,7 +247,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   testBasicInputDataTypesWith(defaultIOSchema, "no serde")
 
-  test("SPARK-32106: TRANSFORM should support more data types (interval, array, map, struct " +
+  test("SPARK-32400: TRANSFORM should support more data types (interval, array, map, struct " +
     "and udt) as input (no serde)") {
     assume(TestUtils.testCommandAvailable("python"))
     withTempView("v") {
@@ -288,7 +288,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     }
   }
 
-  test("SPARK-32106: TRANSFORM should respect DATETIME_JAVA8API_ENABLED (no serde)") {
+  test("SPARK-32400: TRANSFORM should respect DATETIME_JAVA8API_ENABLED (no serde)") {
     assume(TestUtils.testCommandAvailable("python"))
     Array(false, true).foreach { java8AapiEnable =>
       withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8AapiEnable.toString) {
