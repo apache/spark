@@ -36,6 +36,19 @@ class InMemoryAtomicPartitionTable (
   extends InMemoryPartitionTable(name, schema, partitioning, properties)
   with SupportsAtomicPartitionManagement {
 
+  override def createPartition(
+      ident: InternalRow,
+      properties: util.Map[String, String]): Unit =
+    super.createPartition(ident, properties)
+
+  override def dropPartition(ident: InternalRow): Boolean =
+    super.dropPartition(ident)
+
+  override def replacePartitionMetadata(
+      ident: InternalRow,
+      properties: util.Map[String, String]): Unit =
+    super.replacePartitionMetadata(ident, properties)
+
   override def createPartitions(
       idents: Array[InternalRow],
       properties: Array[util.Map[String, String]]): Unit = {
