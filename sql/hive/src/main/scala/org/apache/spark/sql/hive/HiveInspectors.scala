@@ -1065,7 +1065,7 @@ private[hive] trait HiveInspectors {
       case NullType => voidTypeInfo
       case dt =>
         throw new AnalysisException(
-          s"${dt.getClass.getSimpleName.replace("$", "")} cannot be converted to Hive TypeInfo")
+          s"${dt.toString} cannot be converted to Hive TypeInfo")
     }
   }
 }

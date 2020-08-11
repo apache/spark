@@ -275,8 +275,8 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           ioschema = hiveIOSchema)
         SparkPlanTest.executePlan(plan, hiveContext)
       }.getMessage
-      assert(e2.contains(
-        "MyDenseVectorUDT cannot be converted to Hive TypeInfo"))
+      assert(e2.contains("org.apache.spark.sql.types.TestUDT$MyDenseVectorUDT") &&
+        e2.contains("cannot be converted to Hive TypeInfo"))
     }
   }
 
@@ -307,8 +307,8 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             |FROM v
           """.stripMargin).collect()
       }.getMessage
-      assert(e2.contains(
-        "MyDenseVectorUDT cannot be converted to Hive TypeInfo"))
+      assert(e2.contains("org.apache.spark.sql.types.TestUDT$MyDenseVectorUDT") &&
+        e2.contains("cannot be converted to Hive TypeInfo"))
     }
   }
 }
