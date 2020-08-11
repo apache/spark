@@ -128,6 +128,8 @@ private[spark] class ExecutorAllocationManager(
   private val executorAllocationRatio =
     conf.get(DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO)
 
+  private val decommissionEnabled = conf.get(WORKER_DECOMMISSION_ENABLED)
+
   private val defaultProfileId = resourceProfileManager.defaultResourceProfile.id
 
   validateSettings()
@@ -209,7 +211,7 @@ private[spark] class ExecutorAllocationManager(
       // storage shuffle decommissioning is enabled we have *experimental* support for
       // decommissioning without a shuffle service.
       if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED) ||
-          (conf.get(WORKER_DECOMMISSION_ENABLED) &&
+          (decommissionEnabled &&
             conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED))) {
         logWarning("Dynamic allocation without a shuffle service is an experimental feature.")
       } else if (!testing) {
@@ -573,7 +575,7 @@ private[spark] class ExecutorAllocationManager(
     } else {
       // We don't want to change our target number of executors, because we already did that
       // when the task backlog decreased.
-      if (conf.get(WORKER_DECOMMISSION_ENABLED)) {
+      if (decommissionEnabled) {
         val executorIdsWithoutHostLoss = executorIdsToBeRemoved.toSeq.map(
           id => (id, ExecutorDecommissionInfo("spark scale down", false))).toArray
         client.decommissionExecutors(executorIdsWithoutHostLoss, adjustTargetNumExecutors = false)
@@ -592,7 +594,7 @@ private[spark] class ExecutorAllocationManager(
 
     // reset the newExecutorTotal to the existing number of executors
     if (testing || executorsRemoved.nonEmpty) {
-      if (conf.get(WORKER_DECOMMISSION_ENABLED)) {
+      if (decommissionEnabled) {
         executorMonitor.executorsDecommissioned(executorsRemoved)
       } else {
         executorMonitor.executorsKilled(executorsRemoved.toSeq)

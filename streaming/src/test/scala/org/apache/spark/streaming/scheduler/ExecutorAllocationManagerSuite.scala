@@ -97,17 +97,17 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
       }
 
       /** Verify that a particular executor was scaled down. */
-      def verifyKilledExec(expectedKilledExec: Option[String]): Unit = {
-        if (expectedKilledExec.nonEmpty) {
+      def verifyScaledDownExec(expectedExec: Option[String]): Unit = {
+        if (expectedExec.nonEmpty) {
           val decomInfo = ExecutorDecommissionInfo("spark scale down", false)
           if (decommissioning) {
             verify(allocationClient, times(1)).decommissionExecutor(
-              meq(expectedKilledExec.get), meq(decomInfo), meq(true))
-            verify(allocationClient, never).killExecutor(meq(expectedKilledExec.get))
+              meq(expectedExec.get), meq(decomInfo), meq(true))
+            verify(allocationClient, never).killExecutor(meq(expectedExec.get))
           } else {
-            verify(allocationClient, times(1)).killExecutor(meq(expectedKilledExec.get))
+            verify(allocationClient, times(1)).killExecutor(meq(expectedExec.get))
             verify(allocationClient, never).decommissionExecutor(
-              meq(expectedKilledExec.get), meq(decomInfo), meq(true))
+              meq(expectedExec.get), meq(decomInfo), meq(true))
           }
         } else {
           if (decommissioning) {
@@ -122,41 +122,41 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
       // Batch proc time = batch interval, should increase allocation by 1
       addBatchProcTimeAndVerifyAllocation(batchDurationMillis) {
         verifyTotalRequestedExecs(Some(3)) // one already allocated, increase allocation by 1
-        verifyKilledExec(None)
+        verifyScaledDownExec(None)
       }
 
       // Batch proc time = batch interval * 2, should increase allocation by 2
       addBatchProcTimeAndVerifyAllocation(batchDurationMillis * 2) {
         verifyTotalRequestedExecs(Some(4))
-        verifyKilledExec(None)
+        verifyScaledDownExec(None)
       }
 
       // Batch proc time slightly more than the scale up ratio, should increase allocation by 1
       addBatchProcTimeAndVerifyAllocation(
         batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_UP_RATIO.defaultValue.get + 1) {
         verifyTotalRequestedExecs(Some(3))
-        verifyKilledExec(None)
+        verifyScaledDownExec(None)
       }
 
       // Batch proc time slightly less than the scale up ratio, should not change allocation
       addBatchProcTimeAndVerifyAllocation(
         batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_UP_RATIO.defaultValue.get - 1) {
         verifyTotalRequestedExecs(None)
-        verifyKilledExec(None)
+        verifyScaledDownExec(None)
       }
 
       // Batch proc time slightly more than the scale down ratio, should not change allocation
       addBatchProcTimeAndVerifyAllocation(
         batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_DOWN_RATIO.defaultValue.get + 1) {
         verifyTotalRequestedExecs(None)
-        verifyKilledExec(None)
+        verifyScaledDownExec(None)
       }
 
       // Batch proc time slightly more than the scale down ratio, should not change allocation
       addBatchProcTimeAndVerifyAllocation(
         batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_DOWN_RATIO.defaultValue.get - 1) {
         verifyTotalRequestedExecs(None)
-        verifyKilledExec(Some("2"))
+        verifyScaledDownExec(Some("2"))
       }
     }
   }

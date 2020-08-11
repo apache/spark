@@ -363,22 +363,24 @@ private[spark] class ExecutorMonitor(
       UNKNOWN_RESOURCE_PROFILE_ID)
 
     // Check if it is a shuffle file, or RDD to pick the correct codepath for update
-    if (event.blockUpdatedInfo.blockId.isInstanceOf[ShuffleDataBlockId] && shuffleTrackingEnabled) {
-      /**
-       * The executor monitor keeps track of locations of cache and shuffle blocks and this can be
-       * used to decide which executor(s) Spark should shutdown first. Since we move shuffle blocks
-       * around now this wires it up so that it keeps track of it. We only do this for data blocks
-       * as index and other blocks blocks do not necessarily mean the entire block has been
-       * committed.
-       */
-      event.blockUpdatedInfo.blockId match {
-        case ShuffleDataBlockId(shuffleId, _, _) => exec.addShuffle(shuffleId)
-        case _ => // For now we only update on data blocks
+    if (!event.blockUpdatedInfo.blockId.isInstanceOf[RDDBlockId]) {
+      if (event.blockUpdatedInfo.blockId.isInstanceOf[ShuffleDataBlockId] &&
+        shuffleTrackingEnabled) {
+        /**
+         * The executor monitor keeps track of locations of cache and shuffle blocks and this can
+         * be used to decide which executor(s) Spark should shutdown first. Since we move shuffle
+         * blocks around now this wires it up so that it keeps track of it. We only do this for
+         * data blocks as index and other blocks blocks do not necessarily mean the entire block
+         * has been committed.
+         */
+        event.blockUpdatedInfo.blockId match {
+          case ShuffleDataBlockId(shuffleId, _, _) => exec.addShuffle(shuffleId)
+          case _ => // For now we only update on data blocks
+        }
       }
       return
-    } else if (!event.blockUpdatedInfo.blockId.isInstanceOf[RDDBlockId]) {
-      return
     }
+
     val storageLevel = event.blockUpdatedInfo.storageLevel
     val blockId = event.blockUpdatedInfo.blockId.asInstanceOf[RDDBlockId]
 
