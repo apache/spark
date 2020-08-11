@@ -35,7 +35,7 @@ case class JDBCWriteBuilder(schema: StructType, options: JdbcOptionsInWrite) ext
 
   override def buildForV1Write(): InsertableRelation = new InsertableRelation {
     override def insert(data: DataFrame, overwrite: Boolean): Unit = {
-      // TODO: do truncate and append atomically.
+      // TODO (SPARK-32595): do truncate and append atomically.
       if (isTruncate) {
         val conn = JdbcUtils.createConnectionFactory(options)()
         JdbcUtils.truncateTable(conn, options)

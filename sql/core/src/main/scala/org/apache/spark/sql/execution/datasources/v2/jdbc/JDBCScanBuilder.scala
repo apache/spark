@@ -51,6 +51,7 @@ case class JDBCScanBuilder(
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // JDBC doesn't support nested column pruning.
+    // TODO (SPARK-32593): JDBC support nested column and nested column pruning.
     val requiredCols = requiredSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive))
       .toSet
     val fields = schema.fields.filter { field =>
