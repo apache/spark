@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import org.apache.spark.scheduler.ExecutorDecommissionInfo
+
 /**
  * A client that communicates with the cluster manager to request or kill executors.
  * This is currently supported only in YARN mode.

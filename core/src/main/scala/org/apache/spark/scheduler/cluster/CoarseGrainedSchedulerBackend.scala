@@ -479,10 +479,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       adjustExecutors(executorsToDecommission.map(_._1))
     }
 
-    val decommissioned = executorsToDecommission.filter { case (executorId, decomInfo) =>
+    executorsToDecommission.filter { case (executorId, decomInfo) =>
       doDecommission(executorId, decomInfo)
     }.map(_._1)
-    decommissioned
   }
 
 
@@ -782,6 +781,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Adjust the number of executors being requested to no longer include the provided executors.
    */
   private def adjustExecutors(executorIds: Seq[String]) = {
+    if (executorIds.nonEmpty) {
       executorIds.foreach { exec =>
         withLock {
           val rpId = executorDataMap(exec).resourceProfileId
@@ -797,6 +797,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
       }
       doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
+    } else {
+      Future.successful(true)
+    }
   }
 
   /**
