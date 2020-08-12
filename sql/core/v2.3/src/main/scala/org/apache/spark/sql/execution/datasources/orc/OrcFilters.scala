@@ -27,7 +27,6 @@ import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 
@@ -68,9 +67,9 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    * Create ORC filter as a SearchArgument instance.
    */
   def createFilter(schema: StructType, filters: Seq[Filter]): Option[SearchArgument] = {
-    val dataTypeMap = OrcFilters.getSearchableTypeMap(schema, SQLConf.get.caseSensitiveAnalysis)
+    val dataTypeMap = OrcFilters.getSearchableTypeMap(schema)
     // Combines all convertible filters using `And` to produce a single conjunction
-    val conjunctionOptional = buildTree(convertibleFilters(schema, dataTypeMap, filters))
+    val conjunctionOptional = buildTree(convertibleFilters(dataTypeMap, filters))
     conjunctionOptional.map { conjunction =>
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate.
       // The input predicate is fully convertible. There should not be any empty result in the
@@ -80,7 +79,6 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   }
 
   def convertibleFilters(
-      schema: StructType,
       dataTypeMap: Map[String, DataType],
       filters: Seq[Filter]): Seq[Filter] = {
     import org.apache.spark.sql.sources._

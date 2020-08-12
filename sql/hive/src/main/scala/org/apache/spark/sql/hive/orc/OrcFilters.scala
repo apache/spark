@@ -75,7 +75,8 @@ private[orc] object OrcFilters extends Logging {
       DatasourceOrcFilters.createFilter(schema, filters).asInstanceOf[Option[SearchArgument]]
     } else {
       val dataTypeMap = schema.map(f => quoteIfNeeded(f.name) -> f.dataType).toMap
-      // TODO (SPARK-25557): ORC doesn't support nested predicate pushdown, so they are removed.
+      // ORC in Hive 1.2 doesn't support nested predicate pushdown, so they are removed.
+      // Use Hive 2.3 or native ORC implementation (`spark.sql.orc.impl`).
       val newFilters = filters.filter(!_.containsNestedColumn)
       // Combines all convertible filters using `And` to produce a single conjunction
       val conjunctionOptional = buildTree(convertibleFilters(schema, dataTypeMap, newFilters))

@@ -47,9 +47,7 @@ trait OrcFiltersBase {
    *
    * BinaryType, UserDefinedType, ArrayType and MapType are ignored.
    */
-  protected[sql] def getSearchableTypeMap(
-      schema: StructType,
-      caseSensitive: Boolean): Map[String, DataType] = {
+  protected[sql] def getSearchableTypeMap(schema: StructType): Map[String, DataType] = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
     def getPrimitiveFields(
@@ -67,18 +65,12 @@ trait OrcFiltersBase {
       }
     }
 
-    val primitiveFields = getPrimitiveFields(schema.fields)
-    if (caseSensitive) {
-      primitiveFields.toMap
-    } else {
-      // Don't consider ambiguity here, i.e. more than one field are matched in case insensitive
-      // mode, just skip pushdown for these fields, they will trigger Exception when reading,
-      // See: SPARK-25175.
-      val dedupPrimitiveFields = primitiveFields
-        .groupBy(_._1.toLowerCase(Locale.ROOT))
-        .filter(_._2.size == 1)
-        .mapValues(_.head._2)
-      CaseInsensitiveMap(dedupPrimitiveFields)
-    }
+    // Different with Parquet case, for case insensitive analysis, we will set
+    // `OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE`. So we don't need to worry about
+    // mis-matching between pushed predicates and Orc fields.
+    // Don't consider ambiguity here, i.e. more than one field are matched in case insensitive
+    // mode, just skip pushdown for these fields, they will trigger Exception when reading,
+    // See: SPARK-25175.
+    getPrimitiveFields(schema.fields).toMap
   }
 }
