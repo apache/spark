@@ -447,10 +447,9 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("SPARK-32585: Support scala enumeration in ScalaReflection") {
-    assert(schemaFor[FooClassWithEnum] == Schema(StringType, false))
     assert(serializerFor[FooClassWithEnum].dataType == StructType(Seq(
       StructField("i", IntegerType, false),
-      StructField("e", StringType, false))))
+      StructField("e", StringType, true))))
     assert(deserializerFor[FooClassWithEnum].dataType == ObjectType(classOf[FooClassWithEnum]))
   }
 }
