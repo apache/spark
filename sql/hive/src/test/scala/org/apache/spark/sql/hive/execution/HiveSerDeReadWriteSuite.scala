@@ -154,7 +154,7 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
     }
   }
 
-  Seq("PARQUET", "ORC").foreach { fileFormat =>
+  Seq("PARQUET", "ORC", "TEXTFILE").foreach { fileFormat =>
     test(s"Read/Write Hive $fileFormat serde table") {
       // Numeric Types
       checkNumericTypes(fileFormat, "TINYINT", 2)
@@ -182,14 +182,6 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
 
       // Complex Types
       checkComplexTypes(fileFormat)
-    }
-  }
-
-  test("SPARK-32594: insert dates to a Hive table") {
-    withTable("table1") {
-      sql("CREATE TABLE table1 (d date)")
-      sql("INSERT INTO table1 VALUES (date '2020-08-11')")
-      checkAnswer(spark.table("table1"), Row(Date.valueOf("2020-08-11")))
     }
   }
 }
