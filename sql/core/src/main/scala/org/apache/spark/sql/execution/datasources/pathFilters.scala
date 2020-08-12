@@ -88,9 +88,9 @@ abstract class ModifiedDateFilter(
  @param options Map containing options
  */
 class ModifiedBeforeFilter(
-    sparkSession: SparkSession,
-    hadoopConf: Configuration,
-    options: CaseInsensitiveMap[String])
+        sparkSession: SparkSession,
+        hadoopConf: Configuration,
+        options: CaseInsensitiveMap[String])
     extends ModifiedDateFilter(sparkSession, hadoopConf, options)
     with FileIndexFilter {
   override def accept(fileStatus: FileStatus): Boolean =
@@ -122,9 +122,9 @@ case object ModifiedBeforeFilter extends PathFilterObject {
 @param options Map containing options
  */
 case class ModifiedAfterFilter(
-    sparkSession: SparkSession,
-    hadoopConf: Configuration,
-    options: CaseInsensitiveMap[String])
+        sparkSession: SparkSession,
+        hadoopConf: Configuration,
+        options: CaseInsensitiveMap[String])
     extends ModifiedDateFilter(sparkSession, hadoopConf, options)
     with FileIndexFilter {
   override def accept(fileStatus: FileStatus): Boolean =
