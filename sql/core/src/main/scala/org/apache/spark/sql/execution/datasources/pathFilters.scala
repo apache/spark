@@ -51,7 +51,6 @@ abstract class ModifiedDateFilter(
         hadoopConf: Configuration,
         options: CaseInsensitiveMap[String])
     extends PathFilterStrategy {
-
   lazy val timeZoneId: String = options.getOrElse(
     DateTimeUtils.TIMEZONE_OPTION.toLowerCase(Locale.ROOT),
     SQLConf.get.sessionLocalTimeZone)
@@ -61,19 +60,14 @@ abstract class ModifiedDateFilter(
   lazy val timeString: UTF8String = UTF8String.fromString(options.apply(strategy()))
 
   def thresholdTime(): Long = {
-    DateTimeUtils
-      .stringToTimestamp(timeString, timeZone.toZoneId)
-      .getOrElse(
+    DateTimeUtils.stringToTimestamp(timeString, timeZone.toZoneId).getOrElse(
         throw new AnalysisException(
-          s"The timestamp provided for the '${strategy()}'" +
+            s"The timestamp provided for the '${strategy()}'" +
             s" option is invalid.  The expected format is 'YYYY-MM-DDTHH:mm:ss'. " +
             s" Provided timestamp:  " +
             s"${options.apply(strategy())}"))
   }
-
-  def localTime(micros: Long): Long =
-    DateTimeUtils.fromUTCTime(micros, timeZoneId)
-
+  def localTime(micros: Long): Long = DateTimeUtils.fromUTCTime(micros, timeZoneId)
   def accept(fileStatus: FileStatus): Boolean
   def accept(path: Path): Boolean
   def strategy(): String
@@ -91,8 +85,7 @@ class ModifiedBeforeFilter(
         sparkSession: SparkSession,
         hadoopConf: Configuration,
         options: CaseInsensitiveMap[String])
-    extends ModifiedDateFilter(sparkSession, hadoopConf, options)
-    with FileIndexFilter {
+    extends ModifiedDateFilter(sparkSession, hadoopConf, options) with FileIndexFilter {
   override def accept(fileStatus: FileStatus): Boolean =
     // We standardize on microseconds wherever possible
     // getModificationTime returns in milliseconds
@@ -123,8 +116,7 @@ case class ModifiedAfterFilter(
         sparkSession: SparkSession,
         hadoopConf: Configuration,
         options: CaseInsensitiveMap[String])
-    extends ModifiedDateFilter(sparkSession, hadoopConf, options)
-    with FileIndexFilter {
+    extends ModifiedDateFilter(sparkSession, hadoopConf, options) with FileIndexFilter {
   override def accept(fileStatus: FileStatus): Boolean =
     // getModificationTime returns in milliseconds
     // We standardize on microseconds wherever possible
@@ -148,11 +140,8 @@ class PathGlobFilter(
         sparkSession: SparkSession,
         conf: Configuration,
         options: CaseInsensitiveMap[String])
-    extends GlobFilter(options.get("pathGlobFilter").get)
-    with FileIndexFilter {
-
-  override def accept(fileStatus: FileStatus): Boolean =
-    accept(fileStatus.getPath)
+    extends GlobFilter(options.get("pathGlobFilter").get) with FileIndexFilter {
+  override def accept(fileStatus: FileStatus): Boolean = accept(fileStatus.getPath)
   override def strategy(): String = "pathGlobFilter"
 }
 case object PathGlobFilter extends PathFilterObject {
@@ -185,25 +174,22 @@ trait PathFilterStrategy extends FileIndexFilter {
 }
 
 case object PathFilterStrategies {
-  var cache = Iterable[PathFilterObject]()
+    var cache = Iterable[PathFilterObject]()
 
-  def get(
-      sparkSession: SparkSession,
-      conf: Configuration,
-      options: CaseInsensitiveMap[String]): Iterable[FileIndexFilter] =
-    (options.keys)
-      .map(option => {
-        cache
-          .filter(pathFilter => pathFilter.strategy() == option)
-          .map(filter => filter.get(sparkSession, conf, options))
-          .headOption
-          .getOrElse(null)
-      })
-      .filter(_ != null)
+    def get(
+        sparkSession: SparkSession,
+        conf: Configuration,
+        options: CaseInsensitiveMap[String]): Iterable[FileIndexFilter] =
+        options.keys
+            .map(option => {
+                cache.filter(pathFilter => pathFilter.strategy() == option)
+                    .map(filter => filter.get(sparkSession, conf, options))
+                    .headOption.orNull
+            }).filter(_ != null)
 
-  def register(filter: PathFilterObject): Unit = {
-    cache = cache.++(Iterable[PathFilterObject](filter))
-  }
+    def register(filter: PathFilterObject): Unit = {
+        cache = cache.++(Iterable[PathFilterObject](filter))
+    }
 }
 
 object PathFilterFactory {
