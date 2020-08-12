@@ -103,7 +103,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
     if (buffer.hasArray()) {
       int offset = buffer.arrayOffset() + buffer.position();
-      c.putFloats(rowId, total, buffer.array(), offset);
+      c.putFloatsLittleEndian(rowId, total, buffer.array(), offset);
     } else {
       for (int i = 0; i < total; i += 1) {
         c.putFloat(rowId + i, buffer.getFloat());
@@ -118,7 +118,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
     if (buffer.hasArray()) {
       int offset = buffer.arrayOffset() + buffer.position();
-      c.putDoubles(rowId, total, buffer.array(), offset);
+      c.putDoublesLittleEndian(rowId, total, buffer.array(), offset);
     } else {
       for (int i = 0; i < total; i += 1) {
         c.putDouble(rowId + i, buffer.getDouble());

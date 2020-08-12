@@ -311,6 +311,12 @@ public abstract class WritableColumnVector extends ColumnVector {
   public abstract void putFloats(int rowId, int count, byte[] src, int srcIndex);
 
   /**
+   * Sets values from [src[srcIndex], src[srcIndex + count * 4]) to [rowId, rowId + count)
+   * The data in src must be ieee formatted floats in little endian.
+   */
+  public abstract void putFloatsLittleEndian(int rowId, int count, byte[] src, int srcIndex);
+
+  /**
    * Sets `value` to the value at rowId.
    */
   public abstract void putDouble(int rowId, double value);
@@ -330,6 +336,12 @@ public abstract class WritableColumnVector extends ColumnVector {
    * The data in src must be ieee formatted doubles in platform native endian.
    */
   public abstract void putDoubles(int rowId, int count, byte[] src, int srcIndex);
+
+  /**
+   * Sets values from [src[srcIndex], src[srcIndex + count * 8]) to [rowId, rowId + count)
+   * The data in src must be ieee formatted doubles in little endian.
+   */
+  public abstract void putDoublesLittleEndian(int rowId, int count, byte[] src, int srcIndex);
 
   /**
    * Puts a byte array that already exists in this column.
