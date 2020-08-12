@@ -972,17 +972,17 @@ class Column(val expr: Expression) extends Logging {
   }
 
   private def updateFieldsHelper(
-      struct: Expression,
-      namePartsRemaining: Seq[String],
-      value: String => StructFieldsOperation): UpdateFields = {
+    struct: Expression,
+    namePartsRemaining: Seq[String],
+    valueFunc: String => StructFieldsOperation): UpdateFields = {
     val fieldName = namePartsRemaining.head
     if (namePartsRemaining.length == 1) {
-      UpdateFields(struct, value(fieldName) :: Nil)
+      UpdateFields(struct, valueFunc(fieldName) :: Nil)
     } else {
       val newValue = updateFieldsHelper(
         struct = UnresolvedExtractValue(struct, Literal(fieldName)),
         namePartsRemaining = namePartsRemaining.tail,
-        value = value)
+        valueFunc = valueFunc)
       UpdateFields(struct, WithField(fieldName, newValue) :: Nil)
     }
   }
