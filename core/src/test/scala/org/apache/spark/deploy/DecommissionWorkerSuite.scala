@@ -242,10 +242,8 @@ class DecommissionWorkerSuite
       assert(jobResult === 2)
     }
     // 6 tasks: 2 from first stage, 2 rerun again from first stage, 2nd stage attempt 1 and 2.
-    eventually(timeout(30.seconds), interval(10.seconds)) {
-      val tasksSeen = listener.getTasksFinished()
-      assert(tasksSeen.size === 6, s"Expected 6 tasks but got $tasksSeen")
-    }
+    val tasksSeen = listener.getTasksFinished()
+    assert(tasksSeen.size === 6, s"Expected 6 tasks but got $tasksSeen")
   }
 
   private abstract class RootStageAwareListener extends SparkListener {
