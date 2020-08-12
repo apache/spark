@@ -19,8 +19,6 @@ package org.apache.spark.sql.util
 
 import java.util.Locale
 
-import scala.collection.mutable
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
