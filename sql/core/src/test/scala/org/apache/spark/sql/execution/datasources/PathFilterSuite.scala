@@ -18,13 +18,13 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.File
-import java.time.format.DateTimeFormatter
 import java.time.{LocalDateTime, ZoneOffset}
+import java.time.format.DateTimeFormatter
 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, stringToFile}
+import org.apache.spark.sql.catalyst.util.{stringToFile, CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class PathFilterSuite extends QueryTest with SharedSparkSession {
