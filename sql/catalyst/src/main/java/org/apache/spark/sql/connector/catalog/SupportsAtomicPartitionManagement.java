@@ -21,7 +21,6 @@ import java.util.Map;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException;
 import org.apache.spark.sql.catalyst.analysis.PartitionAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
 
@@ -54,12 +53,7 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
 
   @Override
   default boolean dropPartition(InternalRow ident) {
-    try {
-      dropPartitions(new InternalRow[]{ident});
-      return true;
-    } catch (NoSuchPartitionsException e) {
-      return false;
-    }
+    return dropPartitions(new InternalRow[]{ident});
   }
 
   /**
@@ -85,8 +79,7 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
    * the operation of dropPartitions need to be safely rolled back.
    *
    * @param idents an array of partition identifiers
-   * @throws NoSuchPartitionsException If any partition identifier to drop doesn't exist
+   * @return true if partitions were deleted, false if any partition not exists
    */
-  void dropPartitions(
-      InternalRow[] idents) throws NoSuchPartitionsException;
+  boolean dropPartitions(InternalRow[] idents);
 }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
+import org.apache.spark.sql.catalyst.analysis.{PartitionAlreadyExistsException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.connector.catalog.SupportsAtomicPartitionManagement
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
@@ -67,11 +67,10 @@ class InMemoryAtomicPartitionTable (
     }
   }
 
-  override def dropPartitions(idents: Array[InternalRow]): Unit = {
+  override def dropPartitions(idents: Array[InternalRow]): Boolean = {
     if (!idents.forall(partitionExists)) {
-      throw new NoSuchPartitionsException(
-        name, idents.filterNot(partitionExists), partitionSchema)
+      return false;
     }
-    idents.foreach(dropPartition)
+    idents.forall(dropPartition)
   }
 }

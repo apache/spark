@@ -45,6 +45,8 @@ import org.apache.spark.sql.types.StructType;
 public interface SupportsPartitionManagement extends Table {
 
     /**
+     * Get the partition schema of table,
+     * this must be consistent with ${@link Table#partitioning()}
      * @return the partition schema of table
      */
     StructType partitionSchema();
@@ -71,7 +73,7 @@ public interface SupportsPartitionManagement extends Table {
     boolean dropPartition(InternalRow ident);
 
     /**
-     * Test whether a partition exists using an {@link Identifier identifier} from the table.
+     * Test whether a partition exists using an {@link InternalRow ident} from the table.
      *
      * @param ident a partition identifier
      * @return true if the partition exists, false otherwise

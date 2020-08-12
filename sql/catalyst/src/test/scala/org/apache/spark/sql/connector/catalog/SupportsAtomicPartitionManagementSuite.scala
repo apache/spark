@@ -21,7 +21,7 @@ import java.util
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, PartitionsAlreadyExistException}
+import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
 import org.apache.spark.sql.connector.{InMemoryAtomicPartitionTable, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
@@ -117,8 +117,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
     assert(partTable.listPartitionIdentifiers(InternalRow.empty).length == 1)
 
     val partIdents = Array(InternalRow.apply("3"), InternalRow.apply("4"))
-    assertThrows[NoSuchPartitionsException](
-      partTable.dropPartitions(partIdents))
+    assert(!partTable.dropPartitions(partIdents))
     assert(partTable.partitionExists(partIdent))
 
     partTable.dropPartition(partIdent)
