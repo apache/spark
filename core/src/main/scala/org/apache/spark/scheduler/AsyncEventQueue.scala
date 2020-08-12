@@ -69,7 +69,7 @@ private class AsyncEventQueue(
   private val queueSizeThreshold: Int = conf.get(OPTMIZED_ASYNC_EVENT_QUEUE_SIZE_THRESHOLD)
 
   private lazy val maxSizeQueue: Int = if (newQueueType) {
-    capacity + (capacity * queueSizeThreshold)/100
+    capacity + (capacity * queueSizeThreshold) / 100
   } else {
     capacity
   }
