@@ -690,7 +690,8 @@ object ScalaReflection extends ScalaReflection {
         val Schema(dataType, nullable) = schemaFor(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
       case t if isSubtype(t, localTypeOf[Seq[_]]) ||
-        isSubtype(t, localTypeOf[mutable.Buffer[_]]) =>
+        isSubtype(t, localTypeOf[mutable.Buffer[_]]) ||
+        isSubtype(t, localTypeOf[mutable.Seq[_]]) =>
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, nullable) = schemaFor(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)

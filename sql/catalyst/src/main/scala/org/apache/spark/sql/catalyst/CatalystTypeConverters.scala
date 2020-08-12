@@ -25,6 +25,7 @@ import java.time.{Instant, LocalDate}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
+import scala.collection.mutable
 import scala.language.existentials
 
 import org.apache.spark.sql.Row
@@ -165,6 +166,8 @@ object CatalystTypeConverters {
         case a: Array[_] =>
           new GenericArrayData(a.map(elementConverter.toCatalyst))
         case s: Seq[_] =>
+          new GenericArrayData(s.map(elementConverter.toCatalyst).toArray)
+        case s: mutable.Seq[_] =>
           new GenericArrayData(s.map(elementConverter.toCatalyst).toArray)
         case i: JavaIterable[_] =>
           val iter = i.iterator
