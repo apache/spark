@@ -146,7 +146,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
 
       val time = LocalDateTime
         .now()
-        .plusDays(1)
+        .plusDays(3)
         .format(DateTimeFormatter
           .ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
 
@@ -171,7 +171,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       file1.setLastModified(DateTimeUtils.currentTimestamp())
 
       val failTime =
-        LocalDateTime.now().plusDays(1).toEpochSecond(ZoneOffset.UTC)
+        LocalDateTime.now().plusDays(3).toEpochSecond(ZoneOffset.UTC)
       file2.setLastModified(failTime * 1000)
 
       val time = LocalDateTime
