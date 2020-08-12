@@ -237,13 +237,16 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       checkWithApproved(plan, query + suffix, explain)
     }
   }
+
+  // TODO: this is used to reduce generated files to ease the review. Revert it back after review.
+  val targetQuires = Set("47", "q49", "57")
 }
 
 class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v1_4").getAbsolutePath
 
-  tpcdsQueries.foreach { q =>
+  tpcdsQueries.filter(targetQuires.contains).foreach { q =>
     test(s"check simplified (tpcds-v1.4/$q)") {
       testQuery("tpcds", q)
     }
@@ -256,7 +259,7 @@ class TPCDSV1_4_PlanStabilityWithStatsSuite extends PlanStabilitySuite {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v1_4").getAbsolutePath
 
-  tpcdsQueries.foreach { q =>
+  tpcdsQueries.filter(targetQuires.contains).foreach { q =>
     test(s"check simplified sf100 (tpcds-v1.4/$q)") {
       testQuery("tpcds", q, ".sf100")
     }
@@ -267,7 +270,7 @@ class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v2_7").getAbsolutePath
 
-  tpcdsQueriesV2_7_0.foreach { q =>
+  tpcdsQueriesV2_7_0.filter(targetQuires.contains).foreach { q =>
     test(s"check simplified (tpcds-v2.7.0/$q)") {
       testQuery("tpcds-v2.7.0", q)
     }
@@ -280,7 +283,7 @@ class TPCDSV2_7_PlanStabilityWithStatsSuite extends PlanStabilitySuite {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v2_7").getAbsolutePath
 
-  tpcdsQueriesV2_7_0.foreach { q =>
+  tpcdsQueriesV2_7_0.filter(targetQuires.contains).foreach { q =>
     test(s"check simplified sf100 (tpcds-v2.7.0/$q)") {
       testQuery("tpcds-v2.7.0", q, ".sf100")
     }
@@ -291,7 +294,7 @@ class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-modified").getAbsolutePath
 
-  modifiedTPCDSQueries.foreach { q =>
+  modifiedTPCDSQueries.filter(targetQuires.contains).foreach { q =>
     test(s"check simplified (tpcds-modifiedQueries/$q)") {
       testQuery("tpcds-modifiedQueries", q)
     }
@@ -304,7 +307,7 @@ class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-modified").getAbsolutePath
 
-  modifiedTPCDSQueries.foreach { q =>
+  modifiedTPCDSQueries.filter(targetQuires.contains).foreach { q =>
     test(s"check simplified sf100 (tpcds-modifiedQueries/$q)") {
       testQuery("tpcds-modifiedQueries", q, ".sf100")
     }
