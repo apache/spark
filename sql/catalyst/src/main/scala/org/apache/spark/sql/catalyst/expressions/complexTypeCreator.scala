@@ -556,6 +556,9 @@ trait StructFieldsOperation {
 
 /**
  * Add or replace a field by name.
+ *
+ * We extend [[Unevaluable]] here to ensure that [[UpdateFields]] can include it as part of its
+ * children, and thereby enable the analyzer to resolve and transform valExpr as necessary.
  */
 case class WithField(name: String, valExpr: Expression)
   extends Unevaluable with StructFieldsOperation {
