@@ -767,8 +767,8 @@ private[spark] class TaskSetManager(
         isZombie = true
       }
     } else {
-      logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
-        " because task " + index + " has already completed successfully")
+      logInfo(s"Ignoring task-finished event for ${taskName(info.taskId)} " +
+        s"because it has already completed successfully")
     }
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
