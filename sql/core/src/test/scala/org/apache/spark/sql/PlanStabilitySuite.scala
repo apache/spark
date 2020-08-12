@@ -56,7 +56,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   private val originalMaxToStringFields = conf.maxToStringFields
 
   override def beforeAll(): Unit = {
-    conf.setConf(SQLConf.MAX_TO_STRING_FIELDS, 100)
+    conf.setConf(SQLConf.MAX_TO_STRING_FIELDS, Int.MaxValue)
     super.beforeAll()
   }
 
@@ -93,7 +93,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
    * @param explain the full explain output; this is saved to help debug later as the simplified
    *                plan is not too useful for debugging
    */
-  private def approvePlan(
+  private def generateApprovedPlanFile(
       plan: SparkPlan,
       name: String,
       explain: String): Unit = {
@@ -232,7 +232,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
     val explain = normalizeIds(qe.toString)
 
     if (regenerateGoldenFiles) {
-      approvePlan(plan, query + suffix, explain)
+      generateApprovedPlanFile(plan, query + suffix, explain)
     } else {
       checkWithApproved(plan, query + suffix, explain)
     }
