@@ -88,7 +88,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
    * Serialize and save this SparkPlan.
    * The resulting file is used by [[checkWithApproved]] to check stability.
    *
-   * @param plan    the [[SparkPlan]]
+   * @param plan    th SparkPlan
    * @param name    the name of the query
    * @param explain the full explain output; this is saved to help debug later as the simplified
    *                plan is not too useful for debugging
