@@ -47,7 +47,6 @@ public interface SupportsPartitionManagement extends Table {
     /**
      * Get the partition schema of table,
      * this must be consistent with ${@link Table#partitioning()}.
-     * 
      * @return the partition schema of table
      */
     StructType partitionSchema();
