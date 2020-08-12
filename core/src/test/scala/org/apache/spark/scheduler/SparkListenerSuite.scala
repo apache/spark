@@ -627,7 +627,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
     assert(sharedQueueSize(bus) === 1)
     assert(numDroppedEvents(bus) === 0)
-    
+
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
     assert(sharedQueueSize(bus) === 2)
     assert(bus.getOptimizedQueueCapacity(SHARED_QUEUE) == Some(2))
