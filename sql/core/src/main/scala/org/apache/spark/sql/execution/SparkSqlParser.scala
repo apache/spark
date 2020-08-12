@@ -756,9 +756,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         schemaLess)
     } else {
       def format(
-                  fmt: RowFormatContext,
-                  configKey: String,
-                  defaultConfigValue: String): ScriptIOFormat = fmt match {
+          fmt: RowFormatContext,
+          configKey: String,
+          defaultConfigValue: String): ScriptIOFormat = fmt match {
         case c: RowFormatDelimitedContext =>
           getRowFormatDelimited(c)
 
