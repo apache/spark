@@ -141,8 +141,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val file2 = new File(dir, "file2.csv")
       stringToFile(file1, "text")
       stringToFile(file2, "text")
-      file1.setLastModified(DateTimeUtils.currentTimestamp())
-      file2.setLastModified(DateTimeUtils.currentTimestamp())
+      file1.setLastModified(0)
+      file2.setLastModified(0)
 
       val time = LocalDateTime
         .now()
@@ -168,7 +168,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       stringToFile(file1, "text")
       stringToFile(file2, "text")
 
-      file1.setLastModified(DateTimeUtils.currentTimestamp())
+      file1.setLastModified(0)
 
       val failTime =
         LocalDateTime.now().plusDays(3).toEpochSecond(ZoneOffset.UTC)
