@@ -592,29 +592,4 @@ class HashedRelationSuite extends SharedSparkSession {
     assert(hashed.getValue(0L) == null)
     assert(hashed.getValue(key) == null)
   }
-
-  test("SPARK-32399: test values() method for HashedRelation") {
-    val key = Seq(BoundReference(0, LongType, false))
-    val value = Seq(BoundReference(0, IntegerType, true))
-    val unsafeProj = UnsafeProjection.create(value)
-    val rows = (0 until 100).map(i => unsafeProj(InternalRow(i + 1)).copy())
-    val expectedValues = (0 until 100).map(i => i + 1)
-
-    // test LongHashedRelation
-    val longRelation = LongHashedRelation(rows.iterator, key, 10, mm)
-    var values = longRelation.values()
-    assert(values.map(_.getInt(0)).toArray.sortWith(_ < _) === expectedValues)
-
-    // test UnsafeHashedRelation
-    val unsafeRelation = UnsafeHashedRelation(rows.iterator, key, 10, mm)
-    values = unsafeRelation.values()
-    assert(values.map(_.getInt(0)).toArray.sortWith(_ < _) === expectedValues)
-
-    // test UnsafeHashedRelation which can mark row looked up
-    val markRowUnsafeRelation = UnsafeHashedRelation(
-      rows.iterator, key, 10, mm, canMarkRowLookedUp = true, valueExprs = Some(value))
-    values = markRowUnsafeRelation.values()
-    assert(values.map(v => (v.getInt(0), v.getBoolean(1))).toArray.sortWith(_._1 < _._1)
-      === expectedValues.map(i => (i, false)))
-  }
 }

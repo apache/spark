@@ -429,6 +429,61 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
+   * Iterator for the entries of this map. This is to first iterate over key index array
+   * `longArray` then accessing values in `dataPages`. NOTE: this is different from `MapIterator`
+   * in the sense that key index is preserved here (See `UnsafeHashedRelation` for example of usage).
+   */
+  public final class MapIteratorWithKeyIndex implements Iterator<Location> {
+
+    private int keyIndex = 0;
+    private int numRecords;
+    private final Location loc;
+
+    private MapIteratorWithKeyIndex(int numRecords, Location loc) {
+      this.numRecords = numRecords;
+      this.loc = loc;
+    }
+
+    @Override
+    public boolean hasNext() {
+      return numRecords > 0;
+    }
+
+    @Override
+    public Location next() {
+      if (!loc.isDefined() || !loc.nextValue()) {
+        while (longArray.get(keyIndex * 2) == 0) {
+          keyIndex++;
+        }
+        loc.with(keyIndex, (int) longArray.get(keyIndex * 2 + 1), true);
+        keyIndex++;
+      }
+      numRecords--;
+      return loc;
+    }
+  }
+
+  /**
+   * Returns an iterator for iterating over the entries of this map,
+   * by first iterating over the key index inside hash map's `longArray`.
+   *
+   * For efficiency, all calls to `next()` will return the same {@link Location} object.
+   *
+   * The returned iterator is NOT thread-safe. If the map is modified while iterating over it,
+   * the behavior of the returned iterator is undefined.
+   */
+  public MapIteratorWithKeyIndex iteratorWithKeyIndex() {
+    return new MapIteratorWithKeyIndex(numValues, new Location());
+  }
+
+  /**
+   * Number of allowed keys index.
+   */
+  public int numKeysIndex() {
+    return (int) (longArray.size() / 2);
+  }
+
+  /**
    * Looks up a key, and return a {@link Location} handle that can be used to test existence
    * and read/write values.
    *
@@ -599,6 +654,14 @@ public final class BytesToBytesMap extends MemoryConsumer {
      */
     public boolean isDefined() {
       return isDefined;
+    }
+
+    /**
+     * Returns index for key.
+     */
+    public int getKeyIndex() {
+      assert (isDefined);
+      return pos;
     }
 
     /**
