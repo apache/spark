@@ -332,7 +332,7 @@ case class FileSourceScanExec(
   }
 
   @transient
-  lazy val pushedDownFilters = {
+  private lazy val pushedDownFilters = {
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
     dataFilters.flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
   }
