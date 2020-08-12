@@ -67,7 +67,7 @@ abstract class PartitioningAwareFileIndex(
   }
 
   override def listFiles(
-    partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
+      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
     def isNonEmptyFile(f: FileStatus): Boolean = {
       isDataPath(f.getPath) && f.getLen > 0
     }
@@ -141,8 +141,8 @@ abstract class PartitioningAwareFileIndex(
     } else {
       // We use leaf dirs containing data files to discover the schema.
       val leafDirs = leafDirToChildrenFiles.filter { case (_, files) =>
-            files.exists(f => isDataPath(f.getPath))
-        }.keys.toSeq
+        files.exists(f => isDataPath(f.getPath))
+      }.keys.toSeq
 
       val caseInsensitiveOptions = CaseInsensitiveMap(parameters)
       val timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
@@ -235,8 +235,7 @@ abstract class PartitioningAwareFileIndex(
         rootPaths.map { path =>
           // Make the path qualified (consistent with listLeafFiles and bulkListLeafFiles).
           val qualifiedPath = path.getFileSystem(hadoopConf).makeQualified(path)
-          if (leafFiles.contains(qualifiedPath)) qualifiedPath.getParent else qualifiedPath
-        }.toSet
+          if (leafFiles.contains(qualifiedPath)) qualifiedPath.getParent else qualifiedPath}.toSet
     }
   }
 
