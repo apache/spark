@@ -35,11 +35,13 @@ import org.apache.spark.sql.internal.SQLConf
  * Check that TPCDS SparkPlans don't change.
  * If there are plan differences, the error message looks like this:
  *   Plans did not match:
- *   last approved plan: /path/to/tpcds-plan-stability/approved-plans-xxx/q1/simplified.txt
- *   last explain: /path/to/tpcds-plan-stability/approved-plans-xxx/q1/explain.txt
- *   actual plan: /path/to/tmp/q1.actual.simplified.txt
- *   actual explain: /path/to/tmp/q1.actual.explain.txt
- *   [side by side plan diff]
+ *   last approved simplified plan: ../tpcds-plan-stability/approved-plans-xxx/q1/simplified.txt
+ *   last approved explain plan: ../tpcds-plan-stability/approved-plans-xxx/q1/explain.txt
+ *   [last approved simplified plan]
+ *
+ *   actual simplified plan: /path/to/tmp/q1.actual.simplified.txt
+ *   actual explain plan: /path/to/tmp/q1.actual.explain.txt
+ *   [actual simplified plan]
  * The explain files are saved to help debug later, they are not checked. Only the simplified
  * plans are checked (by string comparison).
  *
@@ -133,20 +135,19 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       FileUtils.writeStringToFile(actualSimplifiedFile, actualSimplified, StandardCharsets.UTF_8)
       FileUtils.writeStringToFile(actualExplainFile, explain, StandardCharsets.UTF_8)
 
-      val header =
-        s"""
-           |Plans did not match:
-           |last approved plan: ${approvedSimplifiedFile.getAbsolutePath}
-           |last explain: ${approvedExplainFile.getAbsolutePath}
-           |actual plan: ${actualSimplifiedFile.getAbsolutePath}
-           |actual explain: ${actualExplainFile.getAbsolutePath}
-        """.stripMargin
       val msg =
         s"""
-           |$header
-           |${sideBySide(approvedSimplified.linesIterator.toSeq,
-          actualSimplified.linesIterator.toSeq).mkString("\n")}
-         """.stripMargin
+           |Plans did not match:
+           |last approved simplified plan: ${approvedSimplifiedFile.getAbsolutePath}
+           |last approved explain plan: ${approvedExplainFile.getAbsolutePath}
+           |
+           |$approvedSimplified
+           |
+           |actual simplified plan: ${actualSimplifiedFile.getAbsolutePath}
+           |actual explain plan: ${actualExplainFile.getAbsolutePath}
+           |
+           |$actualSimplifiedFile
+        """.stripMargin
       fail(msg)
     }
   }
