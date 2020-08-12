@@ -593,17 +593,6 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
     checkDataFilters(Set.empty)
   }
 
-  protected def assertPrunedDataFilters(query: String, expected: String): Unit = {
-    val plan = sql(query).queryExecution.sparkPlan
-    assert(getScanExecDataFilters(plan) == expected)
-  }
-
-  protected def getScanExecDataFilters(plan: SparkPlan): String = {
-    plan.collectFirst {
-      case p: FileSourceScanExec => p
-    }.get.pushedDownFilters.mkString("[", ", ", "]")
-  }
-
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =
