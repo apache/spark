@@ -847,4 +847,13 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       }
     }
   }
+
+  test("SPARK-32602 Date type should be correctly stored into hive table.") {
+    withTable("t1") {
+      sql("create table t1 (d date)")
+      sql("insert overwrite table t1 values(cast('2020-08-09' as date))")
+      val r = spark.sql("select d from t1").collect.head.getDate(0).toString
+      assert(r == "2020-08-09")
+    }
+  }
 }
