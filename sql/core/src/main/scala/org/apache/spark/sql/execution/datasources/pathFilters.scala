@@ -94,11 +94,9 @@ class ModifiedBeforeFilter(
     extends ModifiedDateFilter(sparkSession, hadoopConf, options)
     with FileIndexFilter {
   override def accept(fileStatus: FileStatus): Boolean =
-    /* We standardize on microseconds wherever possible */
-    thresholdTime - localTime(
-      DateTimeUtils
-      /* getModificationTime returns in milliseconds */
-        .millisToMicros(fileStatus.getModificationTime)) > 0
+    // We standardize on microseconds wherever possible
+    // getModificationTime returns in milliseconds
+    thresholdTime - localTime(DateTimeUtils.millisToMicros(fileStatus.getModificationTime)) > 0
 
   override def accept(path: Path): Boolean = true
   override def strategy(): String = "modifiedbefore"
@@ -128,12 +126,9 @@ case class ModifiedAfterFilter(
     extends ModifiedDateFilter(sparkSession, hadoopConf, options)
     with FileIndexFilter {
   override def accept(fileStatus: FileStatus): Boolean =
-    (localTime(
-      DateTimeUtils
-      /* getModificationTime returns in milliseconds */
-        .millisToMicros(fileStatus.getModificationTime))
-    /* We standardize on microseconds wherever possible */
-      - thresholdTime > 0)
+    // getModificationTime returns in milliseconds
+    // We standardize on microseconds wherever possible
+    localTime(DateTimeUtils.millisToMicros(fileStatus.getModificationTime)) - thresholdTime > 0
 
   override def accept(path: Path): Boolean = true
   override def strategy(): String = "modifiedafter"
@@ -150,9 +145,9 @@ case object ModifiedAfterFilter extends PathFilterObject {
 }
 
 class PathGlobFilter(
-    sparkSession: SparkSession,
-    conf: Configuration,
-    options: CaseInsensitiveMap[String])
+        sparkSession: SparkSession,
+        conf: Configuration,
+        options: CaseInsensitiveMap[String])
     extends GlobFilter(options.get("pathGlobFilter").get)
     with FileIndexFilter {
 
