@@ -3050,6 +3050,7 @@ trait ArraySetLike {
   @transient protected lazy val nullValueHolder = et match {
     case ByteType => "(byte) 0"
     case ShortType => "(short) 0"
+    case LongType => "(long) 0"
     case _ => "0"
   }
 
