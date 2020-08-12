@@ -239,7 +239,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   }
 
   // TODO: this is used to reduce generated files to ease the review. Revert it back after review.
-  val targetQuires = Set("47", "q49", "57")
+  val targetQuires = Set("q47", "q49", "q57")
 }
 
 class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite {
