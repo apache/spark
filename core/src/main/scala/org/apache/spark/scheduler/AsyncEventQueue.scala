@@ -162,9 +162,19 @@ private class AsyncEventQueue(
   private def setQueueCapacity(): Unit = {
     eventQueue match {
       case queue: VariableLinkedBlockingQueue[SparkListenerEvent] =>
+        val driverID: String = SparkContext.DRIVER_IDENTIFIER
+        // get the driverMemoryUsedPct for deciding whether to increase
+        // Queue capacity or not
+        val driverMemoryUsedPct = if (sc != null && sc.statusStore != null) {
+          val driverSummary = sc.statusStore.executorSummary(driverID)
+          (driverSummary.memoryUsed / driverSummary.maxMemory) * 100
+        } else {
+          1
+        }
         val currentSizeQueue = queue.size
         val newQueSize = currentSizeQueue + (currentSizeQueue * queueSizeThreshold) / 100
-        if (newQueSize <= maxSizeQueue && newQueSize > capacity) {
+        if (newQueSize <= maxSizeQueue && newQueSize > capacity
+          && driverMemoryUsedPct < USE_DRIVER_MEMORY_THRESHOLD) {
           queue.setCapacity(newQueSize)
           newQueueCapacity = newQueSize
         }
@@ -302,4 +312,6 @@ private object AsyncEventQueue {
   val MIN_SIZE_QUEUE_THRESHOLD_PERCENTAGE = 10
 
   val CHECK_QUEUE_SIZE_SCHEDULER_INTERVAL = 10
+
+  val USE_DRIVER_MEMORY_THRESHOLD = 90
 }
