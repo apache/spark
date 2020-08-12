@@ -563,6 +563,66 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
     }
   }
 
+  test("SPARK-32352: Partially push down support data filter if it mixed in partition filters") {
+    withTable("t") {
+      withTempView("temp") {
+        spark.sql(
+          s"""
+             |CREATE TABLE t(i INT, p STRING)
+             |USING parquet
+             |PARTITIONED BY (p)""".stripMargin)
+
+        spark.range(0, 1000).selectExpr("id as col")
+          .createOrReplaceTempView("temp")
+        for (part <- Seq(1, 2, 3, 4)) {
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE t PARTITION (p='$part')
+               |SELECT col FROM temp""".stripMargin)
+        }
+
+        assertPrunedDataFilters(
+          """
+            |SELECT * FROM t
+            |WHERE (i = 1) OR (i = 2)
+          """.stripMargin,
+          "[Or(EqualTo(i,1),EqualTo(i,2))]")
+
+        assertPrunedDataFilters(
+          """
+            |SELECT * FROM t
+            |WHERE (p = '1' AND i = 1) OR (p = '2' and i = 2)
+          """.stripMargin,
+          "[Or(EqualTo(i,1),EqualTo(i,2))]")
+
+        assertPrunedDataFilters(
+          """
+            |SELECT * FROM t
+            |WHERE (p = '1' AND i = 2) OR (i = 1 OR p = '2')
+          """.stripMargin,
+          "[]")
+
+        assertPrunedDataFilters(
+          """
+            |SELECT * FROM t
+            |WHERE p = '1' OR (p = '2' AND i = 1)
+          """.stripMargin,
+          "[]")
+      }
+    }
+  }
+
+  protected def assertPrunedDataFilters(query: String, expected: String): Unit = {
+    val plan = sql(query).queryExecution.sparkPlan
+    assert(getScanExecDataFilters(plan) == expected)
+  }
+
+  protected def getScanExecDataFilters(plan: SparkPlan): String = {
+    plan.collectFirst {
+      case p: FileSourceScanExec => p
+    }.get.pushedDownFilters.mkString("[", ", ", "]")
+  }
+
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =

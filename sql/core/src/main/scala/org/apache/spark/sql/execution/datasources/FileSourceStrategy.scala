@@ -176,12 +176,13 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         l.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
 
       // Partition keys are not available in the statistics of the files.
-      val dataFilters = normalizedFiltersWithoutSubqueries.flatMap(f =>
+      val dataFilters = normalizedFiltersWithoutSubqueries.flatMap { f =>
         if (f.references.intersect(partitionSet).nonEmpty) {
           extractPredicatesWithinOutputSet(f, AttributeSet(dataColumns))
         } else {
           Some(f)
-        })
+        }
+      }
       val supportNestedPredicatePushdown =
         DataSourceUtils.supportNestedPredicatePushdown(fsRelation)
       val pushedFilters = dataFilters
