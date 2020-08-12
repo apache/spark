@@ -41,9 +41,7 @@ abstract class PartitioningAwareFileIndex(
     sparkSession: SparkSession,
     parameters: Map[String, String],
     userSpecifiedSchema: Option[StructType],
-    fileStatusCache: FileStatusCache = NoopCache)
-    extends FileIndex
-    with Logging {
+    fileStatusCache: FileStatusCache = NoopCache) extends FileIndex with Logging {
   import PartitioningAwareFileIndex.BASE_PATH_PARAM
 
   /** Returns the specification of the partitions inferred from the data. */
@@ -59,8 +57,7 @@ abstract class PartitioningAwareFileIndex(
   protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]]
 
   private val caseInsensitiveMap = CaseInsensitiveMap(parameters)
-  protected val pathFilters =
-    PathFilterFactory.create(sparkSession, hadoopConf, caseInsensitiveMap)
+  protected val pathFilters = PathFilterFactory.create(sparkSession, hadoopConf, caseInsensitiveMap)
 
   protected def matchPathPattern(file: FileStatus): Boolean =
     pathFilters.forall(_.accept(file))
@@ -70,8 +67,7 @@ abstract class PartitioningAwareFileIndex(
   }
 
   override def listFiles(
-      partitionFilters: Seq[Expression],
-      dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
+    partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
     def isNonEmptyFile(f: FileStatus): Boolean = {
       isDataPath(f.getPath) && f.getLen > 0
     }
@@ -129,8 +125,7 @@ abstract class PartitioningAwareFileIndex(
         // 2. The path is a file, then it will be present in leafFiles. Include this path.
         // 3. The path is a directory, but has no children files. Do not include this path.
 
-        leafDirToChildrenFiles
-          .get(qualifiedPath)
+        leafDirToChildrenFiles.get(qualifiedPath)
           .orElse { leafFiles.get(qualifiedPath).map(Array(_)) }
           .getOrElse(Array.empty)
       }
@@ -145,17 +140,12 @@ abstract class PartitioningAwareFileIndex(
       PartitionSpec.emptySpec
     } else {
       // We use leaf dirs containing data files to discover the schema.
-      val leafDirs = leafDirToChildrenFiles
-        .filter {
-          case (_, files) =>
+      val leafDirs = leafDirToChildrenFiles.filter { case (_, files) =>
             files.exists(f => isDataPath(f.getPath))
-        }
-        .keys
-        .toSeq
+        }.keys.toSeq
 
       val caseInsensitiveOptions = CaseInsensitiveMap(parameters)
-      val timeZoneId = caseInsensitiveOptions
-        .get(DateTimeUtils.TIMEZONE_OPTION)
+      val timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
         .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone)
 
       PartitioningUtils.parsePartitions(

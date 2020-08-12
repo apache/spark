@@ -47,9 +47,9 @@ import org.apache.spark.unsafe.types.UTF8String
 @param options Map containing options
  */
 abstract class ModifiedDateFilter(
-    sparkSession: SparkSession,
-    hadoopConf: Configuration,
-    options: CaseInsensitiveMap[String])
+        sparkSession: SparkSession,
+        hadoopConf: Configuration,
+        options: CaseInsensitiveMap[String])
     extends PathFilterStrategy {
 
   lazy val timeZoneId: String = options.getOrElse(
