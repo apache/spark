@@ -124,7 +124,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
       Seq(Row("test", "people"), Row("test", "empty_table")))
   }
 
-  // TODO: Operation not allowed: CREATE TABLE ... STORED AS ... does not support
+  // TODO (SPARK-32603): Operation not allowed: CREATE TABLE ... STORED AS ... does not support
   // multi-part identifiers
   ignore("create/drop table") {
     sql("CREATE TABLE h2.test.abc(i INT, j STRING)")
@@ -133,7 +133,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     checkAnswer(sql("SHOW TABLES IN h2.test"), Row("test", "people"))
   }
 
-  // TODO: Operation not allowed: CREATE TABLE ... STORED AS ... does not support
+  // TODO (SPARK-32603): Operation not allowed: CREATE TABLE ... STORED AS ... does not support
   // multi-part identifiers
   ignore("SQL API: create table as select") {
     withTable("h2.test.abc") {
@@ -149,7 +149,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     }
   }
 
-  // TODO: ParseException: mismatched input 'AS' expecting {'(', 'USING'}
+  // TODO (SPARK-32603): ParseException: mismatched input 'AS' expecting {'(', 'USING'}
   ignore("SQL API: replace table as select") {
     withTable("h2.test.abc") {
       intercept[CannotReplaceMissingTableException] {
@@ -174,7 +174,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     }
   }
 
-  // TODO: Operation not allowed: CREATE TABLE ... STORED AS ... does not support
+  // TODO (SPARK-32603): Operation not allowed: CREATE TABLE ... STORED AS ... does not support
   // multi-part identifiers
   ignore("SQL API: insert and overwrite") {
     withTable("h2.test.abc") {
@@ -190,7 +190,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     }
   }
 
-  // TODO: Operation not allowed: CREATE TABLE ... STORED AS ... does not support
+  // TODO (SPARK-32603): Operation not allowed: CREATE TABLE ... STORED AS ... does not support
   // multi-part identifiers
   ignore("DataFrameWriterV2: insert and overwrite") {
     withTable("h2.test.abc") {
