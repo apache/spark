@@ -490,7 +490,7 @@ case class Lag(input: Expression, offset: Expression, default: Expression)
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(input[, offset]) - Returns the value of `input` at the row that is the`offset`th row
+    _FUNC_(input[, offset]) - Returns the value of `input` at the row that is the `offset`th row
       of the window frame (counting from 1). If the value of `input` at the `offset`th row is
       null, null is returned. If there is no such an offset row (e.g., when the offset is 10,
       size of the window frame less than 10), null is returned.
@@ -510,12 +510,15 @@ case class NthValue(input: Expression, offset: Expression)
     if (check.isFailure) {
       check
     } else if (offset.foldable) {
-      offset.eval() match {
-        case i: Int if i <= 0 => TypeCheckFailure(
-          s"The 'offset' argument of nth_value must be greater than zero but it is $i.")
-        case i: Int => TypeCheckSuccess
-        case other => TypeCheckFailure(
-          s"The 'offset' parameter must be a int literal but it is $other.")
+      offset.dataType match {
+        case IntegerType =>
+          offset.eval().asInstanceOf[Int] match {
+            case i: Int if i <= 0 => TypeCheckFailure(
+              s"The 'offset' argument of nth_value must be greater than zero but it is $i.")
+            case _ => TypeCheckSuccess
+          }
+        case _ => TypeCheckFailure(
+          s"The 'offset' parameter must be a int literal but it is ${offset.dataType}.")
       }
     } else {
       TypeCheckFailure("The 'offset' parameter must be a int literal.")

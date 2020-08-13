@@ -191,17 +191,15 @@ class FixedOffsetWindowFunctionFrame(
     super.prepare(rows)
     if (inputIndex >= 0 && inputIndex < input.length) {
       val r = WindowFunctionFrame.getNextOrNull(inputIterator)
-      maybeRow = Some(r)
+      projection(r)
+    } else {
+      fillDefaultValue(EmptyRow)
     }
   }
 
   override def write(index: Int, current: InternalRow): Unit = {
-    if (maybeRow.isDefined) {
-      projection(maybeRow.get)
-    } else {
-      // Use default values since the offset row does not exist.
-      fillDefaultValue(current)
-    }
+    // The results are the same for each row in the partition, and have been evaluated in prepare.
+    // Don't need to recalculate here.
   }
 }
 
