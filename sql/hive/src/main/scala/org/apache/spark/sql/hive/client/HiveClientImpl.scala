@@ -1006,8 +1006,8 @@ private[hive] object HiveClientImpl extends Logging {
   /** Builds the native StructField from Hive's FieldSchema. */
   def fromHiveColumn(hc: FieldSchema): StructField = {
     val columnType = getSparkSQLDataType(hc)
-    val metadata = if (hc.getType != columnType.catalogString &&
-        hc.getType != HiveVoidType.catalogString) {
+    val replacedVoidType = HiveVoidType.replaceVoidType(columnType)
+    val metadata = if (hc.getType != replacedVoidType.catalogString) {
       new MetadataBuilder().putString(HIVE_TYPE_STRING, hc.getType).build()
     } else {
       Metadata.empty
