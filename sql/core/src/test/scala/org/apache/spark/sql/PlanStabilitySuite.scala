@@ -127,7 +127,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       FileUtils.writeStringToFile(file, simplified, StandardCharsets.UTF_8)
       val fileOriginalPlan = new File(dir, "explain.txt")
       FileUtils.writeStringToFile(fileOriginalPlan, explain, StandardCharsets.UTF_8)
-      logInfo(s"APPROVED: $file $fileOriginalPlan")
+      logDebug(s"APPROVED: $file $fileOriginalPlan")
     }
   }
 
