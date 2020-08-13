@@ -441,6 +441,8 @@ private[joins] object UnsafeHashedRelation {
       taskMemoryManager: TaskMemoryManager,
       isNullAware: Boolean = false,
       allowsNullKey: Boolean = false): HashedRelation = {
+    require(!(isNullAware && allowsNullKey),
+      "isNullAware and allowsNullKey cannot be enabled at same time")
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().get(BUFFER_PAGESIZE).getOrElse(16L * 1024 * 1024))

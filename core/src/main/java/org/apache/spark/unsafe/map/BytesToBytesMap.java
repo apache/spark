@@ -436,13 +436,17 @@ public final class BytesToBytesMap extends MemoryConsumer {
    */
   public final class MapIteratorWithKeyIndex implements Iterator<Location> {
 
+    /**
+     * The index in `longArray` where the key is stored.
+     */
     private int keyIndex = 0;
+
     private int numRecords;
     private final Location loc;
 
-    private MapIteratorWithKeyIndex(int numRecords, Location loc) {
-      this.numRecords = numRecords;
-      this.loc = loc;
+    private MapIteratorWithKeyIndex() {
+      this.numRecords = numValues;
+      this.loc = new Location();
     }
 
     @Override
@@ -474,7 +478,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * the behavior of the returned iterator is undefined.
    */
   public MapIteratorWithKeyIndex iteratorWithKeyIndex() {
-    return new MapIteratorWithKeyIndex(numValues, new Location());
+    return new MapIteratorWithKeyIndex();
   }
 
   /**

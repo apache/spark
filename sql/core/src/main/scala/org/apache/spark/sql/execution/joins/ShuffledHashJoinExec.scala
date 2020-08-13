@@ -201,6 +201,11 @@ case class ShuffledHashJoinExec(
    * 2. Process rows from build side by iterating hash relation.
    *    Filter out rows from build side being matched already,
    *    by checking key index and value index from `HashSet`.
+   *
+   * The "value index" is defined as the index of the tuple in the chain
+   * of tuples having the same key. For example, if certain key is found thrice,
+   * the value indices of its tuples will be 0, 1 and 2.
+   * Note that value indices of tuples with different keys are incomparable.
    */
   private def fullOuterJoinWithNonUniqueKey(
       streamIter: Iterator[InternalRow],
