@@ -2700,7 +2700,7 @@ object SQLConf {
       "can reduce the shuffle pressure and improve performance in multidimensional analysis " +
       "when data is huge.")
     .intConf
-    .createWithDefault(8)
+    .createWithDefault(4)
 
   val LEGACY_COMPLEX_TYPES_TO_STRING =
     buildConf("spark.sql.legacy.castComplexTypesToString.enabled")
