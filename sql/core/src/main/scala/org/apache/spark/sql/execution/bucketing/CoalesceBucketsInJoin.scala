@@ -83,7 +83,7 @@ case class CoalesceBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.coalesceBucketsInJoinEnabled) {
+    if (!conf.coalesceBucketsInJoinEnabled && !conf.splitBucketsInJoinEnabled) {
       return plan
     }
 
@@ -91,15 +91,19 @@ case class CoalesceBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
       case ExtractJoinWithBuckets(join, numLeftBuckets, numRightBuckets)
         if math.max(numLeftBuckets, numRightBuckets) / math.min(numLeftBuckets, numRightBuckets) <=
           conf.coalesceBucketsInJoinMaxBucketRatio =>
-        val numCoalescedBuckets = math.min(numLeftBuckets, numRightBuckets)
+        val newNumBuckets = if (conf.coalesceBucketsInJoinEnabled) {
+          math.min(numLeftBuckets, numRightBuckets)
+        } else {
+          math.max(numLeftBuckets, numRightBuckets)
+        }
         join match {
           case j: SortMergeJoinExec =>
-            updateNumCoalescedBuckets(j, numLeftBuckets, numRightBuckets, numCoalescedBuckets)
+            updateNumCoalescedBuckets(j, numLeftBuckets, numRightBuckets, newNumBuckets)
           case j: ShuffledHashJoinExec
             // Only coalesce the buckets for shuffled hash join stream side,
             // to avoid OOM for build side.
-            if isCoalesceSHJStreamSide(j, numLeftBuckets, numRightBuckets, numCoalescedBuckets) =>
-            updateNumCoalescedBuckets(j, numLeftBuckets, numRightBuckets, numCoalescedBuckets)
+            if isCoalesceSHJStreamSide(j, numLeftBuckets, numRightBuckets, newNumBuckets) =>
+            updateNumCoalescedBuckets(j, numLeftBuckets, numRightBuckets, newNumBuckets)
           case other => other
         }
       case other => other

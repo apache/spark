@@ -2665,6 +2665,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SPLIT_BUCKETS_IN_JOIN_ENABLED =
+    buildConf("spark.sql.bucketing.splitBucketsInJoin.enabled")
+      .doc("When true, if two bucketed tables with the different number of buckets are joined, " +
+        "the side with a bigger number of buckets will be coalesced to have the same number " +
+        "of buckets as the other side. Bigger number of buckets is divisible by the smaller " +
+        "number of buckets. Bucket coalescing is applied to sort-merge joins and " +
+        "shuffled hash join. Note: Coalescing bucketed table can avoid unnecessary shuffling " +
+        "in join, but it also reduces parallelism and could possibly cause OOM for " +
+        "shuffled hash join.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO =
     buildConf("spark.sql.bucketing.coalesceBucketsInJoin.maxBucketRatio")
       .doc("The ratio of the number of two buckets being coalesced should be less than or " +
@@ -3310,6 +3323,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
 
   def metadataCacheTTL: Long = getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
+
+  def splitBucketsInJoinEnabled: Boolean = getConf(SQLConf.SPLIT_BUCKETS_IN_JOIN_ENABLED)
 
   def coalesceBucketsInJoinEnabled: Boolean = getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED)
 

@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.execution.bucketing.SplitBucketRDD
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -549,22 +550,40 @@ case class FileSourceScanExec(
       filesGroupedToBuckets
     }
 
-    val filePartitions = optionalNumCoalescedBuckets.map { numCoalescedBuckets =>
-      logInfo(s"Coalescing to ${numCoalescedBuckets} buckets")
-      val coalescedBuckets = prunedFilesGroupedToBuckets.groupBy(_._1 % numCoalescedBuckets)
-      Seq.tabulate(numCoalescedBuckets) { bucketId =>
-        val partitionedFiles = coalescedBuckets.get(bucketId).map {
-          _.values.flatten.toArray
-        }.getOrElse(Array.empty)
-        FilePartition(bucketId, partitionedFiles)
-      }
-    }.getOrElse {
-      Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
+    if (optionalNumCoalescedBuckets.isEmpty) {
+      val filePartitions = Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
         FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Array.empty))
       }
+      new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
+    } else {
+      val newNumBuckets = optionalNumCoalescedBuckets.get
+      if (newNumBuckets < bucketSpec.numBuckets) {
+        logInfo(s"Coalescing to $newNumBuckets buckets")
+        val coalescedBuckets = prunedFilesGroupedToBuckets.groupBy(_._1 % newNumBuckets)
+        val filePartitions = Seq.tabulate(newNumBuckets) { bucketId =>
+          val partitionedFiles = coalescedBuckets
+            .get(bucketId)
+            .map(_.values.flatten.toArray)
+            .getOrElse(Array.empty)
+          FilePartition(bucketId, partitionedFiles)
+        }
+        new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
+      } else {
+        logInfo(s"Splitting to $newNumBuckets buckets")
+        val filePartitions = Seq.tabulate(newNumBuckets) { bucketId =>
+          FilePartition(
+            bucketId,
+            prunedFilesGroupedToBuckets.getOrElse(bucketId % bucketSpec.numBuckets, Array.empty))
+        }
+        // There will be more files read.
+        val filesNum = filePartitions.map(_.files.size.toLong).sum
+        val filesSize = filePartitions.map(_.files.map(_.length).sum).sum
+        driverMetrics("numFiles") = filesNum
+        driverMetrics("filesSize") = filesSize
+        new SplitBucketRDD(
+          fsRelation.sparkSession, readFile, filePartitions, bucketSpec, newNumBuckets, output)
+      }
     }
-
-    new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
   }
 
   /**

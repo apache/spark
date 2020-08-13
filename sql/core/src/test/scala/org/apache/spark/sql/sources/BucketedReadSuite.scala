@@ -982,4 +982,36 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("split shuffle") {
+    withTable("t1", "t2") {
+      df1.write.format("parquet").bucketBy(8, "i").saveAsTable("t1")
+      df2.write.format("parquet").bucketBy(4, "i").saveAsTable("t2")
+      // scalastyle:off println
+      withSQLConf(
+        SQLConf.SPLIT_BUCKETS_IN_JOIN_ENABLED.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        val t1 = spark.table("t1")
+        val t2 = spark.table("t2")
+        val joined = t1.join(t2, t1("i") === t2("i"), "right")
+        joined.explain
+        println(joined.count)
+        val expected = joined.collect()
+      }
+
+      withSQLConf(SQLConf.SPLIT_BUCKETS_IN_JOIN_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        val t1 = spark.table("t1")
+        val t2 = spark.table("t2")
+        val joined2 = t1.join(t2, t1("i") === t2("i"), "right")
+        joined2.explain
+        joined2.show
+        println(joined2.count)
+        // checkAnswer(joined2, expected)
+      }
+      // scalastyle:on println
+    }
+  }
 }
