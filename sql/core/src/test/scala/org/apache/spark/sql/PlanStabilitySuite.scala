@@ -151,20 +151,19 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       FileUtils.writeStringToFile(actualSimplifiedFile, actualSimplified, StandardCharsets.UTF_8)
       FileUtils.writeStringToFile(actualExplainFile, explain, StandardCharsets.UTF_8)
 
-      val msg =
+      fail(
         s"""
-           |Plans did not match:
-           |last approved simplified plan: ${approvedSimplifiedFile.getAbsolutePath}
-           |last approved explain plan: ${approvedExplainFile.getAbsolutePath}
-           |
-           |$approvedSimplified
-           |
-           |actual simplified plan: ${actualSimplifiedFile.getAbsolutePath}
-           |actual explain plan: ${actualExplainFile.getAbsolutePath}
-           |
-           |$actualSimplified
-        """.stripMargin
-      fail(msg)
+          |Plans did not match:
+          |last approved simplified plan: ${approvedSimplifiedFile.getAbsolutePath}
+          |last approved explain plan: ${approvedExplainFile.getAbsolutePath}
+          |
+          |$approvedSimplified
+          |
+          |actual simplified plan: ${actualSimplifiedFile.getAbsolutePath}
+          |actual explain plan: ${actualExplainFile.getAbsolutePath}
+          |
+          |$actualSimplified
+        """.stripMargin)
     }
   }
 
