@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
+import java.util
 import java.util.{Timer, TimerTask}
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
@@ -136,7 +137,9 @@ private[spark] class TaskSchedulerImpl(
   // IDs of the tasks running on each executor
   private val executorIdToRunningTaskIds = new HashMap[String, HashSet[Long]]
 
-  private val executorsPendingDecommission = new HashMap[String, ExecutorDecommissionInfo]
+  val executorsPendingDecommission = new HashMap[String, ExecutorDecommissionInfo]
+  // map of second to list of executors to clear form the above map
+  val decommissioningExecutorsToGc = new util.TreeMap[Long, mutable.ArrayBuffer[String]]()
 
   def runningTasksByExecutors: Map[String, Int] = synchronized {
     executorIdToRunningTaskIds.toMap.mapValues(_.size).toMap
@@ -910,7 +913,7 @@ private[spark] class TaskSchedulerImpl(
         // if we heard isHostDecommissioned ever true, then we keep that one since it is
         // most likely coming from the cluster manager and thus authoritative
         val oldDecomInfo = executorsPendingDecommission.get(executorId)
-        if (oldDecomInfo.isEmpty || !oldDecomInfo.get.isHostDecommissioned) {
+        if (!oldDecomInfo.exists(_.isHostDecommissioned)) {
           executorsPendingDecommission(executorId) = decommissionInfo
         }
       }
@@ -921,7 +924,13 @@ private[spark] class TaskSchedulerImpl(
 
   override def getExecutorDecommissionInfo(executorId: String)
     : Option[ExecutorDecommissionInfo] = synchronized {
-      executorsPendingDecommission.get(executorId)
+    import scala.collection.JavaConverters._
+    // Garbage collect old decommissioning entries
+    val secondsToGcUptil = TimeUnit.MILLISECONDS.toSeconds(clock.getTimeMillis())
+    val headMap = decommissioningExecutorsToGc.headMap(secondsToGcUptil)
+    headMap.values().asScala.flatten.foreach(executorsPendingDecommission -= _)
+    headMap.clear()
+    executorsPendingDecommission.get(executorId)
   }
 
   override def executorLost(executorId: String, givenReason: ExecutorLossReason): Unit = {
@@ -1027,7 +1036,15 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
-    executorsPendingDecommission -= executorId
+
+    val decomInfo = executorsPendingDecommission.get(executorId)
+    if (decomInfo.isDefined) {
+      val rememberSeconds =
+        conf.getInt("spark.decommissioningRememberAfterRemoval.seconds", 60)
+      val gcSecond = TimeUnit.MILLISECONDS.toSeconds(clock.getTimeMillis()) + rememberSeconds
+      decommissioningExecutorsToGc.computeIfAbsent(gcSecond, _ => mutable.ArrayBuffer.empty) +=
+        executorId
+    }
 
     if (reason != LossReasonPending) {
       executorIdToHost -= executorId

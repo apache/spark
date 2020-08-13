@@ -1846,7 +1846,8 @@ private[spark] class DAGScheduler(
               execId = bmAddress.executorId,
               fileLost = true,
               hostToUnregisterOutputs = hostToUnregisterOutputs,
-              maybeEpoch = Some(task.epoch))
+              maybeEpoch = Some(task.epoch),
+              ignoreShuffleVersion = isHostDecommissioned)
           }
         }
 
@@ -2012,7 +2013,8 @@ private[spark] class DAGScheduler(
       execId: String,
       fileLost: Boolean,
       hostToUnregisterOutputs: Option[String],
-      maybeEpoch: Option[Long] = None): Unit = {
+      maybeEpoch: Option[Long] = None,
+      ignoreShuffleVersion: Boolean = false): Unit = {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     logDebug(s"Considering removal of executor $execId; " +
       s"fileLost: $fileLost, currentEpoch: $currentEpoch")
@@ -2022,16 +2024,25 @@ private[spark] class DAGScheduler(
       blockManagerMaster.removeExecutor(execId)
       clearCacheLocs()
     }
-    if (fileLost &&
-        (!shuffleFileLostEpoch.contains(execId) || shuffleFileLostEpoch(execId) < currentEpoch)) {
-      shuffleFileLostEpoch(execId) = currentEpoch
-      hostToUnregisterOutputs match {
-        case Some(host) =>
-          logInfo(s"Shuffle files lost for host: $host (epoch $currentEpoch)")
-          mapOutputTracker.removeOutputsOnHost(host)
-        case None =>
-          logInfo(s"Shuffle files lost for executor: $execId (epoch $currentEpoch)")
-          mapOutputTracker.removeOutputsOnExecutor(execId)
+    if (fileLost) {
+      val remove = if (ignoreShuffleVersion) {
+        true
+      } else if (!shuffleFileLostEpoch.contains(execId) ||
+        shuffleFileLostEpoch(execId) < currentEpoch) {
+        shuffleFileLostEpoch(execId) = currentEpoch
+        true
+      } else {
+        false
+      }
+      if (remove) {
+        hostToUnregisterOutputs match {
+          case Some(host) =>
+            logInfo(s"Shuffle files lost for host: $host (epoch $currentEpoch)")
+            mapOutputTracker.removeOutputsOnHost(host)
+          case None =>
+            logInfo(s"Shuffle files lost for executor: $execId (epoch $currentEpoch)")
+            mapOutputTracker.removeOutputsOnExecutor(execId)
+        }
       }
     }
   }
