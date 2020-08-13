@@ -46,7 +46,7 @@ import org.apache.spark.sql.internal.SQLConf
  * plans are checked (by string comparison).
  *
  * Approving new plans:
- * IF the plan change is intended then re-running the test
+ * If the plan change is intended then re-running the test
  * with environ var SPARK_GENERATE_GOLDEN_FILES=1 will make the new plan canon.
  * This should be done only for the queries that need it, to avoid unnecessary diffs in the
  * other approved plans.
