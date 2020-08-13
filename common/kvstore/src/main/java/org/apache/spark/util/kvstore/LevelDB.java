@@ -31,6 +31,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
+import com.google.common.collect.Iterables;
 import org.fusesource.leveldbjni.JniDBFactory;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.Options;
@@ -164,35 +165,39 @@ public class LevelDB implements KVStore {
     Preconditions.checkArgument(values != null && !values.isEmpty(),
       "Non-empty values required.");
 
-    // Group by class, in case there are values from different classes in the values
+    // Group by class, in case there are values from different classes in the values.
     // Typical usecase is for this to be a single class.
     // A NullPointerException will be thrown if values contain null object.
     for (Map.Entry<? extends Class<?>, ? extends List<?>> entry :
         values.stream().collect(Collectors.groupingBy(Object::getClass)).entrySet()) {
-
-      final Iterator<?> valueIter = entry.getValue().iterator();
-      final Iterator<byte[]> serializedValueIter;
-
-      // Deserialize outside synchronized block
-      List<byte[]> list = new ArrayList<>(entry.getValue().size());
-      for (Object value : values) {
-        list.add(serializer.serialize(value));
-      }
-      serializedValueIter = list.iterator();
-
       final Class<?> klass = entry.getKey();
-      final LevelDBTypeInfo ti = getTypeInfo(klass);
 
-      synchronized (ti) {
-        final LevelDBTypeInfo.Index naturalIndex = ti.naturalIndex();
-        final Collection<LevelDBTypeInfo.Index> indices = ti.indices();
+      // Partition the value list to a set of the 128-values batches. It can reduce the
+      // memory pressure caused by serialization and give fairness to other writing threads
+      // when writing a very large list.
+      for (List<?> batchList : Iterables.partition(entry.getValue(), 128)) {
+        final Iterator<?> valueIter = batchList.iterator();
+        final Iterator<byte[]> serializedValueIter;
 
-        try (WriteBatch batch = db().createWriteBatch()) {
-          while (valueIter.hasNext()) {
-            updateBatch(batch, valueIter.next(), serializedValueIter.next(), klass,
-              naturalIndex, indices);
+        // Deserialize outside synchronized block
+        List<byte[]> serializedValueList = new ArrayList<>(batchList.size());
+        for (Object value : batchList) {
+          serializedValueList.add(serializer.serialize(value));
+        }
+        serializedValueIter = serializedValueList.iterator();
+
+        final LevelDBTypeInfo ti = getTypeInfo(klass);
+        synchronized (ti) {
+          final LevelDBTypeInfo.Index naturalIndex = ti.naturalIndex();
+          final Collection<LevelDBTypeInfo.Index> indices = ti.indices();
+
+          try (WriteBatch batch = db().createWriteBatch()) {
+            while (valueIter.hasNext()) {
+              updateBatch(batch, valueIter.next(), serializedValueIter.next(), klass,
+                naturalIndex, indices);
+            }
+            db().write(batch);
           }
-          db().write(batch);
         }
       }
     }
