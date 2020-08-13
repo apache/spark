@@ -1221,7 +1221,6 @@ class SparkSubmitSuite
     testRemoteResources(enableHttpFs = true, forceDownloadSchemes = Seq("*"))
   }
 
-
   test("SPARK-32119: Jars and files should be loaded when Executors launch for plugins") {
     val tempDir = Utils.createTempDir()
     val tempFileName = "test.txt"
