@@ -539,7 +539,8 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
       prefix: String = "",
       addSuffix: Boolean = false,
       maxFields: Int,
-      printNodeId: Boolean): Unit = {
+      printNodeId: Boolean,
+      indent: Int = 0): Unit = {
     child.generateTreeString(
       depth,
       lastChildren,
@@ -548,7 +549,8 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
       prefix = "",
       addSuffix = false,
       maxFields,
-      printNodeId)
+      printNodeId,
+      indent)
   }
 
   override def needCopyResult: Boolean = false
@@ -808,7 +810,8 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       prefix: String = "",
       addSuffix: Boolean = false,
       maxFields: Int,
-      printNodeId: Boolean): Unit = {
+      printNodeId: Boolean,
+      indent: Int = 0): Unit = {
     child.generateTreeString(
       depth,
       lastChildren,
@@ -817,7 +820,8 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       if (printNodeId) "* " else s"*($codegenStageId) ",
       false,
       maxFields,
-      printNodeId)
+      printNodeId,
+      indent)
   }
 
   override def needStopCheck: Boolean = true

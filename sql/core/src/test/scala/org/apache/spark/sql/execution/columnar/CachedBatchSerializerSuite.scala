@@ -23,6 +23,7 @@ import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.columnar.{CachedBatch, CachedBatchSerializer}
+import org.apache.spark.sql.execution.columnar.InMemoryRelation.clearSerializer
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -118,6 +119,16 @@ class CachedBatchSerializerSuite  extends QueryTest with SharedSparkSession {
     super.sparkConf.set(
       StaticSQLConf.SPARK_CACHE_SERIALIZER.key,
       classOf[TestSingleIntColumnarCachedBatchSerializer].getName)
+  }
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    clearSerializer()
+  }
+
+  protected override def afterAll(): Unit = {
+    clearSerializer()
+    super.afterAll()
   }
 
   test("Columnar Cache Plugin") {

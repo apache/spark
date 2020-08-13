@@ -273,7 +273,7 @@ class SQLContextTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_context import *
+    from pyspark.sql.tests.test_context import *  # noqa: F401
 
     try:
         import xmlrunner

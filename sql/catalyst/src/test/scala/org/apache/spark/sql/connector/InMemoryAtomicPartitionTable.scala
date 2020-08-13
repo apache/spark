@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, PartitionsAlreadyExistException}
+import org.apache.spark.sql.catalyst.analysis.{PartitionAlreadyExistsException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.connector.catalog.SupportsAtomicPartitionManagement
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
@@ -36,6 +36,25 @@ class InMemoryAtomicPartitionTable (
   extends InMemoryPartitionTable(name, schema, partitioning, properties)
   with SupportsAtomicPartitionManagement {
 
+  override def createPartition(
+      ident: InternalRow,
+      properties: util.Map[String, String]): Unit = {
+    if (memoryTablePartitions.containsKey(ident)) {
+      throw new PartitionAlreadyExistsException(name, ident, partitionSchema)
+    } else {
+      memoryTablePartitions.put(ident, properties)
+    }
+  }
+
+  override def dropPartition(ident: InternalRow): Boolean = {
+    if (memoryTablePartitions.containsKey(ident)) {
+      memoryTablePartitions.remove(ident)
+      true
+    } else {
+      false
+    }
+  }
+
   override def createPartitions(
       idents: Array[InternalRow],
       properties: Array[util.Map[String, String]]): Unit = {
@@ -48,23 +67,10 @@ class InMemoryAtomicPartitionTable (
     }
   }
 
-  override def dropPartitions(idents: Array[InternalRow]): Unit = {
+  override def dropPartitions(idents: Array[InternalRow]): Boolean = {
     if (!idents.forall(partitionExists)) {
-      throw new NoSuchPartitionsException(
-        name, idents.filterNot(partitionExists), partitionSchema)
+      return false;
     }
-    idents.foreach(dropPartition)
-  }
-
-  override def replacePartitionMetadatas(
-      idents: Array[InternalRow],
-      properties: Array[util.Map[String, String]]): Unit = {
-    if (!idents.forall(partitionExists)) {
-      throw new NoSuchPartitionsException(
-        name, idents.filterNot(partitionExists), partitionSchema)
-    }
-    idents.zip(properties).foreach { case (ident, property) =>
-      replacePartitionMetadata(ident, property)
-    }
+    idents.forall(dropPartition)
   }
 }

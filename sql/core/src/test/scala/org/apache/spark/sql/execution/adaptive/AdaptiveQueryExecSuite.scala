@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -97,6 +97,12 @@ class AdaptiveQueryExecSuite
   private def findTopLevelSortMergeJoin(plan: SparkPlan): Seq[SortMergeJoinExec] = {
     collect(plan) {
       case j: SortMergeJoinExec => j
+    }
+  }
+
+  private def findTopLevelBaseJoin(plan: SparkPlan): Seq[BaseJoinExec] = {
+    collect(plan) {
+      case j: BaseJoinExec => j
     }
   }
 
@@ -830,6 +836,19 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("tree string output") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val df = sql("SELECT * FROM testData join testData2 ON key = a where value = '1'")
+      val planBefore = df.queryExecution.executedPlan
+      assert(planBefore.toString.contains("== Current Plan =="))
+      assert(planBefore.toString.contains("== Initial Plan =="))
+      df.collect()
+      val planAfter = df.queryExecution.executedPlan
+      assert(planAfter.toString.contains("== Final Plan =="))
+      assert(planAfter.toString.contains("== Initial Plan =="))
+    }
+  }
+
   test("SPARK-31384: avoid NPE in OptimizeSkewedJoin when there's 0 partition plan") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
@@ -1146,6 +1165,20 @@ class AdaptiveQueryExecSuite
           assert(df6.rdd.collectPartitions().length == 10)
         }
       }
+    }
+  }
+
+  test("SPARK-32573: Eliminate NAAJ when BuildSide is EmptyHashedRelationWithAllNullKeys") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData2 t1 WHERE t1.b NOT IN (SELECT b FROM testData3)")
+      val bhj = findTopLevelBroadcastHashJoin(plan)
+      assert(bhj.size == 1)
+      val join = findTopLevelBaseJoin(adaptivePlan)
+      assert(join.isEmpty)
+      checkNumLocalShuffleReaders(adaptivePlan)
     }
   }
 }

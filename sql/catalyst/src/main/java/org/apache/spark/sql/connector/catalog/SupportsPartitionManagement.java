@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.StructType;
  * These APIs are used to modify table partition identifier or partition metadata.
  * In some cases, they will change the table data as well.
  * ${@link #createPartition}:
- *     add a partition and any data that its location contains to the table
+ *     add a partition and any data it contains to the table
  * ${@link #dropPartition}:
  *     remove a partition and any data it contains from the table
  * ${@link #replacePartitionMetadata}:
@@ -45,6 +45,8 @@ import org.apache.spark.sql.types.StructType;
 public interface SupportsPartitionManagement extends Table {
 
     /**
+     * Get the partition schema of table,
+     * this must be consistent with ${@link Table#partitioning()}.
      * @return the partition schema of table
      */
     StructType partitionSchema();
@@ -71,7 +73,7 @@ public interface SupportsPartitionManagement extends Table {
     boolean dropPartition(InternalRow ident);
 
     /**
-     * Test whether a partition exists using an {@link Identifier identifier} from the table.
+     * Test whether a partition exists using an {@link InternalRow ident} from the table.
      *
      * @param ident a partition identifier
      * @return true if the partition exists, false otherwise

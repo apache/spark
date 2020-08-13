@@ -18,7 +18,6 @@ from datetime import datetime, timedelta
 import hashlib
 import os
 import random
-import sys
 import tempfile
 import time
 from glob import glob
@@ -26,7 +25,7 @@ from glob import glob
 from py4j.protocol import Py4JJavaError
 
 from pyspark import shuffle, RDD
-from pyspark.resource import ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder,\
+from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder,\
     TaskResourceRequests
 from pyspark.serializers import CloudPickleSerializer, BatchedSerializer, PickleSerializer,\
     MarshalSerializer, UTF8Deserializer, NoOpSerializer
@@ -882,7 +881,7 @@ class RDDTests(ReusedPySparkTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.tests.test_rdd import *
+    from pyspark.tests.test_rdd import *  # noqa: F401
 
     try:
         import xmlrunner

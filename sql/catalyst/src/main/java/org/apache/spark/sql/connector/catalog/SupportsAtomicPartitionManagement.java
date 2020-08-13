@@ -21,7 +21,7 @@ import java.util.Map;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException;
+import org.apache.spark.sql.catalyst.analysis.PartitionAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
 
 /**
@@ -30,16 +30,31 @@ import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
  * These APIs are used to modify table partition or partition metadata,
  * they will change the table data as well.
  * ${@link #createPartitions}:
- *     add an array of partitions and any data that their location contains to the table
+ *     add an array of partitions and any data they contain to the table
  * ${@link #dropPartitions}:
- *     remove an array of partitions and any data they contains from the table
- * ${@link #replacePartitionMetadatas}:
- *     point an array of partitions to new locations, which will swap location's data for the other
+ *     remove an array of partitions and any data they contain from the table
  *
  * @since 3.1.0
  */
 @Experimental
 public interface SupportsAtomicPartitionManagement extends SupportsPartitionManagement {
+
+  @Override
+  default void createPartition(
+      InternalRow ident,
+      Map<String, String> properties)
+      throws PartitionAlreadyExistsException, UnsupportedOperationException {
+    try {
+      createPartitions(new InternalRow[]{ident}, new Map[]{properties});
+    } catch (PartitionsAlreadyExistException e) {
+      throw new PartitionAlreadyExistsException(e.getMessage());
+    }
+  }
+
+  @Override
+  default boolean dropPartition(InternalRow ident) {
+    return dropPartitions(new InternalRow[]{ident});
+  }
 
   /**
    * Create an array of partitions atomically in table.
@@ -64,24 +79,7 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
    * the operation of dropPartitions need to be safely rolled back.
    *
    * @param idents an array of partition identifiers
-   * @throws NoSuchPartitionsException If the partition identifiers to drop doesn't exist
+   * @return true if partitions were deleted, false if any partition not exists
    */
-  void dropPartitions(
-      InternalRow[] idents) throws NoSuchPartitionsException;
-
-  /**
-   * Replace the partition metadata of the existing partitions atomically.
-   * <p>
-   * If any partition doesn't exists,
-   * the operation of replacePartitionMetadatas need to be safely rolled back.
-   *
-   * @param idents the partition identifier of the existing partitions
-   * @param properties the new metadata of the partitions
-   * @throws NoSuchPartitionsException If the partition identifiers to alter doesn't exist
-   * @throws UnsupportedOperationException If partition property is not supported
-   */
-  void replacePartitionMetadatas(
-      InternalRow[] idents,
-      Map<String, String>[] properties)
-      throws NoSuchPartitionsException, UnsupportedOperationException;
+  boolean dropPartitions(InternalRow[] idents);
 }

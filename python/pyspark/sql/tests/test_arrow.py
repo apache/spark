@@ -35,7 +35,7 @@ if have_pandas:
     from pandas.util.testing import assert_frame_equal
 
 if have_pyarrow:
-    import pyarrow as pa
+    import pyarrow as pa  # noqa: F401
 
 
 @unittest.skipIf(
@@ -453,6 +453,12 @@ class ArrowTests(ReusedSQLTestCase):
         pdf = self.spark.sparkContext.emptyRDD().toDF("col1 int").toPandas()
         self.assertEqual(len(pdf), 0)
         self.assertEqual(list(pdf.columns), ["col1"])
+
+    def test_createDataFrame_empty_partition(self):
+        pdf = pd.DataFrame({"c1": [1], "c2": ["string"]})
+        df = self.spark.createDataFrame(pdf)
+        self.assertEqual([Row(c1=1, c2='string')], df.collect())
+        self.assertGreater(self.spark.sparkContext.defaultParallelism, len(pdf))
 
 
 @unittest.skipIf(

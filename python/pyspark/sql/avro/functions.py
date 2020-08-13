@@ -122,7 +122,7 @@ def _test():
         os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, existing_args])
 
     import doctest
-    from pyspark.sql import Row, SparkSession
+    from pyspark.sql import SparkSession
     import pyspark.sql.avro.functions
     globs = pyspark.sql.avro.functions.__dict__.copy()
     spark = SparkSession.builder\

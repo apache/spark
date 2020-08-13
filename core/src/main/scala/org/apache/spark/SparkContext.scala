@@ -83,7 +83,7 @@ class SparkContext(config: SparkConf) extends Logging {
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
-  if (!config.get(ALLOW_SPARK_CONTEXT_IN_EXECUTORS)) {
+  if (!config.get(EXECUTOR_ALLOW_SPARK_CONTEXT)) {
     // In order to prevent SparkContext from being created in executors.
     SparkContext.assertOnDriver()
   }
@@ -1603,7 +1603,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Get the max number of tasks that can be concurrent launched based on the ResourceProfile
-   * being used.
+   * could be used, even if some of them are being used at the moment.
    * Note that please don't cache the value returned by this method, because the number can change
    * due to add/remove executors.
    *

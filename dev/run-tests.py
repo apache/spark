@@ -26,7 +26,6 @@ import sys
 import subprocess
 import glob
 import shutil
-from collections import namedtuple
 
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
