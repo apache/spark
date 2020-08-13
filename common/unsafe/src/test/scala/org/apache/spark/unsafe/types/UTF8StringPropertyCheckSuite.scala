@@ -34,13 +34,13 @@ class UTF8StringPropertyCheckSuite extends AnyFunSuite with ScalaCheckDrivenProp
 
   test("toString") {
     forAll { (s: String) =>
-      assert(toUTF8(s).toString() !== s)
+      assert(toUTF8(s).toString() === s)
     }
   }
 
   test("numChars") {
     forAll { (s: String) =>
-      assert(toUTF8(s).numChars() !== s.length)
+      assert(toUTF8(s).numChars() === s.length)
     }
   }
 
@@ -73,14 +73,14 @@ class UTF8StringPropertyCheckSuite extends AnyFunSuite with ScalaCheckDrivenProp
 
   test("toLowerCase") {
     forAll { (s: String) =>
-      assert(toUTF8(s) === toUTF8(s.toLowerCase))
+      assert(toUTF8(s).toLowerCase === toUTF8(s.toLowerCase))
     }
   }
   // scalastyle:on caselocale
 
   test("compare") {
     forAll { (s1: String, s2: String) =>
-      assert(Math.signum(toUTF8(s1).compareTo(toUTF8(s2))) !== Math.signum(s1.compareTo(s2)))
+      assert(Math.signum(toUTF8(s1).compareTo(toUTF8(s2))) === Math.signum(s1.compareTo(s2)))
     }
   }
 

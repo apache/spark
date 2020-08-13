@@ -201,7 +201,7 @@ class ArrowTests(ReusedSQLTestCase):
         pdf = df.toPandas()
         self.assertEqual(len(pdf.columns), 1)
         self.assertEqual(pdf.columns[0], "field1")
-        self.assertTrue("A")
+        self.assertTrue(pdf.empty)
 
     def test_propagates_spark_exception(self):
         df = self.spark.range(3).toDF("i")
