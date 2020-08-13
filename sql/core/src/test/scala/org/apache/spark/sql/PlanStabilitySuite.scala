@@ -111,10 +111,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
    * @param explain the full explain output; this is saved to help debug later as the simplified
    *                plan is not too useful for debugging
    */
-  private def generateApprovedPlanFile(
-      plan: SparkPlan,
-      name: String,
-      explain: String): Unit = {
+  private def generateApprovedPlanFile(plan: SparkPlan, name: String, explain: String): Unit = {
     val dir = getDirForTest(name)
     val simplified = getSimplifiedPlan(plan)
     val foundMatch = dir.exists() && isApproved(name, dir, simplified)
