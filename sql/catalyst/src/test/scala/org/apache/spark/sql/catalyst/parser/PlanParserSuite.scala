@@ -1088,19 +1088,19 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       """
         |SELECT TRANSFORM(a, b, c)
-        |ROW FORMAT DELIMITED
-        |FIELDS TERMINATED BY '\t'
-        |COLLECTION ITEMS TERMINATED BY '\u0002'
-        |MAP KEYS TERMINATED BY '\u0003'
-        |LINES TERMINATED BY '\n'
-        |NULL DEFINED AS 'null'
-        |USING 'cat' AS (a, b, c)
-        |ROW FORMAT DELIMITED
-        |FIELDS TERMINATED BY '\t'
-        |COLLECTION ITEMS TERMINATED BY '\u0004'
-        |MAP KEYS TERMINATED BY '\u0005'
-        |LINES TERMINATED BY '\n'
-        |NULL DEFINED AS 'NULL'
+        |  ROW FORMAT DELIMITED
+        |  FIELDS TERMINATED BY '\t'
+        |  COLLECTION ITEMS TERMINATED BY '\u0002'
+        |  MAP KEYS TERMINATED BY '\u0003'
+        |  LINES TERMINATED BY '\n'
+        |  NULL DEFINED AS 'null'
+        |  USING 'cat' AS (a, b, c)
+        |  ROW FORMAT DELIMITED
+        |  FIELDS TERMINATED BY '\t'
+        |  COLLECTION ITEMS TERMINATED BY '\u0004'
+        |  MAP KEYS TERMINATED BY '\u0005'
+        |  LINES TERMINATED BY '\n'
+        |  NULL DEFINED AS 'NULL'
         |FROM testData
       """.stripMargin,
       ScriptTransformation(
@@ -1127,17 +1127,17 @@ class PlanParserSuite extends AnalysisTest {
     intercept(
       """
         |SELECT TRANSFORM(a, b, c)
-        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
-        |WITH SERDEPROPERTIES(
-        | "separatorChar" = "\t",
-        | "quoteChar" = "'",
-        | "escapeChar" = "\\")
-        |USING 'cat' AS (a, b, c)
-        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
-        |WITH SERDEPROPERTIES(
-        | "separatorChar" = "\t",
-        | "quoteChar" = "'",
-        | "escapeChar" = "\\")
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+        |  WITH SERDEPROPERTIES(
+        |    "separatorChar" = "\t",
+        |    "quoteChar" = "'",
+        |    "escapeChar" = "\\")
+        |  USING 'cat' AS (a, b, c)
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+        |  WITH SERDEPROPERTIES(
+        |    "separatorChar" = "\t",
+        |    "quoteChar" = "'",
+        |    "escapeChar" = "\\")
         |FROM testData
       """.stripMargin,
       "TRANSFORM with serde is only supported in hive mode")

@@ -21,27 +21,27 @@ FROM t;
 
 -- common supported data types between no serde and serde transform
 SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
-    SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k, l)
-    USING 'cat' AS (
-        a string,
-        b boolean,
-        c binary,
-        d tinyint,
-        e int,
-        f smallint,
-        g long,
-        h float,
-        i double,
-        j decimal(38, 18),
-        k timestamp,
-        l date)
-    FROM t
+  SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k, l)
+  USING 'cat' AS (
+    a string,
+    b boolean,
+    c binary,
+    d tinyint,
+    e int,
+    f smallint,
+    g long,
+    h float,
+    i double,
+    j decimal(38, 18),
+    k timestamp,
+    l date)
+  FROM t
 ) tmp;
 
 -- common supported data types between no serde and serde transform
 SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
-    SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k, l)
-    USING 'cat' AS (
+  SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k, l)
+  USING 'cat' AS (
     a string,
     b string,
     c string,
@@ -54,7 +54,7 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
     j string,
     k string,
     l string)
-    FROM t
+  FROM t
 ) tmp;
 
 -- SPARK-32388 handle schema less
@@ -90,25 +90,25 @@ REDUCE a, b USING 'cat' AS (a, b) FROM t;
 
 -- transform with defined row format delimit
 SELECT TRANSFORM(a, b, c, null)
-ROW FORMAT DELIMITED
-FIELDS TERMINATED BY '|'
-LINES TERMINATED BY '\n'
-NULL DEFINED AS 'NULL'
+  ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY '|'
+  LINES TERMINATED BY '\n'
+  NULL DEFINED AS 'NULL'
 USING 'cat' AS (a, b, c, d)
-ROW FORMAT DELIMITED
-FIELDS TERMINATED BY '|'
-LINES TERMINATED BY '\n'
-NULL DEFINED AS 'NULL'
+  ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY '|'
+  LINES TERMINATED BY '\n'
+  NULL DEFINED AS 'NULL'
 FROM t;
 
 SELECT TRANSFORM(a, b, c, null)
-ROW FORMAT DELIMITED
-FIELDS TERMINATED BY '|'
-LINES TERMINATED BY '\n'
-NULL DEFINED AS 'NULL'
+  ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY '|'
+  LINES TERMINATED BY '\n'
+  NULL DEFINED AS 'NULL'
 USING 'cat' AS (d)
-ROW FORMAT DELIMITED
-FIELDS TERMINATED BY '||'
-LINES TERMINATED BY '\n'
-NULL DEFINED AS 'NULL'
+  ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY '||'
+  LINES TERMINATED BY '\n'
+  NULL DEFINED AS 'NULL'
 FROM t;
