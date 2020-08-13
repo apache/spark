@@ -146,7 +146,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
            |actual simplified plan: ${actualSimplifiedFile.getAbsolutePath}
            |actual explain plan: ${actualExplainFile.getAbsolutePath}
            |
-           |$actualSimplifiedFile
+           |$actualSimplified
         """.stripMargin
       fail(msg)
     }
