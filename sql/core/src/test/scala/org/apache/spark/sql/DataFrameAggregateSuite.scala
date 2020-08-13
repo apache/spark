@@ -21,6 +21,7 @@ import scala.util.Random
 
 import org.scalatest.Matchers.the
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -1043,6 +1044,42 @@ class DataFrameAggregateSuite extends QueryTest
       s"SELECT $agg(DISTINCT v) FROM (SELECT v FROM VALUES 1, 2, 3 t(v) ORDER BY v)"
     checkAnswer(sql(queryTemplate("FIRST")), Row(1))
     checkAnswer(sql(queryTemplate("LAST")), Row(3))
+  }
+
+  private def exceptionOnDecimalOverflow(df: DataFrame): Unit = {
+    val msg = intercept[SparkException] {
+      df.collect()
+    }.getCause.getMessage
+    assert(msg.contains("cannot be represented as Decimal(38, 18)"))
+  }
+
+  test("SPARK-32018: Throw exception on decimal overflow at partial aggregate phase") {
+    val decimalString = "1" + "0" * 19
+    val union = spark.range(0, 1, 1, 1).union(spark.range(0, 11, 1, 1))
+    val hashAgg = union
+      .select(expr(s"cast('$decimalString' as decimal (38, 18)) as d"), lit("1").as("key"))
+      .groupBy("key")
+      .agg(sum($"d").alias("sumD"))
+      .select($"sumD")
+    exceptionOnDecimalOverflow(hashAgg)
+
+    val sortAgg = union
+      .select(expr(s"cast('$decimalString' as decimal (38, 18)) as d"), lit("a").as("str"),
+      lit("1").as("key")).groupBy("key")
+      .agg(sum($"d").alias("sumD"), min($"str").alias("minStr")).select($"sumD", $"minStr")
+    exceptionOnDecimalOverflow(sortAgg)
+  }
+
+  test("SPARK-32018: Throw exception on decimal overflow at merge aggregation phase") {
+    val decimalString = "5" + "0" * 19
+    val union = spark.range(0, 1, 1, 1).union(spark.range(0, 1, 1, 1))
+      .union(spark.range(0, 1, 1, 1))
+    val agg = union
+      .select(expr(s"cast('$decimalString' as decimal (38, 18)) as d"), lit("1").as("key"))
+      .groupBy("key")
+      .agg(sum($"d").alias("sumD"))
+      .select($"sumD")
+    exceptionOnDecimalOverflow(agg)
   }
 }
 
