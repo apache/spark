@@ -100,6 +100,7 @@ trait DataSourceScanExec extends LeafExecNode {
 /** Physical plan node for scanning data from a relation. */
 case class RowDataSourceScanExec(
     output: Seq[Attribute],
+    requiredSchema: StructType,
     filters: Set[Filter],
     handledFilters: Set[Filter],
     rdd: RDD[InternalRow],
@@ -133,13 +134,14 @@ case class RowDataSourceScanExec(
       if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
     }
     Map(
-      "ReadSchema" -> output.toStructType.catalogString,
+      "ReadSchema" -> requiredSchema.catalogString,
       "PushedFilters" -> markedFilters.mkString("[", ", ", "]"))
   }
 
   // Don't care about `rdd` and `tableIdentifier` when canonicalizing.
   override def doCanonicalize(): SparkPlan =
     copy(
+      output.map(QueryPlan.normalizeExpressions(_, output)),
       rdd = null,
       tableIdentifier = None)
 }

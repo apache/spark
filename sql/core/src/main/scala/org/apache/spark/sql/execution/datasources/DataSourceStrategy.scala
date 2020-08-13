@@ -307,6 +307,7 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
     case l @ LogicalRelation(baseRelation: TableScan, _, _, _) =>
       RowDataSourceScanExec(
         l.output,
+        l.output.toStructType,
         Set.empty,
         Set.empty,
         toCatalystRDD(l, baseRelation.buildScan()),
@@ -379,6 +380,7 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
 
       val scan = RowDataSourceScanExec(
         requestedColumns,
+        requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
@@ -400,6 +402,7 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
 
       val scan = RowDataSourceScanExec(
         requestedColumns,
+        requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
