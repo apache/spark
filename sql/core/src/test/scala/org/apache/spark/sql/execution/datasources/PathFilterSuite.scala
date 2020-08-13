@@ -73,9 +73,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedAfter specified with a past date, " +
-      "multiple files, one valid") {
+  test("SPARK-31962: when modifiedAfter specified with a past date, multiple files, one valid") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file1 = new File(dir, "file1.csv")
@@ -92,9 +90,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedAfter specified with a past date, " +
-      "multiple files, both valid") {
+  test("SPARK-31962: when modifiedAfter specified with a past date, multiple files, both valid") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file1 = new File(dir, "file1.csv")
@@ -111,9 +107,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedAfter specified with a past date," +
-      " multiple files, none valid") {
+  test("SPARK-31962: when modifiedAfter specified with a past date, multiple files, none valid") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file1 = new File(dir, "file1.csv")
@@ -132,9 +126,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedBefore specified with a future date," +
-      " multiple files, both valid") {
+  test("SPARK-31962: when modifiedBefore specified with a future date, " +
+    "multiple files, both valid") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file1 = new File(dir, "file1.csv")
@@ -158,9 +151,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedBefore specified with a future date," +
-      " multiple files, one valid") {
+  test("SPARK-31962: when modifiedBefore specified with a future date, multiple files, one valid") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file1 = new File(dir, "file1.csv")
@@ -188,9 +179,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedBefore specified with a future date," +
-      " multiple files, none valid") {
+  test("SPARK-31962: when modifiedBefore specified with a future date, " +
+    "multiple files, none valid") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file1 = new File(dir, "file1.csv")
@@ -216,9 +206,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedAfter specified " +
-      "with a past date and pathGlobalFilter returning results") {
+  test("SPARK-31962: when modifiedAfter specified with a past date and " +
+    "pathGlobalFilter returning results") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
@@ -232,9 +221,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedAfter specified " +
-      "with past date and pathGlobFilter filtering results") {
+  test("SPARK-31962: when modifiedAfter specified with past date " +
+    "and pathGlobFilter filtering results") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
@@ -250,9 +238,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedAfter specified " +
-      "with future date and pathGlobFilter returning results") {
+  test("SPARK-31962: when modifiedAfter specified with future date and " +
+    "pathGlobFilter returning results") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
@@ -268,9 +255,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedAfter specified " +
-      "with future date and pathGlobFilter filtering results") {
+  test("SPARK-31962: when modifiedAfter specified with future date and " +
+    "pathGlobFilter filtering results") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
@@ -286,9 +272,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedBefore and modifiedAfter" +
-      "are specified out of range and pathGlobFilter returning results") {
+  test("SPARK-31962: when modifiedBefore and modifiedAfter are specified out of range and " +
+    "pathGlobFilter returning results") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
@@ -305,9 +290,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedBefore and modifiedAfter" +
-      "are specified in range and pathGlobFilter returning results") {
+  test("SPARK-31962: when modifiedBefore and modifiedAfter are specified in range and " +
+    "pathGlobFilter returning results") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
@@ -322,9 +306,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedBefore and modifiedAfter" +
-      "are specified in range and pathGlobFilter filtering results") {
+  test("SPARK-31962: when modifiedBefore and modifiedAfter are specified in range and " +
+    "pathGlobFilter filtering results") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
@@ -361,16 +344,14 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-31962: PathFilterStrategies - modifiedAfter option") {
-    val options =
-      CaseInsensitiveMap[String](Map("modifiedAfter" -> "2010-10-01T01:01:00"))
+    val options = CaseInsensitiveMap[String](Map("modifiedAfter" -> "2010-10-01T01:01:00"))
     val strategy = PathFilterFactory.create(spark, spark.sessionState.newHadoopConf(), options)
     assert(strategy.head.isInstanceOf[ModifiedAfterFilter])
     assert(strategy.size == 1)
   }
 
   test("SPARK-31962: PathFilterStrategies - modifiedBefore option") {
-    val options =
-      CaseInsensitiveMap[String](Map("modifiedBefore" -> "2020-10-01T01:01:00"))
+    val options = CaseInsensitiveMap[String](Map("modifiedBefore" -> "2020-10-01T01:01:00"))
     val strategy = PathFilterFactory.create(spark, spark.sessionState.newHadoopConf(), options)
     assert(strategy.head.isInstanceOf[ModifiedBeforeFilter])
     assert(strategy.size == 1)
@@ -395,7 +376,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       "class org.apache.spark.sql.execution.datasources.PathGlobFilter",
       "class org.apache.spark.sql.execution.datasources.ModifiedAfterFilter",
       "class org.apache.spark.sql.execution.datasources.ModifiedBeforeFilter")
-    val foundClasses = strategies.map(x => x.getClass.toString)
+    val foundClasses = strategies.map(_.getClass.toString)
     assert(foundClasses == classes)
     assert(strategies.size == 3)
   }
@@ -403,7 +384,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
   test("SPARK-31962: PathFilterStrategies - no options") {
     val options = CaseInsensitiveMap[String](Map.empty)
     val strategy = PathFilterFactory.create(spark, spark.sessionState.newHadoopConf(), options)
-    assert(strategy.size == 0)
+    assert(strategy.isEmpty)
   }
 
   test("SPARK-31962: modifiedBefore - empty option") {
@@ -442,9 +423,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-31962: modifiedAfter filter takes into account local " +
-      "timezone when specified as an option.  After UTC.") {
+  test("SPARK-31962: modifiedAfter filter takes into account local timezone " +
+    "when specified as an option. After UTC.") {
     withTempDir { dir =>
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
@@ -459,16 +439,15 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
             "timeZone" -> "CET")))
 
       val strategyTime =
-        strategy.head.asInstanceOf[ModifiedAfterFilter].thresholdTime
+        strategy.head.asInstanceOf[ModifiedAfterFilter].thresholdTime()
       assert(
         strategyTime - DateTimeUtils
-          .getMicroseconds(DateTimeUtils.currentTimestamp, timeZone.toZoneId) > 0)
+          .getMicroseconds(DateTimeUtils.currentTimestamp(), timeZone.toZoneId) > 0)
     }
   }
 
-  test(
-    "SPARK-31962: modifiedAfter filter takes into account" +
-      " local timezone when specified as an option.  Before UTC.") {
+  test("SPARK-31962: modifiedAfter filter takes into account local timezone " +
+    "when specified as an option. Before UTC.") {
     withTempDir { dir =>
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
@@ -483,16 +462,15 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
             "timeZone" -> "HST")))
 
       val strategyTime =
-        strategy.head.asInstanceOf[ModifiedAfterFilter].thresholdTime
+        strategy.head.asInstanceOf[ModifiedAfterFilter].thresholdTime()
       assert(
         DateTimeUtils
-          .getMicroseconds(DateTimeUtils.currentTimestamp, timeZone.toZoneId) - strategyTime < 0)
+          .getMicroseconds(DateTimeUtils.currentTimestamp(), timeZone.toZoneId) - strategyTime < 0)
     }
   }
 
-  test(
-    "SPARK-31962: modifiedBefore filter takes into account" +
-      " local timezone when specified as an option.  After UTC.") {
+  test("SPARK-31962: modifiedBefore filter takes into account local timezone " +
+    "when specified as an option. After UTC.") {
     withTempDir { dir =>
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
@@ -514,9 +492,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(
-    "SPARK-31962: modifiedBefore filter takes into account" +
-      " local timezone when specified as an option.  Before UTC.") {
+  test("SPARK-31962: modifiedBefore filter takes into account local timezone " +
+    "when specified as an option. Before UTC.") {
     withTempDir { dir =>
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
@@ -530,9 +507,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
             "modifiedBefore" -> LocalDateTime.now(timeZone.toZoneId).toString,
             "timeZone" -> "HST")))
 
-      val strategyTime =
-        strategy.head.asInstanceOf[ModifiedBeforeFilter].thresholdTime
-      assert(strategyTime - DateTimeUtils.fromUTCTime(DateTimeUtils.currentTimestamp, "UTC") > 0)
+      val strategyTime = strategy.head.asInstanceOf[ModifiedBeforeFilter].thresholdTime()
+      assert(strategyTime - DateTimeUtils.fromUTCTime(DateTimeUtils.currentTimestamp(), "UTC") > 0)
     }
   }
 
@@ -545,12 +521,10 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       checkAnswer(df, Row("foo"))
 
       // Both glob pattern in option and path should be effective to filter files.
-      val df2 =
-        spark.read.option("pathGlobFilter", "*.txt").text(dataDir + "/*.orc")
+      val df2 = spark.read.option("pathGlobFilter", "*.txt").text(dataDir + "/*.orc")
       checkAnswer(df2, Seq.empty)
 
-      val df3 =
-        spark.read.option("pathGlobFilter", "*.txt").text(dataDir + "/*xt")
+      val df3 = spark.read.option("pathGlobFilter", "*.txt").text(dataDir + "/*xt")
       checkAnswer(df3, Row("foo"))
     }
   }
@@ -565,8 +539,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val df = spark.read.text(path.getCanonicalPath + "/*/*.txt")
       checkAnswer(df, input.select("a"))
 
-      val df2 =
-        spark.read.option("pathGlobFilter", "*.txt").text(path.getCanonicalPath)
+      val df2 = spark.read.option("pathGlobFilter", "*.txt").text(path.getCanonicalPath)
       checkAnswer(df2, input)
     }
   }
