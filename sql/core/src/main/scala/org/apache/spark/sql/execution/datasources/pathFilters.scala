@@ -33,67 +33,75 @@ import org.apache.spark.unsafe.types.UTF8String
  *
  * Example Usages
  * Load all CSV files modified after date:
- * spark.read.format("csv").option("modifiedAfter","2020-06-15T05:00:00").load()
+ * {{{
+ *   spark.read.format("csv").option("modifiedAfter","2020-06-15T05:00:00").load()
+ * }}}
  *
  * Load all CSV files modified before date:
- * spark.read.format("csv").option("modifiedBefore","2020-06-15T05:00:00").load()
+ * {{{
+ *   spark.read.format("csv").option("modifiedBefore","2020-06-15T05:00:00").load()
+ * }}}
  *
  * Load all CSV files modified between two dates:
- * spark.read.format("csv").option("modifiedAfter","2019-01-15T05:00:00")
- * .option("modifiedBefore","2020-06-15T05:00:00").load()
+ * {{{
+ *   spark.read.format("csv").option("modifiedAfter","2019-01-15T05:00:00")
+ *     .option("modifiedBefore","2020-06-15T05:00:00").load()
+ * }}}
  *
-@param sparkSession SparkSession
-@param hadoopConf Hadoop Configuration object
-@param options Map containing options
+ * @param sparkSession SparkSession
+ * @param hadoopConf Hadoop Configuration object
+ * @param options Map containing options
  */
 abstract class ModifiedDateFilter(
-        sparkSession: SparkSession,
-        hadoopConf: Configuration,
-        options: CaseInsensitiveMap[String])
-    extends PathFilterStrategy {
+    sparkSession: SparkSession,
+    hadoopConf: Configuration,
+    options: CaseInsensitiveMap[String])
+  extends PathFilterStrategy {
+
   lazy val timeZoneId: String = options.getOrElse(
     DateTimeUtils.TIMEZONE_OPTION.toLowerCase(Locale.ROOT),
     SQLConf.get.sessionLocalTimeZone)
 
-  /* Implicitly defaults to UTC if unable to parse */
+  // Implicitly defaults to UTC if unable to parse
   lazy val timeZone: TimeZone = DateTimeUtils.getTimeZone(timeZoneId)
-  lazy val timeString: UTF8String = UTF8String.fromString(options.apply(strategy()))
+  lazy val timeString: UTF8String = UTF8String.fromString(options.apply(strategy))
 
   def thresholdTime(): Long = {
-    DateTimeUtils.stringToTimestamp(timeString, timeZone.toZoneId).getOrElse(
-        throw new AnalysisException(
-            s"The timestamp provided for the '${strategy()}'" +
-            s" option is invalid.  The expected format is 'YYYY-MM-DDTHH:mm:ss'. " +
-            s" Provided timestamp:  " +
-            s"${options.apply(strategy())}"))
+    DateTimeUtils.stringToTimestamp(timeString, timeZone.toZoneId).getOrElse {
+      throw new AnalysisException(
+        s"The timestamp provided for the '${strategy()}' option is invalid. The expected format " +
+        s"is 'YYYY-MM-DDTHH:mm:ss'. Provided timestamp: ${options.apply(strategy)}")
+    }
   }
   def localTime(micros: Long): Long = DateTimeUtils.fromUTCTime(micros, timeZoneId)
   def accept(fileStatus: FileStatus): Boolean
   def accept(path: Path): Boolean
-  def strategy(): String
+  def strategy: String
 }
 
 /**
  * Filter used to determine whether file was modified
  * before the provided timestamp.
  *
- @param sparkSession SparkSession
- @param hadoopConf Hadoop Configuration object
- @param options Map containing options
+ * @param sparkSession SparkSession
+ * @param hadoopConf Hadoop Configuration object
+ * @param options Map containing options
  */
 class ModifiedBeforeFilter(
-        sparkSession: SparkSession,
-        hadoopConf: Configuration,
-        options: CaseInsensitiveMap[String])
-    extends ModifiedDateFilter(sparkSession, hadoopConf, options) with FileIndexFilter {
+    sparkSession: SparkSession,
+    hadoopConf: Configuration,
+    options: CaseInsensitiveMap[String])
+  extends ModifiedDateFilter(sparkSession, hadoopConf, options) with FileIndexFilter {
+
   override def accept(fileStatus: FileStatus): Boolean =
     // We standardize on microseconds wherever possible
     // getModificationTime returns in milliseconds
     thresholdTime - localTime(DateTimeUtils.millisToMicros(fileStatus.getModificationTime)) > 0
 
   override def accept(path: Path): Boolean = true
-  override def strategy(): String = "modifiedbefore"
+  override val strategy: String = "modifiedbefore"
 }
+
 case object ModifiedBeforeFilter extends PathFilterObject {
   def get(
       sparkSession: SparkSession,
@@ -101,29 +109,30 @@ case object ModifiedBeforeFilter extends PathFilterObject {
       options: CaseInsensitiveMap[String]): ModifiedBeforeFilter = {
     new ModifiedBeforeFilter(sparkSession, configuration, options)
   }
-  def strategy(): String = "modifiedbefore"
+  def strategy: String = "modifiedbefore"
 }
 
 /**
  * Filter used to determine whether file was modified
  * after the provided timestamp.
  *
-@param sparkSession SparkSession
-@param hadoopConf Hadoop Configuration object
-@param options Map containing options
+ * @param sparkSession SparkSession
+ * @param hadoopConf Hadoop Configuration object
+ * @param options Map containing options
  */
 case class ModifiedAfterFilter(
-        sparkSession: SparkSession,
-        hadoopConf: Configuration,
-        options: CaseInsensitiveMap[String])
-    extends ModifiedDateFilter(sparkSession, hadoopConf, options) with FileIndexFilter {
+    sparkSession: SparkSession,
+    hadoopConf: Configuration,
+    options: CaseInsensitiveMap[String])
+  extends ModifiedDateFilter(sparkSession, hadoopConf, options) with FileIndexFilter {
+
   override def accept(fileStatus: FileStatus): Boolean =
     // getModificationTime returns in milliseconds
     // We standardize on microseconds wherever possible
     localTime(DateTimeUtils.millisToMicros(fileStatus.getModificationTime)) - thresholdTime > 0
 
   override def accept(path: Path): Boolean = true
-  override def strategy(): String = "modifiedafter"
+  override val strategy: String = "modifiedafter"
 }
 
 case object ModifiedAfterFilter extends PathFilterObject {
@@ -133,17 +142,19 @@ case object ModifiedAfterFilter extends PathFilterObject {
       options: CaseInsensitiveMap[String]): ModifiedAfterFilter = {
     new ModifiedAfterFilter(sparkSession, configuration, options)
   }
-  def strategy(): String = "modifiedafter"
+  def strategy: String = "modifiedafter"
 }
 
 class PathGlobFilter(
-        sparkSession: SparkSession,
-        conf: Configuration,
-        options: CaseInsensitiveMap[String])
-    extends GlobFilter(options.get("pathGlobFilter").get) with FileIndexFilter {
+    sparkSession: SparkSession,
+    conf: Configuration,
+    options: CaseInsensitiveMap[String])
+  extends GlobFilter(options.get("pathGlobFilter").get) with FileIndexFilter {
+
   override def accept(fileStatus: FileStatus): Boolean = accept(fileStatus.getPath)
-  override def strategy(): String = "pathGlobFilter"
+  override def strategy: String = "pathGlobFilter"
 }
+
 case object PathGlobFilter extends PathFilterObject {
   def get(
       sparkSession: SparkSession,
@@ -151,12 +162,12 @@ case object PathGlobFilter extends PathFilterObject {
       options: CaseInsensitiveMap[String]): PathGlobFilter = {
     new PathGlobFilter(sparkSession, configuration, options)
   }
-  def strategy(): String = "pathglobfilter"
+  def strategy: String = "pathglobfilter"
 }
 
 trait FileIndexFilter extends PathFilter with Serializable {
   def accept(fileStatus: FileStatus): Boolean
-  def strategy(): String
+  def strategy: String
 }
 
 trait PathFilterObject {
@@ -164,32 +175,30 @@ trait PathFilterObject {
       sparkSession: SparkSession,
       configuration: Configuration,
       options: CaseInsensitiveMap[String]): FileIndexFilter
-  def strategy(): String
+  def strategy: String
 }
 
 trait PathFilterStrategy extends FileIndexFilter {
   def accept(path: Path): Boolean
   def accept(fileStatus: FileStatus): Boolean
-  def strategy(): String
+  def strategy: String
 }
 
 case object PathFilterStrategies {
-    var cache = Iterable[PathFilterObject]()
+  var cache = Iterable[PathFilterObject]()
 
-    def get(
-        sparkSession: SparkSession,
-        conf: Configuration,
-        options: CaseInsensitiveMap[String]): Iterable[FileIndexFilter] =
-        options.keys
-            .map(option => {
-                cache.filter(pathFilter => pathFilter.strategy() == option)
-                    .map(filter => filter.get(sparkSession, conf, options))
-                    .headOption.orNull
-            }).filter(_ != null)
+  def get(sparkSession: SparkSession, conf: Configuration, options: CaseInsensitiveMap[String])
+    : Iterable[FileIndexFilter] = {
+    options.keys.map(option => {
+        cache.filter(_.strategy == option)
+          .map(_.get(sparkSession, conf, options))
+          .headOption.orNull
+      }).filter(_ != null)
+  }
 
-    def register(filter: PathFilterObject): Unit = {
-        cache = cache.++(Iterable[PathFilterObject](filter))
-    }
+  def register(filter: PathFilterObject): Unit = {
+    cache = cache.++(Iterable[PathFilterObject](filter))
+  }
 }
 
 object PathFilterFactory {

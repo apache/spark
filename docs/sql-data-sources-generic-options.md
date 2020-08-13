@@ -134,14 +134,14 @@ any timezone configuration, modified timestamps are interpreted as UTC.
 `modifiedBefore` will only allow files having last modified
 timestamps occurring before the specified time to load. For example,
 when`modifiedBefore` has the timestamp `2020-06-01T12:00:00` applied,
- all files modified after that time will not be considered when loading
- from a file data source.
+all files modified after that time will not be considered when loading
+from a file data source.
  
 `modifiedAfter` only allows files having last modified timestamps
 occurring after the specified timestamp. For example, when`modifiedAfter`
 has the timestamp `2020-06-01T12:00:00` applied, only files modified after 
- this time will be eligible when loading from a file data source. When both
-  `modifiedBefore` and `modifiedAfter` are specified together, files having
+this time will be eligible when loading from a file data source. When both
+`modifiedBefore` and `modifiedAfter` are specified together, files having
 last modified timestamps within the resulting time range are the only files
 allowed to load.
 
