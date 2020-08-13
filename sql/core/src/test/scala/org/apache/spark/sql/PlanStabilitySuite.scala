@@ -56,7 +56,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  *
  * To run a single test file upon change:
  * {{{
- *   build/sbt "~sql/test-only *PlanStability[WithStats]Suite -- -z (tpcds-v1.4/q49)"
+ *   build/sbt "sql/test-only *PlanStability[WithStats]Suite -- -z (tpcds-v1.4/q49)"
  * }}}
  *
  * To re-generate golden files for entire suite, run:
