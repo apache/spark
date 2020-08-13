@@ -138,8 +138,9 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
     }
   }
 
-  test("Add HiveVoidType to compatible with Hive void type") {
+  test("SPARK-20680: Add HiveVoidType to compatible with Hive void type") {
     withView("v1") {
+      sql("drop view if exists v1")
       sql("create view v1 as select null as c")
       val df = sql("select * from v1")
       assert(df.schema.fields.head.dataType == NullType)
