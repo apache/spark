@@ -97,7 +97,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
     new File(goldenFilePath, name)
   }
 
-  private def isApproved(name: String, dir: File, actualSimplifiedPlan: String): Boolean = {
+  private def isApproved(dir: File, actualSimplifiedPlan: String): Boolean = {
     val file = new File(dir, "simplified.txt")
     val approved = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
     approved == actualSimplifiedPlan
@@ -115,7 +115,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   private def generateApprovedPlanFile(plan: SparkPlan, name: String, explain: String): Unit = {
     val dir = getDirForTest(name)
     val simplified = getSimplifiedPlan(plan)
-    val foundMatch = dir.exists() && isApproved(name, dir, simplified)
+    val foundMatch = dir.exists() && isApproved(dir, simplified)
 
     if (!foundMatch) {
       FileUtils.deleteDirectory(dir)
@@ -133,7 +133,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
     val dir = getDirForTest(name)
     val tempDir = FileUtils.getTempDirectory
     val actualSimplified = getSimplifiedPlan(plan)
-    val foundMatch = isApproved(name, dir, actualSimplified)
+    val foundMatch = isApproved(dir, actualSimplified)
 
     if (!foundMatch) {
       // show diff with last approved
