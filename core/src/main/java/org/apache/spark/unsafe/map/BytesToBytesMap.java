@@ -431,7 +431,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
   /**
    * Iterator for the entries of this map. This is to first iterate over key index array
    * `longArray` then accessing values in `dataPages`. NOTE: this is different from `MapIterator`
-   * in the sense that key index is preserved here (See `UnsafeHashedRelation` for example of usage).
+   * in the sense that key index is preserved here
+   * (See `UnsafeHashedRelation` for example of usage).
    */
   public final class MapIteratorWithKeyIndex implements Iterator<Location> {
 
@@ -477,9 +478,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
-   * Number of allowed keys index.
+   * The maximum number of allowed keys index.
    */
-  public int numKeysIndex() {
+  public int maxNumKeysIndex() {
     return (int) (longArray.size() / 2);
   }
 

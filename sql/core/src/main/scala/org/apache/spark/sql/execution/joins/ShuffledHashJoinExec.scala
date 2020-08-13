@@ -119,13 +119,11 @@ case class ShuffledHashJoinExec(
     }
 
     val iter = if (hashedRelation.keyIsUnique) {
-      fullOuterJoinWithUniqueKey(streamIter, hashedRelation, joinKeys, joinRow, streamNullJoinRow,
-        joinRowWithStream, joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow,
-        streamNullRow)
+      fullOuterJoinWithUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
+        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow, streamNullRow)
     } else {
-      fullOuterJoinWithNonUniqueKey(streamIter, hashedRelation, joinKeys, joinRow,
-        streamNullJoinRow, joinRowWithStream, joinRowWithBuild, streamNullJoinRowWithBuild,
-        buildNullRow, streamNullRow)
+      fullOuterJoinWithNonUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
+        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow, streamNullRow)
     }
 
     val resultProj = UnsafeProjection.create(output, output)
@@ -148,14 +146,12 @@ case class ShuffledHashJoinExec(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation,
       joinKeys: UnsafeProjection,
-      joinRow: JoinedRow,
-      streamNullJoinRow: JoinedRow,
       joinRowWithStream: InternalRow => JoinedRow,
       joinRowWithBuild: InternalRow => JoinedRow,
       streamNullJoinRowWithBuild: InternalRow => JoinedRow,
       buildNullRow: GenericInternalRow,
       streamNullRow: GenericInternalRow): Iterator[InternalRow] = {
-    val matchedKeys = new BitSet(hashedRelation.numKeysIndex)
+    val matchedKeys = new BitSet(hashedRelation.maxNumKeysIndex)
 
     // Process stream side with looking up hash relation
     val streamResultIter = streamIter.map { srow =>
@@ -164,11 +160,12 @@ case class ShuffledHashJoinExec(
       if (keys.anyNull) {
         joinRowWithBuild(buildNullRow)
       } else {
-        val matched = hashedRelation.getWithKeyIndex(keys)
+        val matched = hashedRelation.getValueWithKeyIndex(keys)
         if (matched != null) {
-          val (keyIndex, buildIter) = (matched._1, matched._2)
-          val buildRow = buildIter.next
-          if (boundCondition(joinRowWithBuild(buildRow))) {
+          val keyIndex = matched.getKeyIndex
+          val buildRow = matched.getValue
+          val joinRow = joinRowWithBuild(buildRow)
+          if (boundCondition(joinRow)) {
             matchedKeys.set(keyIndex)
             joinRow
           } else {
@@ -183,11 +180,12 @@ case class ShuffledHashJoinExec(
     // Process build side with filtering out rows looked up and
     // passed join condition already
     val buildResultIter = hashedRelation.valuesWithKeyIndex().flatMap {
-      case (keyIndex, brow) =>
+      valueRowWithKeyIndex =>
+        val keyIndex = valueRowWithKeyIndex.getKeyIndex
         val isMatched = matchedKeys.get(keyIndex)
         if (!isMatched) {
-          streamNullJoinRowWithBuild(brow)
-          Some(streamNullJoinRow)
+          val buildRow = valueRowWithKeyIndex.getValue
+          Some(streamNullJoinRowWithBuild(buildRow))
         } else {
           None
         }
@@ -210,8 +208,6 @@ case class ShuffledHashJoinExec(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation,
       joinKeys: UnsafeProjection,
-      joinRow: JoinedRow,
-      streamNullJoinRow: JoinedRow,
       joinRowWithStream: InternalRow => JoinedRow,
       joinRowWithBuild: InternalRow => JoinedRow,
       streamNullJoinRowWithBuild: InternalRow => JoinedRow,
@@ -231,7 +227,7 @@ case class ShuffledHashJoinExec(
 
     // Process stream side with looking up hash relation
     val streamResultIter = streamIter.flatMap { srow =>
-      joinRowWithStream(srow)
+      val joinRow = joinRowWithStream(srow)
       val keys = joinKeys(srow)
       if (keys.anyNull) {
         Iterator.single(joinRowWithBuild(buildNullRow))
@@ -271,7 +267,8 @@ case class ShuffledHashJoinExec(
     var prevKeyIndex = -1
     var valueIndex = -1
     val buildResultIter = hashedRelation.valuesWithKeyIndex().flatMap {
-      case (keyIndex, brow) =>
+      valueRowWithKeyIndex =>
+        val keyIndex = valueRowWithKeyIndex.getKeyIndex
         if (prevKeyIndex == -1 || keyIndex != prevKeyIndex) {
           prevKeyIndex = keyIndex
           valueIndex = -1
@@ -279,8 +276,8 @@ case class ShuffledHashJoinExec(
         valueIndex += 1
         val isMatched = isRowMatched(keyIndex, valueIndex)
         if (!isMatched) {
-          streamNullJoinRowWithBuild(brow)
-          Some(streamNullJoinRow)
+          val buildRow = valueRowWithKeyIndex.getValue
+          Some(streamNullJoinRowWithBuild(buildRow))
         } else {
           None
         }

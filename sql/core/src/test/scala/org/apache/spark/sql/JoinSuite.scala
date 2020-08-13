@@ -1214,12 +1214,14 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       // Test multiple join keys
       (spark.range(10).map(i => if (i % 2 == 0) i else null).selectExpr(
         "value as k1", "cast(value % 5 as short) as k2", "cast(value * 3 as long) as k3"),
-        spark.range(30).map(i => if (i % 4 == 0) i else null).selectExpr(
+        spark.range(30).map(i => if (i % 3 == 0) i else null).selectExpr(
           "value as k4", "cast(value % 5 as short) as k5", "cast(value * 3 as long) as k6"),
         $"k1" === $"k4" && $"k2" === $"k5" && $"k3" === $"k6")
     )
     inputDFs.foreach { case (df1, df2, joinExprs) =>
       withSQLConf(
+        // Set broadcast join threshold and number of shuffle partitions,
+        // as shuffled hash join depends on these two configs.
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
         SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
         val smjDF = df1.join(df2, joinExprs, "full")
