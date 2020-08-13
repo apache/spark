@@ -330,7 +330,7 @@ def approx_count_distinct(col, rsd=None):
     """Aggregate function: returns a new :class:`Column` for approximate distinct count of
     column `col`.
 
-    :param rsd: maximum estimation error allowed (default = 0.05). For rsd < 0.01, it is more
+    :param rsd: maximum relative standard deviation allowed (default = 0.05). For rsd < 0.01, it is more
         efficient to use :func:`countDistinct`
 
     >>> df.agg(approx_count_distinct(df.age).alias('distinct_ages')).collect()
