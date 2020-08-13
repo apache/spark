@@ -286,6 +286,10 @@ trait TPCDSBase extends SharedSparkSession {
        """.stripMargin)
   }
 
+  private val originalCBCEnabled = conf.cboEnabled
+  private val originalPlanStatsEnabled = conf.planStatsEnabled
+  private val originalJoinReorderEnabled = conf.joinReorderEnabled
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     if (injectStats) {
@@ -303,6 +307,16 @@ trait TPCDSBase extends SharedSparkSession {
           TableIdentifier(tableName), Some(TPCDSTableStats.sf100TableStats(tableName)))
       }
     }
+  }
+
+  override def afterAll(): Unit = {
+    conf.setConf(SQLConf.CBO_ENABLED, originalCBCEnabled)
+    conf.setConf(SQLConf.PLAN_STATS_ENABLED, originalPlanStatsEnabled)
+    conf.setConf(SQLConf.JOIN_REORDER_ENABLED, originalJoinReorderEnabled)
+    tableNames.foreach { tableName =>
+      spark.sessionState.catalog.alterTableStats(TableIdentifier(tableName), None)
+    }
+    super.afterAll()
   }
 
   protected def injectStats: Boolean = false
