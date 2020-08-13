@@ -1276,13 +1276,11 @@ private[hive] object HiveClientImpl extends Logging {
   }
 }
 
-class HiveVoidType extends DataType {
+case object HiveVoidType extends DataType {
   override def defaultSize: Int = 1
-  override def asNullable: HiveVoidType = this
+  override def asNullable: DataType = HiveVoidType
   override def simpleString: String = "void"
-}
 
-case object HiveVoidType extends HiveVoidType {
   def replaceVoidType(dt: DataType): DataType = dt match {
     case ArrayType(et, nullable) =>
       ArrayType(replaceVoidType(et), nullable)
