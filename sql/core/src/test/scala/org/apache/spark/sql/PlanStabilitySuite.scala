@@ -31,28 +31,44 @@ import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.internal.SQLConf
 
+// scalastyle:off line.size.limit
 /**
  * Check that TPC-DS SparkPlans don't change.
  * If there are plan differences, the error message looks like this:
  *   Plans did not match:
- *   last approved simplified plan: ../tpcds-plan-stability/approved-plans-xxx/q1/simplified.txt
- *   last approved explain plan: ../tpcds-plan-stability/approved-plans-xxx/q1/explain.txt
+ *   last approved simplified plan: /path/to/tpcds-plan-stability/approved-plans-xxx/q1/simplified.txt
+ *   last approved explain plan: /path/to/tpcds-plan-stability/approved-plans-xxx/q1/explain.txt
  *   [last approved simplified plan]
  *
  *   actual simplified plan: /path/to/tmp/q1.actual.simplified.txt
  *   actual explain plan: /path/to/tmp/q1.actual.explain.txt
  *   [actual simplified plan]
+ *
  * The explain files are saved to help debug later, they are not checked. Only the simplified
  * plans are checked (by string comparison).
  *
- * Approving new plans:
- * If the plan change is intended then re-running the test
- * with environ var SPARK_GENERATE_GOLDEN_FILES=1 will make the new plan canon.
- * This should be done only for the queries that need it, to avoid unnecessary diffs in the
- * other approved plans.
- * This can be done by running sbt test-only *PlanStability[WithStats]Suite* -- -z "q31"
- * The new plan files should be part of the PR and reviewed.
+ *
+ * To run the entire test suite:
+ * {{{
+ *   build/sbt "sql/test-only *PlanStability[WithStats]Suite"
+ * }}}
+ *
+ * To run a single test file upon change:
+ * {{{
+ *   build/sbt "~sql/test-only *PlanStability[WithStats]Suite -- -z (tpcds-v1.4/q49)"
+ * }}}
+ *
+ * To re-generate golden files for entire suite, run:
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *PlanStability[WithStats]Suite"
+ * }}}
+ *
+ * To re-generate golden file for a single test, run:
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *PlanStability[WithStats]Suite -- -z (tpcds-v1.4/q49)"
+ * }}}
  */
+// scalastyle:on line.size.limit
 trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
 
   private val originalMaxToStringFields = conf.maxToStringFields
