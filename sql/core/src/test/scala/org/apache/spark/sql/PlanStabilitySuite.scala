@@ -320,7 +320,6 @@ class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite {
   }
 }
 
-
 @ExtendedSQLTest
 class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite {
   override def injectStats: Boolean = true
