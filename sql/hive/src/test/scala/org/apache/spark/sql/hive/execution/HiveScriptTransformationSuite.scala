@@ -182,7 +182,11 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         identity,
         df.select(
           'a.cast("string").as("key"),
-          'b.cast("string").as("value")).collect())
+          concat_ws("\t",
+            'b.cast("string"),
+            'c.cast("string"),
+            'd.cast("string"),
+            'e.cast("string")).as("value")).collect())
     }
   }
 
