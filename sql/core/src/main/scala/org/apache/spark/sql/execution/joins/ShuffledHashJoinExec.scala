@@ -106,15 +106,14 @@ case class ShuffledHashJoinExec(
     }
     val buildNullRow = new GenericInternalRow(buildOutput.length)
     val streamNullRow = new GenericInternalRow(streamedOutput.length)
-    val streamNullJoinRow = new JoinedRow
-    val streamNullJoinRowWithBuild = {
+    lazy val streamNullJoinRowWithBuild = {
       buildSide match {
         case BuildLeft =>
-          streamNullJoinRow.withRight(streamNullRow)
-          streamNullJoinRow.withLeft _
+          joinRow.withRight(streamNullRow)
+          joinRow.withLeft _
         case BuildRight =>
-          streamNullJoinRow.withLeft(streamNullRow)
-          streamNullJoinRow.withRight _
+          joinRow.withLeft(streamNullRow)
+          joinRow.withRight _
       }
     }
 
@@ -148,7 +147,7 @@ case class ShuffledHashJoinExec(
       joinKeys: UnsafeProjection,
       joinRowWithStream: InternalRow => JoinedRow,
       joinRowWithBuild: InternalRow => JoinedRow,
-      streamNullJoinRowWithBuild: InternalRow => JoinedRow,
+      streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
       buildNullRow: GenericInternalRow,
       streamNullRow: GenericInternalRow): Iterator[InternalRow] = {
     val matchedKeys = new BitSet(hashedRelation.maxNumKeysIndex)
@@ -177,8 +176,7 @@ case class ShuffledHashJoinExec(
       }
     }
 
-    // Process build side with filtering out rows looked up and
-    // passed join condition already
+    // Process build side with filtering out the matched rows
     val buildResultIter = hashedRelation.valuesWithKeyIndex().flatMap {
       valueRowWithKeyIndex =>
         val keyIndex = valueRowWithKeyIndex.getKeyIndex
@@ -210,7 +208,7 @@ case class ShuffledHashJoinExec(
       joinKeys: UnsafeProjection,
       joinRowWithStream: InternalRow => JoinedRow,
       joinRowWithBuild: InternalRow => JoinedRow,
-      streamNullJoinRowWithBuild: InternalRow => JoinedRow,
+      streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
       buildNullRow: GenericInternalRow,
       streamNullRow: GenericInternalRow): Iterator[InternalRow] = {
     val matchedRows = new mutable.HashSet[Long]
@@ -232,48 +230,50 @@ case class ShuffledHashJoinExec(
       if (keys.anyNull) {
         Iterator.single(joinRowWithBuild(buildNullRow))
       } else {
-        val matched = hashedRelation.getWithKeyIndex(keys)
-        if (matched != null) {
-          val (keyIndex, buildIter) = (matched._1, matched._2.zipWithIndex)
-
-          new RowIterator {
-            private var found = false
-            override def advanceNext(): Boolean = {
-              while (buildIter.hasNext) {
-                val (buildRow, valueIndex) = buildIter.next()
-                if (boundCondition(joinRowWithBuild(buildRow))) {
-                  markRowMatched(keyIndex, valueIndex)
-                  found = true
-                  return true
-                }
-              }
-              if (!found) {
-                joinRowWithBuild(buildNullRow)
+        val buildIter = hashedRelation.getWithKeyIndex(keys)
+        new RowIterator {
+          private var found = false
+          private var valueIndex = -1
+          override def advanceNext(): Boolean = {
+            while (buildIter != null && buildIter.hasNext) {
+              val buildRowWithKeyIndex = buildIter.next()
+              val keyIndex = buildRowWithKeyIndex.getKeyIndex
+              val buildRow = buildRowWithKeyIndex.getValue
+              valueIndex += 1
+              if (boundCondition(joinRowWithBuild(buildRow))) {
+                markRowMatched(keyIndex, valueIndex)
                 found = true
                 return true
               }
-              false
             }
-            override def getRow: InternalRow = joinRow
-          }.toScala
-        } else {
-          Iterator.single(joinRowWithBuild(buildNullRow))
-        }
+            // When we reach here, it means no match is found for this key.
+            // So we need to return one row with build side NULL row,
+            // to match the full outer join semantic.
+            if (!found) {
+              joinRowWithBuild(buildNullRow)
+              found = true
+              return true
+            }
+            false
+          }
+          override def getRow: InternalRow = joinRow
+        }.toScala
       }
     }
 
-    // Process build side with filtering out rows looked up and
-    // passed join condition already
+    // Process build side with filtering out the matched rows
     var prevKeyIndex = -1
     var valueIndex = -1
     val buildResultIter = hashedRelation.valuesWithKeyIndex().flatMap {
       valueRowWithKeyIndex =>
         val keyIndex = valueRowWithKeyIndex.getKeyIndex
         if (prevKeyIndex == -1 || keyIndex != prevKeyIndex) {
+          valueIndex = 0
           prevKeyIndex = keyIndex
-          valueIndex = -1
+        } else {
+          valueIndex += 1
         }
-        valueIndex += 1
+
         val isMatched = isRowMatched(keyIndex, valueIndex)
         if (!isMatched) {
           val buildRow = valueRowWithKeyIndex.getValue

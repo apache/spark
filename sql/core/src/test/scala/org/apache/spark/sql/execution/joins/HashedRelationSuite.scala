@@ -612,9 +612,10 @@ class HashedRelationSuite extends SharedSparkSession {
     // test getWithKeyIndex()
     (0 until 10).foreach(i => {
       val key = if (i == 0) InternalRow(null) else InternalRow(i)
-      val valuesWithKeyIndex = unsafeRelation.getWithKeyIndex(toUnsafe(key))
-      val keyIndex = valuesWithKeyIndex._1
-      val actualValues = valuesWithKeyIndex._2.map(v => v.getInt(1)).toSeq
+      val valuesWithKeyIndex = unsafeRelation.getWithKeyIndex(toUnsafe(key)).map(
+        v => (v.getKeyIndex, v.getValue.getInt(1))).toArray
+      val keyIndex = valuesWithKeyIndex.head._1
+      val actualValues = valuesWithKeyIndex.map(_._2)
       val expectedValues = (0 until 10).map(j => j * 10 + i)
       if (i == 0) {
         keyIndexToKeyMap(keyIndex) = "null"
@@ -628,9 +629,9 @@ class HashedRelationSuite extends SharedSparkSession {
       assert(actualValues.sortWith(_ < _) === expectedValues)
     })
     // key index is unique per key
-    val numUniqueKeyIndex = (0 until 10).map(i => {
+    val numUniqueKeyIndex = (0 until 10).flatMap(i => {
       val key = if (i == 0) InternalRow(null) else InternalRow(i)
-      val keyIndex = unsafeRelation.getWithKeyIndex(toUnsafe(key))._1
+      val keyIndex = unsafeRelation.getWithKeyIndex(toUnsafe(key)).map(_.getKeyIndex).toSeq
       keyIndex
     }).distinct.size
     assert(numUniqueKeyIndex == 10)

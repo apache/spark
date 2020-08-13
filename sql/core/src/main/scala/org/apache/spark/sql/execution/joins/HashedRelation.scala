@@ -67,11 +67,11 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
   }
 
   /**
-   * Returns key index and matched rows.
+   * Returns an iterator for key index and matched rows.
    *
    * Returns null if there is no matched rows.
    */
-  def getWithKeyIndex(key: InternalRow): (Int, Iterator[InternalRow])
+  def getWithKeyIndex(key: InternalRow): Iterator[ValueRowWithKeyIndex]
 
   /**
    * Returns key index and matched single row.
@@ -155,8 +155,20 @@ private[execution] class ValueRowWithKeyIndex {
   private var keyIndex: Int = _
   private var value: InternalRow = _
 
+  /** Updates this ValueRowWithKeyIndex by updating its key index.  Returns itself. */
+  def withNewKeyIndex(newKeyIndex: Int): ValueRowWithKeyIndex = {
+    keyIndex = newKeyIndex
+    this
+  }
+
+  /** Updates this ValueRowWithKeyIndex by updating its value.  Returns itself. */
+  def withNewValue(newValue: InternalRow): ValueRowWithKeyIndex = {
+    value = newValue
+    this
+  }
+
   /** Updates this ValueRowWithKeyIndex.  Returns itself. */
-  def updates(newKeyIndex: Int, newValue: InternalRow): ValueRowWithKeyIndex = {
+  def update(newKeyIndex: Int, newValue: InternalRow): ValueRowWithKeyIndex = {
     keyIndex = newKeyIndex
     value = newValue
     this
@@ -197,7 +209,7 @@ private[joins] class UnsafeHashedRelation(
   // re-used in get()/getValue()/getWithKeyIndex()/getValueWithKeyIndex()/valuesWithKeyIndex()
   var resultRow = new UnsafeRow(numFields)
 
-  // re-used in getValueWithKeyIndex()/valuesWithKeyIndex()
+  // re-used in getWithKeyIndex()/getValueWithKeyIndex()/valuesWithKeyIndex()
   var valueRowWithKeyIndex = new ValueRowWithKeyIndex
 
   override def get(key: InternalRow): Iterator[InternalRow] = {
@@ -235,23 +247,23 @@ private[joins] class UnsafeHashedRelation(
     }
   }
 
-  override def getWithKeyIndex(key: InternalRow): (Int, Iterator[InternalRow]) = {
+  override def getWithKeyIndex(key: InternalRow): Iterator[ValueRowWithKeyIndex] = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
     val map = binaryMap  // avoid the compiler error
     val loc = new map.Location  // this could be allocated in stack
     binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
       unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
     if (loc.isDefined) {
-      (loc.getKeyIndex,
-        new Iterator[UnsafeRow] {
-          private var _hasNext = true
-          override def hasNext: Boolean = _hasNext
-          override def next(): UnsafeRow = {
-            resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
-            _hasNext = loc.nextValue()
-            resultRow
-          }
-        })
+      valueRowWithKeyIndex.withNewKeyIndex(loc.getKeyIndex)
+      new Iterator[ValueRowWithKeyIndex] {
+        private var _hasNext = true
+        override def hasNext: Boolean = _hasNext
+        override def next(): ValueRowWithKeyIndex = {
+          resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
+          _hasNext = loc.nextValue()
+          valueRowWithKeyIndex.withNewValue(resultRow)
+        }
+      }
     } else {
       null
     }
@@ -265,7 +277,7 @@ private[joins] class UnsafeHashedRelation(
       unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
     if (loc.isDefined) {
       resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
-      valueRowWithKeyIndex.updates(loc.getKeyIndex, resultRow)
+      valueRowWithKeyIndex.update(loc.getKeyIndex, resultRow)
     } else {
       null
     }
@@ -283,7 +295,7 @@ private[joins] class UnsafeHashedRelation(
         }
         val loc = iter.next()
         resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
-        valueRowWithKeyIndex.updates(loc.getKeyIndex, resultRow)
+        valueRowWithKeyIndex.update(loc.getKeyIndex, resultRow)
       }
     }
   }
@@ -1000,7 +1012,7 @@ class LongHashedRelation(
    */
   override def keys(): Iterator[InternalRow] = map.keys()
 
-  override def getWithKeyIndex(key: InternalRow): (Int, Iterator[InternalRow]) = {
+  override def getWithKeyIndex(key: InternalRow): Iterator[ValueRowWithKeyIndex] = {
     throw new UnsupportedOperationException
   }
 
@@ -1063,7 +1075,7 @@ trait NullAwareHashedRelation extends HashedRelation with Externalizable {
     throw new UnsupportedOperationException
   }
 
-  override def getWithKeyIndex(key: InternalRow): (Int, Iterator[InternalRow]) = {
+  override def getWithKeyIndex(key: InternalRow): Iterator[ValueRowWithKeyIndex] = {
     throw new UnsupportedOperationException
   }
 

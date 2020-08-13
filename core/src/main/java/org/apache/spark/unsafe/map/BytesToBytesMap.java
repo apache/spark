@@ -456,7 +456,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         while (longArray.get(keyIndex * 2) == 0) {
           keyIndex++;
         }
-        loc.with(keyIndex, (int) longArray.get(keyIndex * 2 + 1), true);
+        loc.with(keyIndex, 0, true);
         keyIndex++;
       }
       numRecords--;
@@ -479,6 +479,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   /**
    * The maximum number of allowed keys index.
+   *
+   * The value of allowed keys index is in the range of [0, maxNumKeysIndex - 1].
    */
   public int maxNumKeysIndex() {
     return (int) (longArray.size() / 2);
