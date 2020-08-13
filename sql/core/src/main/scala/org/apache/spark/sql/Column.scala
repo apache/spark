@@ -906,34 +906,84 @@ class Column(val expr: Expression) extends Logging {
    */
   // scalastyle:on line.size.limit
   def withField(fieldName: String, col: Column): Column = withExpr {
-    require(fieldName != null, "fieldName cannot be null")
     require(col != null, "col cannot be null")
+    updateFieldsHelper(expr, nameParts(fieldName), name => WithField(name, col.expr))
+  }
 
-    val nameParts = if (fieldName.isEmpty) {
+  // scalastyle:off line.size.limit
+  /**
+   * An expression that drops fields in `StructType` by name.
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".dropFields("b"))
+   *   // result: {"a":1}
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".dropFields("c"))
+   *   // result: {"a":1,"b":2}
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2, 'c', 3) struct_col")
+   *   df.select($"struct_col".dropFields("b", "c"))
+   *   // result: {"a":1}
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".dropFields("a", "b"))
+   *   // result: org.apache.spark.sql.AnalysisException: cannot resolve 'update_fields(update_fields(`struct_col`))' due to data type mismatch: cannot drop all fields in struct
+   *
+   *   val df = sql("SELECT CAST(NULL AS struct<a:int,b:int>) struct_col")
+   *   df.select($"struct_col".dropFields("b"))
+   *   // result: null of type struct<a:int>
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2, 'b', 3) struct_col")
+   *   df.select($"struct_col".dropFields("b"))
+   *   // result: {"a":1}
+   *
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".dropFields("a.b"))
+   *   // result: {"a":{"a":1}}
+   *
+   *   val df = sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
+   *   df.select($"struct_col".dropFields("a.c"))
+   *   // result: org.apache.spark.sql.AnalysisException: Ambiguous reference to fields
+   * }}}
+   *
+   * @group expr_ops
+   * @since 3.1.0
+   */
+  // scalastyle:on line.size.limit
+  def dropFields(fieldNames: String*): Column = withExpr {
+    def dropField(expr: Expression, fieldName: String): UpdateFields =
+      updateFieldsHelper(expr, nameParts(fieldName), name => DropField(name))
+
+    fieldNames.tail.foldLeft(dropField(expr, fieldNames.head)) {
+      (resExpr, fieldName) => dropField(resExpr, fieldName)
+    }
+  }
+
+  private def nameParts(fieldName: String): Seq[String] = {
+    require(fieldName != null, "fieldName cannot be null")
+
+    if (fieldName.isEmpty) {
       fieldName :: Nil
     } else {
       CatalystSqlParser.parseMultipartIdentifier(fieldName)
     }
-    withFieldHelper(expr, nameParts, Nil, col.expr)
   }
 
-  private def withFieldHelper(
-      struct: Expression,
-      namePartsRemaining: Seq[String],
-      namePartsDone: Seq[String],
-      value: Expression) : WithFields = {
-    val name = namePartsRemaining.head
+  private def updateFieldsHelper(
+    struct: Expression,
+    namePartsRemaining: Seq[String],
+    valueFunc: String => StructFieldsOperation): UpdateFields = {
+    val fieldName = namePartsRemaining.head
     if (namePartsRemaining.length == 1) {
-      WithFields(struct, name :: Nil, value :: Nil)
+      UpdateFields(struct, valueFunc(fieldName) :: Nil)
     } else {
-      val newNamesRemaining = namePartsRemaining.tail
-      val newNamesDone = namePartsDone :+ name
-      val newValue = withFieldHelper(
-        struct = UnresolvedExtractValue(struct, Literal(name)),
-        namePartsRemaining = newNamesRemaining,
-        namePartsDone = newNamesDone,
-        value = value)
-      WithFields(struct, name :: Nil, newValue :: Nil)
+      val newValue = updateFieldsHelper(
+        struct = UnresolvedExtractValue(struct, Literal(fieldName)),
+        namePartsRemaining = namePartsRemaining.tail,
+        valueFunc = valueFunc)
+      UpdateFields(struct, WithField(fieldName, newValue) :: Nil)
     }
   }
 

@@ -3561,18 +3561,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-32237: Hint in CTE") {
-    withTable("t") {
-      sql("CREATE TABLE t USING PARQUET AS SELECT 1 AS id")
-      checkAnswer(
-        sql(s"""
-          |WITH cte AS (SELECT /*+ REPARTITION(3) */ * FROM t)
-          |SELECT * FROM cte
-        """.stripMargin),
-        Row(1) :: Nil)
-    }
-  }
-
   test("SPARK-32372: ResolveReferences.dedupRight should only rewrite attributes for ancestor " +
     "plans of the conflict plan") {
     sql("SELECT name, avg(age) as avg_age FROM person GROUP BY name")
