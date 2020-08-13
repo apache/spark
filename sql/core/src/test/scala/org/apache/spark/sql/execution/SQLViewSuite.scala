@@ -731,6 +731,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           sql("CREATE DATABASE IF NOT EXISTS db2")
           sql("USE db2")
           checkAnswer(spark.table("default.v1"), Row(1))
+          sql("DROP VIEW v1")
         }
       }
     }
