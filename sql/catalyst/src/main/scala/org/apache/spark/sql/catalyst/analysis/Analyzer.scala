@@ -1281,12 +1281,12 @@ class Analyzer(
         }
 
         if (attrMapping.isEmpty) {
-          newPlan -> attrMapping
+          newPlan -> attrMapping.toSeq
         } else {
           assert(!attrMapping.groupBy(_._1.exprId)
             .exists(_._2.map(_._2.exprId).distinct.length > 1),
             "Found duplicate rewrite attributes")
-          val attributeRewrites = AttributeMap(attrMapping)
+          val attributeRewrites = AttributeMap(attrMapping.toSeq)
           // Using attrMapping from the children plans to rewrite their parent node.
           // Note that we shouldn't rewrite a node using attrMapping from its sibling nodes.
           newPlan.transformExpressions {
@@ -1294,7 +1294,7 @@ class Analyzer(
               dedupAttr(a, attributeRewrites)
             case s: SubqueryExpression =>
               s.withNewPlan(dedupOuterReferencesInSubquery(s.plan, attributeRewrites))
-          } -> attrMapping
+          } -> attrMapping.toSeq
         }
       }
     }

@@ -971,7 +971,7 @@ object CombineUnions extends Rule[LogicalPlan] {
           flattened += child
       }
     }
-    union.copy(children = flattened)
+    union.copy(children = flattened.toSeq)
   }
 }
 
