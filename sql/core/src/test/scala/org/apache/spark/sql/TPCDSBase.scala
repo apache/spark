@@ -302,7 +302,7 @@ trait TPCDSBase extends SharedSparkSession {
     tableNames.foreach { tableName =>
       createTable(spark, tableName)
       if (injectStats) {
-        // To simulate plan generation on actual TPCDS data, injects data stats here
+        // To simulate plan generation on actual TPC-DS data, injects data stats here
         spark.sessionState.catalog.alterTableStats(
           TableIdentifier(tableName), Some(TPCDSTableStats.sf100TableStats(tableName)))
       }
