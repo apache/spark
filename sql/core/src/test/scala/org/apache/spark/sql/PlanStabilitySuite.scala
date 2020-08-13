@@ -222,7 +222,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   }
 
   /**
-   * Test a TPC-DS query. Depending of the settings this test will either check if the plan matches
+   * Test a TPC-DS query. Depending on the settings this test will either check if the plan matches
    * a golden file or it will create a new golden file.
    */
   protected def testQuery(tpcdsGroup: String, query: String, suffix: String = ""): Unit = {
