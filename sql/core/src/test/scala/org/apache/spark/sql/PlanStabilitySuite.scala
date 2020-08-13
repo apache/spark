@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Check that TPCDS SparkPlans don't change.
+ * Check that TPC-DS SparkPlans don't change.
  * If there are plan differences, the error message looks like this:
  *   Plans did not match:
  *   last approved simplified plan: ../tpcds-plan-stability/approved-plans-xxx/q1/simplified.txt
