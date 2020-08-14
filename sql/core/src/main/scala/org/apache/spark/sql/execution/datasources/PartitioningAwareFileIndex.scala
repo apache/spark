@@ -57,7 +57,7 @@ abstract class PartitioningAwareFileIndex(
   protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]]
 
   private val caseInsensitiveMap = CaseInsensitiveMap(parameters)
-  protected val pathFilters = PathFilterFactory.create(sparkSession, hadoopConf, caseInsensitiveMap)
+  protected val pathFilters = PathFilterFactory.create(caseInsensitiveMap)
 
   protected def matchPathPattern(file: FileStatus): Boolean =
     pathFilters.forall(_.accept(file))
