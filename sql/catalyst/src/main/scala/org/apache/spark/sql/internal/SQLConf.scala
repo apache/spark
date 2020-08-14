@@ -1606,8 +1606,8 @@ object SQLConf {
   val NDV_MAX_ERROR =
     buildConf("spark.sql.statistics.ndv.maxError")
       .internal()
-      .doc("The maximum estimation error allowed in HyperLogLog++ algorithm when generating " +
-        "column level statistics.")
+      .doc("The maximum relative standard deviation allowed in HyperLogLog++ algorithm " +
+        "when generating column level statistics.")
       .version("2.1.1")
       .doubleConf
       .createWithDefault(0.05)
