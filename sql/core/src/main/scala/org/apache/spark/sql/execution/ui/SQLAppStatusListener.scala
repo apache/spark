@@ -211,31 +211,27 @@ class SQLAppStatusListener(
 
     val maxMetricsFromAllStages = new mutable.HashMap[Long, Array[Long]]()
 
-    taskMetrics.foreach { case (id, values) =>
-      if (metricTypes.contains(id)) {
-        val prev = allMetrics.getOrElse(id, null)
-        val updated = if (prev != null) {
-          prev ++ values
-        } else {
-          values
-        }
-        allMetrics(id) = updated
+    taskMetrics.filter(m => metricTypes.contains(m._1)).foreach { case (id, values) =>
+      val prev = allMetrics.getOrElse(id, null)
+      val updated = if (prev != null) {
+        prev ++ values
+      } else {
+        values
       }
+      allMetrics(id) = updated
     }
 
     // Find the max for each metric id between all stages.
-    maxMetrics.foreach { case (id, value, taskId, stageId, attemptId) =>
-      if (metricTypes.contains(id)) {
-        val updated =
-          maxMetricsFromAllStages.getOrElse(id, Array(value, stageId, attemptId, taskId))
-        if (value > updated(0)) {
-          updated(0) = value
-          updated(1) = stageId
-          updated(2) = attemptId
-          updated(3) = taskId
-        }
-        maxMetricsFromAllStages(id) = updated
+    maxMetrics.filter(m => metricTypes.contains(m._1)).foreach {
+        case (id, value, taskId, stageId, attemptId) =>
+      val updated = maxMetricsFromAllStages.getOrElse(id, Array(value, stageId, attemptId, taskId))
+      if (value > updated(0)) {
+        updated(0) = value
+        updated(1) = stageId
+        updated(2) = attemptId
+        updated(3) = taskId
       }
+      maxMetricsFromAllStages(id) = updated
     }
 
     exec.driverAccumUpdates.foreach { case (id, value) =>
