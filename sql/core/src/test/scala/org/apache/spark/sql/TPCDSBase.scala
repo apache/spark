@@ -314,7 +314,7 @@ trait TPCDSBase extends SharedSparkSession {
     conf.setConf(SQLConf.PLAN_STATS_ENABLED, originalPlanStatsEnabled)
     conf.setConf(SQLConf.JOIN_REORDER_ENABLED, originalJoinReorderEnabled)
     tableNames.foreach { tableName =>
-      spark.sessionState.catalog.dropTable(TableIdentifier(tableName))
+      spark.sessionState.catalog.dropTable(TableIdentifier(tableName), true, true)
     }
     super.afterAll()
   }
