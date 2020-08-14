@@ -547,7 +547,7 @@ object ScalaReflection extends ScalaReflection {
           if (!Character.isJavaIdentifierStart(fieldName.head)) {
             throw new UnsupportedOperationException(s"`$fieldName` is a word that starts with" +
              " a character not allowed in Java and cannot be used as field name. " +
-              "A workaround to this problem is to convert the case class to Json" + 
+              "A workaround to this problem is to convert the case class to Json" +
               " and then read the schema as Json\n" + walkedTypePath)
           }
 
