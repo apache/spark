@@ -32,4 +32,3 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         report_paths: "**/target/test-reports/*.xml"
         commit: ${{ github.event.workflow_run.head_commit.id }}
-
