@@ -63,7 +63,7 @@ private[spark] object Tests {
     .createWithDefault(2)
 
   val RESOURCES_WARNING_TESTING = ConfigBuilder("spark.resources.warnings.testing")
-    .version("3.1.0")
+    .version("3.0.1")
     .booleanConf
     .createWithDefault(false)
 
@@ -73,7 +73,7 @@ private[spark] object Tests {
   // on the host.
   val SKIP_VALIDATE_CORES_TESTING =
   ConfigBuilder("spark.testing.skipValidateCores")
-    .version("3.1.0")
+    .version("3.0.1")
     .booleanConf
     .createWithDefault(false)
 }
