@@ -311,6 +311,77 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       }
     }
   }
+
+  test("SPARK-32608: Script Transform ROW FORMAT DELIMIT value should format value") {
+    withTempView("v") {
+      val df = Seq(
+        (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
+        (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2)),
+        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))
+      ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
+      df.createTempView("v")
+
+      // input/output same delimit
+      val query1 = sql(
+        s"""
+           |SELECT TRANSFORM(a, b, c, d, e)
+           |  ROW FORMAT DELIMITED
+           |  FIELDS TERMINATED BY ','
+           |  COLLECTION ITEMS TERMINATED BY '#'
+           |  MAP KEYS TERMINATED BY '@'
+           |  LINES TERMINATED BY '\n'
+           |  NULL DEFINED AS 'null'
+           |  USING 'cat' AS (a, b, c, d, e)
+           |  ROW FORMAT DELIMITED
+           |  FIELDS TERMINATED BY ','
+           |  COLLECTION ITEMS TERMINATED BY '#'
+           |  MAP KEYS TERMINATED BY '@'
+           |  LINES TERMINATED BY '\n'
+           |  NULL DEFINED AS 'NULL'
+           |FROM v
+        """.stripMargin)
+
+      // input/output different delimit and show result
+      val query2 = sql(
+        s"""
+           |SELECT TRANSFORM(a, b, c, d, e)
+           |  ROW FORMAT DELIMITED
+           |  FIELDS TERMINATED BY ','
+           |  LINES TERMINATED BY '\n'
+           |  NULL DEFINED AS 'null'
+           |  USING 'cat' AS (value)
+           |  ROW FORMAT DELIMITED
+           |  FIELDS TERMINATED BY '&'
+           |  LINES TERMINATED BY '\n'
+           |  NULL DEFINED AS 'NULL'
+           |FROM v
+        """.stripMargin)
+
+
+      // In Hive 1.2, the string representation of a decimal omits trailing zeroes.
+      // But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
+      val decimalToString: Column => Column = if (isHive23OrSpark) {
+        c => c.cast("string")
+      } else {
+        c => c.cast("decimal(1, 0)").cast("string")
+      }
+
+      checkAnswer(query1, identity, df.select(
+        'a.cast("string"),
+        'b.cast("string"),
+        'c.cast("string"),
+        decimalToString('d),
+        'e.cast("string")).collect())
+
+      checkAnswer(query2, identity, df.select(
+        concat_ws(",",
+          'a.cast("string"),
+          'b.cast("string"),
+          'c.cast("string"),
+          decimalToString('d),
+          'e.cast("string"))).collect())
+    }
+  }
 }
 
 case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {
