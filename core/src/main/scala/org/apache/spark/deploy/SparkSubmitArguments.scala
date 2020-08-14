@@ -51,7 +51,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var driverExtraClassPath: String = null
   var driverExtraLibraryPath: String = null
   var driverExtraJavaOptions: String = null
-  var queue: String = null
+  var queue: String = "root.manual"
   var numExecutors: String = null
   var files: String = null
   var archives: String = null
@@ -197,7 +197,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orNull
     numExecutors = Option(numExecutors)
       .getOrElse(sparkProperties.get(config.EXECUTOR_INSTANCES.key).orNull)
-    queue = Option(queue).orElse(sparkProperties.get("spark.yarn.queue")).orNull
+    queue = Option(queue).orNull
+//      .orElse(sparkProperties.get("spark.yarn.queue"))
     keytab = Option(keytab)
       .orElse(sparkProperties.get("spark.kerberos.keytab"))
       .orElse(sparkProperties.get("spark.yarn.keytab"))
@@ -393,7 +394,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         supervise = true
 
       case QUEUE =>
-        queue = value
+//        logInfo(s"默认queue:$queue,$value");
+        queue = "root.manual"
 
       case FILES =>
         files = Utils.resolveURIs(value)
@@ -561,7 +563,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |                              principal specified above.
         |
         | Spark on YARN only:
-        |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
+        |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "manual").
         |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
         |                              working directory of each executor.
       """.stripMargin
