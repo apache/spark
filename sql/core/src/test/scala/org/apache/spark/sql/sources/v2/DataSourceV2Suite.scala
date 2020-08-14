@@ -384,9 +384,12 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         val df = spark.read.format(cls.getName).load()
         val q1 = df.select('i).filter('i > 6)
         val q2 = df.select('i).filter('i > 5)
+        val q3 = df.select('i).filter('i > 5)
         val scan1 = getScanExec(q1)
         val scan2 = getScanExec(q2)
+        val scan3 = getScanExec(q3)
         assert(!scan1.equals(scan2))
+        assert(scan2.equals(scan3))
       }
     }
   }
