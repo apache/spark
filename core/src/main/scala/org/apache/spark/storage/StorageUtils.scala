@@ -256,6 +256,27 @@ private[spark] object StorageUtils extends Logging {
   }
 
   /**
+   * Create container directories for storing block data in YARN mode.
+   * These directories are located inside configured local directories and
+   * will be deleted in the processing of container clean of YARN.
+   */
+  def createContainerDirs(conf: SparkConf): Array[File] = {
+    Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
+      val containerDirPath = s"$rootDir/${conf.getenv("CONTAINER_ID")}"
+      try {
+        val containerDir = Utils.createDirectory(containerDirPath, "blockmgr")
+        logInfo(s"Created YARN container directory at $containerDir")
+        Some(containerDir)
+      } catch {
+        case e: IOException =>
+          logError(s"Failed to create YARN container dir in $containerDirPath." +
+            s" Ignoring this directory.", e)
+          None
+      }
+    }
+  }
+
+  /**
    * Create local directories for storing block data. These directories are
    * located inside configured local directories and won't
    * be deleted on JVM exit when using the external shuffle service.
@@ -274,24 +295,32 @@ private[spark] object StorageUtils extends Logging {
     }
   }
 
+  def createSubDirs(conf: SparkConf, parent: Array[File]): Array[Array[File]] = {
+    Array.fill(parent.length)(new Array[File](conf.get(config.DISKSTORE_SUB_DIRECTORIES)))
+  }
+
   /**
-   * Create container directories for storing block data in YARN mode.
-   * These directories are located inside configured local directories and
-   * will be deleted in the processing of container clean of YARN.
+   * Create local temp directories for storing temp block data. These directories are
+   * located inside configured local directories. If executors are running in Yarn,
+   * these directories will be deleted on the Yarn container exit. Or store them in localDirs,
+   * if that they won't be deleted on JVM exit when using the external shuffle service.
    */
-  def createContainerDirs(conf: SparkConf): Array[File] = {
-    Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
-      val containerDirPath = s"$rootDir/${conf.getenv("CONTAINER_ID")}"
-      try {
-        val containerDir = Utils.createDirectory(containerDirPath, "blockmgr")
-        logInfo(s"Created YARN container directory at $containerDir")
-        Some(containerDir)
-      } catch {
-        case e: IOException =>
-          logError(s"Failed to create YARN container dir in $containerDirPath." +
-            s" Ignoring this directory.", e)
-          None
-      }
+  def createTempDirs(conf: SparkConf, replacement: Array[File]): Array[File] = {
+    if (Utils.isRunningInYarnContainer(conf)) {
+      createContainerDirs(conf)
+    } else {
+      // To be compatible with current implementation
+      replacement
+    }
+  }
+
+  def createTempSubDirs(conf: SparkConf, parent: Array[File],
+      replacement: Array[Array[File]]): Array[Array[File]] = {
+    if (Utils.isRunningInYarnContainer(conf)) {
+      Array.fill(parent.length)(new Array[File](conf.get(config.DISKSTORE_SUB_DIRECTORIES)))
+    } else {
+      // To be compatible with current implementation
+      replacement
     }
   }
 }

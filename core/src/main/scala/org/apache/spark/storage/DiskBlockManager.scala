@@ -50,7 +50,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
   // The content of subDirs is immutable but the content of subDirs(i) is mutable. And the content
   // of subDirs(i) is protected by the lock of subDirs(i)
-  private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
+  private val subDirs = StorageUtils.createSubDirs(conf, parent = localDirs)
 
   /* Directories persist the temporary files (temp_local, temp_shuffle).
    * We separate the storage directories of temp block from non-temp block since
@@ -59,14 +59,15 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
    * This is a real issue, especially for long-lived Spark application like Spark thrift-server.
    * So for Yarn mode, we persist these files in YARN container directories which could be
    * cleaned by YARN when the container exists. */
-  private val tempDirs: Array[File] = createTempDirs(conf)
+  private val tempDirs: Array[File] = StorageUtils.createTempDirs(conf, replacement = localDirs)
   if (tempDirs.isEmpty) {
     logError("Failed to create any temp dir.")
     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
   }
 
   // Similar with subDirs, tempSubDirs are used only for temp block.
-  private val tempSubDirs = createTempSubDirs(conf)
+  private val tempSubDirs =
+    StorageUtils.createTempSubDirs(conf, parent = tempDirs, replacement = subDirs)
 
   private val shutdownHook = addShutdownHook()
 
@@ -157,30 +158,6 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
       blockId = new TempShuffleBlockId(UUID.randomUUID())
     }
     (blockId, getFile(blockId))
-  }
-
-  /**
-   * Create local temp directories for storing temp block data. These directories are
-   * located inside configured local directories. If executors are running in Yarn,
-   * these directories will be deleted on the Yarn container exit. Or store them in localDirs,
-   * if that they won't be deleted on JVM exit when using the external shuffle service.
-   */
-  private def createTempDirs(conf: SparkConf): Array[File] = {
-    if (Utils.isRunningInYarnContainer(conf)) {
-      StorageUtils.createContainerDirs(conf)
-    } else {
-      // To be compatible with current implementation, store temp block in localDirs
-      localDirs
-    }
-  }
-
-  private def createTempSubDirs(conf: SparkConf): Array[Array[File]] = {
-    if (Utils.isRunningInYarnContainer(conf)) {
-      Array.fill(tempDirs.length)(new Array[File](subDirsPerLocalDir))
-    } else {
-      // To be compatible with current implementation, store temp block in subDirsDirs
-      subDirs
-    }
   }
 
   private def addShutdownHook(): AnyRef = {
