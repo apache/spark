@@ -21,7 +21,6 @@ import java.lang.reflect.{Method, Modifier}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{Builder, IndexedSeq, WrappedArray}
-import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.Try
 
