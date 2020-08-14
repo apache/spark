@@ -20,13 +20,9 @@
 Getting Started
 ===============
 
-**PySpark** is the Python API for Spark.
-
 This page lists an overview of the basic steps required to setup & get started with PySpark.
 
 .. toctree::
    :maxdepth: 2
 
    installation
-   package_overview
-   quickstart
