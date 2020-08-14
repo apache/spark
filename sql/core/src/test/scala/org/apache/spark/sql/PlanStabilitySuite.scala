@@ -244,7 +244,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       classLoader = Thread.currentThread().getContextClassLoader)
     val qe = sql(queryString).queryExecution
     val plan = qe.executedPlan
-    val explain = normalizeIds(qe.toString)
+    val explain = normalizeIds(qe.explainString(FormattedMode))
 
     if (regenerateGoldenFiles) {
       generateApprovedPlanFile(plan, query + suffix, explain)
