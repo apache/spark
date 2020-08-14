@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * A factory for constructing encoders that convert external row to/from the Spark SQL
@@ -228,7 +229,7 @@ object RowEncoder {
       }
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
     case StringType => ObjectType(classOf[java.lang.String])
-    case _: ArrayType => ObjectType(classOf[scala.collection.Seq[_]])
+    case _: ArrayType => ObjectType(classOf[Seq[_]])
     case _: MapType => ObjectType(classOf[scala.collection.Map[_, _]])
     case _: StructType => ObjectType(classOf[Row])
     case p: PythonUserDefinedType => externalDataTypeFor(p.sqlType)
@@ -291,12 +292,22 @@ object RowEncoder {
           MapObjects(deserializerFor(_), input, et),
           "array",
           ObjectType(classOf[Array[_]]), returnNullable = false)
-      StaticInvoke(
-        scala.collection.mutable.WrappedArray.getClass,
-        ObjectType(classOf[Seq[_]]),
-        "make",
-        arrayData :: Nil,
-        returnNullable = false)
+      if (Utils.isScala212) {
+        StaticInvoke(
+          scala.collection.mutable.WrappedArray.getClass,
+          ObjectType(classOf[Seq[_]]),
+          "make",
+          arrayData :: Nil,
+          returnNullable = false)
+      } else {
+        // Use ArraySeq.unsafeWrapArray instead of WrappedArray.make in Scala 2.13
+        StaticInvoke(
+          Utils.classForName("scala.collection.immutable.ArraySeq"),
+          ObjectType(classOf[Seq[_]]),
+          "unsafeWrapArray",
+          arrayData :: Nil,
+          returnNullable = false)
+      }
 
     case MapType(kt, vt, valueNullable) =>
       val keyArrayType = ArrayType(kt, false)
