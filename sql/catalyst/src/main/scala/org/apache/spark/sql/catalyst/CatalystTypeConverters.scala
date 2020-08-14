@@ -25,7 +25,6 @@ import java.time.{Instant, LocalDate}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
-import scala.collection.mutable
 import scala.language.existentials
 
 import org.apache.spark.sql.Row

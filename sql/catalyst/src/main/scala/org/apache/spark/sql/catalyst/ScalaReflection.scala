@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst
 
 import javax.lang.model.SourceVersion
 
-import scala.collection.mutable
-
 import org.apache.commons.lang3.reflect.ConstructorUtils
 
 import org.apache.spark.internal.Logging
@@ -687,8 +685,7 @@ object ScalaReflection extends ScalaReflection {
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, nullable) = schemaFor(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
-      case t if isSubtype(t, localTypeOf[Seq[_]]) ||
-        isSubtype(t, localTypeOf[mutable.Seq[_]]) =>
+      case t if isSubtype(t, localTypeOf[scala.collection.Seq[_]]) =>
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, nullable) = schemaFor(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
