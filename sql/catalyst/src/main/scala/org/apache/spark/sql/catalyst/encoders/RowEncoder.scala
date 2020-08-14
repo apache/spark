@@ -293,7 +293,7 @@ object RowEncoder {
           ObjectType(classOf[Array[_]]), returnNullable = false)
       StaticInvoke(
         scala.collection.mutable.WrappedArray.getClass,
-        ObjectType(classOf[Seq[_]]),
+        ObjectType(classOf[scala.collection.Seq[_]]),
         "make",
         arrayData :: Nil,
         returnNullable = false)

@@ -314,7 +314,7 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getSeq[T](i: Int): Seq[T] = getAs[Seq[T]](i)
+  def getSeq[T](i: Int): scala.collection.Seq[T] = getAs[scala.collection.Seq[T]](i)
 
   /**
    * Returns the value at position i of array type as `java.util.List`.
