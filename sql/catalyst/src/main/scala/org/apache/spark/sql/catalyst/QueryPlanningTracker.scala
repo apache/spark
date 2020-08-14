@@ -66,7 +66,7 @@ object QueryPlanningTracker {
     def durationMs: Long = endTimeMs - startTimeMs
 
     override def toString: String = {
-      s"PhaseSummary($startTimeMs, $endTimeMs, ${endTimeMs - startTimeMs})"
+      s"PhaseSummary($startTimeMs, $endTimeMs)"
     }
   }
 
@@ -118,16 +118,6 @@ class QueryPlanningTracker {
       phasesMap.put(phase, new PhaseSummary(startTime, endTime))
     }
     ret
-  }
-
-  def printPhasesMap: String = {
-    // Creating StringBuilder
-    val res = new StringBuilder();
-    phasesMap.asScala.foreach {
-      case (key, values) => res.append("" +  key + " : " + values.durationMs + ";  ")
-    }
-
-    res.toString()
   }
 
   /**

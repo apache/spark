@@ -151,13 +151,6 @@ class QueryExecution(
     if (formatted) {
       try {
         ExplainUtils.processPlan(executedPlan, append)
-        logWarning(
-          s"""
-              Plan generation Timing : ${tracker.printPhasesMap}
-             """
-            .stripMargin.replace('\n', ' ').trim)
-
-
       } catch {
         case e: AnalysisException => append(e.toString)
         case e: IllegalArgumentException => append(e.toString)
