@@ -761,8 +761,7 @@ case class MapObjects private(
     case Some(cls) if classOf[WrappedArray[_]].isAssignableFrom(cls) =>
       // Scala WrappedArray
       inputCollection => WrappedArray.make(executeFuncOnCollection(inputCollection).toArray)
-    case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) ||
-      classOf[mutable.Buffer[_]].isAssignableFrom(cls) =>
+    case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
       // Scala sequence
       executeFuncOnCollection(_).toSeq
     case Some(cls) if classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
@@ -863,9 +862,7 @@ case class MapObjects private(
     // need to take care of Seq and List because they may have O(n) complexity for indexed accessing
     // like `list.get(1)`. Here we use Iterator to traverse Seq and List.
     val (getLength, prepareLoop, getLoopVar) = inputDataType match {
-      case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) ||
-        classOf[mutable.Buffer[_]].isAssignableFrom(cls) ||
-        classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
+      case ObjectType(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
         val it = ctx.freshName("it")
         (
           s"${genInputData.value}.size()",
