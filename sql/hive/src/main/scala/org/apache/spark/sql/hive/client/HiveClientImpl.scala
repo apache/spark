@@ -986,7 +986,8 @@ private[hive] object HiveClientImpl extends Logging {
     val typeString = if (c.metadata.contains(HIVE_TYPE_STRING)) {
       c.metadata.getString(HIVE_TYPE_STRING)
     } else {
-      c.dataType.catalogString
+      // replace NullType to HiveVoidType since Hive parse void not null.
+      HiveVoidType.replaceVoidType(c.dataType).catalogString
     }
     new FieldSchema(c.name, typeString, c.getComment().orNull)
   }
@@ -1005,7 +1006,8 @@ private[hive] object HiveClientImpl extends Logging {
   /** Builds the native StructField from Hive's FieldSchema. */
   def fromHiveColumn(hc: FieldSchema): StructField = {
     val columnType = getSparkSQLDataType(hc)
-    val metadata = if (hc.getType != columnType.catalogString) {
+    val replacedVoidType = HiveVoidType.replaceVoidType(columnType)
+    val metadata = if (hc.getType != replacedVoidType.catalogString) {
       new MetadataBuilder().putString(HIVE_TYPE_STRING, hc.getType).build()
     } else {
       Metadata.empty
@@ -1271,5 +1273,24 @@ private[hive] object HiveClientImpl extends Logging {
       hiveConf.set("hive.execution.engine", "mr")
     }
     hiveConf
+  }
+}
+
+case object HiveVoidType extends DataType {
+  override def defaultSize: Int = 1
+  override def asNullable: DataType = HiveVoidType
+  override def simpleString: String = "void"
+
+  def replaceVoidType(dt: DataType): DataType = dt match {
+    case ArrayType(et, nullable) =>
+      ArrayType(replaceVoidType(et), nullable)
+    case MapType(kt, vt, nullable) =>
+      MapType(replaceVoidType(kt), replaceVoidType(vt), nullable)
+    case StructType(fields) =>
+      StructType(fields.map { field =>
+        field.copy(dataType = replaceVoidType(field.dataType))
+      })
+    case _: NullType => HiveVoidType
+    case _ => dt
   }
 }
