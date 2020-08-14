@@ -65,6 +65,14 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   def isHive23OrSpark: Boolean
 
+  // In Hive 1.2, the string representation of a decimal omits trailing zeroes.
+  // But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
+  val decimalToString: Column => Column = if (isHive23OrSpark) {
+    c => c.cast("string")
+  } else {
+    c => c.cast("decimal(1, 0)").cast("string")
+  }
+
   def createScriptTransformationExec(
       input: Seq[Expression],
       script: String,
@@ -130,13 +138,6 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
            |FROM v
         """.stripMargin)
 
-      // In Hive 1.2, the string representation of a decimal omits trailing zeroes.
-      // But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
-      val decimalToString: Column => Column = if (isHive23OrSpark) {
-        c => c.cast("string")
-      } else {
-        c => c.cast("decimal(1, 0)").cast("string")
-      }
       checkAnswer(query, identity, df.select(
         'a.cast("string"),
         'b.cast("string"),
@@ -321,65 +322,54 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
       df.createTempView("v")
 
-      // input/output same delimit
-      val query1 = sql(
-        s"""
-           |SELECT TRANSFORM(a, b, c, d, e)
-           |  ROW FORMAT DELIMITED
-           |  FIELDS TERMINATED BY ','
-           |  COLLECTION ITEMS TERMINATED BY '#'
-           |  MAP KEYS TERMINATED BY '@'
-           |  LINES TERMINATED BY '\n'
-           |  NULL DEFINED AS 'null'
-           |  USING 'cat' AS (a, b, c, d, e)
-           |  ROW FORMAT DELIMITED
-           |  FIELDS TERMINATED BY ','
-           |  COLLECTION ITEMS TERMINATED BY '#'
-           |  MAP KEYS TERMINATED BY '@'
-           |  LINES TERMINATED BY '\n'
-           |  NULL DEFINED AS 'NULL'
-           |FROM v
-        """.stripMargin)
-
-      // input/output different delimit and show result
-      val query2 = sql(
-        s"""
-           |SELECT TRANSFORM(a, b, c, d, e)
-           |  ROW FORMAT DELIMITED
-           |  FIELDS TERMINATED BY ','
-           |  LINES TERMINATED BY '\n'
-           |  NULL DEFINED AS 'null'
-           |  USING 'cat' AS (value)
-           |  ROW FORMAT DELIMITED
-           |  FIELDS TERMINATED BY '&'
-           |  LINES TERMINATED BY '\n'
-           |  NULL DEFINED AS 'NULL'
-           |FROM v
-        """.stripMargin)
-
-
-      // In Hive 1.2, the string representation of a decimal omits trailing zeroes.
-      // But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
-      val decimalToString: Column => Column = if (isHive23OrSpark) {
-        c => c.cast("string")
-      } else {
-        c => c.cast("decimal(1, 0)").cast("string")
-      }
-
-      checkAnswer(query1, identity, df.select(
-        'a.cast("string"),
-        'b.cast("string"),
-        'c.cast("string"),
-        decimalToString('d),
-        'e.cast("string")).collect())
-
-      checkAnswer(query2, identity, df.select(
-        concat_ws(",",
+      // input/output with same delimit
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY ','
+             |  COLLECTION ITEMS TERMINATED BY '#'
+             |  MAP KEYS TERMINATED BY '@'
+             |  LINES TERMINATED BY '\n'
+             |  NULL DEFINED AS 'null'
+             |  USING 'cat' AS (a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY ','
+             |  COLLECTION ITEMS TERMINATED BY '#'
+             |  MAP KEYS TERMINATED BY '@'
+             |  LINES TERMINATED BY '\n'
+             |  NULL DEFINED AS 'NULL'
+             |FROM v
+        """.stripMargin), identity, df.select(
           'a.cast("string"),
           'b.cast("string"),
           'c.cast("string"),
           decimalToString('d),
-          'e.cast("string"))).collect())
+          'e.cast("string")).collect())
+
+      // input/output with different delimit and show result
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY ','
+             |  LINES TERMINATED BY '\n'
+             |  NULL DEFINED AS 'null'
+             |  USING 'cat' AS (value)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '&'
+             |  LINES TERMINATED BY '\n'
+             |  NULL DEFINED AS 'NULL'
+             |FROM v
+        """.stripMargin), identity, df.select(
+          concat_ws(",",
+            'a.cast("string"),
+            'b.cast("string"),
+            'c.cast("string"),
+            decimalToString('d),
+            'e.cast("string"))).collect())
     }
   }
 }
