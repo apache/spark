@@ -17,16 +17,15 @@
 
 package org.apache.spark.sql.execution.bucketing
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.datasources.{FilePartition, FileScanRDD, PartitionedFile}
-import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 private[spark] class SplitBucketRDD(
@@ -37,45 +36,12 @@ private[spark] class SplitBucketRDD(
     newNumBuckets: Int,
     output: Seq[Attribute])
   extends FileScanRDD(sparkSession, readFunction, filePartitions) {
-
-  private val numRows: Int = sparkSession.sessionState.conf.columnBatchSize
-  private val useOffHeap: Boolean = sparkSession.sessionState.conf.offHeapColumnVectorEnabled
-
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
-    val schema = StructType.fromAttributes(output)
-    val converters = new RowToColumnConverter(schema)
-    val vectors = if (useOffHeap) {
-      OffHeapColumnVector.allocateColumns(numRows, schema)
-    } else {
-      OnHeapColumnVector.allocateColumns(numRows, schema)
-    }
-    val columnarBatch = new ColumnarBatch(vectors.toArray)
-    context.addTaskCompletionListener[Unit] { _ =>
-      columnarBatch.close()
-    }
-
     val iter: Iterator[_] = super.compute(split, context)
-    iter.map {
-      case row: InternalRow => row
-      case batch: ColumnarBatch =>
-        val rowIterator = batch.rowIterator()
-        columnarBatch.setNumRows(0)
-        vectors.foreach(_.reset())
-        var rowCount = 0
-        while (rowIterator.hasNext) {
-          val row = rowIterator.next()
-          if (getBucketId(row) == split.index) {
-            converters.convert(row, vectors.toArray)
-            rowCount += 1
-          }
-        }
-        columnarBatch.setNumRows(rowCount)
-        columnarBatch
-    }.filter {
-      case r: InternalRow =>
-        getBucketId(r) == split.index
-      case _: ColumnarBatch => true
-    }.asInstanceOf[Iterator[InternalRow]]
+    iter.flatMap {
+      case row: InternalRow => Seq(row)
+      case batch: ColumnarBatch => batch.rowIterator().asScala
+    }.filter(getBucketId(_) == split.index)
   }
 
   private lazy val getBucketId: InternalRow => Int = {

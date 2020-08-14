@@ -175,7 +175,12 @@ case class FileSourceScanExec(
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
   override lazy val supportsColumnar: Boolean = {
-    relation.fileFormat.supportBatch(relation.sparkSession, schema)
+    val isSplittingBucket = relation.bucketSpec.isDefined &&
+      optionalNumCoalescedBuckets.isDefined &&
+      optionalNumCoalescedBuckets.get > relation.bucketSpec.get.numBuckets
+
+    relation.fileFormat.supportBatch(relation.sparkSession, schema) &&
+      !isSplittingBucket
   }
 
   private lazy val needsUnsafeRowConversion: Boolean = {
