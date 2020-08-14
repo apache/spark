@@ -750,6 +750,14 @@ class TaskSetManagerSuite
     assert(thrown2.getMessage().contains("bigger than spark.driver.maxResultSize"))
   }
 
+  test("SPARK-32470: do not check total size of intermediate stages") {
+    val conf = new SparkConf().set(config.MAX_RESULT_SIZE.key, "20k")
+    sc = new SparkContext("local", "test", conf)
+    // final result is below limit.
+    val r = sc.makeRDD(0 until 2000, 2000).distinct(10).filter(_ == 0).collect()
+    assert(1 === r.size)
+  }
+
   test("[SPARK-13931] taskSetManager should not send Resubmitted tasks after being a zombie") {
     val conf = new SparkConf().set(config.SPECULATION_ENABLED, true)
     sc = new SparkContext("local", "test", conf)

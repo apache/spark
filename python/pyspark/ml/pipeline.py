@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-import sys
-
 from pyspark import keyword_only
 from pyspark.ml.base import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params

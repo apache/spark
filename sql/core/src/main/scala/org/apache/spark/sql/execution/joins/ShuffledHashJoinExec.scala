@@ -81,13 +81,13 @@ case class ShuffledHashJoinExec(
 
   override def needCopyResult: Boolean = true
 
-  protected override def prepareRelation(ctx: CodegenContext): (String, Boolean) = {
+  protected override def prepareRelation(ctx: CodegenContext): HashedRelationInfo = {
     val thisPlan = ctx.addReferenceObj("plan", this)
     val clsName = classOf[HashedRelation].getName
 
     // Inline mutable state since not many join operations in a task
     val relationTerm = ctx.addMutableState(clsName, "relation",
       v => s"$v = $thisPlan.buildHashedRelation(inputs[1]);", forceInline = true)
-    (relationTerm, false)
+    HashedRelationInfo(relationTerm, keyIsUnique = false, isEmpty = false)
   }
 }

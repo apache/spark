@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
@@ -92,6 +93,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         FoldablePropagation,
         OptimizeIn,
         ConstantFolding,
+        EliminateAggregateFilter,
         ReorderAssociativeOperator,
         LikeSimplification,
         BooleanSimplification,
@@ -106,7 +108,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateSerialization,
         RemoveRedundantAliases,
         RemoveNoopOperators,
-        CombineWithFields,
+        CombineUpdateFields,
         SimplifyExtractValueOps,
         CombineConcats) ++
         extendedOperatorOptimizationRules
@@ -215,8 +217,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
-    Batch("ReplaceWithFieldsExpression", Once, ReplaceWithFieldsExpression)
-
+    Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
     batches.filter(_.rules.nonEmpty)
   }
@@ -249,7 +250,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
-      ReplaceWithFieldsExpression.ruleName :: Nil
+      ReplaceUpdateFieldsExpression.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
@@ -336,6 +337,27 @@ object EliminateDistinct extends Rule[LogicalPlan] {
         case _: Max | _: Min => ae.copy(isDistinct = false)
         case _ => ae
       }
+  }
+}
+
+/**
+ * Remove useless FILTER clause for aggregate expressions.
+ * This rule should be applied before RewriteDistinctAggregates.
+ */
+object EliminateAggregateFilter extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressions  {
+    case ae @ AggregateExpression(_, _, _, Some(Literal.TrueLiteral), _) =>
+      ae.copy(filter = None)
+    case AggregateExpression(af: DeclarativeAggregate, _, _, Some(Literal.FalseLiteral), _) =>
+      val initialProject = SafeProjection.create(af.initialValues)
+      val evalProject = SafeProjection.create(af.evaluateExpression :: Nil, af.aggBufferAttributes)
+      val initialBuffer = initialProject(EmptyRow)
+      val internalRow = evalProject(initialBuffer)
+      Literal.create(internalRow.get(0, af.dataType), af.dataType)
+    case AggregateExpression(af: ImperativeAggregate, _, _, Some(Literal.FalseLiteral), _) =>
+      val buffer = new SpecificInternalRow(af.aggBufferAttributes.map(_.dataType))
+      af.initialize(buffer)
+      Literal.create(af.eval(buffer), af.dataType)
   }
 }
 
@@ -949,7 +971,7 @@ object CombineUnions extends Rule[LogicalPlan] {
           flattened += child
       }
     }
-    union.copy(children = flattened)
+    union.copy(children = flattened.toSeq)
   }
 }
 

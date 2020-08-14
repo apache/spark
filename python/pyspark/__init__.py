@@ -61,8 +61,8 @@ from pyspark.serializers import MarshalSerializer, PickleSerializer
 from pyspark.status import *
 from pyspark.taskcontext import TaskContext, BarrierTaskContext, BarrierTaskInfo
 from pyspark.profiler import Profiler, BasicProfiler
-from pyspark.version import __version__
-from pyspark._globals import _NoValue
+from pyspark.version import __version__  # noqa: F401
+from pyspark._globals import _NoValue  # noqa: F401
 
 
 def since(version):
@@ -115,7 +115,7 @@ def keyword_only(func):
 
 
 # for back compatibility
-from pyspark.sql import SQLContext, HiveContext, Row
+from pyspark.sql import SQLContext, HiveContext, Row  # noqa: F401
 
 __all__ = [
     "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",

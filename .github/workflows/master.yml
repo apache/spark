@@ -1,4 +1,4 @@
-name: master
+name: Build and test
 
 on:
   push:
@@ -9,7 +9,6 @@ on:
     - master
 
 jobs:
-  # TODO(SPARK-32248): Recover JDK 11 builds
   # Build: build Spark and run the tests for specified modules.
   build:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }}, ${{ matrix.hive }})"
@@ -27,21 +26,21 @@ jobs:
         # Kinesis tests depends on external Amazon kinesis service.
         # Note that the modules below are from sparktestsupport/modules.py.
         modules:
-          - |-
+          - >-
             core, unsafe, kvstore, avro,
             network-common, network-shuffle, repl, launcher,
             examples, sketch, graphx
-          - |-
+          - >-
             catalyst, hive-thriftserver
-          - |-
+          - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10,
             mllib-local, mllib,
             yarn, mesos, kubernetes, hadoop-cloud, spark-ganglia-lgpl
-          - |-
+          - >-
             pyspark-sql, pyspark-mllib, pyspark-resource
-          - |-
+          - >-
             pyspark-core, pyspark-streaming, pyspark-ml
-          - |-
+          - >-
             sparkr
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [""]
@@ -144,14 +143,15 @@ jobs:
       # PyArrow is not supported in PyPy yet, see ARROW-2651.
       # TODO(SPARK-32247): scipy installation with PyPy fails for an unknown reason.
       run: |
-        python3.6 -m pip install numpy pyarrow pandas scipy
+        python3.6 -m pip install numpy pyarrow pandas scipy xmlrunner
         python3.6 -m pip list
+        # PyPy does not have xmlrunner
         pypy3 -m pip install numpy pandas
         pypy3 -m pip list
     - name: Install Python packages (Python 3.8)
       if: contains(matrix.modules, 'pyspark') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
       run: |
-        python3.8 -m pip install numpy pyarrow pandas scipy
+        python3.8 -m pip install numpy pyarrow pandas scipy xmlrunner
         python3.8 -m pip list
     # SparkR
     - name: Install R 4.0
@@ -170,13 +170,19 @@ jobs:
         # Show installed packages in R.
         sudo Rscript -e 'pkg_list <- as.data.frame(installed.packages()[, c(1,3:4)]); pkg_list[is.na(pkg_list$Priority), 1:2, drop = FALSE]'
     # Run the tests.
-    - name: "Run tests: ${{ matrix.modules }}"
+    - name: Run tests
       run: |
         # Hive tests become flaky when running in parallel as it's too intensive.
         if [[ "$MODULES_TO_TEST" == "hive" ]]; then export SERIAL_SBT_TESTS=1; fi
         mkdir -p ~/.m2
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
         rm -rf ~/.m2/repository/org/apache/spark
+    - name: Upload test results to report
+      if: always()
+      uses: actions/upload-artifact@v2
+      with:
+        name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
+        path: "**/target/test-reports/*.xml"
 
   # Static analysis, and documentation build
   lint:
