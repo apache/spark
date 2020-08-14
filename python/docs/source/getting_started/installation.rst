@@ -16,21 +16,37 @@
     under the License.
 
 
-===============
+============
 Installation
-===============
+============
 
-Using Conda 
-~~~~~~~~~~~~~~~~~~
-PySpark installation using `Conda <https://anaconda.org/conda-forge/pyspark>`_ can be performed using the below command::
-
-    conda install -c conda-forge pyspark
-   
 Using PyPI
 ~~~~~~~~~~
 PySpark installation using `PyPI <https://pypi.org/project/pyspark/>`_::
 
     pip install pyspark
+	
+Using Miniconda  
+~~~~~~~~~~~~~~~
+Pyspark is available in Conda but it is not a part of an official release. Conda can be used to create a virtual environment from terminal as shown below::
+
+	conda create -n ENV_NAME python==PYTHON_VERSION
+
+After the virtual environment is created, it should be visible under the list of conda environments which can be seen using the following command::
+
+	conda env list
+
+The newly created environment can be accessed using the following command::
+
+	source activate ENV_NAME
+
+On Windows, the command is::
+
+	conda activate ENV_NAME
+
+PySpark can be installed in this newly created environment using PyPI as shown before::
+
+	pip install pyspark
 
 Official release channel
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -40,7 +56,7 @@ Any suitable version can be downloaded and extracted as below::
 
     tar xzvf spark-3.0.0-bin-hadoop2.7.tgz
 
-An important step is to ensure ``SPARK_HOME`` environment variable points to the directory where the code has been extracted. The next step is to properly define ``PYTHONPATH`` such that it can find the PySpark and Py4J under ``$SPARK_HOME/python/lib``::
+An important step is to ensure ``SPARK_HOME`` environment variable points to the directory where the code has been extracted. The next step is to properly define ``PYTHONPATH`` such that it can find the PySpark and Py4J under ``$SPARK_HOME/python/lib``, one example of doing this is shown below::
 
     cd spark-3.0.0-bin-hadoop2.7
 
@@ -58,5 +74,11 @@ To install PySpark from source, refer `Building Spark <https://spark.apache.org/
 
 Dependencies
 ------------
-* Using PySpark requires the Spark JARs.
-* At its core PySpark depends on Py4J, but some additional sub-packages have their own extra requirements for some features (including NumPy, pandas, and PyArrow).
+============= =========================
+Package       Minimum supported version
+============= =========================
+`pandas`      0.23.2
+`NumPy`       1.7
+`pyarrow`     0.15.1
+`Py4J`        0.10.9
+============= =========================
