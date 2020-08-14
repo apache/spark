@@ -193,7 +193,7 @@ case class ShuffledHashJoinExec(
   }
 
   /**
-   * Full outer shuffled hash join with unique join keys:
+   * Full outer shuffled hash join with non-unique join keys:
    * 1. Process rows from stream side by looking up hash relation.
    *    Mark the matched rows from build side be looked up.
    *    A `HashSet[Long]` is used to track matched rows with
@@ -253,9 +253,11 @@ case class ShuffledHashJoinExec(
             }
             // When we reach here, it means no match is found for this key.
             // So we need to return one row with build side NULL row,
-            // to match the full outer join semantic.
+            // to satisfy the full outer join semantic.
             if (!found) {
               joinRowWithBuild(buildNullRow)
+              // Set `found` to be true as we only need to return one row
+              // but no more.
               found = true
               return true
             }

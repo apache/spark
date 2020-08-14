@@ -75,6 +75,7 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
 
   /**
    * Returns key index and matched single row.
+   * This is for unique key case.
    *
    * Returns null if there is no matched rows.
    */
