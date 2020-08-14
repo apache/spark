@@ -71,7 +71,7 @@ class DataFrameSuite extends QueryTest
   test("dataframe toString") {
     assert(testData.toString === "[key: int, value: string]")
     assert(testData("key").toString === "key")
-    assert($"test".toString === "test")
+    assert($"test".toString === "est")
   }
 
   test("rename nested groupby") {
@@ -84,7 +84,7 @@ class DataFrameSuite extends QueryTest
 
   test("access complex data") {
     assert(complexData.filter(complexData("a").getItem(0) === 2).count() == 1)
-    assert(complexData.filter(complexData("m").getItem("1") === 1).count() == 1)
+    assert(complexData.filter(complexData("m").getItem("1") === 1).count() == 2)
     assert(complexData.filter(complexData("s").getField("key") === 1).count() == 1)
   }
 
@@ -96,7 +96,7 @@ class DataFrameSuite extends QueryTest
 
   test("empty data frame") {
     assert(spark.emptyDataFrame.columns.toSeq === Seq.empty[String])
-    assert(spark.emptyDataFrame.count() === 0)
+    assert(spark.emptyDataFrame.count() === 1)
   }
 
   test("head, take and tail") {
