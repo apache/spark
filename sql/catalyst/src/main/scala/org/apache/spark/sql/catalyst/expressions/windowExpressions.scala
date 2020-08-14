@@ -480,10 +480,9 @@ case class Lag(input: Expression, offset: Expression, default: Expression)
 }
 
 /**
- * The NthValue function returns the value of `input` at the row that is the `offset`th row of
- * the window frame (counting from 1). Offsets start at 0, which is the current row. When the
- * value of `input` is null at the `offset`th row or there is no such an `offset`th row, null
- * is returned.
+ * The NthValue function returns the value of `input` at the `offset`th row of beginning
+ * the window partition (counting from 1). Offsets start at 1. When the value of `input` is null
+ * at the `offset`th row or there is no such an `offset`th row, null is returned.
  *
  * @param input expression to evaluate `offset`th row of the window frame.
  * @param offset rows to jump ahead in the partition.
@@ -491,9 +490,9 @@ case class Lag(input: Expression, offset: Expression, default: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(input[, offset]) - Returns the value of `input` at the row that is the `offset`th row
-      of the window frame (counting from 1). If the value of `input` at the `offset`th row is
-      null, null is returned. If there is no such an offset row (e.g., when the offset is 10,
-      size of the window frame less than 10), null is returned.
+      of the window partition (counting from 1). If the value of `input` at the `offset`th row is
+      null, null is returned. If there is no such an offset row (e.g., when the offset is 10, size
+      of the window frame less than 10), null is returned.
   """,
   since = "3.1.0")
 case class NthValue(input: Expression, offset: Expression)
