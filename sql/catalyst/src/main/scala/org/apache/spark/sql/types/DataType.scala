@@ -312,11 +312,6 @@ object DataType {
               equalsIgnoreCaseAndNullability(l.dataType, r.dataType)
           }
 
-//      case (ObjectType(fromDataType), ObjectType(toDataType))
-//        if fromDataType.isAssignableFrom(classOf[Seq[_]]) &&
-//          toDataType.isAssignableFrom(classOf[scala.collection.Seq[_]]) =>
-//        true
-
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
   }
