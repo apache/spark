@@ -740,6 +740,9 @@ case class MapObjects private(
   private lazy val convertToSeq: Any => Seq[_] = inputDataType match {
     case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
       _.asInstanceOf[Seq[_]]
+    // Only for `SPARK-23587: MapObjects should support interpreted execution`
+    case ObjectType(cls) if classOf[mutable.ArraySeq[_]].isAssignableFrom(cls) =>
+      _.asInstanceOf[Seq[_]]
     case ObjectType(cls) if cls.isArray =>
       _.asInstanceOf[Array[_]].toSeq
     case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
@@ -863,7 +866,8 @@ case class MapObjects private(
     // like `list.get(1)`. Here we use Iterator to traverse Seq and List.
     val (getLength, prepareLoop, getLoopVar) = inputDataType match {
       case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) ||
-        classOf[mutable.Buffer[_]].isAssignableFrom(cls) =>
+        classOf[mutable.Buffer[_]].isAssignableFrom(cls) ||
+        classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
         val it = ctx.freshName("it")
         (
           s"${genInputData.value}.size()",
