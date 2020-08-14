@@ -739,9 +739,8 @@ case class MapObjects private(
   private lazy val convertToSeq: Any => Seq[_] = inputDataType match {
     case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
       _.asInstanceOf[Seq[_]]
-    // Only for `SPARK-23587: MapObjects should support interpreted execution`
-    case ObjectType(cls) if classOf[mutable.ArraySeq[_]].isAssignableFrom(cls) =>
-      _.asInstanceOf[Seq[_]]
+    case ObjectType(cls) if classOf[mutable.Seq[_]].isAssignableFrom(cls) =>
+      _.asInstanceOf[mutable.Seq[_]].toSeq
     case ObjectType(cls) if cls.isArray =>
       _.asInstanceOf[Array[_]].toSeq
     case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
