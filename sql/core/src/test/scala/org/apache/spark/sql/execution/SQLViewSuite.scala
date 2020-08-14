@@ -723,7 +723,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("sparkSession API view resolution with different default database") {
     withDatabase("db2") {
-      withView("v1") {
+      withView("default.v1") {
         withTable("t1") {
           sql("USE default")
           sql("CREATE TABLE t1 USING parquet AS SELECT 1 AS c0")
@@ -731,7 +731,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           sql("CREATE DATABASE IF NOT EXISTS db2")
           sql("USE db2")
           checkAnswer(spark.table("default.v1"), Row(1))
-          sql("DROP VIEW v1")
         }
       }
     }
