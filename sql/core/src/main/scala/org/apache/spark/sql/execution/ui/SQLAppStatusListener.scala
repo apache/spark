@@ -222,8 +222,8 @@ class SQLAppStatusListener(
     }
 
     // Find the max for each metric id between all stages.
-    maxMetrics.filter(m => metricTypes.contains(m._1)).foreach {
-        case (id, value, taskId, stageId, attemptId) =>
+    val validMaxMetrics = maxMetrics.filter(m => metricTypes.contains(m._1))
+    validMaxMetrics.foreach { case (id, value, taskId, stageId, attemptId) =>
       val updated = maxMetricsFromAllStages.getOrElse(id, Array(value, stageId, attemptId, taskId))
       if (value > updated(0)) {
         updated(0) = value
