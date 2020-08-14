@@ -17,6 +17,7 @@
 
 package org.apache.spark.storage
 
+import java.io.{File, IOException}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
 import scala.collection.Map
@@ -251,6 +252,46 @@ private[spark] object StorageUtils extends Logging {
       conf.get(config.SHUFFLE_SERVICE_PORT.key).toInt
     } else {
       tmpPort
+    }
+  }
+
+  /**
+   * Create local directories for storing block data. These directories are
+   * located inside configured local directories and won't
+   * be deleted on JVM exit when using the external shuffle service.
+   */
+  def createLocalDirs(conf: SparkConf): Array[File] = {
+    Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
+      try {
+        val localDir = Utils.createDirectory(rootDir, "blockmgr")
+        logInfo(s"Created local directory at $localDir")
+        Some(localDir)
+      } catch {
+        case e: IOException =>
+          logError(s"Failed to create local dir in $rootDir. Ignoring this directory.", e)
+          None
+      }
+    }
+  }
+
+  /**
+   * Create container directories for storing block data in YARN mode.
+   * These directories are located inside configured local directories and
+   * will be deleted in the processing of container clean of YARN.
+   */
+  def createContainerDirs(conf: SparkConf): Array[File] = {
+    Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
+      val containerDirPath = s"$rootDir/${conf.getenv("CONTAINER_ID")}"
+      try {
+        val containerDir = Utils.createDirectory(containerDirPath, "blockmgr")
+        logInfo(s"Created YARN container directory at $containerDir")
+        Some(containerDir)
+      } catch {
+        case e: IOException =>
+          logError(s"Failed to create YARN container dir in $containerDirPath." +
+            s" Ignoring this directory.", e)
+          None
+      }
     }
   }
 }
