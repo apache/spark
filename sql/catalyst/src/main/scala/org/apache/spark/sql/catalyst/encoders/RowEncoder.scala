@@ -229,7 +229,11 @@ object RowEncoder {
       }
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
     case StringType => ObjectType(classOf[java.lang.String])
-    case _: ArrayType => ObjectType(classOf[Seq[_]])
+    case _: ArrayType => if (Utils.isScala212) {
+      ObjectType(classOf[scala.collection.Seq[_]])
+    } else {
+      ObjectType(classOf[Seq[_]])
+    }
     case _: MapType => ObjectType(classOf[scala.collection.Map[_, _]])
     case _: StructType => ObjectType(classOf[Row])
     case p: PythonUserDefinedType => externalDataTypeFor(p.sqlType)
