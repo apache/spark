@@ -64,11 +64,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       val rdd = v1Relation.buildScan()
       val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
-      val originalOutputNames = relation.table.schema().map(_.name)
-      val requiredColumnsIndex = output.map(_.name).map(originalOutputNames.indexOf)
       val dsScan = RowDataSourceScanExec(
         output,
-        requiredColumnsIndex,
+        output.toStructType,
         translated.toSet,
         pushed.toSet,
         unsafeRowRDD,
