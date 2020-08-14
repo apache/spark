@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 /**
  * A factory for constructing encoders that convert external row to/from the Spark SQL

@@ -86,8 +86,6 @@ private[spark] object CallSite {
 private[spark] object Utils extends Logging {
   val random = new Random()
 
-  val isScala212: Boolean = scala.util.Properties.versionNumberString.startsWith("2.12")
-
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
   @volatile private var cachedLocalDir: String = ""
 

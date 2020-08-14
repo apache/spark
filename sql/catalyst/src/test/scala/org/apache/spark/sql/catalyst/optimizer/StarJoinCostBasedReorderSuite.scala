@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.statsEstimation.{StatsEstimationTestBase, StatsTestPlan}
 import org.apache.spark.sql.internal.SQLConf._
-import org.apache.spark.util.Utils
 
 
 class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBase {
@@ -341,7 +340,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
           (nameToAttr("d3_c2") === nameToAttr("t1_c1")) &&
           (nameToAttr("t1_c2") === nameToAttr("t2_c2")))
 
-    val expected = if (Utils.isScala212) {
+    val expected = if (util.Properties.versionNumberString.startsWith("2.12")) {
       f1.join(d3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("d3_pk")))
         .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk")))
         .join(d2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
