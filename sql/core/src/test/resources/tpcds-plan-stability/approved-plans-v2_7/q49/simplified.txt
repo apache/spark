@@ -91,37 +91,36 @@ TakeOrderedAndProject [channel,currency_rank,item,return_rank,return_ratio]
                     Project [currency_rank,item,return_rank,return_ratio]
                       Filter [currency_rank,return_rank]
                         InputAdapter
-                          Window [return_ratio]
+                          Window [currency_ratio]
                             WholeStageCodegen (20)
-                              Sort [return_ratio]
-                                Project [currency_rank,item,return_ratio]
-                                  InputAdapter
-                                    Window [currency_ratio]
-                                      WholeStageCodegen (19)
-                                        Sort [currency_ratio]
-                                          InputAdapter
-                                            Exchange #9
-                                              WholeStageCodegen (18)
-                                                HashAggregate [isEmpty,isEmpty,ss_item_sk,sum,sum,sum,sum] [currency_ratio,isEmpty,isEmpty,item,return_ratio,sum,sum,sum,sum,sum(cast(coalesce(sr_return_quantity, 0) as bigint)),sum(cast(coalesce(ss_quantity, 0) as bigint)),sum(coalesce(cast(sr_return_amt as decimal(12,2)), 0.00)),sum(coalesce(cast(ss_net_paid as decimal(12,2)), 0.00))]
-                                                  InputAdapter
-                                                    Exchange [ss_item_sk] #10
-                                                      WholeStageCodegen (17)
-                                                        HashAggregate [sr_return_amt,sr_return_quantity,ss_item_sk,ss_net_paid,ss_quantity] [isEmpty,isEmpty,isEmpty,isEmpty,sum,sum,sum,sum,sum,sum,sum,sum]
-                                                          Project [sr_return_amt,sr_return_quantity,ss_item_sk,ss_net_paid,ss_quantity]
-                                                            BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
-                                                              Project [sr_return_amt,sr_return_quantity,ss_item_sk,ss_net_paid,ss_quantity,ss_sold_date_sk]
-                                                                BroadcastHashJoin [sr_item_sk,sr_ticket_number,ss_item_sk,ss_ticket_number]
-                                                                  Project [ss_item_sk,ss_net_paid,ss_quantity,ss_sold_date_sk,ss_ticket_number]
-                                                                    Filter [ss_item_sk,ss_net_paid,ss_net_profit,ss_quantity,ss_sold_date_sk,ss_ticket_number]
-                                                                      ColumnarToRow
-                                                                        InputAdapter
-                                                                          Scan parquet default.store_sales [ss_item_sk,ss_net_paid,ss_net_profit,ss_quantity,ss_sold_date_sk,ss_ticket_number]
-                                                                  InputAdapter
-                                                                    BroadcastExchange #11
-                                                                      WholeStageCodegen (15)
-                                                                        Filter [sr_item_sk,sr_return_amt,sr_ticket_number]
-                                                                          ColumnarToRow
-                                                                            InputAdapter
-                                                                              Scan parquet default.store_returns [sr_item_sk,sr_return_amt,sr_return_quantity,sr_ticket_number]
-                                                              InputAdapter
-                                                                ReusedExchange [d_date_sk] #5
+                              Sort [currency_ratio]
+                                InputAdapter
+                                  Window [return_ratio]
+                                    WholeStageCodegen (19)
+                                      Sort [return_ratio]
+                                        InputAdapter
+                                          Exchange #9
+                                            WholeStageCodegen (18)
+                                              HashAggregate [isEmpty,isEmpty,ss_item_sk,sum,sum,sum,sum] [currency_ratio,isEmpty,isEmpty,item,return_ratio,sum,sum,sum,sum,sum(cast(coalesce(sr_return_quantity, 0) as bigint)),sum(cast(coalesce(ss_quantity, 0) as bigint)),sum(coalesce(cast(sr_return_amt as decimal(12,2)), 0.00)),sum(coalesce(cast(ss_net_paid as decimal(12,2)), 0.00))]
+                                                InputAdapter
+                                                  Exchange [ss_item_sk] #10
+                                                    WholeStageCodegen (17)
+                                                      HashAggregate [sr_return_amt,sr_return_quantity,ss_item_sk,ss_net_paid,ss_quantity] [isEmpty,isEmpty,isEmpty,isEmpty,sum,sum,sum,sum,sum,sum,sum,sum]
+                                                        Project [sr_return_amt,sr_return_quantity,ss_item_sk,ss_net_paid,ss_quantity]
+                                                          BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
+                                                            Project [sr_return_amt,sr_return_quantity,ss_item_sk,ss_net_paid,ss_quantity,ss_sold_date_sk]
+                                                              BroadcastHashJoin [sr_item_sk,sr_ticket_number,ss_item_sk,ss_ticket_number]
+                                                                Project [ss_item_sk,ss_net_paid,ss_quantity,ss_sold_date_sk,ss_ticket_number]
+                                                                  Filter [ss_item_sk,ss_net_paid,ss_net_profit,ss_quantity,ss_sold_date_sk,ss_ticket_number]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet default.store_sales [ss_item_sk,ss_net_paid,ss_net_profit,ss_quantity,ss_sold_date_sk,ss_ticket_number]
+                                                                InputAdapter
+                                                                  BroadcastExchange #11
+                                                                    WholeStageCodegen (15)
+                                                                      Filter [sr_item_sk,sr_return_amt,sr_ticket_number]
+                                                                        ColumnarToRow
+                                                                          InputAdapter
+                                                                            Scan parquet default.store_returns [sr_item_sk,sr_return_amt,sr_return_quantity,sr_ticket_number]
+                                                            InputAdapter
+                                                              ReusedExchange [d_date_sk] #5
