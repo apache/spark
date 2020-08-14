@@ -40,7 +40,6 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTim
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.util.Utils
 
 class InvokeTargetClass extends Serializable {
   def filterInt(e: Any): Any = e.asInstanceOf[Int] > 0
@@ -361,14 +360,8 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     stack.add(2)
     stack.add(3)
 
-    val itemFromScalaVersion = if (Utils.isScala212) {
-      (Seq(1, 2, 3), ObjectType(classOf[WrappedArray[Int]]))
-    } else {
-      (WrappedArray.make(Array(1, 2, 3)), ObjectType(classOf[WrappedArray[Int]]))
-    }
-
     Seq(
-      itemFromScalaVersion,
+      (Seq(1, 2, 3), ObjectType(classOf[WrappedArray[Int]])),
       (Seq(1, 2, 3), ObjectType(classOf[Seq[Int]])),
       (Array(1, 2, 3), ObjectType(classOf[Array[Int]])),
       (Seq(1, 2, 3), ObjectType(classOf[Object])),
