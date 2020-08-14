@@ -544,10 +544,11 @@ object ScalaReflection extends ScalaReflection {
               "cannot be used as field name\n" + walkedTypePath)
           }
           // It is ok to use head here because a variable name needs to be non empty
-          if (fieldName.head.isDigit) {
+          if (!Character.isJavaIdentifierStart(fieldName.head)) {
             throw new UnsupportedOperationException(s"`$fieldName` is a word that starts with a " +
-              "number and cannot be used as field name. A workaround to this problem is to " +
-              "convert the case class to Json and then read the schema as Json\n" + walkedTypePath)
+              "character not allowed in Java and cannot be used as field name. " +
+              "A workaround to this problem is to convert the case class to Json and then read the" + 
+              "schema as Json\n" + walkedTypePath)
           }
 
           // SPARK-26730 inputObject won't be null with If's guard below. And KnownNotNul
