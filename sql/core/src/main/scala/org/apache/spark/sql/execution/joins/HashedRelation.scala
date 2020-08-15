@@ -137,7 +137,7 @@ private[execution] object HashedRelation {
         0)
     }
 
-    if (!input.hasNext) {
+    if (!input.hasNext && !allowsNullKey) {
       EmptyHashedRelation
     } else if (key.length == 1 && key.head.dataType == LongType && !allowsNullKey) {
       // NOTE: LongHashedRelation does not support NULL keys.

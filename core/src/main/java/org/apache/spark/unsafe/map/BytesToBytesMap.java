@@ -429,7 +429,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
-   * Iterator for the entries of this map. This is to first iterate over key index array
+   * Iterator for the entries of this map. This is to first iterate over key indices in
    * `longArray` then accessing values in `dataPages`. NOTE: this is different from `MapIterator`
    * in the sense that key index is preserved here
    * (See `UnsafeHashedRelation` for example of usage).

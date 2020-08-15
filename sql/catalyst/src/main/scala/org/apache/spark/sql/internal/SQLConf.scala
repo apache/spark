@@ -329,7 +329,9 @@ object SQLConf {
 
   val PREFER_SORTMERGEJOIN = buildConf("spark.sql.join.preferSortMergeJoin")
     .internal()
-    .doc("When true, prefer sort merge join over shuffle hash join.")
+    .doc("When true, prefer sort merge join over shuffled hash join. " +
+      "Note that shuffled hash join supports all join types (e.g. full outer) " +
+      "that sort merge join supports.")
     .version("2.0.0")
     .booleanConf
     .createWithDefault(true)

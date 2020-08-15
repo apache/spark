@@ -1199,6 +1199,18 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       (spark.range(10).selectExpr("id % 5 as k1"),
         spark.range(30).selectExpr("id % 5 as k2"),
         $"k1" === $"k2"),
+      // Test empty build side
+      (spark.range(10).selectExpr("id as k1").filter("k1 < -1"),
+        spark.range(30).selectExpr("id as k2"),
+        $"k1" === $"k2"),
+      // Test empty stream side
+      (spark.range(10).selectExpr("id as k1"),
+        spark.range(30).selectExpr("id as k2").filter("k2 < -1"),
+        $"k1" === $"k2"),
+      // Test empty build and stream side
+      (spark.range(10).selectExpr("id as k1").filter("k1 < -1"),
+        spark.range(30).selectExpr("id as k2").filter("k2 < -1"),
+        $"k1" === $"k2"),
       // Test string join key
       (spark.range(10).selectExpr("cast(id * 3 as string) as k1"),
         spark.range(30).selectExpr("cast(id as string) as k2"),
