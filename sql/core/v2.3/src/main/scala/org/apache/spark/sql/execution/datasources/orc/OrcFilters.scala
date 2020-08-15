@@ -68,6 +68,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    * Create ORC filter as a SearchArgument instance.
    */
   def createFilter(schema: StructType, filters: Seq[Filter]): Option[SearchArgument] = {
+    println(s"createFilter: $schema")
     val dataTypeMap = OrcFilters.getSearchableTypeMap(schema, SQLConf.get.caseSensitiveAnalysis)
     // Combines all convertible filters using `And` to produce a single conjunction
     val conjunctionOptional = buildTree(convertibleFilters(schema, dataTypeMap, filters))
@@ -75,7 +76,9 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate.
       // The input predicate is fully convertible. There should not be any empty result in the
       // following recursive method call `buildSearchArgument`.
-      buildSearchArgument(dataTypeMap, conjunction, newBuilder).build()
+      val f = buildSearchArgument(dataTypeMap, conjunction, newBuilder).build()
+      println(s"pushed: $f")
+      f
     }
   }
 
