@@ -193,19 +193,20 @@ final class MutableAny extends MutableValue {
 final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGenericInternalRow {
 
   private[this] def dataTypeToMutableValue(dataType: DataType): MutableValue = dataType match {
+    // We use INT for DATE internally
+    case IntegerType | DateType => new MutableInt
+    case FloatType => new MutableFloat
     case BooleanType => new MutableBoolean
     case ByteType => new MutableByte
     case ShortType => new MutableShort
-    // We use INT for DATE internally
-    case IntegerType | DateType => new MutableInt
     // We use Long for Timestamp internally
     case LongType | TimestampType => new MutableLong
-    case FloatType => new MutableFloat
     case DoubleType => new MutableDouble
     case _ => new MutableAny
   }
 
   def this(dataTypes: Seq[DataType]) = {
+    // SPARK-32550: use while loop instead of map
     this(new Array[MutableValue](dataTypes.length))
     val length = values.length
     var i = 0
@@ -218,6 +219,7 @@ final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGen
   def this() = this(Seq.empty)
 
   def this(schema: StructType) = {
+    // SPARK-32550: use while loop instead of map
     this(new Array[MutableValue](schema.fields.length))
     val length = values.length
     val fields = schema.fields
