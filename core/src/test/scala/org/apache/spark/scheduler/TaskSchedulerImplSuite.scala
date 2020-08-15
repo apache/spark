@@ -1855,20 +1855,18 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(scheduler.getExecutorDecommissionInfo("executor1").isDefined)
     clock.advance(2000)
     scheduler.executorLost("executor1", ExecutorExited(0, false, "normal"))
-    assert(scheduler.decommissioningExecutorsToGc.size === 1)
-    assert(scheduler.executorsPendingDecommission.size === 1)
+    assert(scheduler.decommissionedExecutorsRemoved.size === 1)
+    assert(scheduler.executorsPendingDecommission.isEmpty)
     clock.advance(2000)
     // It hasn't been 60 seconds yet before removal
     assert(scheduler.getExecutorDecommissionInfo("executor1").isDefined)
     scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("", false))
     clock.advance(2000)
-    assert(scheduler.decommissioningExecutorsToGc.size === 1)
-    assert(scheduler.executorsPendingDecommission.size === 1)
+    assert(scheduler.decommissionedExecutorsRemoved.size === 1)
     assert(scheduler.getExecutorDecommissionInfo("executor1").isDefined)
     clock.advance(61000)
     assert(scheduler.getExecutorDecommissionInfo("executor1").isEmpty)
-    assert(scheduler.decommissioningExecutorsToGc.isEmpty)
-    assert(scheduler.executorsPendingDecommission.isEmpty)
+    assert(scheduler.decommissionedExecutorsRemoved.isEmpty)
   }
 
   /**
