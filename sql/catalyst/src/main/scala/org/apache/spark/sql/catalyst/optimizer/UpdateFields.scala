@@ -17,26 +17,26 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.WithFields
+import org.apache.spark.sql.catalyst.expressions.UpdateFields
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 
 
 /**
- * Combines all adjacent [[WithFields]] expression into a single [[WithFields]] expression.
+ * Combines all adjacent [[UpdateFields]] expression into a single [[UpdateFields]] expression.
  */
-object CombineWithFields extends Rule[LogicalPlan] {
+object CombineUpdateFields extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case WithFields(WithFields(struct, names1, valExprs1), names2, valExprs2) =>
-      WithFields(struct, names1 ++ names2, valExprs1 ++ valExprs2)
+    case UpdateFields(UpdateFields(struct, fieldOps1), fieldOps2) =>
+      UpdateFields(struct, fieldOps1 ++ fieldOps2)
   }
 }
 
 /**
- * Replaces [[WithFields]] expression with an evaluable expression.
+ * Replaces [[UpdateFields]] expression with an evaluable expression.
  */
-object ReplaceWithFieldsExpression extends Rule[LogicalPlan] {
+object ReplaceUpdateFieldsExpression extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case w: WithFields => w.evalExpr
+    case u: UpdateFields => u.evalExpr
   }
 }

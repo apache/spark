@@ -927,6 +927,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       expectedAnswer: Seq[Row],
       expectedSchema: StructType): Unit = {
 
+    df.explain(true)
+    df.printSchema()
+    df.show(false)
     checkAnswer(df, expectedAnswer)
     assert(df.schema == expectedSchema)
   }
@@ -965,6 +968,15 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         StructField("a", StructType(Seq(
           StructField("a", structType, nullable = false))),
           nullable = false))),
+        nullable = false))))
+
+  private lazy val nullStructLevel3: DataFrame = spark.createDataFrame(
+    sparkContext.parallelize(Row(Row(Row(Row(1, null, 3)))) :: Nil),
+    StructType(Seq(
+      StructField("a", StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", structType, nullable = true))),
+          nullable = true))),
         nullable = false))))
 
   test("withField should throw an exception if called on a non-StructType column") {
@@ -1451,6 +1463,17 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
         .select($"struct_col".withField("a.c", lit(3)))
     }.getMessage should include("Ambiguous reference to fields")
+
+    checkAnswer(
+      sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+        .select($"struct_col".withField("a.c", lit(3)).withField("a.d", lit(4))),
+      Row(Row(Row(1, 2, 3, 4))))
+
+    checkAnswer(
+      sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+        .select($"struct_col".withField("a",
+          $"struct_col.a".withField("c", lit(3)).withField("d", lit(4)))),
+      Row(Row(Row(1, 2, 3, 4))))
   }
 
   test("SPARK-32641: extracting field from non-null struct column after withField should return " +
@@ -1536,5 +1559,727 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       df.withColumn("a", $"a".withField("a", lit(4)).getField("c")),
       Row(3) :: Row(null):: Nil,
       StructType(Seq(StructField("a", IntegerType, nullable = true))))
+  }
+
+
+  test("dropFields should throw an exception if called on a non-StructType column") {
+    intercept[AnalysisException] {
+      testData.withColumn("key", $"key".dropFields("a"))
+    }.getMessage should include("struct argument should be struct type, got: int")
+  }
+
+  test("dropFields should throw an exception if fieldName argument is null") {
+    intercept[IllegalArgumentException] {
+      structLevel1.withColumn("a", $"a".dropFields(null))
+    }.getMessage should include("fieldName cannot be null")
+  }
+
+  test("dropFields should throw an exception if any intermediate structs don't exist") {
+    intercept[AnalysisException] {
+      structLevel2.withColumn("a", 'a.dropFields("x.b"))
+    }.getMessage should include("No such struct field x in a")
+
+    intercept[AnalysisException] {
+      structLevel3.withColumn("a", 'a.dropFields("a.x.b"))
+    }.getMessage should include("No such struct field x in a")
+  }
+
+  test("dropFields should throw an exception if intermediate field is not a struct") {
+    intercept[AnalysisException] {
+      structLevel1.withColumn("a", 'a.dropFields("b.a"))
+    }.getMessage should include("struct argument should be struct type, got: int")
+  }
+
+  test("dropFields should throw an exception if intermediate field reference is ambiguous") {
+    intercept[AnalysisException] {
+      val structLevel2: DataFrame = spark.createDataFrame(
+        sparkContext.parallelize(Row(Row(Row(1, null, 3), 4)) :: Nil),
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", structType, nullable = false),
+            StructField("a", structType, nullable = false))),
+            nullable = false))))
+
+      structLevel2.withColumn("a", 'a.dropFields("a.b"))
+    }.getMessage should include("Ambiguous reference to fields")
+  }
+
+  test("dropFields should drop field in struct") {
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", 'a.dropFields("b")),
+      Row(Row(1, 3)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("c", IntegerType, nullable = false))),
+          nullable = false))))
+  }
+
+  test("dropFields should drop field in null struct") {
+    checkAnswerAndSchema(
+      nullStructLevel1.withColumn("a", $"a".dropFields("b")),
+      Row(null) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("c", IntegerType, nullable = false))),
+          nullable = true))))
+  }
+
+  test("dropFields should drop multiple fields in struct") {
+    Seq(
+      structLevel1.withColumn("a", $"a".dropFields("b", "c")),
+      structLevel1.withColumn("a", 'a.dropFields("b").dropFields("c"))
+    ).foreach { df =>
+      checkAnswerAndSchema(
+        df,
+        Row(Row(1)) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false))),
+            nullable = false))))
+    }
+  }
+
+  test("dropFields should throw an exception if no fields will be left in struct") {
+    intercept[AnalysisException] {
+      structLevel1.withColumn("a", 'a.dropFields("a", "b", "c"))
+    }.getMessage should include("cannot drop all fields in struct")
+  }
+
+  test("dropFields should drop field in nested struct") {
+    checkAnswerAndSchema(
+      structLevel2.withColumn("a", 'a.dropFields("a.b")),
+      Row(Row(Row(1, 3))) :: Nil,
+      StructType(
+        Seq(StructField("a", StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("c", IntegerType, nullable = false))),
+            nullable = false))),
+          nullable = false))))
+  }
+
+  test("dropFields should drop multiple fields in nested struct") {
+    checkAnswerAndSchema(
+      structLevel2.withColumn("a", 'a.dropFields("a.b", "a.c")),
+      Row(Row(Row(1))) :: Nil,
+      StructType(
+        Seq(StructField("a", StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false))),
+            nullable = false))),
+          nullable = false))))
+  }
+
+  test("dropFields should drop field in nested null struct") {
+    checkAnswerAndSchema(
+      nullStructLevel2.withColumn("a", $"a".dropFields("a.b")),
+      Row(Row(null)) :: Nil,
+      StructType(
+        Seq(StructField("a", StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("c", IntegerType, nullable = false))),
+            nullable = true))),
+          nullable = false))))
+  }
+
+  test("dropFields should drop multiple fields in nested null struct") {
+    checkAnswerAndSchema(
+      nullStructLevel2.withColumn("a", $"a".dropFields("a.b", "a.c")),
+      Row(Row(null)) :: Nil,
+      StructType(
+        Seq(StructField("a", StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false))),
+            nullable = true))),
+          nullable = false))))
+  }
+
+  test("dropFields should drop field in deeply nested struct") {
+    checkAnswerAndSchema(
+      structLevel3.withColumn("a", 'a.dropFields("a.a.b")),
+      Row(Row(Row(Row(1, 3)))) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("c", IntegerType, nullable = false))),
+              nullable = false))),
+            nullable = false))),
+          nullable = false))))
+  }
+
+  test("dropFields should drop all fields with given name in struct") {
+    val structLevel1 = spark.createDataFrame(
+      sparkContext.parallelize(Row(Row(1, 2, 3)) :: Nil),
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = false))),
+          nullable = false))))
+
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", 'a.dropFields("b")),
+      Row(Row(1)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false))),
+          nullable = false))))
+  }
+
+  test("dropFields should drop field in struct even if casing is different") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      checkAnswerAndSchema(
+        mixedCaseStructLevel1.withColumn("a", 'a.dropFields("A")),
+        Row(Row(1)) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("B", IntegerType, nullable = false))),
+            nullable = false))))
+
+      checkAnswerAndSchema(
+        mixedCaseStructLevel1.withColumn("a", 'a.dropFields("b")),
+        Row(Row(1)) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false))),
+            nullable = false))))
+    }
+  }
+
+  test("dropFields should not drop field in struct because casing is different") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswerAndSchema(
+        mixedCaseStructLevel1.withColumn("a", 'a.dropFields("A")),
+        Row(Row(1, 1)) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("B", IntegerType, nullable = false))),
+            nullable = false))))
+
+      checkAnswerAndSchema(
+        mixedCaseStructLevel1.withColumn("a", 'a.dropFields("b")),
+        Row(Row(1, 1)) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("B", IntegerType, nullable = false))),
+            nullable = false))))
+    }
+  }
+
+  test("dropFields should drop nested field in struct even if casing is different") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      checkAnswerAndSchema(
+        mixedCaseStructLevel2.withColumn("a", 'a.dropFields("A.a")),
+        Row(Row(Row(1), Row(1, 1))) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("A", StructType(Seq(
+              StructField("b", IntegerType, nullable = false))),
+              nullable = false),
+            StructField("B", StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = false))),
+              nullable = false))),
+            nullable = false))))
+
+      checkAnswerAndSchema(
+        mixedCaseStructLevel2.withColumn("a", 'a.dropFields("b.a")),
+        Row(Row(Row(1, 1), Row(1))) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = false))),
+              nullable = false),
+            StructField("b", StructType(Seq(
+              StructField("b", IntegerType, nullable = false))),
+              nullable = false))),
+            nullable = false))))
+    }
+  }
+
+  test("dropFields should throw an exception because casing is different") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      intercept[AnalysisException] {
+        mixedCaseStructLevel2.withColumn("a", 'a.dropFields("A.a"))
+      }.getMessage should include("No such struct field A in a, B")
+
+      intercept[AnalysisException] {
+        mixedCaseStructLevel2.withColumn("a", 'a.dropFields("b.a"))
+      }.getMessage should include("No such struct field b in a, B")
+    }
+  }
+
+  test("dropFields should drop only fields that exist") {
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", 'a.dropFields("d")),
+      Row(Row(1, null, 3)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = false))),
+          nullable = false))))
+
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", 'a.dropFields("b", "d")),
+      Row(Row(1, 3)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("c", IntegerType, nullable = false))),
+          nullable = false))))
+
+    checkAnswerAndSchema(
+      structLevel2.withColumn("a", $"a".dropFields("a.b", "a.d")),
+      Row(Row(Row(1, 3))) :: Nil,
+      StructType(
+        Seq(StructField("a", StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("c", IntegerType, nullable = false))),
+            nullable = false))),
+          nullable = false))))
+  }
+
+  test("dropFields should drop multiple fields at arbitrary levels of nesting in a single call") {
+    val df: DataFrame = spark.createDataFrame(
+      sparkContext.parallelize(Row(Row(Row(1, null, 3), 4)) :: Nil),
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", structType, nullable = false),
+          StructField("b", IntegerType, nullable = false))),
+          nullable = false))))
+
+    checkAnswerAndSchema(
+      df.withColumn("a", $"a".dropFields("a.b", "b")),
+      Row(Row(Row(1, 3))) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("c", IntegerType, nullable = false))), nullable = false))),
+          nullable = false))))
+  }
+
+  test("dropFields user-facing examples") {
+    checkAnswer(
+      sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+        .select($"struct_col".dropFields("b")),
+      Row(Row(1)))
+
+    checkAnswer(
+      sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+        .select($"struct_col".dropFields("c")),
+      Row(Row(1, 2)))
+
+    checkAnswer(
+      sql("SELECT named_struct('a', 1, 'b', 2, 'c', 3) struct_col")
+        .select($"struct_col".dropFields("b", "c")),
+      Row(Row(1)))
+
+    intercept[AnalysisException] {
+      sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+        .select($"struct_col".dropFields("a", "b"))
+    }.getMessage should include("cannot drop all fields in struct")
+
+    checkAnswer(
+      sql("SELECT CAST(NULL AS struct<a:int,b:int>) struct_col")
+        .select($"struct_col".dropFields("b")),
+      Row(null))
+
+    checkAnswer(
+      sql("SELECT named_struct('a', 1, 'b', 2, 'b', 3) struct_col")
+        .select($"struct_col".dropFields("b")),
+      Row(Row(1)))
+
+    checkAnswer(
+      sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+        .select($"struct_col".dropFields("a.b")),
+      Row(Row(Row(1))))
+
+    intercept[AnalysisException] {
+      sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
+        .select($"struct_col".dropFields("a.c"))
+    }.getMessage should include("Ambiguous reference to fields")
+
+    checkAnswer(
+      sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2, 'c', 3)) struct_col")
+        .select($"struct_col".dropFields("a.b", "a.c")),
+      Row(Row(Row(1))))
+
+    checkAnswer(
+      sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2, 'c', 3)) struct_col")
+        .select($"struct_col".withField("a", $"struct_col.a".dropFields("b", "c"))),
+      Row(Row(Row(1))))
+  }
+
+  test("should correctly handle different dropField + withField + getField combinations") {
+    // TODO: maybe make another suite, where we run through these tests with and without optimizer
+    val structType = StructType(Seq(
+      StructField("a", IntegerType, nullable = false),
+      StructField("b", IntegerType, nullable = false)))
+
+    val structLevel1: DataFrame = spark.createDataFrame(
+      sparkContext.parallelize(Row(Row(1, 2)) :: Nil),
+      StructType(Seq(StructField("a", structType, nullable = false))))
+
+    val nullStructLevel1: DataFrame = spark.createDataFrame(
+      sparkContext.parallelize(Row(null) :: Nil),
+      StructType(Seq(StructField("a", structType, nullable = true))))
+
+    val nullableStructLevel1: DataFrame = spark.createDataFrame(
+      sparkContext.parallelize(Row(Row(1, 2)) :: Row(null) :: Nil),
+      StructType(Seq(StructField("a", structType, nullable = true))))
+
+    def check(
+      fieldOps: Column => Column,
+      getFieldName: String,
+      expectedValue: Option[Int]): Unit = {
+
+      def query(df: DataFrame): DataFrame =
+        df.select(fieldOps(col("a")).getField(getFieldName).as("res"))
+
+      checkAnswerAndSchema(
+        query(structLevel1),
+        Row(expectedValue.orNull) :: Nil,
+        StructType(Seq(StructField("res", IntegerType, nullable = expectedValue.isEmpty))))
+
+      checkAnswerAndSchema(
+        query(nullStructLevel1),
+        Row(null) :: Nil,
+        StructType(Seq(StructField("res", IntegerType, nullable = true))))
+
+      checkAnswerAndSchema(
+        query(nullableStructLevel1),
+        Row(expectedValue.orNull) :: Row(null) :: Nil,
+        StructType(Seq(StructField("res", IntegerType, nullable = true))))
+    }
+
+    // add attribute, extract an attribute from the original struct
+    check(_.withField("c", lit(3)), "a", Some(1))
+    check(_.withField("c", lit(3)), "b", Some(2))
+
+    // add attribute, extract added attribute
+    check(_.withField("c", lit(3)), "c", Some(3))
+    check(_.withField("c", col("a.a")), "c", Some(1))
+    check(_.withField("c", col("a.b")), "c", Some(2))
+    check(_.withField("c", lit(null).cast(IntegerType)), "c", None)
+
+    // replace attribute, extract an attribute from the original struct
+    check(_.withField("b", lit(3)), "a", Some(1))
+
+    // replace attribute, extract replaced attribute
+    check(_.withField("b", lit(3)), "b", Some(3))
+    check(_.withField("b", lit(null).cast(IntegerType)), "b", None)
+
+    // drop attribute, extract an attribute from the original struct
+    check(_.dropFields("b"), "a", Some(1))
+    check(_.dropFields("a"), "b", Some(2))
+
+    // drop attribute, add attribute, extract an attribute from the original struct
+    check(_.dropFields("b").withField("c", lit(3)), "a", Some(1))
+    check(_.dropFields("a").withField("c", lit(3)), "b", Some(2))
+
+    // add attribute, drop attribute, extract an attribute from the original struct
+    check(_.withField("c", lit(3)).dropFields("a"), "b", Some(2))
+    check(_.withField("c", lit(3)).dropFields("b"), "a", Some(1))
+    check(_.withField("b", lit(3)).dropFields("b"), "a", Some(1))
+    check(_.withField("a", lit(3)).dropFields("a"), "b", Some(2))
+
+    // add attribute, drop same attribute, extract an attribute from the original struct
+    check(_.withField("c", lit(3)).dropFields("c"), "a", Some(1))
+
+    // add attribute, drop another attribute, extract added attribute
+    check(_.withField("b", lit(3)).dropFields("a"), "b", Some(3))
+    check(_.withField("a", lit(3)).dropFields("b"), "a", Some(3))
+    check(_.withField("b", lit(null).cast(IntegerType)).dropFields("a"), "b", None)
+    check(_.withField("a", lit(null).cast(IntegerType)).dropFields("b"), "a", None)
+
+    // drop attribute, add same attribute, extract added attribute
+    check(_.dropFields("a").withField("c", lit(3)), "c", Some(3))
+    check(_.dropFields("b").withField("c", lit(3)), "c", Some(3))
+    check(_.dropFields("b").withField("b", lit(3)), "b", Some(3))
+    check(_.dropFields("a").withField("a", lit(3)), "a", Some(3))
+    check(_.dropFields("b").withField("b", lit(null).cast(IntegerType)), "b", None)
+    check(_.dropFields("a").withField("a", lit(null).cast(IntegerType)), "a", None)
+    check(_.dropFields("c").withField("c", lit(3)), "c", Some(3))
+    check(_.withField("c", lit(3)).dropFields("c").withField("c", lit(4)), "c", Some(4))
+  }
+
+  test("non-nullable field from a struct being added to a non-nullable struct and then extracted") {
+    val df = spark.createDataFrame(
+      sparkContext.parallelize(Seq(Row(Row(1, 2, 3), Row(4, 5, 6)))),
+      StructType(Seq(
+        StructField("a1", structType, nullable = false),
+        StructField("a2", structType, nullable = false))))
+
+    // add field from the same struct (a1) and then extract it
+    checkAnswerAndSchema(
+      df.select($"a1".withField("d", $"a1.b").getField("d").as("res")),
+      Seq(Row(2)),
+      StructType(Seq(StructField("res", IntegerType, nullable = true))))
+
+    // add field from another struct (a2) and then extract it
+    checkAnswerAndSchema(
+      df.select($"a1".withField("d", $"a2.b").getField("d").as("res")),
+      Seq(Row(5)),
+      StructType(Seq(StructField("res", IntegerType, nullable = true))))
+  }
+
+  test("nullable field from a struct being added to a nullable struct and then extracted") {
+    val df = spark.createDataFrame(
+      sparkContext.parallelize(Seq(
+        Row(Row(1, 2, 3), Row(4, 5, 6)),
+        Row(null, Row(4, 5, 6)),
+        Row(Row(1, 2, 3), null),
+        Row(null, null))),
+      StructType(Seq(
+        StructField("a1", structType, nullable = true),
+        StructField("a2", structType, nullable = true))))
+
+    // TODO: This doesn't fit the test title?
+    // add field from the same struct (a1) and then extract it
+    checkAnswerAndSchema(
+      df.select($"a1".withField("d", $"a1.b").getField("d").as("res")),
+      Seq(
+        Row(2),
+        Row(null),
+        Row(2),
+        Row(null)),
+      StructType(Seq(StructField("res", IntegerType, nullable = true))))
+
+    // add field from another struct (a2) and then extract it
+    checkAnswerAndSchema(
+      df.select($"a1".withField("d", $"a2.b").getField("d").as("res")),
+      Seq(
+        Row(5),
+        Row(null),
+        Row(null),
+        Row(null)),
+      StructType(Seq(StructField("res", IntegerType, nullable = true))))
+  }
+
+  test("non-nullable field from a struct being added to a nullable struct and then extracted") {
+    val df = spark.createDataFrame(
+      sparkContext.parallelize(Seq(
+        Row(Row(1, 2, 3), Row(4, 5, 6)),
+        Row(null, Row(4, 5, 6)),
+        Row(Row(1, 2, 3), Row(4, 5, 6)),
+        Row(null, Row(4, 5, 6)))),
+      StructType(Seq(
+        StructField("a1", structType, nullable = true),
+        StructField("a2", structType, nullable = false))))
+
+    // add field from the same struct (a1) and then extract it
+    checkAnswerAndSchema(
+      df.select($"a1".withField("d", $"a1.b").getField("d").as("res")),
+      Seq(
+        Row(2),
+        Row(null),
+        Row(2),
+        Row(null)),
+      StructType(Seq(StructField("res", IntegerType, nullable = true))))
+
+    // add field from another struct (a2) and then extract it
+    checkAnswerAndSchema(
+      df.select($"a1".withField("d", $"a2.b").getField("d").as("res")),
+      Seq(
+        Row(5),
+        Row(5),
+        Row(null),
+        Row(null)),
+      StructType(Seq(StructField("res", IntegerType, nullable = true))))
+  }
+
+  test("nullable field from a struct being added to a non-nullable struct and then extracted") {
+    val df = spark.createDataFrame(
+      sparkContext.parallelize(Seq(
+        Row(Row(1, 2, 3), Row(4, 5, 6)),
+        Row(Row(1, 2, 3), Row(4, 5, 6)),
+        Row(Row(1, 2, 3), null),
+        Row(Row(1, 2, 3), null))),
+      StructType(Seq(
+        StructField("a1", structType, nullable = false),
+        StructField("a2", structType, nullable = true))))
+
+    // add field from the same struct (a1) and then extract it
+    checkAnswerAndSchema(
+      df.select($"a1".withField("d", $"a1.b").getField("d").as("res")),
+      Seq(
+        Row(2),
+        Row(2),
+        Row(2),
+        Row(2)),
+      StructType(Seq(StructField("res", IntegerType, nullable = true))))
+
+    // add field from another struct (a2) and then extract it
+    checkAnswerAndSchema(
+      df.select($"a1".withField("d", $"a2.b").getField("d").as("res")),
+      Seq(
+        Row(5),
+        Row(5),
+        Row(null),
+        Row(null)),
+      StructType(Seq(StructField("res", IntegerType, nullable = true))))
+  }
+
+  test("should add and drop many fields") {
+    // stress test withField and dropFields APIs
+
+    val nullableStructLevel2: DataFrame = spark.createDataFrame(
+      sparkContext.parallelize(Row(Row(null)) :: Row(Row(Row(0))) :: Nil),
+      StructType(Seq(
+        StructField("a1", StructType(Seq(
+          StructField("a2", StructType(Seq(
+            StructField("col0", IntegerType, nullable = false))),
+            nullable = true))),
+          nullable = false))))
+
+    val maxNum = 100
+
+    // add many nested fields
+    checkAnswerAndSchema(
+      nullableStructLevel2.select(col("a1").withField("a2", (1 to maxNum).foldLeft(col("a1.a2")) {
+        (column, num) => column.withField(s"col$num", lit(num))
+      }).as("a1")),
+      Row(Row(null)) :: Row(Row(Row(0 to maxNum: _*))) :: Nil,
+      StructType(Seq(
+        StructField("a1", StructType(Seq(
+          StructField("a2", StructType((0 to maxNum).map(num =>
+            StructField(s"col$num", IntegerType, nullable = false))),
+            nullable = true))),
+          nullable = false))))
+
+    /**
+     * You might be tempted to write the above query like so:
+     *
+     * {{{
+     * nullableStructLevel2.select((1 to maxNum).foldLeft(col("a1")) {
+     *   (column, num) => column.withField(s"a2.col$num", lit(num))
+     * }.as("a1")),
+     * }}}
+     *
+     * This query leverages Column.withField API's ability to add/replace nested columns directly.
+     * However this will likely stall at the analyzer phase with as little as `maxNum = 3`,
+     * depending on how deeply nested the Column is that you're adding/replacing.
+     * If you're going to add multiple nested columns, you are better off adding them at the level
+     * of nesting that you want to add them.
+     */
+
+    // add and drop many nested fields
+    checkAnswerAndSchema(
+      nullableStructLevel2.select(col("a1").withField("a2", (1 to maxNum).foldLeft(col("a1.a2")) {
+        (column, num) => column.withField(s"col$num", lit(num)).dropFields(s"col${num - 1}")
+      }).as("a1")),
+      Row(Row(null)) :: Row(Row(Row(100))) :: Nil,
+      StructType(Seq(
+        StructField("a1", StructType(Seq(
+          StructField("a2", StructType(Seq(
+            StructField("col100", IntegerType, nullable = false))),
+            nullable = true))),
+          nullable = false))))
+
+    // add and drop many fields and then extract one of the newly added fields
+    checkAnswerAndSchema(
+      nullableStructLevel2.select(col("a1").withField("a2", (1 to maxNum).foldLeft(col("a1.a2")) {
+        (column, num) => column.withField(s"col$num", lit(num)).dropFields(s"col${num - 1}")
+      }).getField("a2").getField(s"col$maxNum").as("res")),
+      Row(null) :: Row(100) :: Nil,
+      StructType(Seq(StructField("res", IntegerType, nullable = true))))
+
+    // TODO: add many fields at many different depths of nesting
+  }
+
+  test("should move field up one level of nesting") {
+    val nullableStructLevel2: DataFrame = spark.createDataFrame(
+      sparkContext.parallelize(Row(Row(null)) :: Row(Row(Row(1, 2, 3))) :: Nil),
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", structType, nullable = true))),
+          nullable = true))))
+
+    // move a field up one level
+    checkAnswerAndSchema(
+      nullableStructLevel2.select(
+        col("a").withField("b", col("a.a.b")).dropFields("a.b").as("res")),
+      Row(Row(null, null)) ::  Row(Row(Row(1, 3), 2)) :: Nil,
+      StructType(Seq(
+        StructField("res", StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("c", IntegerType, nullable = false))),
+            nullable = true),
+          StructField("b", IntegerType, nullable = true))),
+          nullable = true))))
+
+    // move a field up one level and then extract it
+    checkAnswerAndSchema(
+      nullableStructLevel2.select(col("a").withField("b", col("a.a.b")).getField("b").as("res")),
+      Row(null) :: Row(2) :: Nil,
+      StructType(Seq(StructField("res", IntegerType, nullable = true))))
+  }
+
+  test("should be able to refer to newly added nested column") {
+    intercept[AnalysisException] {
+      structLevel1.select($"a".withField("d", lit(4)).withField("e", $"a.d" + 1).as("a"))
+    }.getMessage should include("No such struct field d in a, b, c")
+
+    checkAnswerAndSchema(
+      structLevel1
+        .select($"a".withField("d", lit(4)).as("a"))
+        .select($"a".withField("e", $"a.d" + 1).as("a")),
+      Row(Row(1, null, 3, 4, 5)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = false),
+          StructField("d", IntegerType, nullable = false),
+          StructField("e", IntegerType, nullable = false))),
+          nullable = false))))
+  }
+
+  test("should be able to drop newly added nested column") {
+    Seq(
+      structLevel1.select($"a".withField("d", lit(4)).dropFields("d").as("a")),
+      structLevel1
+        .select($"a".withField("d", lit(4)).as("a"))
+        .select($"a".dropFields("d").as("a"))
+    ).foreach { query =>
+      checkAnswerAndSchema(
+        query,
+        Row(Row(1, null, 3)) :: Nil,
+        StructType(Seq(
+          StructField("a", structType, nullable = false))))
+    }
+  }
+
+  test("should still be able to refer to dropped column within the same select statement") {
+    // we can still access the nested column even after dropping it within the select statement
+    checkAnswerAndSchema(
+      structLevel1.select($"a".dropFields("c").withField("z", $"a.c").as("a")),
+      Row(Row(1, null, 3)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = true),
+          StructField("z", IntegerType, nullable = false))),
+          nullable = false))))
+
+    // we can't access the nested column in another select statement after dropping it in a previous
+    // select statement
+    intercept[AnalysisException]{
+      structLevel1
+        .select($"a".dropFields("c").as("a"))
+        .select($"a".withField("z", $"a.c")).as("a")
+    }.getMessage should include("No such struct field c in a, b;")
   }
 }

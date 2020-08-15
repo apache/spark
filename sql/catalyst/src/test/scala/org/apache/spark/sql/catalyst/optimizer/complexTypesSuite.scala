@@ -37,14 +37,15 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
   object Optimizer extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("collapse projections", FixedPoint(10),
-          CollapseProject) ::
+        CollapseProject) ::
       Batch("Constant Folding", FixedPoint(10),
-          NullPropagation,
-          ConstantFolding,
-          BooleanSimplification,
-          SimplifyConditionals,
-          SimplifyBinaryComparison,
-          SimplifyExtractValueOps) :: Nil
+         NullPropagation,
+         ConstantFolding,
+         BooleanSimplification,
+         SimplifyConditionals,
+         SimplifyBinaryComparison,
+         SimplifyExtractValueOps,
+         CombineUpdateFields) :: Nil
   }
 
   private val idAtt = ('id).long.notNull
@@ -453,28 +454,29 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](3, 4))), null)
   }
 
-  private val structAttr = 'struct1.struct('a.int).withNullability(false)
+  private val structAttr = 'struct1.struct('a.int, 'b.int).withNullability(false)
   private val testStructRelation = LocalRelation(structAttr)
 
-  private val nullableStructAttr = 'struct1.struct('a.int)
+  private val nullableStructAttr = 'struct1.struct('a.int, 'b.int)
   private val testNullableStructRelation = LocalRelation(nullableStructAttr)
 
-  test("simplify GetStructField on WithFields that is not changing the attribute being extracted") {
-    def query(relation: LocalRelation): LogicalPlan = relation.select(
-      GetStructField(WithFields('struct1, Seq("b"), Seq(Literal(1))), 0, Some("a")) as "outerAttr")
+  test("simplify GetStructField on UpdateFields that is not changing the attribute being " +
+    "extracted") {
+    def query(relation: LocalRelation): LogicalPlan = relation.select(GetStructField(
+      UpdateFields('struct1, Seq(WithField("b", Literal(1)))), 0, Some("a")) as "outerAttr")
 
     checkRule(
       query(testStructRelation),
-      testStructRelation.select(GetStructField('struct1, 0, Some("a")) as "outerAttr"))
+      testStructRelation.select(GetStructField('struct1, 0) as "outerAttr"))
 
     checkRule(
       query(testNullableStructRelation),
-      testNullableStructRelation.select(GetStructField('struct1, 0, Some("a")) as "outerAttr"))
+      testNullableStructRelation.select(GetStructField('struct1, 0) as "outerAttr"))
   }
 
-  test("simplify GetStructField on WithFields that is changing the attribute being extracted") {
-    def query(relation: LocalRelation): LogicalPlan = relation.select(
-      GetStructField(WithFields('struct1, Seq("b"), Seq(Literal(1))), 1, Some("b")) as "res")
+  test("simplify GetStructField on UpdateFields that is changing the attribute being extracted") {
+    def query(relation: LocalRelation): LogicalPlan = relation.select(GetStructField(
+      UpdateFields('struct1, Seq(WithField("b", Literal(1)))), 1, Some("b")) as "res")
 
     checkRule(
       query(testStructRelation),
@@ -486,11 +488,11 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
         If(IsNull('struct1), Literal(null, IntegerType), Literal(1)) as "res"))
   }
 
-  test(
-    "simplify GetStructField on WithFields that is changing the attribute being extracted twice") {
-    def query(relation: LocalRelation): LogicalPlan = relation.select(
-      GetStructField(WithFields('struct1, Seq("b", "b"), Seq(Literal(1), Literal(2))), 1, Some("b"))
-        as "outerAtt")
+  test("simplify GetStructField on UpdateFields that is changing the attribute being extracted " +
+    "twice") {
+    def query(relation: LocalRelation): LogicalPlan = relation.select(GetStructField(
+      UpdateFields('struct1, Seq(WithField("b", Literal(1)), WithField("b", Literal(2)))),
+      1, Some("b")) as "outerAtt")
 
     checkRule(
       query(testStructRelation),
@@ -502,9 +504,9 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
         If(IsNull('struct1), Literal(null, IntegerType), Literal(2)) as "outerAtt"))
   }
 
-  test("collapse multiple GetStructField on the same WithFields") {
+  test("collapse multiple GetStructField on the same UpdateFields") {
     def query(relation: LocalRelation): LogicalPlan = relation
-      .select(WithFields('struct1, Seq("b"), Seq(Literal(2))) as "struct2")
+      .select(UpdateFields('struct1, Seq(WithField("b", Literal(2)))) as "struct2")
       .select(
         GetStructField('struct2, 0, Some("a")) as "struct1A",
         GetStructField('struct2, 1, Some("b")) as "struct1B")
@@ -512,21 +514,21 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     checkRule(
       query(testStructRelation),
       testStructRelation.select(
-        GetStructField('struct1, 0, Some("a")) as "struct1A",
+        GetStructField('struct1, 0) as "struct1A",
         Literal(2) as "struct1B"))
 
     checkRule(
       query(testNullableStructRelation),
       testNullableStructRelation.select(
-        GetStructField('struct1, 0, Some("a")) as "struct1A",
+        GetStructField('struct1, 0) as "struct1A",
         If(IsNull('struct1), Literal(null, IntegerType), Literal(2)) as "struct1B"))
   }
 
-  test("collapse multiple GetStructField on different WithFields") {
+  test("collapse multiple GetStructField on different UpdateFields") {
     def query(relation: LocalRelation): LogicalPlan = relation
       .select(
-        WithFields('struct1, Seq("b"), Seq(Literal(2))) as "struct2",
-        WithFields('struct1, Seq("b"), Seq(Literal(3))) as "struct3")
+        UpdateFields('struct1, Seq(WithField("b", Literal(2)))) as "struct2",
+        UpdateFields('struct1, Seq(WithField("b", Literal(3)))) as "struct3")
       .select(
         GetStructField('struct2, 0, Some("a")) as "struct2A",
         GetStructField('struct2, 1, Some("b")) as "struct2B",
@@ -537,18 +539,229 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
       query(testStructRelation),
       testStructRelation
         .select(
-          GetStructField('struct1, 0, Some("a")) as "struct2A",
+          GetStructField('struct1, 0) as "struct2A",
           Literal(2) as "struct2B",
-          GetStructField('struct1, 0, Some("a")) as "struct3A",
+          GetStructField('struct1, 0) as "struct3A",
           Literal(3) as "struct3B"))
 
     checkRule(
       query(testNullableStructRelation),
       testNullableStructRelation
         .select(
-          GetStructField('struct1, 0, Some("a")) as "struct2A",
+          GetStructField('struct1, 0) as "struct2A",
           If(IsNull('struct1), Literal(null, IntegerType), Literal(2)) as "struct2B",
-          GetStructField('struct1, 0, Some("a")) as "struct3A",
+          GetStructField('struct1, 0) as "struct3A",
           If(IsNull('struct1), Literal(null, IntegerType), Literal(3)) as "struct3B"))
+  }
+
+  test("simplify GetStructField on UpdateFields with multiple WithField and extract new column") {
+    def query(relation: LocalRelation): LogicalPlan = relation.select(GetStructField(
+      UpdateFields('struct1, ('a' to 'z').zipWithIndex.map { case (char, i) =>
+        WithField(char.toString, Literal(i))
+      }), 2) as "res")
+
+    checkRule(
+      query(testStructRelation),
+      testStructRelation.select(Literal(2) as "res"))
+
+    checkRule(
+      query(testNullableStructRelation),
+      testNullableStructRelation.select(
+        If(IsNull('struct1), Literal(null, IntegerType), Literal(2)) as "res"))
+  }
+
+  test("Combine multiple UpdateFields and extract newly added field") {
+    def query(relation: LocalRelation): LogicalPlan = relation.select(GetStructField(
+      UpdateFields(
+        UpdateFields(
+          UpdateFields(
+            UpdateFields(
+              'struct1,
+              Seq(WithField("col1", Literal(1)))),
+            Seq(WithField("col2", Literal(2)))),
+          Seq(WithField("col3", Literal(3)))),
+        Seq(WithField("col4", Literal(4)))),
+      5, Some("col4")) as "res")
+
+    checkRule(
+      query(testStructRelation),
+      testStructRelation.select(Literal(4) as "res"))
+
+    checkRule(
+      query(testNullableStructRelation),
+      testNullableStructRelation.select(
+        If(IsNull('struct1), Literal(null, IntegerType), Literal(4)) as "res"))
+  }
+
+  test("should correctly handle different WithField + DropField + GetStructField combinations") {
+    def check(fieldOps: Seq[StructFieldsOperation], ordinal: Int, expected: Expression): Unit = {
+      def query(relation: LocalRelation): LogicalPlan =
+        relation.select(GetStructField(UpdateFields('struct1, fieldOps), ordinal).as("res"))
+
+      checkRule(
+        query(testStructRelation),
+        testStructRelation.select(expected.as("res")))
+
+      checkRule(
+        query(testNullableStructRelation),
+        testNullableStructRelation.select((expected match {
+          case expr: GetStructField if expr.child.fastEquals('struct1.expr) => expr
+          case expr => If(IsNull('struct1), Literal(null, expr.dataType), expr)
+        }).as("res")))
+    }
+
+    // add attribute, extract an attribute from the original struct
+    check(WithField("c", Literal(3)) :: Nil, 0, GetStructField('struct1, 0))
+
+    // drop attribute, extract an attribute from the original struct
+    check(DropField("b") :: Nil, 0, GetStructField('struct1, 0))
+    check(DropField("a") :: Nil, 0, GetStructField('struct1, 1))
+
+    // drop attribute, add attribute, extract an attribute from the original struct
+    check(DropField("b") :: WithField("c", Literal(2)) :: Nil, 0, GetStructField('struct1, 0))
+    check(DropField("a") :: WithField("c", Literal(2)) :: Nil, 0, GetStructField('struct1, 1))
+
+    // add attribute, drop attribute, extract an attribute from the original struct
+    check(WithField("c", Literal(3)) :: DropField("a") :: Nil, 0, GetStructField('struct1, 1))
+    check(WithField("c", Literal(3)) :: DropField("b") :: Nil, 0, GetStructField('struct1, 0))
+    check(WithField("b", Literal(3)) :: DropField("b") :: Nil, 0, GetStructField('struct1, 0))
+    check(WithField("a", Literal(3)) :: DropField("a") :: Nil, 0, GetStructField('struct1, 1))
+
+    // add attribute, drop same attribute, extract an attribute from the original struct
+    check(WithField("c", Literal(3)) :: DropField("c") :: Nil, 0, GetStructField('struct1, 0))
+
+    // add attribute, drop another attribute, extract added attribute
+    check(WithField("b", Literal(3)) :: DropField("a") :: Nil, 0, Literal(3))
+    check(WithField("a", Literal(3)) :: DropField("b") :: Nil, 0, Literal(3))
+
+    // drop attribute, add same attribute, extract added attribute
+    check(DropField("a") :: WithField("c", Literal(3)) :: Nil, 1, Literal(3))
+    check(DropField("b") :: WithField("c", Literal(3)) :: Nil, 1, Literal(3))
+    check(DropField("b") :: WithField("b", Literal(3)) :: Nil, 1, Literal(3))
+    check(DropField("a") :: WithField("a", Literal(3)) :: Nil, 1, Literal(3))
+    check(DropField("c") :: WithField("c", Literal(3)) :: Nil, 2, Literal(3))
+    check(WithField("c", Literal(3)) :: DropField("c") :: WithField("c", Literal(4)) :: Nil, 2,
+      Literal(4))
+
+    // drop earlier attribute, add attribute, extract added attribute
+    check(DropField("a") :: WithField("c", Literal(3)) :: Nil, 1, Literal(3))
+
+    // drop later attribute, add attribute, extract added attribute
+    check(DropField("b") :: WithField("c", Literal(3)) :: Nil, 1, Literal(3))
+  }
+
+  test("should only transform GetStructField calls if not GetStructField on same struct") {
+    val struct2 = 'struct2.struct('b.int)
+    val testStructRelation = LocalRelation(structAttr, struct2)
+    val testNullableStructRelation = LocalRelation(nullableStructAttr, struct2)
+
+    def addFieldFromAnotherStructAndThenExtractIt(relation: LocalRelation): LogicalPlan =
+      relation.select(GetStructField(
+        UpdateFields('struct1, Seq(WithField("b", GetStructField('struct2, 0)))), 1).as("res"))
+
+    checkRule(
+      addFieldFromAnotherStructAndThenExtractIt(testStructRelation),
+      testStructRelation.select(GetStructField('struct2, 0).as("res")))
+
+    checkRule(
+      addFieldFromAnotherStructAndThenExtractIt(testNullableStructRelation),
+      testNullableStructRelation.select(
+        If(IsNull('struct1), Literal(null, IntegerType), GetStructField('struct2, 0)).as("res")))
+
+    def addFieldFromSameStructAndThenExtractIt(relation: LocalRelation): LogicalPlan =
+      relation.select(GetStructField(
+        UpdateFields('struct1, Seq(WithField("b", GetStructField('struct1, 0)))), 1).as("res"))
+
+    checkRule(
+      addFieldFromSameStructAndThenExtractIt(testStructRelation),
+      testStructRelation.select(GetStructField('struct1, 0).as("res")))
+
+    checkRule(
+      addFieldFromSameStructAndThenExtractIt(testNullableStructRelation),
+      testNullableStructRelation.select(GetStructField('struct1, 0).as("res")))
+  }
+
+  test("simplify if extract value is from inside struct") {
+    val nullableStructAttr = 'struct1a.struct(
+      'struct2a.struct(
+        'struct3a.struct('a.int, 'b.int)))
+    val structAttr = nullableStructAttr.withNullability(false)
+    val testStructRelation = LocalRelation(structAttr)
+    val testNullableStructRelation = LocalRelation(nullableStructAttr)
+
+    Seq(testStructRelation, testNullableStructRelation).foreach { relation =>
+      checkRule(
+        relation.select(GetStructField(
+          UpdateFields('struct1a, Seq(
+            WithField("struct2b", GetStructField(GetStructField('struct1a, 0), 0)))), 1).as("res")),
+        relation.select(GetStructField(GetStructField('struct1a, 0), 0).as("res")))
+    }
+  }
+
+  test("simplify add multiple nested fields") {
+    // this scenario is possible if users add multiple nested columns via the Column.withField API
+    // ideally, users should not be doing this.
+    val nullableStructLevel2 = LocalRelation(
+      'a1.struct(
+        'a2.struct('a3.int)).withNullability(false))
+
+    val addB3toA1A2 = UpdateFields('a1, Seq(WithField("a2",
+      UpdateFields(GetStructField('a1, 0), Seq(WithField("b3", Literal(2)))))))
+
+    val query = nullableStructLevel2.select(
+      UpdateFields(
+        addB3toA1A2,
+        Seq(WithField("a2", UpdateFields(
+          GetStructField(addB3toA1A2, 0), Seq(WithField("c3", Literal(3))))))).as("a1"))
+
+    val expected = nullableStructLevel2.select(
+      UpdateFields('a1, Seq(
+        WithField("a2", UpdateFields(GetStructField('a1, 0), Seq(WithField("b3", 2)))),
+        WithField("a2", UpdateFields(GetStructField('a1, 0), Seq(
+          WithField("b3", 2),
+          WithField("c3", 3))))
+      )).as("a1"))
+
+    // TODO: how to make this a reality
+    val idealExpected = nullableStructLevel2.select(
+      UpdateFields('a1, Seq(
+        WithField("a2", UpdateFields(GetStructField('a1, 0), Seq(
+          WithField("b3", 2),
+          WithField("c3", 3))))
+      )).as("a1"))
+
+    checkRule(query, expected)
+  }
+
+  test("simplify drop multiple nested fields") {
+    // this scenario is possible if users drop multiple nested columns via the Column.dropFields API
+    // ideally, users should not be doing this.
+    val df = LocalRelation(
+      'a1.struct(
+        'a2.struct('a3.int, 'b3.int, 'c3.int).withNullability(false)
+      ).withNullability(false))
+
+    val dropA1A2B = UpdateFields('a1, Seq(WithField("a2", UpdateFields(
+      GetStructField('a1, 0), Seq(DropField("b3"))))))
+
+    val query = df.select(
+      UpdateFields(
+        dropA1A2B,
+        Seq(WithField("a2", UpdateFields(
+          GetStructField(dropA1A2B, 0), Seq(DropField("c3")))))).as("a1"))
+
+    val expected = df.select(
+      UpdateFields('a1, Seq(
+        WithField("a2", UpdateFields(GetStructField('a1, 0), Seq(DropField("b3")))),
+        WithField("a2", UpdateFields(GetStructField('a1, 0), Seq(DropField("b3"), DropField("c3"))))
+      )).as("a1"))
+
+    // TODO: how to make this a reality
+    val idealExpected = df.select(
+      UpdateFields('a1, Seq(
+        WithField("a2", UpdateFields(GetStructField('a1, 0), Seq(DropField("b3"), DropField("c3"))))
+      )).as("a1"))
+
+    checkRule(query, expected)
   }
 }
