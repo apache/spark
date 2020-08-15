@@ -330,4 +330,42 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("ADD FILE /path with space/abc.txt", AddFileCommand("/path with space/abc.txt"))
     assertEqual("ADD JAR /path with space/abc.jar", AddJarCommand("/path with space/abc.jar"))
   }
+
+  test("SPARK-32607: Script Transformation ROW FORMAT DELIMITED" +
+    " `TOK_TABLEROWFORMATLINES` only support '\\n'") {
+
+      // test input format TOK_TABLEROWFORMATLINES
+      intercept(
+          s"""
+             |SELECT TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY ','
+             |  LINES TERMINATED BY '@'
+             |  NULL DEFINED AS 'null'
+             |  USING 'cat' AS (value)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '&'
+             |  LINES TERMINATED BY '\n'
+             |  NULL DEFINED AS 'NULL'
+             |FROM v
+        """.stripMargin,
+      "LINES TERMINATED BY only supports newline '\\n' right now.")
+
+    // test output format TOK_TABLEROWFORMATLINES
+    intercept(
+      s"""
+         |SELECT TRANSFORM(a, b, c, d, e)
+         |  ROW FORMAT DELIMITED
+         |  FIELDS TERMINATED BY ','
+         |  LINES TERMINATED BY '\n'
+         |  NULL DEFINED AS 'null'
+         |  USING 'cat' AS (value)
+         |  ROW FORMAT DELIMITED
+         |  FIELDS TERMINATED BY '&'
+         |  LINES TERMINATED BY '@'
+         |  NULL DEFINED AS 'NULL'
+         |FROM v
+        """.stripMargin,
+      "LINES TERMINATED BY only supports newline '\\n' right now.")
+  }
 }

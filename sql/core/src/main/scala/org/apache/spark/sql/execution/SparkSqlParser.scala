@@ -759,6 +759,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         def entry(key: String, value: Token): Seq[(String, String)] = {
           Option(value).map(t => key -> t.getText).toSeq
         }
+
+        if (Option(c.linesSeparatedBy).map(string).getOrElse("\n") != "\n") {
+          throw new ParseException(
+            "LINES TERMINATED BY only supports newline '\\n' right now.", c)
+        }
+
         val entries = entry("TOK_TABLEROWFORMATFIELD", c.fieldsTerminatedBy) ++
           entry("TOK_TABLEROWFORMATCOLLITEMS", c.collectionItemsTerminatedBy) ++
           entry("TOK_TABLEROWFORMATMAPKEYS", c.keysTerminatedBy) ++
