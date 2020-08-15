@@ -536,7 +536,7 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
         bestModel = self.bestModel.copy(extra)
         avgMetrics = self.avgMetrics
         subModels = self.subModels
-        return CrossValidatorModel(bestModel, avgMetrics, subModels)
+        return self._copyValues(CrossValidatorModel(bestModel, avgMetrics, subModels), extra=extra)
 
     @since("2.3.0")
     def write(self):
