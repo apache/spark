@@ -98,6 +98,7 @@ class CrossValidatorTests(SparkSessionTestCase):
         cvCopied = cv.copy()
         for param in [
             lambda x: x.getEstimator().uid,
+            # SPARK-32092: CrossValidator.copy() needs to copy all existing params
             lambda x: x.getNumFolds(),
             lambda x: x.getFoldCol(),
             lambda x: x.getCollectSubModels(),
@@ -111,6 +112,7 @@ class CrossValidatorTests(SparkSessionTestCase):
         for index in range(len(cvModel.avgMetrics)):
             self.assertTrue(abs(cvModel.avgMetrics[index] - cvModelCopied.avgMetrics[index])
                             < 0.0001)
+        # SPARK-32092: CrossValidator.copy() needs to copy all existing params
         for param in [
             lambda x: x.getNumFolds(),
             lambda x: x.getFoldCol(),
@@ -201,6 +203,7 @@ class CrossValidatorTests(SparkSessionTestCase):
         self.assertEqual(loadedLrModel.uid, lrModel.uid)
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
 
+        # SPARK-32092: Saving and then loading CrossValidatorModel should not change the params
         cvModelPath = temp_path + "/cvModel"
         cvModel.save(cvModelPath)
         loadedCvModel = CrossValidatorModel.load(cvModelPath)
