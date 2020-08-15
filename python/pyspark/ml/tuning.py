@@ -560,8 +560,17 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
         avgMetrics = _java2py(sc, java_stage.avgMetrics())
         estimator, epms, evaluator = super(CrossValidatorModel, cls)._from_java_impl(java_stage)
 
-        py_stage = cls(bestModel=bestModel, avgMetrics=avgMetrics)._set(estimator=estimator)
-        py_stage = py_stage._set(estimatorParamMaps=epms)._set(evaluator=evaluator)
+        py_stage = cls(bestModel=bestModel, avgMetrics=avgMetrics)
+        params = {
+            "evaluator": evaluator,
+            "estimator": estimator,
+            "estimatorParamMaps": epms,
+            "numFolds": java_stage.getNumFolds(),
+            "foldCol": java_stage.getFoldCol(),
+            "seed": java_stage.getSeed(),
+        }
+        for param_name, param_val in params.items():
+            py_stage = py_stage._set(**{param_name: param_val})
 
         if java_stage.hasSubModels():
             py_stage.subModels = [[JavaParams._from_java(sub_model)
@@ -585,9 +594,16 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
                                              _py2java(sc, self.avgMetrics))
         estimator, epms, evaluator = super(CrossValidatorModel, self)._to_java_impl()
 
-        _java_obj.set("evaluator", evaluator)
-        _java_obj.set("estimator", estimator)
-        _java_obj.set("estimatorParamMaps", epms)
+        params = {
+            "evaluator": evaluator,
+            "estimator": estimator,
+            "estimatorParamMaps": epms,
+            "numFolds": self.getNumFolds(),
+            "foldCol": self.getFoldCol(),
+            "seed": self.getSeed(),
+        }
+        for param_name, param_val in params.items():
+            _java_obj.set(param_name, param_val)
 
         if self.subModels is not None:
             java_sub_models = [[sub_model._to_java() for sub_model in fold_sub_models]
