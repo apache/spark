@@ -1455,7 +1455,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
         .csv(path.getCanonicalPath)
       assert(readback1.schema == new StructType().add("_c0", IntegerType))
 
-      // SPARK-XXXXX: During infer, "path" option gets added again to the paths that have already
+      // SPARK-32621: During infer, "path" option gets added again to the paths that have already
       // been listed. This results in reading more data than necessary and causes different schema
       // to be inferred when sampling ratio is involved.
       val readback2 = spark.read
