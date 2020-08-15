@@ -1847,7 +1847,13 @@ private[spark] class DAGScheduler(
               fileLost = true,
               hostToUnregisterOutputs = hostToUnregisterOutputs,
               maybeEpoch = Some(task.epoch),
-              ignoreShuffleVersion = isHostDecommissioned)
+              // shuffleFileLostEpoch is ignored when a host is decommissioned because some
+              // decommissioned executors on that host might have been removed before this fetch
+              // failure and might have bumped up the shuffleFileLostEpoch. We ignore that, and
+              // proceed with unconditional removal of shuffle outputs from all executors on that
+              // host, including from those that we still haven't confirmed as lost due to heartbeat
+              // delays.
+              ignoreShuffleFileLostEpoch = isHostDecommissioned)
           }
         }
 
@@ -2014,7 +2020,7 @@ private[spark] class DAGScheduler(
       fileLost: Boolean,
       hostToUnregisterOutputs: Option[String],
       maybeEpoch: Option[Long] = None,
-      ignoreShuffleVersion: Boolean = false): Unit = {
+      ignoreShuffleFileLostEpoch: Boolean = false): Unit = {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     logDebug(s"Considering removal of executor $execId; " +
       s"fileLost: $fileLost, currentEpoch: $currentEpoch")
@@ -2025,7 +2031,7 @@ private[spark] class DAGScheduler(
       clearCacheLocs()
     }
     if (fileLost) {
-      val remove = if (ignoreShuffleVersion) {
+      val remove = if (ignoreShuffleFileLostEpoch) {
         true
       } else if (!shuffleFileLostEpoch.contains(execId) ||
         shuffleFileLostEpoch(execId) < currentEpoch) {

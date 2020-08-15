@@ -294,6 +294,8 @@ private[spark] class CoarseGrainedExecutorBackend(
         override def run(): Unit = {
           var lastTaskRunningTime = System.nanoTime()
           val sleep_time = 1000 // 1s
+          // This config is internal and only used by unit tests to force an executor
+          // to hang around for longer when decommissioned.
           val initialSleepMillis = env.conf.getInt(
             "spark.executor.decommission.initial.sleep.millis", sleep_time)
           if (initialSleepMillis > 0) {

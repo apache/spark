@@ -236,6 +236,8 @@ class DecommissionWorkerSuite
       val jobResult = sc.parallelize(1 to 2, 2).mapPartitionsWithIndex((_, _) => {
         val executorId = SparkEnv.get.executorId
         val context = TaskContext.get()
+        // Only sleep in the first attempt to create the required window for decommissioning.
+        // Subsequent attempts don't need to be delayed to speed up the test.
         if (context.attemptNumber() == 0 && context.stageAttemptNumber() == 0) {
           val sleepTimeSeconds = if (executorId == executorToDecom) 10 else 1
           Thread.sleep(sleepTimeSeconds * 1000L)
