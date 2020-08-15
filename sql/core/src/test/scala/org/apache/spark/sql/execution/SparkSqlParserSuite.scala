@@ -349,7 +349,7 @@ class SparkSqlParserSuite extends AnalysisTest {
              |  NULL DEFINED AS 'NULL'
              |FROM v
         """.stripMargin,
-      "LINES TERMINATED BY only supports newline '\\n' right now.")
+      "LINES TERMINATED BY only supports newline '\\n' right now")
 
     // test output format TOK_TABLEROWFORMATLINES
     intercept(
@@ -366,6 +366,6 @@ class SparkSqlParserSuite extends AnalysisTest {
          |  NULL DEFINED AS 'NULL'
          |FROM v
         """.stripMargin,
-      "LINES TERMINATED BY only supports newline '\\n' right now.")
+      "LINES TERMINATED BY only supports newline '\\n' right now")
   }
 }
