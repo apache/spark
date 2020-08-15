@@ -87,7 +87,8 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
           store.getExecutionList,
           "sqlserver",
           UIUtils.prependBaseUri(request, parent.basePath),
-          sqlTableTag).table(sqlTablePage))
+          sqlTableTag,
+          showSessionLink = true).table(sqlTablePage))
       } catch {
         case e@(_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
           Some(<div class="alert alert-error">
@@ -170,7 +171,8 @@ private[ui] class SqlStatsPagedTable(
     data: Seq[ExecutionInfo],
     subPath: String,
     basePath: String,
-    sqlStatsTableTag: String) extends PagedTable[SqlStatsTableRow] {
+    sqlStatsTableTag: String,
+    showSessionLink: Boolean) extends PagedTable[SqlStatsTableRow] {
 
   private val (sortColumn, desc, pageSize) =
     getTableParameters(request, sqlStatsTableTag, "Start Time")
@@ -206,18 +208,34 @@ private[ui] class SqlStatsPagedTable(
 
   override def headers: Seq[Node] = {
     val sqlTableHeadersAndTooltips: Seq[(String, Boolean, Option[String])] =
-      Seq(
-        ("User", true, None),
-        ("JobID", true, None),
-        ("GroupID", true, None),
-        ("Start Time", true, None),
-        ("Finish Time", true, Some(THRIFT_SERVER_FINISH_TIME)),
-        ("Close Time", true, Some(THRIFT_SERVER_CLOSE_TIME)),
-        ("Execution Time", true, Some(THRIFT_SERVER_EXECUTION)),
-        ("Duration", true, Some(THRIFT_SERVER_DURATION)),
-        ("Statement", true, None),
-        ("State", true, None),
-        ("Detail", true, None))
+      if (showSessionLink) {
+        Seq(
+          ("User", true, None),
+          ("JobID", true, None),
+          ("GroupID", true, None),
+          ("Session ID", true, None),
+          ("Start Time", true, None),
+          ("Finish Time", true, Some(THRIFT_SERVER_FINISH_TIME)),
+          ("Close Time", true, Some(THRIFT_SERVER_CLOSE_TIME)),
+          ("Execution Time", true, Some(THRIFT_SERVER_EXECUTION)),
+          ("Duration", true, Some(THRIFT_SERVER_DURATION)),
+          ("Statement", true, None),
+          ("State", true, None),
+          ("Detail", true, None))
+      } else {
+        Seq(
+          ("User", true, None),
+          ("JobID", true, None),
+          ("GroupID", true, None),
+          ("Start Time", true, None),
+          ("Finish Time", true, Some(THRIFT_SERVER_FINISH_TIME)),
+          ("Close Time", true, Some(THRIFT_SERVER_CLOSE_TIME)),
+          ("Execution Time", true, Some(THRIFT_SERVER_EXECUTION)),
+          ("Duration", true, Some(THRIFT_SERVER_DURATION)),
+          ("Statement", true, None),
+          ("State", true, None),
+          ("Detail", true, None))
+      }
 
     isSortColumnValid(sqlTableHeadersAndTooltips, sortColumn)
 
@@ -247,6 +265,13 @@ private[ui] class SqlStatsPagedTable(
       <td>
         {info.groupId}
       </td>
+      {
+        if (showSessionLink) {
+          <td>
+            <a href={sessionLink}>{info.sessionId}</a>
+          </td>
+        }
+      }
       <td >
         {UIUtils.formatDate(startTime)}
       </td>
