@@ -89,15 +89,34 @@ class CrossValidatorTests(SparkSessionTestCase):
         grid = (ParamGridBuilder()
                 .addGrid(iee.inducedError, [100.0, 0.0, 10000.0])
                 .build())
-        cv = CrossValidator(estimator=iee, estimatorParamMaps=grid, evaluator=evaluator)
+        cv = CrossValidator(
+            estimator=iee,
+            estimatorParamMaps=grid,
+            evaluator=evaluator,
+            numFolds=2
+        )
         cvCopied = cv.copy()
-        self.assertEqual(cv.getEstimator().uid, cvCopied.getEstimator().uid)
+        for param in [
+            lambda x: x.getEstimator().uid,
+            lambda x: x.getNumFolds(),
+            lambda x: x.getFoldCol(),
+            lambda x: x.getCollectSubModels(),
+            lambda x: x.getParallelism(),
+            lambda x: x.getSeed()
+        ]:
+            self.assertEqual(param(cv), param(cvCopied))
 
         cvModel = cv.fit(dataset)
         cvModelCopied = cvModel.copy()
         for index in range(len(cvModel.avgMetrics)):
             self.assertTrue(abs(cvModel.avgMetrics[index] - cvModelCopied.avgMetrics[index])
                             < 0.0001)
+        for param in [
+            lambda x: x.getNumFolds(),
+            lambda x: x.getFoldCol(),
+            lambda x: x.getSeed()
+        ]:
+            self.assertEqual(param(cvModel), param(cvModelCopied))
 
     def test_fit_minimize_metric(self):
         dataset = self.spark.createDataFrame([
@@ -166,15 +185,33 @@ class CrossValidatorTests(SparkSessionTestCase):
         lr = LogisticRegression()
         grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
         evaluator = BinaryClassificationEvaluator()
-        cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        cv = CrossValidator(
+            estimator=lr,
+            estimatorParamMaps=grid, 
+            evaluator=evaluator,
+            collectSubModels=True,
+            numFolds=4
+        )
         cvModel = cv.fit(dataset)
         lrModel = cvModel.bestModel
 
-        cvModelPath = temp_path + "/cvModel"
-        lrModel.save(cvModelPath)
-        loadedLrModel = LogisticRegressionModel.load(cvModelPath)
+        lrModelPath = temp_path + "/lrModel"
+        lrModel.save(lrModelPath)
+        loadedLrModel = LogisticRegressionModel.load(lrModelPath)
         self.assertEqual(loadedLrModel.uid, lrModel.uid)
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
+
+        cvModelPath = temp_path + "/cvModel"
+        cvModel.save(cvModelPath)
+        loadedCvModel = CrossValidatorModel.load(cvModelPath)
+        for param in [
+            lambda x: x.getNumFolds(),
+            lambda x: x.getFoldCol(),
+            lambda x: x.getSeed(),
+            lambda x: len(x.subModels)
+        ]:
+            self.assertEqual(param(cvModel), param(loadedCvModel))
+
 
     def test_save_load_simple_estimator(self):
         temp_path = tempfile.mkdtemp()
