@@ -82,7 +82,10 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
   test("input metrics with cache and coalesce") {
     // prime the cache manager
     val rdd = sc.textFile(tmpFilePath, 4).cache()
-    rdd.collect()
+    val bytesRead0 = runAndReturnBytesRead {
+      rdd.collect()
+    }
+    assert(bytesRead0 != 0)
 
     val bytesRead = runAndReturnBytesRead {
       rdd.count()
@@ -92,7 +95,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     }
 
     // for count and coalesce, the same bytes should be read.
-    assert(bytesRead != 0)
+    assert(bytesRead == 0)
     assert(bytesRead2 == bytesRead)
   }
 
@@ -145,13 +148,16 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
   test("input metrics on records read with cache") {
     // prime the cache manager
     val rdd = sc.textFile(tmpFilePath, 4).cache()
-    rdd.collect()
+    val records0 = runAndReturnRecordsRead {
+      rdd.collect()
+    }
+    assert(records0 != 0)
 
     val records = runAndReturnRecordsRead {
       rdd.count()
     }
 
-    assert(records == numRecords)
+    assert(records == 0)
   }
 
   /**

@@ -388,11 +388,9 @@ abstract class RDD[T: ClassTag](
       // Block hit.
       case Left(blockResult) =>
         if (readCachedBlock) {
-          val existingMetrics = context.taskMetrics().inputMetrics
-          existingMetrics.incBytesRead(blockResult.bytes)
+          // When we read rdd from cache, we should not increase the inputMetrics
           new InterruptibleIterator[T](context, blockResult.data.asInstanceOf[Iterator[T]]) {
             override def next(): T = {
-              existingMetrics.incRecordsRead(1)
               delegate.next()
             }
           }
