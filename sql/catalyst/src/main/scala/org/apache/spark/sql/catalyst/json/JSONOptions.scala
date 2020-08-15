@@ -50,6 +50,10 @@ private[sql] class JSONOptions(
         defaultColumnNameOfCorruptRecord)
   }
 
+  def withNewParameters(parameters: Map[String, String]): JSONOptions = {
+    new JSONOptions(parameters, defaultTimeZoneId, defaultColumnNameOfCorruptRecord)
+  }
+
   val samplingRatio =
     parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
   val primitivesAsString =

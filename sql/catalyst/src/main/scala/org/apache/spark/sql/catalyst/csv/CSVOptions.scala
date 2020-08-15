@@ -58,6 +58,10 @@ class CSVOptions(
         defaultColumnNameOfCorruptRecord)
   }
 
+  def withNewParameters(parameters: Map[String, String]): CSVOptions = {
+    new CSVOptions(parameters, columnPruning, defaultTimeZoneId, defaultColumnNameOfCorruptRecord)
+  }
+
   private def getChar(paramName: String, default: Char): Char = {
     val paramValue = parameters.get(paramName)
     paramValue match {
