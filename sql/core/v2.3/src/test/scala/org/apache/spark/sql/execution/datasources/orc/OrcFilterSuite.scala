@@ -515,10 +515,10 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-25557: case sensitivity in predicate pushdown") {
+  test("SPARK-32622: case sensitivity in predicate pushdown") {
     withTempPath { dir =>
       val count = 10
-      val tableName = "spark_25557"
+      val tableName = "spark_32622"
       val tableDir1 = dir.getAbsoluteFile + "/table1"
 
       // Physical ORC files have both `A` and `a` fields.
