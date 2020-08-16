@@ -759,7 +759,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         def entry(key: String, value: Token): Seq[(String, String)] = {
           Option(value).map(t => key -> t.getText).toSeq
         }
-
         val entries = entry("TOK_TABLEROWFORMATFIELD", c.fieldsTerminatedBy) ++
           entry("TOK_TABLEROWFORMATCOLLITEMS", c.collectionItemsTerminatedBy) ++
           entry("TOK_TABLEROWFORMATMAPKEYS", c.keysTerminatedBy) ++
