@@ -255,6 +255,9 @@ private[ui] class SqlStatsPagedTable(
       }
     }
 
+    val sessionLink = "%s/%s/session/?id=%s".format(
+      UIUtils.prependBaseUri(request, parent.basePath), parent.prefix, info.sessionId)
+
     <tr>
       <td>
         {info.userName}

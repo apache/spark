@@ -86,7 +86,8 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
           executionList,
           "sqlserver/session",
           UIUtils.prependBaseUri(request, parent.basePath),
-          sqlTableTag
+          sqlTableTag,
+          showSessionLink = false
         ).table(sqlTablePage))
       } catch {
         case e@(_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
