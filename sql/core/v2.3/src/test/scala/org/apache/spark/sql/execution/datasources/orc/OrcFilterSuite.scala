@@ -589,8 +589,6 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
           val actual = stripSparkFilter(sql(s"select a from $tableName where a < 0"))
           // TODO: ORC predicate pushdown should work under case-insensitive analysis.
-          sql(s"select a from $tableName where a < 0").show()
-          sql(s"select a from $tableName where a < 0").explain()
           assert(actual.count() == 1)
         }
       }
