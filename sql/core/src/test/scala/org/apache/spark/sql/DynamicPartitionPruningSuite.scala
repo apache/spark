@@ -17,18 +17,23 @@
 
 package org.apache.spark.sql
 
+import java.sql.Date
+
 import org.scalatest.GivenWhenThen
 
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.aggregate.BuildBloomFilter
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec}
+import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{BooleanType, ByteType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, TimestampType}
 
 /**
  * Test suite for the filtering ratio policy used to trigger dynamic partition pruning (DPP).
@@ -205,6 +210,35 @@ abstract class DynamicPartitionPruningSuiteBase
 
     val isMainQueryAdaptive = plan.isInstanceOf[AdaptiveSparkPlanExec]
     subqueriesAll(plan).filterNot(subqueryBroadcast.contains).foreach { s =>
+      assert(s.find(_.isInstanceOf[AdaptiveSparkPlanExec]).isDefined == isMainQueryAdaptive)
+    }
+  }
+
+  def checkPartitionPruningMixedFilterPredicate(
+      df: DataFrame,
+      withSubquery: Boolean,
+      withReusedExchange: Boolean): Unit = {
+    val plan = df.queryExecution.executedPlan
+    val dpExprs = collectDynamicPruningExpressions(plan)
+    val hasSubquery = dpExprs.exists {
+      case MixedFilterSubqueryExec(_, _: SubqueryExec, _, _) => true
+      case _ => false
+    }
+    val subqueryReused = dpExprs.collect {
+      case MixedFilterSubqueryExec(_, SubqueryExec(_,
+      ObjectHashAggregateExec(_, _, _, _, _, _, ShuffleExchangeExec(_,
+      ObjectHashAggregateExec(_, _, _, _, _, _, e: ReusedExchangeExec), _))), _, _) => e
+    }
+
+    val hasFilter = if (withSubquery) "Should" else "Shouldn't"
+    assert(hasSubquery == withSubquery,
+      s"$hasFilter trigger DPP with a subquery duplicate:\n${df.queryExecution}")
+    val hasBroadcast = if (withReusedExchange) "Should" else "Shouldn't"
+    assert(subqueryReused.nonEmpty == withReusedExchange,
+      s"$hasBroadcast trigger DPP with a reused shuffle exchange:\n${df.queryExecution}")
+
+    val isMainQueryAdaptive = plan.isInstanceOf[AdaptiveSparkPlanExec]
+    subqueriesAll(plan).filterNot(subqueryReused.contains).foreach { s =>
       assert(s.find(_.isInstanceOf[AdaptiveSparkPlanExec]).isDefined == isMainQueryAdaptive)
     }
   }
@@ -849,7 +883,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |ON f.store_id = s.store_id WHERE s.country = 'DE'
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, true, false)
+      checkPartitionPruningMixedFilterPredicate(df, true, true)
 
       checkAnswer(df,
         Row(1030, 2, 10, 3) ::
@@ -1302,6 +1336,101 @@ abstract class DynamicPartitionPruningSuiteBase
         Row(1020, 2, 1, 10) ::
         Row(1030, 3, 2, 10) :: Nil
       )
+    }
+  }
+
+  test("dynamic pruning filter with minimum, maximum and Bloom filter") {
+    withSQLConf(
+      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+      Given("has one join condition and shuffle can reuse")
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        val df = sql(
+          """
+            |SELECT f.date_id, s.state_province FROM fact_stats f
+            |JOIN dim_stats s
+            |ON f.store_id = s.store_id WHERE s.state_province = 'Texas'
+          """.stripMargin)
+
+        checkPartitionPruningMixedFilterPredicate(df, true, true)
+        checkAnswer(df, Row(1110, "Texas") :: Row(1120, "Texas") :: Nil)
+      }
+
+      Given("has two join condition and shuffle cannot reuse")
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+        val df = sql(
+          """
+            |SELECT f.date_id, f.*, s.state_province, s.country FROM fact_stats f
+            |JOIN dim_stats s
+            |ON f.store_id = s.store_id AND f.units_sold = s.country
+            |WHERE s.state_province = 'Texas'
+          """.stripMargin)
+
+        checkPartitionPruningMixedFilterPredicate(df, true, false)
+        checkAnswer(df, Nil)
+      }
+
+      Given("increase broadcastjoin threshold will disable mixed filter")
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10000000") {
+        val df = sql(
+          """
+            |SELECT f.date_id, s.state_province FROM fact_stats f
+            |JOIN dim_stats s
+            |ON f.store_id = s.store_id WHERE s.state_province = 'Texas'
+          """.stripMargin)
+
+        checkPartitionPruningMixedFilterPredicate(df, false, false)
+        checkAnswer(df, Row(1110, "Texas") :: Row(1120, "Texas") :: Nil)
+      }
+    }
+  }
+
+  test("minimum, maximum and Bloom filter with different types") {
+    withSQLConf(
+      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      Seq(BooleanType, ByteType, ShortType, IntegerType, LongType,
+        FloatType, DoubleType, DecimalType(18, 2),
+        DateType, TimestampType, StringType/* , BinaryType */).foreach { dataType =>
+        Given(s"${dataType.sql} type")
+        val castCol = if (dataType == DateType) {
+          (col("id").cast(IntegerType) + Literal(Date.valueOf("2020-08-08"))).cast(dataType).as("k")
+        } else {
+          col("id").cast(dataType).as("k")
+        }
+        withTable("df1", "df2") {
+          spark.range(100)
+            .select(col("id"), castCol)
+            .write
+            .partitionBy("k")
+            .format(tableFormat)
+            .mode("overwrite")
+            .saveAsTable("df1")
+
+          spark.range(10)
+            .select(col("id"), castCol)
+            .write
+            .format(tableFormat)
+            .mode("overwrite")
+            .saveAsTable("df2")
+
+          val df = sql("SELECT df1.id, df2.id FROM df1 JOIN df2 ON df1.k = df2.k AND df2.id < 2")
+          if (BuildBloomFilter.isSupportBuildBloomFilterType(dataType)) {
+            checkPartitionPruningMixedFilterPredicate(df, true, true)
+          } else {
+            checkPartitionPruningMixedFilterPredicate(df, false, false)
+          }
+          if (dataType != BooleanType) {
+            checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
+          }
+        }
+      }
     }
   }
 }

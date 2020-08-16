@@ -282,6 +282,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DYNAMIC_PARTITION_PRUNING_MAX_BLOOM_FILTER_ENTRIES =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.maxBloomFilterEntries")
+      .internal()
+      .doc("The max number of entries to build the Bloom filter.")
+      .version("3.1.0")
+      .longConf
+      .createWithDefault(10000000L)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -2833,6 +2841,9 @@ class SQLConf extends Serializable with Logging {
 
   def dynamicPartitionPruningReuseBroadcastOnly: Boolean =
     getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
+
+  def dynamicPartitionPruningMaxBloomFilterEntries: Long =
+    getConf(DYNAMIC_PARTITION_PRUNING_MAX_BLOOM_FILTER_ENTRIES)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 

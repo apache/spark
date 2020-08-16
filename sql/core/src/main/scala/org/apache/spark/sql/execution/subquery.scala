@@ -17,17 +17,24 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.ByteArrayInputStream
+import java.lang.{Double => JDouble, Float => JFloat}
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{AttributeSeq, CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
+import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType, DateType, Decimal, DecimalType, DoubleType, FloatType, IntegralType, StringType, StructType, TimestampType}
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.sketch.BloomFilter
 
 /**
  * The base class for subquery that is used in SparkPlan.
@@ -163,6 +170,122 @@ case class InSubqueryExec(
   }
 
   override lazy val canonicalized: InSubqueryExec = {
+    copy(
+      child = child.canonicalized,
+      plan = plan.canonicalized.asInstanceOf[BaseSubqueryExec],
+      exprId = ExprId(0),
+      resultBroadcast = null)
+  }
+}
+
+case class MixedFilterValue(min: Any, max: Any, bloomFilter: BloomFilter)
+
+case class MixedFilterSubqueryExec(
+    child: Expression,
+    plan: BaseSubqueryExec,
+    exprId: ExprId,
+    private var resultBroadcast: Broadcast[MixedFilterValue] = null)
+  extends ExecSubqueryExpression {
+
+  @transient private var result: MixedFilterValue = _
+  private val ordering = TypeUtils.getInterpretedOrdering(child.dataType)
+
+  override def dataType: DataType = BooleanType
+  override def children: Seq[Expression] = child :: Nil
+  override def nullable: Boolean = child.nullable
+  override def toString: String = s"$child MIXED FILTER ${plan.name}"
+  override def withNewPlan(plan: BaseSubqueryExec): MixedFilterSubqueryExec = copy(plan = plan)
+
+  override def semanticEquals(other: Expression): Boolean = other match {
+    case in: MixedFilterSubqueryExec => child.semanticEquals(in.child) && plan.sameResult(in.plan)
+    case _ => false
+  }
+
+  def updateResult(): Unit = {
+    val head = plan.executeCollect().head
+    result = MixedFilterValue(head.get(0, child.dataType),
+      head.get(1, child.dataType),
+      BloomFilter.readFrom(new ByteArrayInputStream(head.getBinary(2))))
+    resultBroadcast = plan.sqlContext.sparkContext.broadcast(result)
+  }
+
+  def values(): Option[MixedFilterValue] = Option(resultBroadcast).map(_.value)
+
+  private def prepareResult(): Unit = {
+    require(resultBroadcast != null, s"$this has not finished")
+    if (result == null) {
+      result = resultBroadcast.value
+    }
+  }
+
+  private def testBloomFilter(bloomFilter: BloomFilter, value: Any): Boolean = {
+    child.dataType match {
+      case _: IntegralType =>
+        bloomFilter.mightContainLong(value.asInstanceOf[Number].longValue())
+      case DateType | TimestampType =>
+        bloomFilter.mightContainLong(value.asInstanceOf[Number].longValue())
+      case FloatType =>
+        bloomFilter.mightContainLong(JFloat.floatToIntBits(value.asInstanceOf[Float]).toLong)
+      case DoubleType =>
+        bloomFilter.mightContainLong(JDouble.doubleToLongBits(value.asInstanceOf[Double]))
+      case StringType =>
+        bloomFilter.mightContainBinary(value.asInstanceOf[UTF8String].getBytes)
+      case BinaryType =>
+        bloomFilter.mightContainBinary(value.asInstanceOf[Array[Byte]])
+      case _: DecimalType =>
+        bloomFilter.mightContainBinary(value.asInstanceOf[Decimal]
+          .toJavaBigDecimal.unscaledValue().toByteArray)
+      case _ =>
+        // Always return true for unsupported data type.
+        true
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    prepareResult()
+    val v = child.eval(input)
+    if (v == null) {
+      null
+    } else {
+      ordering.gteq(v, result.min) && ordering.lteq(v, result.max) &&
+        testBloomFilter(result.bloomFilter, v)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    prepareResult()
+    val childCode = child.genCode(ctx)
+    val input = childCode.value
+    val min = ctx.addReferenceObj("min", result.min)
+    val max = ctx.addReferenceObj("max", result.max)
+    val bloomFilter = ctx.addReferenceObj("bloomFilter", result.bloomFilter)
+
+    val binaryComparatorCode = s"${ctx.genComp(child.dataType, input, min)} >= 0 && " +
+      s"${ctx.genComp(child.dataType, input, max)} <= 0"
+
+    val bloomFilterTestCode = child.dataType match {
+      case _: IntegralType => s"$bloomFilter.mightContainLong((long)$input)"
+      case DateType | TimestampType => s"$bloomFilter.mightContainLong((long)$input)"
+      case FloatType => s"$bloomFilter.mightContainLong((long)Float.floatToIntBits($input))"
+      case DoubleType => s"$bloomFilter.mightContainLong(Double.doubleToLongBits($input))"
+      case StringType => s"$bloomFilter.mightContainBinary($input.getBytes())"
+      case BinaryType => s"$bloomFilter.mightContainBinary($input)"
+      case _: DecimalType =>
+        s"$bloomFilter.mightContainBinary($input.toJavaBigDecimal().unscaledValue().toByteArray())"
+      case _ => true.toString
+    }
+
+    ev.copy(code = childCode.code +
+      code"""
+            |boolean ${ev.value} = true;
+            |boolean ${ev.isNull} = ${childCode.isNull};
+            |if (!${childCode.isNull}) {
+            |  ${ev.value} = $binaryComparatorCode && $bloomFilterTestCode;
+            |}
+      """.stripMargin)
+  }
+
+  override lazy val canonicalized: MixedFilterSubqueryExec = {
     copy(
       child = child.canonicalized,
       plan = plan.canonicalized.asInstanceOf[BaseSubqueryExec],
