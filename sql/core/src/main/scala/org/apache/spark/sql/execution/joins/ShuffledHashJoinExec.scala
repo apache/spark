@@ -150,6 +150,8 @@ case class ShuffledHashJoinExec(
       streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
       buildNullRow: GenericInternalRow,
       streamNullRow: GenericInternalRow): Iterator[InternalRow] = {
+    // TODO(SPARK-32629):record metrics of extra BitSet/HashSet
+    // in full outer shuffled hash join
     val matchedKeys = new BitSet(hashedRelation.maxNumKeysIndex)
 
     // Process stream side with looking up hash relation
@@ -216,6 +218,8 @@ case class ShuffledHashJoinExec(
       streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
       buildNullRow: GenericInternalRow,
       streamNullRow: GenericInternalRow): Iterator[InternalRow] = {
+    // TODO(SPARK-32629):record metrics of extra BitSet/HashSet
+    // in full outer shuffled hash join
     val matchedRows = new mutable.HashSet[Long]
 
     def markRowMatched(keyIndex: Int, valueIndex: Int): Unit = {

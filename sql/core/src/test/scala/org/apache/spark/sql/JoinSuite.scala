@@ -1223,6 +1223,9 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       (spark.range(10).map(i => if (i % 2 == 0) i else null).selectExpr("value as k1"),
         spark.range(30).map(i => if (i % 4 == 0) i else null).selectExpr("value as k2"),
         $"k1" === $"k2"),
+      (spark.range(10).map(i => if (i % 3 == 0) i else null).selectExpr("value as k1"),
+        spark.range(30).map(i => if (i % 5 == 0) i else null).selectExpr("value as k2"),
+        $"k1" === $"k2"),
       // Test multiple join keys
       (spark.range(10).map(i => if (i % 2 == 0) i else null).selectExpr(
         "value as k1", "cast(value % 5 as short) as k2", "cast(value * 3 as long) as k3"),
