@@ -189,7 +189,7 @@ class CrossValidatorTests(SparkSessionTestCase):
         evaluator = BinaryClassificationEvaluator()
         cv = CrossValidator(
             estimator=lr,
-            estimatorParamMaps=grid, 
+            estimatorParamMaps=grid,
             evaluator=evaluator,
             collectSubModels=True,
             numFolds=4
@@ -214,7 +214,6 @@ class CrossValidatorTests(SparkSessionTestCase):
             lambda x: len(x.subModels)
         ]:
             self.assertEqual(param(cvModel), param(loadedCvModel))
-
 
     def test_save_load_simple_estimator(self):
         temp_path = tempfile.mkdtemp()
