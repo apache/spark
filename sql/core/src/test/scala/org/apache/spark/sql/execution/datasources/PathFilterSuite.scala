@@ -345,21 +345,21 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-31962: PathFilterStrategies - modifiedAfter option") {
     val options = CaseInsensitiveMap[String](Map("modifiedAfter" -> "2010-10-01T01:01:00"))
-    val strategy = PathFilterFactory.create(spark, spark.sessionState.newHadoopConf(), options)
+    val strategy = PathFilterFactory.create(options)
     assert(strategy.head.isInstanceOf[ModifiedAfterFilter])
     assert(strategy.size == 1)
   }
 
   test("SPARK-31962: PathFilterStrategies - modifiedBefore option") {
     val options = CaseInsensitiveMap[String](Map("modifiedBefore" -> "2020-10-01T01:01:00"))
-    val strategy = PathFilterFactory.create(spark, spark.sessionState.newHadoopConf(), options)
+    val strategy = PathFilterFactory.create(options)
     assert(strategy.head.isInstanceOf[ModifiedBeforeFilter])
     assert(strategy.size == 1)
   }
 
   test("SPARK-31962: PathFilterStrategies - pathGlobFilter option") {
     val options = CaseInsensitiveMap[String](Map("pathGlobFilter" -> "*.txt"))
-    val strategy = PathFilterFactory.create(spark, spark.sessionState.newHadoopConf(), options)
+    val strategy = PathFilterFactory.create(options)
     assert(strategy.head.isInstanceOf[PathGlobFilter])
     assert(strategy.size == 1)
   }
@@ -371,7 +371,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
         "modifiedAfter" -> "2020-01-01T01:01:01",
         "modifiedBefore" -> "2020-01-01T01:01:01"))
     val strategies =
-      PathFilterFactory.create(spark, spark.sessionState.newHadoopConf(), options)
+      PathFilterFactory.create(options)
     val classes = Set(
       "class org.apache.spark.sql.execution.datasources.PathGlobFilter",
       "class org.apache.spark.sql.execution.datasources.ModifiedAfterFilter",
@@ -383,7 +383,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-31962: PathFilterStrategies - no options") {
     val options = CaseInsensitiveMap[String](Map.empty)
-    val strategy = PathFilterFactory.create(spark, spark.sessionState.newHadoopConf(), options)
+    val strategy = PathFilterFactory.create(options)
     assert(strategy.isEmpty)
   }
 
