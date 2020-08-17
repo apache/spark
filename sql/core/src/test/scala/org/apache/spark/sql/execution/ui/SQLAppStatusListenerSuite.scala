@@ -803,9 +803,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     // aggregateMetrics should ignore metrics from job 0
     val aggregateMetrics = listener.liveExecutionMetrics(executionId)
     if (aggregateMetrics.isDefined) {
-      newAccumulatorIds.sorted.tail.foreach { id =>
-        assert(aggregateMetrics.get.contains(id))
-      }
+      oldAccumulatorIds.foreach(id => assert(!aggregateMetrics.get.contains(id)))
     }
 
     listener.onOtherEvent(SparkListenerSQLExecutionEnd(
