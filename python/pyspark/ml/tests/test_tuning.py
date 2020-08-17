@@ -93,6 +93,7 @@ class CrossValidatorTests(SparkSessionTestCase):
             estimator=iee,
             estimatorParamMaps=grid,
             evaluator=evaluator,
+            collectSubModels=True,
             numFolds=2
         )
         cvCopied = cv.copy()
@@ -119,6 +120,19 @@ class CrossValidatorTests(SparkSessionTestCase):
             lambda x: x.getSeed()
         ]:
             self.assertEqual(param(cvModel), param(cvModelCopied))
+        
+        cvModel.avgMetrics[0] = 'foo'
+        self.assertNotEqual(
+            cvModelCopied.avgMetrics[0],
+            'foo',
+            "Changing the original avgMetrics should not affect the copied model"
+        )
+        cvModel.subModels[0] = 'foo'
+        self.assertNotEqual(
+            cvModelCopied.subModels[0],
+            'foo',
+            "Changing the original subModels should not affect the copied model"
+        )
 
     def test_fit_minimize_metric(self):
         dataset = self.spark.createDataFrame([
@@ -562,15 +576,29 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         lr = LogisticRegression()
         grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
         evaluator = BinaryClassificationEvaluator()
-        tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        tvs = TrainValidationSplit(
+            estimator=lr,
+            estimatorParamMaps=grid,
+            evaluator=evaluator,
+            collectSubModels=True
+        )
         tvsModel = tvs.fit(dataset)
         lrModel = tvsModel.bestModel
 
-        tvsModelPath = temp_path + "/tvsModel"
-        lrModel.save(tvsModelPath)
-        loadedLrModel = LogisticRegressionModel.load(tvsModelPath)
+        lrModelPath = temp_path + "/lrModel"
+        lrModel.save(lrModelPath)
+        loadedLrModel = LogisticRegressionModel.load(lrModelPath)
         self.assertEqual(loadedLrModel.uid, lrModel.uid)
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
+
+        tvsModelPath = temp_path + "/tvsModel"
+        tvsModel.save(tvsModelPath)
+        loadedTvsModel = TrainValidationSplitModel.load(tvsModelPath)
+        for param in [
+            lambda x: x.getSeed(),
+            lambda x: x.getTrainRatio(),
+        ]:
+            self.assertEqual(param(tvsModel), param(loadedTvsModel))
 
     def test_save_load_simple_estimator(self):
         # This tests saving and loading the trained model only.
@@ -773,10 +801,29 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         grid = ParamGridBuilder() \
             .addGrid(iee.inducedError, [100.0, 0.0, 10000.0]) \
             .build()
-        tvs = TrainValidationSplit(estimator=iee, estimatorParamMaps=grid, evaluator=evaluator)
+        tvs = TrainValidationSplit(
+            estimator=iee,
+            estimatorParamMaps=grid,
+            evaluator=evaluator,
+            collectSubModels=True
+        )
         tvsModel = tvs.fit(dataset)
         tvsCopied = tvs.copy()
         tvsModelCopied = tvsModel.copy()
+
+        for param in [
+            lambda x: x.getCollectSubModels(),
+            lambda x: x.getParallelism(),
+            lambda x: x.getSeed(),
+            lambda x: x.getTrainRatio(),
+        ]:
+            self.assertEqual(param(tvs), param(tvsCopied))
+
+        for param in [
+            lambda x: x.getSeed(),
+            lambda x: x.getTrainRatio(),
+        ]:
+            self.assertEqual(param(tvsModel), param(tvsModelCopied))
 
         self.assertEqual(tvs.getEstimator().uid, tvsCopied.getEstimator().uid,
                          "Copied TrainValidationSplit has the same uid of Estimator")
@@ -788,6 +835,19 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         for index in range(len(tvsModel.validationMetrics)):
             self.assertEqual(tvsModel.validationMetrics[index],
                              tvsModelCopied.validationMetrics[index])
+
+        tvsModel.validationMetrics[0] = 'foo'
+        self.assertNotEqual(
+            tvsModelCopied.validationMetrics[0],
+            'foo',
+            "Changing the original validationMetrics should not affect the copied model"
+        )
+        tvsModel.subModels[0] = 'foo'
+        self.assertNotEqual(
+            tvsModelCopied.subModels[0],
+            'foo',
+            "Changing the original subModels should not affect the copied model"
+        )
 
 
 if __name__ == "__main__":
