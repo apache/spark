@@ -1864,7 +1864,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     clock.advance(2000)
     assert(scheduler.decommissionedExecutorsRemoved.size === 1)
     assert(scheduler.getExecutorDecommissionInfo("executor1").isDefined)
-    clock.advance(61000)
+    clock.advance(301000)
     assert(scheduler.getExecutorDecommissionInfo("executor1").isEmpty)
     assert(scheduler.decommissionedExecutorsRemoved.isEmpty)
   }

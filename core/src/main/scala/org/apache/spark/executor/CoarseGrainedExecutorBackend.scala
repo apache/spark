@@ -297,7 +297,7 @@ private[spark] class CoarseGrainedExecutorBackend(
           // This config is internal and only used by unit tests to force an executor
           // to hang around for longer when decommissioned.
           val initialSleepMillis = env.conf.getInt(
-            "spark.executor.decommission.initial.sleep.millis", sleep_time)
+            "spark.test.executor.decommission.initial.sleep.millis", sleep_time)
           if (initialSleepMillis > 0) {
             Thread.sleep(initialSleepMillis)
           }

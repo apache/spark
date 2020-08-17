@@ -148,7 +148,7 @@ private[spark] class TaskSchedulerImpl(
   // decommissioned.
   lazy val decommissionedExecutorsRemoved = CacheBuilder.newBuilder()
     .expireAfterWrite(
-      conf.getLong("spark.decommissioningRememberAfterRemoval.seconds", 60L), TimeUnit.SECONDS)
+      conf.get(DECOMMISSIONED_EXECUTORS_REMEMBER_AFTER_REMOVAL_TTL), TimeUnit.SECONDS)
     .ticker(new Ticker{
       override def read(): Long = TimeUnit.MILLISECONDS.toNanos(clock.getTimeMillis())
     })
