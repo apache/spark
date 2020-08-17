@@ -64,9 +64,7 @@ abstract class CSVDataSource extends Serializable {
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): Option[StructType] = {
     if (inputPaths.nonEmpty) {
-      // Remove "path" option so that it is not added to the given `inputPaths`.
-      val optionsWithoutPath = parsedOptions.withNewParameters(parsedOptions.parameters - "path")
-      Some(infer(sparkSession, inputPaths, optionsWithoutPath))
+      Some(infer(sparkSession, inputPaths, parsedOptions))
     } else {
       None
     }
@@ -157,7 +155,7 @@ object TextInputCSVDataSource extends CSVDataSource {
         sparkSession,
         paths = paths,
         className = classOf[TextFileFormat].getName,
-        options = options.parameters
+        options = options.parameters.originalMap
       ).resolveRelation(checkFilesExist = false))
       .select("value").as[String](Encoders.STRING)
 

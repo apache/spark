@@ -62,9 +62,7 @@ abstract class JsonDataSource extends Serializable {
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): Option[StructType] = {
     if (inputPaths.nonEmpty) {
-      // Remove "path" option so that it is not added to the given `inputPaths`.
-      val optionsWithoutPath = parsedOptions.withNewParameters(parsedOptions.parameters - "path")
-      Some(infer(sparkSession, inputPaths, optionsWithoutPath))
+      Some(infer(sparkSession, inputPaths, parsedOptions))
     } else {
       None
     }
@@ -122,7 +120,7 @@ object TextInputJsonDataSource extends JsonDataSource {
         sparkSession,
         paths = inputPaths.map(_.getPath.toString),
         className = classOf[TextFileFormat].getName,
-        options = parsedOptions.parameters
+        options = parsedOptions.parameters.originalMap
       ).resolveRelation(checkFilesExist = false))
       .select("value").as(Encoders.STRING)
   }

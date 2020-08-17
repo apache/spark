@@ -191,9 +191,11 @@ case class DataSource(
     val dataSchema = userSpecifiedSchema.map { schema =>
       StructType(schema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name))))
     }.orElse {
+      // Remove "path" option so that it is not added to the paths returned by
+      // `tempFileIndex.allFiles()`.
       format.inferSchema(
         sparkSession,
-        caseInsensitiveOptions,
+        caseInsensitiveOptions - "path",
         tempFileIndex.allFiles())
     }.getOrElse {
       throw new AnalysisException(
@@ -367,9 +369,11 @@ case class DataSource(
         val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath,
           caseInsensitiveOptions, userSpecifiedSchema)
         val dataSchema = userSpecifiedSchema.orElse {
+          // Remove "path" option so that it is not added to the paths returned by
+          // `fileCatalog.allFiles()`.
           format.inferSchema(
             sparkSession,
-            caseInsensitiveOptions,
+            caseInsensitiveOptions - "path",
             fileCatalog.allFiles())
         }.getOrElse {
           throw new AnalysisException(

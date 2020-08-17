@@ -32,11 +32,11 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 case class CSVTable(
     name: String,
     sparkSession: SparkSession,
-    options: CaseInsensitiveStringMap,
+    originalOptions: CaseInsensitiveStringMap,
     paths: Seq[String],
     userSpecifiedSchema: Option[StructType],
     fallbackFileFormat: Class[_ <: FileFormat])
-  extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
+  extends FileTable(sparkSession, originalOptions, paths, userSpecifiedSchema) {
   override def newScanBuilder(options: CaseInsensitiveStringMap): CSVScanBuilder =
     CSVScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
 
