@@ -21,8 +21,6 @@ import java.util.Properties
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.catalyst.plans.logical.Filter
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
