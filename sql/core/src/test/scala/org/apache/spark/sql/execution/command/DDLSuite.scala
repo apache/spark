@@ -3035,7 +3035,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val msg = intercept[AnalysisException] {
       sql("REFRESH FUNCTION md5")
     }.getMessage
-    assert(msg.contains("Cannot refresh builtin function"))
+    assert(msg.contains("Cannot refresh built-in function"))
 
     withUserDefinedFunction("func1" -> true) {
       sql("CREATE TEMPORARY FUNCTION func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
