@@ -47,7 +47,8 @@ case class DataSourceV2ScanExec(
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
     case other: DataSourceV2ScanExec =>
-      output == other.output && reader.getClass == other.reader.getClass && options == other.options
+      (output == other.output && reader.getClass == other.reader.getClass
+        && options == other.options && pushedFilters == other.pushedFilters)
     case _ => false
   }
 
