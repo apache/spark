@@ -116,8 +116,8 @@ private[spark] object KubernetesUtils extends Logging {
             .withContainers(rest.asJava)
             .endSpec()
             .build(),
-          sparkContainer)
-      }.getOrElse(SparkPod(pod, new ContainerBuilder().build()))
+          List(sparkContainer))
+      }.getOrElse(SparkPod(pod, List(new ContainerBuilder().build())))
   }
 
   def parseMasterUrl(url: String): String = url.substring("k8s://".length)

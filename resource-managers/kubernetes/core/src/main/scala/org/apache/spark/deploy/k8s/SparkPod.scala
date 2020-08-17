@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s
 
 import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, Pod, PodBuilder}
 
-private[spark] case class SparkPod(pod: Pod, container: Container) {
+private[spark] case class SparkPod(pod: Pod, containers: List[Container]) {
 
   /**
    * Convenience method to apply a series of chained transformations to a pod.
@@ -52,6 +52,6 @@ private[spark] object SparkPod {
         .withNewSpec()
         .endSpec()
         .build(),
-      new ContainerBuilder().build())
+      List(new ContainerBuilder().build()))
   }
 }

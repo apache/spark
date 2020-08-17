@@ -48,13 +48,15 @@ private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
           .endSpec()
         .build()
 
-      val containerWithVolume = new ContainerBuilder(pod.container)
+      val containersWithVolume = pod.containers.map { container =>
+        new ContainerBuilder(container)
           .addNewVolumeMount()
-            .withName(POD_TEMPLATE_VOLUME)
+          .withName(POD_TEMPLATE_VOLUME)
             .withMountPath(EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH)
           .endVolumeMount()
-        .build()
-      SparkPod(podWithVolume, containerWithVolume)
+          .build()
+      }
+      SparkPod(podWithVolume, containersWithVolume)
     } else {
       pod
     }

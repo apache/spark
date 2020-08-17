@@ -23,6 +23,7 @@ import java.util.Properties
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
 import io.fabric8.kubernetes.client.Watcher.Action
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 import util.control.Breaks._
@@ -107,19 +108,21 @@ private[spark] class Client(
     val configMap = buildConfigMap(configMapName, resolvedDriverSpec.systemProperties)
     // The include of the ENV_VAR for "SPARK_CONF_DIR" is to allow for the
     // Spark command builder to pickup on the Java Options present in the ConfigMap
-    val resolvedDriverContainer = new ContainerBuilder(resolvedDriverSpec.pod.container)
-      .addNewEnv()
-        .withName(ENV_SPARK_CONF_DIR)
-        .withValue(SPARK_CONF_DIR_INTERNAL)
+    val resolvedDriverContainers = resolvedDriverSpec.pod.containers.map { container =>
+      new ContainerBuilder(container)
+        .addNewEnv()
+          .withName(ENV_SPARK_CONF_DIR)
+          .withValue(SPARK_CONF_DIR_INTERNAL)
         .endEnv()
-      .addNewVolumeMount()
-        .withName(SPARK_CONF_VOLUME)
-        .withMountPath(SPARK_CONF_DIR_INTERNAL)
+        .addNewVolumeMount()
+          .withName(SPARK_CONF_VOLUME)
+          .withMountPath(SPARK_CONF_DIR_INTERNAL)
         .endVolumeMount()
-      .build()
+        .build()
+    }
     val resolvedDriverPod = new PodBuilder(resolvedDriverSpec.pod.pod)
       .editSpec()
-        .addToContainers(resolvedDriverContainer)
+        .addAllToContainers(resolvedDriverContainers.asJava)
         .addNewVolume()
           .withName(SPARK_CONF_VOLUME)
           .withNewConfigMap()

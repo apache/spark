@@ -83,14 +83,15 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
           .endSpec()
           .build()
 
-      val driverContainerWithMountedSecretVolume =
-        new ContainerBuilder(pod.container)
+      val driverContainersWithMountedSecretVolume = pod.containers.map { container =>
+        new ContainerBuilder(container)
           .addNewVolumeMount()
             .withName(DRIVER_CREDENTIALS_SECRET_VOLUME_NAME)
             .withMountPath(DRIVER_CREDENTIALS_SECRETS_BASE_DIR)
             .endVolumeMount()
           .build()
-      SparkPod(driverPodWithMountedKubernetesCredentials, driverContainerWithMountedSecretVolume)
+      }
+      SparkPod(driverPodWithMountedKubernetesCredentials, driverContainersWithMountedSecretVolume)
     }
   }
 

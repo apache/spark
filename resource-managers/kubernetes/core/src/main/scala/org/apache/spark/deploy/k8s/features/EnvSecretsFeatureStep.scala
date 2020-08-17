@@ -44,9 +44,11 @@ private[spark] class EnvSecretsFeatureStep(kubernetesConf: KubernetesConf)
           .build()
       }
 
-    val containerWithEnvVars = new ContainerBuilder(pod.container)
-      .addAllToEnv(addedEnvSecrets.toSeq.asJava)
+    val containersWithEnvVars = pod.containers.map{ container =>
+      new ContainerBuilder(container)
+        .addAllToEnv(addedEnvSecrets.toSeq.asJava)
       .build()
-    SparkPod(pod.pod, containerWithEnvVars)
+    }
+    SparkPod(pod.pod, containersWithEnvVars)
   }
 }

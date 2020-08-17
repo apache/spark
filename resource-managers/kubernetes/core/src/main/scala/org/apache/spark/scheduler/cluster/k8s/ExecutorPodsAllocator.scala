@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
 
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
@@ -216,7 +217,7 @@ private[spark] class ExecutorPodsAllocator(
           kubernetesClient)
         val podWithAttachedContainer = new PodBuilder(executorPod.pod)
           .editOrNewSpec()
-          .addToContainers(executorPod.container)
+          .addAllToContainers(executorPod.containers.asJava)
           .endSpec()
           .build()
         kubernetesClient.pods().create(podWithAttachedContainer)

@@ -33,7 +33,8 @@ private[spark] class LocalDirsFeatureStep(
   private val useLocalDirTmpFs = conf.get(KUBERNETES_LOCAL_DIRS_TMPFS)
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    var localDirs = pod.container.getVolumeMounts.asScala
+    // We configure the mounts the same between containers so inspect the head.
+    var localDirs = pod.containers.head.getVolumeMounts.asScala
       .filter(_.getName.startsWith("spark-local-dir-"))
       .map(_.getMountPath)
     var localDirVolumes : Seq[Volume] = Seq()
@@ -76,13 +77,15 @@ private[spark] class LocalDirsFeatureStep(
         .addToVolumes(localDirVolumes: _*)
         .endSpec()
       .build()
-    val containerWithLocalDirVolumeMounts = new ContainerBuilder(pod.container)
-      .addNewEnv()
-        .withName("SPARK_LOCAL_DIRS")
-        .withValue(localDirs.mkString(","))
+    val containersWithLocalDirVolumeMounts = pod.containers.map { container =>
+      new ContainerBuilder(container)
+        .addNewEnv()
+          .withName("SPARK_LOCAL_DIRS")
+          .withValue(localDirs.mkString(","))
         .endEnv()
-      .addToVolumeMounts(localDirVolumeMounts: _*)
-      .build()
-    SparkPod(podWithLocalDirVolumes, containerWithLocalDirVolumeMounts)
+        .addToVolumeMounts(localDirVolumeMounts: _*)
+        .build()
+    }
+    SparkPod(podWithLocalDirVolumes, containersWithLocalDirVolumeMounts)
   }
 }

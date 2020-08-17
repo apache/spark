@@ -161,8 +161,9 @@ private[spark] class BasicExecutorFeatureStep(
           .build()
       }
 
-    val executorContainer = new ContainerBuilder(pod.container)
-      .withName(Option(pod.container.getName).getOrElse(DEFAULT_EXECUTOR_CONTAINER_NAME))
+    val executorContainers = pod.containers.map { container =>
+      new ContainerBuilder(container)
+      .withName(Option(container.getName).getOrElse(DEFAULT_EXECUTOR_CONTAINER_NAME))
       .withImage(executorContainerImage)
       .withImagePullPolicy(kubernetesConf.imagePullPolicy)
       .editOrNewResources()
@@ -179,21 +180,26 @@ private[spark] class BasicExecutorFeatureStep(
       .withPorts(requiredPorts.asJava)
       .addToArgs("executor")
       .build()
-    val containerWithLimitCores = executorLimitCores.map { limitCores =>
+    }
+
+    val containersWithLimitCores = executorLimitCores.map { limitCores =>
       val executorCpuLimitQuantity = new Quantity(limitCores)
-      new ContainerBuilder(executorContainer)
+      executorContainers.map{ container =>
+      new ContainerBuilder(container)
         .editResources()
           .addToLimits("cpu", executorCpuLimitQuantity)
           .endResources()
         .build()
-    }.getOrElse(executorContainer)
-    val containerWithLifecycle =
+      }
+    }.getOrElse(executorContainers)
+    val containersWithLifecycle =
       if (!kubernetesConf.workerDecommissioning) {
         logInfo("Decommissioning not enabled, skipping shutdown script")
-        containerWithLimitCores
+        containersWithLimitCores
       } else {
         logInfo("Adding decommission script to lifecycle")
-        new ContainerBuilder(containerWithLimitCores).withNewLifecycle()
+        containersWithLimitCores.map { container =>
+        new ContainerBuilder(container).withNewLifecycle()
           .withNewPreStop()
             .withNewExec()
               .addToCommand("/opt/decom.sh")
@@ -201,7 +207,9 @@ private[spark] class BasicExecutorFeatureStep(
           .endPreStop()
           .endLifecycle()
           .build()
+        }
       }
+
     val ownerReference = kubernetesConf.driverPod.map { pod =>
       new OwnerReferenceBuilder()
         .withController(true)
@@ -211,6 +219,7 @@ private[spark] class BasicExecutorFeatureStep(
         .withUid(pod.getMetadata.getUid)
         .build()
     }
+
     val executorPod = new PodBuilder(pod.pod)
       .editOrNewMetadata()
         .withName(name)
@@ -229,6 +238,6 @@ private[spark] class BasicExecutorFeatureStep(
     kubernetesConf.get(KUBERNETES_EXECUTOR_SCHEDULER_NAME)
       .foreach(executorPod.getSpec.setSchedulerName)
 
-    SparkPod(executorPod, containerWithLifecycle)
+    SparkPod(executorPod, containersWithLifecycle)
   }
 }

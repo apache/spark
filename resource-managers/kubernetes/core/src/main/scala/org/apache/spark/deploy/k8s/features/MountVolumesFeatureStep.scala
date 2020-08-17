@@ -32,11 +32,13 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
       .endSpec()
       .build()
 
-    val containerWithVolumeMounts = new ContainerBuilder(pod.container)
-      .addToVolumeMounts(volumeMounts.toSeq: _*)
-      .build()
+    val containersWithVolumeMounts = pod.containers.map{ container =>
+      new ContainerBuilder(container)
+        .addToVolumeMounts(volumeMounts.toSeq: _*)
+        .build()
+    }
 
-    SparkPod(podWithVolumes, containerWithVolumeMounts)
+    SparkPod(podWithVolumes, containersWithVolumeMounts)
   }
 
   private def constructVolumes(
