@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.lang.{Double => JDouble, Float => JFloat}
+
 import scala.collection.immutable.TreeSet
 import scala.collection.mutable
 
@@ -32,6 +34,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, Logical
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.sketch.BloomFilter
 
 
 /**
@@ -977,6 +981,72 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
   override def symbol: String = ">="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
+}
+
+case class InBloomFilter(child: Expression, bloomFilter: BloomFilter)
+  extends UnaryExpression with Predicate {
+
+  require(bloomFilter != null, "bloomFilter could not be null")
+
+  override def toString: String = s"$child IN BLOOM FILTER"
+
+  override def nullable: Boolean = child.nullable
+
+  protected override def nullSafeEval(value: Any): Any = {
+    child.dataType match {
+      case _: IntegralType =>
+        bloomFilter.mightContainLong(value.asInstanceOf[Number].longValue())
+      case DateType | TimestampType =>
+        bloomFilter.mightContainLong(value.asInstanceOf[Number].longValue())
+      case FloatType =>
+        bloomFilter.mightContainLong(JFloat.floatToIntBits(value.asInstanceOf[Float]).toLong)
+      case DoubleType =>
+        bloomFilter.mightContainLong(JDouble.doubleToLongBits(value.asInstanceOf[Double]))
+      case StringType =>
+        bloomFilter.mightContainBinary(value.asInstanceOf[UTF8String].getBytes)
+      case BinaryType =>
+        bloomFilter.mightContainBinary(value.asInstanceOf[Array[Byte]])
+      case _: DecimalType =>
+        bloomFilter.mightContainBinary(value.asInstanceOf[Decimal]
+          .toJavaBigDecimal.unscaledValue().toByteArray)
+      case dataType =>
+        throw new IllegalArgumentException(
+          s"Bloom filter do not support ${dataType.catalogString} type.")
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childCode = child.genCode(ctx)
+    val input = childCode.value
+    val bf = ctx.addReferenceObj("bloomFilter", bloomFilter)
+    val bloomFilterTestCode = child.dataType match {
+      case _: IntegralType => s"$bf.mightContainLong((long)$input)"
+      case DateType | TimestampType => s"$bf.mightContainLong((long)$input)"
+      case FloatType => s"$bf.mightContainLong((long)Float.floatToIntBits($input))"
+      case DoubleType => s"$bf.mightContainLong(Double.doubleToLongBits($input))"
+      case StringType => s"$bf.mightContainBinary($input.getBytes())"
+      case BinaryType => s"$bf.mightContainBinary($input)"
+      case _: DecimalType =>
+        s"$bf.mightContainBinary($input.toJavaBigDecimal().unscaledValue().toByteArray())"
+      case dataType =>
+        throw new IllegalArgumentException(
+          s"Bloom filter do not support ${dataType.catalogString} type.")
+    }
+
+    ev.copy(code = childCode.code +
+      code"""
+            |boolean ${ev.value} = true;
+            |boolean ${ev.isNull} = ${childCode.isNull};
+            |if (!${childCode.isNull}) {
+            |  ${ev.value} = $bloomFilterTestCode;
+            |}
+      """.stripMargin)
+  }
+
+  override def sql: String = {
+    val valueSQL = child.sql
+    s"($valueSQL IN BLOOM FILTER)"
+  }
 }
 
 /**

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution
 
 import java.io.ByteArrayInputStream
-import java.lang.{Double => JDouble, Float => JFloat}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -26,14 +25,12 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, CreateNamedStruct, Expression, ExprId, GreaterThanOrEqual, InBloomFilter, InSet, LessThanOrEqual, ListQuery, Literal, PlanExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType, DateType, Decimal, DecimalType, DoubleType, FloatType, IntegralType, StringType, StructType, TimestampType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
 import org.apache.spark.util.sketch.BloomFilter
 
 /**
@@ -218,71 +215,23 @@ case class MixedFilterSubqueryExec(
     }
   }
 
-  private def testBloomFilter(bloomFilter: BloomFilter, value: Any): Boolean = {
-    child.dataType match {
-      case _: IntegralType =>
-        bloomFilter.mightContainLong(value.asInstanceOf[Number].longValue())
-      case DateType | TimestampType =>
-        bloomFilter.mightContainLong(value.asInstanceOf[Number].longValue())
-      case FloatType =>
-        bloomFilter.mightContainLong(JFloat.floatToIntBits(value.asInstanceOf[Float]).toLong)
-      case DoubleType =>
-        bloomFilter.mightContainLong(JDouble.doubleToLongBits(value.asInstanceOf[Double]))
-      case StringType =>
-        bloomFilter.mightContainBinary(value.asInstanceOf[UTF8String].getBytes)
-      case BinaryType =>
-        bloomFilter.mightContainBinary(value.asInstanceOf[Array[Byte]])
-      case _: DecimalType =>
-        bloomFilter.mightContainBinary(value.asInstanceOf[Decimal]
-          .toJavaBigDecimal.unscaledValue().toByteArray)
-      case _ =>
-        // Always return true for unsupported data type.
-        true
-    }
-  }
-
   override def eval(input: InternalRow): Any = {
     prepareResult()
     val v = child.eval(input)
     if (v == null) {
       null
     } else {
-      ordering.gteq(v, result.min) && ordering.lteq(v, result.max) &&
-        testBloomFilter(result.bloomFilter, v)
+      And(And(GreaterThanOrEqual(child, Literal.create(result.min, child.dataType)),
+        LessThanOrEqual(child, Literal.create(result.max, child.dataType))),
+        InBloomFilter(child, result.bloomFilter)).eval(input)
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     prepareResult()
-    val childCode = child.genCode(ctx)
-    val input = childCode.value
-    val min = ctx.addReferenceObj("min", result.min)
-    val max = ctx.addReferenceObj("max", result.max)
-    val bloomFilter = ctx.addReferenceObj("bloomFilter", result.bloomFilter)
-
-    val binaryComparatorCode = s"${ctx.genComp(child.dataType, input, min)} >= 0 && " +
-      s"${ctx.genComp(child.dataType, input, max)} <= 0"
-
-    val bloomFilterTestCode = child.dataType match {
-      case _: IntegralType => s"$bloomFilter.mightContainLong((long)$input)"
-      case DateType | TimestampType => s"$bloomFilter.mightContainLong((long)$input)"
-      case FloatType => s"$bloomFilter.mightContainLong((long)Float.floatToIntBits($input))"
-      case DoubleType => s"$bloomFilter.mightContainLong(Double.doubleToLongBits($input))"
-      case StringType => s"$bloomFilter.mightContainBinary($input.getBytes())"
-      case BinaryType => s"$bloomFilter.mightContainBinary($input)"
-      case _: DecimalType =>
-        s"$bloomFilter.mightContainBinary($input.toJavaBigDecimal().unscaledValue().toByteArray())"
-      case _ => true.toString
-    }
-
-    ev.copy(code = childCode.code +
-      code"""
-            |boolean ${ev.value} = true;
-            |boolean ${ev.isNull} = ${childCode.isNull};
-            |if (!${childCode.isNull}) {
-            |  ${ev.value} = $binaryComparatorCode && $bloomFilterTestCode;
-            |}
-      """.stripMargin)
+    And(And(GreaterThanOrEqual(child, Literal.create(result.min, child.dataType)),
+      LessThanOrEqual(child, Literal.create(result.max, child.dataType))),
+      InBloomFilter(child, result.bloomFilter)).doGenCode(ctx, ev)
   }
 
   override lazy val canonicalized: MixedFilterSubqueryExec = {
