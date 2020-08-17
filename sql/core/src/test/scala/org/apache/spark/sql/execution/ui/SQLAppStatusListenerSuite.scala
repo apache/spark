@@ -680,7 +680,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     assert(sparkPlanInfo.nodeName === "WholeStageCodegen (2)")
   }
 
-  test("SPARK-32615 SQLMetrics validation after sparkPlanInfo updated in AQE") {
+  test("SPARK-32615: SQLMetrics validation after sparkPlanInfo updated in AQE") {
     val statusStore = createStatusStore()
     val listener = statusStore.listener.get
 
