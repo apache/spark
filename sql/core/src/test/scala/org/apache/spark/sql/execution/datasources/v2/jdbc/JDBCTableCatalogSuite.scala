@@ -55,8 +55,6 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       conn.prepareStatement(
         """CREATE TABLE "test"."people" (name TEXT(32) NOT NULL, id INTEGER NOT NULL)""")
         .executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"people\" VALUES ('fred', 1)").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"people\" VALUES ('mary', 2)").executeUpdate()
     }
   }
 

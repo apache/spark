@@ -117,6 +117,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
       .option("upperBound", "3")
       .option("numPartitions", "2")
       .table("h2.test.people")
+    assert(df.rdd.getNumPartitions == 2)
   }
 
   test("show tables") {
