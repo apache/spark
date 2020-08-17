@@ -340,18 +340,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
           (nameToAttr("d3_c2") === nameToAttr("t1_c1")) &&
           (nameToAttr("t1_c2") === nameToAttr("t2_c2")))
 
-    val expected = if (util.Properties.versionNumberString.startsWith("2.12")) {
-      f1.join(d3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("d3_pk")))
-        .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk")))
-        .join(d2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
-        .join(t4.join(t3, Inner, Some(nameToAttr("t3_c2") === nameToAttr("t4_c2"))), Inner,
-          Some(nameToAttr("d1_c2") === nameToAttr("t3_c1")))
-        .join(t2.join(t1, Inner, Some(nameToAttr("t1_c2") === nameToAttr("t2_c2"))), Inner,
-          Some(nameToAttr("d3_c2") === nameToAttr("t1_c1")))
-        .join(t5.join(t6, Inner, Some(nameToAttr("t5_c2") === nameToAttr("t6_c2"))), Inner,
-          Some(nameToAttr("d2_c2") === nameToAttr("t5_c1")))
-        .select(outputsOf(d1, t3, t4, f1, d2, t5, t6, d3, t1, t2): _*)
-    } else {
+    val expected =
       f1.join(d3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("d3_pk")))
         .join(d2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
         .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk")))
@@ -362,7 +351,6 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
         .join(t5.join(t6, Inner, Some(nameToAttr("t5_c2") === nameToAttr("t6_c2"))), Inner,
           Some(nameToAttr("d2_c2") === nameToAttr("t5_c1")))
         .select(outputsOf(d1, t3, t4, f1, d2, t5, t6, d3, t1, t2): _*)
-    }
 
     assertEqualPlans(query, expected)
   }

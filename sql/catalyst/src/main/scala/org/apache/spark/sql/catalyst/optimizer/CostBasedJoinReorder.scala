@@ -206,14 +206,14 @@ object JoinReorderDP extends PredicateHelper with Logging {
     // For the lower level k, we only need to search from 0 to lev - k, because when building
     // a join from A and B, both A J B and B J A are handled.
     while (k <= lev - k) {
-      val oneSideCandidates = existingLevels(k).values.toSeq
+      val oneSideCandidates = existingLevels(k).values.toSeq.sortBy(_.itemIds.head)
       for (i <- oneSideCandidates.indices) {
         val oneSidePlan = oneSideCandidates(i)
         val otherSideCandidates = if (k == lev - k) {
           // Both sides of a join are at the same level, no need to repeat for previous ones.
           oneSideCandidates.drop(i)
         } else {
-          existingLevels(lev - k).values.toSeq
+          existingLevels(lev - k).values.toSeq.sortBy(_.itemIds.head)
         }
 
         otherSideCandidates.foreach { otherSidePlan =>
