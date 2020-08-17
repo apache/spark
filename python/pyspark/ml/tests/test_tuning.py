@@ -120,7 +120,7 @@ class CrossValidatorTests(SparkSessionTestCase):
             lambda x: x.getSeed()
         ]:
             self.assertEqual(param(cvModel), param(cvModelCopied))
-        
+
         cvModel.avgMetrics[0] = 'foo'
         self.assertNotEqual(
             cvModelCopied.avgMetrics[0],

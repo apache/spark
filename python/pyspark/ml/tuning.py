@@ -891,7 +891,10 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
         bestModel = self.bestModel.copy(extra)
         validationMetrics = list(self.validationMetrics)
         subModels = [model.copy() for model in self.subModels]
-        return self._copyValues(TrainValidationSplitModel(bestModel, validationMetrics, subModels), extra=extra)
+        return self._copyValues(
+            TrainValidationSplitModel(bestModel, validationMetrics, subModels),
+            extra=extra
+        )
 
     @since("2.3.0")
     def write(self):
