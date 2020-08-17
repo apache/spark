@@ -271,12 +271,13 @@ private[ui] class SqlStatsPagedTable(
       <td>
         {info.state}
       </td>
-      {errorMessageCell(sqlStatsTableRow.detail)}
+      {errorMessageCell(Option(sqlStatsTableRow.detail))}
     </tr>
   }
 
 
-  private def errorMessageCell(errorMessage: String): Seq[Node] = {
+  private def errorMessageCell(errorMessageOption: Option[String]): Seq[Node] = {
+    val errorMessage = errorMessageOption.getOrElse("")
     val isMultiline = errorMessage.indexOf('\n') >= 0
     val errorSummary = StringEscapeUtils.escapeHtml4(
       if (isMultiline) {
