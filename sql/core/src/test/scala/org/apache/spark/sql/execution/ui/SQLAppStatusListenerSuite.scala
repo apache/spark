@@ -715,7 +715,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
     assert(statusStore.executionMetrics(executionId).isEmpty)
 
-    // update old metrics with Id 1 & 2, since 0 is timing Metrics
+    // update old metrics with Id 1 & 2, since 0 is timing metrics,
+    // timing metrics has a complicated string presentation so we don't test it here.
     val oldMetricsValueMap = oldAccumulatorIds.sorted.tail.map(id => (id, 100L)).toMap
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
       (0L, 0, 0, createAccumulatorInfos(oldMetricsValueMap))
@@ -772,7 +773,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     // live metrics will be override, and ExecutionMetrics should be empty as the newPlan updated.
     assert(statusStore.executionMetrics(executionId).isEmpty)
 
-    // update new metrics with Id 4 & 5, since 3 is timing Metrics
+    // update new metrics with Id 4 & 5, since 3 is timing metrics,
+    // timing metrics has a complicated string presentation so we don't test it here.
     val newMetricsValueMap = newAccumulatorIds.sorted.tail.map(id => (id, 500L)).toMap
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
       (0L, 1, 0, createAccumulatorInfos(newMetricsValueMap))
