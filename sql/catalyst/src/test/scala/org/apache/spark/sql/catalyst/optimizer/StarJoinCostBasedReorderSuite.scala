@@ -315,15 +315,15 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
     // star: {d1 f1 d2 d3 }
     // non-star: {t5 t3 t6 t2 t4 t1}
     //
-    // level 0: (t4 ), (d2 ), (t5 ), (d3 ), (d1 ), (f1 ), (t2 ), (t6 ), (t1 ), (t3 )
-    // level 1: {t5 t6 }, {t4 t3 }, {d3 f1 }, {t2 t1 }, {d2 f1 }, {d1 f1 }
-    // level 2: {d2 d1 f1 }, {d2 d3 f1 }, {d3 d1 f1 }
-    // level 3: {d2 d1 d3 f1 }
-    // level 4: {d1 t3 d3 f1 d2 }, {d1 d3 f1 t1 d2 }, {d1 t5 d3 f1 d2 }
-    // level 5: {d1 t5 d3 f1 t1 d2 }, {d1 t3 t4 d3 f1 d2 }, {d1 t5 t6 d3 f1 d2 },
-    //          {d1 t5 t3 d3 f1 d2 }, {d1 t3 d3 f1 t1 d2 }, {d1 t2 d3 f1 t1 d2 }
-    // level 6: {d1 t5 t3 t4 d3 f1 d2 }, {d1 t3 t2 d3 f1 t1 d2 }, {d1 t5 t6 d3 f1 t1 d2 },
-    //          {d1 t5 t3 d3 f1 t1 d2 }, {d1 t5 t2 d3 f1 t1 d2 }, ...
+    // level 0: (t5 ), (d3 ), (d1 ), (f1 ), (t2 ), (d2 ), (t6 ), (t3 ), (t4 ), (t1 )
+    // level 1: {f1 d3 }, {t1 t2 }, {f1 d2 }, {t5 t6 }, {d1 f1 }, {t3 t4 }
+    // level 2: {d1 f1 d2 }, {d1 f1 d3 }, {d2 f1 d3 }
+    // level 3: {d1 d2 f1 d3 }
+    // level 4: {d1 t3 d3 f1 d2 }, {d1 t5 d3 f1 d2 }, {d1 d3 f1 t1 d2 }
+    // level 5: {d1 t2 d3 f1 t1 d2 }, {d1 t3 d3 f1 t1 d2 }, {d1 t5 t3 d3 f1 d2 },
+    //          {d1 t5 t6 d3 f1 d2 }, {d1 t5 d3 f1 t1 d2 }, {d1 t3 t4 d3 f1 d2 }
+    // level 6: {d1 t3 t2 d3 f1 t1 d2 }, {d1 t5 t6 d3 f1 t1 d2 }, {d1 t5 t3 d3 f1 t1 d2 },
+    //          {d1 t5 t3 t6 d3 f1 d2 }, {d1 t5 t3 t4 d3 f1 d2 }, ...
     // ...
     // level 9: {d1 t5 t3 t6 t2 t4 d3 f1 t1 d2 }
     //
