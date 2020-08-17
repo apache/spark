@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution
+package org.apache.spark.sql.execution
 
 class TestUncaughtExceptionHandler extends Thread.UncaughtExceptionHandler {
 

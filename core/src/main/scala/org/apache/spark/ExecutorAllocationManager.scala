@@ -28,6 +28,7 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
+import org.apache.spark.internal.config.Worker.WORKER_DECOMMISSION_ENABLED
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
 import org.apache.spark.resource.ResourceProfileManager
@@ -127,6 +128,8 @@ private[spark] class ExecutorAllocationManager(
   private val executorAllocationRatio =
     conf.get(DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO)
 
+  private val decommissionEnabled = conf.get(WORKER_DECOMMISSION_ENABLED)
+
   private val defaultProfileId = resourceProfileManager.defaultResourceProfile.id
 
   validateSettings()
@@ -204,7 +207,12 @@ private[spark] class ExecutorAllocationManager(
         s"s${DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key} must be > 0!")
     }
     if (!conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
-      if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)) {
+      // If dynamic allocation shuffle tracking or worker decommissioning along with
+      // storage shuffle decommissioning is enabled we have *experimental* support for
+      // decommissioning without a shuffle service.
+      if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED) ||
+          (decommissionEnabled &&
+            conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED))) {
         logWarning("Dynamic allocation without a shuffle service is an experimental feature.")
       } else if (!testing) {
         throw new SparkException("Dynamic allocation of executors requires the external " +
@@ -539,7 +547,9 @@ private[spark] class ExecutorAllocationManager(
         // get the running total as we remove or initialize it to the count - pendingRemoval
         val newExecutorTotal = numExecutorsTotalPerRpId.getOrElseUpdate(rpId,
           (executorMonitor.executorCountWithResourceProfile(rpId) -
-            executorMonitor.pendingRemovalCountPerResourceProfileId(rpId)))
+            executorMonitor.pendingRemovalCountPerResourceProfileId(rpId) -
+            executorMonitor.decommissioningPerResourceProfileId(rpId)
+          ))
         if (newExecutorTotal - 1 < minNumExecutors) {
           logDebug(s"Not removing idle executor $executorIdToBeRemoved because there " +
             s"are only $newExecutorTotal executor(s) left (minimum number of executor limit " +
@@ -565,8 +575,14 @@ private[spark] class ExecutorAllocationManager(
     } else {
       // We don't want to change our target number of executors, because we already did that
       // when the task backlog decreased.
-      client.killExecutors(executorIdsToBeRemoved.toSeq, adjustTargetNumExecutors = false,
-        countFailures = false, force = false)
+      if (decommissionEnabled) {
+        val executorIdsWithoutHostLoss = executorIdsToBeRemoved.toSeq.map(
+          id => (id, ExecutorDecommissionInfo("spark scale down", false))).toArray
+        client.decommissionExecutors(executorIdsWithoutHostLoss, adjustTargetNumExecutors = false)
+      } else {
+        client.killExecutors(executorIdsToBeRemoved.toSeq, adjustTargetNumExecutors = false,
+          countFailures = false, force = false)
+      }
     }
 
     // [SPARK-21834] killExecutors api reduces the target number of executors.
@@ -578,7 +594,11 @@ private[spark] class ExecutorAllocationManager(
 
     // reset the newExecutorTotal to the existing number of executors
     if (testing || executorsRemoved.nonEmpty) {
-      executorMonitor.executorsKilled(executorsRemoved.toSeq)
+      if (decommissionEnabled) {
+        executorMonitor.executorsDecommissioned(executorsRemoved)
+      } else {
+        executorMonitor.executorsKilled(executorsRemoved.toSeq)
+      }
       logInfo(s"Executors ${executorsRemoved.mkString(",")} removed due to idle timeout.")
       executorsRemoved.toSeq
     } else {

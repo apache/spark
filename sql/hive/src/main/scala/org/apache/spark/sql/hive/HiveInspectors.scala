@@ -1063,6 +1063,9 @@ private[hive] trait HiveInspectors {
       case DateType => dateTypeInfo
       case TimestampType => timestampTypeInfo
       case NullType => voidTypeInfo
+      case dt =>
+        throw new AnalysisException(
+          s"${dt.catalogString} cannot be converted to Hive TypeInfo")
     }
   }
 }

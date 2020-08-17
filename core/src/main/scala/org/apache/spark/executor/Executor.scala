@@ -220,6 +220,20 @@ private[spark] class Executor(
 
   heartbeater.start()
 
+  private val appStartTime = conf.getLong("spark.app.startTime", 0)
+
+  // To allow users to distribute plugins and their required files
+  // specified by --jars and --files on application submission, those jars/files should be
+  // downloaded and added to the class loader via updateDependencies.
+  // This should be done before plugin initialization below
+  // because executors search plugins from the class loader and initialize them.
+  private val Seq(initialUserJars, initialUserFiles) = Seq("jar", "file").map { key =>
+    conf.getOption(s"spark.app.initial.$key.urls").map { urls =>
+      Map(urls.split(",").map(url => (url, appStartTime)): _*)
+    }.getOrElse(Map.empty)
+  }
+  updateDependencies(initialUserFiles, initialUserJars)
+
   // Plugins need to load using a class loader that includes the executor's user classpath.
   // Plugins also needs to be initialized after the heartbeater started
   // to avoid blocking to send heartbeat (see SPARK-32175).

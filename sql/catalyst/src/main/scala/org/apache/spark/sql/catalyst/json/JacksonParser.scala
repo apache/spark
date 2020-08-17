@@ -465,7 +465,7 @@ class JacksonParser(
           case null => None
           case _ => rootConverter.apply(parser) match {
             case null => throw new RuntimeException("Root converter returned null")
-            case rows => rows
+            case rows => rows.toSeq
           }
         }
       }
