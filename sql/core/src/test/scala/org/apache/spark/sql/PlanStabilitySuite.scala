@@ -257,7 +257,6 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   val targetQuires = Set("q47", "q49", "q57")
 }
 
-@ExtendedSQLTest
 class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v1_4").getAbsolutePath
@@ -269,7 +268,6 @@ class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite {
   }
 }
 
-@ExtendedSQLTest
 class TPCDSV1_4_PlanStabilityWithStatsSuite extends PlanStabilitySuite {
   override def injectStats: Boolean = true
 
@@ -283,7 +281,6 @@ class TPCDSV1_4_PlanStabilityWithStatsSuite extends PlanStabilitySuite {
   }
 }
 
-@ExtendedSQLTest
 class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v2_7").getAbsolutePath
@@ -295,7 +292,6 @@ class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite {
   }
 }
 
-@ExtendedSQLTest
 class TPCDSV2_7_PlanStabilityWithStatsSuite extends PlanStabilitySuite {
   override def injectStats: Boolean = true
 
@@ -309,7 +305,6 @@ class TPCDSV2_7_PlanStabilityWithStatsSuite extends PlanStabilitySuite {
   }
 }
 
-@ExtendedSQLTest
 class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-modified").getAbsolutePath
@@ -321,7 +316,6 @@ class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite {
   }
 }
 
-@ExtendedSQLTest
 class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite {
   override def injectStats: Boolean = true
 
