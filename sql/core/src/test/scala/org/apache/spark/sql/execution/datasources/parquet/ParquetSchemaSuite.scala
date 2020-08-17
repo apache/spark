@@ -262,6 +262,25 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     int96AsTimestamp = true,
     writeLegacyParquetFormat = true)
 
+  testSchemaInference[Tuple1[Map[(String, String), String]]](
+    "map - group type key",
+    """
+      |message root {
+      |  optional group _1 (MAP) {
+      |    repeated group map (MAP_KEY_VALUE) {
+      |      required group key {
+      |        optional binary _1 (UTF8);
+      |        optional binary _2 (UTF8);
+      |      }
+      |      optional binary value (UTF8);
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
+
   testSchemaInference[Tuple1[(Int, String)]](
     "struct",
     """
