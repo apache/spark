@@ -192,7 +192,7 @@ class DataFrameSuite extends QueryTest
       structDf.select(xxhash64($"a", $"record.*")))
   }
 
-  test("SPARK-28224: Aggregate sum big decimal overflow") {
+  test("SPARK-28224,SPARK-32018: Aggregate sum big decimal overflow") {
     val largeDecimals = spark.sparkContext.parallelize(
       DecimalData(BigDecimal("1"* 20 + ".123"), BigDecimal("1"* 20 + ".123")) ::
         DecimalData(BigDecimal("9"* 20 + ".123"), BigDecimal("9"* 20 + ".123")) :: Nil).toDF()
@@ -200,15 +200,11 @@ class DataFrameSuite extends QueryTest
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
         val structDf = largeDecimals.select("a").agg(sum("a"))
-        if (!ansiEnabled) {
-          checkAnswer(structDf, Row(null))
-        } else {
-          val e = intercept[SparkException] {
-            structDf.collect
-          }
-          assert(e.getCause.getClass.equals(classOf[ArithmeticException]))
-          assert(e.getCause.getMessage.contains("cannot be represented as Decimal"))
+        val e = intercept[SparkException] {
+          structDf.collect
         }
+        assert(e.getCause.getClass.equals(classOf[ArithmeticException]))
+        assert(e.getCause.getMessage.contains("cannot be represented as Decimal"))
       }
     }
   }
