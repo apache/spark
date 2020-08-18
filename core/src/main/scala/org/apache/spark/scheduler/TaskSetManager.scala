@@ -103,8 +103,9 @@ private[spark] class TaskSetManager(
     }
     numTasks <= slots
   }
-  val executorDecommissionKillInterval = conf.get(EXECUTOR_DECOMMISSION_KILL_INTERVAL).map(
-    TimeUnit.SECONDS.toMillis)
+
+  private val executorDecommissionKillInterval =
+    conf.get(EXECUTOR_DECOMMISSION_KILL_INTERVAL).map(TimeUnit.SECONDS.toMillis)
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not
@@ -1119,10 +1120,12 @@ private[spark] class TaskSetManager(
 
   def executorDecommission(execId: String): Unit = {
     recomputeLocality()
-    executorDecommissionKillInterval.foreach { interval =>
-      val executorKillTime = clock.getTimeMillis() + interval
-      runningTasksSet.filter(taskInfos(_).executorId == execId).foreach { tid =>
-        tidToExecutorKillTimeMapping(tid) = executorKillTime
+    if (speculationEnabled) {
+      executorDecommissionKillInterval.foreach { interval =>
+        val executorKillTime = clock.getTimeMillis() + interval
+        runningTasksSet.filter(taskInfos(_).executorId == execId).foreach { tid =>
+          tidToExecutorKillTimeMapping(tid) = executorKillTime
+        }
       }
     }
   }
