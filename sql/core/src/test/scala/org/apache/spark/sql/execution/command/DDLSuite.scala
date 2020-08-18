@@ -3036,6 +3036,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       sql("REFRESH FUNCTION md5")
     }.getMessage
     assert(msg.contains("Cannot refresh built-in function"))
+    intercept[NoSuchFunctionException] {
+      sql("REFRESH FUNCTION default.md5")
+    }
 
     withUserDefinedFunction("func1" -> true) {
       sql("CREATE TEMPORARY FUNCTION func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
@@ -3077,6 +3080,21 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       }.getMessage
       assert(err.contains("Can not load class"))
       assert(!spark.sessionState.catalog.isRegisteredFunction(func))
+    }
+  }
+
+  test("REFRESH FUNCTION persistent function with the same name as the built-in function") {
+    withUserDefinedFunction("rand" -> false) {
+      val rand = FunctionIdentifier("rand", Some("default"))
+      sql("CREATE FUNCTION rand AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+      assert(!spark.sessionState.catalog.isRegisteredFunction(rand))
+      val msg = intercept[AnalysisException] {
+        sql("REFRESH FUNCTION rand")
+      }.getMessage
+      assert(msg.contains("Cannot refresh built-in function"))
+      assert(!spark.sessionState.catalog.isRegisteredFunction(rand))
+      sql("REFRESH FUNCTION default.rand")
+      assert(spark.sessionState.catalog.isRegisteredFunction(rand))
     }
   }
 }
