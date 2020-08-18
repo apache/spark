@@ -26,23 +26,23 @@ import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
 import org.apache.spark.sql.execution.datasources.v2.FileTable
-import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.{AtomicType, DataType, StructType, UserDefinedType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class CSVTable(
+    name: String,
     sparkSession: SparkSession,
-    datasourceRegister: DataSourceRegister,
     options: CaseInsensitiveStringMap,
+    paths: Seq[String],
     userSpecifiedSchema: Option[StructType],
     fallbackFileFormat: Class[_ <: FileFormat])
-  extends FileTable(sparkSession, datasourceRegister, options, userSpecifiedSchema) {
+  extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
   override def newScanBuilder(options: CaseInsensitiveStringMap): CSVScanBuilder =
     CSVScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] = {
     val parsedOptions = new CSVOptions(
-      optionsWithoutPaths.asScala.toMap,
+      options.asScala.toMap,
       columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
 

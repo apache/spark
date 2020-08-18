@@ -30,10 +30,16 @@ class CSVDataSourceV2 extends FileDataSourceV2 {
   override def shortName(): String = "csv"
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
-    CSVTable(sparkSession, this, options, None, fallbackFileFormat)
+    val paths = getPaths(options)
+    val tableName = getTableName(options, paths)
+    val optionsWithoutPaths = getOptionsWithoutPaths(options)
+    CSVTable(tableName, sparkSession, optionsWithoutPaths, paths, None, fallbackFileFormat)
   }
 
   override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
-    CSVTable(sparkSession, this, options, Some(schema), fallbackFileFormat)
+    val paths = getPaths(options)
+    val tableName = getTableName(options, paths)
+    val optionsWithoutPaths = getOptionsWithoutPaths(options)
+    CSVTable(tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
   }
 }

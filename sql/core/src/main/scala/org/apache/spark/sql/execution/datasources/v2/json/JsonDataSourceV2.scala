@@ -30,11 +30,17 @@ class JsonDataSourceV2 extends FileDataSourceV2 {
   override def shortName(): String = "json"
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
-    JsonTable(sparkSession, this, options, None, fallbackFileFormat)
+    val paths = getPaths(options)
+    val tableName = getTableName(options, paths)
+    val optionsWithoutPaths = getOptionsWithoutPaths(options)
+    JsonTable(tableName, sparkSession, optionsWithoutPaths, paths, None, fallbackFileFormat)
   }
 
   override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
-    JsonTable(sparkSession, this, options, Some(schema), fallbackFileFormat)
+    val paths = getPaths(options)
+    val tableName = getTableName(options, paths)
+    val optionsWithoutPaths = getOptionsWithoutPaths(options)
+    JsonTable(tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
   }
 }
 

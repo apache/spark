@@ -49,6 +49,34 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
 
   lazy val sparkSession = SparkSession.active
 
+  protected def getPaths(map: CaseInsensitiveStringMap): Seq[String] = {
+    val objectMapper = new ObjectMapper()
+    val paths = Option(map.get("paths")).map { pathStr =>
+      objectMapper.readValue(pathStr, classOf[Array[String]]).toSeq
+    }.getOrElse(Seq.empty)
+    paths ++ Option(map.get("path")).toSeq
+  }
+
+  protected def getOptionsWithoutPaths(map: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    val caseInsensitiveMap = CaseInsensitiveMap(map.asCaseSensitiveMap.asScala.toMap)
+    val caseInsensitiveMapWithoutPaths = caseInsensitiveMap - "paths" - "path"
+    new CaseInsensitiveStringMap(
+      caseInsensitiveMapWithoutPaths.asInstanceOf[CaseInsensitiveMap[String]].originalMap.asJava)
+  }
+
+  protected def getTableName(map: CaseInsensitiveStringMap, paths: Seq[String]): String = {
+    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(
+      map.asCaseSensitiveMap().asScala.toMap)
+    val name = shortName() + " " + paths.map(qualifiedPathName(_, hadoopConf)).mkString(",")
+    Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, name)
+  }
+
+  private def qualifiedPathName(path: String, hadoopConf: Configuration): String = {
+    val hdfsPath = new Path(path)
+    val fs = hdfsPath.getFileSystem(hadoopConf)
+    hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
+  }
+
   // TODO: To reduce code diff of SPARK-29665, we create stub implementations for file source v2, so
   //       that we don't need to touch all the file source v2 classes. We should remove the stub
   //       implementation and directly implement the TableProvider APIs.
