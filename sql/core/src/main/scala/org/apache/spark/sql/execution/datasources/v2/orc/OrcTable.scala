@@ -25,23 +25,23 @@ import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.orc.OrcUtils
 import org.apache.spark.sql.execution.datasources.v2.FileTable
+import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class OrcTable(
-    name: String,
     sparkSession: SparkSession,
+    datasourceRegister: DataSourceRegister,
     options: CaseInsensitiveStringMap,
-    paths: Seq[String],
     userSpecifiedSchema: Option[StructType],
     fallbackFileFormat: Class[_ <: FileFormat])
-  extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
+  extends FileTable(sparkSession, datasourceRegister, options, userSpecifiedSchema) {
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): OrcScanBuilder =
     new OrcScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
-    OrcUtils.inferSchema(sparkSession, files, options.asScala.toMap)
+    OrcUtils.inferSchema(sparkSession, files, optionsWithoutPaths.asScala.toMap)
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder =
     new OrcWriteBuilder(paths, formatName, supportsDataType, info)

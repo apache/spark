@@ -20,26 +20,60 @@ import java.util
 
 import scala.collection.JavaConverters._
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming.{FileStreamSink, MetadataLogFileIndex}
+import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.Utils
 
 abstract class FileTable(
     sparkSession: SparkSession,
+    datasourceRegister: DataSourceRegister,
     options: CaseInsensitiveStringMap,
-    paths: Seq[String],
     userSpecifiedSchema: Option[StructType])
   extends Table with SupportsRead with SupportsWrite {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  protected lazy val paths: Seq[String] = {
+    val objectMapper = new ObjectMapper()
+    val paths = Option(options.get("paths")).map { pathStr =>
+      objectMapper.readValue(pathStr, classOf[Array[String]]).toSeq
+    }.getOrElse(Seq.empty)
+    paths ++ Option(options.get("path")).toSeq
+  }
+
+  protected lazy val optionsWithoutPaths: CaseInsensitiveStringMap = {
+    val caseInsensitiveMap = CaseInsensitiveMap(options.asCaseSensitiveMap.asScala.toMap)
+    val caseInsensitiveMapWithoutPaths = caseInsensitiveMap - "paths" - "path"
+    new CaseInsensitiveStringMap(
+      caseInsensitiveMapWithoutPaths.asInstanceOf[CaseInsensitiveMap[String]].originalMap.asJava)
+  }
+
+  override lazy val name: String = {
+    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(
+      options.asCaseSensitiveMap().asScala.toMap)
+    val name = datasourceRegister.shortName + " " +
+      paths.map(qualifiedPathName(_, hadoopConf)).mkString(",")
+    Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, name)
+  }
+
+  private def qualifiedPathName(path: String, hadoopConf: Configuration): String = {
+    val hdfsPath = new Path(path)
+    val fs = hdfsPath.getFileSystem(hadoopConf)
+    hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
+  }
 
   lazy val fileIndex: PartitioningAwareFileIndex = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap

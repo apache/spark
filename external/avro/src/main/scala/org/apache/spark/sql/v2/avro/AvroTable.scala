@@ -25,22 +25,22 @@ import org.apache.spark.sql.avro.AvroUtils
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileTable
+import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class AvroTable(
-    name: String,
     sparkSession: SparkSession,
+    datasourceRegister: DataSourceRegister,
     options: CaseInsensitiveStringMap,
-    paths: Seq[String],
     userSpecifiedSchema: Option[StructType],
     fallbackFileFormat: Class[_ <: FileFormat])
-  extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
+  extends FileTable(sparkSession, datasourceRegister, options, userSpecifiedSchema) {
   override def newScanBuilder(options: CaseInsensitiveStringMap): AvroScanBuilder =
     new AvroScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
-    AvroUtils.inferSchema(sparkSession, options.asScala.toMap, files)
+    AvroUtils.inferSchema(sparkSession, optionsWithoutPaths.asScala.toMap, files)
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder =
     new AvroWriteBuilder(paths, formatName, supportsDataType, info)
