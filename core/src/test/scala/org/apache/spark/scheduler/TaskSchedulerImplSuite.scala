@@ -145,7 +145,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskScheduler
   }
 
-  test("SPARK-XXXX: Decommissioned host/executor should be considered as inactive") {
+  test("SPARK-32653: Decommissioned host/executor should be considered as inactive") {
     val scheduler = setupScheduler()
     val exec0 = "exec0"
     val exec1 = "exec1"
