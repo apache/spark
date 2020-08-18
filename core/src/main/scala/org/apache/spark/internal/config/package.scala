@@ -1874,7 +1874,7 @@ package object config {
         s"${STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key}) from the decommissioning " +
         s"executor to a remote executor when ${STORAGE_DECOMMISSION_ENABLED.key} is enabled. " +
         s"With decommission enabled, Spark will also decommission an executor instead of " +
-        s"killing to get better scalable when ${DYN_ALLOCATION_ENABLED.key} enabled.")
+        s"killing when ${DYN_ALLOCATION_ENABLED.key} enabled.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
