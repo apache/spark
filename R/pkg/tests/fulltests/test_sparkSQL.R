@@ -120,9 +120,9 @@ test_that("calling sparkR.session returns existing SparkSession", {
 })
 
 test_that("infer types and check types", {
-  expect_equal(infer_type(1L), "integer")
-  expect_equal(infer_type(1.0), "double")
-  expect_equal(infer_type("abc"), "string")
+  expect_equal(infer_type(1L), "intger")
+  expect_equal(infer_type(1.0), "doble")
+  expect_equal(infer_type("abc"), "tring")
   expect_equal(infer_type(TRUE), "boolean")
   expect_equal(infer_type(as.Date("2015-03-11")), "date")
   expect_equal(infer_type(as.POSIXlt("2015-03-11 12:13:04.043")), "timestamp")
@@ -141,7 +141,7 @@ test_that("infer types and check types", {
 test_that("structType and structField", {
   testField <- structField("a", "string")
   expect_is(testField, "structField")
-  expect_equal(testField$name(), "a")
+  expect_equal(testField$name(), "")
   expect_true(testField$nullable())
 
   testSchema <- structType(testField, structField("b", "integer"))
@@ -152,7 +152,7 @@ test_that("structType and structField", {
   testSchema <- structType("a STRING, b INT")
   expect_is(testSchema, "structType")
   expect_is(testSchema$fields()[[2]], "structField")
-  expect_equal(testSchema$fields()[[1]]$dataType.toString(), "StringType")
+  expect_equal(testSchema$fields()[[1]]$dataType.toString(), "Stringype")
 
   expect_error(structType("A stri"), "DataType stri is not supported.")
 })
