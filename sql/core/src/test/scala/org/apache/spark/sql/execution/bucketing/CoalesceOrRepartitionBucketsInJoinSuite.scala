@@ -29,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
-class CoalesceBucketsInJoinSuite extends SQLTestUtils with SharedSparkSession {
+class CoalesceOrRepartitionBucketsInJoinSuite extends SQLTestUtils with SharedSparkSession {
   private val SORT_MERGE_JOIN = "sortMergeJoin"
   private val SHUFFLED_HASH_JOIN = "shuffledHashJoin"
   private val BROADCAST_HASH_JOIN = "broadcastHashJoin"
@@ -99,12 +99,12 @@ class CoalesceBucketsInJoinSuite extends SQLTestUtils with SharedSparkSession {
           s.leftKeys, s.rightKeys, Inner, BuildLeft, None, lScan, rScan)
       }
 
-      val plan = CoalesceBucketsInJoin(spark.sessionState.conf)(join)
+      val plan = CoalesceOrRepartitionBucketsInJoin(spark.sessionState.conf)(join)
 
       def verify(expected: Option[Int], subPlan: SparkPlan): Unit = {
         val coalesced = subPlan.collect {
-          case f: FileSourceScanExec if f.optionalNumCoalescedBuckets.nonEmpty =>
-            f.optionalNumCoalescedBuckets.get
+          case f: FileSourceScanExec if f.optionalNewNumBuckets.nonEmpty =>
+            f.optionalNewNumBuckets.get
         }
         if (expected.isDefined) {
           assert(coalesced.size == 1 && coalesced.head == expected.get)
@@ -265,7 +265,7 @@ class CoalesceBucketsInJoinSuite extends SQLTestUtils with SharedSparkSession {
     val value = scan.metadata("SelectedBucketsCount")
     assert(value === "8 out of 8")
 
-    val scanWithCoalescing = scan.copy(optionalNumCoalescedBuckets = Some(4))
+    val scanWithCoalescing = scan.copy(optionalNewNumBuckets = Some(4))
     val valueWithCoalescing = scanWithCoalescing.metadata("SelectedBucketsCount")
     assert(valueWithCoalescing == "8 out of 8 (Coalesced to 4)")
   }

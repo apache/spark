@@ -157,7 +157,7 @@ case class RowDataSourceScanExec(
  * @param requiredSchema Required schema of the underlying relation, excluding partition columns.
  * @param partitionFilters Predicates to use for partition pruning.
  * @param optionalBucketSet Bucket ids for bucket pruning.
- * @param optionalNumCoalescedBuckets Number of coalesced buckets.
+ * @param optionalNewNumBuckets Number of buckets to coalesce or repartition.
  * @param dataFilters Filters on non-partition columns.
  * @param tableIdentifier identifier for the table in the metastore.
  */
@@ -167,7 +167,7 @@ case class FileSourceScanExec(
     requiredSchema: StructType,
     partitionFilters: Seq[Expression],
     optionalBucketSet: Option[BitSet],
-    optionalNumCoalescedBuckets: Option[Int],
+    optionalNewNumBuckets: Option[Int],
     dataFilters: Seq[Expression],
     tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec {
@@ -176,8 +176,8 @@ case class FileSourceScanExec(
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
   override lazy val supportsColumnar: Boolean = {
     val isSplittingBucket = relation.bucketSpec.isDefined &&
-      optionalNumCoalescedBuckets.isDefined &&
-      optionalNumCoalescedBuckets.get > relation.bucketSpec.get.numBuckets
+    optionalNewNumBuckets.isDefined &&
+    optionalNewNumBuckets.get > relation.bucketSpec.get.numBuckets
 
     relation.fileFormat.supportBatch(relation.sparkSession, schema) &&
       !isSplittingBucket
@@ -299,7 +299,7 @@ case class FileSourceScanExec(
       // above
       val spec = relation.bucketSpec.get
       val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
-      val numPartitions = optionalNumCoalescedBuckets.getOrElse(spec.numBuckets)
+      val numPartitions = optionalNewNumBuckets.getOrElse(spec.numBuckets)
       val partitioning = HashPartitioning(bucketColumns, numPartitions)
       val sortColumns =
         spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
@@ -321,7 +321,7 @@ case class FileSourceScanExec(
         val singleFilePartitions = bucketToFilesGrouping.forall(p => p._2.length <= 1)
 
         // TODO SPARK-24528 Sort order is currently ignored if buckets are coalesced.
-        if (singleFilePartitions && optionalNumCoalescedBuckets.isEmpty) {
+        if (singleFilePartitions && optionalNewNumBuckets.isEmpty) {
           // TODO Currently Spark does not support writing columns sorting in descending order
           // so using Ascending order. This can be fixed in future
           sortColumns.map(attribute => SortOrder(attribute, Ascending))
@@ -367,7 +367,7 @@ case class FileSourceScanExec(
       }
       metadata + ("SelectedBucketsCount" ->
         (s"$numSelectedBuckets out of ${spec.numBuckets}" +
-          optionalNumCoalescedBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
+          optionalNewNumBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
     } getOrElse {
       metadata
     }
@@ -555,15 +555,15 @@ case class FileSourceScanExec(
       filesGroupedToBuckets
     }
 
-    if (optionalNumCoalescedBuckets.isEmpty) {
+    if (optionalNewNumBuckets.isEmpty) {
       val filePartitions = Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
         FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Array.empty))
       }
       new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
     } else {
-      val newNumBuckets = optionalNumCoalescedBuckets.get
+      val newNumBuckets = optionalNewNumBuckets.get
       if (newNumBuckets < bucketSpec.numBuckets) {
-        logInfo(s"Coalescing to $newNumBuckets buckets")
+        logInfo(s"Coalescing to $newNumBuckets buckets from ${bucketSpec.numBuckets} buckets")
         val coalescedBuckets = prunedFilesGroupedToBuckets.groupBy(_._1 % newNumBuckets)
         val filePartitions = Seq.tabulate(newNumBuckets) { bucketId =>
           val partitionedFiles = coalescedBuckets
@@ -574,7 +574,7 @@ case class FileSourceScanExec(
         }
         new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
       } else {
-        logInfo(s"Splitting to $newNumBuckets buckets")
+        logInfo(s"Repartitioning to $newNumBuckets buckets from ${bucketSpec.numBuckets} buckets")
         val filePartitions = Seq.tabulate(newNumBuckets) { bucketId =>
           FilePartition(
             bucketId,
@@ -647,7 +647,7 @@ case class FileSourceScanExec(
       QueryPlan.normalizePredicates(
         filterUnusedDynamicPruningExpressions(partitionFilters), output),
       optionalBucketSet,
-      optionalNumCoalescedBuckets,
+      optionalNewNumBuckets,
       QueryPlan.normalizePredicates(dataFilters, output),
       None)
   }

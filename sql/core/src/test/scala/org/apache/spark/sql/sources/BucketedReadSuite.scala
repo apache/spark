@@ -960,11 +960,11 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
           assert(shuffles.length == expectedNumShuffles)
 
           val scans = plan.collect {
-            case f: FileSourceScanExec if f.optionalNumCoalescedBuckets.isDefined => f
+            case f: FileSourceScanExec if f.relation.bucketSpec.isDefined => f
           }
           if (expectedCoalescedNumBuckets.isDefined) {
             assert(scans.length == 1)
-            assert(scans.head.optionalNumCoalescedBuckets == expectedCoalescedNumBuckets)
+            assert(scans.head.optionalNewNumBuckets == expectedCoalescedNumBuckets)
           } else {
             assert(scans.isEmpty)
           }

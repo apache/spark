@@ -38,13 +38,13 @@ import org.apache.spark.sql.internal.SQLConf
  *   - The ratio of the number of buckets is less than the value set in
  *     COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.
  */
-case class CoalesceBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
-  private def updateNumCoalescedBucketsInScan(
+case class CoalesceOrRepartitionBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
+  private def updateNumBucketsInScan(
       plan: SparkPlan,
-      numCoalescedBuckets: Int): SparkPlan = {
+      newNumBuckets: Int): SparkPlan = {
     plan transformUp {
       case f: FileSourceScanExec =>
-        f.copy(optionalNumCoalescedBuckets = Some(numCoalescedBuckets))
+        f.copy(optionalNewNumBuckets = Some(newNumBuckets))
     }
   }
 
@@ -55,14 +55,14 @@ case class CoalesceBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
       numCoalescedBuckets: Int): BaseJoinExec = {
     if (numCoalescedBuckets != numLeftBuckets) {
       val leftCoalescedChild =
-        updateNumCoalescedBucketsInScan(join.left, numCoalescedBuckets)
+        updateNumBucketsInScan(join.left, numCoalescedBuckets)
       join match {
         case j: SortMergeJoinExec => j.copy(left = leftCoalescedChild)
         case j: ShuffledHashJoinExec => j.copy(left = leftCoalescedChild)
       }
     } else {
       val rightCoalescedChild =
-        updateNumCoalescedBucketsInScan(join.right, numCoalescedBuckets)
+        updateNumBucketsInScan(join.right, numCoalescedBuckets)
       join match {
         case j: SortMergeJoinExec => j.copy(right = rightCoalescedChild)
         case j: ShuffledHashJoinExec => j.copy(right = rightCoalescedChild)
@@ -129,7 +129,7 @@ object ExtractJoinWithBuckets {
   private def getBucketSpec(plan: SparkPlan): Option[BucketSpec] = {
     plan.collectFirst {
       case f: FileSourceScanExec if f.relation.bucketSpec.nonEmpty &&
-          f.optionalNumCoalescedBuckets.isEmpty =>
+          f.optionalNewNumBuckets.isEmpty =>
         f.relation.bucketSpec.get
     }
   }
