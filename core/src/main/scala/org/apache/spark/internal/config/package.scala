@@ -413,6 +413,19 @@ package object config {
       .intConf
       .createWithDefault(1)
 
+  private[spark] val DECOMMISSION_ENABLED =
+    ConfigBuilder("spark.decommission.enabled")
+      .doc("When decommission enabled, Spark will try its best to shutdown the executor " +
+        s"gracefully. Spark will try to migrate all the RDD blocks (controlled by " +
+        s"${STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key}) and shuffle blocks (controlled by " +
+        s"${STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key}) from the decommissioning " +
+        s"executor to a remote executor when ${STORAGE_DECOMMISSION_ENABLED.key} is enabled. " +
+        s"With decommission enabled, Spark will also decommission an executor instead of " +
+        s"killing to get better scalable when ${DYN_ALLOCATION_ENABLED.key} enabled.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val STORAGE_DECOMMISSION_ENABLED =
     ConfigBuilder("spark.storage.decommission.enabled")
       .doc("Whether to decommission the block manager when decommissioning executor")
