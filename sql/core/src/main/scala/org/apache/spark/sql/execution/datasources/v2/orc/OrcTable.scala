@@ -31,11 +31,11 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 case class OrcTable(
     name: String,
     sparkSession: SparkSession,
-    originalOptions: CaseInsensitiveStringMap,
+    options: CaseInsensitiveStringMap,
     paths: Seq[String],
     userSpecifiedSchema: Option[StructType],
     fallbackFileFormat: Class[_ <: FileFormat])
-  extends FileTable(sparkSession, originalOptions, paths, userSpecifiedSchema) {
+  extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): OrcScanBuilder =
     new OrcScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
