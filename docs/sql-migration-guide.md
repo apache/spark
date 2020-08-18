@@ -36,6 +36,10 @@ license: |
 
   - In Spark 3.1, NULL elements of structures, arrays and maps are converted to "null" in casting them to strings. In Spark 3.0 or earlier, NULL elements are converted to empty strings. To restore the behavior before Spark 3.1, you can set `spark.sql.legacy.castComplexTypesToString.enabled` to `true`.
 
+  - In Spark 3.1, when `spark.sql.ansi.enabled` is false, sum aggregation of decimal type column always returns `null` on decimal value overflow. In Spark 3.0 or earlier, when `spark.sql.ansi.enabled` is false and decimal value overflow happens in sum aggregation of decimal type column:
+    - If it is hash aggregation with `group by` clause, a runtime exception is thrown.
+    - Otherwise, null is returned.  
+
 ## Upgrading from Spark SQL 3.0 to 3.0.1
 
 - In Spark 3.0, JSON datasource and JSON function `schema_of_json` infer TimestampType from string values if they match to the pattern defined by the JSON option `timestampFormat`. Since version 3.0.1, the timestamp type inference is disabled by default. Set the JSON option `inferTimestamp` to `true` to enable such type inference.
