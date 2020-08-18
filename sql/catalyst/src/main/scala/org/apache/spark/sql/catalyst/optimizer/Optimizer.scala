@@ -1824,3 +1824,32 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
       empty(ll)
   }
 }
+
+/**
+ * Split [[Expand]] into several Expand if the projection size of Expand is larger
+ * than default projection size.
+ */
+object SplitAggregateWithExpand extends Rule[LogicalPlan] {
+  private def splitExpand(expand: Expand, num: Int): Seq[Expand] = {
+    val groupedProjections = expand.projections.grouped(num).toList
+    val expands: Seq[Expand] = groupedProjections.map {
+      projectionSeq => Expand(projectionSeq, expand.output, expand.child)
+    }
+    expands
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case a @ Aggregate(_, _, e @ Expand(projections, _, _)) =>
+      if (SQLConf.get.groupingWithUnion && projections.length
+        > SQLConf.get.groupingExpandProjections) {
+        val num = SQLConf.get.groupingExpandProjections
+        val subExpands = splitExpand(e, num)
+        val aggregates: Seq[Aggregate] = subExpands.map { expand =>
+          Aggregate(a.groupingExpressions, a.aggregateExpressions, expand)
+        }
+        Union(aggregates)
+      } else {
+        a
+      }
+  }
+}
