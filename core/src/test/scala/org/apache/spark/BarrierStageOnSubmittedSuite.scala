@@ -19,9 +19,12 @@ package org.apache.spark
 
 import scala.concurrent.duration._
 
+import org.apache.spark.TestUtils.createTempScriptWithExpectedOutput
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{PartitionPruningRDD, RDD}
+import org.apache.spark.resource.TestResourceIDs.{EXECUTOR_GPU_ID, TASK_GPU_ID, WORKER_GPU_ID}
 import org.apache.spark.scheduler.BarrierJobAllocationFailed._
+import org.apache.spark.scheduler.BarrierJobSlotsNumberCheckFailed
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -258,5 +261,38 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .map(x => x + 1)
     testSubmitJob(sc, rdd,
       message = ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+  }
+
+  test("SPARK-32518: CoarseGrainedSchedulerBackend.maxNumConcurrentTasks should " +
+    "consider all kinds of resources for the barrier stage") {
+    withTempDir { dir =>
+      val discoveryScript = createTempScriptWithExpectedOutput(
+        dir, "gpuDiscoveryScript", """{"name": "gpu","addresses":["0"]}""")
+
+      val conf = new SparkConf()
+        .setMaster("local-cluster[1, 2, 1024]")
+        .setAppName("test-cluster")
+        .set(WORKER_GPU_ID.amountConf, "1")
+        .set(WORKER_GPU_ID.discoveryScriptConf, discoveryScript)
+        .set(EXECUTOR_GPU_ID.amountConf, "1")
+        .set(TASK_GPU_ID.amountConf, "1")
+        // disable barrier stage retry to fail the application as soon as possible
+        .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES, 1)
+        // disable the check to simulate the behavior of Standalone in order to
+        // reproduce the issue.
+        .set(Tests.SKIP_VALIDATE_CORES_TESTING, true)
+      sc = new SparkContext(conf)
+      // setup an executor which will have 2 CPUs and 1 GPU
+      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
+
+      val exception = intercept[BarrierJobSlotsNumberCheckFailed] {
+        sc.parallelize(Range(1, 10), 2)
+          .barrier()
+          .mapPartitions { iter => iter }
+          .collect()
+      }
+      assert(exception.getMessage.contains("[SPARK-24819]: Barrier execution " +
+        "mode does not allow run a barrier stage that requires more slots"))
+    }
   }
 }

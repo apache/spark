@@ -77,7 +77,8 @@ private[spark] trait SchedulerBackend {
   def getDriverAttributes: Option[Map[String, String]] = None
 
   /**
-   * Get the max number of tasks that can be concurrent launched currently.
+   * Get the max number of tasks that can be concurrent launched based on the resources
+   * could be used, even if some of them are being used at the moment.
    * Note that please don't cache the value returned by this method, because the number can change
    * due to add/remove executors.
    *
