@@ -315,21 +315,21 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
     // star: {d1 f1 d2 d3 }
     // non-star: {t5 t3 t6 t2 t4 t1}
     //
-    // level 0: (t5 ), (d3 ), (d1 ), (f1 ), (t2 ), (d2 ), (t6 ), (t3 ), (t4 ), (t1 )
-    // level 1: {f1 d3 }, {t1 t2 }, {f1 d2 }, {t5 t6 }, {d1 f1 }, {t3 t4 }
-    // level 2: {d1 f1 d2 }, {d1 f1 d3 }, {d2 f1 d3 }
-    // level 3: {d1 d2 f1 d3 }
-    // level 4: {d1 t3 d3 f1 d2 }, {d1 t5 d3 f1 d2 }, {d1 d3 f1 t1 d2 }
-    // level 5: {d1 t2 d3 f1 t1 d2 }, {d1 t3 d3 f1 t1 d2 }, {d1 t5 t3 d3 f1 d2 },
-    //          {d1 t5 t6 d3 f1 d2 }, {d1 t5 d3 f1 t1 d2 }, {d1 t3 t4 d3 f1 d2 }
-    // level 6: {d1 t3 t2 d3 f1 t1 d2 }, {d1 t5 t6 d3 f1 t1 d2 }, {d1 t5 t3 d3 f1 t1 d2 },
-    //          {d1 t5 t3 t6 d3 f1 d2 }, {d1 t5 t3 t4 d3 f1 d2 }, ...
+    // level 0: (t4 ), (d2 ), (t5 ), (d3 ), (d1 ), (f1 ), (t2 ), (t6 ), (t1 ), (t3 )
+    // level 1: {t5 t6 }, {t4 t3 }, {d3 f1 }, {t2 t1 }, {d2 f1 }, {d1 f1 }
+    // level 2: {d2 d1 f1 }, {d2 d3 f1 }, {d3 d1 f1 }
+    // level 3: {d2 d1 d3 f1 }
+    // level 4: {d1 t3 d3 f1 d2 }, {d1 d3 f1 t1 d2 }, {d1 t5 d3 f1 d2 }
+    // level 5: {d1 t5 d3 f1 t1 d2 }, {d1 t3 t4 d3 f1 d2 }, {d1 t5 t6 d3 f1 d2 },
+    //          {d1 t5 t3 d3 f1 d2 }, {d1 t3 d3 f1 t1 d2 }, {d1 t2 d3 f1 t1 d2 }
+    // level 6: {d1 t5 t3 t4 d3 f1 d2 }, {d1 t3 t2 d3 f1 t1 d2 }, {d1 t5 t6 d3 f1 t1 d2 },
+    //          {d1 t5 t3 d3 f1 t1 d2 }, {d1 t5 t2 d3 f1 t1 d2 }, ...
     // ...
     // level 9: {d1 t5 t3 t6 t2 t4 d3 f1 t1 d2 }
     //
     // Number of generated plans: 46 (vs. 82)
     val query =
-      d1.join(t3).join(t4).join(f1).join(d2).join(t5).join(t6).join(d3).join(t1).join(t2)
+      d1.join(t3).join(t4).join(f1).join(d3).join(d2).join(t5).join(t6).join(t1).join(t2)
         .where((nameToAttr("d1_c2") === nameToAttr("t3_c1")) &&
           (nameToAttr("t3_c2") === nameToAttr("t4_c2")) &&
           (nameToAttr("d1_pk") === nameToAttr("f1_fk1")) &&
@@ -342,15 +342,15 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
 
     val expected =
       f1.join(d3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("d3_pk")))
-        .join(d2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
         .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk")))
+        .join(d2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
         .join(t4.join(t3, Inner, Some(nameToAttr("t3_c2") === nameToAttr("t4_c2"))), Inner,
           Some(nameToAttr("d1_c2") === nameToAttr("t3_c1")))
         .join(t2.join(t1, Inner, Some(nameToAttr("t1_c2") === nameToAttr("t2_c2"))), Inner,
           Some(nameToAttr("d3_c2") === nameToAttr("t1_c1")))
         .join(t5.join(t6, Inner, Some(nameToAttr("t5_c2") === nameToAttr("t6_c2"))), Inner,
           Some(nameToAttr("d2_c2") === nameToAttr("t5_c1")))
-        .select(outputsOf(d1, t3, t4, f1, d2, t5, t6, d3, t1, t2): _*)
+        .select(outputsOf(d1, t3, t4, f1, d3, d2, t5, t6, t1, t2): _*)
 
     assertEqualPlans(query, expected)
   }
