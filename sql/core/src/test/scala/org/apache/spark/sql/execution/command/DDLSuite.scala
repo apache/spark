@@ -3046,14 +3046,20 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
 
     withUserDefinedFunction("func1" -> false) {
+      val func = FunctionIdentifier("func1", Some("default"))
+      assert(!spark.sessionState.catalog.isRegisteredFunction(func))
       intercept[NoSuchFunctionException] {
         sql("REFRESH FUNCTION func1")
       }
+      assert(!spark.sessionState.catalog.isRegisteredFunction(func))
 
-      val func = FunctionIdentifier("func1", Some("default"))
       sql("CREATE FUNCTION func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
       assert(!spark.sessionState.catalog.isRegisteredFunction(func))
       sql("REFRESH FUNCTION func1")
+      assert(spark.sessionState.catalog.isRegisteredFunction(func))
+      intercept[NoSuchFunctionException] {
+        sql("REFRESH FUNCTION func2")
+      }
       assert(spark.sessionState.catalog.isRegisteredFunction(func))
 
       spark.sessionState.catalog.externalCatalog.dropFunction("default", "func1")
