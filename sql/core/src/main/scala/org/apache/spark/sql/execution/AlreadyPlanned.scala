@@ -40,6 +40,7 @@ class AlreadyPlannedExecution(
   override lazy val analyzed: LogicalPlan = plan
   override lazy val optimizedPlan: LogicalPlan = plan
   override lazy val sparkPlan: SparkPlan = plan.physicalPlan
+  override lazy val executedPlan: SparkPlan = plan.physicalPlan
 }
 
 object AlreadyPlanned {
