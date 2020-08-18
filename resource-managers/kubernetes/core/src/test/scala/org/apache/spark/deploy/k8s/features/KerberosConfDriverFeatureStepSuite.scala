@@ -80,7 +80,8 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
 
     val pod = step.configurePod(SparkPod.initialPod())
     assert(podHasVolume(pod.pod, KERBEROS_KEYTAB_VOLUME))
-    assert(containerHasVolume(pod.container, KERBEROS_KEYTAB_VOLUME, KERBEROS_KEYTAB_MOUNT_POINT))
+    assert(containerHasVolume(
+      pod.containers.head, KERBEROS_KEYTAB_VOLUME, KERBEROS_KEYTAB_MOUNT_POINT))
 
     assert(step.getAdditionalPodSystemProperties().keys === Set(KEYTAB.key))
 
@@ -149,7 +150,8 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
   private def checkPodForKrbConf(pod: SparkPod, confMapName: String): Unit = {
     val podVolume = pod.pod.getSpec().getVolumes().asScala.find(_.getName() == KRB_FILE_VOLUME)
     assert(podVolume.isDefined)
-    assert(containerHasVolume(pod.container, KRB_FILE_VOLUME, KRB_FILE_DIR_PATH + "/krb5.conf"))
+    assert(containerHasVolume(
+      pod.containers.head, KRB_FILE_VOLUME, KRB_FILE_DIR_PATH + "/krb5.conf"))
     assert(podVolume.get.getConfigMap().getName() === confMapName)
   }
 
@@ -157,9 +159,9 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
     val podVolume = pod.pod.getSpec().getVolumes().asScala
       .find(_.getName() == SPARK_APP_HADOOP_SECRET_VOLUME_NAME)
     assert(podVolume.isDefined)
-    assert(containerHasVolume(pod.container, SPARK_APP_HADOOP_SECRET_VOLUME_NAME,
+    assert(containerHasVolume(pod.containers.head, SPARK_APP_HADOOP_SECRET_VOLUME_NAME,
       SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR))
-    assert(containerHasEnvVar(pod.container, ENV_HADOOP_TOKEN_FILE_LOCATION))
+    assert(containerHasEnvVar(pod.containers.head, ENV_HADOOP_TOKEN_FILE_LOCATION))
     assert(podVolume.get.getSecret().getSecretName() === dtSecretName)
   }
 

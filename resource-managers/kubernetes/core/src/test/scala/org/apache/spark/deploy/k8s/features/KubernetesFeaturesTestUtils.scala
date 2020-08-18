@@ -45,7 +45,7 @@ object KubernetesFeaturesTestUtils {
           .addToLabels(stepType, stepType)
           .endMetadata()
           .build()
-        SparkPod(configuredPod, originalPod.container)
+        SparkPod(configuredPod, originalPod.containers)
       })
     mockStep
   }

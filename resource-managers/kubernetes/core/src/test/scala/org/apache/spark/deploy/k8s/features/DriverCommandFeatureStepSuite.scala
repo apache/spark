@@ -33,7 +33,7 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
     val spec = applyFeatureStep(
       JavaMainAppResource(Some(mainResource)),
       appArgs = Array("5", "7"))
-    assert(spec.pod.container.getArgs.asScala === List(
+    assert(spec.pod.containers.head.getArgs.asScala === List(
       "driver",
       "--properties-file", SPARK_CONF_PATH,
       "--class", KubernetesTestConf.MAIN_CLASS,
@@ -49,13 +49,13 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
       conf = sparkConf,
       appArgs = Array("5", "7", "9"))
 
-    assert(spec.pod.container.getArgs.asScala === List(
+    assert(spec.pod.containers.head.getArgs.asScala === List(
       "driver",
       "--properties-file", SPARK_CONF_PATH,
       "--class", KubernetesTestConf.MAIN_CLASS,
       mainResource, "5", "7", "9"))
 
-    val envs = spec.pod.container.getEnv.asScala
+    val envs = spec.pod.containers.head.getEnv.asScala
       .map { env => (env.getName, env.getValue) }
       .toMap
     val expected = Map(ENV_PYSPARK_MAJOR_PYTHON_VERSION -> "2")
@@ -69,7 +69,7 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
       RMainAppResource(mainResource),
       appArgs = Array("5", "7", "9"))
 
-    assert(spec.pod.container.getArgs.asScala === List(
+    assert(spec.pod.containers.head.getArgs.asScala === List(
       "driver",
       "--properties-file", SPARK_CONF_PATH,
       "--class", KubernetesTestConf.MAIN_CLASS,
@@ -82,7 +82,7 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
       JavaMainAppResource(Some(mainResource)),
       appArgs = Array("5", "7"),
       proxyUser = Some("test.user"))
-    assert(spec.pod.container.getArgs.asScala === List(
+    assert(spec.pod.containers.head.getArgs.asScala === List(
       "driver",
       "--proxy-user", "test.user",
       "--properties-file", SPARK_CONF_PATH,
@@ -100,7 +100,7 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
       appArgs = Array("5", "7", "9"),
       proxyUser = Some("test.user"))
 
-    assert(spec.pod.container.getArgs.asScala === List(
+    assert(spec.pod.containers.head.getArgs.asScala === List(
       "driver",
       "--proxy-user", "test.user",
       "--properties-file", SPARK_CONF_PATH,
@@ -116,7 +116,7 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
       appArgs = Array("5", "7", "9"),
       proxyUser = Some("test.user"))
 
-    assert(spec.pod.container.getArgs.asScala === List(
+    assert(spec.pod.containers.head.getArgs.asScala === List(
       "driver",
       "--proxy-user", "test.user",
       "--properties-file", SPARK_CONF_PATH,

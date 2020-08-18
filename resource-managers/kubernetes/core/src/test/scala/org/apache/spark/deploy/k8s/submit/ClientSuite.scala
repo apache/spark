@@ -56,7 +56,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     new SecretBuilder().withNewMetadata().withName("secret").endMetadata().build())
 
   private val BUILT_KUBERNETES_SPEC = KubernetesDriverSpec(
-    SparkPod(BUILT_DRIVER_POD, BUILT_DRIVER_CONTAINER),
+    SparkPod(BUILT_DRIVER_POD, List(BUILT_DRIVER_CONTAINER)),
     ADDITIONAL_RESOURCES,
     RESOLVED_JAVA_OPTIONS)
 

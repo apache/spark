@@ -72,19 +72,19 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val basePod = SparkPod.initialPod()
     val configuredPod = featureStep.configurePod(basePod)
 
-    assert(configuredPod.container.getName === DEFAULT_DRIVER_CONTAINER_NAME)
-    assert(configuredPod.container.getImage === "spark-driver:latest")
-    assert(configuredPod.container.getImagePullPolicy === CONTAINER_IMAGE_PULL_POLICY)
+    assert(configuredPod.containers.head.getName === DEFAULT_DRIVER_CONTAINER_NAME)
+    assert(configuredPod.containers.head.getImage === "spark-driver:latest")
+    assert(configuredPod.containers.head.getImagePullPolicy === CONTAINER_IMAGE_PULL_POLICY)
 
     val expectedPortNames = Set(
       containerPort(DRIVER_PORT_NAME, DEFAULT_DRIVER_PORT),
       containerPort(BLOCK_MANAGER_PORT_NAME, DEFAULT_BLOCKMANAGER_PORT),
       containerPort(UI_PORT_NAME, UI_PORT.defaultValue.get)
     )
-    val foundPortNames = configuredPod.container.getPorts.asScala.toSet
+    val foundPortNames = configuredPod.containers.head.getPorts.asScala.toSet
     assert(expectedPortNames === foundPortNames)
 
-    val envs = configuredPod.container
+    val envs = configuredPod.containers.head
       .getEnv
       .asScala
       .map { env => (env.getName, env.getValue) }
@@ -98,12 +98,12 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.pod.getSpec().getImagePullSecrets.asScala ===
       TEST_IMAGE_PULL_SECRET_OBJECTS)
 
-    assert(configuredPod.container.getEnv.asScala.exists(envVar =>
+    assert(configuredPod.containers.head.getEnv.asScala.exists(envVar =>
       envVar.getName.equals(ENV_DRIVER_BIND_ADDRESS) &&
         envVar.getValueFrom.getFieldRef.getApiVersion.equals("v1") &&
         envVar.getValueFrom.getFieldRef.getFieldPath.equals("status.podIP")))
 
-    val resourceRequirements = configuredPod.container.getResources
+    val resourceRequirements = configuredPod.containers.head.getResources
     val requests = resourceRequirements.getRequests.asScala
     assert(amountAndFormat(requests("cpu")) === "2")
     assert(amountAndFormat(requests("memory")) === "456Mi")
@@ -138,7 +138,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     // if spark.driver.cores is not set default is 1
     val requests1 = new BasicDriverFeatureStep(KubernetesTestConf.createDriverConf(sparkConf))
       .configurePod(basePod)
-      .container.getResources
+      .containers.head.getResources
       .getRequests.asScala
     assert(amountAndFormat(requests1("cpu")) === "1")
 
@@ -146,7 +146,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     sparkConf.set(DRIVER_CORES, 10)
     val requests2 = new BasicDriverFeatureStep(KubernetesTestConf.createDriverConf(sparkConf))
       .configurePod(basePod)
-      .container.getResources
+      .containers.head.getResources
       .getRequests.asScala
     assert(amountAndFormat(requests2("cpu")) === "10")
 
@@ -155,7 +155,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       sparkConf.set(KUBERNETES_DRIVER_REQUEST_CORES, value)
       val requests3 = new BasicDriverFeatureStep(KubernetesTestConf.createDriverConf(sparkConf))
         .configurePod(basePod)
-        .container.getResources
+        .containers.head.getResources
         .getRequests.asScala
       assert(amountAndFormat(requests3("cpu")) === value)
     }
@@ -177,8 +177,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val basePod = SparkPod.initialPod()
     val configuredJavaPod = javaFeatureStep.configurePod(basePod)
     val configuredPythonPod = pythonFeatureStep.configurePod(basePod)
-    assert(configuredJavaPod.container.getImage === "spark-driver:latest")
-    assert(configuredPythonPod.container.getImage === "spark-driver-py:latest")
+    assert(configuredJavaPod.containers.head.getImage === "spark-driver:latest")
+    assert(configuredPythonPod.containers.head.getImage === "spark-driver-py:latest")
   }
 
   // Memory overhead tests. Tuples are:
@@ -203,7 +203,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
         mainAppResource = resource)
       val step = new BasicDriverFeatureStep(conf)
       val pod = step.configurePod(SparkPod.initialPod())
-      val mem = amountAndFormat(pod.container.getResources.getRequests.get("memory"))
+      val mem = amountAndFormat(pod.containers.head.getResources.getRequests.get("memory"))
       val expected = (driverMem + driverMem * expectedFactor).toInt
       assert(mem === s"${expected}Mi")
 

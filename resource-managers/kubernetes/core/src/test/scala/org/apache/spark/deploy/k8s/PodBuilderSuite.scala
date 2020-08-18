@@ -96,7 +96,7 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     assert(spec.getSubdomain === "subdomain")
     assert(spec.getTolerations.asScala.exists(_.getKey == "toleration-key"))
     assert(spec.getVolumes.asScala.exists(_.getName == "test-volume"))
-    val container = pod.container
+    val container = pod.containers.head
     assert(container.getName === "executor-container")
     assert(container.getArgs.contains("arg"))
     assert(container.getCommand.equals(List("command").asJava))
@@ -106,7 +106,7 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     assert(container.getStdin)
     assert(container.getTerminationMessagePath === "termination-message-path")
     assert(container.getTerminationMessagePolicy === "termination-message-policy")
-    assert(pod.container.getVolumeMounts.asScala.exists(_.getName == "test-volume"))
+    assert(container.getVolumeMounts.asScala.exists(_.getName == "test-volume"))
   }
 
   private def podWithSupportedFeatures(): Pod = {

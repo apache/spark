@@ -63,10 +63,12 @@ class PodTemplateConfigMapStepSuite extends SparkFunSuite {
     assert(volume.getConfigMap.getItems.get(0).getPath ===
       Constants.EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME)
 
-    assert(configuredPod.container.getVolumeMounts.size() === 1)
-    val volumeMount = configuredPod.container.getVolumeMounts.get(0)
-    assert(volumeMount.getMountPath === Constants.EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH)
-    assert(volumeMount.getName === Constants.POD_TEMPLATE_VOLUME)
+      configuredPod.containers.map{ container =>
+      assert(container.getVolumeMounts.size() === 1)
+      val volumeMount = container.getVolumeMounts.get(0)
+      assert(volumeMount.getMountPath === Constants.EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH)
+      assert(volumeMount.getName === Constants.POD_TEMPLATE_VOLUME)
+    }
 
     val resources = step.getAdditionalKubernetesResources()
     assert(resources.size === 1)

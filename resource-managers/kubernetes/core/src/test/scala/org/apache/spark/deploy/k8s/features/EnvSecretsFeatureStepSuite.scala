@@ -38,10 +38,11 @@ class EnvSecretsFeatureStepSuite extends SparkFunSuite {
       secretEnvNamesToKeyRefs = envVarsToKeys)
 
     val step = new EnvSecretsFeatureStep(kubernetesConf)
-    val container = step.configurePod(baseDriverPod).container
-    val containerEnvKeys = container.getEnv.asScala.map { v => v.getName }.toSet
-    envVarsToKeys.keys.foreach { envName =>
-      assert(containerEnvKeys.contains(envName))
+    step.configurePod(baseDriverPod).containers.map { container =>
+      val containerEnvKeys = container.getEnv.asScala.map { v => v.getName }.toSet
+      envVarsToKeys.keys.foreach { envName =>
+        assert(containerEnvKeys.contains(envName))
+      }
     }
   }
 }

@@ -127,12 +127,13 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
     val executor = step.configurePod(SparkPod.initialPod())
 
-    assert(executor.container.getResources.getLimits.size() === 3)
-    assert(amountAndFormat(executor.container.getResources
+    // For the executor specifically not shuffle service
+    assert(executor.containers.head.getResources.getLimits.size() === 3)
+    assert(amountAndFormat(executor.containers.head.getResources
       .getLimits.get("memory")) === "1408Mi")
     gpuResources.foreach { case (k8sName, testRInfo) =>
       assert(amountAndFormat(
-        executor.container.getResources.getLimits.get(k8sName)) === testRInfo.count)
+        executor.containers.head.getResources.getLimits.get(k8sName)) === testRInfo.count)
     }
   }
 
@@ -149,10 +150,12 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
 
     // There is exactly 1 container with no volume mounts and default memory limits.
     // Default memory limit is 1024M + 384M (minimum overhead constant).
-    assert(executor.container.getImage === EXECUTOR_IMAGE)
-    assert(executor.container.getVolumeMounts.isEmpty)
-    assert(executor.container.getResources.getLimits.size() === 1)
-    assert(amountAndFormat(executor.container.getResources
+    executor.containers.map{ container =>
+      assert(container.getImage === EXECUTOR_IMAGE)
+      assert(container.getVolumeMounts.isEmpty)
+    }
+    assert(executor.containers.head.getResources.getLimits.size() === 1)
+    assert(amountAndFormat(executor.containers.head.getResources
       .getLimits.get("memory")) === "1408Mi")
 
     // The pod has no node selector, volumes.
@@ -202,7 +205,9 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
     val executor = step.configurePod(SparkPod.initialPod())
     // This is checking that basic executor + executorMemory = 1408 + 42 = 1450
-    assert(amountAndFormat(executor.container.getResources.getRequests.get("memory")) === "1450Mi")
+    assert(
+      amountAndFormat(
+        executor.containers.head.getResources.getRequests.get("memory")) === "1450Mi")
   }
 
   test("auth secret propagation") {
@@ -235,8 +240,10 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       secMgr)
 
     val executor = step.configurePod(SparkPod.initialPod())
-    assert(!KubernetesFeaturesTestUtils.containerHasEnvVar(
-      executor.container, SecurityManager.ENV_AUTH_SECRET))
+    executor.containers.map { container =>
+      assert(!KubernetesFeaturesTestUtils.containerHasEnvVar(
+        container, SecurityManager.ENV_AUTH_SECRET))
+    }
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.
@@ -267,12 +274,14 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       s"$ENV_JAVA_OPT_PREFIX${ind + extraJavaOptsStart}" -> opt
     }.toMap
 
-    val containerEnvs = executorPod.container.getEnv.asScala.map {
-      x => (x.getName, x.getValue)
-    }.toMap
+    executorPod.containers.map { container =>
+      val containerEnvs = container.getEnv.asScala.map {
+        x => (x.getName, x.getValue)
+      }.toMap
 
-    val expectedEnvs = defaultEnvs ++ additionalEnvVars ++ extraJavaOptsEnvs
-    assert(containerEnvs === expectedEnvs)
+      val expectedEnvs = defaultEnvs ++ additionalEnvVars ++ extraJavaOptsEnvs
+      assert(containerEnvs === expectedEnvs)
+    }
   }
 
   private def amountAndFormat(quantity: Quantity): String = quantity.getAmount + quantity.getFormat

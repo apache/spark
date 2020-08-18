@@ -64,8 +64,8 @@ class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
 
   private def checkPod(pod: SparkPod): Unit = {
     assert(podHasVolume(pod.pod, HADOOP_CONF_VOLUME))
-    assert(containerHasVolume(pod.container, HADOOP_CONF_VOLUME, HADOOP_CONF_DIR_PATH))
-    assert(containerHasEnvVar(pod.container, ENV_HADOOP_CONF_DIR))
+    assert(containerHasVolume(pod.containers.head, HADOOP_CONF_VOLUME, HADOOP_CONF_DIR_PATH))
+    assert(containerHasEnvVar(pod.containers.head, ENV_HADOOP_CONF_DIR))
   }
 
 }

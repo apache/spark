@@ -36,10 +36,12 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
 
     assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
     assert(configuredPod.pod.getSpec.getVolumes.get(0).getHostPath.getPath === "/hostPath/tmp")
-    assert(configuredPod.container.getVolumeMounts.size() === 1)
-    assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
-    assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
-    assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === false)
+    configuredPod.containers.map{ container =>
+      assert(container.getVolumeMounts.size() === 1)
+      assert(container.getVolumeMounts.get(0).getMountPath === "/tmp")
+      assert(container.getVolumeMounts.get(0).getName === "testVolume")
+      assert(container.getVolumeMounts.get(0).getReadOnly === false)
+    }
   }
 
   test("Mounts pesistentVolumeClaims") {
@@ -57,10 +59,12 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
     val pvcClaim = configuredPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
     assert(pvcClaim.getClaimName === "pvcClaim")
-    assert(configuredPod.container.getVolumeMounts.size() === 1)
-    assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
-    assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
-    assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly)
+    configuredPod.containers.map{ container =>
+      assert(container.getVolumeMounts.size() === 1)
+      assert(container.getVolumeMounts.get(0).getMountPath === "/tmp")
+      assert(container.getVolumeMounts.get(0).getName === "testVolume")
+      assert(container.getVolumeMounts.get(0).getReadOnly)
+    }
 
   }
 
@@ -81,10 +85,12 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(emptyDir.getMedium === "Memory")
     assert(emptyDir.getSizeLimit.getAmount ===  "6")
     assert(emptyDir.getSizeLimit.getFormat === "G")
-    assert(configuredPod.container.getVolumeMounts.size() === 1)
-    assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
-    assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
-    assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === false)
+    configuredPod.containers.map{ container =>
+      assert(container.getVolumeMounts.size() === 1)
+      assert(container.getVolumeMounts.get(0).getMountPath === "/tmp")
+      assert(container.getVolumeMounts.get(0).getName === "testVolume")
+      assert(container.getVolumeMounts.get(0).getReadOnly === false)
+    }
   }
 
   test("Mounts emptyDir with no options") {
@@ -103,10 +109,12 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     val emptyDir = configuredPod.pod.getSpec.getVolumes.get(0).getEmptyDir
     assert(emptyDir.getMedium === "")
     assert(emptyDir.getSizeLimit === null)
-    assert(configuredPod.container.getVolumeMounts.size() === 1)
-    assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
-    assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
-    assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === false)
+    configuredPod.containers.map{ container =>
+      assert(container.getVolumeMounts.size() === 1)
+      assert(container.getVolumeMounts.get(0).getMountPath === "/tmp")
+      assert(container.getVolumeMounts.get(0).getName === "testVolume")
+      assert(container.getVolumeMounts.get(0).getReadOnly === false)
+    }
   }
 
   test("Mounts read/write nfs volumes") {
@@ -125,10 +133,12 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.pod.getSpec.getVolumes.get(0).getNfs.getPath === "/share/name")
     assert(configuredPod.pod.getSpec.getVolumes.get(0).getNfs.getReadOnly === null)
     assert(configuredPod.pod.getSpec.getVolumes.get(0).getNfs.getServer === "nfs.example.com")
-    assert(configuredPod.container.getVolumeMounts.size() === 1)
-    assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
-    assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
-    assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === false)
+    configuredPod.containers.map{ container =>
+      assert(container.getVolumeMounts.size() === 1)
+      assert(container.getVolumeMounts.get(0).getMountPath === "/tmp")
+      assert(container.getVolumeMounts.get(0).getName === "testVolume")
+      assert(container.getVolumeMounts.get(0).getReadOnly === false)
+    }
   }
 
   test("Mounts read-only nfs volumes") {
@@ -147,10 +157,12 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.pod.getSpec.getVolumes.get(0).getNfs.getPath === "/share/name")
     assert(configuredPod.pod.getSpec.getVolumes.get(0).getNfs.getReadOnly === null)
     assert(configuredPod.pod.getSpec.getVolumes.get(0).getNfs.getServer === "nfs.example.com")
-    assert(configuredPod.container.getVolumeMounts.size() === 1)
-    assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
-    assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
-    assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === true)
+    configuredPod.containers.map{ container =>
+      assert(container.getVolumeMounts.size() === 1)
+      assert(container.getVolumeMounts.get(0).getMountPath === "/tmp")
+      assert(container.getVolumeMounts.get(0).getName === "testVolume")
+      assert(container.getVolumeMounts.get(0).getReadOnly === true)
+    }
   }
 
   test("Mounts multiple volumes") {
@@ -174,7 +186,9 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     val configuredPod = step.configurePod(SparkPod.initialPod())
 
     assert(configuredPod.pod.getSpec.getVolumes.size() === 2)
-    assert(configuredPod.container.getVolumeMounts.size() === 2)
+    configuredPod.containers.map{ container =>
+      assert(container.getVolumeMounts.size() === 2)
+    }
   }
 
   test("Mounts subpath on emptyDir") {
@@ -190,10 +204,12 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     val configuredPod = step.configurePod(SparkPod.initialPod())
 
     assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
-    val emptyDirMount = configuredPod.container.getVolumeMounts.get(0)
-    assert(emptyDirMount.getMountPath === "/tmp")
-    assert(emptyDirMount.getName === "testVolume")
-    assert(emptyDirMount.getSubPath === "foo")
+    configuredPod.containers.map{ container =>
+      val emptyDirMount = container.getVolumeMounts.get(0)
+      assert(emptyDirMount.getMountPath === "/tmp")
+      assert(emptyDirMount.getName === "testVolume")
+      assert(emptyDirMount.getSubPath === "foo")
+    }
   }
 
   test("Mounts subpath on persistentVolumeClaims") {
@@ -211,11 +227,13 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
     val pvcClaim = configuredPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
     assert(pvcClaim.getClaimName === "pvcClaim")
-    assert(configuredPod.container.getVolumeMounts.size() === 1)
-    val pvcMount = configuredPod.container.getVolumeMounts.get(0)
-    assert(pvcMount.getMountPath === "/tmp")
-    assert(pvcMount.getName === "testVolume")
-    assert(pvcMount.getSubPath === "bar")
+    configuredPod.containers.map{ container =>
+      assert(container.getVolumeMounts.size() === 1)
+      val pvcMount = container.getVolumeMounts.get(0)
+      assert(pvcMount.getMountPath === "/tmp")
+      assert(pvcMount.getName === "testVolume")
+      assert(pvcMount.getSubPath === "bar")
+    }
   }
 
   test("Mounts multiple subpaths") {
@@ -238,14 +256,16 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     val step = new MountVolumesFeatureStep(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())
 
+    configuredPod.containers.map{ container =>
     assert(configuredPod.pod.getSpec.getVolumes.size() === 2)
-    val mounts = configuredPod.container.getVolumeMounts.asScala.sortBy(_.getName())
-    assert(mounts.size === 2)
-    assert(mounts(0).getName === "testEmptyDir")
-    assert(mounts(0).getMountPath === "/tmp/foo")
-    assert(mounts(0).getSubPath === "foo")
-    assert(mounts(1).getName === "testPVC")
-    assert(mounts(1).getMountPath === "/tmp/bar")
-    assert(mounts(1).getSubPath === "bar")
+      val mounts = container.getVolumeMounts.asScala.sortBy(_.getName())
+      assert(mounts.size === 2)
+      assert(mounts(0).getName === "testEmptyDir")
+      assert(mounts(0).getMountPath === "/tmp/foo")
+      assert(mounts(0).getSubPath === "foo")
+      assert(mounts(1).getName === "testPVC")
+      assert(mounts(1).getMountPath === "/tmp/bar")
+      assert(mounts(1).getSubPath === "bar")
+    }
   }
 }

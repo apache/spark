@@ -16,6 +16,8 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import scala.collection.JavaConverters._
+
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, Pod, PodBuilder}
 
 import org.apache.spark.deploy.k8s.Constants._
@@ -99,7 +101,7 @@ object ExecutorLifecycleTestUtils {
     val sparkPod = executorPodWithId(executorId)
     val podWithAttachedContainer = new PodBuilder(sparkPod.pod)
       .editOrNewSpec()
-        .addToContainers(sparkPod.container)
+        .addAllToContainers(sparkPod.containers.asJava)
         .endSpec()
       .build()
     podWithAttachedContainer
@@ -118,6 +120,6 @@ object ExecutorLifecycleTestUtils {
       .withName("spark-executor")
       .withImage("k8s-spark")
       .build()
-    SparkPod(pod, container)
+    SparkPod(pod, List(container))
   }
 }

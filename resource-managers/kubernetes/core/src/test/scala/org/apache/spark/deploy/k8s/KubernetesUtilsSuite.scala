@@ -38,31 +38,31 @@ class KubernetesUtilsSuite extends SparkFunSuite {
     val sparkPod = KubernetesUtils.selectSparkContainer(POD, Some("second"))
     assert(sparkPod.pod.getSpec.getHostname == HOST)
     assert(sparkPod.pod.getSpec.getContainers.asScala.toList.map(_.getName) == List("first"))
-    assert(sparkPod.container.getName == "second")
+    assert(sparkPod.containers.head.getName == "second")
   }
 
   test("Selects the first container if no container name is given.") {
     val sparkPod = KubernetesUtils.selectSparkContainer(POD, Option.empty)
     assert(sparkPod.pod.getSpec.getHostname == HOST)
     assert(sparkPod.pod.getSpec.getContainers.asScala.toList.map(_.getName) == List("second"))
-    assert(sparkPod.container.getName == "first")
+    assert(sparkPod.containers.head.getName == "first")
   }
 
   test("Falls back to the first container if given container name does not exist.") {
     val sparkPod = KubernetesUtils.selectSparkContainer(POD, Some("does-not-exist"))
     assert(sparkPod.pod.getSpec.getHostname == HOST)
     assert(sparkPod.pod.getSpec.getContainers.asScala.toList.map(_.getName) == List("second"))
-    assert(sparkPod.container.getName == "first")
+    assert(sparkPod.containers.head.getName == "first")
   }
 
   test("constructs spark pod correctly with pod template with no containers") {
     val noContainersPod = new PodBuilder(POD).editSpec().withContainers().endSpec().build()
     val sparkPod = KubernetesUtils.selectSparkContainer(noContainersPod, Some("does-not-exist"))
     assert(sparkPod.pod.getSpec.getHostname == HOST)
-    assert(sparkPod.container.getName == null)
+    assert(sparkPod.containers.head.getName == null)
     val sparkPodWithNoContainerName =
       KubernetesUtils.selectSparkContainer(noContainersPod, Option.empty)
     assert(sparkPodWithNoContainerName.pod.getSpec.getHostname == HOST)
-    assert(sparkPodWithNoContainerName.container.getName == null)
+    assert(sparkPodWithNoContainerName.containers.head.getName == null)
   }
 }
