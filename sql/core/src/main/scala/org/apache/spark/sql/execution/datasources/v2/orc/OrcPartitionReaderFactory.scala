@@ -132,6 +132,8 @@ case class OrcPartitionReaderFactory(
 
     val filePath = new Path(new URI(file.filePath))
 
+    pushDownPredicates(filePath, conf)
+
     val fs = filePath.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     val resultedColPruneInfo =
