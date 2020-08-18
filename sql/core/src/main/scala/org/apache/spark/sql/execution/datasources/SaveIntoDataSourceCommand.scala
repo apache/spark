@@ -42,8 +42,8 @@ case class SaveIntoDataSourceCommand(
   override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    dataSource.createRelation(sparkSession.sqlContext, mode, options,
-      Dataset.ofRows(sparkSession, query))
+    dataSource.createRelation(
+      sparkSession.sqlContext, mode, options, Dataset.ofRows(sparkSession, query))
 
     Seq.empty[Row]
   }
