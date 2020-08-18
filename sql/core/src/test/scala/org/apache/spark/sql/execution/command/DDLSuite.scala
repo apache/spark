@@ -3084,7 +3084,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("REFRESH FUNCTION persistent function with the same name as the built-in function") {
-    withUserDefinedFunction("rand" -> false) {
+    withUserDefinedFunction("default.rand" -> false) {
       val rand = FunctionIdentifier("rand", Some("default"))
       sql("CREATE FUNCTION rand AS 'test.org.apache.spark.sql.MyDoubleAvg'")
       assert(!spark.sessionState.catalog.isRegisteredFunction(rand))
