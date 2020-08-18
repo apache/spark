@@ -96,14 +96,11 @@ class FileStreamSinkLog(
   require(defaultCompactInterval > 0,
     s"Please set ${SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key} (was $defaultCompactInterval) " +
       "to a positive value.")
-
-  override def shouldRetain(log: SinkFileStatus): Boolean = true
 }
 
 object FileStreamSinkLog {
   val VERSION = 1
-  // TODO: This action hasn't been used from the introduction. We should just remove this.
-  // TODO: We can remove the field "action" as well, ignoring "action" in existing metadata log.
+  // TODO: SPARK-32648 This action hasn't been used from the introduction, better to remove this.
   val DELETE_ACTION = "delete"
   val ADD_ACTION = "add"
 }

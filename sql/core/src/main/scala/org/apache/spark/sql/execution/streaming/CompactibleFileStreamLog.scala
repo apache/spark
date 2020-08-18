@@ -106,8 +106,13 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     interval
   }
 
-  /** Determine whether the log should be retained or not. */
-  def shouldRetain(log: T): Boolean
+  /**
+   * Determine whether the log should be retained or not.
+   *
+   * Default implementation retains all log entries. Implementations should override the method
+   * to change the behavior.
+   */
+  def shouldRetain(log: T): Boolean = true
 
   override def batchIdToPath(batchId: Long): Path = {
     if (isCompactionBatch(batchId, compactInterval)) {
@@ -130,11 +135,11 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     }
   }
 
-  def serializeEntry(entry: T, out: OutputStream): Unit = {
+  private def serializeEntry(entry: T, out: OutputStream): Unit = {
     out.write(Serialization.write(entry).getBytes(UTF_8))
   }
 
-  def deserializeEntry(line: String): T = Serialization.read[T](line)
+  private def deserializeEntry(line: String): T = Serialization.read[T](line)
 
   override def serialize(logData: Array[T], out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller

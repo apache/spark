@@ -61,8 +61,6 @@ class FileStreamSourceLog(
     }
   }
 
-  override def shouldRetain(log: FileEntry): Boolean = true
-
   override def add(batchId: Long, logs: Array[FileEntry]): Boolean = {
     if (super.add(batchId, logs)) {
       if (isCompactionBatch(batchId, compactInterval)) {

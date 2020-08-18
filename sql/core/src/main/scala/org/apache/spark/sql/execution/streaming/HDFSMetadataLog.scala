@@ -158,7 +158,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
 
   /**
    * Store the metadata for the specified batchId and return `true` if successful. This method
-   * fills the content of metadata via executing function. If the function throws exception,
+   * fills the content of metadata via executing function. If the function throws an exception,
    * writing will be automatically cancelled and this method will propagate the exception.
    *
    * If the batchId's metadata has already been stored, this method will return `false`.
