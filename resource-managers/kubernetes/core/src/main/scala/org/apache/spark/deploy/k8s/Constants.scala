@@ -49,6 +49,7 @@ private[spark] object Constants {
   val DRIVER_PORT_NAME = "driver-rpc-port"
   val BLOCK_MANAGER_PORT_NAME = "blockmanager"
   val UI_PORT_NAME = "spark-ui"
+  val SHUFFLE_SERVICE_PORT_NAME = "shuffle-port"
 
   // Environment Variables
   val ENV_DRIVER_URL = "SPARK_DRIVER_URL"
@@ -83,6 +84,7 @@ private[spark] object Constants {
   val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
   val DEFAULT_DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
   val DEFAULT_EXECUTOR_CONTAINER_NAME = "spark-kubernetes-executor"
+  val SHUFFLE_SERVICE_CONTAINER_NAME = "spark-kubernetes-shuffle"
   val MEMORY_OVERHEAD_MIN_MIB = 384L
   val NON_JVM_MEMORY_OVERHEAD_FACTOR = 0.4d
 

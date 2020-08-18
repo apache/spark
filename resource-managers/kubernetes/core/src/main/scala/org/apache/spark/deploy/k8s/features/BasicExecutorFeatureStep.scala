@@ -77,6 +77,10 @@ private[spark] class BasicExecutorFeatureStep(
     }
   private val executorLimitCores = kubernetesConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
 
+  private val externalShuffleService = kubernetesConf.get(SHUFFLE_SERVICE_ENABLED)
+  private val shuffleServicePort = kubernetesConf.get(SHUFFLE_SERVICE_PORT)
+
+
   override def configurePod(pod: SparkPod): SparkPod = {
     val name = s"$executorPodNamePrefix-exec-${kubernetesConf.executorId}"
 
@@ -152,7 +156,7 @@ private[spark] class BasicExecutorFeatureStep(
         }
       }
 
-    val requiredPorts = Seq(
+    val executorPorts = Seq(
       (BLOCK_MANAGER_PORT_NAME, blockManagerPort))
       .map { case (name, port) =>
         new ContainerPortBuilder()
@@ -161,25 +165,54 @@ private[spark] class BasicExecutorFeatureStep(
           .build()
       }
 
-    val executorContainers = pod.containers.map { container =>
+
+    val baseContainer = pod.containers.headOption.map { container =>
       new ContainerBuilder(container)
-      .withName(Option(container.getName).getOrElse(DEFAULT_EXECUTOR_CONTAINER_NAME))
       .withImage(executorContainerImage)
       .withImagePullPolicy(kubernetesConf.imagePullPolicy)
-      .editOrNewResources()
-        .addToRequests("memory", executorMemoryQuantity)
-        .addToLimits("memory", executorMemoryQuantity)
-        .addToRequests("cpu", executorCpuQuantity)
-        .addToLimits(executorResourceQuantities.asJava)
-        .endResources()
       .addNewEnv()
         .withName(ENV_SPARK_USER)
         .withValue(Utils.getCurrentUserName())
         .endEnv()
       .addAllToEnv(executorEnv.asJava)
-      .withPorts(requiredPorts.asJava)
-      .addToArgs("executor")
       .build()
+    }.head
+
+    // We always make a basic exec container
+    val execContainer = new ContainerBuilder(baseContainer)
+      .withName(Option(baseContainer.getName).getOrElse(DEFAULT_EXECUTOR_CONTAINER_NAME))
+      .withPorts(executorPorts.asJava)
+      .addToArgs("executor")
+      .editOrNewResources()
+        .addToRequests("memory", executorMemoryQuantity)
+        .addToLimits("memory", executorMemoryQuantity)
+        .addToRequests("cpu", executorCpuQuantity)
+        .addToLimits(executorResourceQuantities.asJava)
+      .endResources()
+      .build()
+
+    // If the shuffle service is enabled
+    val executorContainers = if (externalShuffleService) {
+      val shufflePorts = List(new ContainerPortBuilder()
+        .withName(SHUFFLE_SERVICE_PORT_NAME)
+        .withContainerPort(shuffleServicePort)
+        .build())
+      val shuffleMemoryQuantity = new Quantity(s"2g")
+      val shuffleCpuQuantity = new Quantity("1")
+      val shuffleContainer = new ContainerBuilder(baseContainer)
+        .withName(SHUFFLE_SERVICE_CONTAINER_NAME)
+        .withPorts(shufflePorts.asJava)
+        .addToArgs("shuffleService")
+        .editOrNewResources()
+          .addToRequests("memory", shuffleMemoryQuantity)
+          .addToLimits("memory", shuffleMemoryQuantity)
+          .addToRequests("cpu", shuffleCpuQuantity)
+        .endResources()
+        .build()
+
+      List(execContainer, shuffleContainer)
+    } else {
+      List(execContainer)
     }
 
     val containersWithLimitCores = executorLimitCores.map { limitCores =>
@@ -199,6 +232,8 @@ private[spark] class BasicExecutorFeatureStep(
       } else {
         logInfo("Adding decommission script to lifecycle")
         containersWithLimitCores.map { container =>
+        // In the future we may want to use a sidecar lifecycle but it is
+        // not supported in K8s 1.18
         new ContainerBuilder(container).withNewLifecycle()
           .withNewPreStop()
             .withNewExec()
