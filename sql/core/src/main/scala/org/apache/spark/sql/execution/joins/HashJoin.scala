@@ -114,7 +114,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     }
   }
 
-  @transient private lazy val (buildOutput, streamedOutput) = {
+  @transient protected lazy val (buildOutput, streamedOutput) = {
     buildSide match {
       case BuildLeft => (left.output, right.output)
       case BuildRight => (right.output, left.output)
@@ -133,7 +133,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
   protected def streamSideKeyGenerator(): UnsafeProjection =
     UnsafeProjection.create(streamedBoundKeys)
 
-  @transient private[this] lazy val boundCondition = if (condition.isDefined) {
+  @transient protected[this] lazy val boundCondition = if (condition.isDefined) {
     Predicate.create(condition.get, streamedPlan.output ++ buildPlan.output).eval _
   } else {
     (r: InternalRow) => true

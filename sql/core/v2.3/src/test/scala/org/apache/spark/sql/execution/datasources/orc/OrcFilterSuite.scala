@@ -516,10 +516,10 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-25557: case sensitivity in predicate pushdown") {
+  test("SPARK-32622: case sensitivity in predicate pushdown") {
     withTempPath { dir =>
       val count = 10
-      val tableName = "spark_25557"
+      val tableName = "spark_32622"
       val tableDir1 = dir.getAbsoluteFile + "/table1"
 
       // Physical ORC files have both `A` and `a` fields.
@@ -588,14 +588,27 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           checkAnswer(sql(s"select a from $tableName"), (0 until count).map(c => Row(c - 1)))
 
           val actual = stripSparkFilter(sql(s"select a from $tableName where a < 0"))
-          // TODO: ORC predicate pushdown should work under case-insensitive analysis.
+          assert(actual.count() == 1)
+        }
+      }
+
+      withTable(tableName) {
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          sql(
+            s"""
+               |CREATE TABLE $tableName (A LONG) USING ORC LOCATION '$tableDir2'
+             """.stripMargin)
+
+          checkAnswer(sql(s"select A from $tableName"), (0 until count).map(c => Row(c - 1)))
+
+          val actual = stripSparkFilter(sql(s"select A from $tableName where A < 0"))
           assert(actual.count() == 1)
         }
       }
     }
   }
 
-  test("SPARK-25557: Case-insensitive field resolution for pushdown when reading ORC") {
+  test("SPARK-32646: Case-insensitive field resolution for pushdown when reading ORC") {
     import org.apache.spark.sql.sources._
 
     def getOrcFilter(
@@ -609,6 +622,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       }
       orcFilter
     }
+
     def testFilter(
         schema: StructType,
         filters: Seq[Filter],
