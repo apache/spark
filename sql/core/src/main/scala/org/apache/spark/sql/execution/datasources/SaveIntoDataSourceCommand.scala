@@ -18,8 +18,10 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.{AlreadyPlanned, AlreadyPlannedExecution}
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.CreatableRelationProvider
@@ -42,8 +44,14 @@ case class SaveIntoDataSourceCommand(
   override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    dataSource.createRelation(
-      sparkSession.sqlContext, mode, options, Dataset.ofRows(sparkSession, query))
+    val df = query match {
+      case planned: AlreadyPlanned =>
+        val qe = new AlreadyPlannedExecution(sparkSession, planned)
+        new Dataset[Row](qe, RowEncoder(qe.analyzed.schema))
+      case _ =>
+        Dataset.ofRows(sparkSession, query)
+    }
+    dataSource.createRelation(sparkSession.sqlContext, mode, options, df)
 
     Seq.empty[Row]
   }
