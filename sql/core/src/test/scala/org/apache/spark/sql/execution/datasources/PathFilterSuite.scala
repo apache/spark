@@ -364,23 +364,6 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     assert(strategy.size == 1)
   }
 
-  test("SPARK-31962: PathFilterStrategies - multiple options") {
-    val options = CaseInsensitiveMap[String](
-      Map(
-        "pathGlobFilter" -> "*.txt",
-        "modifiedAfter" -> "2020-01-01T01:01:01",
-        "modifiedBefore" -> "2020-01-01T01:01:01"))
-    val strategies =
-      PathFilterFactory.create(options)
-    val classes = Set(
-      "class org.apache.spark.sql.execution.datasources.PathGlobFilter",
-      "class org.apache.spark.sql.execution.datasources.ModifiedAfterFilter",
-      "class org.apache.spark.sql.execution.datasources.ModifiedBeforeFilter")
-    val foundClasses = strategies.map(_.getClass.toString)
-    assert(foundClasses == classes)
-    assert(strategies.size == 3)
-  }
-
   test("SPARK-31962: PathFilterStrategies - no options") {
     val options = CaseInsensitiveMap[String](Map.empty)
     val strategy = PathFilterFactory.create(options)
@@ -428,21 +411,14 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     withTempDir { dir =>
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
-
       val timeZone = DateTimeUtils.getTimeZone("UTC")
-      val strategy = PathFilterFactory.create(
-        spark,
-        spark.sessionState.newHadoopConf(),
-        CaseInsensitiveMap[String](
-          Map(
-            "modifiedAfter" -> LocalDateTime.now(timeZone.toZoneId).toString,
-            "timeZone" -> "CET")))
-
       val strategyTime =
-        strategy.head.asInstanceOf[ModifiedAfterFilter].thresholdTime()
-      assert(
-        strategyTime - DateTimeUtils
-          .getMicroseconds(DateTimeUtils.currentTimestamp(), timeZone.toZoneId) > 0)
+        ModifiedDateFilter.toThreshold(LocalDateTime.now(timeZone.toZoneId).toString,
+          "HST",
+          "modifiedafter")
+
+      assert(strategyTime - DateTimeUtils.getMicroseconds(
+        DateTimeUtils.currentTimestamp(), ZoneOffset.UTC) > 0)
     }
   }
 
@@ -451,21 +427,14 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     withTempDir { dir =>
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
+
       val timeZone = DateTimeUtils.getTimeZone("UTC")
-
-      val strategy = PathFilterFactory.create(
-        spark,
-        spark.sessionState.newHadoopConf(),
-        CaseInsensitiveMap[String](
-          Map(
-            "modifiedAfter" -> LocalDateTime.now(timeZone.toZoneId).toString,
-            "timeZone" -> "HST")))
-
       val strategyTime =
-        strategy.head.asInstanceOf[ModifiedAfterFilter].thresholdTime()
-      assert(
-        DateTimeUtils
-          .getMicroseconds(DateTimeUtils.currentTimestamp(), timeZone.toZoneId) - strategyTime < 0)
+        ModifiedDateFilter.toThreshold(LocalDateTime.now(timeZone.toZoneId).toString,
+          "HST",
+          "modifiedafter")
+      assert(DateTimeUtils
+          .getMicroseconds(DateTimeUtils.currentTimestamp(), ZoneOffset.UTC) - strategyTime < 0)
     }
   }
 
@@ -474,21 +443,13 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     withTempDir { dir =>
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
-
-      val timeZone = DateTimeUtils.getTimeZone("CET")
-      val strategy = PathFilterFactory.create(
-        spark,
-        spark.sessionState.newHadoopConf(),
-        CaseInsensitiveMap[String](
-          Map(
-            "modifiedBefore" -> LocalDateTime.now(timeZone.toZoneId).toString,
-            "timeZone" -> "CET")))
-
+      val timeZone = DateTimeUtils.getTimeZone("UTC")
       val strategyTime =
-        strategy.head.asInstanceOf[ModifiedBeforeFilter].thresholdTime
-      assert(
-        DateTimeUtils
-          .fromUTCTime(DateTimeUtils.currentTimestamp, "UTC") - strategyTime >= 0)
+        ModifiedDateFilter.toThreshold(LocalDateTime.now(timeZone.toZoneId).toString,
+          "CET",
+          "modifiedbefore")
+      assert(DateTimeUtils
+            .getMicroseconds(DateTimeUtils.currentTimestamp(), ZoneOffset.UTC) - strategyTime < 0)
     }
   }
 
@@ -498,16 +459,10 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
       val timeZone = DateTimeUtils.getTimeZone("UTC")
-
-      val strategy = PathFilterFactory.create(
-        spark,
-        spark.sessionState.newHadoopConf(),
-        CaseInsensitiveMap[String](
-          Map(
-            "modifiedBefore" -> LocalDateTime.now(timeZone.toZoneId).toString,
-            "timeZone" -> "HST")))
-
-      val strategyTime = strategy.head.asInstanceOf[ModifiedBeforeFilter].thresholdTime()
+      val strategyTime =
+        ModifiedDateFilter.toThreshold(LocalDateTime.now(timeZone.toZoneId).toString,
+          "HST",
+          "modifiedbefore")
       assert(strategyTime - DateTimeUtils.fromUTCTime(DateTimeUtils.currentTimestamp(), "UTC") > 0)
     }
   }
