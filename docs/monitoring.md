@@ -1326,9 +1326,3 @@ Both take a comma-separated list of class names that implement the
 possible for one list to be placed in the Spark default config file, allowing users to
 easily add other plugins from the command line without overwriting the config file's list. Duplicate
 plugins are ignored.
-
-Distribution of the jar files containing the plugin code is currently not done by Spark. The user
-or admin should make sure that the jar files are available to Spark applications, for example, by
-including the plugin jar with the Spark distribution. The exception to this rule is the YARN
-backend, where the <code>--jars</code> command line option (or equivalent config entry) can be
-used to make the plugin code available to both executors and cluster-mode drivers.
