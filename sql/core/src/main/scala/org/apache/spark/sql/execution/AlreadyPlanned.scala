@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 
 /**
  * A special node that allows skipping query planning all the way to physical execution. This node
@@ -33,18 +33,18 @@ case class AlreadyPlanned(physicalPlan: SparkPlan) extends LeafNode {
   override lazy val resolved: Boolean = false
 }
 
+/** Query execution that skips re-analysis and planning. */
 class AlreadyPlannedExecution(
     session: SparkSession,
     plan: AlreadyPlanned) extends QueryExecution(session, plan) {
   override lazy val analyzed: LogicalPlan = plan
   override lazy val optimizedPlan: LogicalPlan = plan
   override lazy val sparkPlan: SparkPlan = plan.physicalPlan
-  override lazy val executedPlan: SparkPlan = plan.physicalPlan
 }
 
 object AlreadyPlanned {
   def dataFrame(sparkSession: SparkSession, query: SparkPlan): DataFrame = {
     val qe = new AlreadyPlannedExecution(sparkSession, AlreadyPlanned(query))
-    new Dataset[Row](sparkSession, qe, RowEncoder(qe.analyzed.schema))
+    new Dataset[Row](qe, RowEncoder(qe.analyzed.schema))
   }
 }

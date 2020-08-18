@@ -25,6 +25,9 @@ import scala.collection.mutable
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
@@ -123,6 +126,13 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
         .save()
     }
     assert(e3.getMessage.contains("schema"))
+  }
+
+  test("fallback writes should only analyze plan once") {
+    val clonedSession = spark.cloneSession()
+    clonedSession.sessionState.experimentalMethods.extraOptimizations = Seq(OnlyOnceRule)
+    val df = clonedSession.createDataFrame(Seq((1, "x"), (2, "y"), (3, "z")))
+    df.write.mode("append").option("name", "t1").format(v2Format).save()
   }
 }
 
@@ -316,5 +326,17 @@ class InMemoryTableWithV1Fallback(
         }
       }
     }
+  }
+}
+
+/** A rule that fails if a query plan is analyzed twice. */
+object OnlyOnceRule extends Rule[LogicalPlan] {
+  val tag = TreeNodeTag[String]("test")
+
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    // This rule will be run as injectPostHocResolutionRule, and is supposed to be run only once.
+    assert(plan.getTagValue(tag).isEmpty)
+    plan.setTagValue(tag, "abc")
+    plan
   }
 }

@@ -120,19 +120,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
       catalog match {
         case staging: StagingTableCatalog =>
-<<<<<<< HEAD
-          AtomicCreateTableAsSelectExec(staging, ident, parts, query, planLater(query),
+          AtomicCreateTableAsSelectExec(staging, ident, parts, planLater(query),
             propsWithOwner, writeOptions, ifNotExists) :: Nil
         case _ =>
-          CreateTableAsSelectExec(catalog, ident, parts, query, planLater(query),
+          CreateTableAsSelectExec(catalog, ident, parts, planLater(query),
             propsWithOwner, writeOptions, ifNotExists) :: Nil
-=======
-          AtomicCreateTableAsSelectExec(
-            staging, ident, parts, planLater(query), props, writeOptions, ifNotExists) :: Nil
-        case _ =>
-          CreateTableAsSelectExec(
-            catalog, ident, parts, planLater(query), props, writeOptions, ifNotExists) :: Nil
->>>>>>> 2bd20c016a3b3df08d38cde4a005271a49f47f81
       }
 
     case RefreshTable(catalog, ident) =>
