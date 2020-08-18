@@ -26,28 +26,26 @@ class AlreadyPlannedSuite extends SparkPlanTest with SharedSparkSession {
 
   test("simple execution") {
     val df = spark.range(10)
-    val planned = AlreadyPlanned.dataFrame(spark, df.queryExecution.executedPlan)
+    val planned = AlreadyPlanned.dataFrame(spark, df.queryExecution.sparkPlan)
 
     checkAnswer(planned, identity, df.toDF().collect())
   }
 
   test("planning on top won't work - filter") {
     val df = spark.range(10)
-    val planned = AlreadyPlanned.dataFrame(spark, df.queryExecution.executedPlan)
+    val planned = AlreadyPlanned.dataFrame(spark, df.queryExecution.sparkPlan)
 
     val e = intercept[AnalysisException] {
-      planned.where('id < 5).collect()
+      planned.where('id < 5)
     }
   }
 
   test("planning on top won't work - joins") {
     val df = spark.range(10)
-    val planned = AlreadyPlanned.dataFrame(spark, df.queryExecution.executedPlan)
-
-    val join = planned.where('id < 3).alias("l").join(planned.alias("r"), Seq("id"))
+    val planned = AlreadyPlanned.dataFrame(spark, df.queryExecution.sparkPlan)
 
     intercept[AnalysisException] {
-      join.collect()
+      planned.where('id < 3).alias("l").join(planned.alias("r"), Seq("id"))
     }
   }
 }
