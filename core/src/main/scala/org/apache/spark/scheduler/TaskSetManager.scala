@@ -1052,10 +1052,10 @@ private[spark] class TaskSetManager(
       logDebug("Task length threshold for speculation: " + threshold)
       for (tid <- runningTasksSet) {
         var speculated = checkAndSubmitSpeculatableTask(tid, time, threshold)
-        if (!speculated && executorDecommissionKillInterval.nonEmpty) {
+        if (!speculated && executorDecommissionKillInterval.isDefined) {
           val taskInfo = taskInfos(tid)
           val decomState = sched.getExecutorDecommissionState(taskInfo.executorId)
-          if (decomState.nonEmpty) {
+          if (decomState.isDefined) {
             // Check if this task might finish after this executor is decommissioned.
             // We estimate the task's finish time by using the median task duration.
             // Whereas the time when the executor might be decommissioned is estimated using the
