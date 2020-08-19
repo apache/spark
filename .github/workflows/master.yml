@@ -168,6 +168,12 @@ jobs:
       with:
         name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}
         path: "**/target/test-reports/*.xml"
+    - name: Upload unit tests log files
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
+        path: "**/target/unit-tests.log"
 
   # Static analysis, and documentation build
   lint:
