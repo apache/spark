@@ -114,9 +114,9 @@ case class InSubqueryExec(
     child: Expression,
     plan: BaseSubqueryExec,
     exprId: ExprId,
-    private var resultBroadcast: Broadcast[Array[Any]] = null) extends ExecSubqueryExpression {
+    private var resultBroadcast: Broadcast[Set[Any]] = null) extends ExecSubqueryExpression {
 
-  @transient private var result: Array[Any] = _
+  @transient private var result: Set[Any] = _
 
   override def dataType: DataType = BooleanType
   override def children: Seq[Expression] = child :: Nil
@@ -131,14 +131,13 @@ case class InSubqueryExec(
 
   def updateResult(): Unit = {
     val rows = plan.executeCollect()
-    result = child.dataType match {
-      case _: StructType => rows.toArray
-      case _ => rows.map(_.get(0, child.dataType))
-    }
+    // The child always partition column. So it must be AtomicType.
+    // See PreprocessTableCreation for more details.
+    result = rows.map(_.get(0, child.dataType)).toSet
     resultBroadcast = plan.sqlContext.sparkContext.broadcast(result)
   }
 
-  def values(): Option[Array[Any]] = Option(resultBroadcast).map(_.value)
+  def values(): Option[Set[Any]] = Option(resultBroadcast).map(_.value)
 
   private def prepareResult(): Unit = {
     require(resultBroadcast != null, s"$this has not finished")
@@ -159,7 +158,7 @@ case class InSubqueryExec(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     prepareResult()
-    InSet(child, result.toSet).doGenCode(ctx, ev)
+    InSet(child, result).doGenCode(ctx, ev)
   }
 
   override lazy val canonicalized: InSubqueryExec = {
