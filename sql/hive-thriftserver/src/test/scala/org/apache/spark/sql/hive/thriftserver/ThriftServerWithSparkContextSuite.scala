@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import org.apache.spark.tags.GitHubActionsUnstableTest
+
+@GitHubActionsUnstableTest
 class ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
   test("SPARK-29911: Uncache cached tables when session closed") {

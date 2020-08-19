@@ -725,7 +725,8 @@ class TypesTests(ReusedSQLTestCase):
         if sys.version_info[0] < 3:
             all_types = set(['c', 'b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'f', 'd'])
         else:
-            all_types = set(array.typecodes)
+            # PyPy seems not having array.typecodes.
+            all_types = set(['b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'q', 'Q', 'f', 'd'])
         unsupported_types = all_types - set(supported_types)
         # test unsupported types
         for t in unsupported_types:
