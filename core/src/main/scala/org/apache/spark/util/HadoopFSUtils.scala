@@ -27,7 +27,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.viewfs.ViewFileSystem
 import org.apache.hadoop.hdfs.DistributedFileSystem
-import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.JobContext
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
@@ -143,19 +142,6 @@ object HadoopFSUtils extends Logging {
             def next(): LocatedFileStatus = remoteIter.next
             def hasNext(): Boolean = remoteIter.hasNext
           }.toArray
-        case _ if !ignoreLocality =>
-          // Try and use the accelerated code path even if it isn't known
-          // to support it, and fall back.
-          try {
-            val remoteIter = fs.listLocatedStatus(path)
-            new Iterator[LocatedFileStatus]() {
-              def next(): LocatedFileStatus = remoteIter.next
-              def hasNext(): Boolean = remoteIter.hasNext
-            }.toArray
-          } catch {
-            case e: FileNotFoundException =>
-              fs.listStatus(path)
-          }
         case _ =>
           // We are ignoring locality, so we'll use a null locality
           fs.listStatus(path).map{f =>
@@ -294,34 +280,26 @@ object HadoopFSUtils extends Logging {
    */
   def alternativeStatus(job: JobContext, format: FileInputFormat[_, _]):
       jList[FileStatus] = {
-
-    val conf = job.getConfiguration()
-
+    val conf = job.getConfiguration
     val sc = SparkContext.getActive match {
       case None => throw new SparkException("No active SparkContext.")
       case Some(x) => x
     }
 
     // TODO: use real configurations
-
     val listingParallelismThreshold = sc.conf.get(config.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
-
     val ignoreLocality = sc.conf.get(config.IGNORE_DATA_LOCALITY)
-
     val maxListingParallelism = sc.conf.get(config.PARALLEL_PARTITION_DISCOVERY_PARALLELISM)
-
     val ignoreMissingFiles = sc.conf.get(config.IGNORE_MISSING_FILES)
-
-    val recursive = conf.getBoolean("mapred.input.dir.recursive", false)
 
     // The hiddenFileFilter is private but we want it, but it's final so
     // we can recreate it safely.
     val filter = new PathFilter() {
       val parentFilter = FileInputFormat.getInputPathFilter(job)
       override def accept(p: Path): Boolean = {
-        val name = p.getName()
+        val name = p.getName
         !name.startsWith("_") && !name.startsWith(".") &&
-          parentFilter != null && parentFilter.accept(p)
+          (parentFilter == null || parentFilter.accept(p))
       }
     }
 
