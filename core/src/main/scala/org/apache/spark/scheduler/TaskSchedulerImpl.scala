@@ -1062,15 +1062,11 @@ private[spark] class TaskSchedulerImpl(
   }
 
   def getExecutorsAliveOnHost(host: String): Option[Set[String]] = synchronized {
-    if (isHostDecommissioned(host)) {
-      None
-    } else {
-      hostToExecutors.get(host).map(_.filterNot(isExecutorDecommissioned)).map(_.toSet)
-    }
+    hostToExecutors.get(host).map(_.filterNot(isExecutorDecommissioned)).map(_.toSet)
   }
 
   def hasExecutorsAliveOnHost(host: String): Boolean = synchronized {
-    !isHostDecommissioned(host) && hostToExecutors.get(host)
+    hostToExecutors.get(host)
       .exists(executors => executors.exists(e => !isExecutorDecommissioned(e)))
   }
 
@@ -1089,7 +1085,7 @@ private[spark] class TaskSchedulerImpl(
 
   // exposed for test
   protected def isExecutorDecommissioned(execId: String): Boolean =
-    isHostDecommissioned(executorIdToHost(execId)) || getExecutorDecommissionInfo(execId).nonEmpty
+    getExecutorDecommissionInfo(execId).nonEmpty || isHostDecommissioned(executorIdToHost(execId))
 
   // exposed for test
   protected def isHostDecommissioned(host: String): Boolean = {
