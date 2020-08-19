@@ -838,6 +838,8 @@ object Unidoc {
         f.getCanonicalPath.contains("org/apache/spark/shuffle") &&
         !f.getCanonicalPath.contains("org/apache/spark/shuffle/api")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/executor")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/ExecutorAllocationClient")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/scheduler/cluster/CoarseGrainedSchedulerBackend")))
       .map(_.filterNot(f =>
         f.getCanonicalPath.contains("org/apache/spark/unsafe") &&
         !f.getCanonicalPath.contains("org/apache/spark/unsafe/types/CalendarInterval")))

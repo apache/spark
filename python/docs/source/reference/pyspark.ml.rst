@@ -153,6 +153,8 @@ Classification
     NaiveBayesModel
     MultilayerPerceptronClassifier
     MultilayerPerceptronClassificationModel
+    MultilayerPerceptronClassificationSummary
+    MultilayerPerceptronClassificationTrainingSummary
     OneVsRest
     OneVsRestModel
     FMClassifier
@@ -175,6 +177,7 @@ Clustering
     BisectingKMeansSummary
     KMeans
     KMeansModel
+    KMeansSummary
     GaussianMixture
     GaussianMixtureModel
     GaussianMixtureSummary

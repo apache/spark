@@ -34,7 +34,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
-import org.apache.spark.util.ManualClock
+import org.apache.spark.util.{Clock, ManualClock, SystemClock}
 
 class FakeSchedulerBackend extends SchedulerBackend {
   def start(): Unit = {}
@@ -88,10 +88,15 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   def setupSchedulerWithMaster(master: String, confs: (String, String)*): TaskSchedulerImpl = {
+    setupSchedulerWithMasterAndClock(master, new SystemClock, confs: _*)
+  }
+
+  def setupSchedulerWithMasterAndClock(master: String, clock: Clock, confs: (String, String)*):
+  TaskSchedulerImpl = {
     val conf = new SparkConf().setMaster(master).setAppName("TaskSchedulerImplSuite")
     confs.foreach { case (k, v) => conf.set(k, v) }
     sc = new SparkContext(conf)
-    taskScheduler = new TaskSchedulerImpl(sc)
+    taskScheduler = new TaskSchedulerImpl(sc, sc.conf.get(config.TASK_MAX_FAILURES), clock = clock)
     setupHelper()
   }
 
@@ -1800,6 +1805,68 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(2 === taskDescriptions.length)
     assert(taskDescriptions.head.resources.contains(GPU))
     assert(2 == taskDescriptions.head.resources(GPU).addresses.size)
+  }
+
+  private def setupSchedulerForDecommissionTests(clock: Clock): TaskSchedulerImpl = {
+    val taskScheduler = setupSchedulerWithMasterAndClock(
+      s"local[2]",
+      clock,
+      config.CPUS_PER_TASK.key -> 1.toString)
+    taskScheduler.submitTasks(FakeTask.createTaskSet(2))
+    val multiCoreWorkerOffers = IndexedSeq(WorkerOffer("executor0", "host0", 1),
+      WorkerOffer("executor1", "host1", 1))
+    val taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
+    assert(taskDescriptions.map(_.executorId).sorted === Seq("executor0", "executor1"))
+    taskScheduler
+  }
+
+  test("scheduler should keep the decommission info where host was decommissioned") {
+    val scheduler = setupSchedulerForDecommissionTests(new SystemClock)
+
+    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("0", false))
+    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1", true))
+    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("0 new", false))
+    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1 new", false))
+
+    assert(scheduler.getExecutorDecommissionInfo("executor0")
+      === Some(ExecutorDecommissionInfo("0 new", false)))
+    assert(scheduler.getExecutorDecommissionInfo("executor1")
+      === Some(ExecutorDecommissionInfo("1", true)))
+    assert(scheduler.getExecutorDecommissionInfo("executor2").isEmpty)
+  }
+
+  test("scheduler should eventually purge removed and decommissioned executors") {
+    val clock = new ManualClock(10000L)
+    val scheduler = setupSchedulerForDecommissionTests(clock)
+
+    // executor 0 is decommissioned after loosing
+    assert(scheduler.getExecutorDecommissionInfo("executor0").isEmpty)
+    scheduler.executorLost("executor0", ExecutorExited(0, false, "normal"))
+    assert(scheduler.getExecutorDecommissionInfo("executor0").isEmpty)
+    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("", false))
+    assert(scheduler.getExecutorDecommissionInfo("executor0").isEmpty)
+
+    assert(scheduler.executorsPendingDecommission.isEmpty)
+    clock.advance(5000)
+
+    // executor 1 is decommissioned before loosing
+    assert(scheduler.getExecutorDecommissionInfo("executor1").isEmpty)
+    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("", false))
+    assert(scheduler.getExecutorDecommissionInfo("executor1").isDefined)
+    clock.advance(2000)
+    scheduler.executorLost("executor1", ExecutorExited(0, false, "normal"))
+    assert(scheduler.decommissionedExecutorsRemoved.size === 1)
+    assert(scheduler.executorsPendingDecommission.isEmpty)
+    clock.advance(2000)
+    // It hasn't been 60 seconds yet before removal
+    assert(scheduler.getExecutorDecommissionInfo("executor1").isDefined)
+    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("", false))
+    clock.advance(2000)
+    assert(scheduler.decommissionedExecutorsRemoved.size === 1)
+    assert(scheduler.getExecutorDecommissionInfo("executor1").isDefined)
+    clock.advance(301000)
+    assert(scheduler.getExecutorDecommissionInfo("executor1").isEmpty)
+    assert(scheduler.decommissionedExecutorsRemoved.isEmpty)
   }
 
   /**

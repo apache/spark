@@ -1866,6 +1866,19 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
+  private[spark] val DECOMMISSION_ENABLED =
+    ConfigBuilder("spark.decommission.enabled")
+      .doc("When decommission enabled, Spark will try its best to shutdown the executor " +
+        s"gracefully. Spark will try to migrate all the RDD blocks (controlled by " +
+        s"${STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key}) and shuffle blocks (controlled by " +
+        s"${STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key}) from the decommissioning " +
+        s"executor to a remote executor when ${STORAGE_DECOMMISSION_ENABLED.key} is enabled. " +
+        s"With decommission enabled, Spark will also decommission an executor instead of " +
+        s"killing when ${DYN_ALLOCATION_ENABLED.key} enabled.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EXECUTOR_DECOMMISSION_KILL_INTERVAL =
     ConfigBuilder("spark.executor.decommission.killInterval")
       .doc("Duration after which a decommissioned executor will be killed forcefully." +
@@ -1876,6 +1889,16 @@ package object config {
       .version("3.1.0")
       .timeConf(TimeUnit.SECONDS)
       .createOptional
+
+  private[spark] val DECOMMISSIONED_EXECUTORS_REMEMBER_AFTER_REMOVAL_TTL =
+    ConfigBuilder("spark.executor.decommission.removed.infoCacheTTL")
+      .doc("Duration for which a decommissioned executor's information will be kept after its" +
+        "removal. Keeping the decommissioned info after removal helps pinpoint fetch failures to " +
+        "decommissioning even after the mapper executor has been decommissioned. This allows " +
+        "eager recovery from fetch failures caused by decommissioning, increasing job robustness.")
+      .version("3.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefaultString("5m")
 
   private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
     .doc("Staging directory used while submitting applications.")
@@ -1906,6 +1929,13 @@ package object config {
         "application completes. If set to true, the client process will stay alive polling " +
         "the driver's status. Otherwise, the client process will exit after submission.")
       .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EXECUTOR_ALLOW_SPARK_CONTEXT =
+    ConfigBuilder("spark.executor.allowSparkContext")
+      .doc("If set to true, SparkContext can be created in executors.")
+      .version("3.0.1")
       .booleanConf
       .createWithDefault(false)
 }

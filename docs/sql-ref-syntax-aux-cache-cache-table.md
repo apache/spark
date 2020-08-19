@@ -49,6 +49,7 @@ CACHE [ LAZY ] TABLE table_identifier
      * `NONE`
      * `DISK_ONLY`
      * `DISK_ONLY_2`
+     * `DISK_ONLY_3`
      * `MEMORY_ONLY`
      * `MEMORY_ONLY_2`
      * `MEMORY_ONLY_SER`

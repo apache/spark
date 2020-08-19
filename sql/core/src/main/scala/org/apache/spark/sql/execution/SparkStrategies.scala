@@ -116,7 +116,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *
    * - Shuffle hash join:
    *     Only supported for equi-joins, while the join keys do not need to be sortable.
-   *     Supported for all join types except full outer joins.
+   *     Supported for all join types.
+   *     Building hash map from table is a memory-intensive operation and it could cause OOM
+   *     when the build side is big.
    *
    * - Shuffle sort merge join (SMJ):
    *     Only supported for equi-joins and the join keys have to be sortable.
@@ -260,7 +262,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           // it's a right join, and broadcast right side if it's a left join.
           // TODO: revisit it. If left side is much smaller than the right side, it may be better
           // to broadcast the left side even if it's a left join.
-          if (canBuildLeft(joinType)) BuildLeft else BuildRight
+          if (canBuildBroadcastLeft(joinType)) BuildLeft else BuildRight
         }
 
         def createBroadcastNLJoin(buildLeft: Boolean, buildRight: Boolean) = {
@@ -591,6 +593,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case planned: AlreadyPlanned => planned.physicalPlan :: Nil
       case d: DataWritingCommand => DataWritingCommandExec(d, planLater(d.query)) :: Nil
       case r: RunnableCommand => ExecutedCommandExec(r) :: Nil
 
@@ -665,7 +668,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
           ShuffleExchangeExec(RoundRobinPartitioning(numPartitions),
-            planLater(child), canChangeNumPartitions = false) :: Nil
+            planLater(child), noUserSpecifiedNumPartition = false) :: Nil
         } else {
           execution.CoalesceExec(numPartitions, planLater(child)) :: Nil
         }
@@ -698,9 +701,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
-        val canChangeNumParts = r.optNumPartitions.isEmpty
         exchange.ShuffleExchangeExec(
-          r.partitioning, planLater(r.child), canChangeNumParts) :: Nil
+          r.partitioning,
+          planLater(r.child),
+          noUserSpecifiedNumPartition = r.optNumPartitions.isEmpty) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil

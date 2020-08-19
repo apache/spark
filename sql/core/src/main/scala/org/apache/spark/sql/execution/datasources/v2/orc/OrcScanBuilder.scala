@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.orc.OrcFilters
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -60,10 +61,8 @@ case class OrcScanBuilder(
         // changed `hadoopConf` in executors.
         OrcInputFormat.setSearchArgument(hadoopConf, f, schema.fieldNames)
       }
-      val dataTypeMap = schema.map(f => quoteIfNeeded(f.name) -> f.dataType).toMap
-      // TODO (SPARK-25557): ORC doesn't support nested predicate pushdown, so they are removed.
-      val newFilters = filters.filter(!_.containsNestedColumn)
-      _pushedFilters = OrcFilters.convertibleFilters(schema, dataTypeMap, newFilters).toArray
+      val dataTypeMap = OrcFilters.getSearchableTypeMap(schema, SQLConf.get.caseSensitiveAnalysis)
+      _pushedFilters = OrcFilters.convertibleFilters(schema, dataTypeMap, filters).toArray
     }
     filters
   }

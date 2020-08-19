@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 import array
-import sys
 from abc import ABCMeta
 import copy
 

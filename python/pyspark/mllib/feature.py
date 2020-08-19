@@ -25,9 +25,7 @@ from py4j.protocol import Py4JJavaError
 from pyspark import since
 from pyspark.rdd import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import (
-    Vectors, DenseVector, SparseVector, _convert_to_vector)
-from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.linalg import Vectors, _convert_to_vector
 from pyspark.mllib.util import JavaLoader, JavaSaveable
 
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
@@ -60,6 +58,7 @@ class Normalizer(VectorTransformer):
 
     :param p: Normalization in L^p^ space, p = 2 by default.
 
+    >>> from pyspark.mllib.linalg import Vectors
     >>> v = Vectors.dense(range(3))
     >>> nor = Normalizer(1)
     >>> nor.transform(v)
@@ -285,6 +284,8 @@ class ChiSqSelector(object):
     By default, the selection method is `numTopFeatures`, with the default number of top features
     set to 50.
 
+    >>> from pyspark.mllib.linalg import SparseVector, DenseVector
+    >>> from pyspark.mllib.regression import LabeledPoint
     >>> data = sc.parallelize([
     ...     LabeledPoint(0.0, SparseVector(3, {0: 8.0, 1: 7.0})),
     ...     LabeledPoint(1.0, SparseVector(3, {1: 9.0, 2: 6.0})),

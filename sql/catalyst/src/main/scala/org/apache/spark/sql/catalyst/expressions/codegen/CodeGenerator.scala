@@ -134,7 +134,7 @@ class CodegenContext extends Logging {
   def addReferenceObj(objName: String, obj: Any, className: String = null): String = {
     val idx = references.length
     references += obj
-    val clsName = Option(className).getOrElse(obj.getClass.getName)
+    val clsName = Option(className).getOrElse(obj.getClass.getCanonicalName)
     s"(($clsName) references[$idx] /* $objName */)"
   }
 

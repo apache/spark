@@ -99,16 +99,14 @@ trait DataSourceScanExec extends LeafExecNode {
 
 /** Physical plan node for scanning data from a relation. */
 case class RowDataSourceScanExec(
-    fullOutput: Seq[Attribute],
-    requiredColumnsIndex: Seq[Int],
+    output: Seq[Attribute],
+    requiredSchema: StructType,
     filters: Set[Filter],
     handledFilters: Set[Filter],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with InputRDDCodegen {
-
-  def output: Seq[Attribute] = requiredColumnsIndex.map(fullOutput)
 
   override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -136,14 +134,14 @@ case class RowDataSourceScanExec(
       if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
     }
     Map(
-      "ReadSchema" -> output.toStructType.catalogString,
+      "ReadSchema" -> requiredSchema.catalogString,
       "PushedFilters" -> markedFilters.mkString("[", ", ", "]"))
   }
 
   // Don't care about `rdd` and `tableIdentifier` when canonicalizing.
   override def doCanonicalize(): SparkPlan =
     copy(
-      fullOutput.map(QueryPlan.normalizeExpressions(_, fullOutput)),
+      output.map(QueryPlan.normalizeExpressions(_, output)),
       rdd = null,
       tableIdentifier = None)
 }
@@ -608,12 +606,20 @@ case class FileSourceScanExec(
     new FileScanRDD(fsRelation.sparkSession, readFile, partitions)
   }
 
+  // Filters unused DynamicPruningExpression expressions - one which has been replaced
+  // with DynamicPruningExpression(Literal.TrueLiteral) during Physical Planning
+  private def filterUnusedDynamicPruningExpressions(
+      predicates: Seq[Expression]): Seq[Expression] = {
+    predicates.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral))
+  }
+
   override def doCanonicalize(): FileSourceScanExec = {
     FileSourceScanExec(
       relation,
       output.map(QueryPlan.normalizeExpressions(_, output)),
       requiredSchema,
-      QueryPlan.normalizePredicates(partitionFilters, output),
+      QueryPlan.normalizePredicates(
+        filterUnusedDynamicPruningExpressions(partitionFilters), output),
       optionalBucketSet,
       optionalNumCoalescedBuckets,
       QueryPlan.normalizePredicates(dataFilters, output),
