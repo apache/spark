@@ -22,7 +22,8 @@ import java.util.Collections
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfterEach, Matchers}
+import org.scalatest.BeforeAndAfterEach
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.yarn.config.{YARN_EXCLUDE_NODES, YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED}

@@ -21,7 +21,7 @@ import java.sql.Date
 
 import scala.util.Random
 
-import org.scalatest.Matchers.the
+import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
@@ -1038,4 +1038,23 @@ class DataFrameAggregateSuite extends QueryTest
       checkAnswer(df, Row("abellina", 2) :: Row("mithunr", 1) :: Nil)
     }
   }
+
+  test("SPARK-32136: NormalizeFloatingNumbers should work on null struct") {
+    val df = Seq(
+      A(None),
+      A(Some(B(None))),
+      A(Some(B(Some(1.0))))).toDF
+    val groupBy = df.groupBy("b").agg(count("*"))
+    checkAnswer(groupBy, Row(null, 1) :: Row(Row(null), 1) :: Row(Row(1.0), 1) :: Nil)
+  }
+
+  test("SPARK-32344: Unevaluable's set to FIRST/LAST ignoreNullsExpr in distinct aggregates") {
+    val queryTemplate = (agg: String) =>
+      s"SELECT $agg(DISTINCT v) FROM (SELECT v FROM VALUES 1, 2, 3 t(v) ORDER BY v)"
+    checkAnswer(sql(queryTemplate("FIRST")), Row(1))
+    checkAnswer(sql(queryTemplate("LAST")), Row(3))
+  }
 }
+
+case class B(c: Option[Double])
+case class A(b: Option[B])

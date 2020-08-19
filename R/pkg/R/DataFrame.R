@@ -1233,13 +1233,8 @@ setMethod("collect",
                   port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
                 output <- tryCatch({
                   doServerAuth(conn, authSecret)
-                  arrowTable <- arrow::read_arrow(readRaw(conn))
-                  # Arrow drops `as_tibble` since 0.14.0, see ARROW-5190.
-                  if (exists("as_tibble", envir = asNamespace("arrow"))) {
-                    as.data.frame(arrow::as_tibble(arrowTable), stringsAsFactors = stringsAsFactors)
-                  } else {
-                    as.data.frame(arrowTable, stringsAsFactors = stringsAsFactors)
-                  }
+                  arrowTable <- arrow::read_ipc_stream(readRaw(conn))
+                  as.data.frame(arrowTable, stringsAsFactors = stringsAsFactors)
                 }, finally = {
                   close(conn)
                 })

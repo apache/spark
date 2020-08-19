@@ -255,7 +255,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           tasks = None,
           executorSummary = None,
           killedTasksSummary = Map(),
-          ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
+          ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID,
+          peakExecutorMetrics = None)
       }
     }
 
@@ -288,20 +289,20 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       }
 
     val activeStagesTable =
-      new StageTableBase(store, request, activeStages, "active", "activeStage", parent.basePath,
-        basePath, parent.isFairScheduler,
+      new StageTableBase(store, request, activeStages.toSeq, "active", "activeStage",
+        parent.basePath, basePath, parent.isFairScheduler,
         killEnabled = parent.killEnabled, isFailedStage = false)
     val pendingOrSkippedStagesTable =
-      new StageTableBase(store, request, pendingOrSkippedStages, pendingOrSkippedTableId,
+      new StageTableBase(store, request, pendingOrSkippedStages.toSeq, pendingOrSkippedTableId,
         "pendingStage", parent.basePath, basePath, parent.isFairScheduler,
         killEnabled = false, isFailedStage = false)
     val completedStagesTable =
-      new StageTableBase(store, request, completedStages, "completed", "completedStage",
+      new StageTableBase(store, request, completedStages.toSeq, "completed", "completedStage",
         parent.basePath, basePath, parent.isFairScheduler,
         killEnabled = false, isFailedStage = false)
     val failedStagesTable =
-      new StageTableBase(store, request, failedStages, "failed", "failedStage", parent.basePath,
-        basePath, parent.isFairScheduler,
+      new StageTableBase(store, request, failedStages.toSeq, "failed", "failedStage",
+        parent.basePath, basePath, parent.isFairScheduler,
         killEnabled = false, isFailedStage = true)
 
     val shouldShowActiveStages = activeStages.nonEmpty
@@ -391,7 +392,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     var content = summary
     val appStartTime = store.applicationInfo().attempts.head.startTime.getTime()
 
-    content ++= makeTimeline(activeStages ++ completedStages ++ failedStages,
+    content ++= makeTimeline((activeStages ++ completedStages ++ failedStages).toSeq,
       store.executorList(false), appStartTime)
 
     val operationGraphContent = store.asOption(store.operationGraphForJob(jobId)) match {

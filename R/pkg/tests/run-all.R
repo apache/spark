@@ -35,8 +35,8 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
   install.spark(overwrite = TRUE)
 
   sparkRDir <- file.path(Sys.getenv("SPARK_HOME"), "R")
-  sparkRWhitelistSQLDirs <- c("spark-warehouse", "metastore_db")
-  invisible(lapply(sparkRWhitelistSQLDirs,
+  sparkRAllowedSQLDirs <- c("spark-warehouse", "metastore_db")
+  invisible(lapply(sparkRAllowedSQLDirs,
                    function(x) { unlink(file.path(sparkRDir, x), recursive = TRUE, force = TRUE)}))
   sparkRFilesBefore <- list.files(path = sparkRDir, all.files = TRUE)
 
@@ -61,15 +61,18 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
     set.seed(42)
 
     # TODO (SPARK-30663) To be removed once testthat 1.x is removed from all builds
-    if (grepl("^1\\..*", packageVersion("testthat"))) {
+    if (packageVersion("testthat")$major <= 1) {
       # testthat 1.x
       test_runner <- testthat:::run_tests
       reporter <- "summary"
-
     } else {
       # testthat >= 2.0.0
       test_runner <- testthat:::test_package_dir
-      reporter <- testthat::default_reporter()
+      dir.create("target/test-reports", showWarnings = FALSE)
+      reporter <- MultiReporter$new(list(
+        SummaryReporter$new(),
+        JunitReporter$new(file = "target/test-reports/test-results.xml")
+      ))
     }
 
     test_runner("SparkR",

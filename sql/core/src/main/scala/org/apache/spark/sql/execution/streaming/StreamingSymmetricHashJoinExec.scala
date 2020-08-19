@@ -295,6 +295,10 @@ case class StreamingSymmetricHashJoinExec(
             postJoinFilter(joinedRow.withLeft(leftKeyValue.value).withRight(rightValue))
           }
         }
+
+        // NOTE: we need to make sure `outerOutputIter` is evaluated "after" exhausting all of
+        // elements in `innerOutputIter`, because evaluation of `innerOutputIter` may update
+        // the match flag which the logic for outer join is relying on.
         val removedRowIter = leftSideJoiner.removeOldState()
         val outerOutputIter = removedRowIter.filterNot { kv =>
           stateFormatVersion match {

@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{HashMap, HashSet}
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.reflect.ClassTag
@@ -31,8 +31,10 @@ import scala.reflect.ClassTag
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.{BeforeAndAfter, Matchers, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 import other.supplier.{CustomPersistenceEngine, CustomRecoveryModeFactory}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -689,7 +691,16 @@ class MasterSuite extends SparkFunSuite
     val master = makeAliveMaster()
     var worker: MockExecutorLaunchFailWorker = null
     try {
-      worker = new MockExecutorLaunchFailWorker(master)
+      val conf = new SparkConf()
+      // SPARK-32250: When running test on Github Action machine, the available processors in JVM
+      // is only 2, while on Jenkins it's 32. For this specific test, 2 available processors, which
+      // also decides number of threads in Dispatcher, is not enough to consume the messages. In
+      // the worst situation, MockExecutorLaunchFailWorker would occupy these 2 threads for
+      // handling messages LaunchDriver, LaunchExecutor at the same time but leave no thread for
+      // the driver to handle the message RegisteredApplication. At the end, it results in the dead
+      // lock situation. Therefore, we need to set more threads to avoid the dead lock.
+      conf.set(Network.RPC_NETTY_DISPATCHER_NUM_THREADS, 6)
+      worker = new MockExecutorLaunchFailWorker(master, conf)
       worker.rpcEnv.setupEndpoint("worker", worker)
       val workerRegMsg = RegisterWorker(
         worker.id,
@@ -723,6 +734,65 @@ class MasterSuite extends SparkFunSuite
         master.rpcEnv.shutdown()
       }
     }
+  }
+
+  def testWorkerDecommissioning(
+      numWorkers: Int,
+      numWorkersExpectedToDecom: Int,
+      hostnames: Seq[String]): Unit = {
+    val conf = new SparkConf()
+    val master = makeAliveMaster(conf)
+    val workerRegs = (1 to numWorkers).map{idx =>
+      val worker = new MockWorker(master.self, conf)
+      worker.rpcEnv.setupEndpoint("worker", worker)
+      val workerReg = RegisterWorker(
+        worker.id,
+        "localhost",
+        worker.self.address.port,
+        worker.self,
+        10,
+        1024,
+        "http://localhost:8080",
+        RpcAddress("localhost", 10000))
+      master.self.send(workerReg)
+      workerReg
+    }
+
+    eventually(timeout(10.seconds)) {
+      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
+      assert(masterState.workers.length === numWorkers)
+      assert(masterState.workers.forall(_.state == WorkerState.ALIVE))
+      assert(masterState.workers.map(_.id).toSet == workerRegs.map(_.id).toSet)
+    }
+
+    val decomWorkersCount = master.self.askSync[Integer](DecommissionWorkersOnHosts(hostnames))
+    assert(decomWorkersCount === numWorkersExpectedToDecom)
+
+    // Decommissioning is actually async ... wait for the workers to actually be decommissioned by
+    // polling the master's state.
+    eventually(timeout(30.seconds)) {
+      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
+      assert(masterState.workers.length === numWorkers)
+      val workersActuallyDecomed = masterState.workers.count(_.state == WorkerState.DECOMMISSIONED)
+      assert(workersActuallyDecomed === numWorkersExpectedToDecom)
+    }
+
+    // Decommissioning a worker again should return the same answer since we want this call to be
+    // idempotent.
+    val decomWorkersCountAgain = master.self.askSync[Integer](DecommissionWorkersOnHosts(hostnames))
+    assert(decomWorkersCountAgain === numWorkersExpectedToDecom)
+  }
+
+  test("All workers on a host should be decommissioned") {
+    testWorkerDecommissioning(2, 2, Seq("LoCalHost", "localHOST"))
+  }
+
+  test("No workers should be decommissioned with invalid host") {
+    testWorkerDecommissioning(2, 0, Seq("NoSuchHost1", "NoSuchHost2"))
+  }
+
+  test("Only worker on host should be decommissioned") {
+    testWorkerDecommissioning(1, 1, Seq("lOcalHost", "NoSuchHost"))
   }
 
   test("SPARK-19900: there should be a corresponding driver for the app after relaunching driver") {

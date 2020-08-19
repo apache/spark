@@ -16,10 +16,8 @@
 #
 import unittest
 
-import py4j
-
 from pyspark.ml.image import ImageSchema
-from pyspark.testing.mlutils import PySparkTestCase, SparkSessionTestCase
+from pyspark.testing.mlutils import SparkSessionTestCase
 from pyspark.sql import Row
 from pyspark.testing.utils import QuietTest
 
@@ -68,7 +66,7 @@ class ImageFileFormatTest(SparkSessionTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_image import *
+    from pyspark.ml.tests.test_image import *  # noqa: F401
 
     try:
         import xmlrunner

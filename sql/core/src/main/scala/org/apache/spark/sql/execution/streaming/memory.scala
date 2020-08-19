@@ -215,7 +215,7 @@ case class MemoryStream[A : Encoder](
         batches.slice(sliceStart, sliceEnd)
       }
 
-      logDebug(generateDebugString(newBlocks.flatten, startOrdinal, endOrdinal))
+      logDebug(generateDebugString(newBlocks.flatten.toSeq, startOrdinal, endOrdinal))
 
       numPartitions match {
         case Some(numParts) =>

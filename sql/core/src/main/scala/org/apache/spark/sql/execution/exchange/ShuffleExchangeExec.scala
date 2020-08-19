@@ -30,8 +30,9 @@ import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProces
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Divide, Literal, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
+import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
@@ -41,12 +42,53 @@ import org.apache.spark.util.MutablePair
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordComparator}
 
 /**
+ * Common trait for all shuffle exchange implementations to facilitate pattern matching.
+ */
+trait ShuffleExchangeLike extends Exchange {
+
+  /**
+   * Returns the number of mappers of this shuffle.
+   */
+  def numMappers: Int
+
+  /**
+   * Returns the shuffle partition number.
+   */
+  def numPartitions: Int
+
+  /**
+   * Returns whether the shuffle partition number can be changed.
+   */
+  def canChangeNumPartitions: Boolean
+
+  /**
+   * The asynchronous job that materializes the shuffle.
+   */
+  def mapOutputStatisticsFuture: Future[MapOutputStatistics]
+
+  /**
+   * Returns the shuffle RDD with specified partition specs.
+   */
+  def getShuffleRDD(partitionSpecs: Array[ShufflePartitionSpec]): RDD[_]
+
+  /**
+   * Returns the runtime statistics after shuffle materialization.
+   */
+  def runtimeStatistics: Statistics
+}
+
+/**
  * Performs a shuffle that will result in the desired partitioning.
  */
 case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
-    canChangeNumPartitions: Boolean = true) extends Exchange {
+    noUserSpecifiedNumPartition: Boolean = true) extends ShuffleExchangeLike {
+
+  // If users specify the num partitions via APIs like `repartition`, we shouldn't change it.
+  // For `SinglePartition`, it requires exactly one partition and we can't change it either.
+  override def canChangeNumPartitions: Boolean =
+    noUserSpecifiedNumPartition && outputPartitioning != SinglePartition
 
   private lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
@@ -64,12 +106,26 @@ case class ShuffleExchangeExec(
   @transient lazy val inputRDD: RDD[InternalRow] = child.execute()
 
   // 'mapOutputStatisticsFuture' is only needed when enable AQE.
-  @transient lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
+  @transient override lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
     if (inputRDD.getNumPartitions == 0) {
       Future.successful(null)
     } else {
       sparkContext.submitMapStage(shuffleDependency)
     }
+  }
+
+  override def numMappers: Int = shuffleDependency.rdd.getNumPartitions
+
+  override def numPartitions: Int = shuffleDependency.partitioner.numPartitions
+
+  override def getShuffleRDD(partitionSpecs: Array[ShufflePartitionSpec]): RDD[InternalRow] = {
+    new ShuffledRowRDD(shuffleDependency, readMetrics, partitionSpecs)
+  }
+
+  override def runtimeStatistics: Statistics = {
+    val dataSize = metrics("dataSize").value
+    val rowCount = metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_RECORDS_WRITTEN).value
+    Statistics(dataSize, Some(rowCount))
   }
 
   /**

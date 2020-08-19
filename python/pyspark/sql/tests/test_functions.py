@@ -16,7 +16,6 @@
 #
 
 import datetime
-import sys
 from itertools import chain
 import re
 
@@ -167,10 +166,6 @@ class FunctionsTests(ReusedSQLTestCase):
             TypeError,
             "must be the same type",
             lambda: df.select(col('name').substr(0, lit(1))))
-        if sys.version_info.major == 2:
-            self.assertRaises(
-                TypeError,
-                lambda: df.select(col('name').substr(long(0), long(1))))
 
         for name in _string_functions.keys():
             self.assertEqual(
@@ -296,6 +291,16 @@ class FunctionsTests(ReusedSQLTestCase):
         for result in results:
             self.assertEqual(result[0], '')
 
+    def test_slice(self):
+        from pyspark.sql.functions import slice, lit
+
+        df = self.spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ['x'])
+
+        self.assertEquals(
+            df.select(slice(df.x, 2, 2).alias("sliced")).collect(),
+            df.select(slice(df.x, lit(2), lit(2)).alias("sliced")).collect(),
+        )
+
     def test_array_repeat(self):
         from pyspark.sql.functions import array_repeat, lit
 
@@ -363,7 +368,7 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertListEqual(actual, expected)
 
     def test_higher_order_function_failures(self):
-        from pyspark.sql.functions import col, exists, transform
+        from pyspark.sql.functions import col, transform
 
         # Should fail with varargs
         with self.assertRaises(ValueError):
@@ -388,7 +393,7 @@ class FunctionsTests(ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_functions import *
+    from pyspark.sql.tests.test_functions import *  # noqa: F401
 
     try:
         import xmlrunner

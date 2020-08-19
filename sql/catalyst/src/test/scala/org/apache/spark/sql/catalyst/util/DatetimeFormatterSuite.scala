@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time.DateTimeException
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper

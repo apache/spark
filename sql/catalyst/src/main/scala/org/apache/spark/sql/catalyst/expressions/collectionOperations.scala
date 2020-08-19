@@ -2612,10 +2612,17 @@ object Sequence {
       val stepDays = step.days
       val stepMicros = step.microseconds
 
+      if (scale == MICROS_PER_DAY && stepMonths == 0 && stepDays == 0) {
+        throw new IllegalArgumentException(
+          "sequence step must be a day interval if start and end values are dates")
+      }
+
       if (stepMonths == 0 && stepMicros == 0 && scale == MICROS_PER_DAY) {
+        // Adding pure days to date start/end
         backedSequenceImpl.eval(start, stop, fromLong(stepDays))
 
       } else if (stepMonths == 0 && stepDays == 0 && scale == 1) {
+        // Adding pure microseconds to timestamp start/end
         backedSequenceImpl.eval(start, stop, fromLong(stepMicros))
 
       } else {
@@ -2674,10 +2681,23 @@ object Sequence {
            |${genSequenceLengthCode(ctx, startMicros, stopMicros, intervalInMicros, arrLength)}
           """.stripMargin
 
+      val check = if (scale == MICROS_PER_DAY) {
+        s"""
+           |if ($stepMonths == 0 && $stepDays == 0) {
+           |  throw new IllegalArgumentException(
+           |    "sequence step must be a day interval if start and end values are dates");
+           |}
+          """.stripMargin
+        } else {
+          ""
+        }
+
       s"""
          |final int $stepMonths = $step.months;
          |final int $stepDays = $step.days;
          |final long $stepMicros = $step.microseconds;
+         |
+         |$check
          |
          |if ($stepMonths == 0 && $stepMicros == 0 && ${scale}L == ${MICROS_PER_DAY}L) {
          |  ${backedSequenceImpl.genCode(ctx, start, stop, stepDays, arr, elemType)};
@@ -3030,6 +3050,7 @@ trait ArraySetLike {
   @transient protected lazy val nullValueHolder = et match {
     case ByteType => "(byte) 0"
     case ShortType => "(short) 0"
+    case LongType => "(long) 0"
     case _ => "0"
   }
 
@@ -3135,7 +3156,7 @@ case class ArrayDistinct(child: Expression)
           }
         }
       }
-      new GenericArrayData(arrayBuffer)
+      new GenericArrayData(arrayBuffer.toSeq)
     }
   }
 
@@ -3293,7 +3314,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
             i += 1
           }
         }
-        new GenericArrayData(arrayBuffer)
+        new GenericArrayData(arrayBuffer.toSeq)
     } else {
       (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
@@ -3324,7 +3345,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
             arrayBuffer += elem
           }
         }))
-        new GenericArrayData(arrayBuffer)
+        new GenericArrayData(arrayBuffer.toSeq)
     }
   }
 
@@ -3456,7 +3477,7 @@ object ArrayUnion {
         arrayBuffer += elem
       }
     }))
-    new GenericArrayData(arrayBuffer)
+    new GenericArrayData(arrayBuffer.toSeq)
   }
 }
 
@@ -3518,7 +3539,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
             }
             i += 1
           }
-          new GenericArrayData(arrayBuffer)
+          new GenericArrayData(arrayBuffer.toSeq)
         } else {
           new GenericArrayData(Array.emptyObjectArray)
         }
@@ -3566,7 +3587,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
             }
             i += 1
           }
-          new GenericArrayData(arrayBuffer)
+          new GenericArrayData(arrayBuffer.toSeq)
         } else {
           new GenericArrayData(Array.emptyObjectArray)
         }
@@ -3757,7 +3778,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
           }
           i += 1
         }
-        new GenericArrayData(arrayBuffer)
+        new GenericArrayData(arrayBuffer.toSeq)
     } else {
       (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
@@ -3802,7 +3823,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
           }
           i += 1
         }
-        new GenericArrayData(arrayBuffer)
+        new GenericArrayData(arrayBuffer.toSeq)
     }
   }
 
