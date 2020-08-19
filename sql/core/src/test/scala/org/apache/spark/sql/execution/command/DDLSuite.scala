@@ -3036,9 +3036,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       sql("REFRESH FUNCTION md5")
     }.getMessage
     assert(msg.contains("Cannot refresh built-in function"))
-    intercept[NoSuchFunctionException] {
+    val msg2 = intercept[NoSuchFunctionException] {
       sql("REFRESH FUNCTION default.md5")
-    }
+    }.getMessage
+    assert(msg2.contains(s"Undefined function: 'md5'. This function is neither a registered " +
+      s"temporary function nor a permanent function registered in the database 'default'."))
 
     withUserDefinedFunction("func1" -> true) {
       sql("CREATE TEMPORARY FUNCTION func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
@@ -3060,9 +3062,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       assert(!spark.sessionState.catalog.isRegisteredFunction(func))
       sql("REFRESH FUNCTION func1")
       assert(spark.sessionState.catalog.isRegisteredFunction(func))
-      intercept[NoSuchFunctionException] {
+      val msg = intercept[NoSuchFunctionException] {
         sql("REFRESH FUNCTION func2")
-      }
+      }.getMessage
+      assert(msg.contains(s"Undefined function: 'func2'. This function is neither a registered " +
+        s"temporary function nor a permanent function registered in the database 'default'."))
       assert(spark.sessionState.catalog.isRegisteredFunction(func))
 
       spark.sessionState.catalog.externalCatalog.dropFunction("default", "func1")
