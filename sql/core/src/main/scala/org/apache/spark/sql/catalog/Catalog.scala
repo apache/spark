@@ -355,8 +355,13 @@ abstract class Catalog {
       tableName: String,
       source: String,
       options: java.util.Map[String, String],
-      description: Option[String]): DataFrame = {
-    createTable(tableName, source, options.asScala.toMap, description)
+      description: String): DataFrame = {
+    createTable(
+      tableName,
+      source = source,
+      options = options.asScala.toMap,
+      description = { if (description.isEmpty) None else Some(description) }
+    )
   }
 
   /**
@@ -441,13 +446,13 @@ abstract class Catalog {
       source: String,
       schema: StructType,
       options: java.util.Map[String, String],
-      description: Option[String]): DataFrame = {
+      description: String): DataFrame = {
     createTable(
       tableName,
       source = source,
       schema = schema,
       options = options.asScala.toMap,
-      description = description
+      description = { if (description.isEmpty) None else Some(description) }
     )
   }
 
