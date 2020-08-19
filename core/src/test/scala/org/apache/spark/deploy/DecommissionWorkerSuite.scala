@@ -57,7 +57,7 @@ class DecommissionWorkerSuite
   override def beforeEach(): Unit = {
     super.beforeEach()
     masterAndWorkerConf = new SparkConf()
-      .set(config.Worker.WORKER_DECOMMISSION_ENABLED, true)
+      .set(config.DECOMMISSION_ENABLED, true)
     masterAndWorkerSecurityManager = new SecurityManager(masterAndWorkerConf)
     masterRpcEnv = RpcEnv.create(
       Master.SYSTEM_NAME,
