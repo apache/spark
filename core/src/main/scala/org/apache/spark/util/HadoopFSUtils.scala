@@ -320,7 +320,8 @@ object HadoopFSUtils extends Logging {
       val parentFilter = FileInputFormat.getInputPathFilter(job)
       override def accept(p: Path): Boolean = {
         val name = p.getName()
-        !name.startsWith("_") && !name.startsWith(".") && parentFilter.accept(p)
+        !name.startsWith("_") && !name.startsWith(".") &&
+          parentFilter != null && parentFilter.accept(p)
       }
     }
 
