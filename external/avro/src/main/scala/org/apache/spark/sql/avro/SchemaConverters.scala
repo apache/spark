@@ -40,13 +40,13 @@ object SchemaConverters {
   case class SchemaType(dataType: DataType, nullable: Boolean)
 
   /**
-   * This function takes an avro schema and returns a sql schema.
+   * Converts an Avro schema to a corresponding Spark SQL schema.
    */
   def toSqlType(avroSchema: Schema): SchemaType = {
     toSqlTypeHelper(avroSchema, Set.empty)
   }
 
-  def toSqlTypeHelper(avroSchema: Schema, existingRecordNames: Set[String]): SchemaType = {
+  private def toSqlTypeHelper(avroSchema: Schema, existingRecordNames: Set[String]): SchemaType = {
     avroSchema.getType match {
       case INT => avroSchema.getLogicalType match {
         case _: Date => SchemaType(DateType, nullable = false)
@@ -133,6 +133,9 @@ object SchemaConverters {
     }
   }
 
+  /**
+   * Converts a Spark SQL schema to a corresponding Avro schema.
+   */
   def toAvroType(
       catalystType: DataType,
       nullable: Boolean = false,
