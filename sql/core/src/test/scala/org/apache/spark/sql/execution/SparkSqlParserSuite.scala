@@ -371,7 +371,7 @@ class SparkSqlParserSuite extends AnalysisTest {
           ("TOK_TABLEROWFORMATNULL", "NULL")), None, None,
         List.empty, List.empty, None, None, false)))
   }
-  
+
   test("SPARK-32607: Script Transformation ROW FORMAT DELIMITED" +
     " `TOK_TABLEROWFORMATLINES` only support '\\n'") {
 
