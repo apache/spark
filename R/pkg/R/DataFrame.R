@@ -1231,9 +1231,14 @@ setMethod("collect",
                 authSecret <- portAuth[[2]]
                 conn <- socketConnection(
                   port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
+                version <- packageVersion("arrow")
                 output <- tryCatch({
                   doServerAuth(conn, authSecret)
-                  arrowTable <- arrow::read_arrow(readRaw(conn))
+                  if (version$minor >= 17 || version$major >= 1) {
+                    arrowTable <- arrow::read_ipc_stream(readRaw(conn))
+                  } else {
+                    arrowTable <- arrow::read_arrow(readRaw(conn))
+                  }
                   as.data.frame(arrowTable, stringsAsFactors = stringsAsFactors)
                 }, finally = {
                   close(conn)
