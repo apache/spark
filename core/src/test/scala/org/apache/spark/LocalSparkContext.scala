@@ -22,12 +22,37 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.Suite
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.resource.ResourceProfile
 
 /** Manages a local `sc` `SparkContext` variable, correctly stopping it after each test. */
-trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self: Suite =>
+trait LocalSparkContext extends Logging
+  with BeforeAndAfterEach with BeforeAndAfterAll { self: Suite =>
+
+  private var _conf: SparkConf = new SparkConf()
 
   @transient var sc: SparkContext = _
+  @transient private var _sc: SparkContext = _
+
+  /**
+   * Currently, we are focusing on the reconstruction of LocalSparkContext, so this method
+   * was created temporarily. When the migration work is completed, this method will be
+   * renamed to `sc` and the variable `sc` will be deleted.
+   */
+  def sparkContext: SparkContext = {
+    if (_sc == null) {
+      _sc = new SparkContext(_conf)
+    }
+    _sc
+  }
+
+  def setConf(pairs: (String, String)*): Unit = {
+    if (_sc != null) {
+      logWarning("Because SparkContext already initialized, " +
+        "since configurations won't take effect in this case.")
+    }
+    pairs.foreach { case (k, v) => _conf.set(k, v) }
+  }
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -44,8 +69,10 @@ trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self
 
   def resetSparkContext(): Unit = {
     LocalSparkContext.stop(sc)
+    LocalSparkContext.stop(_sc)
     ResourceProfile.clearDefaultProfile()
-    sc = null
+    _sc = null
+    _conf = new SparkConf()
   }
 
 }
