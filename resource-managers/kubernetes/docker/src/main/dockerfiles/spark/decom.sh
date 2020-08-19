@@ -32,4 +32,4 @@ timeout 60 tail --pid=${WORKER_PID} -f /dev/null
 date
 echo "Done"
 date
-sleep 30
+sleep 1
