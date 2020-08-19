@@ -536,6 +536,13 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     GenerateUnsafeProjection.generate(exprs, true)
     GenerateMutableProjection.generate(exprs, true)
   }
+
+  test("SPARK-32624: Use getCanonicalName to fix byte[] compile issue") {
+    val ctx = new CodegenContext
+    val bytes = new Array[Byte](3)
+    val byteObj = ctx.addReferenceObj("bytes", bytes)
+    assert(byteObj == "((byte[]) references[0] /* bytes */)")
+  }
 }
 
 case class HugeCodeIntExpression(value: Int) extends Expression {
