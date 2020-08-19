@@ -1056,11 +1056,13 @@ private[spark] class TaskSetManager(
           val taskInfo = taskInfos(tid)
           val decomState = sched.getExecutorDecommissionState(taskInfo.executorId)
           if (decomState.nonEmpty) {
-            // Check whether this task will finish before the exectorKillTime assuming
-            // it will take medianDuration overall. If this task cannot finish within
-            // executorKillInterval, then this task is a candidate for speculation
+            // Check if this task might finish after this executor is decommissioned.
+            // We estimate the task's finish time by using the median task duration.
+            // Whereas the time when the executor might be decommissioned is estimated using the
+            // config executorDecommissionKillInterval. If the task is going to finish after
+            // decommissioning, then we will eagerly speculate the task.
             val taskEndTimeBasedOnMedianDuration = taskInfos(tid).launchTime + medianDuration
-            val executorDecomTime = decomState.get.tsMillis + executorDecommissionKillInterval.get
+            val executorDecomTime = decomState.get.startTime + executorDecommissionKillInterval.get
             val canExceedDeadline = executorDecomTime < taskEndTimeBasedOnMedianDuration
             if (canExceedDeadline) {
               speculated = checkAndSubmitSpeculatableTask(tid, time, 0)

@@ -2029,7 +2029,7 @@ class TaskSetManagerSuite
     // (TASK 2 -> 15, TASK 3 -> 15)
     sched.executorDecommission("exec2", ExecutorDecommissionInfo("decom",
       isHostDecommissioned = false))
-    assert(sched.getExecutorDecommissionState("exec2").map(_.tsMillis) ===
+    assert(sched.getExecutorDecommissionState("exec2").map(_.startTime) ===
       Some(clock.getTimeMillis()))
 
     assert(manager.checkSpeculatableTasks(0))

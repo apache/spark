@@ -930,7 +930,7 @@ private[spark] class TaskSchedulerImpl(
         if (!oldDecomState.exists(_.isHostDecommissioned)) {
           executorsPendingDecommission(executorId) = ExecutorDecommissionState(
             decommissionInfo.message,
-            oldDecomState.map(_.tsMillis).getOrElse(clock.getTimeMillis()),
+            oldDecomState.map(_.startTime).getOrElse(clock.getTimeMillis()),
             decommissionInfo.isHostDecommissioned)
         }
       }

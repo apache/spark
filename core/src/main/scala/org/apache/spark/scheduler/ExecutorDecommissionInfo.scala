@@ -34,6 +34,6 @@ case class ExecutorDecommissionInfo(message: String, isHostDecommissioned: Boole
  */
 case class ExecutorDecommissionState(
     message: String,
-    // Timestamp in milliseconds when decommissioning was triggered
-    tsMillis: Long,
+    // Timestamp the decommissioning commenced in millis since epoch of the driver's clock
+    startTime: Long,
     isHostDecommissioned: Boolean)
