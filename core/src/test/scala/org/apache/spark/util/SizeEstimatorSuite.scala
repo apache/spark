@@ -73,9 +73,20 @@ class SizeEstimatorSuite
   with PrivateMethodTester
   with ResetSystemProperties {
 
-  def reinitializeSizeEstimator(arch: String, useCompressedOops: Boolean): Unit = {
-    System.setProperty("os.arch", arch)
-    System.setProperty(TEST_USE_COMPRESSED_OOPS_KEY, useCompressedOops.toString())
+  // Save modified system properties so that we can restore them after tests.
+  val originalArch = System.getProperty("os.arch")
+  val originalCompressedOops = System.getProperty(TEST_USE_COMPRESSED_OOPS_KEY)
+
+  def reinitializeSizeEstimator(arch: String, useCompressedOops: String): Unit = {
+    def set(k: String, v: String): Unit = {
+      if (v == null) {
+        System.clearProperty(k)
+      } else {
+        System.setProperty(k, v)
+      }
+    }
+    set("os.arch", arch)
+    set(TEST_USE_COMPRESSED_OOPS_KEY, useCompressedOops)
     val initialize = PrivateMethod[Unit](Symbol("initialize"))
     SizeEstimator invokePrivate initialize()
   }
@@ -84,11 +95,13 @@ class SizeEstimatorSuite
     super.beforeEach()
     // Set the arch to 64-bit and compressedOops to true so that SizeEstimator
     // provides identical results accross all systems in these tests.
-    reinitializeSizeEstimator("amd64", true)
+    reinitializeSizeEstimator("amd64", "true")
   }
 
   override def afterEach(): Unit = {
     super.afterEach()
+    // Restore system properties and SizeEstimator to their original states.
+    reinitializeSizeEstimator(originalArch, originalCompressedOops)
   }
 
   test("simple classes") {
@@ -185,7 +198,7 @@ class SizeEstimatorSuite
   }
 
   test("32-bit arch") {
-    reinitializeSizeEstimator("x86", true)
+    reinitializeSizeEstimator("x86", "true")
     assertResult(40)(SizeEstimator.estimate(DummyString("")))
     assertResult(48)(SizeEstimator.estimate(DummyString("a")))
     assertResult(48)(SizeEstimator.estimate(DummyString("ab")))
@@ -195,7 +208,7 @@ class SizeEstimatorSuite
   // NOTE: The String class definition varies across JDK versions (1.6 vs. 1.7) and vendors
   // (Sun vs IBM). Use a DummyString class to make tests deterministic.
   test("64-bit arch with no compressed oops") {
-    reinitializeSizeEstimator("amd64", false)
+    reinitializeSizeEstimator("amd64", "false")
     assertResult(56)(SizeEstimator.estimate(DummyString("")))
     assertResult(64)(SizeEstimator.estimate(DummyString("a")))
     assertResult(64)(SizeEstimator.estimate(DummyString("ab")))
@@ -213,13 +226,13 @@ class SizeEstimatorSuite
   }
 
   test("class field blocks rounding on 64-bit VM without useCompressedOops") {
-    reinitializeSizeEstimator("amd64", false)
+    reinitializeSizeEstimator("amd64", "false")
     assertResult(24)(SizeEstimator.estimate(new DummyClass5))
     assertResult(32)(SizeEstimator.estimate(new DummyClass6))
   }
 
   test("check 64-bit detection for s390x arch") {
-    reinitializeSizeEstimator("s390x", true)
+    reinitializeSizeEstimator("s390x", "true")
     // Class should be 32 bytes on s390x if recognised as 64 bit platform
     assertResult(32)(SizeEstimator.estimate(new DummyClass7))
   }

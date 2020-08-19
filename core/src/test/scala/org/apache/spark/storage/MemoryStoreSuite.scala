@@ -52,13 +52,34 @@ class MemoryStoreSuite
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
   def rdd(rddId: Int, splitId: Int): RDDBlockId = RDDBlockId(rddId, splitId)
 
+  // Save modified system properties so that we can restore them after tests.
+  val originalArch = System.getProperty("os.arch")
+  val originalCompressedOops = System.getProperty(TEST_USE_COMPRESSED_OOPS_KEY)
+
+  def reinitializeSizeEstimator(arch: String, useCompressedOops: String): Unit = {
+    def set(k: String, v: String): Unit = {
+      if (v == null) {
+        System.clearProperty(k)
+      } else {
+        System.setProperty(k, v)
+      }
+    }
+    set("os.arch", arch)
+    set(TEST_USE_COMPRESSED_OOPS_KEY, useCompressedOops)
+    val initialize = PrivateMethod[Unit](Symbol("initialize"))
+    SizeEstimator invokePrivate initialize()
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
-    System.setProperty("os.arch", "amd64")
-    System.setProperty(TEST_USE_COMPRESSED_OOPS_KEY, "true")
-    val initialize = PrivateMethod[Unit](Symbol("initialize"))
-    SizeEstimator invokePrivate initialize()
+    reinitializeSizeEstimator("amd64", "true")
+  }
+
+  override def afterEach(): Unit = {
+    super.afterEach()
+    // Restore system properties and SizeEstimator to their original states.
+    reinitializeSizeEstimator(originalArch, originalCompressedOops)
   }
 
   def makeMemoryStore(maxMem: Long): (MemoryStore, BlockInfoManager) = {
