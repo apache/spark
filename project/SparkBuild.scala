@@ -867,10 +867,10 @@ object Unidoc {
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, avro),
+        yarn, tags, streamingKafka010, sqlKafka010),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, avro),
+        yarn, tags, streamingKafka010, sqlKafka010),
 
     unidocAllClasspaths in (ScalaUnidoc, unidoc) := {
       ignoreClasspaths((unidocAllClasspaths in (ScalaUnidoc, unidoc)).value)
