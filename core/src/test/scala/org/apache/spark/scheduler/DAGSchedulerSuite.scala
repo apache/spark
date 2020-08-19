@@ -3250,7 +3250,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(mergedRp.getExecutorCores.get == 4)
 
     // test that instead of creating a new merged profile, we use the already created one
-    val rdd2 = sparkContext.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
+    val rdd2 =
+      sparkContext.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
     val (_, resourceprofiles2) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd2)
     val mergedRp2 = scheduler.mergeResourceProfilesForStage(resourceprofiles2)
     assert(mergedRp2.id === mergedRp.id)
