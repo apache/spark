@@ -230,6 +230,10 @@ class CrossValidatorTests(SparkSessionTestCase):
         ]:
             self.assertEqual(param(cvModel), param(loadedCvModel))
 
+        self.assertTrue(all(
+            loadedCvModel.isSet(param) for param in loadedCvModel.params
+        ))
+
     def test_save_load_simple_estimator(self):
         temp_path = tempfile.mkdtemp()
         dataset = self.spark.createDataFrame(
@@ -601,6 +605,10 @@ class TrainValidationSplitTests(SparkSessionTestCase):
             lambda x: x.getTrainRatio(),
         ]:
             self.assertEqual(param(tvsModel), param(loadedTvsModel))
+
+        self.assertTrue(all(
+            loadedTvsModel.isSet(param) for param in loadedTvsModel.params
+        ))
 
     def test_save_load_simple_estimator(self):
         # This tests saving and loading the trained model only.
