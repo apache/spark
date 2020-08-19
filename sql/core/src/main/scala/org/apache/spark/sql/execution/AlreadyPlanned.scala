@@ -29,18 +29,17 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Stati
  * land for some reason (e.g. V1 DataSource write execution). This will allow the metrics, and the
  * query plan to properly appear as part of the query execution.
  */
-case class AlreadyPlanned(
-    output: Seq[Attribute],
-    physicalPlan: SparkPlan) extends LogicalPlan with MultiInstanceRelation {
+case class AlreadyPlanned(physicalPlan: SparkPlan) extends LogicalPlan with MultiInstanceRelation {
   override def children: Seq[LogicalPlan] = Nil
   override lazy val resolved: Boolean = true
+  override val output: Seq[Attribute] = physicalPlan.output
   override def newInstance(): LogicalPlan = {
     val newAttrs = output.map(a => a.exprId -> a.newInstance())
     val attrMap = newAttrs.toMap
     val projections = physicalPlan.output.map { o =>
       Alias(o, o.name)(attrMap(o.exprId).exprId, o.qualifier, Option(o.metadata))
     }
-    AlreadyPlanned(newAttrs.map(_._2), ProjectExec(projections, physicalPlan))
+    AlreadyPlanned(ProjectExec(projections, physicalPlan))
   }
 }
 
@@ -56,7 +55,7 @@ class AlreadyPlannedExecution(
 
 object AlreadyPlanned {
   def dataFrame(sparkSession: SparkSession, query: SparkPlan): DataFrame = {
-    val qe = new AlreadyPlannedExecution(sparkSession, AlreadyPlanned(query.output, query))
+    val qe = new AlreadyPlannedExecution(sparkSession, AlreadyPlanned(query))
     new Dataset[Row](qe, RowEncoder(qe.analyzed.schema))
   }
 }
