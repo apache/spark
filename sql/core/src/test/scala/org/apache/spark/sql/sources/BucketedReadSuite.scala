@@ -901,7 +901,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("bucket coalescing is not satisfied") {
+  test("bucket coalescing/repartitioning is not satisfied") {
     def run(testSpec1: BucketedTableTestSpec, testSpec2: BucketedTableTestSpec): Unit = {
       Seq((testSpec1, testSpec2), (testSpec2, testSpec1)).foreach { specs =>
         testBucketing(
@@ -911,35 +911,50 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       }
     }
 
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "false") {
-      // Coalescing buckets is disabled by a config.
-      run(
-        BucketedTableTestSpec(
-          Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = false),
-        BucketedTableTestSpec(
-          Some(BucketSpec(4, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = true))
+    Seq(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "false",
+      SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "false").foreach { enabledConfig =>
+      withSQLConf(enabledConfig) {
+        // Coalescing/repartitioning buckets is disabled by a config.
+        run(
+          BucketedTableTestSpec(
+            Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
+            expectedShuffle = false),
+          BucketedTableTestSpec(
+            Some(BucketSpec(4, Seq("i", "j"), Seq("i", "j"))),
+            expectedShuffle = true))
+      }
     }
 
-    withSQLConf(
-      SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
-      SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.key -> "2") {
-      // Coalescing buckets is not applied because the ratio of the number of buckets (3)
-      // is greater than max allowed (2).
-      run(
-        BucketedTableTestSpec(
-          Some(BucketSpec(12, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = false),
-        BucketedTableTestSpec(
-          Some(BucketSpec(4, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = true))
+    Seq(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
+      SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "true").foreach { enabledConfig =>
+      withSQLConf(
+        enabledConfig,
+        SQLConf.COALESCE_OR_REPARTITION_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.key -> "2") {
+        // Coalescing/repartitioning buckets is not applied because the ratio of
+        // the number of buckets (3) is greater than max allowed (2).
+        run(
+          BucketedTableTestSpec(
+            Some(BucketSpec(12, Seq("i", "j"), Seq("i", "j"))),
+            expectedShuffle = false),
+          BucketedTableTestSpec(
+            Some(BucketSpec(4, Seq("i", "j"), Seq("i", "j"))),
+            expectedShuffle = true))
+      }
     }
 
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
-      run(
-        // Coalescing buckets is not applied because the bigger number of buckets (8) is not
-        // divisible by the smaller number of buckets (7).
-        BucketedTableTestSpec(
-          Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = false),
-        BucketedTableTestSpec(
-          Some(BucketSpec(7, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = true))
+    Seq(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
+      SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "true").foreach { enabledConfig =>
+      withSQLConf(enabledConfig) {
+        run(
+          // Coalescing/repartitioning buckets is not applied because the bigger number of
+          // buckets (8) is not divisible by the smaller number of buckets (7).
+          BucketedTableTestSpec(
+            Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
+            expectedShuffle = false),
+          BucketedTableTestSpec(
+            Some(BucketSpec(7, Seq("i", "j"), Seq("i", "j"))),
+            expectedShuffle = true))
+      }
     }
   }
 
@@ -960,7 +975,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
           assert(shuffles.length == expectedNumShuffles)
 
           val scans = plan.collect {
-            case f: FileSourceScanExec if f.relation.bucketSpec.isDefined => f
+            case f: FileSourceScanExec if f.optionalNewNumBuckets.isDefined => f
           }
           if (expectedCoalescedNumBuckets.isDefined) {
             assert(scans.length == 1)
@@ -983,35 +998,50 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("split shuffle") {
+  test("bucket repartitioning eliminates shuffle") {
+    withSQLConf(SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+      // The side with testSpec2 will be repartitioned to have 8 output partitions.
+      val testSpec1 = BucketedTableTestSpec(
+        Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
+        numPartitions = 1,
+        expectedShuffle = false,
+        expectedSort = false,
+        expectedNumOutputPartitions = Some(8))
+      val testSpec2 = BucketedTableTestSpec(
+        Some(BucketSpec(4, Seq("i", "j"), Seq("i", "j"))),
+        numPartitions = 1,
+        expectedShuffle = false,
+        expectedSort = false,
+        expectedNumOutputPartitions = Some(8))
+
+      Seq((testSpec1, testSpec2), (testSpec2, testSpec1)).foreach { specs =>
+        testBucketing(
+          bucketedTableTestSpecLeft = specs._1,
+          bucketedTableTestSpecRight = specs._2,
+          joinCondition = joinCondition(Seq("i", "j")))
+      }
+    }
+  }
+
+  test("bucket repartitioning should work with wholestage codegen enabled") {
     withTable("t1", "t2") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("t1")
       df2.write.format("parquet").bucketBy(4, "i").saveAsTable("t2")
-      // scalastyle:off println
-//      withSQLConf(
-//        SQLConf.SPLIT_BUCKETS_IN_JOIN_ENABLED.key -> "false",
-//        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-//        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-//        val t1 = spark.table("t1")
-//        val t2 = spark.table("t2")
-//        val joined = t1.join(t2, t1("i") === t2("i"), "right")
-//        joined.explain
-//        println(joined.count)
-//        val expected = joined.collect()
-//      }
 
-      withSQLConf(SQLConf.SPLIT_BUCKETS_IN_JOIN_ENABLED.key -> "true",
+      val t1 = spark.table("t1")
+      val t2 = spark.table("t2")
+      val expected = t1.join(t2, t1("i") === t2("i")).collect
+
+      withSQLConf(SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
         val t1 = spark.table("t1")
         val t2 = spark.table("t2")
-        val joined2 = t1.join(t2, t1("i") === t2("i"))
-        joined2.explain
-        joined2.show
-        println(joined2.count)
-        // checkAnswer(joined2, expected)
+        val actual = t1.join(t2, t1("i") === t2("i"))
+        val plan = actual.queryExecution.executedPlan
+        assert(plan.collect { case exchange: ShuffleExchangeExec => exchange }.isEmpty)
+        checkAnswer(actual, expected)
       }
-      // scalastyle:on println
     }
   }
 }

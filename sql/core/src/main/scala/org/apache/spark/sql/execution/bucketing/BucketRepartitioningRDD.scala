@@ -28,14 +28,20 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.{FilePartition, FileScanRDD, PartitionedFile}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
-private[spark] class SplitBucketRDD(
+/**
+ * An RDD that filters out the rows that do not belong to the current bucket file being read.
+ */
+private[spark] class BucketRepartitioningRDD(
     @transient private val sparkSession: SparkSession,
     readFunction: PartitionedFile => Iterator[InternalRow],
     @transient override val filePartitions: Seq[FilePartition],
     bucketSpec: BucketSpec,
-    newNumBuckets: Int,
+    numRepartitionedBuckets: Int,
     output: Seq[Attribute])
   extends FileScanRDD(sparkSession, readFunction, filePartitions) {
+  assert(numRepartitionedBuckets > bucketSpec.numBuckets)
+  assert(numRepartitionedBuckets % bucketSpec.numBuckets == 0)
+
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val iter: Iterator[_] = super.compute(split, context)
     iter.flatMap {
@@ -47,7 +53,7 @@ private[spark] class SplitBucketRDD(
   private lazy val getBucketId: InternalRow => Int = {
     val bucketIdExpression = {
       val bucketColumns = bucketSpec.bucketColumnNames.map(c => output.find(_.name == c).get)
-      HashPartitioning(bucketColumns, newNumBuckets).partitionIdExpression
+      HashPartitioning(bucketColumns, numRepartitionedBuckets).partitionIdExpression
     }
 
     val projection = UnsafeProjection.create(Seq(bucketIdExpression), output)

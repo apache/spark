@@ -175,7 +175,7 @@ class CoalesceOrRepartitionBucketsInJoinSuite extends SQLTestUtils with SharedSp
 
   test("the ratio of the number of buckets is greater than max allowed") {
     withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
-      SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.key -> "2") {
+      SQLConf.COALESCE_OR_REPARTITION_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.key -> "2") {
       run(JoinSetting(
         RelationSetting(4, None), RelationSetting(16, None), joinOperator = SORT_MERGE_JOIN))
       run(JoinSetting(

@@ -2665,24 +2665,24 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val SPLIT_BUCKETS_IN_JOIN_ENABLED =
-    buildConf("spark.sql.bucketing.splitBucketsInJoin.enabled")
+  val REPARTITION_BUCKETS_IN_JOIN_ENABLED =
+    buildConf("spark.sql.bucketing.repartitionBucketsInJoin.enabled")
       .doc("When true, if two bucketed tables with the different number of buckets are joined, " +
-        "the side with a bigger number of buckets will be coalesced to have the same number " +
+        "the side with a smaller number of buckets will be repartitioned to have the same number " +
         "of buckets as the other side. Bigger number of buckets is divisible by the smaller " +
-        "number of buckets. Bucket coalescing is applied to sort-merge joins and " +
-        "shuffled hash join. Note: Coalescing bucketed table can avoid unnecessary shuffling " +
-        "in join, but it also reduces parallelism and could possibly cause OOM for " +
-        "shuffled hash join.")
+        "number of buckets. Bucket repartitioning is applied to sort-merge joins and " +
+        "shuffled hash join. Note: Repartitioning bucketed table can avoid unnecessary shuffling " +
+        "in join and increases parallelism, but it also reads more data than necessary.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
 
-  val COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO =
-    buildConf("spark.sql.bucketing.coalesceBucketsInJoin.maxBucketRatio")
-      .doc("The ratio of the number of two buckets being coalesced should be less than or " +
-        "equal to this value for bucket coalescing to be applied. This configuration only " +
-        s"has an effect when '${COALESCE_BUCKETS_IN_JOIN_ENABLED.key}' is set to true.")
+  val COALESCE_OR_REPARTITION_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO =
+    buildConf("spark.sql.bucketing.coalesceOrRepartitionBucketsInJoin.maxBucketRatio")
+      .doc("The ratio of the number of two buckets being coalesced/repartitioned should be " +
+        "less than or equal to this value for bucket coalescing/repartitioning to be applied. " +
+        s"This configuration only has an effect when '${COALESCE_BUCKETS_IN_JOIN_ENABLED.key}' " +
+        s"or '${REPARTITION_BUCKETS_IN_JOIN_ENABLED.key}' is set to true.")
       .version("3.1.0")
       .intConf
       .checkValue(_ > 0, "The difference must be positive.")
@@ -3324,12 +3324,13 @@ class SQLConf extends Serializable with Logging {
 
   def metadataCacheTTL: Long = getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
 
-  def splitBucketsInJoinEnabled: Boolean = getConf(SQLConf.SPLIT_BUCKETS_IN_JOIN_ENABLED)
+  def repartitionBucketsInJoinEnabled: Boolean =
+    getConf(SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED)
 
   def coalesceBucketsInJoinEnabled: Boolean = getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED)
 
   def coalesceBucketsInJoinMaxBucketRatio: Int =
-    getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO)
+    getConf(SQLConf.COALESCE_OR_REPARTITION_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO)
 
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.bucketing
 
 import scala.annotation.tailrec
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
@@ -48,24 +49,22 @@ case class CoalesceOrRepartitionBucketsInJoin(conf: SQLConf) extends Rule[SparkP
     }
   }
 
-  private def updateNumCoalescedBuckets(
+  private def updateNumBuckets(
       join: BaseJoinExec,
       numLeftBuckets: Int,
       numRightBucket: Int,
-      numCoalescedBuckets: Int): BaseJoinExec = {
-    if (numCoalescedBuckets != numLeftBuckets) {
-      val leftCoalescedChild =
-        updateNumBucketsInScan(join.left, numCoalescedBuckets)
+      newNumBuckets: Int): BaseJoinExec = {
+    if (newNumBuckets != numLeftBuckets) {
+      val leftChild = updateNumBucketsInScan(join.left, newNumBuckets)
       join match {
-        case j: SortMergeJoinExec => j.copy(left = leftCoalescedChild)
-        case j: ShuffledHashJoinExec => j.copy(left = leftCoalescedChild)
+        case j: SortMergeJoinExec => j.copy(left = leftChild)
+        case j: ShuffledHashJoinExec => j.copy(left = leftChild)
       }
     } else {
-      val rightCoalescedChild =
-        updateNumBucketsInScan(join.right, numCoalescedBuckets)
+      val rightChild = updateNumBucketsInScan(join.right, newNumBuckets)
       join match {
-        case j: SortMergeJoinExec => j.copy(right = rightCoalescedChild)
-        case j: ShuffledHashJoinExec => j.copy(right = rightCoalescedChild)
+        case j: SortMergeJoinExec => j.copy(right = rightChild)
+        case j: ShuffledHashJoinExec => j.copy(right = rightChild)
       }
     }
   }
@@ -83,8 +82,14 @@ case class CoalesceOrRepartitionBucketsInJoin(conf: SQLConf) extends Rule[SparkP
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.coalesceBucketsInJoinEnabled && !conf.splitBucketsInJoinEnabled) {
+    if (!conf.coalesceBucketsInJoinEnabled && !conf.repartitionBucketsInJoinEnabled) {
       return plan
+    }
+
+    if (conf.coalesceBucketsInJoinEnabled && conf.repartitionBucketsInJoinEnabled) {
+      throw new AnalysisException("Both 'spark.sql.bucketing.coalesceBucketsInJoin.enabled' and " +
+        "'spark.sql.bucketing.repartitionBucketsInJoin.enabled' cannot be set to true at the" +
+        "same time")
     }
 
     plan transform {
@@ -98,12 +103,18 @@ case class CoalesceOrRepartitionBucketsInJoin(conf: SQLConf) extends Rule[SparkP
         }
         join match {
           case j: SortMergeJoinExec =>
-            updateNumCoalescedBuckets(j, numLeftBuckets, numRightBuckets, newNumBuckets)
-          case j: ShuffledHashJoinExec
-            // Only coalesce the buckets for shuffled hash join stream side,
-            // to avoid OOM for build side.
-            if isCoalesceSHJStreamSide(j, numLeftBuckets, numRightBuckets, newNumBuckets) =>
-            updateNumCoalescedBuckets(j, numLeftBuckets, numRightBuckets, newNumBuckets)
+            updateNumBuckets(j, numLeftBuckets, numRightBuckets, newNumBuckets)
+          case j: ShuffledHashJoinExec =>
+            if (conf.repartitionBucketsInJoinEnabled) {
+              updateNumBuckets(j, numLeftBuckets, numRightBuckets, newNumBuckets)
+            } else if (conf.coalesceBucketsInJoinEnabled &&
+              isCoalesceSHJStreamSide(j, numLeftBuckets, numRightBuckets, newNumBuckets)) {
+              // Only coalesce the buckets for shuffled hash join stream side,
+              // to avoid OOM for build side.
+              updateNumBuckets(j, numLeftBuckets, numRightBuckets, newNumBuckets)
+            } else {
+              j
+            }
           case other => other
         }
       case other => other
@@ -159,8 +170,9 @@ object ExtractJoinWithBuckets {
 
   private def isDivisible(numBuckets1: Int, numBuckets2: Int): Boolean = {
     val (small, large) = (math.min(numBuckets1, numBuckets2), math.max(numBuckets1, numBuckets2))
-    // A bucket can be coalesced only if the bigger number of buckets is divisible by the smaller
-    // number of buckets because bucket id is calculated by modding the total number of buckets.
+    // A bucket can be coalesced or repartitioned only if the bigger number of buckets is divisible
+    // by the smaller number of buckets because bucket id is calculated by modding the total number
+    // of buckets.
     numBuckets1 != numBuckets2 && large % small == 0
   }
 

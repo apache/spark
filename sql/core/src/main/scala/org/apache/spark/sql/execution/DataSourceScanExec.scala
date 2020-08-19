@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.execution.bucketing.SplitBucketRDD
+import org.apache.spark.sql.execution.bucketing.BucketRepartitioningRDD
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -175,12 +175,16 @@ case class FileSourceScanExec(
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
   override lazy val supportsColumnar: Boolean = {
-    val isSplittingBucket = relation.bucketSpec.isDefined &&
-    optionalNewNumBuckets.isDefined &&
-    optionalNewNumBuckets.get > relation.bucketSpec.get.numBuckets
+    // `RepartitioningBucketRDD` converts columnar batches to rows to calculate bucket id for each
+    // row, thus columnar is not supported when `RepartitioningBucketRDD` is used to avoid
+    // conversions from batches to rows and back to batches.
+    relation.fileFormat.supportBatch(relation.sparkSession, schema) && !isRepartitioningBuckets
+  }
 
-    relation.fileFormat.supportBatch(relation.sparkSession, schema) &&
-      !isSplittingBucket
+  @transient private lazy val isRepartitioningBuckets: Boolean = {
+    relation.bucketSpec.isDefined &&
+      optionalNewNumBuckets.isDefined &&
+      optionalNewNumBuckets.get > relation.bucketSpec.get.numBuckets
   }
 
   private lazy val needsUnsafeRowConversion: Boolean = {
@@ -321,7 +325,7 @@ case class FileSourceScanExec(
         val singleFilePartitions = bucketToFilesGrouping.forall(p => p._2.length <= 1)
 
         // TODO SPARK-24528 Sort order is currently ignored if buckets are coalesced.
-        if (singleFilePartitions && optionalNewNumBuckets.isEmpty) {
+        if (singleFilePartitions && (optionalNewNumBuckets.isEmpty || isRepartitioningBuckets)) {
           // TODO Currently Spark does not support writing columns sorting in descending order
           // so using Ascending order. This can be fixed in future
           sortColumns.map(attribute => SortOrder(attribute, Ascending))
@@ -367,7 +371,9 @@ case class FileSourceScanExec(
       }
       metadata + ("SelectedBucketsCount" ->
         (s"$numSelectedBuckets out of ${spec.numBuckets}" +
-          optionalNewNumBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
+          optionalNewNumBuckets.map { b =>
+            if (b > spec.numBuckets) s" (Repartitioned to $b)" else s" (Coalesced to $b)"
+          }.getOrElse("")))
     } getOrElse {
       metadata
     }
@@ -563,6 +569,7 @@ case class FileSourceScanExec(
     } else {
       val newNumBuckets = optionalNewNumBuckets.get
       if (newNumBuckets < bucketSpec.numBuckets) {
+        assert(bucketSpec.numBuckets % newNumBuckets == 0)
         logInfo(s"Coalescing to $newNumBuckets buckets from ${bucketSpec.numBuckets} buckets")
         val coalescedBuckets = prunedFilesGroupedToBuckets.groupBy(_._1 % newNumBuckets)
         val filePartitions = Seq.tabulate(newNumBuckets) { bucketId =>
@@ -574,18 +581,19 @@ case class FileSourceScanExec(
         }
         new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
       } else {
+        assert(newNumBuckets % bucketSpec.numBuckets == 0)
         logInfo(s"Repartitioning to $newNumBuckets buckets from ${bucketSpec.numBuckets} buckets")
         val filePartitions = Seq.tabulate(newNumBuckets) { bucketId =>
           FilePartition(
             bucketId,
             prunedFilesGroupedToBuckets.getOrElse(bucketId % bucketSpec.numBuckets, Array.empty))
         }
-        // There will be more files read.
+        // There are now more files to be read.
         val filesNum = filePartitions.map(_.files.size.toLong).sum
         val filesSize = filePartitions.map(_.files.map(_.length).sum).sum
         driverMetrics("numFiles") = filesNum
         driverMetrics("filesSize") = filesSize
-        new SplitBucketRDD(
+        new BucketRepartitioningRDD(
           fsRelation.sparkSession, readFile, filePartitions, bucketSpec, newNumBuckets, output)
       }
     }
