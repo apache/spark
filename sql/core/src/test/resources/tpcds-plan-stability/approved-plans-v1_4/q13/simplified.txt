@@ -1,0 +1,57 @@
+WholeStageCodegen (7)
+  HashAggregate [count,count,count,sum,sum,sum,sum] [avg(UnscaledValue(ss_ext_sales_price)),avg(UnscaledValue(ss_ext_wholesale_cost)),avg(cast(ss_quantity as bigint)),avg(ss_ext_sales_price),avg(ss_ext_wholesale_cost),avg(ss_quantity),count,count,count,sum,sum,sum,sum,sum(UnscaledValue(ss_ext_wholesale_cost)),sum(ss_ext_wholesale_cost)]
+    InputAdapter
+      Exchange #1
+        WholeStageCodegen (6)
+          HashAggregate [ss_ext_sales_price,ss_ext_wholesale_cost,ss_quantity] [count,count,count,count,count,count,sum,sum,sum,sum,sum,sum,sum,sum]
+            Project [ss_ext_sales_price,ss_ext_wholesale_cost,ss_quantity]
+              BroadcastHashJoin [cd_education_status,cd_marital_status,hd_demo_sk,hd_dep_count,ss_hdemo_sk,ss_sales_price]
+                Project [cd_education_status,cd_marital_status,ss_ext_sales_price,ss_ext_wholesale_cost,ss_hdemo_sk,ss_quantity,ss_sales_price]
+                  BroadcastHashJoin [cd_demo_sk,cd_education_status,cd_marital_status,ss_cdemo_sk,ss_sales_price]
+                    Project [ss_cdemo_sk,ss_ext_sales_price,ss_ext_wholesale_cost,ss_hdemo_sk,ss_quantity,ss_sales_price]
+                      BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
+                        Project [ss_cdemo_sk,ss_ext_sales_price,ss_ext_wholesale_cost,ss_hdemo_sk,ss_quantity,ss_sales_price,ss_sold_date_sk]
+                          BroadcastHashJoin [ca_address_sk,ca_state,ss_addr_sk,ss_net_profit]
+                            Project [ss_addr_sk,ss_cdemo_sk,ss_ext_sales_price,ss_ext_wholesale_cost,ss_hdemo_sk,ss_net_profit,ss_quantity,ss_sales_price,ss_sold_date_sk]
+                              BroadcastHashJoin [s_store_sk,ss_store_sk]
+                                Filter [ss_addr_sk,ss_cdemo_sk,ss_hdemo_sk,ss_net_profit,ss_sales_price,ss_sold_date_sk,ss_store_sk]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet default.store_sales [ss_addr_sk,ss_cdemo_sk,ss_ext_sales_price,ss_ext_wholesale_cost,ss_hdemo_sk,ss_net_profit,ss_quantity,ss_sales_price,ss_sold_date_sk,ss_store_sk]
+                                InputAdapter
+                                  BroadcastExchange #2
+                                    WholeStageCodegen (1)
+                                      Filter [s_store_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.store [s_store_sk]
+                            InputAdapter
+                              BroadcastExchange #3
+                                WholeStageCodegen (2)
+                                  Project [ca_address_sk,ca_state]
+                                    Filter [ca_address_sk,ca_country,ca_state]
+                                      ColumnarToRow
+                                        InputAdapter
+                                          Scan parquet default.customer_address [ca_address_sk,ca_country,ca_state]
+                        InputAdapter
+                          BroadcastExchange #4
+                            WholeStageCodegen (3)
+                              Project [d_date_sk]
+                                Filter [d_date_sk,d_year]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet default.date_dim [d_date_sk,d_year]
+                    InputAdapter
+                      BroadcastExchange #5
+                        WholeStageCodegen (4)
+                          Filter [cd_demo_sk,cd_education_status,cd_marital_status]
+                            ColumnarToRow
+                              InputAdapter
+                                Scan parquet default.customer_demographics [cd_demo_sk,cd_education_status,cd_marital_status]
+                InputAdapter
+                  BroadcastExchange #6
+                    WholeStageCodegen (5)
+                      Filter [hd_demo_sk,hd_dep_count]
+                        ColumnarToRow
+                          InputAdapter
+                            Scan parquet default.household_demographics [hd_demo_sk,hd_dep_count]

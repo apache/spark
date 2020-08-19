@@ -27,8 +27,8 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
-import org.apache.spark.internal.config.Worker.WORKER_DECOMMISSION_ENABLED
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
 import org.apache.spark.resource.ResourceProfileManager
@@ -128,7 +128,7 @@ private[spark] class ExecutorAllocationManager(
   private val executorAllocationRatio =
     conf.get(DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO)
 
-  private val decommissionEnabled = conf.get(WORKER_DECOMMISSION_ENABLED)
+  private val decommissionEnabled = conf.get(DECOMMISSION_ENABLED)
 
   private val defaultProfileId = resourceProfileManager.defaultResourceProfile.id
 

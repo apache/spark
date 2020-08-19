@@ -24,8 +24,8 @@ import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Concat, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, SortOrder}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, RefreshResource}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, StaticSQLConf}
@@ -38,6 +38,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType
  * defined in the Catalyst module.
  */
 class SparkSqlParserSuite extends AnalysisTest {
+  import org.apache.spark.sql.catalyst.dsl.expressions._
 
   val newConf = new SQLConf
   private lazy val parser = new SparkSqlParser(newConf)
@@ -329,5 +330,45 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("LIST JAR \"abc.jar\"", ListJarsCommand(Array("abc.jar")))
     assertEqual("ADD FILE /path with space/abc.txt", AddFileCommand("/path with space/abc.txt"))
     assertEqual("ADD JAR /path with space/abc.jar", AddJarCommand("/path with space/abc.jar"))
+  }
+
+  test("SPARK-32608: script transform with row format delimit") {
+    assertEqual(
+      """
+        |SELECT TRANSFORM(a, b, c)
+        |  ROW FORMAT DELIMITED
+        |  FIELDS TERMINATED BY ','
+        |  COLLECTION ITEMS TERMINATED BY '#'
+        |  MAP KEYS TERMINATED BY '@'
+        |  LINES TERMINATED BY '\n'
+        |  NULL DEFINED AS 'null'
+        |  USING 'cat' AS (a, b, c)
+        |  ROW FORMAT DELIMITED
+        |  FIELDS TERMINATED BY ','
+        |  COLLECTION ITEMS TERMINATED BY '#'
+        |  MAP KEYS TERMINATED BY '@'
+        |  LINES TERMINATED BY '\n'
+        |  NULL DEFINED AS 'NULL'
+        |FROM testData
+      """.stripMargin,
+    ScriptTransformation(
+      Seq('a, 'b, 'c),
+      "cat",
+      Seq(AttributeReference("a", StringType)(),
+        AttributeReference("b", StringType)(),
+        AttributeReference("c", StringType)()),
+      UnresolvedRelation(TableIdentifier("testData")),
+      ScriptInputOutputSchema(
+        Seq(("TOK_TABLEROWFORMATFIELD", ","),
+          ("TOK_TABLEROWFORMATCOLLITEMS", "#"),
+          ("TOK_TABLEROWFORMATMAPKEYS", "@"),
+          ("TOK_TABLEROWFORMATLINES", "\n"),
+          ("TOK_TABLEROWFORMATNULL", "null")),
+        Seq(("TOK_TABLEROWFORMATFIELD", ","),
+          ("TOK_TABLEROWFORMATCOLLITEMS", "#"),
+          ("TOK_TABLEROWFORMATMAPKEYS", "@"),
+          ("TOK_TABLEROWFORMATLINES", "\n"),
+          ("TOK_TABLEROWFORMATNULL", "NULL")), None, None,
+        List.empty, List.empty, None, None, false)))
   }
 }
