@@ -32,6 +32,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_FILE_UPLOAD_PATH
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.util.{Clock, SystemClock, Utils}
@@ -321,6 +322,27 @@ private[spark] object KubernetesUtils extends Logging {
           .withServiceAccountName(account)
         .endSpec()
         .build()
+    }
+  }
+
+  /**
+   * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  def executorOffHeapMemorySizeAsMb(kubernetesConf: KubernetesExecutorConf): Int = {
+    val sizeInMB = Utils.memoryStringToMb(kubernetesConf.get(MEMORY_OFFHEAP_SIZE).toString)
+    checkOffHeapEnabled(kubernetesConf, sizeInMB).toInt
+  }
+
+  /**
+   * return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  def checkOffHeapEnabled(kubernetesConf: KubernetesExecutorConf, offHeapSize: Long): Long = {
+    if (kubernetesConf.get(MEMORY_OFFHEAP_ENABLED)) {
+      require(offHeapSize > 0,
+        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
+      offHeapSize
+    } else {
+      0
     }
   }
 }

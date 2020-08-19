@@ -205,6 +205,16 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(amountAndFormat(executor.container.getResources.getRequests.get("memory")) === "1450Mi")
   }
 
+  test("SPARK-32661 test executor offheap memory") {
+    baseConf.set(MEMORY_OFFHEAP_ENABLED, true)
+    baseConf.set("spark.memory.offHeap.size", "42m")
+
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
+    val executor = step.configurePod(SparkPod.initialPod())
+    // This is checking that basic executor + executorMemory = 1408 + 42 = 1450
+    assert(amountAndFormat(executor.container.getResources.getRequests.get("memory")) === "1450Mi")
+  }
+
   test("auth secret propagation") {
     val conf = baseConf.clone()
       .set(config.NETWORK_AUTH_ENABLED, true)

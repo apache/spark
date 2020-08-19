@@ -59,7 +59,8 @@ private[spark] class BasicExecutorFeatureStep(
     .getOrElse(math.max(
       (kubernetesConf.get(MEMORY_OVERHEAD_FACTOR) * executorMemoryMiB).toInt,
       MEMORY_OVERHEAD_MIN_MIB))
-  private val executorMemoryWithOverhead = executorMemoryMiB + memoryOverheadMiB
+  private val memoryOffHeapMiB = KubernetesUtils.executorOffHeapMemorySizeAsMb(kubernetesConf)
+  private val executorMemoryWithOverhead = executorMemoryMiB + memoryOverheadMiB + memoryOffHeapMiB
   private val executorMemoryTotal =
     if (kubernetesConf.get(APP_RESOURCE_TYPE) == Some(APP_RESOURCE_TYPE_PYTHON)) {
       executorMemoryWithOverhead +
