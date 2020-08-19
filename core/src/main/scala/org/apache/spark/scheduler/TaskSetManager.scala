@@ -479,8 +479,8 @@ private[spark] class TaskSetManager(
         // We used to log the time it takes to serialize the task, but task size is already
         // a good proxy to task serialization time.
         // val timeTaken = clock.getTime() - startTime
-        val taskName = s"task ${info.id} in stage ${taskSet.id}"
-        logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
+        val tName = taskName(taskId)
+        logInfo(s"Starting $tName ($host, executor ${info.executorId}, " +
           s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes) " +
           s"taskResourceAssignments ${taskResourceAssignments}")
 
@@ -489,7 +489,7 @@ private[spark] class TaskSetManager(
           taskId,
           attemptNum,
           execId,
-          taskName,
+          tName,
           index,
           task.partitionId,
           addedFiles,
@@ -507,6 +507,12 @@ private[spark] class TaskSetManager(
     } else {
       (None, false)
     }
+  }
+
+  def taskName(tid: Long): String = {
+    val info = taskInfos.get(tid)
+    assert(info.isDefined, s"Can not find TaskInfo for task (TID $tid)")
+    s"task ${info.get.id} in stage ${taskSet.id} (TID $tid)"
   }
 
   private def maybeFinishTaskSet(): Unit = {
@@ -743,9 +749,8 @@ private[spark] class TaskSetManager(
     // Kill any other attempts for the same task (since those are unnecessary now that one
     // attempt completed successfully).
     for (attemptInfo <- taskAttempts(index) if attemptInfo.running) {
-      logInfo(s"Killing attempt ${attemptInfo.attemptNumber} for task ${attemptInfo.id} " +
-        s"in stage ${taskSet.id} (TID ${attemptInfo.taskId}) on ${attemptInfo.host} " +
-        s"as the attempt ${info.attemptNumber} succeeded on ${info.host}")
+      logInfo(s"Killing attempt ${attemptInfo.attemptNumber} for ${taskName(attemptInfo.taskId)}" +
+        s" on ${attemptInfo.host} as the attempt ${info.attemptNumber} succeeded on ${info.host}")
       killedByOtherAttempt += attemptInfo.taskId
       sched.backend.killTask(
         attemptInfo.taskId,
@@ -755,17 +760,16 @@ private[spark] class TaskSetManager(
     }
     if (!successful(index)) {
       tasksSuccessful += 1
-      logInfo(s"Finished task ${info.id} in stage ${taskSet.id} (TID ${info.taskId}) in" +
-        s" ${info.duration} ms on ${info.host} (executor ${info.executorId})" +
-        s" ($tasksSuccessful/$numTasks)")
+      logInfo(s"Finished ${taskName(info.taskId)} in ${info.duration} ms " +
+        s"on ${info.host} (executor ${info.executorId}) ($tasksSuccessful/$numTasks)")
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
       if (tasksSuccessful == numTasks) {
         isZombie = true
       }
     } else {
-      logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
-        " because task " + index + " has already completed successfully")
+      logInfo(s"Ignoring task-finished event for ${taskName(info.taskId)} " +
+        s"because it has already completed successfully")
     }
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
@@ -806,8 +810,8 @@ private[spark] class TaskSetManager(
     copiesRunning(index) -= 1
     var accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty
     var metricPeaks: Array[Long] = Array.empty
-    val failureReason = s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid, ${info.host}," +
-      s" executor ${info.executorId}): ${reason.toErrorString}"
+    val failureReason = s"Lost ${taskName(tid)} (${info.host} " +
+      s"executor ${info.executorId}): ${reason.toErrorString}"
     val failureException: Option[Throwable] = reason match {
       case fetchFailed: FetchFailed =>
         logWarning(failureReason)
@@ -828,12 +832,11 @@ private[spark] class TaskSetManager(
         // ExceptionFailure's might have accumulator updates
         accumUpdates = ef.accums
         metricPeaks = ef.metricPeaks.toArray
+        val task = taskName(tid)
         if (ef.className == classOf[NotSerializableException].getName) {
           // If the task result wasn't serializable, there's no point in trying to re-execute it.
-          logError("Task %s in stage %s (TID %d) had a not serializable result: %s; not retrying"
-            .format(info.id, taskSet.id, tid, ef.description))
-          abort("Task %s in stage %s (TID %d) had a not serializable result: %s".format(
-            info.id, taskSet.id, tid, ef.description))
+          logError(s"$task had a not serializable result: ${ef.description}; not retrying")
+          abort(s"$task had a not serializable result: ${ef.description}")
           return
         }
         if (ef.className == classOf[TaskOutputFileAlreadyExistException].getName) {
@@ -866,8 +869,8 @@ private[spark] class TaskSetManager(
           logWarning(failureReason)
         } else {
           logInfo(
-            s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid) on ${info.host}, executor" +
-              s" ${info.executorId}: ${ef.className} (${ef.description}) [duplicate $dupCount]")
+            s"Lost $task on ${info.host}, executor ${info.executorId}: " +
+              s"${ef.className} (${ef.description}) [duplicate $dupCount]")
         }
         ef.exception
 
@@ -879,7 +882,7 @@ private[spark] class TaskSetManager(
         None
 
       case e: ExecutorLostFailure if !e.exitCausedByApp =>
-        logInfo(s"Task $tid failed because while it was being computed, its executor " +
+        logInfo(s"${taskName(tid)} failed because while it was being computed, its executor " +
           "exited for a reason unrelated to the task. Not counting this failure towards the " +
           "maximum number of failures for the task.")
         None
@@ -910,10 +913,10 @@ private[spark] class TaskSetManager(
     }
 
     if (successful(index)) {
-      logInfo(s"Task ${info.id} in stage ${taskSet.id} (TID $tid) failed, but the task will not" +
-        s" be re-executed (either because the task failed with a shuffle data fetch failure," +
-        s" so the previous stage needs to be re-run, or because a different copy of the task" +
-        s" has already succeeded).")
+      logInfo(s"${taskName(info.taskId)} failed, but the task will not" +
+        " be re-executed (either because the task failed with a shuffle data fetch failure," +
+        " so the previous stage needs to be re-run, or because a different copy of the task" +
+        " has already succeeded).")
     } else {
       addPendingTask(index)
     }

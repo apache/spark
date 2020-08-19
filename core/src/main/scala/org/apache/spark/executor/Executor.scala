@@ -336,8 +336,8 @@ private[spark] class Executor(
     extends Runnable {
 
     val taskId = taskDescription.taskId
-    val threadName = s"Executor task launch worker for task $taskId"
     val taskName = taskDescription.name
+    val threadName = s"Executor task launch worker for $taskName"
     val mdcProperties = taskDescription.properties.asScala
       .filter(_._1.startsWith("mdc.")).toSeq
 
@@ -364,7 +364,7 @@ private[spark] class Executor(
     @volatile var task: Task[Any] = _
 
     def kill(interruptThread: Boolean, reason: String): Unit = {
-      logInfo(s"Executor is trying to kill $taskName (TID $taskId), reason: $reason")
+      logInfo(s"Executor is trying to kill $taskName, reason: $reason")
       reasonIfKilled = Some(reason)
       if (task != null) {
         synchronized {
@@ -425,7 +425,7 @@ private[spark] class Executor(
       } else 0L
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = env.closureSerializer.newInstance()
-      logInfo(s"Running $taskName (TID $taskId)")
+      logInfo(s"Running $taskName")
       execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
       var taskStartTimeNs: Long = 0
       var taskStartCpu: Long = 0
@@ -459,7 +459,7 @@ private[spark] class Executor(
         // MapOutputTrackerMaster and its cache invalidation is not based on epoch numbers so
         // we don't need to make any special calls here.
         if (!isLocal) {
-          logDebug("Task " + taskId + "'s epoch is " + task.epoch)
+          logDebug(s"$taskName's epoch is ${task.epoch}")
           env.mapOutputTracker.asInstanceOf[MapOutputTrackerWorker].updateEpoch(task.epoch)
         }
 
@@ -485,7 +485,7 @@ private[spark] class Executor(
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
 
           if (freedMemory > 0 && !threwException) {
-            val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, TID = $taskId"
+            val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, $taskName"
             if (conf.get(UNSAFE_EXCEPTION_ON_MEMORY_LEAK)) {
               throw new SparkException(errMsg)
             } else {
@@ -495,7 +495,7 @@ private[spark] class Executor(
 
           if (releasedLocks.nonEmpty && !threwException) {
             val errMsg =
-              s"${releasedLocks.size} block locks were not released by TID = $taskId:\n" +
+              s"${releasedLocks.size} block locks were not released by $taskName\n" +
                 releasedLocks.mkString("[", ", ", "]")
             if (conf.get(STORAGE_EXCEPTION_PIN_LEAK)) {
               throw new SparkException(errMsg)
@@ -508,7 +508,7 @@ private[spark] class Executor(
           // uh-oh.  it appears the user code has caught the fetch-failure without throwing any
           // other exceptions.  Its *possible* this is what the user meant to do (though highly
           // unlikely).  So we will log an error and keep going.
-          logError(s"TID ${taskId} completed successfully though internally it encountered " +
+          logError(s"$taskName completed successfully though internally it encountered " +
             s"unrecoverable fetch failures!  Most likely this means user code is incorrectly " +
             s"swallowing Spark's internal ${classOf[FetchFailedException]}", fetchFailure)
         }
@@ -592,7 +592,7 @@ private[spark] class Executor(
         // directSend = sending directly back to the driver
         val serializedResult: ByteBuffer = {
           if (maxResultSize > 0 && resultSize > maxResultSize) {
-            logWarning(s"Finished $taskName (TID $taskId). Result is larger than maxResultSize " +
+            logWarning(s"Finished $taskName. Result is larger than maxResultSize " +
               s"(${Utils.bytesToString(resultSize)} > ${Utils.bytesToString(maxResultSize)}), " +
               s"dropping it.")
             ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
@@ -602,11 +602,10 @@ private[spark] class Executor(
               blockId,
               new ChunkedByteBuffer(serializedDirectResult.duplicate()),
               StorageLevel.MEMORY_AND_DISK_SER)
-            logInfo(
-              s"Finished $taskName (TID $taskId). $resultSize bytes result sent via BlockManager)")
+            logInfo(s"Finished $taskName. $resultSize bytes result sent via BlockManager)")
             ser.serialize(new IndirectTaskResult[Any](blockId, resultSize))
           } else {
-            logInfo(s"Finished $taskName (TID $taskId). $resultSize bytes result sent to driver")
+            logInfo(s"Finished $taskName. $resultSize bytes result sent to driver")
             serializedDirectResult
           }
         }
@@ -616,7 +615,7 @@ private[spark] class Executor(
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
       } catch {
         case t: TaskKilledException =>
-          logInfo(s"Executor killed $taskName (TID $taskId), reason: ${t.reason}")
+          logInfo(s"Executor killed $taskName, reason: ${t.reason}")
 
           val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
           // Here and below, put task metric peaks in a WrappedArray to expose them as a Seq
@@ -629,7 +628,7 @@ private[spark] class Executor(
         case _: InterruptedException | NonFatal(_) if
             task != null && task.reasonIfKilled.isDefined =>
           val killReason = task.reasonIfKilled.getOrElse("unknown reason")
-          logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
+          logInfo(s"Executor interrupted and killed $taskName, reason: $killReason")
 
           val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
           val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
@@ -643,7 +642,7 @@ private[spark] class Executor(
             // there was a fetch failure in the task, but some user code wrapped that exception
             // and threw something else.  Regardless, we treat it as a fetch failure.
             val fetchFailedCls = classOf[FetchFailedException].getName
-            logWarning(s"TID ${taskId} encountered a ${fetchFailedCls} and " +
+            logWarning(s"$taskName encountered a ${fetchFailedCls} and " +
               s"failed, but the ${fetchFailedCls} was hidden by another " +
               s"exception.  Spark is handling this like a fetch failure and ignoring the " +
               s"other exception: $t")
@@ -659,13 +658,13 @@ private[spark] class Executor(
         case t: Throwable if env.isStopped =>
           // Log the expected exception after executor.stop without stack traces
           // see: SPARK-19147
-          logError(s"Exception in $taskName (TID $taskId): ${t.getMessage}")
+          logError(s"Exception in $taskName: ${t.getMessage}")
 
         case t: Throwable =>
           // Attempt to exit cleanly by informing the driver of our failure.
           // If anything goes wrong (or this was a fatal exception), we will delegate to
           // the default uncaught exception handler, which will terminate the Executor.
-          logError(s"Exception in $taskName (TID $taskId)", t)
+          logError(s"Exception in $taskName", t)
 
           // SPARK-20904: Do not report failure to driver if if happened during shut down. Because
           // libraries may set up shutdown hooks that race with running tasks during shutdown,
