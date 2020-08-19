@@ -18,9 +18,10 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 
 /**
  * A special node that allows skipping query planning all the way to physical execution. This node
@@ -28,9 +29,19 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
  * land for some reason (e.g. V1 DataSource write execution). This will allow the metrics, and the
  * query plan to properly appear as part of the query execution.
  */
-case class AlreadyPlanned(physicalPlan: SparkPlan) extends LeafNode {
-  override val output: Seq[Attribute] = physicalPlan.output
-  override lazy val resolved: Boolean = false
+case class AlreadyPlanned(
+    output: Seq[Attribute],
+    physicalPlan: SparkPlan) extends LogicalPlan with MultiInstanceRelation {
+  override def children: Seq[LogicalPlan] = Nil
+  override lazy val resolved: Boolean = true
+  override def newInstance(): LogicalPlan = {
+    val newAttrs = output.map(a => a.exprId -> a.newInstance())
+    val attrMap = newAttrs.toMap
+    val projections = physicalPlan.output.map { o =>
+      Alias(o, o.name)(attrMap(o.exprId).exprId, o.qualifier, Option(o.metadata))
+    }
+    AlreadyPlanned(newAttrs.map(_._2), ProjectExec(projections, physicalPlan))
+  }
 }
 
 /** Query execution that skips re-analysis and planning. */
@@ -45,7 +56,7 @@ class AlreadyPlannedExecution(
 
 object AlreadyPlanned {
   def dataFrame(sparkSession: SparkSession, query: SparkPlan): DataFrame = {
-    val qe = new AlreadyPlannedExecution(sparkSession, AlreadyPlanned(query))
+    val qe = new AlreadyPlannedExecution(sparkSession, AlreadyPlanned(query.output, query))
     new Dataset[Row](qe, RowEncoder(qe.analyzed.schema))
   }
 }

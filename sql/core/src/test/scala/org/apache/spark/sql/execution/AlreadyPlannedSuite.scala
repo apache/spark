@@ -31,21 +31,50 @@ class AlreadyPlannedSuite extends SparkPlanTest with SharedSparkSession {
     checkAnswer(planned, identity, df.toDF().collect())
   }
 
-  test("planning on top won't work - filter") {
+  test("planning on top works - projection") {
     val df = spark.range(10)
     val planned = AlreadyPlanned.dataFrame(spark, df.queryExecution.sparkPlan)
 
-    val e = intercept[AnalysisException] {
-      planned.where('id < 5)
-    }
+    checkAnswer(
+      planned.withColumn("data", 'id + 1),
+      identity,
+      df.withColumn("data", 'id + 1).collect())
   }
 
-  test("planning on top won't work - joins") {
+  test("planning on top works - filter") {
     val df = spark.range(10)
     val planned = AlreadyPlanned.dataFrame(spark, df.queryExecution.sparkPlan)
 
-    intercept[AnalysisException] {
-      planned.where('id < 3).alias("l").join(planned.alias("r"), Seq("id"))
-    }
+    checkAnswer(planned.where('id < 5), identity, df.where('id < 5).toDF().collect())
+  }
+
+  test("planning on top works - joins") {
+    val df = spark.range(10)
+    val planned = AlreadyPlanned.dataFrame(spark, df.queryExecution.sparkPlan)
+
+    val plannedLeft = planned.alias("l")
+    val dfLeft = df.alias("l")
+    val plannedRight = planned.alias("r")
+    val dfRight = df.alias("r")
+
+    checkAnswer(
+      plannedLeft.where('id < 3).join(plannedRight, Seq("id")),
+      identity,
+      dfLeft.where('id < 3).join(dfRight, Seq("id")).collect())
+
+    checkAnswer(
+      plannedLeft.where('id < 3).join(plannedRight, plannedLeft("id") === plannedRight("id")),
+      identity,
+      dfLeft.where('id < 3).join(dfRight, dfLeft("id") === dfRight("id")).collect())
+
+    checkAnswer(
+      plannedLeft.join(plannedRight, Seq("id")).where('id < 3),
+      identity,
+      dfLeft.join(dfRight, Seq("id")).where('id < 3).collect())
+
+    checkAnswer(
+      plannedLeft.join(plannedRight, plannedLeft("id") === plannedRight("id")).where($"l.id" < 3),
+      identity,
+      dfLeft.join(dfRight, dfLeft("id") === dfRight("id")).where($"l.id" < 3).collect())
   }
 }
