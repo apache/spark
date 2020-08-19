@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
+import io.fabric8.kubernetes.api.model.Pod
+
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Worker
 
@@ -33,7 +35,7 @@ private[spark] trait ExternalShuffleSidecarSuite { k8sSuite: KubernetesSuite =>
       .set("spark.executor.instances", "3")
 
     runSparkApplicationAndVerifyCompletion(
-      appResource = PYSPARK_DECOMISSIONING,
+      appResource = PYSPARK_RESOURCE,
       mainClass = "",
       expectedLogOnCompletion = Seq(
         "Finished waiting, stopping Spark",
