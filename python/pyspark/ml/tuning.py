@@ -603,7 +603,9 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
             "seed": self.getSeed(),
         }
         for param_name, param_val in params.items():
-            _java_obj.set(param_name, param_val)
+            java_param = _java_obj.getParam(param_name)
+            pair = java_param.w(param_val)
+            _java_obj.set(pair)
 
         if self.subModels is not None:
             java_sub_models = [[sub_model._to_java() for sub_model in fold_sub_models]
@@ -962,7 +964,9 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
             "seed": self.getSeed(),
         }
         for param_name, param_val in params.items():
-            _java_obj.set(param_name, param_val)
+            java_param = _java_obj.getParam(param_name)
+            pair = java_param.w(param_val)
+            _java_obj.set(pair)
 
         if self.subModels is not None:
             java_sub_models = [sub_model._to_java() for sub_model in self.subModels]

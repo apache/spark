@@ -206,7 +206,8 @@ class CrossValidatorTests(SparkSessionTestCase):
             estimatorParamMaps=grid,
             evaluator=evaluator,
             collectSubModels=True,
-            numFolds=4
+            numFolds=4,
+            seed=42
         )
         cvModel = cv.fit(dataset)
         lrModel = cvModel.bestModel
@@ -580,7 +581,8 @@ class TrainValidationSplitTests(SparkSessionTestCase):
             estimator=lr,
             estimatorParamMaps=grid,
             evaluator=evaluator,
-            collectSubModels=True
+            collectSubModels=True,
+            seed=42
         )
         tvsModel = tvs.fit(dataset)
         lrModel = tvsModel.bestModel
