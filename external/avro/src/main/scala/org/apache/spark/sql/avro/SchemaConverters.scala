@@ -24,6 +24,7 @@ import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.LogicalTypes.{Date, Decimal, TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.Decimal.{maxPrecisionForBytes, minBytesForPrecision}
@@ -37,11 +38,20 @@ object SchemaConverters {
 
   private lazy val nullSchema = Schema.create(Schema.Type.NULL)
 
+  /**
+   * Internal wrapper for SQL data type and nullability.
+   *
+   * @since 2.4
+   */
+  @DeveloperApi
   case class SchemaType(dataType: DataType, nullable: Boolean)
 
   /**
    * Converts an Avro schema to a corresponding Spark SQL schema.
+   *
+   * @since 2.4
    */
+  @DeveloperApi
   def toSqlType(avroSchema: Schema): SchemaType = {
     toSqlTypeHelper(avroSchema, Set.empty)
   }
@@ -135,7 +145,10 @@ object SchemaConverters {
 
   /**
    * Converts a Spark SQL schema to a corresponding Avro schema.
+   *
+   * @since 2.4
    */
+  @DeveloperApi
   def toAvroType(
       catalystType: DataType,
       nullable: Boolean = false,
