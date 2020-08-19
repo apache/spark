@@ -58,10 +58,10 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   }
 
   protected def getOptionsWithoutPaths(map: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
-    val caseInsensitiveMap = CaseInsensitiveMap(map.asCaseSensitiveMap.asScala.toMap)
-    val caseInsensitiveMapWithoutPaths = caseInsensitiveMap - "paths" - "path"
-    new CaseInsensitiveStringMap(
-      caseInsensitiveMapWithoutPaths.asInstanceOf[CaseInsensitiveMap[String]].originalMap.asJava)
+    val withoutPath = map.asCaseSensitiveMap().asScala.filterKeys { k =>
+      !k.equalsIgnoreCase("path") && !k.equalsIgnoreCase("paths")
+    }
+    new CaseInsensitiveStringMap(withoutPath.asJava)
   }
 
   protected def getTableName(map: CaseInsensitiveStringMap, paths: Seq[String]): String = {
