@@ -1450,10 +1450,22 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
       val ds = sampledTestData.coalesce(1)
       ds.write.text(path.getAbsolutePath)
 
-      val readback = spark.read
+      val readback1 = spark.read
         .option("inferSchema", true).option("samplingRatio", 0.1)
         .csv(path.getCanonicalPath)
-      assert(readback.schema == new StructType().add("_c0", IntegerType))
+      assert(readback1.schema == new StructType().add("_c0", IntegerType))
+
+      withClue("SPARK-32621: 'path' option can cause issues while inferring schema") {
+        // During infer, "path" option gets added again to the paths that have already been listed.
+        // This results in reading more data than necessary and causes different schema to be
+        // inferred when sampling ratio is involved.
+        val readback2 = spark.read
+          .option("inferSchema", true).option("samplingRatio", 0.1)
+          .option("path", path.getCanonicalPath)
+          .format("csv")
+          .load
+        assert(readback2.schema == new StructType().add("_c0", IntegerType))
+      }
     })
   }
 
