@@ -249,6 +249,7 @@ Management
     SparkFiles.getRootDirectory
     StorageLevel.DISK_ONLY
     StorageLevel.DISK_ONLY_2
+    StorageLevel.DISK_ONLY_3
     StorageLevel.MEMORY_AND_DISK
     StorageLevel.MEMORY_AND_DISK_2
     StorageLevel.MEMORY_ONLY

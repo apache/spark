@@ -147,8 +147,7 @@ flake8 checks failed."
     fi
 
     echo "starting $FLAKE8_BUILD test..."
-    FLAKE8_REPORT=$( ($FLAKE8_BUILD . --count --select=E901,E999,F821,F822,F823 \
-                     --max-line-length=100 --show-source --statistics) 2>&1)
+    FLAKE8_REPORT=$( ($FLAKE8_BUILD --append-config dev/tox.ini --count --show-source --statistics .) 2>&1)
     FLAKE8_STATUS=$?
 
     if [ "$FLAKE8_STATUS" -ne 0 ]; then

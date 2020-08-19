@@ -1877,6 +1877,16 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .createOptional
 
+  private[spark] val DECOMMISSIONED_EXECUTORS_REMEMBER_AFTER_REMOVAL_TTL =
+    ConfigBuilder("spark.executor.decommission.removed.infoCacheTTL")
+      .doc("Duration for which a decommissioned executor's information will be kept after its" +
+        "removal. Keeping the decommissioned info after removal helps pinpoint fetch failures to " +
+        "decommissioning even after the mapper executor has been decommissioned. This allows " +
+        "eager recovery from fetch failures caused by decommissioning, increasing job robustness.")
+      .version("3.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefaultString("5m")
+
   private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
     .doc("Staging directory used while submitting applications.")
     .version("2.0.0")
@@ -1909,8 +1919,8 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val ALLOW_SPARK_CONTEXT_IN_EXECUTORS =
-    ConfigBuilder("spark.driver.allowSparkContextInExecutors")
+  private[spark] val EXECUTOR_ALLOW_SPARK_CONTEXT =
+    ConfigBuilder("spark.executor.allowSparkContext")
       .doc("If set to true, SparkContext can be created in executors.")
       .version("3.0.1")
       .booleanConf

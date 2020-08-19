@@ -98,7 +98,7 @@ class ProfilerTests2(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_profiler import *
+    from pyspark.tests.test_profiler import *  # noqa: F401
 
     try:
         import xmlrunner

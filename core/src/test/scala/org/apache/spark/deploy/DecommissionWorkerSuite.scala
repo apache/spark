@@ -84,6 +84,19 @@ class DecommissionWorkerSuite
     }
   }
 
+  // Unlike TestUtils.withListener, it also waits for the job to be done
+  def withListener(sc: SparkContext, listener: RootStageAwareListener)
+                  (body: SparkListener => Unit): Unit = {
+    sc.addSparkListener(listener)
+    try {
+      body(listener)
+      sc.listenerBus.waitUntilEmpty()
+      listener.waitForJobDone()
+    } finally {
+      sc.listenerBus.removeListener(listener)
+    }
+  }
+
   test("decommission workers should not result in job failure") {
     val maxTaskFailures = 2
     val numTimesToKillWorkers = maxTaskFailures + 1
@@ -109,7 +122,7 @@ class DecommissionWorkerSuite
         }
       }
     }
-    TestUtils.withListener(sc, listener) { _ =>
+    withListener(sc, listener) { _ =>
       val jobResult = sc.parallelize(1 to 1, 1).map { _ =>
         Thread.sleep(5 * 1000L); 1
       }.count()
@@ -164,7 +177,7 @@ class DecommissionWorkerSuite
           }
         }
       }
-      TestUtils.withListener(sc, listener) { _ =>
+      withListener(sc, listener) { _ =>
         val jobResult = sc.parallelize(1 to 2, 2).mapPartitionsWithIndex((pid, _) => {
           val sleepTimeSeconds = if (pid == 0) 1 else 10
           Thread.sleep(sleepTimeSeconds * 1000L)
@@ -190,10 +203,11 @@ class DecommissionWorkerSuite
     }
   }
 
-  test("decommission workers ensure that fetch failures lead to rerun") {
+  def testFetchFailures(initialSleepMillis: Int): Unit = {
     createWorkers(2)
     sc = createSparkContext(
       config.Tests.TEST_NO_STAGE_RETRY.key -> "false",
+      "spark.test.executor.decommission.initial.sleep.millis" -> initialSleepMillis.toString,
       config.UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE.key -> "true")
     val executorIdToWorkerInfo = getExecutorToWorkerAssignments
     val executorToDecom = executorIdToWorkerInfo.keysIterator.next
@@ -212,22 +226,29 @@ class DecommissionWorkerSuite
       override def handleRootTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
         val taskInfo = taskEnd.taskInfo
         if (taskInfo.executorId == executorToDecom && taskInfo.attemptNumber == 0 &&
-          taskEnd.stageAttemptId == 0) {
+          taskEnd.stageAttemptId == 0 && taskEnd.stageId == 0) {
           decommissionWorkerOnMaster(workerToDecom,
             "decommission worker after task on it is done")
         }
       }
     }
-    TestUtils.withListener(sc, listener) { _ =>
+    withListener(sc, listener) { _ =>
       val jobResult = sc.parallelize(1 to 2, 2).mapPartitionsWithIndex((_, _) => {
         val executorId = SparkEnv.get.executorId
-        val sleepTimeSeconds = if (executorId == executorToDecom) 10 else 1
-        Thread.sleep(sleepTimeSeconds * 1000L)
+        val context = TaskContext.get()
+        // Only sleep in the first attempt to create the required window for decommissioning.
+        // Subsequent attempts don't need to be delayed to speed up the test.
+        if (context.attemptNumber() == 0 && context.stageAttemptNumber() == 0) {
+          val sleepTimeSeconds = if (executorId == executorToDecom) 10 else 1
+          Thread.sleep(sleepTimeSeconds * 1000L)
+        }
         List(1).iterator
       }, preservesPartitioning = true)
         .repartition(1).mapPartitions(iter => {
         val context = TaskContext.get()
         if (context.attemptNumber == 0 && context.stageAttemptNumber() == 0) {
+          // Wait a bit for the decommissioning to be triggered in the listener
+          Thread.sleep(5000)
           // MapIndex is explicitly -1 to force the entire host to be decommissioned
           // However, this will cause both the tasks in the preceding stage since the host here is
           // "localhost" (shortcoming of this single-machine unit test in that all the workers
@@ -244,6 +265,14 @@ class DecommissionWorkerSuite
     // 6 tasks: 2 from first stage, 2 rerun again from first stage, 2nd stage attempt 1 and 2.
     val tasksSeen = listener.getTasksFinished()
     assert(tasksSeen.size === 6, s"Expected 6 tasks but got $tasksSeen")
+  }
+
+  test("decommission stalled workers ensure that fetch failures lead to rerun") {
+    testFetchFailures(3600 * 1000)
+  }
+
+  test("decommission eager workers ensure that fetch failures lead to rerun") {
+    testFetchFailures(0)
   }
 
   private abstract class RootStageAwareListener extends SparkListener {
@@ -265,6 +294,7 @@ class DecommissionWorkerSuite
     override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
       jobEnd.jobResult match {
         case JobSucceeded => jobDone.set(true)
+        case JobFailed(exception) => logError(s"Job failed", exception)
       }
     }
 
@@ -272,7 +302,15 @@ class DecommissionWorkerSuite
 
     protected def handleRootTaskStart(start: SparkListenerTaskStart) = {}
 
+    private def getSignature(taskInfo: TaskInfo, stageId: Int, stageAttemptId: Int):
+    String = {
+      s"${stageId}:${stageAttemptId}:" +
+        s"${taskInfo.index}:${taskInfo.attemptNumber}-${taskInfo.status}"
+    }
+
     override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+      val signature = getSignature(taskStart.taskInfo, taskStart.stageId, taskStart.stageAttemptId)
+      logInfo(s"Task started: $signature")
       if (isRootStageId(taskStart.stageId)) {
         rootTasksStarted.add(taskStart.taskInfo)
         handleRootTaskStart(taskStart)
@@ -280,8 +318,7 @@ class DecommissionWorkerSuite
     }
 
     override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
-      val taskSignature = s"${taskEnd.stageId}:${taskEnd.stageAttemptId}:" +
-        s"${taskEnd.taskInfo.index}:${taskEnd.taskInfo.attemptNumber}"
+      val taskSignature = getSignature(taskEnd.taskInfo, taskEnd.stageId, taskEnd.stageAttemptId)
       logInfo(s"Task End $taskSignature")
       tasksFinished.add(taskSignature)
       if (isRootStageId(taskEnd.stageId)) {
@@ -291,8 +328,13 @@ class DecommissionWorkerSuite
     }
 
     def getTasksFinished(): Seq[String] = {
-      assert(jobDone.get(), "Job isn't successfully done yet")
-      tasksFinished.asScala.toSeq
+      tasksFinished.asScala.toList
+    }
+
+    def waitForJobDone(): Unit = {
+      eventually(timeout(10.seconds), interval(100.milliseconds)) {
+        assert(jobDone.get(), "Job isn't successfully done yet")
+      }
     }
   }
 

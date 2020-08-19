@@ -213,9 +213,11 @@ case class BroadcastHashJoinExec(
     (broadcastRelation, relationTerm)
   }
 
-  protected override def prepareRelation(ctx: CodegenContext): (String, Boolean) = {
+  protected override def prepareRelation(ctx: CodegenContext): HashedRelationInfo = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
-    (relationTerm, broadcastRelation.value.keyIsUnique)
+    HashedRelationInfo(relationTerm,
+      broadcastRelation.value.keyIsUnique,
+      broadcastRelation.value == EmptyHashedRelation)
   }
 
   /**

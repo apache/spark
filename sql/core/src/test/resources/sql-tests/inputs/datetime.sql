@@ -48,6 +48,8 @@ select year('1500-01-01'), month('1500-01-01'), dayOfYear('1500-01-01');
 
 select date '2019-01-01\t';
 select timestamp '2019-01-01\t';
+select date '2020-01-01中文';
+select timestamp '2019-01-01中文';
 
 -- time add/sub
 select timestamp'2011-11-11 11:11:11' + interval '2' day;

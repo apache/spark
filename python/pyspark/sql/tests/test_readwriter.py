@@ -201,7 +201,7 @@ class ReadwriterV2Tests(ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_readwriter import *
+    from pyspark.sql.tests.test_readwriter import *  # noqa: F401
 
     try:
         import xmlrunner

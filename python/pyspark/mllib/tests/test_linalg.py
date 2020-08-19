@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import sys
 import array as pyarray
 import unittest
 
@@ -639,7 +638,7 @@ class SciPyTests(MLlibTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mllib.tests.test_linalg import *
+    from pyspark.mllib.tests.test_linalg import *  # noqa: F401
 
     try:
         import xmlrunner

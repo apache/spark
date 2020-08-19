@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CPUS_PER_TASK
 import org.apache.spark.internal.config.Status._
@@ -868,13 +868,17 @@ private[spark] class AppStatusListener(
     // check if there is a new peak value for any of the executor level memory metrics
     // for the live UI. SparkListenerExecutorMetricsUpdate events are only processed
     // for the live UI.
-    event.executorUpdates.foreach { case (_, peakUpdates) =>
+    event.executorUpdates.foreach { case (key, peakUpdates) =>
       liveExecutors.get(event.execId).foreach { exec =>
         if (exec.peakExecutorMetrics.compareAndUpdatePeakValues(peakUpdates)) {
-          maybeUpdate(exec, now)
+          update(exec, now)
         }
       }
+
+      // Update stage level peak executor metrics.
+      updateStageLevelPeakExecutorMetrics(key._1, key._2, event.execId, peakUpdates, now)
     }
+
     // Flush updates if necessary. Executor heartbeat is an event that happens periodically. Flush
     // here to ensure the staleness of Spark UI doesn't last more than
     // `max(heartbeat interval, liveUpdateMinFlushPeriod)`.
@@ -885,17 +889,38 @@ private[spark] class AppStatusListener(
     }
   }
 
-  override def onStageExecutorMetrics(executorMetrics: SparkListenerStageExecutorMetrics): Unit = {
+  override def onStageExecutorMetrics(event: SparkListenerStageExecutorMetrics): Unit = {
     val now = System.nanoTime()
 
     // check if there is a new peak value for any of the executor level memory metrics,
     // while reading from the log. SparkListenerStageExecutorMetrics are only processed
     // when reading logs.
-    liveExecutors.get(executorMetrics.execId).orElse(
-      deadExecutors.get(executorMetrics.execId)).foreach { exec =>
-        if (exec.peakExecutorMetrics.compareAndUpdatePeakValues(executorMetrics.executorMetrics)) {
-          update(exec, now)
-        }
+    liveExecutors.get(event.execId).orElse(
+      deadExecutors.get(event.execId)).foreach { exec =>
+      if (exec.peakExecutorMetrics.compareAndUpdatePeakValues(event.executorMetrics)) {
+        update(exec, now)
+      }
+    }
+
+    // Update stage level peak executor metrics.
+    updateStageLevelPeakExecutorMetrics(
+      event.stageId, event.stageAttemptId, event.execId, event.executorMetrics, now)
+  }
+
+  private def updateStageLevelPeakExecutorMetrics(
+      stageId: Int,
+      stageAttemptId: Int,
+      executorId: String,
+      executorMetrics: ExecutorMetrics,
+      now: Long): Unit = {
+    Option(liveStages.get((stageId, stageAttemptId))).foreach { stage =>
+      if (stage.peakExecutorMetrics.compareAndUpdatePeakValues(executorMetrics)) {
+        update(stage, now)
+      }
+      val esummary = stage.executorSummary(executorId)
+      if (esummary.peakExecutorMetrics.compareAndUpdatePeakValues(executorMetrics)) {
+        update(esummary, now)
+      }
     }
   }
 
