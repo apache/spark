@@ -17,15 +17,19 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import scala.concurrent.duration._
+
+import org.scalatest.concurrent.Eventually
+
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, Range, SubqueryAlias, View}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types._
 
 class InMemorySessionCatalogSuite extends SessionCatalogSuite {
@@ -45,7 +49,7 @@ class InMemorySessionCatalogSuite extends SessionCatalogSuite {
  * signatures but do not extend a common parent. This is largely by design but
  * unfortunately leads to very similar test code in two places.
  */
-abstract class SessionCatalogSuite extends AnalysisTest {
+abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   protected val utils: CatalogTestUtils
 
   protected val isHiveExternalCatalog = false
@@ -63,6 +67,16 @@ abstract class SessionCatalogSuite extends AnalysisTest {
 
   private def withEmptyCatalog(f: SessionCatalog => Unit): Unit = {
     val catalog = new SessionCatalog(newEmptyCatalog())
+    catalog.createDatabase(newDb("default"), ignoreIfExists = true)
+    try {
+      f(catalog)
+    } finally {
+      catalog.reset()
+    }
+  }
+
+  private def withConfAndEmptyCatalog(conf: SQLConf)(f: SessionCatalog => Unit): Unit = {
+    val catalog = new SessionCatalog(newEmptyCatalog(), new SimpleFunctionRegistry(), conf)
     catalog.createDatabase(newDb("default"), ignoreIfExists = true)
     try {
       f(catalog)
@@ -1639,6 +1653,29 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       // override in `AnalysisException`,so here we get the root cause
       // exception message for check.
       assert(cause.cause.get.getMessage.contains("Actual error"))
+    }
+  }
+
+  test("expire table relation cache if TTL is configured") {
+    case class TestCommand() extends Command
+
+    val conf = new SQLConf()
+    conf.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, 1L)
+
+    withConfAndEmptyCatalog(conf) { catalog =>
+      val table = QualifiedTableName(catalog.getCurrentDatabase, "test")
+
+      // First, make sure the test table is not cached.
+      assert(catalog.getCachedTable(table) === null)
+
+      catalog.cacheTable(table, TestCommand())
+      assert(catalog.getCachedTable(table) !== null)
+
+      // Wait until the cache expiration.
+      eventually(timeout(3.seconds)) {
+        // And the cache is gone.
+        assert(catalog.getCachedTable(table) === null)
+      }
     }
   }
 }

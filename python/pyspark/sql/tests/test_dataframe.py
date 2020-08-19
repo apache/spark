@@ -379,8 +379,6 @@ class DataFrameTests(ReusedSQLTestCase):
 
     # add tests for SPARK-23647 (test more types for hint)
     def test_extended_hint_types(self):
-        from pyspark.sql import DataFrame
-
         df = self.spark.range(10e10).toDF("id")
         such_a_nice_list = ["itworks1", "itworks2", "itworks3"]
         hinted_df = df.hint("my awesome hint", 1.2345, "what", such_a_nice_list)

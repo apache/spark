@@ -26,7 +26,8 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
-import org.scalatest.Matchers._
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
@@ -1267,7 +1268,7 @@ class DataFrameSuite extends QueryTest
       s"""+----------------+
          ||               a|
          |+----------------+
-         ||[1 -> a, 2 -> b]|
+         ||{1 -> a, 2 -> b}|
          |+----------------+
          |""".stripMargin)
     val df3 = Seq(((1, "a"), 0), ((2, "b"), 0)).toDF("a", "b")
@@ -1275,8 +1276,8 @@ class DataFrameSuite extends QueryTest
       s"""+------+---+
          ||     a|  b|
          |+------+---+
-         ||[1, a]|  0|
-         ||[2, b]|  0|
+         ||{1, a}|  0|
+         ||{2, b}|  0|
          |+------+---+
          |""".stripMargin)
   }

@@ -20,10 +20,8 @@ import warnings
 from collections import namedtuple
 
 from pyspark import since
-from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.udf import UserDefinedFunction
-from pyspark.sql.types import IntegerType, StringType, StructType
+from pyspark.sql.types import StructType
 
 
 Database = namedtuple("Database", "name description locationUri")
@@ -44,19 +42,16 @@ class Catalog(object):
         self._jsparkSession = sparkSession._jsparkSession
         self._jcatalog = sparkSession._jsparkSession.catalog()
 
-    @ignore_unicode_prefix
     @since(2.0)
     def currentDatabase(self):
         """Returns the current default database in this session."""
         return self._jcatalog.currentDatabase()
 
-    @ignore_unicode_prefix
     @since(2.0)
     def setCurrentDatabase(self, dbName):
         """Sets the current default database in this session."""
         return self._jcatalog.setCurrentDatabase(dbName)
 
-    @ignore_unicode_prefix
     @since(2.0)
     def listDatabases(self):
         """Returns a list of databases available across all sessions."""
@@ -70,7 +65,6 @@ class Catalog(object):
                 locationUri=jdb.locationUri()))
         return databases
 
-    @ignore_unicode_prefix
     @since(2.0)
     def listTables(self, dbName=None):
         """Returns a list of tables/views in the specified database.
@@ -92,7 +86,6 @@ class Catalog(object):
                 isTemporary=jtable.isTemporary()))
         return tables
 
-    @ignore_unicode_prefix
     @since(2.0)
     def listFunctions(self, dbName=None):
         """Returns a list of functions registered in the specified database.
@@ -113,7 +106,6 @@ class Catalog(object):
                 isTemporary=jfunction.isTemporary()))
         return functions
 
-    @ignore_unicode_prefix
     @since(2.0)
     def listColumns(self, tableName, dbName=None):
         """Returns a list of columns for the given table/view in the specified database.

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, FunctionResourceType, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1962,7 +1962,6 @@ class DDLParserSuite extends AnalysisTest {
       """
         |CREATE OR REPLACE GLOBAL TEMPORARY VIEW a.b.c
         |(col1, col3 COMMENT 'hello')
-        |TBLPROPERTIES('prop1Key'="prop1Val")
         |COMMENT 'BLABLA'
         |AS SELECT * FROM tab1
       """.stripMargin
@@ -1971,7 +1970,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq("a", "b", "c"),
       Seq("col1" -> None, "col3" -> Some("hello")),
       Some("BLABLA"),
-      Map("prop1Key" -> "prop1Val"),
+      Map(),
       Some("SELECT * FROM tab1"),
       parsePlan("SELECT * FROM tab1"),
       false,
@@ -2003,6 +2002,17 @@ class DDLParserSuite extends AnalysisTest {
     intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
   }
 
+  test("SPARK-32374: create temporary view with properties not allowed") {
+    assertUnsupported(
+      sql = """
+        |CREATE OR REPLACE TEMPORARY VIEW a.b.c
+        |(col1, col3 COMMENT 'hello')
+        |TBLPROPERTIES('prop1Key'="prop1Val")
+        |AS SELECT * FROM tab1
+      """.stripMargin,
+      containsThesePhrases = Seq("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"))
+  }
+
   test("SHOW TBLPROPERTIES table") {
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c"),
@@ -2016,40 +2026,40 @@ class DDLParserSuite extends AnalysisTest {
   test("DESCRIBE FUNCTION") {
     comparePlans(
       parsePlan("DESC FUNCTION a"),
-      DescribeFunctionStatement(Seq("a"), false))
+      DescribeFunction(UnresolvedFunc(Seq("a")), false))
     comparePlans(
       parsePlan("DESCRIBE FUNCTION a"),
-      DescribeFunctionStatement(Seq("a"), false))
+      DescribeFunction(UnresolvedFunc(Seq("a")), false))
     comparePlans(
       parsePlan("DESCRIBE FUNCTION a.b.c"),
-      DescribeFunctionStatement(Seq("a", "b", "c"), false))
+      DescribeFunction(UnresolvedFunc(Seq("a", "b", "c")), false))
     comparePlans(
       parsePlan("DESCRIBE FUNCTION EXTENDED a.b.c"),
-      DescribeFunctionStatement(Seq("a", "b", "c"), true))
+      DescribeFunction(UnresolvedFunc(Seq("a", "b", "c")), true))
   }
 
   test("SHOW FUNCTIONS") {
     comparePlans(
       parsePlan("SHOW FUNCTIONS"),
-      ShowFunctionsStatement(true, true, None, None))
+      ShowFunctions(None, true, true, None))
     comparePlans(
       parsePlan("SHOW USER FUNCTIONS"),
-      ShowFunctionsStatement(true, false, None, None))
+      ShowFunctions(None, true, false, None))
     comparePlans(
       parsePlan("SHOW user FUNCTIONS"),
-      ShowFunctionsStatement(true, false, None, None))
+      ShowFunctions(None, true, false, None))
     comparePlans(
       parsePlan("SHOW SYSTEM FUNCTIONS"),
-      ShowFunctionsStatement(false, true, None, None))
+      ShowFunctions(None, false, true, None))
     comparePlans(
       parsePlan("SHOW ALL FUNCTIONS"),
-      ShowFunctionsStatement(true, true, None, None))
+      ShowFunctions(None, true, true, None))
     comparePlans(
       parsePlan("SHOW FUNCTIONS LIKE 'funct*'"),
-      ShowFunctionsStatement(true, true, Some("funct*"), None))
+      ShowFunctions(None, true, true, Some("funct*")))
     comparePlans(
       parsePlan("SHOW FUNCTIONS LIKE a.b.c"),
-      ShowFunctionsStatement(true, true, None, Some(Seq("a", "b", "c"))))
+      ShowFunctions(Some(UnresolvedFunc(Seq("a", "b", "c"))), true, true, None))
     val sql = "SHOW other FUNCTIONS"
     intercept(sql, s"$sql not supported")
   }
@@ -2057,19 +2067,19 @@ class DDLParserSuite extends AnalysisTest {
   test("DROP FUNCTION") {
     comparePlans(
       parsePlan("DROP FUNCTION a"),
-      DropFunctionStatement(Seq("a"), false, false))
+      DropFunction(UnresolvedFunc(Seq("a")), false, false))
     comparePlans(
       parsePlan("DROP FUNCTION a.b.c"),
-      DropFunctionStatement(Seq("a", "b", "c"), false, false))
+      DropFunction(UnresolvedFunc(Seq("a", "b", "c")), false, false))
     comparePlans(
       parsePlan("DROP TEMPORARY FUNCTION a.b.c"),
-      DropFunctionStatement(Seq("a", "b", "c"), false, true))
+      DropFunction(UnresolvedFunc(Seq("a", "b", "c")), false, true))
     comparePlans(
       parsePlan("DROP FUNCTION IF EXISTS a.b.c"),
-      DropFunctionStatement(Seq("a", "b", "c"), true, false))
+      DropFunction(UnresolvedFunc(Seq("a", "b", "c")), true, false))
     comparePlans(
       parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a.b.c"),
-      DropFunctionStatement(Seq("a", "b", "c"), true, true))
+      DropFunction(UnresolvedFunc(Seq("a", "b", "c")), true, true))
   }
 
   test("CREATE FUNCTION") {
@@ -2107,6 +2117,15 @@ class DDLParserSuite extends AnalysisTest {
 
     intercept("CREATE FUNCTION a as 'fun' USING OTHER 'o'",
       "Operation not allowed: CREATE FUNCTION with resource type 'other'")
+  }
+
+  test("REFRESH FUNCTION") {
+    parseCompare("REFRESH FUNCTION c",
+      RefreshFunction(UnresolvedFunc(Seq("c"))))
+    parseCompare("REFRESH FUNCTION b.c",
+      RefreshFunction(UnresolvedFunc(Seq("b", "c"))))
+    parseCompare("REFRESH FUNCTION a.b.c",
+      RefreshFunction(UnresolvedFunc(Seq("a", "b", "c"))))
   }
 
   private case class TableSpec(

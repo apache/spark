@@ -405,7 +405,7 @@ class FileBasedDataSourceSuite extends QueryTest
         ""
       }
       def errorMessage(format: String): String = {
-        s"$format data source does not support unknown data type."
+        s"$format data source does not support null data type."
       }
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
         withTempDir { dir =>
@@ -633,13 +633,15 @@ class FileBasedDataSourceSuite extends QueryTest
 
       assert(fileList.toSet === expectedFileList.toSet)
 
-      val fileList2 = spark.read.format("binaryFile")
-        .option("recursiveFileLookup", true)
-        .option("pathGlobFilter", "*.bin")
-        .load(dataPath)
-        .select("path").collect().map(_.getString(0))
+      withClue("SPARK-32368: 'recursiveFileLookup' and 'pathGlobFilter' can be case insensitive") {
+        val fileList2 = spark.read.format("binaryFile")
+          .option("RecuRsivefileLookup", true)
+          .option("PaThglobFilter", "*.bin")
+          .load(dataPath)
+          .select("path").collect().map(_.getString(0))
 
-      assert(fileList2.toSet === expectedFileList.filter(_.endsWith(".bin")).toSet)
+        assert(fileList2.toSet === expectedFileList.filter(_.endsWith(".bin")).toSet)
+      }
     }
   }
 

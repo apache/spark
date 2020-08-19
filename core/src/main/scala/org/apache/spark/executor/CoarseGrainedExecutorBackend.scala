@@ -40,7 +40,7 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceProfile._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc._
-import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
+import org.apache.spark.scheduler.{ExecutorDecommissionInfo, ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, SignalUtils, ThreadUtils, Utils}
@@ -64,7 +64,6 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   private[this] val stopping = new AtomicBoolean(false)
   var executor: Executor = null
-  @volatile private var decommissioned = false
   @volatile var driver: Option[RpcEndpointRef] = None
 
   // If this CoarseGrainedExecutorBackend is changed to support multiple threads, then this may need
@@ -79,6 +78,8 @@ private[spark] class CoarseGrainedExecutorBackend(
    * Exposed for testing only.
    */
   private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
+
+  @volatile private var decommissioned = false
 
   override def onStart(): Unit = {
     logInfo("Registering PWR handler.")
@@ -140,13 +141,13 @@ private[spark] class CoarseGrainedExecutorBackend(
   def extractLogUrls: Map[String, String] = {
     val prefix = "SPARK_LOG_URL_"
     sys.env.filterKeys(_.startsWith(prefix))
-      .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2))
+      .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2)).toMap
   }
 
   def extractAttributes: Map[String, String] = {
     val prefix = "SPARK_EXECUTOR_ATTRIBUTE_"
     sys.env.filterKeys(_.startsWith(prefix))
-      .map(e => (e._1.substring(prefix.length).toUpperCase(Locale.ROOT), e._2))
+      .map(e => (e._1.substring(prefix.length).toUpperCase(Locale.ROOT), e._2)).toMap
   }
 
   override def receive: PartialFunction[Any, Unit] = {
@@ -166,11 +167,15 @@ private[spark] class CoarseGrainedExecutorBackend(
         exitExecutor(1, "Received LaunchTask command but executor was null")
       } else {
         if (decommissioned) {
-          logError("Asked to launch a task while decommissioned.")
+          val msg = "Asked to launch a task while decommissioned."
+          logError(msg)
           driver match {
             case Some(endpoint) =>
               logInfo("Sending DecommissionExecutor to driver.")
-              endpoint.send(DecommissionExecutor(executorId))
+              endpoint.send(
+                DecommissionExecutor(
+                  executorId,
+                  ExecutorDecommissionInfo(msg, isHostDecommissioned = false)))
             case _ =>
               logError("No registered driver to send Decommission to.")
           }
@@ -210,6 +215,10 @@ private[spark] class CoarseGrainedExecutorBackend(
     case UpdateDelegationTokens(tokenBytes) =>
       logInfo(s"Received tokens of ${tokenBytes.length} bytes")
       SparkHadoopUtil.get.addDelegationTokens(tokenBytes, env.conf)
+
+    case DecommissionSelf =>
+      logInfo("Received decommission self")
+      decommissionSelf()
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -259,24 +268,79 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   private def decommissionSelf(): Boolean = {
-    logInfo("Decommissioning self w/sync")
+    val msg = "Decommissioning self w/sync"
+    logInfo(msg)
     try {
       decommissioned = true
       // Tell master we are are decommissioned so it stops trying to schedule us
       if (driver.nonEmpty) {
-        driver.get.askSync[Boolean](DecommissionExecutor(executorId))
+        driver.get.askSync[Boolean](DecommissionExecutor(
+            executorId, ExecutorDecommissionInfo(msg, false)))
       } else {
         logError("No driver to message decommissioning.")
       }
       if (executor != null) {
         executor.decommission()
       }
-      logInfo("Done decommissioning self.")
+      // Shutdown the executor once all tasks are gone & any configured migrations completed.
+      // Detecting migrations completion doesn't need to be perfect and we want to minimize the
+      // overhead for executors that are not in decommissioning state as overall that will be
+      // more of the executors. For example, this will not catch a block which is already in
+      // the process of being put from a remote executor before migration starts. This trade-off
+      // is viewed as acceptable to minimize introduction of any new locking structures in critical
+      // code paths.
+
+      val shutdownThread = new Thread("wait-for-blocks-to-migrate") {
+        override def run(): Unit = {
+          var lastTaskRunningTime = System.nanoTime()
+          val sleep_time = 1000 // 1s
+          // This config is internal and only used by unit tests to force an executor
+          // to hang around for longer when decommissioned.
+          val initialSleepMillis = env.conf.getInt(
+            "spark.test.executor.decommission.initial.sleep.millis", sleep_time)
+          if (initialSleepMillis > 0) {
+            Thread.sleep(initialSleepMillis)
+          }
+          while (true) {
+            logInfo("Checking to see if we can shutdown.")
+            if (executor == null || executor.numRunningTasks == 0) {
+              if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
+                logInfo("No running tasks, checking migrations")
+                val (migrationTime, allBlocksMigrated) = env.blockManager.lastMigrationInfo()
+                // We can only trust allBlocksMigrated boolean value if there were no tasks running
+                // since the start of computing it.
+                if (allBlocksMigrated && (migrationTime > lastTaskRunningTime)) {
+                  logInfo("No running tasks, all blocks migrated, stopping.")
+                  exitExecutor(0, "Finished decommissioning", notifyDriver = true)
+                } else {
+                  logInfo("All blocks not yet migrated.")
+                }
+              } else {
+                logInfo("No running tasks, no block migration configured, stopping.")
+                exitExecutor(0, "Finished decommissioning", notifyDriver = true)
+              }
+            } else {
+              logInfo("Blocked from shutdown by running ${executor.numRunningtasks} tasks")
+              // If there is a running task it could store blocks, so make sure we wait for a
+              // migration loop to complete after the last task is done.
+              // Note: this is only advanced if there is a running task, if there
+              // is no running task but the blocks are not done migrating this does not
+              // move forward.
+              lastTaskRunningTime = System.nanoTime()
+            }
+            Thread.sleep(sleep_time)
+          }
+        }
+      }
+      shutdownThread.setDaemon(true)
+      shutdownThread.start()
+
+      logInfo("Will exit when finished decommissioning")
       // Return true since we are handling a signal
       true
     } catch {
       case e: Exception =>
-        logError(s"Error ${e} during attempt to decommission self")
+        logError("Unexpected error while decommissioning self", e)
         false
     }
   }
@@ -304,8 +368,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     val createFn: (RpcEnv, Arguments, SparkEnv, ResourceProfile) =>
       CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env, resourceProfile) =>
       new CoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
-        arguments.bindAddress, arguments.hostname, arguments.cores, arguments.userClassPath, env,
-        arguments.resourcesFileOpt, resourceProfile)
+        arguments.bindAddress, arguments.hostname, arguments.cores, arguments.userClassPath.toSeq,
+        env, arguments.resourcesFileOpt, resourceProfile)
     }
     run(parseArguments(args, this.getClass.getCanonicalName.stripSuffix("$")), createFn)
     System.exit(0)
