@@ -36,7 +36,7 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 // A variant of `AvroKeyOutputFormat`, which is used to inject the custom `RecordWriterFactory` so
 // that we can set avro file metadata.
 class SparkAvroKeyOutputFormat extends AvroKeyOutputFormat<GenericRecord> {
-  public SparkAvroKeyOutputFormat(Map<String, String> metadata) {
+  SparkAvroKeyOutputFormat(Map<String, String> metadata) {
     super(new SparkRecordWriterFactory(metadata));
   }
 
