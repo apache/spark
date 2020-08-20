@@ -65,10 +65,6 @@ object CatalystErrors {
         s"pivot column data type ${pivotCol.dataType.catalogString}")
   }
 
-  def unresolvedRelationForTimeTravelError(): Throwable = {
-    new AnalysisException("Cannot specify time travel in multiple formats.")
-  }
-
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
       s"Cannot write, IF NOT EXISTS is not supported for table: $tableName")
