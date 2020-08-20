@@ -231,8 +231,9 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       .option("PATH", "2")
       .option("Path", "3")
       .option("patH", "4")
+      .option("path", "5")
       .load()
-    assert(LastOptions.parameters("path") == "4")
+    assert(LastOptions.parameters("path") == "5")
   }
 
   test("SPARK-32364: path argument of save function should override all existing options") {
@@ -1110,7 +1111,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     def verifyLoadFails(f: () => DataFrame): Unit = {
       val e = intercept[AnalysisException](f())
       assert(e.getMessage.contains(
-        "Either remove the option or put it into the load() parameters"))
+        "Either remove the path option if it's the same as the path parameter"))
     }
 
     val path = "/tmp"
