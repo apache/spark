@@ -852,6 +852,7 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive/test")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalog/v2/utils")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hive")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/v2/avro")))
   }
 
   private def ignoreClasspaths(classpaths: Seq[Classpath]): Seq[Classpath] = {

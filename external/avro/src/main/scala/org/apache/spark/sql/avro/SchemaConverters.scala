@@ -41,7 +41,7 @@ object SchemaConverters {
   /**
    * Internal wrapper for SQL data type and nullability.
    *
-   * @since 2.4
+   * @since 2.4.0
    */
   @DeveloperApi
   case class SchemaType(dataType: DataType, nullable: Boolean)
@@ -49,7 +49,7 @@ object SchemaConverters {
   /**
    * Converts an Avro schema to a corresponding Spark SQL schema.
    *
-   * @since 2.4
+   * @since 2.4.0
    */
   @DeveloperApi
   def toSqlType(avroSchema: Schema): SchemaType = {
@@ -146,7 +146,7 @@ object SchemaConverters {
   /**
    * Converts a Spark SQL schema to a corresponding Avro schema.
    *
-   * @since 2.4
+   * @since 2.4.0
    */
   @DeveloperApi
   def toAvroType(
