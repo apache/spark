@@ -39,7 +39,7 @@ trait LocalSparkContext extends Logging
    * was created temporarily. When the migration work is completed, this method will be
    * renamed to `sc` and the variable `sc` will be deleted.
    */
-  def sparkContext: SparkContext = {
+  def sparkCtx: SparkContext = {
     if (_sc == null) {
       _sc = new SparkContext(_conf)
     }
