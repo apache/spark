@@ -58,7 +58,7 @@ class BlockManagerMasterEndpoint(
   private val executorIdToLocalDirs =
     CacheBuilder
       .newBuilder()
-      .maximumSize(conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE))
+      .maximumSize(conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE).toLong)
       .build[String, Array[String]]()
 
   // Mapping from external shuffle service block manager id to the block statuses.
