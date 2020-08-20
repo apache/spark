@@ -113,7 +113,7 @@ class CrossValidatorTests(SparkSessionTestCase):
         for index in range(len(cvModel.avgMetrics)):
             self.assertTrue(abs(cvModel.avgMetrics[index] - cvModelCopied.avgMetrics[index])
                             < 0.0001)
-        # SPARK-32092: CrossValidator.copy() needs to copy all existing params
+        # SPARK-32092: CrossValidatorModel.copy() needs to copy all existing params
         for param in [
             lambda x: x.getNumFolds(),
             lambda x: x.getFoldCol(),
