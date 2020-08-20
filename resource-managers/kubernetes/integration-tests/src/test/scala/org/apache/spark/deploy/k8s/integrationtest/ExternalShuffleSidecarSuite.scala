@@ -17,6 +17,7 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 import io.fabric8.kubernetes.api.model.Pod
+import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Worker
@@ -24,7 +25,7 @@ import org.apache.spark.internal.config.Worker
 private[spark] trait ExternalShuffleSidecarSuite { k8sSuite: KubernetesSuite =>
 
   import ExternalShuffleSidecarSuite._
-  import KubernetesSuite.k8sTestTag
+  import KubernetesSuite._
 
   test("Test external shuffle service", k8sTestTag) {
     sparkAppConf
@@ -54,15 +55,38 @@ private[spark] trait ExternalShuffleSidecarSuite { k8sSuite: KubernetesSuite =>
   def checkESSIsLaunchedAndUsed(executorPod: Pod): Unit = {
     doBasicExecutorPyPodCheck(executorPod)
     assert(executorPod.getSpec.getContainers.get(1).getName === "spark-kubernetes-shuffle")
-    val expectedLogOnCompletion = Seq("MAGIC CHEESE")
-    Eventually.eventually(patienceTimeout, patienceInterval) {
-      expectedLogOnCompletion.foreach { e =>
-        assert(kubernetesTestComponents.kubernetesClient
+    val expectedShuffleLogOnCompletion = Seq("MAGIC CHEESE")
+    val expectedExecLogOnCompletion = Seq("MAGIC EXEC CHEESE")
+
+    var shuffleLogText = ""
+    var execLogText = ""
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      try {
+        shuffleLogText = kubernetesTestComponents.kubernetesClient
           .pods()
-          .withName(pod.getMetadata.getName)
+          .withName(executorPod.getMetadata.getName)
+          .inContainer("spark-kubernetes-shuffle")
           .getLog
+      } catch {
+        case e: Exception =>
+          logWarning("Not able to update log text", e)
+          shuffleLogText = s"${shuffleLogText} no update ${e} for spark-kubernetes-shuffle\n"
+      }
+      try {
+        execLogText = kubernetesTestComponents.kubernetesClient
+          .pods()
+          .withName(executorPod.getMetadata.getName)
+          .inContainer("spark-kubernetes-executor")
+          .getLog
+      } catch {
+        case e: Exception =>
+          logWarning("Not able to update log text", e)
+          execLogText = s"${execLogText} no update ${e} for spark-kubernetes-executor\n"
+      }
+      expectedShuffleLogOnCompletion.foreach { e =>
+        assert(shuffleLogText
           .contains(e),
-          s"The application did not complete, did not find str ${e}")
+          s"The application did not complete, did not find str ${e} in ${shuffleLogText}")
       }
     }
   }
