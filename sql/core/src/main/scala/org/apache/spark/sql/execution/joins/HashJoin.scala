@@ -155,7 +155,9 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     val joinRow = new JoinedRow
     val joinKeys = streamSideKeyGenerator()
 
-    if (hashedRelation.keyIsUnique) {
+    if (hashedRelation == EmptyHashedRelation) {
+      Iterator.empty
+    } else if (hashedRelation.keyIsUnique) {
       streamIter.flatMap { srow =>
         joinRow.withLeft(srow)
         val matched = hashedRelation.getValue(joinKeys(srow))
