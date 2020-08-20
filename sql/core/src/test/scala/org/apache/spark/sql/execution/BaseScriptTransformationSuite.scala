@@ -146,7 +146,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     }
   }
 
-  test("SPARK-25990: TRANSFORM should handle schema less correctly (no serde)") {
+  test("SPARK-32388: TRANSFORM should handle schema less correctly (no serde)") {
     assume(TestUtils.testCommandAvailable("python"))
     val scriptFilePath = getTestResourcePath("test_script.py")
 
@@ -176,6 +176,39 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         df.select(
           'a.cast("string").as("key"),
           'b.cast("string").as("value")).collect())
+
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("a").expr,
+            df.col("b").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("key", StringType)(),
+            AttributeReference("value", StringType)()),
+          child = child,
+          ioschema = defaultIOSchema.copy(schemaLess = true)
+        ),
+        df.select(
+          'a.cast("string").as("key"),
+          'b.cast("string").as("value")).collect())
+
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("a").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("key", StringType)(),
+            AttributeReference("value", StringType)()),
+          child = child,
+          ioschema = defaultIOSchema.copy(schemaLess = true)
+        ),
+        df.select(
+          'a.cast("string").as("key"),
+          lit(null)).collect())
     }
   }
 

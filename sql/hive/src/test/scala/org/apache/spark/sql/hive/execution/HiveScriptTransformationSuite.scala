@@ -23,7 +23,7 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TestUtils}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveUtils
@@ -196,11 +196,13 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
              |SELECT TRANSFORM(a, b, c, d, e)
              |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
              |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t',
              |    'serialization.last.column.takes.rest' = 'true'
              |  )
              |  USING 'cat'
              |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
              |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t',
              |    'serialization.last.column.takes.rest' = 'true'
              |  )
              |FROM v
@@ -223,12 +225,14 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
              |SELECT TRANSFORM(a, b, c, d, e)
              |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
              |  WITH SERDEPROPERTIES (
-             |    'serialization.last.column.takes.rest' = 'true'
+             |    'field.delim' = '\t',
+             |    'serialization.last.column.takes.rest' = 'false'
              |  )
              |  USING 'cat'
              |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
              |  WITH SERDEPROPERTIES (
-             |    'serialization.last.column.takes.rest' = 'true'
+             |    'field.delim' = '\t',
+             |    'serialization.last.column.takes.rest' = 'false'
              |  )
              |FROM v
         """.stripMargin),
@@ -246,11 +250,13 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
              |SELECT TRANSFORM(a, b)
              |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
              |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t',
              |    'serialization.last.column.takes.rest' = 'true'
              |  )
              |  USING 'cat'
              |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
              |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t',
              |    'serialization.last.column.takes.rest' = 'true'
              |  )
              |FROM v
@@ -261,7 +267,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           'b.cast("string").as("value")).collect())
 
       // In hive default serde mode, if we don't define output schema,
-      // when output column size < 2， it will return null for deficiency
+      // when output column size < 2, it will return null for deficiency
       // output schema (key: String, value: String)
       checkAnswer(
         sql(
@@ -269,11 +275,13 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
              |SELECT TRANSFORM(a)
              |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
              |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t',
              |    'serialization.last.column.takes.rest' = 'true'
              |  )
              |  USING 'cat'
              |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
              |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t',
              |    'serialization.last.column.takes.rest' = 'true'
              |  )
              |FROM v
