@@ -46,18 +46,14 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
  *                                  /path/to/outputPath/.spark-staging-{jobId}/_temporary/
  *                                  {appAttemptId}/_temporary/{taskAttemptId}/a=1/b=1/xxx.parquet.
  *                                  1. When [[FileOutputCommitter]] algorithm version set to 1,
- *                                  we firstly move files from task attempt
- *                                  paths to corresponding partition directories under the staging
- *                                  directory during committing job, e.g.
- *                                  /path/to/outputPath/.spark-staging-{jobId}/a=1/b=1.
- *                                  Secondly, move the partition directories under staging
- *                                  directory to destination path, e.g. /path/to/outputPath/a=1/b=1
+ *                                  we firstly move files from task attempt paths to
+ *                                  /path/to/outputPath/.spark-staging-{jobId}/a=1/b=1,
+ *                                  then move them to /path/to/outputPath/a=1/b=1
  *                                  2. When [[FileOutputCommitter]] algorithm version set to 2,
- *                                  committing tasks directly move files to staging directory,
- *                                  e.g. /path/to/outputPath/.spark-staging-{jobId}/a=1/b=1.
- *                                  Then move this partition directories under staging directory
- *                                  to destination path during job committing, e.g.
- *                                  /path/to/outputPath/a=1/b=1
+ *                                  committing tasks directly move files to
+ *                                  /path/to/outputPath/.spark-staging-{jobId}/a=1/b=1,
+ *                                  then move them to /path/to/outputPath/a=1/b=1 at the end of job
+ *                                  committing.
  */
 class HadoopMapReduceCommitProtocol(
     jobId: String,

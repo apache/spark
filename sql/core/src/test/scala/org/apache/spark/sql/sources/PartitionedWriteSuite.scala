@@ -20,6 +20,7 @@ package org.apache.spark.sql.sources
 import java.io.File
 import java.sql.Timestamp
 
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
 import org.apache.spark.TestUtils
@@ -193,7 +194,7 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
 
 /**
  * A file commit protocol with pre-created partition file. when try to overwrite partition dir
- * in dynamic partition mode, FileAlreadyExist exception would raise without SPARK-31968
+ * in dynamic partition mode, FileAlreadyExist exception would raise without SPARK-27194
  */
 private class PartitionFileExistCommitProtocol(
     jobId: String,
@@ -202,7 +203,7 @@ private class PartitionFileExistCommitProtocol(
   extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite) {
   override def setupJob(jobContext: JobContext): Unit = {
     super.setupJob(jobContext)
-    val stagingDir = new File(path, s".spark-staging-$jobId")
+    val stagingDir = new File(new Path(path).toUri.getPath, s".spark-staging-$jobId")
     stagingDir.mkdirs()
     val stagingPartDir = new File(stagingDir, "p1=2")
     stagingPartDir.mkdirs()
