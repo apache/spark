@@ -296,7 +296,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   override def beforeEach(): Unit = {
     super.beforeEach()
     firstInit = true
-    setConf("spark.master" -> "local[2]", "spark.app.name" -> "DAGSchedulerSuite") {}
+    setConf("spark.master" -> "local[2]", "spark.app.name" -> "DAGSchedulerSuite")
   }
 
   override def sparkCtx: SparkContext = {
