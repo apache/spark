@@ -157,7 +157,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
   }
 
   test("SPARK-32388: TRANSFORM should handle schema less correctly (hive serde)") {
-
     withTempView("v") {
       val df = Seq(
         (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),

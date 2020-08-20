@@ -147,9 +147,6 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   }
 
   test("SPARK-32388: TRANSFORM should handle schema less correctly (no serde)") {
-    assume(TestUtils.testCommandAvailable("python"))
-    val scriptFilePath = getTestResourcePath("test_script.py")
-
     withTempView("v") {
       val df = Seq(
         (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
@@ -166,7 +163,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             df.col("c").expr,
             df.col("d").expr,
             df.col("e").expr),
-          script = s"python $scriptFilePath",
+          script = "cat",
           output = Seq(
             AttributeReference("key", StringType)(),
             AttributeReference("value", StringType)()),
