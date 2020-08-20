@@ -181,7 +181,6 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
             """.stripMargin)
 
           val df = Seq((1, 2)).toDF("c1", "p1")
-          // trigger ut
           df.write
             .partitionBy("p1")
             .mode("overwrite")
