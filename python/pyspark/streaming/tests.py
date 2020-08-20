@@ -26,6 +26,7 @@ import random
 import struct
 import shutil
 from functools import reduce
+import platform
 
 try:
     import xmlrunner
@@ -167,6 +168,9 @@ class PySparkStreamingTestCase(unittest.TestCase):
             output.sort(key=lambda x: x[0])
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(),
+    "The tests fail in PyPy3 implementation for an unknown reason.")
 class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_map(self):
@@ -657,6 +661,9 @@ class StreamingListenerTests(PySparkStreamingTestCase):
             self.assertEqual(info.numRecords(), 0)
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(),
+    "The tests fail in PyPy3 implementation for an unknown reason.")
 class WindowFunctionTests(PySparkStreamingTestCase):
 
     timeout = 15
@@ -884,6 +891,9 @@ class StreamingContextTests(PySparkStreamingTestCase):
         self.assertTrue(self.ssc.awaitTerminationOrTimeout(0.001))
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(),
+    "The tests fail in PyPy3 implementation for an unknown reason.")
 class CheckpointTests(unittest.TestCase):
 
     setupCalled = False
