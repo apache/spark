@@ -26,13 +26,15 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.resource.ResourceProfile
 
 /** Manages a local `sc` `SparkContext` variable, correctly stopping it after each test. */
-trait LocalSparkContext extends Logging
-  with BeforeAndAfterEach with BeforeAndAfterAll { self: Suite =>
+trait LocalSparkContext extends BeforeAndAfterEach
+  with BeforeAndAfterAll with Logging{ self: Suite =>
 
-  private var _conf: SparkConf = new SparkConf()
+  private var _conf: SparkConf = defaultSparkConf
 
   @transient var sc: SparkContext = _
   @transient private var _sc: SparkContext = _
+
+  def sparkConf: SparkConf = _conf
 
   /**
    * Currently, we are focusing on the reconstruction of LocalSparkContext, so this method
@@ -48,8 +50,8 @@ trait LocalSparkContext extends Logging
 
   def setConf(pairs: (String, String)*): Unit = {
     if (_sc != null) {
-      logWarning("Because SparkContext already initialized, " +
-        "since configurations won't take effect in this case.")
+      logWarning(s"These configurations ${pairs.mkString(", ")} won't take effect" +
+        "since the SparkContext has been already initialized.")
     }
     pairs.foreach { case (k, v) => _conf.set(k, v) }
   }
@@ -72,8 +74,11 @@ trait LocalSparkContext extends Logging
     LocalSparkContext.stop(_sc)
     ResourceProfile.clearDefaultProfile()
     _sc = null
-    _conf = new SparkConf()
+    _conf = defaultSparkConf
   }
+
+  private def defaultSparkConf: SparkConf = new SparkConf()
+    .setMaster("local[2]").setAppName(s"${this.getClass.getSimpleName}")
 
 }
 
