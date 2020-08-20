@@ -24,8 +24,6 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{InputSplit, JobContext, RecordReader, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.CombineFileInputFormat
 
-import org.apache.spark.util.HadoopFSUtils
-
 /**
  * A [[org.apache.hadoop.mapreduce.lib.input.CombineFileInputFormat CombineFileInputFormat]] for
  * reading whole text files. Each file is read as key-value pair, where the key is the file path and
