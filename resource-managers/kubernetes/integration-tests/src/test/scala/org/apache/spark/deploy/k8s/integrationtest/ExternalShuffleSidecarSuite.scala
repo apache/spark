@@ -58,8 +58,7 @@ private[spark] trait ExternalShuffleSidecarSuite { k8sSuite: KubernetesSuite =>
     val expectedShuffleLogOnCompletion = Seq(
       "ExternalShuffleService: Started daemon with process name",
       "INFO ExternalShuffleService: Starting shuffle service on port 7337",
-      "INFO ExternalShuffleBlockResolver: Registered executor ExternalShuffleBlockResolver.AppExecId",
-      "CHEETOS")
+      "INFO ExternalShuffleBlockResolver: Registered executor ExternalShuffleBlockResolver.AppExecId")
     val expectedExecLogOnCompletion = Seq(
       "BlockManager: Registering executor with local external shuffle service.",
       "BlockManager: external shuffle service port = 7337")
