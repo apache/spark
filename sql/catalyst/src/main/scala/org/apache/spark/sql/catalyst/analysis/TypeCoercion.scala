@@ -329,7 +329,7 @@ object TypeCoercion {
   object WidenSetOperationTypes extends Rule[LogicalPlan] {
 
     def apply(plan: LogicalPlan): LogicalPlan = {
-      val exprIdMapArray = mutable.ArrayBuffer[(ExprId, (ExprId, DataType))]()
+      val exprIdMapArray = mutable.ArrayBuffer[(ExprId, Attribute)]()
       val newPlan = plan resolveOperatorsUp {
         case s @ Except(left, right, isAll) if s.childrenResolved &&
           left.output.length == right.output.length && !s.resolved =>
@@ -359,9 +359,7 @@ object TypeCoercion {
         case p if p.childrenResolved && p.missingInput.nonEmpty =>
           p.mapExpressions { _.transform {
             case a: AttributeReference if p.missingInput.contains(a) &&
-              exprIdMap.contains(a.exprId) =>
-              val (exprId, dt) = exprIdMap(a.exprId)
-              AttributeReference(a.name, dt, a.nullable, a.metadata)(exprId, a.qualifier)
+              exprIdMap.contains(a.exprId) => exprIdMap(a.exprId)
           }
         }
       }
@@ -369,7 +367,7 @@ object TypeCoercion {
 
     /** Build new children with the widest types for each attribute among all the children */
     private def buildNewChildrenWithWiderTypes(children: Seq[LogicalPlan])
-      : (Seq[LogicalPlan], Seq[(ExprId, (ExprId, DataType))]) = {
+      : (Seq[LogicalPlan], Seq[(ExprId, Attribute)]) = {
       require(children.forall(_.output.length == children.head.output.length))
 
       // Get a sequence of data types, each of which is the widest type of this specific attribute
@@ -408,11 +406,11 @@ object TypeCoercion {
 
     /** Given a plan, add an extra project on top to widen some columns' data types. */
     private def widenTypes(plan: LogicalPlan, targetTypes: Seq[DataType])
-      : (LogicalPlan, Seq[(ExprId, (ExprId, DataType))]) = {
+      : (LogicalPlan, Seq[(ExprId, Attribute)]) = {
       val (casted, newExprIds) = plan.output.zip(targetTypes).map {
         case (e, dt) if e.dataType != dt =>
           val alias = Alias(Cast(e, dt), e.name)()
-          (alias, Some(e.exprId -> (alias.exprId, dt)))
+          (alias, Some(e.exprId -> alias.toAttribute))
         case (e, _) =>
           (e, None)
       }.unzip
