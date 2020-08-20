@@ -593,7 +593,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case planned: AlreadyPlanned => planned.physicalPlan :: Nil
       case d: DataWritingCommand => DataWritingCommandExec(d, planLater(d.query)) :: Nil
       case r: RunnableCommand => ExecutedCommandExec(r) :: Nil
 

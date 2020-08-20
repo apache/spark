@@ -120,10 +120,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
       catalog match {
         case staging: StagingTableCatalog =>
-          AtomicCreateTableAsSelectExec(staging, ident, parts, planLater(query),
+          AtomicCreateTableAsSelectExec(staging, ident, parts, query, planLater(query),
             propsWithOwner, writeOptions, ifNotExists) :: Nil
         case _ =>
-          CreateTableAsSelectExec(catalog, ident, parts, planLater(query),
+          CreateTableAsSelectExec(catalog, ident, parts, query, planLater(query),
             propsWithOwner, writeOptions, ifNotExists) :: Nil
       }
 
@@ -150,6 +150,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             staging,
             ident,
             parts,
+            query,
             planLater(query),
             propsWithOwner,
             writeOptions,
@@ -159,6 +160,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             catalog,
             ident,
             parts,
+            query,
             planLater(query),
             propsWithOwner,
             writeOptions,
@@ -168,7 +170,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case AppendData(r: DataSourceV2Relation, query, writeOptions, _) =>
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
-          AppendDataExecV1(v1, writeOptions.asOptions, planLater(query)) :: Nil
+          AppendDataExecV1(v1, writeOptions.asOptions, query) :: Nil
         case v2 =>
           AppendDataExec(v2, writeOptions.asOptions, planLater(query)) :: Nil
       }
@@ -182,7 +184,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }.toArray
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
-          OverwriteByExpressionExecV1(v1, filters, writeOptions.asOptions, planLater(query)) :: Nil
+          OverwriteByExpressionExecV1(v1, filters, writeOptions.asOptions, query) :: Nil
         case v2 =>
           OverwriteByExpressionExec(v2, filters, writeOptions.asOptions, planLater(query)) :: Nil
       }
