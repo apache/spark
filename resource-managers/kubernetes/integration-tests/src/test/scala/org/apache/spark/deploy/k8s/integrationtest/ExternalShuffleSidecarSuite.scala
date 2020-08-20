@@ -39,9 +39,7 @@ private[spark] trait ExternalShuffleSidecarSuite { k8sSuite: KubernetesSuite =>
       mainClass = "",
       expectedLogOnCompletion = Seq(
         "Finished waiting, stopping Spark",
-        "decommissioning executor",
         "Final accumulator value is: 100",
-        "hopesAndDreams",
       ),
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
@@ -56,6 +54,17 @@ private[spark] trait ExternalShuffleSidecarSuite { k8sSuite: KubernetesSuite =>
   def checkESSIsLaunchedAndUsed(executorPod: Pod): Unit = {
     doBasicExecutorPyPodCheck(executorPod)
     assert(executorPod.getSpec.getContainers.get(1).getName === "spark-kubernetes-shuffle")
+    val expectedLogOnCompletion = Seq("MAGIC CHEESE")
+    Eventually.eventually(patienceTimeout, patienceInterval) {
+      expectedLogOnCompletion.foreach { e =>
+        assert(kubernetesTestComponents.kubernetesClient
+          .pods()
+          .withName(pod.getMetadata.getName)
+          .getLog
+          .contains(e),
+          s"The application did not complete, did not find str ${e}")
+      }
+    }
   }
 
 }
