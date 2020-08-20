@@ -34,7 +34,7 @@ trait LocalSparkContext extends BeforeAndAfterEach
   @transient var sc: SparkContext = _
   @transient private var _sc: SparkContext = _
 
-  def sparkConf: SparkConf = _conf
+  def getSparkConf: SparkConf = _conf
 
   /**
    * Currently, we are focusing on the reconstruction of LocalSparkContext, so this method
