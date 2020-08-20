@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
-import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins._
@@ -1250,6 +1250,58 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
             case _: ShuffledHashJoinExec => true }.size === 1)
           // Same result between shuffled hash join and sort merge join
           checkAnswer(shjDF, smjResult)
+        }
+      }
+    }
+  }
+
+  test("SPARK-32649: Optimize BHJ/SHJ inner/semi join with empty hashed relation") {
+    val inputDFs = Seq(
+      // Test empty build side for inner join
+      (spark.range(30).selectExpr("id as k1"),
+        spark.range(10).selectExpr("id as k2").filter("k2 < -1"),
+        "inner"),
+      // Test empty build side for semi join
+      (spark.range(30).selectExpr("id as k1"),
+        spark.range(10).selectExpr("id as k2").filter("k2 < -1"),
+        "semi")
+    )
+    inputDFs.foreach { case (df1, df2, joinType) =>
+      // Test broadcast hash join
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "200") {
+        val bhjCodegenDF = df1.join(df2, $"k1" === $"k2", joinType)
+        assert(bhjCodegenDF.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_ : BroadcastHashJoinExec) => true
+          case WholeStageCodegenExec(ProjectExec(_, _ : BroadcastHashJoinExec)) => true
+        }.size === 1)
+        checkAnswer(bhjCodegenDF, Seq.empty)
+
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+          val bhjNonCodegenDF = df1.join(df2, $"k1" === $"k2", joinType)
+          assert(bhjNonCodegenDF.queryExecution.executedPlan.collect {
+            case _: BroadcastHashJoinExec => true }.size === 1)
+          checkAnswer(bhjNonCodegenDF, Seq.empty)
+        }
+      }
+
+      // Test shuffled hash join
+      withSQLConf(SQLConf.PREFER_SORTMERGEJOIN.key -> "false",
+        // Set broadcast join threshold and number of shuffle partitions,
+        // as shuffled hash join depends on these two configs.
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+        val shjCodegenDF = df1.join(df2, $"k1" === $"k2", joinType)
+        assert(shjCodegenDF.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_ : ShuffledHashJoinExec) => true
+          case WholeStageCodegenExec(ProjectExec(_, _ : ShuffledHashJoinExec)) => true
+        }.size === 1)
+        checkAnswer(shjCodegenDF, Seq.empty)
+
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+          val shjNonCodegenDF = df1.join(df2, $"k1" === $"k2", joinType)
+          assert(shjNonCodegenDF.queryExecution.executedPlan.collect {
+            case _: ShuffledHashJoinExec => true }.size === 1)
+          checkAnswer(shjNonCodegenDF, Seq.empty)
         }
       }
     }
