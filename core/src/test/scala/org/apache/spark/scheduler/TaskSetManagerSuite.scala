@@ -652,8 +652,7 @@ class TaskSetManagerSuite
     assert(manager.resourceOffer("execA", "host1", ANY)._1.isDefined)
   }
 
-  test("SPARK-32653: Decommissioned host/executor should not be used to calculate locality " +
-    "levels") {
+  test("SPARK-32653: Decommissioned host should not be used to calculate locality levels") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc)
     val backend = mock(classOf[SchedulerBackend])
@@ -667,16 +666,43 @@ class TaskSetManagerSuite
     sched.addExecutor(exec1, host0)
 
     val taskSet = FakeTask.createTaskSet(2,
-      Seq(TaskLocation(host0, exec0)),
-      Seq(TaskLocation(host0, exec1)))
+      Seq(ExecutorCacheTaskLocation(host0, exec0)),
+      Seq(ExecutorCacheTaskLocation(host0, exec1)))
     sched.submitTasks(taskSet)
     val manager = sched.taskSetManagerForAttempt(0, 0).get
 
     assert(manager.myLocalityLevels === Array(PROCESS_LOCAL, NODE_LOCAL, ANY))
 
+    // Decommission all executors on host0, to mimic CoarseGrainedSchedulerBackend.
     sched.executorDecommission(exec0, ExecutorDecommissionInfo("test", true))
+    sched.executorDecommission(exec1, ExecutorDecommissionInfo("test", true))
 
     assert(manager.myLocalityLevels === Array(ANY))
+  }
+
+  test("SPARK-32653: Decommissioned executor should not be used to calculate locality levels") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc)
+    val backend = mock(classOf[SchedulerBackend])
+    doNothing().when(backend).reviveOffers()
+    sched.initialize(backend)
+
+    val exec0 = "exec0"
+    val exec1 = "exec1"
+    val host0 = "host0"
+    sched.addExecutor(exec0, host0)
+    sched.addExecutor(exec1, host0)
+
+    val taskSet = FakeTask.createTaskSet(1, Seq(ExecutorCacheTaskLocation(host0, exec0)))
+    sched.submitTasks(taskSet)
+    val manager = sched.taskSetManagerForAttempt(0, 0).get
+
+    assert(manager.myLocalityLevels === Array(PROCESS_LOCAL, NODE_LOCAL, ANY))
+
+    // Decommission the only executor (without the host) that the task is interested in running on.
+    sched.executorDecommission(exec0, ExecutorDecommissionInfo("test", false))
+
+    assert(manager.myLocalityLevels === Array(NODE_LOCAL, ANY))
   }
 
   test("test RACK_LOCAL tasks") {

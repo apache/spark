@@ -1084,11 +1084,11 @@ private[spark] class TaskSchedulerImpl(
   }
 
   // exposed for test
-  protected def isExecutorDecommissioned(execId: String): Boolean =
-    getExecutorDecommissionInfo(execId).nonEmpty || isHostDecommissioned(executorIdToHost(execId))
+  protected final def isExecutorDecommissioned(execId: String): Boolean =
+    getExecutorDecommissionInfo(execId).nonEmpty
 
   // exposed for test
-  protected def isHostDecommissioned(host: String): Boolean = {
+  protected final def isHostDecommissioned(host: String): Boolean = {
     hostToExecutors.get(host).exists { executors =>
       executors.exists(e => getExecutorDecommissionInfo(e).exists(_.isHostDecommissioned))
     }
