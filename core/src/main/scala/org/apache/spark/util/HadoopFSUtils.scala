@@ -18,27 +18,22 @@
 package org.apache.spark.util
 
 import java.io.FileNotFoundException
-import java.util.{List => jList}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.viewfs.ViewFileSystem
 import org.apache.hadoop.hdfs.DistributedFileSystem
-import org.apache.hadoop.mapreduce.JobContext
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 
 /**
  * :: DeveloperApi ::
  * Utility functions to simplify and speed-up file listing.
- * To see how to use these look at
  */
 @DeveloperApi
 object HadoopFSUtils extends Logging {
@@ -169,13 +164,14 @@ object HadoopFSUtils extends Logging {
         Array.empty[FileStatus]
     }
 
-    val filteredStatuses = filterFun match {
+    def doFilter(statuses: Array[FileStatus]) = filterFun match {
       case Some(shouldFilterOut) =>
         statuses.filterNot(status => shouldFilterOut(status.getPath.getName))
       case None =>
         statuses
     }
 
+    val filteredStatuses = doFilter(statuses)
     val allLeafStatuses = {
       val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
       val nestedFiles: Seq[FileStatus] = contextOpt match {
@@ -211,13 +207,7 @@ object HadoopFSUtils extends Logging {
     }
 
     val missingFiles = mutable.ArrayBuffer.empty[String]
-    val filteredLeafStatuses = filterFun match {
-      case Some(shouldFilterOut) =>
-        allLeafStatuses.filterNot(
-          status => shouldFilterOut(status.getPath.getName))
-      case None =>
-        allLeafStatuses
-    }
+    val filteredLeafStatuses = doFilter(allLeafStatuses)
     val resolvedLeafStatuses = filteredLeafStatuses.flatMap {
       case f: LocatedFileStatus =>
         Some(f)
@@ -265,65 +255,5 @@ object HadoopFSUtils extends Logging {
     }
 
     resolvedLeafStatuses.toSeq
-  }
-
-  /**
-   * Utility function to make it easier for FileInputFormats to use
-   * HadoopFSUtils.
-   */
-  def alternativeStatus(job: JobContext, format: FileInputFormat[_, _]):
-      jList[FileStatus] = {
-    val conf = job.getConfiguration
-    val sc = SparkContext.getActive match {
-      case None => throw new SparkException("No active SparkContext.")
-      case Some(x) => x
-    }
-
-    // TODO: use real configurations
-    val listingParallelismThreshold = sc.conf.get(config.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
-    val ignoreLocality = sc.conf.get(config.IGNORE_DATA_LOCALITY)
-    val maxListingParallelism = sc.conf.get(config.PARALLEL_PARTITION_DISCOVERY_PARALLELISM)
-    val ignoreMissingFiles = sc.conf.get(config.IGNORE_MISSING_FILES)
-
-    // The hiddenFileFilter is private but we want it, but it's final so
-    // we can recreate it safely.
-    val filter = new PathFilter() {
-      val parentFilter = FileInputFormat.getInputPathFilter(job)
-      override def accept(p: Path): Boolean = {
-        val name = p.getName
-        !name.startsWith("_") && !name.startsWith(".") &&
-          (parentFilter == null || parentFilter.accept(p))
-      }
-    }
-
-    val dirs: Seq[Path] = FileInputFormat.getInputPaths(job)
-
-    val statuses = if (dirs.size < listingParallelismThreshold) {
-      dirs.flatMap{dir =>
-        listLeafFiles(
-          path = dir,
-          hadoopConf = conf,
-          filter = filter,
-          contextOpt = Some(sc),
-          ignoreMissingFiles = ignoreMissingFiles,
-          isSQLRootPath = false,
-          ignoreLocality = ignoreLocality,
-          filterFun = None,
-          parallelismThreshold = listingParallelismThreshold,
-          maxParallelism = maxListingParallelism)
-      }.toList
-    } else {
-      parallelListLeafFiles(
-        sc = sc,
-        paths = dirs,
-        hadoopConf = conf,
-        filter = filter,
-        areSQLRootPaths = false,
-        ignoreMissingFiles = ignoreMissingFiles,
-        ignoreLocality = ignoreLocality,
-        maxParallelism = maxListingParallelism,
-        filterFun = None).flatMap(_._2).toList
-    }
-    statuses.asJava
   }
 }

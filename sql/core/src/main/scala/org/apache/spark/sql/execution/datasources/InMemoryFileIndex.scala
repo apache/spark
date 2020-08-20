@@ -21,11 +21,8 @@ import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
-import org.apache.hadoop.fs.viewfs.ViewFileSystem
-import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
-import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
@@ -154,9 +151,6 @@ object InMemoryFileIndex extends Logging {
 
     val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
     val ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality
-
-    val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
-
     val parallelPartitionDiscoveryParallelism =
       sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism
     val sc = sparkSession.sparkContext
@@ -173,7 +167,7 @@ object InMemoryFileIndex extends Logging {
           ignoreMissingFiles = ignoreMissingFiles,
           ignoreLocality = ignoreLocality,
           isSQLRootPath = areRootPaths,
-          filterFun = Some(shouldFilterOut _),
+          filterFun = Some(shouldFilterOut),
           parallelismThreshold = threshold,
           maxParallelism = parallelPartitionDiscoveryParallelism)
         (path, leafFiles)
@@ -182,7 +176,7 @@ object InMemoryFileIndex extends Logging {
       HadoopFSUtils.parallelListLeafFiles(sparkSession.sparkContext, paths, hadoopConf, filter,
         areSQLRootPaths = areRootPaths, ignoreMissingFiles = ignoreMissingFiles,
         ignoreLocality = ignoreLocality, parallelPartitionDiscoveryParallelism,
-        Some(shouldFilterOut _))
+        Some(shouldFilterOut))
     }
     result
   }

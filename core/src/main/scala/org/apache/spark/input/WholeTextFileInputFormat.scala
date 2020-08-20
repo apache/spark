@@ -70,9 +70,4 @@ private[spark] class WholeTextFileInputFormat
     }
     super.setMaxSplitSize(maxSplitSize)
   }
-
-  // Note: we override listStatus but not getSplits because our parent class overrides it.
-  override protected def listStatus(job: JobContext) = {
-    HadoopFSUtils.alternativeStatus(job, this)
-  }
 }
