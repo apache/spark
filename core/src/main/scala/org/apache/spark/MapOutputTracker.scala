@@ -291,12 +291,25 @@ private class ShuffleStatus(numPartitions: Int, numReducers: Int) extends Loggin
       broadcastManager: BroadcastManager,
       isLocal: Boolean,
       minBroadcastSize: Int,
-      conf: SparkConf): Array[Byte] = synchronized {
-    if (cachedSerializedMergeStatus eq null) {
-      val serResult = MapOutputTracker.serializeOutputStatuses(
+      conf: SparkConf): Array[Byte] = {
+    var result: Array[Byte] = null
+
+    withReadLock {
+      if (cachedSerializedMergeStatus != null) {
+        result = cachedSerializedMergeStatus
+      }
+    }
+
+    if (result == null) withWriteLock {
+      if (cachedSerializedMergeStatus == null ) {
+        val serResult = MapOutputTracker.serializeOutputStatuses(
           mergeStatuses, broadcastManager, isLocal, minBroadcastSize, conf)
-      cachedSerializedMergeStatus = serResult._1
-      cachedSerializedBroadcastMergeStatus = serResult._2
+        cachedSerializedMergeStatus = serResult._1
+        cachedSerializedBroadcastMergeStatus = serResult._2
+      }
+      // The following line has to be outside if statement since it's possible that another thread
+      // initializes cachedSerializedMergeStatus in-between `withReadLock` and `withWriteLock`.
+      result = cachedSerializedMergeStatus
     }
     cachedSerializedMergeStatus
   }
