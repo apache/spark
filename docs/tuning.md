@@ -264,6 +264,13 @@ parent RDD's number of partitions. You can pass the level of parallelism as a se
 or set the config property `spark.default.parallelism` to change the default.
 In general, we recommend 2-3 tasks per CPU core in your cluster.
 
+Sometimes you may also need to increase directory listing parallelism when job input has large number of directories,
+otherwise the process could take a very long time, especially when against object store like S3.
+If your job works on RDD with Hadoop input formats (e.g., via `SparkContext#sequenceFile`), the parallelism is
+controlled via `spark.hadoop.mapreduce.input.fileinputformat.list-status.num-threads` (default is 1). For other
+cases such as Spark SQL, you can tune `spark.sql.sources.parallelPartitionDiscovery.threshold` to improve the listing
+performance.
+
 ## Memory Usage of Reduce Tasks
 
 Sometimes, you will get an OutOfMemoryError not because your RDDs don't fit in memory, but because the
