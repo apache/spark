@@ -362,13 +362,51 @@ class SparkSqlParserSuite extends AnalysisTest {
         Seq(("TOK_TABLEROWFORMATFIELD", ","),
           ("TOK_TABLEROWFORMATCOLLITEMS", "#"),
           ("TOK_TABLEROWFORMATMAPKEYS", "@"),
-          ("TOK_TABLEROWFORMATLINES", "\n"),
-          ("TOK_TABLEROWFORMATNULL", "null")),
+          ("TOK_TABLEROWFORMATNULL", "null"),
+          ("TOK_TABLEROWFORMATLINES", "\n")),
         Seq(("TOK_TABLEROWFORMATFIELD", ","),
           ("TOK_TABLEROWFORMATCOLLITEMS", "#"),
           ("TOK_TABLEROWFORMATMAPKEYS", "@"),
-          ("TOK_TABLEROWFORMATLINES", "\n"),
-          ("TOK_TABLEROWFORMATNULL", "NULL")), None, None,
+          ("TOK_TABLEROWFORMATNULL", "NULL"),
+          ("TOK_TABLEROWFORMATLINES", "\n")), None, None,
         List.empty, List.empty, None, None, false)))
   }
+
+  test("SPARK-32607: Script Transformation ROW FORMAT DELIMITED" +
+    " `TOK_TABLEROWFORMATLINES` only support '\\n'") {
+
+      // test input format TOK_TABLEROWFORMATLINES
+      intercept(
+          s"""
+             |SELECT TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY ','
+             |  LINES TERMINATED BY '@'
+             |  NULL DEFINED AS 'null'
+             |  USING 'cat' AS (value)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '&'
+             |  LINES TERMINATED BY '\n'
+             |  NULL DEFINED AS 'NULL'
+             |FROM v
+        """.stripMargin,
+      "LINES TERMINATED BY only supports newline '\\n' right now")
+
+    // test output format TOK_TABLEROWFORMATLINES
+    intercept(
+      s"""
+         |SELECT TRANSFORM(a, b, c, d, e)
+         |  ROW FORMAT DELIMITED
+         |  FIELDS TERMINATED BY ','
+         |  LINES TERMINATED BY '\n'
+         |  NULL DEFINED AS 'null'
+         |  USING 'cat' AS (value)
+         |  ROW FORMAT DELIMITED
+         |  FIELDS TERMINATED BY '&'
+         |  LINES TERMINATED BY '@'
+         |  NULL DEFINED AS 'NULL'
+         |FROM v
+        """.stripMargin,
+      "LINES TERMINATED BY only supports newline '\\n' right now")
+    }
 }
