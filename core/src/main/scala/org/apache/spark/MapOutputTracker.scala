@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.{ByteArrayInputStream, ObjectInputStream, ObjectOutputStream}
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection.JavaConverters._
@@ -594,7 +595,10 @@ private[spark] class MapOutputTrackerMaster(
    */
   def getStatistics(dep: ShuffleDependency[_, _, _]): MapOutputStatistics = {
     shuffleStatuses(dep.shuffleId).withMapStatuses { statuses =>
-      val totalSizes = new Array[Long](dep.partitioner.numPartitions)
+      val totalSizes = new Array[AtomicLong](dep.partitioner.numPartitions)
+      for (i <- 0 until totalSizes.length) {
+        totalSizes(i) = new AtomicLong(0)
+      }
       val parallelAggThreshold = conf.get(
         SHUFFLE_MAP_OUTPUT_PARALLEL_AGGREGATION_THRESHOLD)
       val parallelism = math.min(
@@ -603,7 +607,7 @@ private[spark] class MapOutputTrackerMaster(
       if (parallelism <= 1) {
         for (s <- statuses) {
           for (i <- 0 until totalSizes.length) {
-            totalSizes(i) += s.getSizeForBlock(i)
+            totalSizes(i).getAndAdd(s.getSizeForBlock(i))
           }
         }
       } else {
@@ -613,7 +617,7 @@ private[spark] class MapOutputTrackerMaster(
           val mapStatusSubmitTasks = equallyDivide(totalSizes.length, parallelism).map {
             reduceIds => Future {
               for (s <- statuses; i <- reduceIds) {
-                totalSizes(i) += s.getSizeForBlock(i)
+                totalSizes(i).getAndAdd(s.getSizeForBlock(i))
               }
             }
           }
@@ -622,7 +626,7 @@ private[spark] class MapOutputTrackerMaster(
           threadPool.shutdown()
         }
       }
-      new MapOutputStatistics(dep.shuffleId, totalSizes)
+      new MapOutputStatistics(dep.shuffleId, totalSizes.map(_.get()))
     }
   }
 
