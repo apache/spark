@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeSeq, CreateNamedStruc
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
+import org.apache.spark.sql.types.{AtomicType, BooleanType, DataType, StructType}
 
 /**
  * The base class for subquery that is used in SparkPlan.
@@ -131,8 +131,10 @@ case class InSubqueryExec(
 
   def updateResult(): Unit = {
     val rows = plan.executeCollect()
-    // The child always partition column. So it must be AtomicType.
+    // The child is always partition column. So it must be AtomicType.
     // See PreprocessTableCreation for more details.
+    require(child.dataType.isInstanceOf[AtomicType],
+      s"$child should be atomic type, but got ${child.dataType.catalogString} type.")
     result = rows.map(_.get(0, child.dataType)).toSet
     resultBroadcast = plan.sqlContext.sparkContext.broadcast(result)
   }
