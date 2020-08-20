@@ -33,6 +33,7 @@ import org.apache.spark.sql.types.Decimal.{maxPrecisionForBytes, minBytesForPrec
  * This object contains method that are used to convert sparkSQL schemas to avro schemas and vice
  * versa.
  */
+@DeveloperApi
 object SchemaConverters {
   private lazy val uuidGenerator = RandomUUIDGenerator(new Random().nextLong())
 
@@ -43,7 +44,6 @@ object SchemaConverters {
    *
    * @since 2.4.0
    */
-  @DeveloperApi
   case class SchemaType(dataType: DataType, nullable: Boolean)
 
   /**
@@ -51,7 +51,6 @@ object SchemaConverters {
    *
    * @since 2.4.0
    */
-  @DeveloperApi
   def toSqlType(avroSchema: Schema): SchemaType = {
     toSqlTypeHelper(avroSchema, Set.empty)
   }
@@ -148,7 +147,6 @@ object SchemaConverters {
    *
    * @since 2.4.0
    */
-  @DeveloperApi
   def toAvroType(
       catalystType: DataType,
       nullable: Boolean = false,
