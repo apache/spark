@@ -145,6 +145,33 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskScheduler
   }
 
+  test("SPARK-32653: Decommissioned host/executor should be considered as inactive") {
+    val scheduler = setupScheduler()
+    val exec0 = "exec0"
+    val exec1 = "exec1"
+    val exec2 = "exec2"
+    val host0 = "host0"
+    val host1 = "host1"
+    val workerOffers = IndexedSeq(
+      WorkerOffer(exec0, host0, 1),
+      WorkerOffer(exec1, host0, 1),
+      WorkerOffer(exec2, host1, 1))
+    scheduler.resourceOffers(workerOffers)
+    assert(Seq(exec0, exec1, exec2).forall(scheduler.isExecutorAlive))
+    assert(Seq(host0, host1).forall(scheduler.hasExecutorsAliveOnHost))
+    assert(scheduler.getExecutorsAliveOnHost(host0)
+      .exists(s => s.contains(exec0) && s.contains(exec1)))
+    assert(scheduler.getExecutorsAliveOnHost(host1).exists(_.contains(exec2)))
+
+    scheduler.executorDecommission(exec1, ExecutorDecommissionInfo("test", false))
+    scheduler.executorDecommission(exec2, ExecutorDecommissionInfo("test", true))
+
+    assert(scheduler.isExecutorAlive(exec0))
+    assert(!Seq(exec1, exec2).exists(scheduler.isExecutorAlive))
+    assert(scheduler.hasExecutorsAliveOnHost(host0))
+    assert(!scheduler.hasExecutorsAliveOnHost(host1))
+  }
+
   test("Scheduler does not always schedule tasks on the same workers") {
     val taskScheduler = setupScheduler()
     val numFreeCores = 1
