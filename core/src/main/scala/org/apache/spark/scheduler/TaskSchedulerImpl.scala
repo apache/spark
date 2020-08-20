@@ -951,14 +951,14 @@ private[spark] class TaskSchedulerImpl(
     val reason = givenReason match {
       // Handle executor process loss due to decommissioning
       case ExecutorProcessLost(message, origWorkerLost, origCausedByApp) =>
-        val executorDecommissionInfo = getExecutorDecommissionState(executorId)
+        val executorDecommissionState = getExecutorDecommissionState(executorId)
         ExecutorProcessLost(
           message,
           // Also mark the worker lost if we know that the host was decommissioned
-          origWorkerLost || executorDecommissionInfo.exists(_.isHostDecommissioned),
+          origWorkerLost || executorDecommissionState.exists(_.isHostDecommissioned),
           // Executor loss is certainly not caused by app if we knew that this executor is being
           // decommissioned
-          causedByApp = executorDecommissionInfo.isEmpty && origCausedByApp)
+          causedByApp = executorDecommissionState.isEmpty && origCausedByApp)
       case e => e
     }
 
@@ -1088,12 +1088,12 @@ private[spark] class TaskSchedulerImpl(
 
   // exposed for test
   protected final def isExecutorDecommissioned(execId: String): Boolean =
-    getExecutorDecommissionInfo(execId).nonEmpty
+    getExecutorDecommissionState(execId).isDefined
 
   // exposed for test
   protected final def isHostDecommissioned(host: String): Boolean = {
     hostToExecutors.get(host).exists { executors =>
-      executors.exists(e => getExecutorDecommissionInfo(e).exists(_.isHostDecommissioned))
+      executors.exists(e => getExecutorDecommissionState(e).exists(_.isHostDecommissioned))
     }
   }
 
