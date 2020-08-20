@@ -32,8 +32,8 @@ private[spark] trait ExternalShuffleSidecarSuite { k8sSuite: KubernetesSuite =>
       .set("spark.kubernetes.pyspark.pythonVersion", "3")
       .set("spark.kubernetes.container.image", pyImage)
       .set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
-      // Ensure we have somewhere to migrate our data too
-      .set("spark.executor.instances", "3")
+      // Ensure we can have a remote fetch.
+      .set("spark.executor.instances", "2")
 
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_RESOURCE,
@@ -55,8 +55,14 @@ private[spark] trait ExternalShuffleSidecarSuite { k8sSuite: KubernetesSuite =>
   def checkESSIsLaunchedAndUsed(executorPod: Pod): Unit = {
     doBasicExecutorPyPodCheck(executorPod)
     assert(executorPod.getSpec.getContainers.get(1).getName === "spark-kubernetes-shuffle")
-    val expectedShuffleLogOnCompletion = Seq("MAGIC CHEESE")
-    val expectedExecLogOnCompletion = Seq("MAGIC EXEC CHEESE")
+    val expectedShuffleLogOnCompletion = Seq(
+      "ExternalShuffleService: Started daemon with process name",
+      "INFO ExternalShuffleService: Starting shuffle service on port 7337",
+      "INFO ExternalShuffleBlockResolver: Registered executor ExternalShuffleBlockResolver.AppExecId",
+      "CHEETOS")
+    val expectedExecLogOnCompletion = Seq(
+      "BlockManager: Registering executor with local external shuffle service.",
+      "BlockManager: external shuffle service port = 7337")
 
     var shuffleLogText = ""
     var execLogText = ""
