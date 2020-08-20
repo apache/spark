@@ -1189,7 +1189,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       case StringType =>
         (c, evPrim, evNull) =>
           val handleException = if (ansiEnabled) {
-            s"""throw new NumberFormatException("invalid input syntax for type numeric: $c");"""
+            s"""throw new NumberFormatException("invalid input syntax for type numeric: " + $c);"""
           } else {
             s"$evNull =true;"
           }
@@ -1549,7 +1549,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         val floatStr = ctx.freshVariable("floatStr", StringType)
         (c, evPrim, evNull) =>
           val handleNull = if (ansiEnabled) {
-            s"""throw new NumberFormatException("invalid input syntax for type numeric: $c");"""
+            s"""throw new NumberFormatException("invalid input syntax for type numeric: " + $c);"""
           } else {
             s"$evNull = true;"
           }
@@ -1585,7 +1585,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         val doubleStr = ctx.freshVariable("doubleStr", StringType)
         (c, evPrim, evNull) =>
           val handleNull = if (ansiEnabled) {
-            s"""throw new NumberFormatException("invalid input syntax for type numeric: $c");"""
+            s"""throw new NumberFormatException("invalid input syntax for type numeric: " + $c);"""
           } else {
             s"$evNull = true;"
           }

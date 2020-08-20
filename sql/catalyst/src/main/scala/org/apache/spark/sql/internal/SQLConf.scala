@@ -329,7 +329,10 @@ object SQLConf {
 
   val PREFER_SORTMERGEJOIN = buildConf("spark.sql.join.preferSortMergeJoin")
     .internal()
-    .doc("When true, prefer sort merge join over shuffle hash join.")
+    .doc("When true, prefer sort merge join over shuffled hash join. " +
+      "Sort merge join consumes less memory than shuffled hash join and it works efficiently " +
+      "when both join tables are large. On the other hand, shuffled hash join can improve " +
+      "performance (e.g., of full outer joins) when one of join tables is much smaller.")
     .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
@@ -1211,6 +1214,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val REMOVE_REDUNDANT_PROJECTS_ENABLED = buildConf("spark.sql.execution.removeRedundantProjects")
+    .internal()
+    .doc("Whether to remove redundant project exec node based on children's output and " +
+      "ordering requirement.")
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val STATE_STORE_PROVIDER_CLASS =
     buildConf("spark.sql.streaming.stateStore.providerClass")
       .internal()
@@ -1598,8 +1609,8 @@ object SQLConf {
   val NDV_MAX_ERROR =
     buildConf("spark.sql.statistics.ndv.maxError")
       .internal()
-      .doc("The maximum estimation error allowed in HyperLogLog++ algorithm when generating " +
-        "column level statistics.")
+      .doc("The maximum relative standard deviation allowed in HyperLogLog++ algorithm " +
+        "when generating column level statistics.")
       .version("2.1.1")
       .doubleConf
       .createWithDefault(0.05)
@@ -2108,9 +2119,9 @@ object SQLConf {
       .doc("A comma-separated list of data source short names or fully qualified data source " +
         "implementation class names for which Spark tries to push down predicates for nested " +
         "columns and/or names containing `dots` to data sources. This configuration is only " +
-        "effective with file-based data source in DSv1. Currently, Parquet implements " +
-        "both optimizations while ORC only supports predicates for names containing `dots`. The " +
-        "other data sources don't support this feature yet. So the default value is 'parquet,orc'.")
+        "effective with file-based data sources in DSv1. Currently, Parquet and ORC implement " +
+        "both optimizations. The other data sources don't support this feature yet. So the " +
+        "default value is 'parquet,orc'.")
       .version("3.0.0")
       .stringConf
       .createWithDefault("parquet,orc")

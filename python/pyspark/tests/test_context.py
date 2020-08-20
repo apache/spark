@@ -126,7 +126,7 @@ class AddFileTests(PySparkTestCase):
         # To ensure that we're actually testing addPyFile's effects, check that
         # this fails due to `userlibrary` not being on the Python path:
         def func():
-            from userlibrary import UserClass
+            from userlibrary import UserClass  # noqa: F401
         self.assertRaises(ImportError, func)
         path = os.path.join(SPARK_HOME, "python/test_support/userlibrary.py")
         self.sc.addPyFile(path)
@@ -137,7 +137,7 @@ class AddFileTests(PySparkTestCase):
         # To ensure that we're actually testing addPyFile's effects, check that
         # this fails due to `userlibrary` not being on the Python path:
         def func():
-            from userlib import UserClass
+            from userlib import UserClass  # noqa: F401
         self.assertRaises(ImportError, func)
         path = os.path.join(SPARK_HOME, "python/test_support/userlib-0.1.zip")
         self.sc.addPyFile(path)
@@ -318,7 +318,7 @@ class ContextTestsWithResources(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_context import *
+    from pyspark.tests.test_context import *  # noqa: F401
 
     try:
         import xmlrunner

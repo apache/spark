@@ -1,0 +1,76 @@
+TakeOrderedAndProject [aggOrder,avg(wr_fee),avg(wr_refunded_cash),avg(ws_quantity),substr(r_reason_desc, 1, 20)]
+  WholeStageCodegen (9)
+    HashAggregate [count,count,count,r_reason_desc,sum,sum,sum] [aggOrder,avg(UnscaledValue(wr_fee)),avg(UnscaledValue(wr_refunded_cash)),avg(cast(ws_quantity as bigint)),avg(wr_fee),avg(wr_refunded_cash),avg(ws_quantity),count,count,count,substr(r_reason_desc, 1, 20),sum,sum,sum]
+      InputAdapter
+        Exchange [r_reason_desc] #1
+          WholeStageCodegen (8)
+            HashAggregate [r_reason_desc,wr_fee,wr_refunded_cash,ws_quantity] [count,count,count,count,count,count,sum,sum,sum,sum,sum,sum]
+              Project [r_reason_desc,wr_fee,wr_refunded_cash,ws_quantity]
+                BroadcastHashJoin [r_reason_sk,wr_reason_sk]
+                  Project [wr_fee,wr_reason_sk,wr_refunded_cash,ws_quantity]
+                    BroadcastHashJoin [d_date_sk,ws_sold_date_sk]
+                      Project [wr_fee,wr_reason_sk,wr_refunded_cash,ws_quantity,ws_sold_date_sk]
+                        BroadcastHashJoin [ca_address_sk,ca_state,wr_refunded_addr_sk,ws_net_profit]
+                          Project [wr_fee,wr_reason_sk,wr_refunded_addr_sk,wr_refunded_cash,ws_net_profit,ws_quantity,ws_sold_date_sk]
+                            BroadcastHashJoin [cd_demo_sk,cd_education_status,cd_education_status,cd_marital_status,cd_marital_status,wr_returning_cdemo_sk]
+                              Project [cd_education_status,cd_marital_status,wr_fee,wr_reason_sk,wr_refunded_addr_sk,wr_refunded_cash,wr_returning_cdemo_sk,ws_net_profit,ws_quantity,ws_sold_date_sk]
+                                BroadcastHashJoin [cd_demo_sk,cd_education_status,cd_marital_status,wr_refunded_cdemo_sk,ws_sales_price]
+                                  Project [wr_fee,wr_reason_sk,wr_refunded_addr_sk,wr_refunded_cash,wr_refunded_cdemo_sk,wr_returning_cdemo_sk,ws_net_profit,ws_quantity,ws_sales_price,ws_sold_date_sk]
+                                    BroadcastHashJoin [wp_web_page_sk,ws_web_page_sk]
+                                      Project [wr_fee,wr_reason_sk,wr_refunded_addr_sk,wr_refunded_cash,wr_refunded_cdemo_sk,wr_returning_cdemo_sk,ws_net_profit,ws_quantity,ws_sales_price,ws_sold_date_sk,ws_web_page_sk]
+                                        BroadcastHashJoin [wr_item_sk,wr_order_number,ws_item_sk,ws_order_number]
+                                          Filter [ws_item_sk,ws_net_profit,ws_order_number,ws_sales_price,ws_sold_date_sk,ws_web_page_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.web_sales [ws_item_sk,ws_net_profit,ws_order_number,ws_quantity,ws_sales_price,ws_sold_date_sk,ws_web_page_sk]
+                                          InputAdapter
+                                            BroadcastExchange #2
+                                              WholeStageCodegen (1)
+                                                Filter [wr_item_sk,wr_order_number,wr_reason_sk,wr_refunded_addr_sk,wr_refunded_cdemo_sk,wr_returning_cdemo_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.web_returns [wr_fee,wr_item_sk,wr_order_number,wr_reason_sk,wr_refunded_addr_sk,wr_refunded_cash,wr_refunded_cdemo_sk,wr_returning_cdemo_sk]
+                                      InputAdapter
+                                        BroadcastExchange #3
+                                          WholeStageCodegen (2)
+                                            Filter [wp_web_page_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.web_page [wp_web_page_sk]
+                                  InputAdapter
+                                    BroadcastExchange #4
+                                      WholeStageCodegen (3)
+                                        Filter [cd_demo_sk,cd_education_status,cd_marital_status]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet default.customer_demographics [cd_demo_sk,cd_education_status,cd_marital_status]
+                              InputAdapter
+                                BroadcastExchange #5
+                                  WholeStageCodegen (4)
+                                    Filter [cd_demo_sk,cd_education_status,cd_marital_status]
+                                      ColumnarToRow
+                                        InputAdapter
+                                          Scan parquet default.customer_demographics [cd_demo_sk,cd_education_status,cd_marital_status]
+                          InputAdapter
+                            BroadcastExchange #6
+                              WholeStageCodegen (5)
+                                Project [ca_address_sk,ca_state]
+                                  Filter [ca_address_sk,ca_country,ca_state]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.customer_address [ca_address_sk,ca_country,ca_state]
+                      InputAdapter
+                        BroadcastExchange #7
+                          WholeStageCodegen (6)
+                            Project [d_date_sk]
+                              Filter [d_date_sk,d_year]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.date_dim [d_date_sk,d_year]
+                  InputAdapter
+                    BroadcastExchange #8
+                      WholeStageCodegen (7)
+                        Filter [r_reason_sk]
+                          ColumnarToRow
+                            InputAdapter
+                              Scan parquet default.reason [r_reason_desc,r_reason_sk]
