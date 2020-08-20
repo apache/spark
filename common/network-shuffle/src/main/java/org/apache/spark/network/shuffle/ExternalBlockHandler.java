@@ -119,6 +119,12 @@ public class ExternalBlockHandler extends RpcHandler {
           streamId = streamManager.registerStream(client.getClientId(),
             new ManagedBufferIterator(msg), client.getChannel());
         }
+        logger.info(
+          "Registered streamId {} with {} buffers for client {} from host {}",
+          streamId,
+          numBlockIds,
+          client.getClientId(),
+          getRemoteAddress(client.getChannel()));
         if (logger.isTraceEnabled()) {
           logger.trace(
             "Registered streamId {} with {} buffers for client {} from host {}",
