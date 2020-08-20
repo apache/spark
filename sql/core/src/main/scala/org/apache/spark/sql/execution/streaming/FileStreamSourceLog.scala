@@ -61,10 +61,6 @@ class FileStreamSourceLog(
     }
   }
 
-  def compactLogs(logs: Seq[FileEntry]): Seq[FileEntry] = {
-    logs
-  }
-
   override def add(batchId: Long, logs: Array[FileEntry]): Boolean = {
     if (super.add(batchId, logs)) {
       if (isCompactionBatch(batchId, compactInterval)) {
@@ -84,7 +80,7 @@ class FileStreamSourceLog(
       if (isCompactionBatch(id, compactInterval) && fileEntryCache.containsKey(id)) {
         (id, Some(fileEntryCache.get(id)))
       } else {
-        val logs = super.get(id).map(_.filter(_.batchId == id))
+        val logs = filterInBatch(id)(_.batchId == id)
         (id, logs)
       }
     }.partition(_._2.isDefined)
