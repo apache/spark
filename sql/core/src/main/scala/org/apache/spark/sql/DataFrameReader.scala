@@ -247,7 +247,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
     if ((extraOptions.contains("path") || extraOptions.contains("paths")) && paths.nonEmpty) {
       throw new AnalysisException("There is a 'path' or 'paths' option set and load() is called " +
-        "with path parameters. Either remove the option or put it into the load() parameters.")
+        "with path parameters. Either remove the option or move it into the load() parameters.")
     }
 
     val updatedPaths = if (paths.length == 1) {
