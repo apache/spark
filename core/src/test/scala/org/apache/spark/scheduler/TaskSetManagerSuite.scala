@@ -109,8 +109,10 @@ object FakeRackUtil {
  * a list of "live" executors and their hostnames for isExecutorAlive and hasExecutorsAliveOnHost
  * to work, and these are required for locality in TaskSetManager.
  */
-class FakeTaskScheduler(sc: SparkContext, clock: Clock,
-                        liveExecutors: (String, String)* /* execId, host */)
+class FakeTaskScheduler(
+    sc: SparkContext,
+    clock: Clock,
+    liveExecutors: (String, String)* /* execId, host */)
   extends TaskSchedulerImpl(sc, sc.conf.get(config.TASK_MAX_FAILURES), clock = clock)
 {
   val startedTasks = new ArrayBuffer[Long]
@@ -121,7 +123,7 @@ class FakeTaskScheduler(sc: SparkContext, clock: Clock,
 
   val executors = new mutable.HashMap[String, String]
 
-  def this(sc: SparkContext, liveExecutors: (String, String)*) {
+  def this(sc: SparkContext, liveExecutors: (String, String)*) = {
     this(sc, new SystemClock, liveExecutors: _*)
   }
 

@@ -1848,20 +1848,20 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   test("scheduler should keep the decommission state where host was decommissioned") {
-    val scheduler = setupSchedulerForDecommissionTests(new SystemClock)
-
+    val clock = new ManualClock(10000L)
+    val scheduler = setupSchedulerForDecommissionTests(clock)
+    val oldTime = clock.getTimeMillis()
     scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("0", false))
     scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1", true))
+
+    clock.advance(3000L)
     scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("0 new", false))
     scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1 new", false))
 
-    def convert(state: Option[ExecutorDecommissionState]): Option[ExecutorDecommissionInfo] =
-      state.map(s => ExecutorDecommissionInfo(s.message, s.isHostDecommissioned))
-
-    assert(convert(scheduler.getExecutorDecommissionState("executor0"))
-      === Some(ExecutorDecommissionInfo("0 new", false)))
-    assert(convert(scheduler.getExecutorDecommissionState("executor1"))
-      === Some(ExecutorDecommissionInfo("1", true)))
+    assert(scheduler.getExecutorDecommissionState("executor0")
+      === Some(ExecutorDecommissionState("0 new", oldTime, false)))
+    assert(scheduler.getExecutorDecommissionState("executor1")
+      === Some(ExecutorDecommissionState("1", oldTime, true)))
     assert(scheduler.getExecutorDecommissionState("executor2").isEmpty)
   }
 
