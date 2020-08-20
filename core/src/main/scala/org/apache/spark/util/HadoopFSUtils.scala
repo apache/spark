@@ -142,14 +142,7 @@ object HadoopFSUtils extends Logging {
             def next(): LocatedFileStatus = remoteIter.next
             def hasNext(): Boolean = remoteIter.hasNext
           }.toArray
-        case _ =>
-          // We are ignoring locality, so we'll use a null locality
-          fs.listStatus(path).map{f =>
-            f match {
-              case _: LocatedFileStatus => f
-              case _ => new LocatedFileStatus(f, null)
-            }
-          }
+        case _ => fs.listStatus(path)
       }
     } catch {
       // If we are listing a root path for SQL (e.g. a top level directory of a table), we need to
