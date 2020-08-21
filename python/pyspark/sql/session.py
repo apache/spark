@@ -27,7 +27,7 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.conversion import SparkConversionMixin
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.types import Row, DataType, StringType, StructType, \
+from pyspark.sql.types import DataType, StructType, \
     _make_type_verifier, _infer_schema, _has_nulltype, _merge_type, _create_converter, \
     _parse_datatype_string
 from pyspark.sql.utils import install_exception_handler
@@ -192,6 +192,7 @@ class SparkSession(SparkConversionMixin):
         """Creates a new SparkSession.
 
         >>> from datetime import datetime
+        >>> from pyspark.sql import Row
         >>> spark = SparkSession(sc)
         >>> allTypes = sc.parallelize([Row(i=1, s="string", d=1.0, l=1,
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),

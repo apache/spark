@@ -573,6 +573,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <code>?planDescription=[true (default) | false]</code> enables/disables Physical <code>planDescription</code> on demand when Physical Plan size is high.
     <br>
     <code>?offset=[offset]&length=[len]</code> lists queries in the given range.
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/sql/[execution-id]</code></td>
@@ -581,6 +582,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <code>?details=[true (default) | false]</code> lists/hides metric details in addition to given query details.
     <br>
     <code>?planDescription=[true (default) | false]</code> enables/disables Physical <code>planDescription</code> on demand for the given query when Physical Plan size is high.
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/environment</code></td>

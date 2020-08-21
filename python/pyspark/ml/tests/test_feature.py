@@ -16,7 +16,6 @@
 # limitations under the License.
 #
 
-import sys
 import unittest
 
 from pyspark.ml.feature import Binarizer, CountVectorizer, CountVectorizerModel, HashingTF, IDF, \
@@ -301,7 +300,7 @@ class HashingTFTest(SparkSessionTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_feature import *
+    from pyspark.ml.tests.test_feature import *  # noqa: F401
 
     try:
         import xmlrunner

@@ -65,6 +65,12 @@ abstract class SparkFunSuite
   with Logging {
 // scalastyle:on
 
+  // Initialize the logger forcibly to let the logger log timestamp
+  // based on the local time zone depending on environments.
+  // The default time zone will be set to America/Los_Angeles later
+  // so this initialization is necessary here.
+  log
+
   // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
   TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
   // Add Locale setting

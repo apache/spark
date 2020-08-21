@@ -16,7 +16,6 @@
 #
 
 import functools
-import sys
 import warnings
 from inspect import getfullargspec
 

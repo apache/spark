@@ -22,6 +22,7 @@ import java.sql.SQLException
 import org.apache.hive.service.cli.HiveSQLException
 
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.types._
 
 trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 

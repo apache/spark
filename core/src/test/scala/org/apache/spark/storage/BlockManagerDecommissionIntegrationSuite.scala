@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, Semaphore}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, Semaphore, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -40,7 +40,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
   val TaskEnded = "TASK_ENDED"
   val JobEnded = "JOB_ENDED"
 
-  test(s"verify that an already running task which is going to cache data succeeds " +
+  testRetry(s"verify that an already running task which is going to cache data succeeds " +
     s"on a decommissioned executor after task start") {
     runDecomTest(true, false, TaskStarted)
   }
@@ -69,9 +69,9 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       .set(config.STORAGE_DECOMMISSION_ENABLED, true)
       .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED, persist)
       .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, shuffle)
-      // Just replicate blocks as fast as we can during testing, there isn't another
+      // Just replicate blocks quickly during testing, there isn't another
       // workload we need to worry about.
-      .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 1L)
+      .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 10L)
 
     if (whenToDecom == TaskStarted) {
       // We are using accumulators below, make sure those are reported frequently.
@@ -89,7 +89,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
 
     val sleepIntervalMs = whenToDecom match {
       // Increase the window of time b/w task started and ended so that we can decom within that.
-      case TaskStarted => 2000
+      case TaskStarted => 10000
       // Make one task take a really short time so that we can decommission right after it is
       // done but before its peers are done.
       case TaskEnded =>
@@ -176,11 +176,11 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       } else {
         10.milliseconds
       }
-      eventually(timeout(6.seconds), interval(intervalMs)) {
+      eventually(timeout(20.seconds), interval(intervalMs)) {
         assert(getCandidateExecutorToDecom.isDefined)
       }
     } else {
-      ThreadUtils.awaitResult(asyncCount, 15.seconds)
+      ThreadUtils.awaitResult(asyncCount, 1.minute)
     }
 
     // Decommission one of the executors.
@@ -194,7 +194,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     val decomTime = new SystemClock().getTimeMillis()
 
     // Wait for job to finish.
-    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 15.seconds)
+    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 1.minute)
     assert(asyncCountResult === numParts)
     // All tasks finished, so accum should have been increased numParts times.
     assert(accum.value === numParts)
@@ -226,7 +226,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     }
 
     // Wait for our respective blocks to have migrated
-    eventually(timeout(30.seconds), interval(10.milliseconds)) {
+    eventually(timeout(1.minute), interval(10.milliseconds)) {
       if (persist) {
         // One of our blocks should have moved.
         val rddUpdates = blocksUpdated.filter { update =>
@@ -266,18 +266,17 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     val execIdToBlocksMapping = storageStatus.map(
       status => (status.blockManagerId.executorId, status.blocks)).toMap
     // No cached blocks should be present on executor which was decommissioned
-    assert(execIdToBlocksMapping(execToDecommission).keys.filter(_.isRDD).toSeq === Seq(),
+    assert(
+      !execIdToBlocksMapping.contains(execToDecommission) ||
+      execIdToBlocksMapping(execToDecommission).keys.filter(_.isRDD).toSeq === Seq(),
       "Cache blocks should be migrated")
     if (persist) {
       // There should still be all the RDD blocks cached
       assert(execIdToBlocksMapping.values.flatMap(_.keys).count(_.isRDD) === numParts)
     }
 
-    // Make the executor we decommissioned exit
-    sched.client.killExecutors(List(execToDecommission))
-
-    // Wait for the executor to be removed
-    executorRemovedSem.acquire(1)
+    // Wait for the executor to be removed automatically after migration.
+    assert(executorRemovedSem.tryAcquire(1, 5L, TimeUnit.MINUTES))
 
     // Since the RDD is cached or shuffled so further usage of same RDD should use the
     // cached data. Original RDD partitions should not be recomputed i.e. accum

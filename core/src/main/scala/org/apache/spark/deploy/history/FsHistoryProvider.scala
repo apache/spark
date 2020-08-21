@@ -27,6 +27,7 @@ import java.util.zip.ZipOutputStream
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.io.Source
+import scala.util.control.NonFatal
 import scala.xml.Node
 
 import com.fasterxml.jackson.annotation.JsonIgnore
@@ -530,10 +531,18 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               // If the file is currently not being tracked by the SHS, add an entry for it and try
               // to parse it. This will allow the cleaner code to detect the file as stale later on
               // if it was not possible to parse it.
-              listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime, LogType.EventLogs,
-                None, None, reader.fileSizeForLastIndex, reader.lastIndex, None,
-                reader.completed))
-              reader.fileSizeForLastIndex > 0
+              try {
+                listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime,
+                  LogType.EventLogs, None, None, reader.fileSizeForLastIndex, reader.lastIndex,
+                  None, reader.completed))
+                reader.fileSizeForLastIndex > 0
+              } catch {
+                case _: FileNotFoundException => false
+              }
+
+            case NonFatal(e) =>
+              logWarning(s"Error while filtering log ${reader.rootPath}", e)
+              false
           }
         }
         .sortWith { case (entry1, entry2) =>

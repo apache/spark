@@ -50,8 +50,6 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
   /** @group getParam */
   def getLower: Double = $(lower)
 
-  setDefault(lower -> 0.25)
-
   /**
    * Upper quantile to calculate quantile range, shared by all features
    * Default: 0.75
@@ -63,8 +61,6 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
 
   /** @group getParam */
   def getUpper: Double = $(upper)
-
-  setDefault(upper -> 0.75)
 
   /**
    * Whether to center the data with median before scaling.
@@ -78,8 +74,6 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
   /** @group getParam */
   def getWithCentering: Boolean = $(withCentering)
 
-  setDefault(withCentering -> false)
-
   /**
    * Whether to scale the data to quantile range.
    * Default: true
@@ -91,7 +85,7 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
   /** @group getParam */
   def getWithScaling: Boolean = $(withScaling)
 
-  setDefault(withScaling -> true)
+  setDefault(withScaling -> true, lower -> 0.25, upper -> 0.75, withCentering -> false)
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {

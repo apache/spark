@@ -66,6 +66,8 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   $APT_INSTALL nodejs && \
   # Install needed python packages. Use pip for installing packages (for consistency).
   $APT_INSTALL libpython3-dev python3-pip python3-setuptools && \
+  # qpdf is required for CRAN checks to pass.
+  $APT_INSTALL qpdf jq && \
   # Change default python version to python3.
   update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 && \
   update-alternatives --install /usr/bin/python python /usr/bin/python3.6 2 && \

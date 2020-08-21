@@ -21,8 +21,6 @@ import shutil
 import tempfile
 import unittest
 
-import py4j
-
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, Column, Row
 from pyspark.sql.functions import UserDefinedFunction, udf
