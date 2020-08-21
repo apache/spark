@@ -26,10 +26,9 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.exec.{RecordReader, RecordWriter}
 import org.apache.hadoop.hive.serde.serdeConstants
-import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeSpec}
+import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.io.Writable
-import org.apache.hive.common.util.AnnotationUtils
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
@@ -273,16 +272,8 @@ object HiveScriptIOSchema extends HiveInspectors {
     val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
 
     var propsMap = serdeProps.toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
+
     propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
-
-    if (!propsMap.contains(serdeConstants.SERIALIZATION_LAST_COLUMN_TAKES_REST)) {
-      val schemaProps = AnnotationUtils.getAnnotation(serde.getClass, classOf[SerDeSpec])
-      if (schemaProps != null &&
-        schemaProps.schemaProps().contains(serdeConstants.SERIALIZATION_LAST_COLUMN_TAKES_REST)) {
-        propsMap = propsMap + (serdeConstants.SERIALIZATION_LAST_COLUMN_TAKES_REST -> "true")
-      }
-    }
-
     val properties = new Properties()
     // Can not use properties.putAll(propsMap.asJava) in scala-2.12
     // See https://github.com/scala/bug/issues/10418
