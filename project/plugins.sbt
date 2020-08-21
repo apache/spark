@@ -41,10 +41,8 @@ addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.3.0")
 
 addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.4.3")
 
-// need to make changes to uptake sbt 1.0 support in "com.cavorite" % "sbt-avro-1-7" % "1.1.2"
-addSbtPlugin("com.cavorite" % "sbt-avro" % "0.3.2")
 addSbtPlugin("com.cavorite" % "sbt-avro" % "2.1.1")
-libraryDependencies += "org.apache.avro" % "avro-compiler" % "1.10.0"
+libraryDependencies += "org.apache.avro" % "avro-compiler" % "1.8.2"
 
 addSbtPlugin("io.spray" % "sbt-revolver" % "0.9.1")
 
