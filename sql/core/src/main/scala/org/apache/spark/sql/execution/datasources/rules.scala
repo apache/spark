@@ -239,7 +239,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
         c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema))
       }
 
-    case create: V2CreateTablePlan =>
+    case create: V2CreateTablePlan if create.childrenResolved =>
       val schema = create.tableSchema
       val partitioning = create.partitioning
       val identifier = create.tableName

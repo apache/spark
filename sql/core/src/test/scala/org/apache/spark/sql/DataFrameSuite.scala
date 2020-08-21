@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
@@ -2447,6 +2448,14 @@ class DataFrameSuite extends QueryTest
     "it refers to non-existent table with same name") {
     val e = intercept[AnalysisException] {
       sql("WITH t AS (SELECT 1 FROM nonexist.t) SELECT * FROM t")
+    }
+    assert(e.getMessage.contains("Table or view not found:"))
+  }
+
+  test("SPARK-32680: Don't analyze CTAS with unresolved query") {
+    val v2Source = classOf[FakeV2Provider].getName
+    val e = intercept[AnalysisException] {
+      sql(s"CREATE TABLE t USING $v2Source AS SELECT * from nonexist")
     }
     assert(e.getMessage.contains("Table or view not found:"))
   }
