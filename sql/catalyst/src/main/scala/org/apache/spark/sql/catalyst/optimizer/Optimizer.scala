@@ -1832,10 +1832,10 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
 object SplitAggregateWithExpand extends Rule[LogicalPlan] {
   private def splitExpand(expand: Expand, num: Int): Seq[Expand] = {
     val groupedProjections = expand.projections.grouped(num).toList
-    val expands: Seq[Expand] = groupedProjections.map {
+    groupedProjections.map {
       projectionSeq => Expand(projectionSeq, expand.output, expand.child)
     }
-    expands
+    
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
