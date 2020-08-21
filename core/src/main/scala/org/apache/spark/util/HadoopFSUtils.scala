@@ -29,7 +29,6 @@ import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
-import org.apache.spark.metrics.source.HiveCatalogMetrics
 
 /**
  * :: DeveloperApi ::
@@ -95,7 +94,6 @@ object HadoopFSUtils extends Logging {
 
     logInfo(s"Listing leaf files and directories in parallel under ${paths.length} paths." +
       s" The first several paths are: ${paths.take(10).mkString(", ")}.")
-    HiveCatalogMetrics.incrementParallelListingJobCount(1)
 
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)
     val serializedPaths = paths.map(_.toString)
@@ -108,7 +106,7 @@ object HadoopFSUtils extends Logging {
     val statusMap = try {
       val description = paths.size match {
         case 0 =>
-          s"Listing leaf files and directories 0 paths"
+          "Listing leaf files and directories 0 paths"
         case 1 =>
           s"Listing leaf files and directories for 1 path:<br/>${paths(0)}"
         case s =>
