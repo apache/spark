@@ -81,7 +81,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
   def convertibleFilters(
       schema: StructType,
-      dataTypeMap: Map[String, DataType],
+      dataTypeMap: Map[String, OrcPrimitiveField],
       filters: Seq[Filter]): Seq[Filter] = {
     import org.apache.spark.sql.sources._
 
@@ -139,7 +139,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   /**
    * Get PredicateLeafType which is corresponding to the given DataType.
    */
-  private def getPredicateLeafType(dataType: DataType) = dataType match {
+  private[sql] def getPredicateLeafType(dataType: DataType) = dataType match {
     case BooleanType => PredicateLeaf.Type.BOOLEAN
     case ByteType | ShortType | IntegerType | LongType => PredicateLeaf.Type.LONG
     case FloatType | DoubleType => PredicateLeaf.Type.FLOAT
@@ -179,7 +179,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    * @return the builder so far.
    */
   private def buildSearchArgument(
-      dataTypeMap: Map[String, DataType],
+      dataTypeMap: Map[String, OrcPrimitiveField],
       expression: Filter,
       builder: Builder): Builder = {
     import org.apache.spark.sql.sources._
@@ -215,11 +215,11 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    * @return the builder so far.
    */
   private def buildLeafSearchArgument(
-      dataTypeMap: Map[String, DataType],
+      dataTypeMap: Map[String, OrcPrimitiveField],
       expression: Filter,
       builder: Builder): Option[Builder] = {
     def getType(attribute: String): PredicateLeaf.Type =
-      getPredicateLeafType(dataTypeMap(attribute))
+      getPredicateLeafType(dataTypeMap(attribute).fieldType)
 
     import org.apache.spark.sql.sources._
 
@@ -228,38 +228,46 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
     expression match {
       case EqualTo(name, value) if dataTypeMap.contains(name) =>
-        val castedValue = castLiteralValue(value, dataTypeMap(name))
-        Some(builder.startAnd().equals(name, getType(name), castedValue).end())
+        val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
+        Some(builder.startAnd()
+          .equals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
       case EqualNullSafe(name, value) if dataTypeMap.contains(name) =>
-        val castedValue = castLiteralValue(value, dataTypeMap(name))
-        Some(builder.startAnd().nullSafeEquals(name, getType(name), castedValue).end())
+        val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
+        Some(builder.startAnd()
+          .nullSafeEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
       case LessThan(name, value) if dataTypeMap.contains(name) =>
-        val castedValue = castLiteralValue(value, dataTypeMap(name))
-        Some(builder.startAnd().lessThan(name, getType(name), castedValue).end())
+        val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
+        Some(builder.startAnd()
+          .lessThan(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
       case LessThanOrEqual(name, value) if dataTypeMap.contains(name) =>
-        val castedValue = castLiteralValue(value, dataTypeMap(name))
-        Some(builder.startAnd().lessThanEquals(name, getType(name), castedValue).end())
+        val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
+        Some(builder.startAnd()
+          .lessThanEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
       case GreaterThan(name, value) if dataTypeMap.contains(name) =>
-        val castedValue = castLiteralValue(value, dataTypeMap(name))
-        Some(builder.startNot().lessThanEquals(name, getType(name), castedValue).end())
+        val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
+        Some(builder.startNot()
+          .lessThanEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
       case GreaterThanOrEqual(name, value) if dataTypeMap.contains(name) =>
-        val castedValue = castLiteralValue(value, dataTypeMap(name))
-        Some(builder.startNot().lessThan(name, getType(name), castedValue).end())
+        val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
+        Some(builder.startNot()
+          .lessThan(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
       case IsNull(name) if dataTypeMap.contains(name) =>
-        Some(builder.startAnd().isNull(name, getType(name)).end())
+        Some(builder.startAnd()
+          .isNull(dataTypeMap(name).fieldName, getType(name)).end())
 
       case IsNotNull(name) if dataTypeMap.contains(name) =>
-        Some(builder.startNot().isNull(name, getType(name)).end())
+        Some(builder.startNot()
+          .isNull(dataTypeMap(name).fieldName, getType(name)).end())
 
       case In(name, values) if dataTypeMap.contains(name) =>
-        val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(name)))
-        Some(builder.startAnd().in(name, getType(name),
+        val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(name).fieldType))
+        Some(builder.startAnd().in(dataTypeMap(name).fieldName, getType(name),
           castedValues.map(_.asInstanceOf[AnyRef]): _*).end())
 
       case _ => None
