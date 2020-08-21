@@ -280,7 +280,10 @@ private[spark] object Utils extends Logging {
       hadoopConf: Configuration): Unit = {
     if (isTrashEnabled && hadoopConf.getInt("fs.trash.interval", 0) > 0) {
       logDebug(s"will move data ${partitionPath.toString} to trash")
-      Trash.moveToAppropriateTrash(fs, partitionPath, hadoopConf)
+      val isSuccess = Trash.moveToAppropriateTrash(fs, partitionPath, hadoopConf)
+      if (!isSuccess) {
+        logWarning(s"Failed to move data ${partitionPath.toString} to trash")
+      }
     } else {
       fs.delete(partitionPath, true)
     }
