@@ -88,6 +88,8 @@ case class CreateFunctionCommand(
         catalog.alterFunction(func)
       } else {
         // For a permanent, we will store the metadata into underlying external catalog.
+        // This function will be loaded into the FunctionRegistry when a query uses it.
+        // We do not load it into FunctionRegistry right now.
         catalog.createFunction(func, ignoreIfExists)
       }
     }
