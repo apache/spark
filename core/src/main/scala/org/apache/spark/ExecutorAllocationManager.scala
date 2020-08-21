@@ -269,6 +269,7 @@ private[spark] class ExecutorAllocationManager(
   def reset(): Unit = synchronized {
     addTime = 0L
     numExecutorsTargetPerResourceProfileId.keys.foreach { rpId =>
+      logWarning(s"Resetting the num execs target rpId: $rpId to $initialNumExecutors")
       numExecutorsTargetPerResourceProfileId(rpId) = initialNumExecutors
     }
     executorMonitor.reset()
@@ -286,7 +287,7 @@ private[spark] class ExecutorAllocationManager(
     val numRunningOrPendingTasks = pending + running
     val rp = resourceProfileManager.resourceProfileFromId(rpId)
     val tasksPerExecutor = rp.maxTasksPerExecutor(conf)
-    logDebug(s"max needed for rpId: $rpId numpending: $numRunningOrPendingTasks," +
+    logWarning(s"max needed for rpId: $rpId numpending: $numRunningOrPendingTasks," +
       s" tasksperexecutor: $tasksPerExecutor")
     val maxNeeded = math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
       tasksPerExecutor).toInt
@@ -332,6 +333,7 @@ private[spark] class ExecutorAllocationManager(
       initializing = false
     }
 
+    logWarning("scheduled called")
     // Update executor target number only after initializing flag is unset
     updateAndSyncNumExecutorsTarget(clock.nanoTime())
     if (executorIdsToBeRemoved.nonEmpty) {
@@ -360,6 +362,7 @@ private[spark] class ExecutorAllocationManager(
     } else {
       val updatesNeeded = new mutable.HashMap[Int, ExecutorAllocationManager.TargetNumUpdates]
 
+      logWarning("in update and sync executors target")
       // Update targets for all ResourceProfiles then do a single request to the cluster manager
       numExecutorsTargetPerResourceProfileId.foreach { case (rpId, targetExecs) =>
         val maxNeeded = maxNumExecutorsNeededPerResourceProfile(rpId)
@@ -475,6 +478,7 @@ private[spark] class ExecutorAllocationManager(
   private def decrementExecutors(maxNeeded: Int, rpId: Int): Int = {
     val oldNumExecutorsTarget = numExecutorsTargetPerResourceProfileId(rpId)
     numExecutorsTargetPerResourceProfileId(rpId) = math.max(maxNeeded, minNumExecutors)
+    logWarning(s"decrement executors new num is ${numExecutorsTargetPerResourceProfileId(rpId)}")
     numExecutorsToAddPerResourceProfileId(rpId) = 1
     numExecutorsTargetPerResourceProfileId(rpId) - oldNumExecutorsTarget
   }
