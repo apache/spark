@@ -17,5 +17,8 @@
 # limitations under the License.
 #
 
+# This file is used for Binder integration to install PySpark available in
+# Jupyter notebook.
+
 VERSION=$(python -c "exec(open('python/pyspark/version.py').read()); print(__version__)")
 pip install "pyspark[sql,ml,mllib]<=$VERSION"

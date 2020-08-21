@@ -50,7 +50,8 @@ extensions = [
     'IPython.sphinxext.ipython_console_highlighting'
 ]
 
-# Links
+# Links used globally in the RST files.
+# These are defined here to allow link substitutions dynamically.
 rst_epilog = """
 .. |binder| replace:: Live Notebook
 .. _binder: https://mybinder.org/v2/gh/apache/spark/{0}?filepath=python%2Fdocs%2Fsource%2Fgetting_started%2Fquickstart.ipynb
