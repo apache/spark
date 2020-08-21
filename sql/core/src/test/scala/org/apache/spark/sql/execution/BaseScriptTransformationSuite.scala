@@ -372,6 +372,35 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             'e.cast("string"))).collect())
     }
   }
+
+  test("SPARK-32667: SCRIPT TRANSFORM pad null value to fill column" +
+    " when without schema less (no-serde)") {
+    val df = Seq(
+      (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
+      (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2)),
+      (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))
+    ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
+
+    checkAnswer(
+      df,
+      (child: SparkPlan) => createScriptTransformationExec(
+        input = Seq(
+          df.col("a").expr,
+          df.col("b").expr),
+        script = "cat",
+        output = Seq(
+          AttributeReference("a", StringType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", StringType)(),
+          AttributeReference("d", StringType)()),
+        child = child,
+        ioschema = defaultIOSchema
+      ),
+      df.select(
+        'a.cast("string").as("a"),
+        'b.cast("string").as("b"),
+        lit(null), lit(null)).collect())
+  }
 }
 
 case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {
