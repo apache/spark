@@ -73,7 +73,7 @@ private[sql] class HiveSessionCatalog(
       if (t.isSuccess) {
         t.asInstanceOf[Success[Expression]].get
       } else {
-        val exception = t.asInstanceOf[Failure].exception
+        val exception = t.asInstanceOf[Failure[Expression]].exception
         var udfExpr: Option[Expression] = None
         try {
           // When we instantiate hive UDF wrapper class, we may throw exception if the input
