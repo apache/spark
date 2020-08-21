@@ -6,9 +6,6 @@
 
 # TODO - Should we merge the main SBT script with this library?
 
-# debug GH download issue
-set -x
-
 if test -z "$HOME"; then
   declare -r script_dir="$(dirname "$script_path")"
 else
