@@ -158,8 +158,7 @@ object InMemoryFileIndex extends Logging {
       ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality,
       parallelismThreshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold,
       parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism,
-      filterFun = Some(shouldFilterOut),
-    )
+      filterFun = Some(shouldFilterOut))
  }
 
   /** Checks if we should filter out this path name. */

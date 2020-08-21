@@ -27,17 +27,15 @@ import org.apache.hadoop.fs.viewfs.ViewFileSystem
 import org.apache.hadoop.hdfs.DistributedFileSystem
 
 import org.apache.spark._
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.Private
 import org.apache.spark.internal.Logging
 
 /**
- * :: DeveloperApi ::
  * Utility functions to simplify and speed-up file listing.
  */
-@DeveloperApi
+@Private
 object HadoopFSUtils extends Logging {
   /**
-   * :: DeveloperApi ::
    * Lists a collection of paths recursively. Picks the listing strategy adaptively depending
    * on the number of paths to list.
    *
@@ -267,7 +265,7 @@ object HadoopFSUtils extends Logging {
             ignoreLocality = ignoreLocality,
             filterFun = filterFun,
             parallelismThreshold = parallelismThreshold,
-            parallelismMax = parallelismDefault,
+            parallelismMax = parallelismDefault
           ).flatMap(_._2)
         case _ =>
           dirs.flatMap { dir =>
