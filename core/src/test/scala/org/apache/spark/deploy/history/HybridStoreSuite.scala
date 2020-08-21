@@ -165,7 +165,9 @@ class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter {
     val listener = new SwitchListener()
     store.switchToLevelDB(listener, "test", None)
     assert(listener.waitUntilDone())
-    assert(store.getStore().isInstanceOf[LevelDB])
+    while (!store.getStore().isInstanceOf[LevelDB]) {
+      Thread.sleep(10)
+    }
   }
 
   private class SwitchListener extends HybridStore.SwitchToLevelDBListener {
