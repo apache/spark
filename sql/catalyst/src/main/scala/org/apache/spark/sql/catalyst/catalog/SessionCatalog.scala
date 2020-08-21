@@ -1370,6 +1370,17 @@ class SessionCatalog(
   }
 
   /**
+   * Make sure function class is on the classpath.
+   */
+  def requireFunctionClassExists(funcDefinition: CatalogFunction): Unit = {
+    val className = funcDefinition.className
+    if (!Utils.classIsLoadable(className)) {
+      throw new AnalysisException(s"Can not load class '$className' when registering " +
+        s"the function '${funcDefinition.identifier}', please make sure it is on the classpath")
+    }
+  }
+
+  /**
    * Unregister a temporary or permanent function from a session-specific [[FunctionRegistry]]
    * Return true if function exists.
    */

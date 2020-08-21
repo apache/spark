@@ -76,21 +76,23 @@ case class CreateFunctionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val func = CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources)
+    catalog.loadFunctionResources(resources)
+    // We fail fast if function class is not exists.
+    catalog.requireFunctionClassExists(func)
     if (isTemp) {
-      // We first load resources and then put the builder in the function registry.
-      catalog.loadFunctionResources(resources)
       catalog.registerFunction(func, overrideIfExists = replace)
     } else {
       // Handles `CREATE OR REPLACE FUNCTION AS ... USING ...`
       if (replace && catalog.functionExists(func.identifier)) {
-        // alter the function in the metastore
+        // Alter the function in the metastore
         catalog.alterFunction(func)
       } else {
         // For a permanent, we will store the metadata into underlying external catalog.
-        // This function will be loaded into the FunctionRegistry when a query uses it.
-        // We do not load it into FunctionRegistry right now.
         catalog.createFunction(func, ignoreIfExists)
       }
+      // We already created permanent function when we arrive there,
+      // so we override the cached function if exists.
+      catalog.registerFunction(func, overrideIfExists = true)
     }
     Seq.empty[Row]
   }
