@@ -264,7 +264,7 @@ parent RDD's number of partitions. You can pass the level of parallelism as a se
 or set the config property `spark.default.parallelism` to change the default.
 In general, we recommend 2-3 tasks per CPU core in your cluster.
 
-# Parallel Listing on Input Paths
+## Parallel Listing on Input Paths
 
 Sometimes you may also need to increase directory listing parallelism when job input has large number of directories,
 otherwise the process could take a very long time, especially when against object store like S3.

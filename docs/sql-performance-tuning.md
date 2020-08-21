@@ -119,7 +119,7 @@ that these options will be deprecated in future release as more optimizations ar
     <td>32</td>
     <td>
       Configures the threshold to enable parallel listing for job input paths. If the number of
-      input paths is larger than this threshold, Spark will use parallel listing on the driver side.
+      input paths is larger than this threshold, Spark will list the files by using Spark distributed job.
       Otherwise, it will fallback to sequential listing. This configuration is only effective when
       using file-based data sources such as Parquet, ORC and JSON.
     </td>
