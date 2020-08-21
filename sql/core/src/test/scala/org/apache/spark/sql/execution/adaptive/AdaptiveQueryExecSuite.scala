@@ -1181,4 +1181,36 @@ class AdaptiveQueryExecSuite
       checkNumLocalShuffleReaders(adaptivePlan)
     }
   }
+
+  test("SPARK-32573, SPARK-32649: optimize join to empty relation") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+      // Test NULL-aware anti join
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData2 t1 WHERE t1.b NOT IN (SELECT b FROM testData3)")
+      val bhj = findTopLevelBroadcastHashJoin(plan)
+      assert(bhj.size == 1)
+      val join = findTopLevelBaseJoin(adaptivePlan)
+      assert(join.isEmpty)
+      checkNumLocalShuffleReaders(adaptivePlan)
+
+      // Test inner and left semi join
+      Seq(
+        // inner join (small table at right side)
+        "SELECT * FROM testData t1 join testData3 t2 ON t1.key = t2.a WHERE t2.b = 1",
+        // inner join (small table at left side)
+        "SELECT * FROM testData3 t1 join testData t2 ON t1.a = t2.key WHERE t1.b = 1",
+        // left semi join
+        "SELECT * FROM testData t1 left semi join testData3 t2 ON t1.key = t2.a AND t2.b = 1"
+      ).foreach(query => {
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+        val smj = findTopLevelSortMergeJoin(plan)
+        assert(smj.size == 1)
+        val join = findTopLevelBaseJoin(adaptivePlan)
+        assert(join.isEmpty)
+        checkNumLocalShuffleReaders(adaptivePlan)
+      })
+    }
+  }
 }
