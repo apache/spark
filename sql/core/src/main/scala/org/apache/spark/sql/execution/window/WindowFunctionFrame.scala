@@ -133,16 +133,11 @@ abstract class OffsetWindowFunctionFrameBase(
     inputIterator = input.generateIterator()
     // drain the first few rows if offset is larger than zero
     inputIndex = 0
-    val newOffset = if (offset >= 0) {
-      offset
-    } else {
-      inputIterator.size + offset
-    }
-    while (inputIndex < newOffset) {
+    while (inputIndex < offset) {
       if (inputIterator.hasNext) inputIterator.next()
       inputIndex += 1
     }
-    inputIndex = newOffset
+    inputIndex = offset
   }
 
   override def currentLowerBound(): Int = throw new UnsupportedOperationException()
@@ -192,6 +187,15 @@ class PartitionBasedOffsetWindowFunctionFrame(
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     super.prepare(rows)
+    if (offset < 0) {
+      inputIndex = 0
+      val newOffset = inputIterator.size + offset
+      while (inputIndex < newOffset) {
+        if (inputIterator.hasNext) inputIterator.next()
+        inputIndex += 1
+      }
+      inputIndex = newOffset
+    }
     if (inputIndex >= 0 && inputIndex < input.length) {
       val r = WindowFunctionFrame.getNextOrNull(inputIterator)
       projection(r)
