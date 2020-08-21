@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.joins.{EmptyHashedRelation, HashedRelation
  *    is [[HashedRelationWithAllNullKeys]].
  *
  * 2. Join is inner or left semi join, and broadcasted [[HashedRelation]]
-      is [[EmptyHashedRelation]].
+ *    is [[EmptyHashedRelation]].
  */
 object EliminateJoinToEmptyRelation extends Rule[LogicalPlan] {
 
