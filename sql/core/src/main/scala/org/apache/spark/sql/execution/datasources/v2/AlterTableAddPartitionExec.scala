@@ -55,7 +55,7 @@ case class AlterTableAddPartitionExec(
             notExistsPartitions.map(_._2.asJava).toArray)
       case _ =>
         throw new UnsupportedOperationException(
-          s"Nonatomic partition table ${table.name()} can not add multiple partitions")
+          s"Nonatomic partition table ${table.name()} can not add multiple partitions.")
     }
     Seq.empty
   }

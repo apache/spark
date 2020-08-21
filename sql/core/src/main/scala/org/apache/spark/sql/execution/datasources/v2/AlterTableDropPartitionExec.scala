@@ -50,7 +50,7 @@ case class AlterTableDropPartitionExec(
           .dropPartitions(existsPartitions.toArray)
       case _ =>
         throw new UnsupportedOperationException(
-          s"Nonatomic partition table ${table.name()} can not drop multiple partitions")
+          s"Nonatomic partition table ${table.name()} can not drop multiple partitions.")
     }
     Seq.empty
   }
