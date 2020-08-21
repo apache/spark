@@ -271,19 +271,18 @@ private[spark] object Utils extends Logging {
 
   /**
    * Move data to trash on truncate table given
-   * spark.sql.truncate.trash.interval is positive
+   * spark.sql.truncate.trash.enabled is true
    */
   def moveToTrashIfEnabled(
       fs: FileSystem,
       partitionPath: Path,
-      trashInterval: Int,
+      isTrashEnabled: Boolean,
       hadoopConf: Configuration): Unit = {
-    if (trashInterval < 0) {
-      fs.delete(partitionPath, true)
-    } else {
+    if (isTrashEnabled && hadoopConf.getInt("fs.trash.interval", 0) > 0) {
       logDebug(s"will move data ${partitionPath.toString} to trash")
-      hadoopConf.setInt("fs.trash.interval", trashInterval)
       Trash.moveToAppropriateTrash(fs, partitionPath, hadoopConf)
+    } else {
+      fs.delete(partitionPath, true)
     }
   }
 

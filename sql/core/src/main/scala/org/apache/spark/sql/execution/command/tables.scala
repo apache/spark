@@ -490,7 +490,7 @@ case class TruncateTableCommand(
       }
     val hadoopConf = spark.sessionState.newHadoopConf()
     val ignorePermissionAcl = SQLConf.get.truncateTableIgnorePermissionAcl
-    val trashInterval = SQLConf.get.truncateTrashInterval
+    val isTrashEnabled = SQLConf.get.truncateTrashEnabled
     locations.foreach { location =>
       if (location.isDefined) {
         val path = new Path(location.get)
@@ -515,7 +515,7 @@ case class TruncateTableCommand(
             }
           }
 
-          Utils.moveToTrashIfEnabled(fs, path, trashInterval, hadoopConf)
+          Utils.moveToTrashIfEnabled(fs, path, isTrashEnabled, hadoopConf)
 
           // We should keep original permission/acl of the path.
           // For owner/group, only super-user can set it, for example on HDFS. Because
