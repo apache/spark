@@ -470,8 +470,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
     val shuffleDepB = new ShuffleDependency(rddB, new HashPartitioner(1))
     val s_B = shuffleDepB.shuffleId
 
-    val rddC =
-      new MyRDD(sc, 1, List(shuffleDepA, shuffleDepB), tracker = mapOutputTracker)
+    val rddC = new MyRDD(sc, 1, List(shuffleDepA, shuffleDepB), tracker = mapOutputTracker)
     val shuffleDepC = new ShuffleDependency(rddC, new HashPartitioner(1))
     val s_C = shuffleDepC.shuffleId
 
@@ -500,7 +499,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
   }
 
   test("All shuffle files on the storage endpoint should be cleaned up when it is lost") {
-    setConf(
+    withConf(
       config.SHUFFLE_SERVICE_ENABLED.key -> "true",
       "spark.files.fetchFailure.unRegisterOutputOnHost" -> "true")
     runEvent(ExecutorAdded("hostA-exec1", "hostA"))
@@ -571,7 +570,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
   }
 
   test("SPARK-32003: All shuffle files for executor should be cleaned up on fetch failure") {
-    setConf(config.SHUFFLE_SERVICE_ENABLED.key -> "true")
+    withConf(config.SHUFFLE_SERVICE_ENABLED.key -> "true")
 
     val shuffleMapRdd = new MyRDD(sc, 3, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(3))
@@ -861,7 +860,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
       "not lost"
     }
     test(s"shuffle files $maybeLost when $eventDescription") {
-      setConf(config.SHUFFLE_SERVICE_ENABLED.key -> shuffleServiceOn.toString)
+      withConf(config.SHUFFLE_SERVICE_ENABLED.key -> shuffleServiceOn.toString)
       assert(sc.env.blockManager.externalShuffleServiceEnabled == shuffleServiceOn)
 
       val shuffleMapRdd = new MyRDD(sc, 2, Nil)
@@ -1104,8 +1103,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
 
     val shuffleOneRdd = new MyRDD(sc, 2, Nil).cache()
     val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, new HashPartitioner(2))
-    val shuffleTwoRdd =
-      new MyRDD(sc, 2, List(shuffleDepOne), tracker = mapOutputTracker).cache()
+    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne), tracker = mapOutputTracker).cache()
     val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, new HashPartitioner(1))
     val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo), tracker = mapOutputTracker)
     submit(finalRdd, Array(0))
@@ -1154,8 +1152,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
 
     val shuffleOneRdd = new MyRDD(sc, 2, Nil).cache()
     val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, new HashPartitioner(2))
-    val shuffleTwoRdd =
-      new MyRDD(sc, 2, List(shuffleDepOne), tracker = mapOutputTracker).cache()
+    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne), tracker = mapOutputTracker).cache()
     val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, new HashPartitioner(1))
     val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo), tracker = mapOutputTracker)
     submit(finalRdd, Array(0))
@@ -1759,8 +1756,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
     val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(2))
 
     val reduceRdd1 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
-    val reduceRdd2 =
-      new MyRDD(sc, 2, List(shuffleDep1, shuffleDep2), tracker = mapOutputTracker)
+    val reduceRdd2 = new MyRDD(sc, 2, List(shuffleDep1, shuffleDep2), tracker = mapOutputTracker)
 
     // We need to make our own listeners for this test, since by default submit uses the same
     // listener for all jobs, and here we want to capture the failure for each job separately.
@@ -1957,8 +1953,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
   test("cached post-shuffle") {
     val shuffleOneRdd = new MyRDD(sc, 2, Nil).cache()
     val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, new HashPartitioner(2))
-    val shuffleTwoRdd =
-      new MyRDD(sc, 2, List(shuffleDepOne), tracker = mapOutputTracker).cache()
+    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne), tracker = mapOutputTracker).cache()
     val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, new HashPartitioner(1))
     val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo), tracker = mapOutputTracker)
     submit(finalRdd, Array(0))
@@ -2259,8 +2254,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
     val shuffleDep = new ShuffleDependency(rdd1, new HashPartitioner(1))
     val narrowDep = new OneToOneDependency(rdd2)
     val shuffleId = shuffleDep.shuffleId
-    val reduceRdd =
-      new MyRDD(sc, 1, List(shuffleDep, narrowDep), tracker = mapOutputTracker)
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep, narrowDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0))
     completeShuffleMapStageSuccessfully(0, 0, 1)
     assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
@@ -2856,13 +2850,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
 
     val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
     val shuffleId1 = shuffleDep1.shuffleId
-    val shuffleMapRdd2 =
-      new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+    val shuffleMapRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
 
     val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(2))
     val shuffleId2 = shuffleDep2.shuffleId
-    val finalRdd =
-      new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
+    val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
 
     submit(finalRdd, Array(0, 1))
 
@@ -2883,7 +2875,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
   }
 
   test("SPARK-25341: abort stage while using old fetch protocol") {
-    setConf(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL.key -> "true")
+    withConf(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL.key -> "true")
     // Construct the scenario of indeterminate stage fetch failed.
     constructIndeterminateStageFetchFailed()
     // The job should fail because Spark can't rollback the shuffle map stage while
@@ -3201,8 +3193,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
     val treqs2 = new TaskResourceRequests().cpus(2)
     val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build
 
-    val rdd =
-      sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
+    val rdd = sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
     val error = intercept[IllegalArgumentException] {
       val (shuffledeps, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
       scheduler.mergeResourceProfilesForStage(resourceprofiles)
@@ -3212,7 +3203,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
   }
 
   test("test 2 resource profile with merge conflict config true") {
-    setConf(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key -> "true")
+    withConf(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key -> "true")
 
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
@@ -3222,8 +3213,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
     val treqs2 = new TaskResourceRequests().cpus(2)
     val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build
 
-    val rdd =
-      sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
+    val rdd = sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
     val (shuffledeps, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
     val mergedRp = scheduler.mergeResourceProfilesForStage(resourceprofiles)
     assert(mergedRp.getTaskCpus.get == 2)
@@ -3231,7 +3221,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
   }
 
   test("test multiple resource profiles created from merging use same rp") {
-    setConf(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key -> "true")
+    withConf(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key -> "true")
 
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
@@ -3241,16 +3231,14 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
     val treqs2 = new TaskResourceRequests().cpus(2)
     val rp2 = new ResourceProfileBuilder().require(ereqs2).require(treqs2).build
 
-    val rdd = sc.parallelize(1 to 10)
-      .withResources(rp1).map(x => (x, x)).withResources(rp2)
+    val rdd = sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
     val (_, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
     val mergedRp = scheduler.mergeResourceProfilesForStage(resourceprofiles)
     assert(mergedRp.getTaskCpus.get == 2)
     assert(mergedRp.getExecutorCores.get == 4)
 
     // test that instead of creating a new merged profile, we use the already created one
-    val rdd2 =
-      sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
+    val rdd2 = sc.parallelize(1 to 10).withResources(rp1).map(x => (x, x)).withResources(rp2)
     val (_, resourceprofiles2) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd2)
     val mergedRp2 = scheduler.mergeResourceProfilesForStage(resourceprofiles2)
     assert(mergedRp2.id === mergedRp.id)
@@ -3326,7 +3314,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
   }
 
   test("test merge 3 resource profiles") {
-    setConf(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key -> "true")
+    withConf(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key -> "true")
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
     val rp1 = new ResourceProfile(ereqs.requests, treqs.requests)

@@ -25,7 +25,15 @@ import org.scalatest.Suite
 import org.apache.spark.internal.Logging
 import org.apache.spark.resource.ResourceProfile
 
-/** Manages a local `sc` `SparkContext` variable, correctly stopping it after each test. */
+/**
+ * Manages a local `sc` `SparkContext` variable, correctly stopping it after each test.
+ *
+ * Note: this class is a copy of [[LocalSparkContext]]. Why copy it? Reduce conflict. Because
+ * many test suites use [[LocalSparkContext]] and overwrite some variable or function (e.g.
+ * sc of LocalSparkContext), there occurs conflict when we refactor the `sc` as a new function.
+ * After migrating all test suites that use [[LocalSparkContext]] to use [[LocalSC]], we will
+ * delete the original [[LocalSparkContext]] and rename [[LocalSC]] to [[LocalSparkContext]].
+ */
 trait LocalSC extends BeforeAndAfterEach
   with BeforeAndAfterAll with Logging { self: Suite =>
 
@@ -33,7 +41,7 @@ trait LocalSC extends BeforeAndAfterEach
 
   @transient private var _sc: SparkContext = _
 
-  def getSparkConf: SparkConf = _conf
+  def conf: SparkConf = _conf
 
   /**
    * Currently, we are focusing on the reconstruction of LocalSparkContext, so this method
@@ -47,7 +55,7 @@ trait LocalSC extends BeforeAndAfterEach
     _sc
   }
 
-  def setConf(pairs: (String, String)*): Unit = {
+  def withConf(pairs: (String, String)*): Unit = {
     if (_sc != null) {
       logWarning(s"These configurations ${pairs.mkString(", ")} won't take effect " +
         "since the SparkContext has been already initialized.")
@@ -77,7 +85,6 @@ trait LocalSC extends BeforeAndAfterEach
 
   private def defaultSparkConf: SparkConf = new SparkConf()
     .setMaster("local[2]").setAppName(s"${this.getClass.getSimpleName}")
-
 }
 
 object LocalSC {
@@ -97,7 +104,4 @@ object LocalSC {
       stop(sc)
     }
   }
-
 }
-
-
