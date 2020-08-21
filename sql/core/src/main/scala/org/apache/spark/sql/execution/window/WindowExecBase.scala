@@ -137,7 +137,7 @@ trait WindowExecBase extends UnaryExecNode {
           function match {
             case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
             case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
-            case f: OffsetWindowFunction => if (f.isWholeBased) {
+            case f: OffsetWindowFunction => if (f.isOffsetPartitionBased) {
               collect("WHOLE_OFFSET", frame, e, f)
             } else {
               collect("OFFSET", frame, e, f)
@@ -190,7 +190,7 @@ trait WindowExecBase extends UnaryExecNode {
 
           case ("WHOLE_OFFSET", _, IntegerLiteral(offset), _) =>
             target: InternalRow =>
-              new FixedOffsetWindowFunctionFrame(
+              new PartitionBasedOffsetWindowFunctionFrame(
                 target,
                 ordinal,
                 // OFFSET frame functions are guaranteed be OffsetWindowFunctions.

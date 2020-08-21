@@ -133,11 +133,16 @@ abstract class OffsetWindowFunctionFrameBase(
     inputIterator = input.generateIterator()
     // drain the first few rows if offset is larger than zero
     inputIndex = 0
-    while (inputIndex < offset) {
+    val newOffset = if (offset >= 0) {
+      offset
+    } else {
+      inputIterator.size + offset
+    }
+    while (inputIndex < newOffset) {
       if (inputIterator.hasNext) inputIterator.next()
       inputIndex += 1
     }
-    inputIndex = offset
+    inputIndex = newOffset
   }
 
   override def currentLowerBound(): Int = throw new UnsupportedOperationException()
@@ -175,7 +180,7 @@ class OffsetWindowFunctionFrame(
  * NTH_VALUE statements.
  * The fixed offset window frame return the same value for all rows in the window partition.
  */
-class FixedOffsetWindowFunctionFrame(
+class PartitionBasedOffsetWindowFunctionFrame(
     target: InternalRow,
     ordinal: Int,
     expressions: Array[OffsetWindowFunction],
@@ -184,8 +189,6 @@ class FixedOffsetWindowFunctionFrame(
     offset: Int)
   extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
-
-  var maybeRow: Option[UnsafeRow] = None
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     super.prepare(rows)
