@@ -180,6 +180,7 @@ object HadoopFSUtils extends Logging {
     }
   }
 
+  // scalastyle:off argcount
   /**
    * Lists a single filesystem path recursively. If a `SparkContext`` object is specified, this
    * function may launch Spark jobs to parallelize listing based on parallelismThreshold.
@@ -337,6 +338,7 @@ object HadoopFSUtils extends Logging {
 
     resolvedLeafStatuses.toSeq
   }
+  // scalastyle:on argcount
 
   /** A serializable variant of HDFS's BlockLocation. */
   private case class SerializableBlockLocation(
