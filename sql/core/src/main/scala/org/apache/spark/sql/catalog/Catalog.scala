@@ -354,13 +354,13 @@ abstract class Catalog {
   def createTable(
       tableName: String,
       source: String,
-      options: java.util.Map[String, String],
-      description: String): DataFrame = {
+      description: String,
+      options: java.util.Map[String, String]): DataFrame = {
     createTable(
       tableName,
       source = source,
-      options = options.asScala.toMap,
-      description = { if (description.isEmpty) None else Some(description) }
+      description = description,
+      options = options.asScala.toMap
     )
   }
 
@@ -377,8 +377,8 @@ abstract class Catalog {
   def createTable(
       tableName: String,
       source: String,
-      options: Map[String, String],
-      description: Option[String]): DataFrame
+      description: String,
+      options: Map[String, String]): DataFrame
 
   /**
    * Create a table based on the dataset in a data source, a schema and a set of options.
@@ -445,14 +445,14 @@ abstract class Catalog {
       tableName: String,
       source: String,
       schema: StructType,
-      options: java.util.Map[String, String],
-      description: String): DataFrame = {
+      description: String,
+      options: java.util.Map[String, String]): DataFrame = {
     createTable(
       tableName,
       source = source,
       schema = schema,
-      options = options.asScala.toMap,
-      description = { if (description.isEmpty) None else Some(description) }
+      description = description,
+      options = options.asScala.toMap
     )
   }
 
@@ -470,8 +470,8 @@ abstract class Catalog {
       tableName: String,
       source: String,
       schema: StructType,
-      options: Map[String, String],
-      description: Option[String]): DataFrame
+      description: String,
+      options: Map[String, String]): DataFrame
 
   /**
    * Drops the local temporary view with the given view name in the catalog.

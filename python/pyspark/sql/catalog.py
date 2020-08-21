@@ -177,13 +177,13 @@ class Catalog(object):
         if description is None:
             description = ""
         if schema is None:
-            df = self._jcatalog.createTable(tableName, source, options, description)
+            df = self._jcatalog.createTable(tableName, source, description, options)
         else:
             if not isinstance(schema, StructType):
                 raise TypeError("schema should be StructType")
             scala_datatype = self._jsparkSession.parseDataType(schema.json())
             df = self._jcatalog.createTable(
-                tableName, source, scala_datatype, options, description)
+                tableName, source, scala_datatype, description, options)
         return DataFrame(df, self._sparkSession._wrapped)
 
     @since(2.0)
