@@ -22,12 +22,38 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.Suite
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.resource.ResourceProfile
 
 /** Manages a local `sc` `SparkContext` variable, correctly stopping it after each test. */
-trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self: Suite =>
+trait LocalSC extends BeforeAndAfterEach
+  with BeforeAndAfterAll with Logging { self: Suite =>
 
-  @transient var sc: SparkContext = _
+  private var _conf: SparkConf = defaultSparkConf
+
+  @transient private var _sc: SparkContext = _
+
+  def getSparkConf: SparkConf = _conf
+
+  /**
+   * Currently, we are focusing on the reconstruction of LocalSparkContext, so this method
+   * was created temporarily. When the migration work is completed, this method will be
+   * renamed to `sc` and the variable `sc` will be deleted.
+   */
+  def sc: SparkContext = {
+    if (_sc == null) {
+      _sc = new SparkContext(_conf)
+    }
+    _sc
+  }
+
+  def setConf(pairs: (String, String)*): Unit = {
+    if (_sc != null) {
+      logWarning(s"These configurations ${pairs.mkString(", ")} won't take effect " +
+        "since the SparkContext has been already initialized.")
+    }
+    pairs.foreach { case (k, v) => _conf.set(k, v) }
+  }
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -43,14 +69,18 @@ trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self
   }
 
   def resetSparkContext(): Unit = {
-    LocalSparkContext.stop(sc)
+    LocalSC.stop(_sc)
     ResourceProfile.clearDefaultProfile()
-    sc = null
+    _sc = null
+    _conf = defaultSparkConf
   }
+
+  private def defaultSparkConf: SparkConf = new SparkConf()
+    .setMaster("local[2]").setAppName(s"${this.getClass.getSimpleName}")
 
 }
 
-object LocalSparkContext {
+object LocalSC {
   def stop(sc: SparkContext): Unit = {
     if (sc != null) {
       sc.stop()
@@ -69,3 +99,5 @@ object LocalSparkContext {
   }
 
 }
+
+
