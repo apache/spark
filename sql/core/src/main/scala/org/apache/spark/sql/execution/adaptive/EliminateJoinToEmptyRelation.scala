@@ -30,6 +30,9 @@ import org.apache.spark.sql.execution.joins.{EmptyHashedRelation, HashedRelation
  *
  * 2. Join is inner or left semi join, and broadcasted [[HashedRelation]]
  *    is [[EmptyHashedRelation]].
+ *    This applies to all Joins (sort merge join, shuffled hash join, and broadcast hash join),
+ *    because sort merge join and shuffled hash join will be changed to broadcast hash join with AQE
+ *    at the first place.
  */
 object EliminateJoinToEmptyRelation extends Rule[LogicalPlan] {
 
