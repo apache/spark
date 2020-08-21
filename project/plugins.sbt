@@ -52,4 +52,4 @@ libraryDependencies += "org.ow2.asm"  % "asm-commons" % "7.2"
 
 addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.2")
 
-addSbtPlugin("com.typesafe.sbt" % "sbt-pom-reader" % "2.1.0")
+addSbtPlugin("com.typesafe.sbt" % "sbt-pom-reader" % "2.2.0")
