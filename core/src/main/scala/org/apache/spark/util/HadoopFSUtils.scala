@@ -44,13 +44,57 @@ object HadoopFSUtils extends Logging {
    *
    * This may only be called on the driver.
    *
+   * @param sc Spark context used to run parallel listing.
+   * @param paths Input paths to list
+   * @param hadoopConf Hadoop configuration
+   * @param filter Path filter used to exclude leaf files from result
+   * @param areSQLRootPaths Whether the input paths are SQL root paths
+   * @param ignoreMissingFiles Ignore missing files that happen during recursive listing
+   *                           (e.g., due to race conditions)
+   * @param ignoreLocality Whether to fetch data locality info when listing leaf files. If false,
+   *                       this will return [[FileStatus]]es without [[BlockLocation]] info.
+   * @param parallelismThreshold The threshold to enable parallelism. If the number of input paths
+   *                             is smaller than this value, this will fallback to use
+   *                             sequential listing.
+   * @param parallelismMax The maximum parallelism for listing. If the number of input paths is
+   *                           larger than this value, parallelism will be throttled to this value
+   *                           to avoid generating too many tasks.
+   * @param filterFun Optional predicate on the leaf files. Files who failed the check will be
+   *                  excluded from the results
    * @return for each input path, the set of discovered files for the path
    */
-  @DeveloperApi
-  def parallelListLeafFiles(sc: SparkContext, paths: Seq[Path], hadoopConf: Configuration,
-    filter: PathFilter, areSQLRootPaths: Boolean, ignoreMissingFiles: Boolean,
-    ignoreLocality: Boolean, maxParallelism: Int,
-    filterFun: Option[String => Boolean] = None): Seq[(Path, Seq[FileStatus])] = {
+  def parallelListLeafFiles(
+      sc: SparkContext,
+      paths: Seq[Path],
+      hadoopConf: Configuration,
+      filter: PathFilter,
+      areSQLRootPaths: Boolean,
+      ignoreMissingFiles: Boolean,
+      ignoreLocality: Boolean,
+      parallelismThreshold: Int,
+      parallelismMax: Int,
+      filterFun: Option[String => Boolean] = None): Seq[(Path, Seq[FileStatus])] = {
+
+    // Short-circuits parallel listing when serial listing is likely to be faster.
+    if (paths.size <= parallelismThreshold) {
+      return paths.map { path =>
+        val leafFiles = listLeafFiles(
+          path,
+          hadoopConf,
+          filter,
+          Some(sc),
+          ignoreMissingFiles = ignoreMissingFiles,
+          ignoreLocality = ignoreLocality,
+          isSQLRootPath = areSQLRootPaths,
+          parallelismThreshold = parallelismThreshold,
+          parallelismDefault = parallelismMax,
+          filterFun = filterFun)
+        (path, leafFiles)
+      }
+    }
+
+    logInfo(s"Listing leaf files and directories in parallel under ${paths.length} paths." +
+      s" The first several paths are: ${paths.take(10).mkString(", ")}.")
     HiveCatalogMetrics.incrementParallelListingJobCount(1)
 
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)
@@ -58,7 +102,7 @@ object HadoopFSUtils extends Logging {
 
     // Set the number of parallelism to prevent following file listing from generating many tasks
     // in case of large #defaultParallelism.
-    val numParallelism = Math.min(paths.size, maxParallelism)
+    val numParallelism = Math.min(paths.size, parallelismMax)
 
     val previousJobDescription = sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION)
     val statusMap = try {
@@ -70,44 +114,83 @@ object HadoopFSUtils extends Logging {
         case s =>
           s"Listing leaf files and directories for $s paths:<br/>${paths(0)}, ..."
       }
-      sc.setJobDescription(description) // TODO(holden): should we use jobgroup?
+      sc.setJobDescription(description)
       sc
         .parallelize(serializedPaths, numParallelism)
         .mapPartitions { pathStrings =>
           val hadoopConf = serializableConfiguration.value
           pathStrings.map(new Path(_)).toSeq.map { path =>
             val leafFiles = listLeafFiles(
-              contextOpt = None, // Can't execute parallel scans on workers
               path = path,
               hadoopConf = hadoopConf,
               filter = filter,
+              contextOpt = None, // Can't execute parallel scans on workers
               ignoreMissingFiles = ignoreMissingFiles,
               ignoreLocality = ignoreLocality,
               isSQLRootPath = areSQLRootPaths,
               filterFun = filterFun,
               parallelismThreshold = Int.MaxValue,
-              maxParallelism = 0)
+              parallelismDefault = 0)
             (path, leafFiles)
           }.iterator
-        }.collect() // TODO(holden): should we use local itr here?
+        }.map { case (path, statuses) =>
+            val serializableStatuses = statuses.map { status =>
+              // Turn FileStatus into SerializableFileStatus so we can send it back to the driver
+              val blockLocations = status match {
+                case f: LocatedFileStatus =>
+                  f.getBlockLocations.map { loc =>
+                    SerializableBlockLocation(
+                      loc.getNames,
+                      loc.getHosts,
+                      loc.getOffset,
+                      loc.getLength)
+                  }
+
+                case _ =>
+                  Array.empty[SerializableBlockLocation]
+              }
+
+              SerializableFileStatus(
+                status.getPath.toString,
+                status.getLen,
+                status.isDirectory,
+                status.getReplication,
+                status.getBlockSize,
+                status.getModificationTime,
+                status.getAccessTime,
+                blockLocations)
+            }
+            (path.toString, serializableStatuses)
+        }.collect()
     } finally {
       sc.setJobDescription(previousJobDescription)
     }
 
-    statusMap.toSeq
+    // turn SerializableFileStatus back to Status
+    statusMap.map { case (path, serializableStatuses) =>
+      val statuses = serializableStatuses.map { f =>
+        val blockLocations = f.blockLocations.map { loc =>
+          new BlockLocation(loc.names, loc.hosts, loc.offset, loc.length)
+        }
+        new LocatedFileStatus(
+          new FileStatus(
+            f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime,
+            new Path(f.path)),
+          blockLocations)
+      }
+      (new Path(path), statuses)
+    }
   }
+
   /**
-   * :: DeveloperApi ::
-   * Lists a single filesystem path recursively. If a Sparkcontext object is specified, this
+   * Lists a single filesystem path recursively. If a `SparkContext`` object is specified, this
    * function may launch Spark jobs to parallelize listing based on parallelismThreshold.
    *
    * If sessionOpt is None, this may be called on executors.
    *
    * @return all children of path that match the specified filter.
    */
-  // scalastyle:off argcount
-  @DeveloperApi
-  def listLeafFiles(
+  private def listLeafFiles(
       path: Path,
       hadoopConf: Configuration,
       filter: PathFilter,
@@ -117,8 +200,7 @@ object HadoopFSUtils extends Logging {
       isSQLRootPath: Boolean,
       filterFun: Option[String => Boolean],
       parallelismThreshold: Int,
-      maxParallelism: Int): Seq[FileStatus] = {
-    // scalastyle:on argcount
+      parallelismDefault: Int): Seq[FileStatus] = {
 
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
@@ -185,7 +267,8 @@ object HadoopFSUtils extends Logging {
             ignoreMissingFiles = ignoreMissingFiles,
             ignoreLocality = ignoreLocality,
             filterFun = filterFun,
-            maxParallelism = maxParallelism
+            parallelismThreshold = parallelismThreshold,
+            parallelismMax = parallelismDefault,
           ).flatMap(_._2)
         case _ =>
           dirs.flatMap { dir =>
@@ -199,7 +282,7 @@ object HadoopFSUtils extends Logging {
               isSQLRootPath = false,
               filterFun = filterFun,
               parallelismThreshold = parallelismThreshold,
-              maxParallelism = maxParallelism)
+              parallelismDefault = parallelismDefault)
           }
       }
       val allFiles = topLevelFiles ++ nestedFiles
@@ -256,4 +339,22 @@ object HadoopFSUtils extends Logging {
 
     resolvedLeafStatuses.toSeq
   }
+
+  /** A serializable variant of HDFS's BlockLocation. */
+  private case class SerializableBlockLocation(
+    names: Array[String],
+    hosts: Array[String],
+    offset: Long,
+    length: Long)
+
+  /** A serializable variant of HDFS's FileStatus. */
+  private case class SerializableFileStatus(
+    path: String,
+    length: Long,
+    isDir: Boolean,
+    blockReplication: Short,
+    blockSize: Long,
+    modificationTime: Long,
+    accessTime: Long,
+    blockLocations: Array[SerializableBlockLocation])
 }

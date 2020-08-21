@@ -148,38 +148,19 @@ object InMemoryFileIndex extends Logging {
       filter: PathFilter,
       sparkSession: SparkSession,
       areRootPaths: Boolean): Seq[(Path, Seq[FileStatus])] = {
-
-    val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
-    val ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality
-    val parallelPartitionDiscoveryParallelism =
-      sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism
-    val sc = sparkSession.sparkContext
-
-    // Short-circuits parallel listing when serial listing is likely to be faster.
-    val threshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold
-    val result = if (paths.size <= threshold) {
-      paths.map { path =>
-        val leafFiles = HadoopFSUtils.listLeafFiles(
-          path = path,
-          hadoopConf = hadoopConf,
-          filter = filter,
-          contextOpt = Some(sc),
-          ignoreMissingFiles = ignoreMissingFiles,
-          ignoreLocality = ignoreLocality,
-          isSQLRootPath = areRootPaths,
-          filterFun = Some(shouldFilterOut),
-          parallelismThreshold = threshold,
-          maxParallelism = parallelPartitionDiscoveryParallelism)
-        (path, leafFiles)
-      }
-    } else {
-      HadoopFSUtils.parallelListLeafFiles(sparkSession.sparkContext, paths, hadoopConf, filter,
-        areSQLRootPaths = areRootPaths, ignoreMissingFiles = ignoreMissingFiles,
-        ignoreLocality = ignoreLocality, parallelPartitionDiscoveryParallelism,
-        Some(shouldFilterOut))
-    }
-    result
-  }
+    HadoopFSUtils.parallelListLeafFiles(
+      sc = sparkSession.sparkContext,
+      paths = paths,
+      hadoopConf = hadoopConf,
+      filter = filter,
+      areSQLRootPaths = areRootPaths,
+      ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles,
+      ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality,
+      parallelismThreshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold,
+      parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism,
+      filterFun = Some(shouldFilterOut),
+    )
+ }
 
   /** Checks if we should filter out this path name. */
   def shouldFilterOut(pathName: String): Boolean = {

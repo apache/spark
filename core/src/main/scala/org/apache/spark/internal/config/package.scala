@@ -443,40 +443,6 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  val PARALLEL_PARTITION_DISCOVERY_THRESHOLD =
-    ConfigBuilder("spark.rdd.sources.parallelPartitionDiscovery.threshold")
-      .doc("The maximum number of paths allowed for listing files at driver side. If the number " +
-        "of detected paths exceeds this value during partition discovery, it tries to list the " +
-        "files with another Spark distributed job. This configuration is effective only when " +
-        "using file-based using HadoopFSUtils")
-      .version("1.5.0")
-      .intConf
-      .checkValue(parallel => parallel >= 0, "The maximum number of paths allowed for listing " +
-        "files at driver side must not be negative")
-      .createWithDefault(2)
-
-  val PARALLEL_PARTITION_DISCOVERY_PARALLELISM =
-    ConfigBuilder("spark.rdd.sources.parallelPartitionDiscovery.parallelism")
-      .doc("The number of parallelism to list a collection of path recursively, Set the " +
-        "number to prevent file listing from generating too many tasks.")
-      .version("3.1.0")
-      .internal()
-      .intConf
-      .createWithDefault(10000)
-
-  val IGNORE_DATA_LOCALITY =
-    ConfigBuilder("spark.rdd.sources.ignoreDataLocality")
-      .doc("If true, Spark will not fetch the block locations for each file on " +
-        "listing files. This speeds up file listing, but the scheduler cannot " +
-        "schedule tasks to take advantage of data locality. It can be particularly " +
-        "useful if data is read from a remote cluster so the scheduler could never " +
-        "take advantage of locality anyway. This configuration is effective only when " +
-        "using file-based using HadoopFSUtils")
-      .version("3.1.0")
-      .internal()
-      .booleanConf
-      .createWithDefault(false)
-
   private[spark] val STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK =
     ConfigBuilder("spark.storage.decommission.maxReplicationFailuresPerBlock")
       .internal()

@@ -290,9 +290,9 @@ class FileIndexSuite extends SharedSparkSession {
           }
         }
         HiveCatalogMetrics.reset()
-        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() === 0)
+        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
         new InMemoryFileIndex(spark, Seq(new Path(dir.getCanonicalPath)), Map.empty, None)
-        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() === expectedNumPar)
+        assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == expectedNumPar)
       }
     }
   }
@@ -516,7 +516,6 @@ class FileIndexSuite extends SharedSparkSession {
       SQLConf.get.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, previousValue)
     }
   }
-
 }
 
 object DeletionRaceFileSystem {
