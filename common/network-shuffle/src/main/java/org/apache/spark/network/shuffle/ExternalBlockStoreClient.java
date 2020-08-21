@@ -175,8 +175,6 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
           logger.warn("Error trying to remove RDD blocks " + Arrays.toString(blockIds) +
             " via external shuffle service from executor: " + execId, t);
           numRemovedBlocksFuture.complete(0);
-        } finally {
-          client.close();
         }
       }
 
@@ -185,7 +183,6 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
         logger.warn("Error trying to remove RDD blocks " + Arrays.toString(blockIds) +
           " via external shuffle service from executor: " + execId, e);
         numRemovedBlocksFuture.complete(0);
-        client.close();
       }
     });
     return numRemovedBlocksFuture;
@@ -212,8 +209,6 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
               Arrays.toString(getLocalDirsMessage.execIds) + " via external shuffle service",
               t.getCause());
             hostLocalDirsCompletable.completeExceptionally(t);
-          } finally {
-            client.close();
           }
         }
 
@@ -223,7 +218,6 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
             Arrays.toString(getLocalDirsMessage.execIds) + " via external shuffle service",
             t.getCause());
           hostLocalDirsCompletable.completeExceptionally(t);
-          client.close();
         }
       });
     } catch (IOException | InterruptedException e) {
