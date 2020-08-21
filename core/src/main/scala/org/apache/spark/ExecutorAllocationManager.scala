@@ -272,6 +272,9 @@ private[spark] class ExecutorAllocationManager(
       logWarning(s"Resetting the num execs target rpId: $rpId to $initialNumExecutors")
       numExecutorsTargetPerResourceProfileId(rpId) = initialNumExecutors
     }
+    numExecutorsToAddPerResourceProfileId.keys.foreach { rpId =>
+      numExecutorsToAddPerResourceProfileId(rpId) = 1
+    }
     executorMonitor.reset()
   }
 
