@@ -156,10 +156,7 @@ private[sql] trait LookupCatalog extends Logging {
     }
   }
 
-  // TODO: move function related v2 statements to the new framework.
-  def parseSessionCatalogFunctionIdentifier(
-      nameParts: Seq[String],
-      sql: String): FunctionIdentifier = {
+  def parseSessionCatalogFunctionIdentifier(nameParts: Seq[String]): FunctionIdentifier = {
     if (nameParts.length == 1 && catalogManager.v1SessionCatalog.isTempFunction(nameParts.head)) {
       return FunctionIdentifier(nameParts.head)
     }
@@ -179,7 +176,7 @@ private[sql] trait LookupCatalog extends Logging {
           }
         }
 
-      case _ => throw new AnalysisException(s"$sql is only supported in v1 catalog")
+      case _ => throw new AnalysisException("function is only supported in v1 catalog")
     }
   }
 }

@@ -91,9 +91,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
         .select(max('d))
     val scalarSubquery =
       testRelation
-        .where(ScalarSubquery(subPlan))
+        .where(ScalarSubquery(subPlan) === 1)
         .select('a).analyze
-    assert(scalarSubquery.resolved)
 
     val optimized = Optimize.execute(scalarSubquery)
     val doubleOptimized = Optimize.execute(optimized)

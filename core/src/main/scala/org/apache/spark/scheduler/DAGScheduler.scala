@@ -480,10 +480,12 @@ private[spark] class DAGScheduler(
    * submission.
    */
   private def checkBarrierStageWithNumSlots(rdd: RDD[_], rp: ResourceProfile): Unit = {
-    val numPartitions = rdd.getNumPartitions
-    val maxNumConcurrentTasks = sc.maxNumConcurrentTasks(rp)
-    if (rdd.isBarrier() && numPartitions > maxNumConcurrentTasks) {
-      throw new BarrierJobSlotsNumberCheckFailed(numPartitions, maxNumConcurrentTasks)
+    if (rdd.isBarrier()) {
+      val numPartitions = rdd.getNumPartitions
+      val maxNumConcurrentTasks = sc.maxNumConcurrentTasks(rp)
+      if (numPartitions > maxNumConcurrentTasks) {
+        throw new BarrierJobSlotsNumberCheckFailed(numPartitions, maxNumConcurrentTasks)
+      }
     }
   }
 
@@ -1821,10 +1823,19 @@ private[spark] class DAGScheduler(
 
           // TODO: mark the executor as failed only if there were lots of fetch failures on it
           if (bmAddress != null) {
-            val hostToUnregisterOutputs = if (env.blockManager.externalShuffleServiceEnabled &&
-              unRegisterOutputOnHostOnFetchFailure) {
-              // We had a fetch failure with the external shuffle service, so we
-              // assume all shuffle data on the node is bad.
+            val externalShuffleServiceEnabled = env.blockManager.externalShuffleServiceEnabled
+            val isHostDecommissioned = taskScheduler
+              .getExecutorDecommissionInfo(bmAddress.executorId)
+              .exists(_.isHostDecommissioned)
+
+            // Shuffle output of all executors on host `bmAddress.host` may be lost if:
+            // - External shuffle service is enabled, so we assume that all shuffle data on node is
+            //   bad.
+            // - Host is decommissioned, thus all executors on that host will die.
+            val shuffleOutputOfEntireHostLost = externalShuffleServiceEnabled ||
+              isHostDecommissioned
+            val hostToUnregisterOutputs = if (shuffleOutputOfEntireHostLost
+              && unRegisterOutputOnHostOnFetchFailure) {
               Some(bmAddress.host)
             } else {
               // Unregister shuffle data just for one executor (we don't have any
@@ -1835,7 +1846,14 @@ private[spark] class DAGScheduler(
               execId = bmAddress.executorId,
               fileLost = true,
               hostToUnregisterOutputs = hostToUnregisterOutputs,
-              maybeEpoch = Some(task.epoch))
+              maybeEpoch = Some(task.epoch),
+              // shuffleFileLostEpoch is ignored when a host is decommissioned because some
+              // decommissioned executors on that host might have been removed before this fetch
+              // failure and might have bumped up the shuffleFileLostEpoch. We ignore that, and
+              // proceed with unconditional removal of shuffle outputs from all executors on that
+              // host, including from those that we still haven't confirmed as lost due to heartbeat
+              // delays.
+              ignoreShuffleFileLostEpoch = isHostDecommissioned)
           }
         }
 
@@ -2001,7 +2019,8 @@ private[spark] class DAGScheduler(
       execId: String,
       fileLost: Boolean,
       hostToUnregisterOutputs: Option[String],
-      maybeEpoch: Option[Long] = None): Unit = {
+      maybeEpoch: Option[Long] = None,
+      ignoreShuffleFileLostEpoch: Boolean = false): Unit = {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     logDebug(s"Considering removal of executor $execId; " +
       s"fileLost: $fileLost, currentEpoch: $currentEpoch")
@@ -2011,16 +2030,25 @@ private[spark] class DAGScheduler(
       blockManagerMaster.removeExecutor(execId)
       clearCacheLocs()
     }
-    if (fileLost &&
-        (!shuffleFileLostEpoch.contains(execId) || shuffleFileLostEpoch(execId) < currentEpoch)) {
-      shuffleFileLostEpoch(execId) = currentEpoch
-      hostToUnregisterOutputs match {
-        case Some(host) =>
-          logInfo(s"Shuffle files lost for host: $host (epoch $currentEpoch)")
-          mapOutputTracker.removeOutputsOnHost(host)
-        case None =>
-          logInfo(s"Shuffle files lost for executor: $execId (epoch $currentEpoch)")
-          mapOutputTracker.removeOutputsOnExecutor(execId)
+    if (fileLost) {
+      val remove = if (ignoreShuffleFileLostEpoch) {
+        true
+      } else if (!shuffleFileLostEpoch.contains(execId) ||
+        shuffleFileLostEpoch(execId) < currentEpoch) {
+        shuffleFileLostEpoch(execId) = currentEpoch
+        true
+      } else {
+        false
+      }
+      if (remove) {
+        hostToUnregisterOutputs match {
+          case Some(host) =>
+            logInfo(s"Shuffle files lost for host: $host (epoch $currentEpoch)")
+            mapOutputTracker.removeOutputsOnHost(host)
+          case None =>
+            logInfo(s"Shuffle files lost for executor: $execId (epoch $currentEpoch)")
+            mapOutputTracker.removeOutputsOnExecutor(execId)
+        }
       }
     }
   }
@@ -2339,7 +2367,7 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
 
     case ExecutorLost(execId, reason) =>
       val workerLost = reason match {
-        case ExecutorProcessLost(_, true) => true
+        case ExecutorProcessLost(_, true, _) => true
         case _ => false
       }
       dagScheduler.handleExecutorLost(execId, workerLost)

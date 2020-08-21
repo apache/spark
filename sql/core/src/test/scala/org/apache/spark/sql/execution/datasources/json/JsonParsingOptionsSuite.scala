@@ -112,12 +112,23 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("allowNonNumericNumbers on") {
-    val str = """{"age": NaN}"""
+    val str = """{"c0":NaN, "c1":+INF, "c2":+Infinity, "c3":Infinity, "c4":-INF, "c5":-Infinity}"""
     val df = spark.read.option("allowNonNumericNumbers", true).json(Seq(str).toDS())
 
-    assert(df.schema.head.name == "age")
-    assert(df.schema.head.dataType == DoubleType)
-    assert(df.first().getDouble(0).isNaN)
+    assert(df.schema ===
+      new StructType()
+        .add("c0", "double")
+        .add("c1", "double")
+        .add("c2", "double")
+        .add("c3", "double")
+        .add("c4", "double")
+        .add("c5", "double"))
+    checkAnswer(
+      df,
+      Row(
+        Double.NaN,
+        Double.PositiveInfinity, Double.PositiveInfinity, Double.PositiveInfinity,
+        Double.NegativeInfinity, Double.NegativeInfinity))
   }
 
   test("allowBackslashEscapingAnyCharacter off") {

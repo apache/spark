@@ -32,12 +32,14 @@ class AvroDataSourceV2 extends FileDataSourceV2 {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     val paths = getPaths(options)
     val tableName = getTableName(options, paths)
-    AvroTable(tableName, sparkSession, options, paths, None, fallbackFileFormat)
+    val optionsWithoutPaths = getOptionsWithoutPaths(options)
+    AvroTable(tableName, sparkSession, optionsWithoutPaths, paths, None, fallbackFileFormat)
   }
 
   override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
     val paths = getPaths(options)
     val tableName = getTableName(options, paths)
-    AvroTable(tableName, sparkSession, options, paths, Some(schema), fallbackFileFormat)
+    val optionsWithoutPaths = getOptionsWithoutPaths(options)
+    AvroTable(tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
   }
 }

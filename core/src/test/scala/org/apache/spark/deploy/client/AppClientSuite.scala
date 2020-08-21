@@ -59,7 +59,7 @@ class AppClientSuite
    */
   override def beforeAll(): Unit = {
     super.beforeAll()
-    conf = new SparkConf().set(config.Worker.WORKER_DECOMMISSION_ENABLED.key, "true")
+    conf = new SparkConf().set(config.DECOMMISSION_ENABLED.key, "true")
     securityManager = new SecurityManager(conf)
     masterRpcEnv = RpcEnv.create(Master.SYSTEM_NAME, "localhost", 0, conf, securityManager)
     workerRpcEnvs = (0 until numWorkers).map { i =>

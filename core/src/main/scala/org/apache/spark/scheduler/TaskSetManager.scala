@@ -71,6 +71,7 @@ private[spark] class TaskSetManager(
   val ser = env.closureSerializer.newInstance()
 
   val tasks = taskSet.tasks
+  private val isShuffleMapTasks = tasks(0).isInstanceOf[ShuffleMapTask]
   private[scheduler] val partitionToIndex = tasks.zipWithIndex
     .map { case (t, idx) => t.partitionId -> idx }.toMap
   val numTasks = tasks.length
@@ -102,8 +103,9 @@ private[spark] class TaskSetManager(
     }
     numTasks <= slots
   }
-  val executorDecommissionKillInterval = conf.get(EXECUTOR_DECOMMISSION_KILL_INTERVAL).map(
-    TimeUnit.SECONDS.toMillis)
+
+  private val executorDecommissionKillInterval =
+    conf.get(EXECUTOR_DECOMMISSION_KILL_INTERVAL).map(TimeUnit.SECONDS.toMillis)
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not
@@ -477,8 +479,8 @@ private[spark] class TaskSetManager(
         // We used to log the time it takes to serialize the task, but task size is already
         // a good proxy to task serialization time.
         // val timeTaken = clock.getTime() - startTime
-        val taskName = s"task ${info.id} in stage ${taskSet.id}"
-        logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
+        val tName = taskName(taskId)
+        logInfo(s"Starting $tName ($host, executor ${info.executorId}, " +
           s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes) " +
           s"taskResourceAssignments ${taskResourceAssignments}")
 
@@ -487,7 +489,7 @@ private[spark] class TaskSetManager(
           taskId,
           attemptNum,
           execId,
-          taskName,
+          tName,
           index,
           task.partitionId,
           addedFiles,
@@ -505,6 +507,12 @@ private[spark] class TaskSetManager(
     } else {
       (None, false)
     }
+  }
+
+  def taskName(tid: Long): String = {
+    val info = taskInfos.get(tid)
+    assert(info.isDefined, s"Can not find TaskInfo for task (TID $tid)")
+    s"task ${info.get.id} in stage ${taskSet.id} (TID $tid)"
   }
 
   private def maybeFinishTaskSet(): Unit = {
@@ -690,12 +698,14 @@ private[spark] class TaskSetManager(
   }
 
   /**
-   * Check whether has enough quota to fetch the result with `size` bytes
+   * Check whether has enough quota to fetch the result with `size` bytes.
+   * This check does not apply to shuffle map tasks as they return map status and metrics updates,
+   * which will be discarded by the driver after being processed.
    */
   def canFetchMoreResults(size: Long): Boolean = sched.synchronized {
     totalResultSize += size
     calculatedTasks += 1
-    if (maxResultSize > 0 && totalResultSize > maxResultSize) {
+    if (!isShuffleMapTasks && maxResultSize > 0 && totalResultSize > maxResultSize) {
       val msg = s"Total size of serialized results of ${calculatedTasks} tasks " +
         s"(${Utils.bytesToString(totalResultSize)}) is bigger than ${config.MAX_RESULT_SIZE.key} " +
         s"(${Utils.bytesToString(maxResultSize)})"
@@ -739,9 +749,8 @@ private[spark] class TaskSetManager(
     // Kill any other attempts for the same task (since those are unnecessary now that one
     // attempt completed successfully).
     for (attemptInfo <- taskAttempts(index) if attemptInfo.running) {
-      logInfo(s"Killing attempt ${attemptInfo.attemptNumber} for task ${attemptInfo.id} " +
-        s"in stage ${taskSet.id} (TID ${attemptInfo.taskId}) on ${attemptInfo.host} " +
-        s"as the attempt ${info.attemptNumber} succeeded on ${info.host}")
+      logInfo(s"Killing attempt ${attemptInfo.attemptNumber} for ${taskName(attemptInfo.taskId)}" +
+        s" on ${attemptInfo.host} as the attempt ${info.attemptNumber} succeeded on ${info.host}")
       killedByOtherAttempt += attemptInfo.taskId
       sched.backend.killTask(
         attemptInfo.taskId,
@@ -751,17 +760,16 @@ private[spark] class TaskSetManager(
     }
     if (!successful(index)) {
       tasksSuccessful += 1
-      logInfo(s"Finished task ${info.id} in stage ${taskSet.id} (TID ${info.taskId}) in" +
-        s" ${info.duration} ms on ${info.host} (executor ${info.executorId})" +
-        s" ($tasksSuccessful/$numTasks)")
+      logInfo(s"Finished ${taskName(info.taskId)} in ${info.duration} ms " +
+        s"on ${info.host} (executor ${info.executorId}) ($tasksSuccessful/$numTasks)")
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
       if (tasksSuccessful == numTasks) {
         isZombie = true
       }
     } else {
-      logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
-        " because task " + index + " has already completed successfully")
+      logInfo(s"Ignoring task-finished event for ${taskName(info.taskId)} " +
+        s"because it has already completed successfully")
     }
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
@@ -802,8 +810,8 @@ private[spark] class TaskSetManager(
     copiesRunning(index) -= 1
     var accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty
     var metricPeaks: Array[Long] = Array.empty
-    val failureReason = s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid, ${info.host}," +
-      s" executor ${info.executorId}): ${reason.toErrorString}"
+    val failureReason = s"Lost ${taskName(tid)} (${info.host} " +
+      s"executor ${info.executorId}): ${reason.toErrorString}"
     val failureException: Option[Throwable] = reason match {
       case fetchFailed: FetchFailed =>
         logWarning(failureReason)
@@ -824,12 +832,11 @@ private[spark] class TaskSetManager(
         // ExceptionFailure's might have accumulator updates
         accumUpdates = ef.accums
         metricPeaks = ef.metricPeaks.toArray
+        val task = taskName(tid)
         if (ef.className == classOf[NotSerializableException].getName) {
           // If the task result wasn't serializable, there's no point in trying to re-execute it.
-          logError("Task %s in stage %s (TID %d) had a not serializable result: %s; not retrying"
-            .format(info.id, taskSet.id, tid, ef.description))
-          abort("Task %s in stage %s (TID %d) had a not serializable result: %s".format(
-            info.id, taskSet.id, tid, ef.description))
+          logError(s"$task had a not serializable result: ${ef.description}; not retrying")
+          abort(s"$task had a not serializable result: ${ef.description}")
           return
         }
         if (ef.className == classOf[TaskOutputFileAlreadyExistException].getName) {
@@ -862,8 +869,8 @@ private[spark] class TaskSetManager(
           logWarning(failureReason)
         } else {
           logInfo(
-            s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid) on ${info.host}, executor" +
-              s" ${info.executorId}: ${ef.className} (${ef.description}) [duplicate $dupCount]")
+            s"Lost $task on ${info.host}, executor ${info.executorId}: " +
+              s"${ef.className} (${ef.description}) [duplicate $dupCount]")
         }
         ef.exception
 
@@ -875,7 +882,7 @@ private[spark] class TaskSetManager(
         None
 
       case e: ExecutorLostFailure if !e.exitCausedByApp =>
-        logInfo(s"Task $tid failed because while it was being computed, its executor " +
+        logInfo(s"${taskName(tid)} failed because while it was being computed, its executor " +
           "exited for a reason unrelated to the task. Not counting this failure towards the " +
           "maximum number of failures for the task.")
         None
@@ -906,10 +913,10 @@ private[spark] class TaskSetManager(
     }
 
     if (successful(index)) {
-      logInfo(s"Task ${info.id} in stage ${taskSet.id} (TID $tid) failed, but the task will not" +
-        s" be re-executed (either because the task failed with a shuffle data fetch failure," +
-        s" so the previous stage needs to be re-run, or because a different copy of the task" +
-        s" has already succeeded).")
+      logInfo(s"${taskName(info.taskId)} failed, but the task will not" +
+        " be re-executed (either because the task failed with a shuffle data fetch failure," +
+        " so the previous stage needs to be re-run, or because a different copy of the task" +
+        " has already succeeded).")
     } else {
       addPendingTask(index)
     }
@@ -962,8 +969,7 @@ private[spark] class TaskSetManager(
     // and we are not using an external shuffle server which could serve the shuffle outputs.
     // The reason is the next stage wouldn't be able to fetch the data from this dead executor
     // so we would need to rerun these tasks on other executors.
-    if (tasks(0).isInstanceOf[ShuffleMapTask] && !env.blockManager.externalShuffleServiceEnabled
-        && !isZombie) {
+    if (isShuffleMapTasks && !env.blockManager.externalShuffleServiceEnabled && !isZombie) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
         // We may have a running task whose partition has been marked as successful,
@@ -985,6 +991,7 @@ private[spark] class TaskSetManager(
       val exitCausedByApp: Boolean = reason match {
         case exited: ExecutorExited => exited.exitCausedByApp
         case ExecutorKilled => false
+        case ExecutorProcessLost(_, _, false) => false
         case _ => true
       }
       handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, exitCausedByApp,
@@ -1116,10 +1123,12 @@ private[spark] class TaskSetManager(
 
   def executorDecommission(execId: String): Unit = {
     recomputeLocality()
-    executorDecommissionKillInterval.foreach { interval =>
-      val executorKillTime = clock.getTimeMillis() + interval
-      runningTasksSet.filter(taskInfos(_).executorId == execId).foreach { tid =>
-        tidToExecutorKillTimeMapping(tid) = executorKillTime
+    if (speculationEnabled) {
+      executorDecommissionKillInterval.foreach { interval =>
+        val executorKillTime = clock.getTimeMillis() + interval
+        runningTasksSet.filter(taskInfos(_).executorId == execId).foreach { tid =>
+          tidToExecutorKillTimeMapping(tid) = executorKillTime
+        }
       }
     }
   }

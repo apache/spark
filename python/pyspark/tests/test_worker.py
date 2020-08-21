@@ -16,14 +16,13 @@
 # limitations under the License.
 #
 import os
-import sys
 import tempfile
 import threading
 import time
 import unittest
 has_resource_module = True
 try:
-    import resource
+    import resource  # noqa: F401
 except ImportError:
     has_resource_module = False
 
@@ -200,7 +199,7 @@ class WorkerMemoryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.tests.test_worker import *
+    from pyspark.tests.test_worker import *  # noqa: F401
 
     try:
         import xmlrunner

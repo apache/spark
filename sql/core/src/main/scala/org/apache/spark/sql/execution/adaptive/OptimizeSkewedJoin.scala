@@ -202,7 +202,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
         val leftParts = if (isLeftSkew && !isLeftCoalesced) {
           val reducerId = leftPartSpec.startReducerIndex
           val skewSpecs = createSkewPartitionSpecs(
-            left.shuffleStage.shuffle.shuffleDependency.shuffleId, reducerId, leftTargetSize)
+            left.mapStats.shuffleId, reducerId, leftTargetSize)
           if (skewSpecs.isDefined) {
             logDebug(s"Left side partition $partitionIndex " +
               s"(${FileUtils.byteCountToDisplaySize(leftActualSize)}) is skewed, " +
@@ -218,7 +218,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
         val rightParts = if (isRightSkew && !isRightCoalesced) {
           val reducerId = rightPartSpec.startReducerIndex
           val skewSpecs = createSkewPartitionSpecs(
-            right.shuffleStage.shuffle.shuffleDependency.shuffleId, reducerId, rightTargetSize)
+            right.mapStats.shuffleId, reducerId, rightTargetSize)
           if (skewSpecs.isDefined) {
             logDebug(s"Right side partition $partitionIndex " +
               s"(${FileUtils.byteCountToDisplaySize(rightActualSize)}) is skewed, " +

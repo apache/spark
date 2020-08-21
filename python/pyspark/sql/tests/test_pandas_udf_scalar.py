@@ -17,7 +17,6 @@
 import os
 import random
 import shutil
-import sys
 import tempfile
 import time
 import unittest
@@ -41,7 +40,7 @@ if have_pandas:
     import pandas as pd
 
 if have_pyarrow:
-    import pyarrow as pa
+    import pyarrow as pa  # noqa: F401
 
 
 @unittest.skipIf(

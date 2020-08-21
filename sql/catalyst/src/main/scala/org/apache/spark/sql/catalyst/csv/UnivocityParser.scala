@@ -25,10 +25,11 @@ import com.univocity.parsers.csv.CsvParser
 
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -98,7 +99,11 @@ class UnivocityParser(
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
 
-  private val csvFilters = new CSVFilters(filters, requiredSchema)
+  private val csvFilters = if (SQLConf.get.csvFilterPushDown) {
+    new OrderedFilters(filters, requiredSchema)
+  } else {
+    new NoopFilters
+  }
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {

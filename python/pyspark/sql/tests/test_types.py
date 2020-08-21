@@ -720,7 +720,7 @@ class TypesTests(ReusedSQLTestCase):
         unsupported_types = all_types - set(supported_types)
         # test unsupported types
         for t in unsupported_types:
-            with self.assertRaises(TypeError):
+            with self.assertRaisesRegexp(TypeError, "infer the type of the field myarray"):
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
 
@@ -969,7 +969,7 @@ class DataTypeVerificationTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_types import *
+    from pyspark.sql.tests.test_types import *  # noqa: F401
 
     try:
         import xmlrunner

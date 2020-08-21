@@ -53,15 +53,23 @@ EXPLAIN FORMATTED
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-AdaptiveSparkPlan (9)
-+- Sort (8)
-   +- Exchange (7)
-      +- HashAggregate (6)
-         +- Exchange (5)
-            +- HashAggregate (4)
-               +- Project (3)
-                  +- Filter (2)
-                     +- Scan parquet default.explain_temp1 (1)
+AdaptiveSparkPlan (8)
++- == Current Plan ==
+   Sort (7)
+   +- Exchange (6)
+      +- HashAggregate (5)
+         +- Exchange (4)
+            +- HashAggregate (3)
+               +- Filter (2)
+                  +- Scan parquet default.explain_temp1 (1)
++- == Initial Plan ==
+   Sort (7)
+   +- Exchange (6)
+      +- HashAggregate (5)
+         +- Exchange (4)
+            +- HashAggregate (3)
+               +- Filter (2)
+                  +- Scan parquet default.explain_temp1 (1)
 
 
 (1) Scan parquet default.explain_temp1
@@ -75,37 +83,33 @@ ReadSchema: struct<key:int,val:int>
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 0))
 
-(3) Project
-Output [2]: [key#x, val#x]
-Input [2]: [key#x, val#x]
-
-(4) HashAggregate
+(3) HashAggregate
 Input [2]: [key#x, val#x]
 Keys [1]: [key#x]
 Functions [1]: [partial_max(val#x)]
 Aggregate Attributes [1]: [max#x]
 Results [2]: [key#x, max#x]
 
-(5) Exchange
+(4) Exchange
 Input [2]: [key#x, max#x]
 Arguments: hashpartitioning(key#x, 4), true, [id=#x]
 
-(6) HashAggregate
+(5) HashAggregate
 Input [2]: [key#x, max#x]
 Keys [1]: [key#x]
 Functions [1]: [max(val#x)]
 Aggregate Attributes [1]: [max(val#x)#x]
 Results [2]: [key#x, max(val#x)#x AS max(val)#x]
 
-(7) Exchange
+(6) Exchange
 Input [2]: [key#x, max(val)#x]
 Arguments: rangepartitioning(key#x ASC NULLS FIRST, 4), true, [id=#x]
 
-(8) Sort
+(7) Sort
 Input [2]: [key#x, max(val)#x]
 Arguments: [key#x ASC NULLS FIRST], true, 0
 
-(9) AdaptiveSparkPlan
+(8) AdaptiveSparkPlan
 Output [2]: [key#x, max(val)#x]
 Arguments: isFinalPlan=false
 
@@ -121,15 +125,23 @@ EXPLAIN FORMATTED
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-AdaptiveSparkPlan (9)
-+- Project (8)
-   +- Filter (7)
-      +- HashAggregate (6)
-         +- Exchange (5)
-            +- HashAggregate (4)
-               +- Project (3)
-                  +- Filter (2)
-                     +- Scan parquet default.explain_temp1 (1)
+AdaptiveSparkPlan (8)
++- == Current Plan ==
+   Project (7)
+   +- Filter (6)
+      +- HashAggregate (5)
+         +- Exchange (4)
+            +- HashAggregate (3)
+               +- Filter (2)
+                  +- Scan parquet default.explain_temp1 (1)
++- == Initial Plan ==
+   Project (7)
+   +- Filter (6)
+      +- HashAggregate (5)
+         +- Exchange (4)
+            +- HashAggregate (3)
+               +- Filter (2)
+                  +- Scan parquet default.explain_temp1 (1)
 
 
 (1) Scan parquet default.explain_temp1
@@ -143,37 +155,33 @@ ReadSchema: struct<key:int,val:int>
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 0))
 
-(3) Project
-Output [2]: [key#x, val#x]
-Input [2]: [key#x, val#x]
-
-(4) HashAggregate
+(3) HashAggregate
 Input [2]: [key#x, val#x]
 Keys [1]: [key#x]
 Functions [1]: [partial_max(val#x)]
 Aggregate Attributes [1]: [max#x]
 Results [2]: [key#x, max#x]
 
-(5) Exchange
+(4) Exchange
 Input [2]: [key#x, max#x]
 Arguments: hashpartitioning(key#x, 4), true, [id=#x]
 
-(6) HashAggregate
+(5) HashAggregate
 Input [2]: [key#x, max#x]
 Keys [1]: [key#x]
 Functions [1]: [max(val#x)]
 Aggregate Attributes [1]: [max(val#x)#x]
 Results [3]: [key#x, max(val#x)#x AS max(val)#x, max(val#x)#x AS max(val#x)#x]
 
-(7) Filter
+(6) Filter
 Input [3]: [key#x, max(val)#x, max(val#x)#x]
 Condition : (isnotnull(max(val#x)#x) AND (max(val#x)#x > 0))
 
-(8) Project
+(7) Project
 Output [2]: [key#x, max(val)#x]
 Input [3]: [key#x, max(val)#x, max(val#x)#x]
 
-(9) AdaptiveSparkPlan
+(8) AdaptiveSparkPlan
 Output [2]: [key#x, max(val)#x]
 Arguments: isFinalPlan=false
 
@@ -187,17 +195,25 @@ EXPLAIN FORMATTED
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-AdaptiveSparkPlan (11)
-+- HashAggregate (10)
-   +- Exchange (9)
-      +- HashAggregate (8)
-         +- Union (7)
-            :- Project (3)
-            :  +- Filter (2)
-            :     +- Scan parquet default.explain_temp1 (1)
-            +- Project (6)
-               +- Filter (5)
-                  +- Scan parquet default.explain_temp1 (4)
+AdaptiveSparkPlan (9)
++- == Current Plan ==
+   HashAggregate (8)
+   +- Exchange (7)
+      +- HashAggregate (6)
+         +- Union (5)
+            :- Filter (2)
+            :  +- Scan parquet default.explain_temp1 (1)
+            +- Filter (4)
+               +- Scan parquet default.explain_temp1 (3)
++- == Initial Plan ==
+   HashAggregate (8)
+   +- Exchange (7)
+      +- HashAggregate (6)
+         +- Union (5)
+            :- Filter (2)
+            :  +- Scan parquet default.explain_temp1 (1)
+            +- Filter (4)
+               +- Scan parquet default.explain_temp1 (3)
 
 
 (1) Scan parquet default.explain_temp1
@@ -211,26 +227,29 @@ ReadSchema: struct<key:int,val:int>
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 0))
 
-(3) Project
-Output [2]: [key#x, val#x]
-Input [2]: [key#x, val#x]
-
-(4) Scan parquet default.explain_temp1
+(3) Scan parquet default.explain_temp1
 Output [2]: [key#x, val#x]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/explain_temp1]
 PushedFilters: [IsNotNull(key), GreaterThan(key,0)]
 ReadSchema: struct<key:int,val:int>
 
-(5) Filter
+(4) Filter
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 0))
 
-(6) Project
-Output [2]: [key#x, val#x]
-Input [2]: [key#x, val#x]
+(5) Union
 
-(7) Union
+(6) HashAggregate
+Input [2]: [key#x, val#x]
+Keys [2]: [key#x, val#x]
+Functions: []
+Aggregate Attributes: []
+Results [2]: [key#x, val#x]
+
+(7) Exchange
+Input [2]: [key#x, val#x]
+Arguments: hashpartitioning(key#x, val#x, 4), true, [id=#x]
 
 (8) HashAggregate
 Input [2]: [key#x, val#x]
@@ -239,18 +258,7 @@ Functions: []
 Aggregate Attributes: []
 Results [2]: [key#x, val#x]
 
-(9) Exchange
-Input [2]: [key#x, val#x]
-Arguments: hashpartitioning(key#x, val#x, 4), true, [id=#x]
-
-(10) HashAggregate
-Input [2]: [key#x, val#x]
-Keys [2]: [key#x, val#x]
-Functions: []
-Aggregate Attributes: []
-Results [2]: [key#x, val#x]
-
-(11) AdaptiveSparkPlan
+(9) AdaptiveSparkPlan
 Output [2]: [key#x, val#x]
 Arguments: isFinalPlan=false
 
@@ -265,15 +273,21 @@ EXPLAIN FORMATTED
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-AdaptiveSparkPlan (9)
-+- BroadcastHashJoin Inner BuildRight (8)
-   :- Project (3)
-   :  +- Filter (2)
-   :     +- Scan parquet default.explain_temp1 (1)
-   +- BroadcastExchange (7)
-      +- Project (6)
-         +- Filter (5)
-            +- Scan parquet default.explain_temp2 (4)
+AdaptiveSparkPlan (7)
++- == Current Plan ==
+   BroadcastHashJoin Inner BuildRight (6)
+   :- Filter (2)
+   :  +- Scan parquet default.explain_temp1 (1)
+   +- BroadcastExchange (5)
+      +- Filter (4)
+         +- Scan parquet default.explain_temp2 (3)
++- == Initial Plan ==
+   BroadcastHashJoin Inner BuildRight (6)
+   :- Filter (2)
+   :  +- Scan parquet default.explain_temp1 (1)
+   +- BroadcastExchange (5)
+      +- Filter (4)
+         +- Scan parquet default.explain_temp2 (3)
 
 
 (1) Scan parquet default.explain_temp1
@@ -287,35 +301,27 @@ ReadSchema: struct<key:int,val:int>
 Input [2]: [key#x, val#x]
 Condition : isnotnull(key#x)
 
-(3) Project
-Output [2]: [key#x, val#x]
-Input [2]: [key#x, val#x]
-
-(4) Scan parquet default.explain_temp2
+(3) Scan parquet default.explain_temp2
 Output [2]: [key#x, val#x]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/explain_temp2]
 PushedFilters: [IsNotNull(key)]
 ReadSchema: struct<key:int,val:int>
 
-(5) Filter
+(4) Filter
 Input [2]: [key#x, val#x]
 Condition : isnotnull(key#x)
 
-(6) Project
-Output [2]: [key#x, val#x]
+(5) BroadcastExchange
 Input [2]: [key#x, val#x]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#x]
 
-(7) BroadcastExchange
-Input [2]: [key#x, val#x]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#x]
-
-(8) BroadcastHashJoin
+(6) BroadcastHashJoin
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
 Join condition: None
 
-(9) AdaptiveSparkPlan
+(7) AdaptiveSparkPlan
 Output [4]: [key#x, val#x, key#x, val#x]
 Arguments: isFinalPlan=false
 
@@ -330,13 +336,19 @@ EXPLAIN FORMATTED
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-AdaptiveSparkPlan (7)
-+- BroadcastHashJoin LeftOuter BuildRight (6)
+AdaptiveSparkPlan (6)
++- == Current Plan ==
+   BroadcastHashJoin LeftOuter BuildRight (5)
    :- Scan parquet default.explain_temp1 (1)
-   +- BroadcastExchange (5)
-      +- Project (4)
-         +- Filter (3)
-            +- Scan parquet default.explain_temp2 (2)
+   +- BroadcastExchange (4)
+      +- Filter (3)
+         +- Scan parquet default.explain_temp2 (2)
++- == Initial Plan ==
+   BroadcastHashJoin LeftOuter BuildRight (5)
+   :- Scan parquet default.explain_temp1 (1)
+   +- BroadcastExchange (4)
+      +- Filter (3)
+         +- Scan parquet default.explain_temp2 (2)
 
 
 (1) Scan parquet default.explain_temp1
@@ -356,20 +368,16 @@ ReadSchema: struct<key:int,val:int>
 Input [2]: [key#x, val#x]
 Condition : isnotnull(key#x)
 
-(4) Project
-Output [2]: [key#x, val#x]
+(4) BroadcastExchange
 Input [2]: [key#x, val#x]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#x]
 
-(5) BroadcastExchange
-Input [2]: [key#x, val#x]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#x]
-
-(6) BroadcastHashJoin
+(5) BroadcastHashJoin
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
 Join condition: None
 
-(7) AdaptiveSparkPlan
+(6) AdaptiveSparkPlan
 Output [4]: [key#x, val#x, key#x, val#x]
 Arguments: isFinalPlan=false
 
@@ -389,10 +397,13 @@ EXPLAIN FORMATTED
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-AdaptiveSparkPlan (4)
-+- Project (3)
-   +- Filter (2)
-      +- Scan parquet default.explain_temp1 (1)
+AdaptiveSparkPlan (3)
++- == Current Plan ==
+   Filter (2)
+   +- Scan parquet default.explain_temp1 (1)
++- == Initial Plan ==
+   Filter (2)
+   +- Scan parquet default.explain_temp1 (1)
 
 
 (1) Scan parquet default.explain_temp1
@@ -406,11 +417,7 @@ ReadSchema: struct<key:int,val:int>
 Input [2]: [key#x, val#x]
 Condition : (((isnotnull(key#x) AND isnotnull(val#x)) AND (key#x = Subquery subquery#x, [id=#x])) AND (val#x > 3))
 
-(3) Project
-Output [2]: [key#x, val#x]
-Input [2]: [key#x, val#x]
-
-(4) AdaptiveSparkPlan
+(3) AdaptiveSparkPlan
 Output [2]: [key#x, val#x]
 Arguments: isFinalPlan=false
 
@@ -431,7 +438,11 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (3)
-+- Filter (2)
++- == Current Plan ==
+   Filter (2)
+   +- Scan parquet default.explain_temp1 (1)
++- == Initial Plan ==
+   Filter (2)
    +- Scan parquet default.explain_temp1 (1)
 
 
@@ -459,7 +470,11 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (3)
-+- Project (2)
++- == Current Plan ==
+   Project (2)
+   +- Scan parquet default.explain_temp1 (1)
++- == Initial Plan ==
+   Project (2)
    +- Scan parquet default.explain_temp1 (1)
 
 
@@ -490,15 +505,21 @@ EXPLAIN FORMATTED
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-AdaptiveSparkPlan (9)
-+- BroadcastHashJoin Inner BuildRight (8)
-   :- Project (3)
-   :  +- Filter (2)
-   :     +- Scan parquet default.explain_temp1 (1)
-   +- BroadcastExchange (7)
-      +- Project (6)
-         +- Filter (5)
-            +- Scan parquet default.explain_temp1 (4)
+AdaptiveSparkPlan (7)
++- == Current Plan ==
+   BroadcastHashJoin Inner BuildRight (6)
+   :- Filter (2)
+   :  +- Scan parquet default.explain_temp1 (1)
+   +- BroadcastExchange (5)
+      +- Filter (4)
+         +- Scan parquet default.explain_temp1 (3)
++- == Initial Plan ==
+   BroadcastHashJoin Inner BuildRight (6)
+   :- Filter (2)
+   :  +- Scan parquet default.explain_temp1 (1)
+   +- BroadcastExchange (5)
+      +- Filter (4)
+         +- Scan parquet default.explain_temp1 (3)
 
 
 (1) Scan parquet default.explain_temp1
@@ -512,35 +533,27 @@ ReadSchema: struct<key:int,val:int>
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 10))
 
-(3) Project
-Output [2]: [key#x, val#x]
-Input [2]: [key#x, val#x]
-
-(4) Scan parquet default.explain_temp1
+(3) Scan parquet default.explain_temp1
 Output [2]: [key#x, val#x]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/explain_temp1]
 PushedFilters: [IsNotNull(key), GreaterThan(key,10)]
 ReadSchema: struct<key:int,val:int>
 
-(5) Filter
+(4) Filter
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 10))
 
-(6) Project
-Output [2]: [key#x, val#x]
+(5) BroadcastExchange
 Input [2]: [key#x, val#x]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#x]
 
-(7) BroadcastExchange
-Input [2]: [key#x, val#x]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#x]
-
-(8) BroadcastHashJoin
+(6) BroadcastHashJoin
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
 Join condition: None
 
-(9) AdaptiveSparkPlan
+(7) AdaptiveSparkPlan
 Output [4]: [key#x, val#x, key#x, val#x]
 Arguments: isFinalPlan=false
 
@@ -558,21 +571,33 @@ EXPLAIN FORMATTED
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-AdaptiveSparkPlan (15)
-+- BroadcastHashJoin Inner BuildRight (14)
-   :- HashAggregate (6)
-   :  +- Exchange (5)
-   :     +- HashAggregate (4)
-   :        +- Project (3)
-   :           +- Filter (2)
-   :              +- Scan parquet default.explain_temp1 (1)
-   +- BroadcastExchange (13)
-      +- HashAggregate (12)
-         +- Exchange (11)
-            +- HashAggregate (10)
-               +- Project (9)
-                  +- Filter (8)
-                     +- Scan parquet default.explain_temp1 (7)
+AdaptiveSparkPlan (13)
++- == Current Plan ==
+   BroadcastHashJoin Inner BuildRight (12)
+   :- HashAggregate (5)
+   :  +- Exchange (4)
+   :     +- HashAggregate (3)
+   :        +- Filter (2)
+   :           +- Scan parquet default.explain_temp1 (1)
+   +- BroadcastExchange (11)
+      +- HashAggregate (10)
+         +- Exchange (9)
+            +- HashAggregate (8)
+               +- Filter (7)
+                  +- Scan parquet default.explain_temp1 (6)
++- == Initial Plan ==
+   BroadcastHashJoin Inner BuildRight (12)
+   :- HashAggregate (5)
+   :  +- Exchange (4)
+   :     +- HashAggregate (3)
+   :        +- Filter (2)
+   :           +- Scan parquet default.explain_temp1 (1)
+   +- BroadcastExchange (11)
+      +- HashAggregate (10)
+         +- Exchange (9)
+            +- HashAggregate (8)
+               +- Filter (7)
+                  +- Scan parquet default.explain_temp1 (6)
 
 
 (1) Scan parquet default.explain_temp1
@@ -586,71 +611,63 @@ ReadSchema: struct<key:int,val:int>
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 10))
 
-(3) Project
-Output [2]: [key#x, val#x]
-Input [2]: [key#x, val#x]
-
-(4) HashAggregate
+(3) HashAggregate
 Input [2]: [key#x, val#x]
 Keys [1]: [key#x]
 Functions [1]: [partial_max(val#x)]
 Aggregate Attributes [1]: [max#x]
 Results [2]: [key#x, max#x]
 
-(5) Exchange
+(4) Exchange
 Input [2]: [key#x, max#x]
 Arguments: hashpartitioning(key#x, 4), true, [id=#x]
 
-(6) HashAggregate
+(5) HashAggregate
 Input [2]: [key#x, max#x]
 Keys [1]: [key#x]
 Functions [1]: [max(val#x)]
 Aggregate Attributes [1]: [max(val#x)#x]
 Results [2]: [key#x, max(val#x)#x AS max(val)#x]
 
-(7) Scan parquet default.explain_temp1
+(6) Scan parquet default.explain_temp1
 Output [2]: [key#x, val#x]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/explain_temp1]
 PushedFilters: [IsNotNull(key), GreaterThan(key,10)]
 ReadSchema: struct<key:int,val:int>
 
-(8) Filter
+(7) Filter
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 10))
 
-(9) Project
-Output [2]: [key#x, val#x]
-Input [2]: [key#x, val#x]
-
-(10) HashAggregate
+(8) HashAggregate
 Input [2]: [key#x, val#x]
 Keys [1]: [key#x]
 Functions [1]: [partial_max(val#x)]
 Aggregate Attributes [1]: [max#x]
 Results [2]: [key#x, max#x]
 
-(11) Exchange
+(9) Exchange
 Input [2]: [key#x, max#x]
 Arguments: hashpartitioning(key#x, 4), true, [id=#x]
 
-(12) HashAggregate
+(10) HashAggregate
 Input [2]: [key#x, max#x]
 Keys [1]: [key#x]
 Functions [1]: [max(val#x)]
 Aggregate Attributes [1]: [max(val#x)#x]
 Results [2]: [key#x, max(val#x)#x AS max(val)#x]
 
-(13) BroadcastExchange
+(11) BroadcastExchange
 Input [2]: [key#x, max(val)#x]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#x]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#x]
 
-(14) BroadcastHashJoin
+(12) BroadcastHashJoin
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
 Join condition: None
 
-(15) AdaptiveSparkPlan
+(13) AdaptiveSparkPlan
 Output [4]: [key#x, max(val)#x, key#x, max(val)#x]
 Arguments: isFinalPlan=false
 
@@ -693,7 +710,13 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (5)
-+- HashAggregate (4)
++- == Current Plan ==
+   HashAggregate (4)
+   +- Exchange (3)
+      +- HashAggregate (2)
+         +- Scan parquet default.explain_temp1 (1)
++- == Initial Plan ==
+   HashAggregate (4)
    +- Exchange (3)
       +- HashAggregate (2)
          +- Scan parquet default.explain_temp1 (1)
@@ -738,7 +761,13 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (5)
-+- ObjectHashAggregate (4)
++- == Current Plan ==
+   ObjectHashAggregate (4)
+   +- Exchange (3)
+      +- ObjectHashAggregate (2)
+         +- Scan parquet default.explain_temp4 (1)
++- == Initial Plan ==
+   ObjectHashAggregate (4)
    +- Exchange (3)
       +- ObjectHashAggregate (2)
          +- Scan parquet default.explain_temp4 (1)
@@ -783,7 +812,15 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (7)
-+- SortAggregate (6)
++- == Current Plan ==
+   SortAggregate (6)
+   +- Sort (5)
+      +- Exchange (4)
+         +- SortAggregate (3)
+            +- Sort (2)
+               +- Scan parquet default.explain_temp4 (1)
++- == Initial Plan ==
+   SortAggregate (6)
    +- Sort (5)
       +- Exchange (4)
          +- SortAggregate (3)

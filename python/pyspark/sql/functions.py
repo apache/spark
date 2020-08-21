@@ -29,9 +29,10 @@ from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import StringType, DataType
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
-from pyspark.sql.udf import UserDefinedFunction, _create_udf
+from pyspark.sql.udf import UserDefinedFunction, _create_udf  # noqa: F401
+from pyspark.sql.udf import _create_udf
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
-from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
+from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
 from pyspark.sql.utils import to_str
 
 # Note to developers: all of PySpark functions here take string as column names whenever possible.
@@ -329,8 +330,8 @@ def approx_count_distinct(col, rsd=None):
     """Aggregate function: returns a new :class:`Column` for approximate distinct count of
     column `col`.
 
-    :param rsd: maximum estimation error allowed (default = 0.05). For rsd < 0.01, it is more
-        efficient to use :func:`countDistinct`
+    :param rsd: maximum relative standard deviation allowed (default = 0.05).
+        For rsd < 0.01, it is more efficient to use :func:`countDistinct`
 
     >>> df.agg(approx_count_distinct(df.age).alias('distinct_ages')).collect()
     [Row(distinct_ages=2)]
@@ -1196,6 +1197,8 @@ def to_date(col, format=None):
     By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
     is omitted. Equivalent to ``col.cast("date")``.
 
+    .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_date(df.t).alias('date')).collect()
     [Row(date=datetime.date(1997, 2, 28))]
@@ -1218,6 +1221,8 @@ def to_timestamp(col, format=None):
     using the optionally specified format. Specify formats according to `datetime pattern`_.
     By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
     is omitted. Equivalent to ``col.cast("timestamp")``.
+
+    .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_timestamp(df.t).alias('dt')).collect()
@@ -1992,7 +1997,7 @@ def map_from_arrays(col1, col2):
     +----------------+
     |             map|
     +----------------+
-    |[2 -> a, 5 -> b]|
+    |{2 -> a, 5 -> b}|
     +----------------+
     """
     sc = SparkContext._active_spark_context
@@ -2312,9 +2317,9 @@ def explode_outer(col):
     +---+----------+----+
     | id|     a_map| col|
     +---+----------+----+
-    |  1|[x -> 1.0]| foo|
-    |  1|[x -> 1.0]| bar|
-    |  2|        []|null|
+    |  1|{x -> 1.0}| foo|
+    |  1|{x -> 1.0}| bar|
+    |  2|        {}|null|
     |  3|      null|null|
     +---+----------+----+
     """
@@ -2347,9 +2352,9 @@ def posexplode_outer(col):
     +---+----------+----+----+
     | id|     a_map| pos| col|
     +---+----------+----+----+
-    |  1|[x -> 1.0]|   0| foo|
-    |  1|[x -> 1.0]|   1| bar|
-    |  2|        []|null|null|
+    |  1|{x -> 1.0}|   0| foo|
+    |  1|{x -> 1.0}|   1| bar|
+    |  2|        {}|null|null|
     |  3|      null|null|null|
     +---+----------+----+----+
     """
@@ -2746,7 +2751,7 @@ def map_entries(col):
     +----------------+
     |         entries|
     +----------------+
-    |[[1, a], [2, b]]|
+    |[{1, a}, {2, b}]|
     +----------------+
     """
     sc = SparkContext._active_spark_context
@@ -2766,7 +2771,7 @@ def map_from_entries(col):
     +----------------+
     |             map|
     +----------------+
-    |[1 -> a, 2 -> b]|
+    |{1 -> a, 2 -> b}|
     +----------------+
     """
     sc = SparkContext._active_spark_context
@@ -2818,7 +2823,7 @@ def map_concat(*cols):
     +------------------------+
     |map3                    |
     +------------------------+
-    |[1 -> a, 2 -> b, 3 -> c]|
+    |{1 -> a, 2 -> b, 3 -> c}|
     +------------------------+
     """
     sc = SparkContext._active_spark_context
@@ -3237,7 +3242,7 @@ def transform_keys(col, f):
     +-------------------------+
     |data_upper               |
     +-------------------------+
-    |[BAR -> 2.0, FOO -> -2.0]|
+    |{BAR -> 2.0, FOO -> -2.0}|
     +-------------------------+
     """
     return _invoke_higher_order_function("TransformKeys", [col], [f])
@@ -3264,7 +3269,7 @@ def transform_values(col, f):
     +---------------------------------------+
     |new_data                               |
     +---------------------------------------+
-    |[OPS -> 34.0, IT -> 20.0, SALES -> 2.0]|
+    |{OPS -> 34.0, IT -> 20.0, SALES -> 2.0}|
     +---------------------------------------+
     """
     return _invoke_higher_order_function("TransformValues", [col], [f])
@@ -3290,7 +3295,7 @@ def map_filter(col, f):
     +--------------------------+
     |data_filtered             |
     +--------------------------+
-    |[baz -> 32.0, foo -> 42.0]|
+    |{baz -> 32.0, foo -> 42.0}|
     +--------------------------+
     """
     return _invoke_higher_order_function("MapFilter", [col], [f])
@@ -3320,7 +3325,7 @@ def map_zip_with(col1, col2, f):
     +---------------------------+
     |updated_data               |
     +---------------------------+
-    |[SALES -> 16.8, IT -> 48.0]|
+    |{SALES -> 16.8, IT -> 48.0}|
     +---------------------------+
     """
     return _invoke_higher_order_function("MapZipWith", [col1, col2], [f])
