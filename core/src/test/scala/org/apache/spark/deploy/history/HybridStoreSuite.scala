@@ -24,8 +24,8 @@ import java.util.concurrent.LinkedBlockingQueue
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.status.KVUtils._
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.status.KVUtils._
 import org.apache.spark.util.kvstore._
 
 class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter {
