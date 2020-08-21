@@ -90,9 +90,6 @@ case class CreateFunctionCommand(
         // For a permanent, we will store the metadata into underlying external catalog.
         catalog.createFunction(func, ignoreIfExists)
       }
-      // We already created permanent function when we arrive there,
-      // so we override the cached function if exists.
-      catalog.registerFunction(func, overrideIfExists = true)
     }
     Seq.empty[Row]
   }
