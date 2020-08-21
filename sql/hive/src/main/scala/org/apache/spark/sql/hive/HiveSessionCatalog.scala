@@ -97,8 +97,7 @@ private[sql] class HiveSessionCatalog(
             udfExpr.get.dataType // Force it to check input data types.
           } else if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
             udfExpr = Some(HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), input))
-            // Force it to check data types.
-            udfExpr.get.asInstanceOf[HiveGenericUDTF].elementSchema
+            udfExpr.get.asInstanceOf[HiveGenericUDTF].elementSchema // Force it to check data types.
           }
         } catch {
           case NonFatal(e) =>
