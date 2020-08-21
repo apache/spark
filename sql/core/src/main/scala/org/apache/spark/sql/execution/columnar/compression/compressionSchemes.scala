@@ -319,7 +319,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       var currentValueLocal: Long = 0
 
       while (pos < capacity) {
-        assert(valueCountLocal < runLocal)
+        assert(valueCountLocal <= runLocal)
         if (pos != nextNullIndex) {
           if (valueCountLocal == runLocal) {
             currentValueLocal = getFunction(buffer)
