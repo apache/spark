@@ -318,7 +318,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       var valueCountLocal = 0
       var currentValueLocal: Long = 0
 
-      while (valueCountLocal < runLocal || (pos < capacity)) {
+      while (pos < capacity) {
         if (pos != nextNullIndex) {
           if (valueCountLocal == runLocal) {
             currentValueLocal = getFunction(buffer)
@@ -626,7 +626,7 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
       var pos = 0
       var seenNulls = 0
 
-      while (visitedLocal < countLocal) {
+      while (pos < capacity) {
         if (pos != nextNullIndex) {
           val bit = visitedLocal % BITS_PER_LONG
 
