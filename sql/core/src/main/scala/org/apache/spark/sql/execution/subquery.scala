@@ -183,18 +183,6 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
         ScalarSubquery(
           SubqueryExec(s"scalar-subquery#${subquery.exprId.id}", executedPlan),
           subquery.exprId)
-      case expressions.InSubquery(values, ListQuery(query, _, exprId, _)) =>
-        val expr = if (values.length == 1) {
-          values.head
-        } else {
-          CreateNamedStruct(
-            values.zipWithIndex.flatMap { case (v, index) =>
-              Seq(Literal(s"col_$index"), v)
-            }
-          )
-        }
-        val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, query)
-        InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
     }
   }
 }

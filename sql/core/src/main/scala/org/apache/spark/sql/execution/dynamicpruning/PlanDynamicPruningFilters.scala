@@ -71,7 +71,6 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
           val mode = broadcastMode(buildKeys, executedPlan.output)
           // plan a broadcast exchange of the build side of the join
           val exchange = BroadcastExchangeExec(mode, executedPlan)
-          val name = s"dynamicpruning#${exprId.id}"
           // place the broadcast adaptor for reusing the broadcast results on the probe side
           val broadcastValues =
             SubqueryBroadcastExec(name, broadcastKeyIndex, buildKeys, exchange)
@@ -83,8 +82,8 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
           // we need to apply an aggregate on the buildPlan in order to be column pruned
           val alias = Alias(buildKeys(broadcastKeyIndex), buildKeys(broadcastKeyIndex).toString)()
           val aggregate = Aggregate(Seq(alias), Seq(alias), buildPlan)
-          DynamicPruningExpression(expressions.InSubquery(
-            Seq(value), ListQuery(aggregate, childOutputs = aggregate.output)))
+          val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, aggregate)
+          DynamicPruningExpression(InSubqueryExec(value, SubqueryExec(name, executedPlan), exprId))
         }
     }
   }

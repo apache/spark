@@ -29,17 +29,6 @@ case class PlanAdaptiveSubqueries(subqueryMap: Map[Long, SubqueryExec]) extends 
     plan.transformAllExpressions {
       case expressions.ScalarSubquery(_, _, exprId) =>
         execution.ScalarSubquery(subqueryMap(exprId.id), exprId)
-      case expressions.InSubquery(values, ListQuery(_, _, exprId, _)) =>
-        val expr = if (values.length == 1) {
-          values.head
-        } else {
-          CreateNamedStruct(
-            values.zipWithIndex.flatMap { case (v, index) =>
-              Seq(Literal(s"col_$index"), v)
-            }
-          )
-        }
-        InSubqueryExec(expr, subqueryMap(exprId.id), exprId)
     }
   }
 }
