@@ -1835,7 +1835,6 @@ object SplitAggregateWithExpand extends Rule[LogicalPlan] {
     groupedProjections.map {
       projectionSeq => Expand(projectionSeq, expand.output, expand.child)
     }
-    
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
