@@ -472,7 +472,7 @@ private[joins] object UnsafeHashedRelation {
           // scalastyle:on throwerror
         }
       } else if (isNullAware) {
-        return EmptyHashedRelationWithAllNullKeys
+        return HashedRelationWithAllNullKeys
       }
     }
 
@@ -1056,7 +1056,7 @@ private[joins] object LongHashedRelation {
         val key = rowKey.getLong(0)
         map.append(key, unsafeRow)
       } else if (isNullAware) {
-        return EmptyHashedRelationWithAllNullKeys
+        return HashedRelationWithAllNullKeys
       }
     }
     map.optimize()
@@ -1067,7 +1067,7 @@ private[joins] object LongHashedRelation {
 /**
  * Common trait with dummy implementation for NAAJ special HashedRelation
  * EmptyHashedRelation
- * EmptyHashedRelationWithAllNullKeys
+ * HashedRelationWithAllNullKeys
  */
 trait NullAwareHashedRelation extends HashedRelation with Externalizable {
   override def get(key: InternalRow): Iterator[InternalRow] = {
@@ -1130,8 +1130,8 @@ object EmptyHashedRelation extends NullAwareHashedRelation {
  * A special HashedRelation indicates it built from a non-empty input:Iterator[InternalRow],
  * which contains all null columns key.
  */
-object EmptyHashedRelationWithAllNullKeys extends NullAwareHashedRelation {
-  override def asReadOnlyCopy(): EmptyHashedRelationWithAllNullKeys.type = this
+object HashedRelationWithAllNullKeys extends NullAwareHashedRelation {
+  override def asReadOnlyCopy(): HashedRelationWithAllNullKeys.type = this
 }
 
 /** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */
