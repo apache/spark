@@ -147,7 +147,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     }
 
     // the pruning overhead is the total size in bytes of all scan relations
-    val overhead = otherPlan.collectLeaves().map(_.stats.sizeInBytes).sum.toFloat
+    val overhead = otherPlan.collectLeaves().map(_.stats.sizeInBytes).sum
 
     filterRatio * partPlan.stats.sizeInBytes.toFloat > overhead.toFloat
   }

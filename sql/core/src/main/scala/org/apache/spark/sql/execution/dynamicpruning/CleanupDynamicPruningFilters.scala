@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.dynamicpruning
 
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, DynamicPruningSubquery, Expression, PredicateHelper}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
@@ -32,12 +32,29 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelper {
 
+  private def isFilterOnNonPartition(condition: Expression, child: LogicalPlan): Boolean = {
+    splitConjunctivePredicates(condition).exists {
+      case DynamicPruningSubquery(pruningKey, _, _, _, _, _) =>
+        PartitionPruning.getPartitionTableScan(pruningKey, child).isEmpty
+      case _ => false
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!SQLConf.get.dynamicPartitionPruningEnabled) {
       return plan
     }
 
     plan.transform {
+      // Remove any Filters with DynamicPruning that didn't filter on partition column`.
+      // This is inferred by Infer Filters from PartitionPruning.
+      case f @ Filter(condition, child) if isFilterOnNonPartition(condition, child) =>
+        val newCondition = condition.transform {
+          case DynamicPruningSubquery(pruningKey, _, _, _, _, _)
+            if PartitionPruning.getPartitionTableScan(pruningKey, child).isEmpty =>
+            TrueLiteral
+        }
+        f.copy(condition = newCondition)
       // pass through anything that is pushed down into PhysicalOperation
       case p @ PhysicalOperation(_, _, LogicalRelation(_: HadoopFsRelation, _, _, _)) => p
       // remove any Filters with DynamicPruning that didn't get pushed down to PhysicalOperation.

@@ -1299,6 +1299,7 @@ abstract class DynamicPartitionPruningSuiteBase
     assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 2)
     checkDistinctSubqueries(df, 1)
     checkPartitionPruningPredicate(df, false, true)
+    assert(!checkUnpushedFilters(df), "Inferred dynamic pruning expression has been pushed down.")
 
     checkAnswer(df,
       Row(2, 20, 2) ::
@@ -1324,6 +1325,7 @@ abstract class DynamicPartitionPruningSuiteBase
 
     assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
     checkPartitionPruningPredicate(df, false, true)
+    assert(!checkUnpushedFilters(df), "Inferred dynamic pruning expression should be removed.")
 
     checkAnswer(df,
       Row(2, "NL", 2) ::
