@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.mutable
+import scala.collection.{mutable, View}
 import scala.collection.mutable.ArrayBuffer
 
 object ExpressionSet {
@@ -84,6 +84,12 @@ class ExpressionSet protected(
     } else {
       new ExpressionSet(baseSet.clone(), originals.clone())
     }
+  }
+
+  override def concat(elems: IterableOnce[Expression]): Set[Expression] = {
+    val newSet = new ExpressionSet(baseSet.clone(), originals.clone())
+    elems.iterator.foreach(newSet.add)
+    newSet
   }
 
   override def iterator: Iterator[Expression] = originals.iterator

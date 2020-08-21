@@ -79,16 +79,19 @@ case class AdaptiveSparkPlanExec(
   @transient private val optimizer = new RuleExecutor[LogicalPlan] {
     // TODO add more optimization rules
     override protected def batches: Seq[Batch] = Seq(
-      Batch("Demote BroadcastHashJoin", Once, DemoteBroadcastHashJoin(conf))
+      Batch("Demote BroadcastHashJoin", Once, DemoteBroadcastHashJoin(conf)),
+      Batch("Eliminate Null Aware Anti Join", Once, EliminateNullAwareAntiJoin)
     )
   }
 
+  @transient private val removeRedundantProjects = RemoveRedundantProjects(conf)
   @transient private val ensureRequirements = EnsureRequirements(conf)
 
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
+    removeRedundantProjects,
     ensureRequirements
   ) ++ context.session.sessionState.queryStagePrepRules
 

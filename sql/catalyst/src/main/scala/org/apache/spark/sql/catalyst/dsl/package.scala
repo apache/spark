@@ -168,20 +168,35 @@ package object dsl {
     }
 
     def rand(e: Long): Expression = Rand(e)
-    def sum(e: Expression): Expression = Sum(e).toAggregateExpression()
-    def sumDistinct(e: Expression): Expression = Sum(e).toAggregateExpression(isDistinct = true)
-    def count(e: Expression): Expression = Count(e).toAggregateExpression()
+    def sum(e: Expression, filter: Option[Expression] = None): Expression =
+      Sum(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def sumDistinct(e: Expression, filter: Option[Expression] = None): Expression =
+      Sum(e).toAggregateExpression(isDistinct = true, filter = filter)
+    def count(e: Expression, filter: Option[Expression] = None): Expression =
+      Count(e).toAggregateExpression(isDistinct = false, filter = filter)
     def countDistinct(e: Expression*): Expression =
       Count(e).toAggregateExpression(isDistinct = true)
-    def approxCountDistinct(e: Expression, rsd: Double = 0.05): Expression =
-      HyperLogLogPlusPlus(e, rsd).toAggregateExpression()
-    def avg(e: Expression): Expression = Average(e).toAggregateExpression()
-    def first(e: Expression): Expression = new First(e).toAggregateExpression()
-    def last(e: Expression): Expression = new Last(e).toAggregateExpression()
-    def min(e: Expression): Expression = Min(e).toAggregateExpression()
-    def minDistinct(e: Expression): Expression = Min(e).toAggregateExpression(isDistinct = true)
-    def max(e: Expression): Expression = Max(e).toAggregateExpression()
-    def maxDistinct(e: Expression): Expression = Max(e).toAggregateExpression(isDistinct = true)
+    def countDistinctWithFilter(filter: Expression, e: Expression*): Expression =
+      Count(e).toAggregateExpression(isDistinct = true, filter = Some(filter))
+    def approxCountDistinct(
+        e: Expression,
+        rsd: Double = 0.05,
+        filter: Option[Expression] = None): Expression =
+      HyperLogLogPlusPlus(e, rsd).toAggregateExpression(isDistinct = false, filter = filter)
+    def avg(e: Expression, filter: Option[Expression] = None): Expression =
+      Average(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def first(e: Expression, filter: Option[Expression] = None): Expression =
+      new First(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def last(e: Expression, filter: Option[Expression] = None): Expression =
+      new Last(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def min(e: Expression, filter: Option[Expression] = None): Expression =
+      Min(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def minDistinct(e: Expression, filter: Option[Expression] = None): Expression =
+      Min(e).toAggregateExpression(isDistinct = true, filter = filter)
+    def max(e: Expression, filter: Option[Expression] = None): Expression =
+      Max(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def maxDistinct(e: Expression, filter: Option[Expression] = None): Expression =
+      Max(e).toAggregateExpression(isDistinct = true, filter = filter)
     def upper(e: Expression): Expression = Upper(e)
     def lower(e: Expression): Expression = Lower(e)
     def coalesce(args: Expression*): Expression = Coalesce(args)
