@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeSeq, CreateNamedStruc
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AtomicType, BooleanType, DataType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
 
 /**
  * The base class for subquery that is used in SparkPlan.
@@ -131,11 +131,10 @@ case class InSubqueryExec(
 
   def updateResult(): Unit = {
     val rows = plan.executeCollect()
-    // The child is always partition column. So it must be AtomicType.
-    // See PreprocessTableCreation for more details.
-    require(child.dataType.isInstanceOf[AtomicType],
-      s"$child should be atomic type, but got ${child.dataType.catalogString} type.")
-    result = rows.map(_.get(0, child.dataType)).toSet
+    result = child.dataType match {
+      case _: StructType => rows.toSet
+      case _ => rows.map(_.get(0, child.dataType)).toSet
+    }
     resultBroadcast = plan.sqlContext.sparkContext.broadcast(result)
   }
 
@@ -183,6 +182,18 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
         ScalarSubquery(
           SubqueryExec(s"scalar-subquery#${subquery.exprId.id}", executedPlan),
           subquery.exprId)
+      case expressions.InSubquery(values, ListQuery(query, _, exprId, _)) =>
+        val expr = if (values.length == 1) {
+          values.head
+        } else {
+          CreateNamedStruct(
+            values.zipWithIndex.flatMap { case (v, index) =>
+              Seq(Literal(s"col_$index"), v)
+            }
+          )
+        }
+        val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, query)
+        InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
     }
   }
 }
