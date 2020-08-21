@@ -319,6 +319,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       var currentValueLocal: Long = 0
 
       while (pos < capacity) {
+        assert(valueCountLocal < runLocal)
         if (pos != nextNullIndex) {
           if (valueCountLocal == runLocal) {
             currentValueLocal = getFunction(buffer)
@@ -616,7 +617,6 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
     override def hasNext: Boolean = visited < count
 
     override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
-      val countLocal = count
       var currentWordLocal: Long = 0
       var visitedLocal: Int = 0
       val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())

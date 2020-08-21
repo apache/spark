@@ -157,17 +157,15 @@ class BooleanBitSetSuite extends SparkFunSuite {
     skeletonForDecompress(BITS_PER_LONG * 2 + 1)
   }
 
-  def makeNullBooleanRow(): InternalRow = {
-    val row = new GenericInternalRow(1)
-    row.setNullAt(0)
-    row
-  }
-
   test(s"$BooleanBitSet: Only nulls for decompression()") {
     val builder = TestCompressibleColumnBuilder(new NoopColumnStats, BOOLEAN, BooleanBitSet)
     val numRows = 10
 
-    val rows = Seq.fill[InternalRow](numRows)(makeNullBooleanRow())
+    val rows = Seq.fill[InternalRow](numRows)({
+      val row = new GenericInternalRow(1)
+      row.setNullAt(0)
+      row
+    })
     rows.foreach(builder.appendFrom(_, 0))
     val buffer = builder.build()
 
