@@ -1170,6 +1170,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
+<<<<<<< HEAD
   test("SPARK-32573: Eliminate NAAJ when BuildSide is HashedRelationWithAllNullKeys") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
@@ -1184,11 +1185,10 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-32573, SPARK-32649: optimize join to empty relation") {
+  test("SPARK-32573: Eliminate NAAJ when BuildSide is HashedRelationWithAllNullKeys") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
-      // Test NULL-aware anti join
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData2 t1 WHERE t1.b NOT IN (SELECT b FROM testData3)")
       val bhj = findTopLevelBroadcastHashJoin(plan)
@@ -1196,8 +1196,13 @@ class AdaptiveQueryExecSuite
       val join = findTopLevelBaseJoin(adaptivePlan)
       assert(join.isEmpty)
       checkNumLocalShuffleReaders(adaptivePlan)
+    }
+  }
 
-      // Test inner and left semi join
+  test("SPARK-32649: Eliminate inner and semi join to empty relation") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       Seq(
         // inner join (small table at right side)
         "SELECT * FROM testData t1 join testData3 t2 ON t1.key = t2.a WHERE t2.b = 1",

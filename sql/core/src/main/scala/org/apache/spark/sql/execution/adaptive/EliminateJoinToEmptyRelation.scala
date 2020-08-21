@@ -24,19 +24,18 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.joins.{EmptyHashedRelation, HashedRelation, HashedRelationWithAllNullKeys}
 
 /**
- * This optimization rule detects and converts a `Join` to an empty `LocalRelation`:
- * 1. `Join` is single column NULL-aware anti join (NAAJ), and broadcasted `HashedRelation`
- *    is `EmptyHashedRelationWithAllNullKeys`.
+ * This optimization rule detects and converts a Join to an empty [[LocalRelation]]:
+ * 1. Join is single column NULL-aware anti join (NAAJ), and broadcasted [[HashedRelation]]
+ *    is [[HashedRelationWithAllNullKeys]].
  *
- * 2. `Join` is inner or left semi join, and broadcasted `HashedRelation` is `EmptyHashedRelation`.
+ * 2. Join is inner or left semi join, and broadcasted [[HashedRelation]]
+      is [[EmptyHashedRelation]].
  */
-object OptimizeJoinToEmptyRelation extends Rule[LogicalPlan] {
+object EliminateJoinToEmptyRelation extends Rule[LogicalPlan] {
 
-  private def canEliminate(
-      plan: LogicalPlan,
-      expectedRelation: HashedRelation): Boolean = plan match {
+  private def canEliminate(plan: LogicalPlan, relation: HashedRelation): Boolean = plan match {
     case LogicalQueryStage(_, stage: BroadcastQueryStageExec) if stage.resultOption.get().isDefined
-      && stage.broadcast.relationFuture.get().value == expectedRelation => true
+      && stage.broadcast.relationFuture.get().value == relation => true
     case _ => false
   }
 

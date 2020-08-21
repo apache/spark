@@ -447,9 +447,9 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     }
 
     if (isEmptyHashedRelation) {
-      s"""
-         |// If HashedRelation is empty, hash inner join simply returns nothing.
-       """.stripMargin
+      """
+        |// If HashedRelation is empty, hash inner join simply returns nothing.
+      """.stripMargin
     } else if (keyIsUnique) {
       s"""
          |// generate join key for stream side
@@ -573,9 +573,9 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     if (isEmptyHashedRelation) {
-      s"""
-         |// If HashedRelation is empty, hash semi join simply returns nothing.
-       """.stripMargin
+      """
+        |// If HashedRelation is empty, hash semi join simply returns nothing.
+      """.stripMargin
     } else if (keyIsUnique) {
       s"""
          |// generate join key for stream side
