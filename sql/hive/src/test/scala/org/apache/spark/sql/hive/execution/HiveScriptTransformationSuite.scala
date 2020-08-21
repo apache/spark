@@ -166,7 +166,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       df.createTempView("v")
 
       // In hive default serde mode, if we don't define output schema,
-      // when output column size > 2, and 'serialization.last.column.takes.rest' as default,
+      // when output column size > 2 and don't specify serde,
       // it will choose take rest columns in second column as output schema
       // (key: String, value: String)
       checkAnswer(
@@ -186,7 +186,33 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             'e.cast("string")).as("value")).collect())
 
       // In hive default serde mode, if we don't define output schema,
-      // when output column size > 2, and 'serialization.last.column.takes.rest=true',
+      // when output column size > 2 and just specify serde,
+      // it will choose take rest columns in second column as output schema
+      // (key: String, value: String)
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+             |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t'
+             |  )
+             |  USING 'cat'
+             |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+             |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t'
+             |  )
+             |FROM v
+        """.stripMargin),
+        identity,
+        df.select(
+          'a.cast("string").as("key"),
+          'b.cast("string").as("value")).collect())
+
+
+      // In hive default serde mode, if we don't define output schema,
+      // when output column size > 2 and specify serde with
+      // 'serialization.last.column.takes.rest=true',
       // it will choose take rest columns in second column as output schema
       // (key: String, value: String)
       checkAnswer(
@@ -216,7 +242,8 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             'e.cast("string")).as("value")).collect())
 
       // In hive default serde mode, if we don't define output schema,
-      // when output column size > 2, and 'serialization.last.column.takes.rest=false',
+      // when output column size > 2 and specify serde
+      // with 'serialization.last.column.takes.rest=false',
       // it will choose first two column as output schema (key: String, value: String)
       checkAnswer(
         sql(
@@ -241,7 +268,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           'b.cast("string").as("value")).collect())
 
       // In hive default serde mode, if we don't define output schema,
-      // when output column size = 2, it will these two column as
+      // when output column size = 2 and specify serde, it will these two column as
       // output schema (key: String, value: String)
       checkAnswer(
         sql(
@@ -266,7 +293,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           'b.cast("string").as("value")).collect())
 
       // In hive default serde mode, if we don't define output schema,
-      // when output column size < 2, it will return null for deficiency
+      // when output column size < 2 and specify serde, it will return null for deficiency
       // output schema (key: String, value: String)
       checkAnswer(
         sql(
