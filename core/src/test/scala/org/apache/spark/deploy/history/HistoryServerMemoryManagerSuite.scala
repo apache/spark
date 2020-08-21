@@ -22,11 +22,11 @@ import org.apache.spark.internal.config.History._
 
 class HistoryServerMemoryManagerSuite extends SparkFunSuite {
 
-	private val MAX_USAGE = 3L
+  private val MAX_USAGE = 3L
 
-	test("lease and release memory") {
-		val conf = new SparkConf().set(MAX_IN_MEMORY_STORE_USAGE, MAX_USAGE)
-		val manager = new HistoryServerMemoryManager(conf)
+  test("lease and release memory") {
+    val conf = new SparkConf().set(MAX_IN_MEMORY_STORE_USAGE, MAX_USAGE)
+    val manager = new HistoryServerMemoryManager(conf)
 
     manager.lease("app1", None, 1L)
     manager.lease("app2", None, 1L)
@@ -50,5 +50,5 @@ class HistoryServerMemoryManagerSuite extends SparkFunSuite {
     manager.lease("app4", None, 1L)
     assert(manager.currentUsage.get === 3L)
     assert(manager.active.size === 3)
-	}
+  }
 }

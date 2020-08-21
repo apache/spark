@@ -49,18 +49,18 @@ class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("test multiple objects write read delete") {
-  	val store = createHybridStore()
+    val store = createHybridStore()
 
-  	val t1 = createCustomType1(1)
-  	val t2 = createCustomType1(2)
+    val t1 = createCustomType1(1)
+    val t2 = createCustomType1(2)
 
-  	intercept[NoSuchElementException] {
-  		store.read(t1.getClass(), t1.key)
-  	}
+    intercept[NoSuchElementException] {
+      store.read(t1.getClass(), t1.key)
+    }
 
-  	store.write(t1)
-  	store.write(t2)
-  	store.delete(t2.getClass(), t2.key)
+    store.write(t1)
+    store.write(t2)
+    store.delete(t2.getClass(), t2.key)
 
     Seq(false, true).foreach { switch =>
       if (switch) switchHybridStore(store)
