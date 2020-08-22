@@ -70,14 +70,22 @@ object LiteralGenerator {
 
   lazy val floatLiteralGen: Gen[Literal] =
     for {
-      f <- Gen.chooseNum(Float.MinValue / 2, Float.MaxValue / 2,
-        Float.NaN, Float.PositiveInfinity, Float.NegativeInfinity)
+      f <- Gen.oneOf(
+        Gen.oneOf(
+          Float.NaN, Float.PositiveInfinity, Float.NegativeInfinity, Float.MinPositiveValue,
+          0.0f, -0.0f, 1.0f, -1.0f),
+        Arbitrary.arbFloat.arbitrary
+      )
     } yield Literal.create(f, FloatType)
 
   lazy val doubleLiteralGen: Gen[Literal] =
     for {
-      f <- Gen.chooseNum(Double.MinValue / 2, Double.MaxValue / 2,
-        Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity)
+      f <- Gen.oneOf(
+        Gen.oneOf(
+          Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity, Double.MinPositiveValue,
+          0.0, -0.0, 1.0, -1.0),
+        Arbitrary.arbDouble.arbitrary
+      )
     } yield Literal.create(f, DoubleType)
 
   // TODO cache the generated data
