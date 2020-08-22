@@ -38,7 +38,7 @@ resolvers += Resolver.url("bintray",
 addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.3.0")
 
 // sbt 1.0.0 support: https://github.com/AlpineNow/junit_xml_listener/issues/6
-addSbtPlugin("com.alpinenow" % "junit_xml_listener" % "0.5.1")
+// addSbtPlugin("com.alpinenow" % "junit_xml_listener" % "0.5.1")
 
 // need to make changes to uptake sbt 1.0 support in "com.eed3si9n" % "sbt-unidoc" % "0.4.1"
 addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.3.3")
