@@ -875,8 +875,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     conf.set("spark.shuffle.service.enabled", "true")
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.shuffle.push.based.enabled", "true")) === false)
-    assert(Utils.isDynamicAllocationEnabled(conf.set("spark.shuffle.push.based.enabled", "true")
-      .set("spark.sql.adaptive.enabled", "true")) === true)
   }
 
   test("getDynamicAllocationInitialExecutors") {
@@ -1424,7 +1422,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     conf.set("spark.shuffle.service.enabled", "true")
     assert(Utils.isPushBasedShuffleEnabled(conf) === true)
     assert(Utils.isPushBasedShuffleEnabled(
-      conf.set("spark.sql.adaptive.enabled", "true")) === false)
+      conf.set("spark.sql.adaptive.enabled", "true")) === true)
   }
 
   test("Test create dir with 770") {
