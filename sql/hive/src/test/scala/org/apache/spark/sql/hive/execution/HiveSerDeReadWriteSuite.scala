@@ -27,6 +27,7 @@ import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
+  // change to trigger test.
   private var originalConvertMetastoreParquet = CONVERT_METASTORE_PARQUET.defaultValueString
   private var originalConvertMetastoreORC = CONVERT_METASTORE_ORC.defaultValueString
   private var originalORCImplementation = ORC_IMPLEMENTATION.defaultValueString
