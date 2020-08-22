@@ -89,15 +89,50 @@ class CrossValidatorTests(SparkSessionTestCase):
         grid = (ParamGridBuilder()
                 .addGrid(iee.inducedError, [100.0, 0.0, 10000.0])
                 .build())
-        cv = CrossValidator(estimator=iee, estimatorParamMaps=grid, evaluator=evaluator)
+        cv = CrossValidator(
+            estimator=iee,
+            estimatorParamMaps=grid,
+            evaluator=evaluator,
+            collectSubModels=True,
+            numFolds=2
+        )
         cvCopied = cv.copy()
-        self.assertEqual(cv.getEstimator().uid, cvCopied.getEstimator().uid)
+        for param in [
+            lambda x: x.getEstimator().uid,
+            # SPARK-32092: CrossValidator.copy() needs to copy all existing params
+            lambda x: x.getNumFolds(),
+            lambda x: x.getFoldCol(),
+            lambda x: x.getCollectSubModels(),
+            lambda x: x.getParallelism(),
+            lambda x: x.getSeed()
+        ]:
+            self.assertEqual(param(cv), param(cvCopied))
 
         cvModel = cv.fit(dataset)
         cvModelCopied = cvModel.copy()
         for index in range(len(cvModel.avgMetrics)):
             self.assertTrue(abs(cvModel.avgMetrics[index] - cvModelCopied.avgMetrics[index])
                             < 0.0001)
+        # SPARK-32092: CrossValidatorModel.copy() needs to copy all existing params
+        for param in [
+            lambda x: x.getNumFolds(),
+            lambda x: x.getFoldCol(),
+            lambda x: x.getSeed()
+        ]:
+            self.assertEqual(param(cvModel), param(cvModelCopied))
+
+        cvModel.avgMetrics[0] = 'foo'
+        self.assertNotEqual(
+            cvModelCopied.avgMetrics[0],
+            'foo',
+            "Changing the original avgMetrics should not affect the copied model"
+        )
+        cvModel.subModels[0] = 'foo'
+        self.assertNotEqual(
+            cvModelCopied.subModels[0],
+            'foo',
+            "Changing the original subModels should not affect the copied model"
+        )
 
     def test_fit_minimize_metric(self):
         dataset = self.spark.createDataFrame([
@@ -166,15 +201,38 @@ class CrossValidatorTests(SparkSessionTestCase):
         lr = LogisticRegression()
         grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
         evaluator = BinaryClassificationEvaluator()
-        cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        cv = CrossValidator(
+            estimator=lr,
+            estimatorParamMaps=grid,
+            evaluator=evaluator,
+            collectSubModels=True,
+            numFolds=4,
+            seed=42
+        )
         cvModel = cv.fit(dataset)
         lrModel = cvModel.bestModel
 
-        cvModelPath = temp_path + "/cvModel"
-        lrModel.save(cvModelPath)
-        loadedLrModel = LogisticRegressionModel.load(cvModelPath)
+        lrModelPath = temp_path + "/lrModel"
+        lrModel.save(lrModelPath)
+        loadedLrModel = LogisticRegressionModel.load(lrModelPath)
         self.assertEqual(loadedLrModel.uid, lrModel.uid)
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
+
+        # SPARK-32092: Saving and then loading CrossValidatorModel should not change the params
+        cvModelPath = temp_path + "/cvModel"
+        cvModel.save(cvModelPath)
+        loadedCvModel = CrossValidatorModel.load(cvModelPath)
+        for param in [
+            lambda x: x.getNumFolds(),
+            lambda x: x.getFoldCol(),
+            lambda x: x.getSeed(),
+            lambda x: len(x.subModels)
+        ]:
+            self.assertEqual(param(cvModel), param(loadedCvModel))
+
+        self.assertTrue(all(
+            loadedCvModel.isSet(param) for param in loadedCvModel.params
+        ))
 
     def test_save_load_simple_estimator(self):
         temp_path = tempfile.mkdtemp()
@@ -523,15 +581,34 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         lr = LogisticRegression()
         grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
         evaluator = BinaryClassificationEvaluator()
-        tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        tvs = TrainValidationSplit(
+            estimator=lr,
+            estimatorParamMaps=grid,
+            evaluator=evaluator,
+            collectSubModels=True,
+            seed=42
+        )
         tvsModel = tvs.fit(dataset)
         lrModel = tvsModel.bestModel
 
-        tvsModelPath = temp_path + "/tvsModel"
-        lrModel.save(tvsModelPath)
-        loadedLrModel = LogisticRegressionModel.load(tvsModelPath)
+        lrModelPath = temp_path + "/lrModel"
+        lrModel.save(lrModelPath)
+        loadedLrModel = LogisticRegressionModel.load(lrModelPath)
         self.assertEqual(loadedLrModel.uid, lrModel.uid)
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
+
+        tvsModelPath = temp_path + "/tvsModel"
+        tvsModel.save(tvsModelPath)
+        loadedTvsModel = TrainValidationSplitModel.load(tvsModelPath)
+        for param in [
+            lambda x: x.getSeed(),
+            lambda x: x.getTrainRatio(),
+        ]:
+            self.assertEqual(param(tvsModel), param(loadedTvsModel))
+
+        self.assertTrue(all(
+            loadedTvsModel.isSet(param) for param in loadedTvsModel.params
+        ))
 
     def test_save_load_simple_estimator(self):
         # This tests saving and loading the trained model only.
@@ -734,10 +811,29 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         grid = ParamGridBuilder() \
             .addGrid(iee.inducedError, [100.0, 0.0, 10000.0]) \
             .build()
-        tvs = TrainValidationSplit(estimator=iee, estimatorParamMaps=grid, evaluator=evaluator)
+        tvs = TrainValidationSplit(
+            estimator=iee,
+            estimatorParamMaps=grid,
+            evaluator=evaluator,
+            collectSubModels=True
+        )
         tvsModel = tvs.fit(dataset)
         tvsCopied = tvs.copy()
         tvsModelCopied = tvsModel.copy()
+
+        for param in [
+            lambda x: x.getCollectSubModels(),
+            lambda x: x.getParallelism(),
+            lambda x: x.getSeed(),
+            lambda x: x.getTrainRatio(),
+        ]:
+            self.assertEqual(param(tvs), param(tvsCopied))
+
+        for param in [
+            lambda x: x.getSeed(),
+            lambda x: x.getTrainRatio(),
+        ]:
+            self.assertEqual(param(tvsModel), param(tvsModelCopied))
 
         self.assertEqual(tvs.getEstimator().uid, tvsCopied.getEstimator().uid,
                          "Copied TrainValidationSplit has the same uid of Estimator")
@@ -749,6 +845,19 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         for index in range(len(tvsModel.validationMetrics)):
             self.assertEqual(tvsModel.validationMetrics[index],
                              tvsModelCopied.validationMetrics[index])
+
+        tvsModel.validationMetrics[0] = 'foo'
+        self.assertNotEqual(
+            tvsModelCopied.validationMetrics[0],
+            'foo',
+            "Changing the original validationMetrics should not affect the copied model"
+        )
+        tvsModel.subModels[0] = 'foo'
+        self.assertNotEqual(
+            tvsModelCopied.subModels[0],
+            'foo',
+            "Changing the original subModels should not affect the copied model"
+        )
 
 
 if __name__ == "__main__":
