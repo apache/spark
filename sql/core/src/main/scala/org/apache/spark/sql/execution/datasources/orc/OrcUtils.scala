@@ -92,6 +92,20 @@ object OrcUtils extends Logging {
     }
   }
 
+  def readCatalystSchema(
+      file: Path,
+      conf: Configuration,
+      ignoreCorruptFiles: Boolean): Option[StructType] = {
+    readSchema(file, conf, ignoreCorruptFiles) match {
+      case Some(schema) =>
+        Some(CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType])
+
+      case None =>
+        // Field names is empty or `FileFormatException` was thrown but ignoreCorruptFiles is true.
+        None
+    }
+  }
+
   /**
    * Reads ORC file schemas in multi-threaded manner, using native version of ORC.
    * This is visible for testing.
