@@ -1147,6 +1147,13 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         checkAnswer(
           spark.read.format("parquet").option("path", path).load(path, path),
           Seq(Row(1), Row(1), Row(1)))
+
+        // When built-in datasource functions are invoked (e.g, `csv`, `parquet`, etc.),
+        // the path option is always added regardless of the number of path parameters.
+        checkAnswer(spark.read.option("path", path).parquet(path), Seq(Row(1), Row(1)))
+        checkAnswer(
+          spark.read.option("path", path).parquet(path, path),
+          Seq(Row(1), Row(1), Row(1)))
       }
     }
   }

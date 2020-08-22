@@ -230,7 +230,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def load(path: String): DataFrame = {
     // force invocation of `load(...varargs...)`
-    load(Seq(path): _*)
+    if (sparkSession.sessionState.conf.legacyPathOptionBehavior) {
+      option("path", path).load(Seq.empty: _*)
+    } else {
+      load(Seq(path): _*)
+    }
   }
 
   /**
@@ -246,14 +250,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
-    if (!sparkSession.sessionState.conf.getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR) &&
+    val legacyPathOptionBehavior = sparkSession.sessionState.conf.legacyPathOptionBehavior
+    if (!legacyPathOptionBehavior &&
         (extraOptions.contains("path") || extraOptions.contains("paths")) && paths.nonEmpty) {
       throw new AnalysisException("There is a 'path' or 'paths' option set and load() is called " +
         "with path parameters. Either remove the path option if it's the same as the path " +
         "parameter, or add it to the load() parameter if you do want to read multiple paths.")
     }
 
-    val updatedPaths = if (paths.length == 1) {
+    val updatedPaths = if (!legacyPathOptionBehavior && paths.length == 1) {
       option("path", paths.head)
       Seq.empty
     } else {
