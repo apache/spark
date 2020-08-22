@@ -68,5 +68,6 @@ DROP FUNCTION udaf1
 -- !query schema
 struct<>
 -- !query output
+org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 Function 'default.udaf1' not found in database 'default';
 
