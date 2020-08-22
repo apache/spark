@@ -234,6 +234,19 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       .option("path", "5")
       .load()
     assert(LastOptions.parameters("path") == "5")
+
+    withClue("SPARK-32516: legacy path option behavior") {
+      withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
+        spark.read
+          .format("org.apache.spark.sql.test")
+          .option("paTh", "1")
+          .option("PATH", "2")
+          .option("Path", "3")
+          .option("patH", "4")
+          .load("5")
+        assert(LastOptions.parameters("path") == "5")
+      }
+    }
   }
 
   test("SPARK-32364: path argument of save function should override all existing options") {
@@ -1119,5 +1132,22 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     verifyLoadFails(() => spark.read.option("path", path).format("parquet").load(path))
     verifyLoadFails(() => spark.read.option("paths", path).parquet(path))
     verifyLoadFails(() => spark.read.option("paths", path).format("parquet").load(path))
+  }
+
+  test("SPARK-32516: legacy path option behavior in load()") {
+    withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        Seq(1).toDF.write.mode("overwrite").parquet(path)
+
+        // When there is one path parameter to load(), "path" option is overwritten.
+        checkAnswer(spark.read.format("parquet").option("path", path).load(path), Row(1))
+
+        // When there are multiple path parameters to load(), "path" option is added.
+        checkAnswer(
+          spark.read.format("parquet").option("path", path).load(path, path),
+          Seq(Row(1), Row(1), Row(1)))
+      }
+    }
   }
 }

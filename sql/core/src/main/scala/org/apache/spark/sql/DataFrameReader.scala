@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
@@ -245,7 +246,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
-    if ((extraOptions.contains("path") || extraOptions.contains("paths")) && paths.nonEmpty) {
+    if (!sparkSession.sessionState.conf.getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR) &&
+        (extraOptions.contains("path") || extraOptions.contains("paths")) && paths.nonEmpty) {
       throw new AnalysisException("There is a 'path' or 'paths' option set and load() is called " +
         "with path parameters. Either remove the path option if it's the same as the path " +
         "parameter, or add it to the load() parameter if you do want to read multiple paths.")
