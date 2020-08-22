@@ -49,7 +49,7 @@ object HadoopFSUtils extends Logging {
    * @param ignoreMissingFiles Ignore missing files that happen during recursive listing
    *                           (e.g., due to race conditions)
    * @param ignoreLocality Whether to fetch data locality info when listing leaf files. If false,
-   *                       this will return [[FileStatus]]es without [[BlockLocation]] info.
+   *                       this will return `FileStatus` without `BlockLocation` info.
    * @param parallelismThreshold The threshold to enable parallelism. If the number of input paths
    *                             is smaller than this value, this will fallback to use
    *                             sequential listing.
