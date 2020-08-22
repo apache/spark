@@ -271,7 +271,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Move data to trash on truncate table given
-   * spark.sql.truncate.trash.enabled is true
+   * 'spark.sql.truncate.trash.enabled' is true
    */
   def moveToTrashIfEnabled(
       fs: FileSystem,

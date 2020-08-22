@@ -3102,24 +3102,74 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("Move data to trash on truncate table if enabled") {
+  test("SPARK-32481 Move data to trash on truncate table if enabled") {
+    val trashIntervalKey = "fs.trash.interval"
     withTable("tab1") {
       withSQLConf(SQLConf.TRUNCATE_TRASH_ENABLED.key -> "true") {
         sql("CREATE TABLE tab1 (col INT) USING parquet")
         sql("INSERT INTO tab1 SELECT 1")
-
+        // scalastyle:off hadoopConfiguration
+        val hadoopConf = spark.sparkContext.hadoopConfiguration
+        // scalastyle:on hadoopConfiguration
+        val originalValue = hadoopConf.get(trashIntervalKey, "0")
         val tablePath = new Path(spark.sessionState.catalog
           .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
-        val hadoopConf = spark.sessionState.newHadoopConf()
-        val fs = tablePath.getFileSystem(hadoopConf)
-        // trash interval should be configured from hadoop side
-        hadoopConf.setInt("fs.trash.Interval", 5)
 
+        val fs = tablePath.getFileSystem(hadoopConf)
         val trashRoot = fs.getTrashRoot(tablePath)
         assert(!fs.exists(trashRoot))
-        sql("TRUNCATE TABLE tab1")
+        try {
+          hadoopConf.set(trashIntervalKey, "5")
+          sql("TRUNCATE TABLE tab1")
+        } finally {
+          hadoopConf.set(trashIntervalKey, originalValue)
+        }
         assert(fs.exists(trashRoot))
         fs.delete(trashRoot, true)
+      }
+    }
+  }
+
+  test("SPARK-32481 delete data permanently on truncate table if trash interval is non-positive") {
+    val trashIntervalKey = "fs.trash.interval"
+    withTable("tab1") {
+      withSQLConf(SQLConf.TRUNCATE_TRASH_ENABLED.key -> "true") {
+        sql("CREATE TABLE tab1 (col INT) USING parquet")
+        sql("INSERT INTO tab1 SELECT 1")
+        // scalastyle:off hadoopConfiguration
+        val hadoopConf = spark.sparkContext.hadoopConfiguration
+        // scalastyle:on hadoopConfiguration
+        val originalValue = hadoopConf.get(trashIntervalKey, "0")
+        val tablePath = new Path(spark.sessionState.catalog
+          .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
+
+        val fs = tablePath.getFileSystem(hadoopConf)
+        val trashRoot = fs.getTrashRoot(tablePath)
+        assert(!fs.exists(trashRoot))
+        try {
+          hadoopConf.set(trashIntervalKey, "0")
+          sql("TRUNCATE TABLE tab1")
+        } finally {
+          hadoopConf.set(trashIntervalKey, originalValue)
+        }
+        assert(!fs.exists(trashRoot))
+      }
+    }
+  }
+
+  test("SPARK-32481 Donot move data to trash on truncate table if disabled") {
+    withTable("tab1") {
+      withSQLConf(SQLConf.TRUNCATE_TRASH_ENABLED.key -> "false") {
+        sql("CREATE TABLE tab1 (col INT) USING parquet")
+        sql("INSERT INTO tab1 SELECT 1")
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val tablePath = new Path(spark.sessionState.catalog
+          .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
+
+        val fs = tablePath.getFileSystem(hadoopConf)
+        val trashRoot = fs.getTrashRoot(tablePath)
+        sql("TRUNCATE TABLE tab1")
+        assert(!fs.exists(trashRoot))
       }
     }
   }
