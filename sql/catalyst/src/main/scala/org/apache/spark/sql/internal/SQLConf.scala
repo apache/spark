@@ -2724,10 +2724,11 @@ object SQLConf {
 
   val TRUNCATE_TRASH_ENABLED =
     buildConf("spark.sql.truncate.trash.enabled")
-      .doc("This Configuration will decide whether move files to trash on truncate table given, " +
-        "'fs.trash.interval' is positive in Hadoop Configuration. " +
-        "Note that, in Hadoop conf if server side has this configured then the client side " +
-        "one will be ignored. ")
+      .doc("This configuration decides when truncating table, whether data files will be moved " +
+        "to trash directory or deleted permanently. The trash retention time is controlled by " +
+        "fs.trash.interval, and in default, the server side configuration value takes " +
+        "precedence over the client-side one. Note that if fs.trash.interval is non-positive, " +
+        "this will be a no-op and log a warning message.")
       .booleanConf
       .createWithDefault(false)
 

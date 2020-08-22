@@ -3101,6 +3101,28 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       assert(spark.sessionState.catalog.isRegisteredFunction(rand))
     }
   }
+
+  test("Move data to trash on truncate table if enabled") {
+    withTable("tab1") {
+      withSQLConf(SQLConf.TRUNCATE_TRASH_ENABLED.key -> "true") {
+        sql("CREATE TABLE tab1 (col INT) USING parquet")
+        sql("INSERT INTO tab1 SELECT 1")
+
+        val tablePath = new Path(spark.sessionState.catalog
+          .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val fs = tablePath.getFileSystem(hadoopConf)
+        // trash interval should be configured from hadoop side
+        hadoopConf.setInt("fs.trash.Interval", 5)
+
+        val trashRoot = fs.getTrashRoot(tablePath)
+        assert(!fs.exists(trashRoot))
+        sql("TRUNCATE TABLE tab1")
+        assert(fs.exists(trashRoot))
+        fs.delete(trashRoot, true)
+      }
+    }
+  }
 }
 
 object FakeLocalFsFileSystem {
