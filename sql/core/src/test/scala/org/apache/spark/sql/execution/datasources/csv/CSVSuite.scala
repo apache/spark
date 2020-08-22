@@ -2366,6 +2366,17 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
     }
   }
 
+  test("SPARK-32614: don't treat rows starting with null char as comment") {
+    withTempPath { path =>
+      Seq("\u0000foo", "bar", "baz").toDS.write.text(path.getCanonicalPath)
+      val df = spark.read.format("csv")
+        .option("inferSchema", "true")
+        .load(path.getCanonicalPath)
+
+      assert(df.count() == 3)
+    }
+  }
+
   test("case sensitivity of filters references") {
     Seq(true, false).foreach { filterPushdown =>
       withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> filterPushdown.toString) {

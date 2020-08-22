@@ -25,8 +25,14 @@ object CSVExprUtils {
    * This is currently being used in CSV reading path and CSV schema inference.
    */
   def filterCommentAndEmpty(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
-    iter.filter { line =>
-      line.trim.nonEmpty && !line.startsWith(options.comment.toString)
+    if (options.isCommentSet) {
+      val commentPrefix = options.comment.toString
+      iter.filter { line =>
+        val trimmed = line.trim
+        trimmed.nonEmpty && !trimmed.startsWith(commentPrefix)
+      }
+    } else {
+      iter.filter(_.trim.nonEmpty)
     }
   }
 
@@ -34,7 +40,8 @@ object CSVExprUtils {
     if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
       iter.dropWhile { line =>
-        line.trim.isEmpty || line.trim.startsWith(commentPrefix)
+        val trimmed = line.trim
+        trimmed.isEmpty || trimmed.trim.startsWith(commentPrefix)
       }
     } else {
       iter.dropWhile(_.trim.isEmpty)
