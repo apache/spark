@@ -3108,9 +3108,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       withSQLConf(SQLConf.TRUNCATE_TRASH_ENABLED.key -> "true") {
         sql("CREATE TABLE tab1 (col INT) USING parquet")
         sql("INSERT INTO tab1 SELECT 1")
-        // scalastyle:off hadoopConfiguration
+        // scalastyle:off hadoopconfiguration
         val hadoopConf = spark.sparkContext.hadoopConfiguration
-        // scalastyle:on hadoopConfiguration
+        // scalastyle:on hadoopconfiguration
         val originalValue = hadoopConf.get(trashIntervalKey, "0")
         val tablePath = new Path(spark.sessionState.catalog
           .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
@@ -3136,9 +3136,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       withSQLConf(SQLConf.TRUNCATE_TRASH_ENABLED.key -> "true") {
         sql("CREATE TABLE tab1 (col INT) USING parquet")
         sql("INSERT INTO tab1 SELECT 1")
-        // scalastyle:off hadoopConfiguration
+        // scalastyle:off hadoopconfiguration
         val hadoopConf = spark.sparkContext.hadoopConfiguration
-        // scalastyle:on hadoopConfiguration
+        // scalastyle:on hadoopconfiguration
         val originalValue = hadoopConf.get(trashIntervalKey, "0")
         val tablePath = new Path(spark.sessionState.catalog
           .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
