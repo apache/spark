@@ -20,15 +20,14 @@ package org.apache.spark.util
 import java.io.FileNotFoundException
 
 import scala.collection.mutable
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.viewfs.ViewFileSystem
 import org.apache.hadoop.hdfs.DistributedFileSystem
-
 import org.apache.spark._
 import org.apache.spark.annotation.Private
 import org.apache.spark.internal.Logging
+import org.apache.spark.metrics.source.HiveCatalogMetrics
 
 /**
  * Utility functions to simplify and speed-up file listing.
@@ -92,6 +91,7 @@ object HadoopFSUtils extends Logging {
 
     logInfo(s"Listing leaf files and directories in parallel under ${paths.length} paths." +
       s" The first several paths are: ${paths.take(10).mkString(", ")}.")
+    HiveCatalogMetrics.incrementParallelListingJobCount(1)
 
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)
     val serializedPaths = paths.map(_.toString)
