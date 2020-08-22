@@ -20,10 +20,12 @@ package org.apache.spark.util
 import java.io.FileNotFoundException
 
 import scala.collection.mutable
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.viewfs.ViewFileSystem
 import org.apache.hadoop.hdfs.DistributedFileSystem
+
 import org.apache.spark._
 import org.apache.spark.annotation.Private
 import org.apache.spark.internal.Logging
