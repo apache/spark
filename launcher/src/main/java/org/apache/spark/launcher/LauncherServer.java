@@ -364,7 +364,7 @@ class LauncherServer implements Closeable {
      *
      * This method allows a short period for the above to happen (same amount of time as the
      * connection timeout, which is configurable). This should be fine for well-behaved
-     * applications, where they close the connection arond the same time the app handle detects the
+     * applications, where they close the connection around the same time the app handle detects the
      * app has finished.
      *
      * In case the connection is not closed within the grace period, this method forcefully closes
