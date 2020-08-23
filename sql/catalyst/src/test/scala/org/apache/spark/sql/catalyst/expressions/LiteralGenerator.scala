@@ -178,6 +178,8 @@ object LiteralGenerator {
       case BinaryType => binaryLiteralGen
       case CalendarIntervalType => calendarIntervalLiterGen
       case DecimalType.Fixed(precision, scale) => decimalLiteralGen(precision, scale)
+      case ArrayType(et, _) => randomGen(et).map(
+        lit => Literal.create(Array(lit.value), ArrayType(et)))
       case dt => throw new IllegalArgumentException(s"not supported type $dt")
     }
   }

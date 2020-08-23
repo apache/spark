@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 import scala.collection.immutable.HashSet
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.RandomDataGenerator
+import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
@@ -91,6 +91,10 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     DataTypeTestUtils.propertyCheckSupported.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(EqualTo, dt, dt)
       checkConsistencyBetweenInterpretedAndCodegen(EqualNullSafe, dt, dt)
+
+      val arrayType = ArrayType(dt)
+      checkConsistencyBetweenInterpretedAndCodegen(EqualTo, arrayType, arrayType)
+      checkConsistencyBetweenInterpretedAndCodegen(EqualNullSafe, arrayType, arrayType)
     }
   }
 
@@ -496,11 +500,30 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(EqualTo(infinity, infinity), true)
   }
 
-  test("SPARK-32688: 0.0 and -0.0 should be considered equal") {
-    checkEvaluation(EqualTo(Literal(0.0), Literal(-0.0)), true)
-    checkEvaluation(EqualNullSafe(Literal(0.0), Literal(-0.0)), true)
-    checkEvaluation(EqualTo(Literal(0.0f), Literal(-0.0f)), true)
-    checkEvaluation(EqualNullSafe(Literal(0.0f), Literal(-0.0f)), true)
+  private def testEquality(literals: Seq[Literal]): Unit = {
+    literals.foreach(left => {
+      literals.foreach(right => {
+        checkEvaluation(EqualTo(left, right), true)
+        checkEvaluation(EqualNullSafe(left, right), true)
+
+        val leftArray = Literal.create(Array(left.value), ArrayType(left.dataType))
+        val rightArray = Literal.create(Array(right.value), ArrayType(right.dataType))
+        checkEvaluation(EqualTo(leftArray, rightArray), true)
+        checkEvaluation(EqualNullSafe(leftArray, rightArray), true)
+
+        val leftStruct = Literal.create(
+          Row(left.value), new StructType().add("a", left.dataType))
+        val rightStruct = Literal.create(
+          Row(right.value), new StructType().add("a", right.dataType))
+        checkEvaluation(EqualTo(leftStruct, rightStruct), true)
+        checkEvaluation(EqualNullSafe(leftStruct, rightStruct), true)
+      })
+    })
+  }
+
+  test("SPARK-32688: 0.0 and -0.0 should be equal") {
+    testEquality(Seq(Literal(0.0), Literal(-0.0)))
+    testEquality(Seq(Literal(0.0f), Literal(-0.0f)))
   }
 
   test("SPARK-22693: InSet should not use global variables") {
