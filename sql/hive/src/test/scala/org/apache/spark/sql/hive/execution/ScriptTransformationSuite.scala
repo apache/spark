@@ -299,7 +299,7 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
           'a.cast("string"),
           'b.cast("string"),
           'c.cast("string"),
-          decimalToString('d),
+          'd.cast("string"),
           'e.cast("string")).collect())
 
       // input/output with different delimit and show result
@@ -322,7 +322,7 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
             'a.cast("string"),
             'b.cast("string"),
             'c.cast("string"),
-            decimalToString('d),
+            'd.cast("string"),
             'e.cast("string"))).collect())
     }
   }
