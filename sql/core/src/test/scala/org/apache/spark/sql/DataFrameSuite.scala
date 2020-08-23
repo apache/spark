@@ -2578,5 +2578,6 @@ class DataFrameSuite extends QueryTest
     val df = Seq(Double.NaN).toDF("d")
     checkAnswer(df.selectExpr("ln(d)"), Row(Double.NaN))
   }
+}
 
 case class GroupByKey(a: Int, b: Int)
