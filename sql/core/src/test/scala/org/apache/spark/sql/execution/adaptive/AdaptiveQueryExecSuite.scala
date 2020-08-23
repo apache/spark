@@ -1170,21 +1170,6 @@ class AdaptiveQueryExecSuite
     }
   }
 
-<<<<<<< HEAD
-  test("SPARK-32573: Eliminate NAAJ when BuildSide is HashedRelationWithAllNullKeys") {
-    withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
-      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
-        "SELECT * FROM testData2 t1 WHERE t1.b NOT IN (SELECT b FROM testData3)")
-      val bhj = findTopLevelBroadcastHashJoin(plan)
-      assert(bhj.size == 1)
-      val join = findTopLevelBaseJoin(adaptivePlan)
-      assert(join.isEmpty)
-      checkNumLocalShuffleReaders(adaptivePlan)
-    }
-  }
-
   test("SPARK-32573: Eliminate NAAJ when BuildSide is HashedRelationWithAllNullKeys") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
