@@ -68,12 +68,15 @@ object LiteralGenerator {
   lazy val longLiteralGen: Gen[Literal] =
     for { l <- Arbitrary.arbLong.arbitrary } yield Literal.create(l, LongType)
 
+  // The floatLiteralGen and doubleLiteralGen will 50% of the time yield arbitrary values
+  // and 50% of the time will yield some special values that are more likely to reveal
+  // corner cases. This behavior is similar to the integral value generators.
   lazy val floatLiteralGen: Gen[Literal] =
     for {
       f <- Gen.oneOf(
         Gen.oneOf(
           Float.NaN, Float.PositiveInfinity, Float.NegativeInfinity, Float.MinPositiveValue,
-          Float.MaxValue, 0.0f, -0.0f, 1.0f, -1.0f),
+          Float.MaxValue, -Float.MaxValue, 0.0f, -0.0f, 1.0f, -1.0f),
         Arbitrary.arbFloat.arbitrary
       )
     } yield Literal.create(f, FloatType)
@@ -83,7 +86,7 @@ object LiteralGenerator {
       f <- Gen.oneOf(
         Gen.oneOf(
           Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity, Double.MinPositiveValue,
-          Double.MaxValue, 0.0, -0.0, 1.0, -1.0),
+          Double.MaxValue, -Double.MaxValue, 0.0, -0.0, 1.0, -1.0),
         Arbitrary.arbDouble.arbitrary
       )
     } yield Literal.create(f, DoubleType)

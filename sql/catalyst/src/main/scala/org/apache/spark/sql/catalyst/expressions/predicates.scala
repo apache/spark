@@ -793,7 +793,9 @@ case class EqualTo(left: Expression, right: Expression)
   // | FALSE   | FALSE   | TRUE    | UNKNOWN |
   // | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
   // +---------+---------+---------+---------+
-  protected override def nullSafeEval(left: Any, right: Any): Any = ordering.equiv(left, right)
+  protected override def nullSafeEval(left: Any, right: Any): Any = {
+    left == right || ordering.equiv(left, right)
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => ctx.genEqual(left.dataType, c1, c2))
@@ -845,7 +847,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     } else if (input1 == null || input2 == null) {
       false
     } else {
-      ordering.equiv(input1, input2)
+      input1 == input2 || ordering.equiv(input1, input2)
     }
   }
 

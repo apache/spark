@@ -496,6 +496,13 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(EqualTo(infinity, infinity), true)
   }
 
+  test("SPARK-32688: 0.0 and -0.0 should be considered equal") {
+    checkEvaluation(EqualTo(Literal(0.0), Literal(-0.0)), true)
+    checkEvaluation(EqualNullSafe(Literal(0.0), Literal(-0.0)), true)
+    checkEvaluation(EqualTo(Literal(0.0f), Literal(-0.0f)), true)
+    checkEvaluation(EqualNullSafe(Literal(0.0f), Literal(-0.0f)), true)
+  }
+
   test("SPARK-22693: InSet should not use global variables") {
     val ctx = new CodegenContext
     InSet(Literal(1), Set(1, 2, 3, 4)).genCode(ctx)
