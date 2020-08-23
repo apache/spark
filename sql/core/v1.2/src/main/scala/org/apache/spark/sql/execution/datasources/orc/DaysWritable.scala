@@ -59,9 +59,7 @@ class DaysWritable(
   }
 
   override def getDays: Int = julianDays
-  override def get(doesTimeMatter: Boolean): Date = {
-    new Date(DateWritable.daysToMillis(julianDays, doesTimeMatter))
-  }
+  override def get(): Date = new Date(DateWritable.daysToMillis(julianDays))
 
   override def set(d: Int): Unit = {
     gregorianDays = d
