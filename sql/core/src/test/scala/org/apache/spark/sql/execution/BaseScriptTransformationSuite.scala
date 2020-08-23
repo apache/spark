@@ -345,7 +345,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           'a.cast("string"),
           'b.cast("string"),
           'c.cast("string"),
-          decimalToString('d),
+          'd.cast("string"),
           'e.cast("string")).collect())
 
       // input/output with different delimit and show result
@@ -368,7 +368,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             'a.cast("string"),
             'b.cast("string"),
             'c.cast("string"),
-            decimalToString('d),
+            'd.cast("string"),
             'e.cast("string"))).collect())
     }
   }
