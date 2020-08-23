@@ -246,6 +246,8 @@ class CSVOptions(
     charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
     if (isCommentSet) {
       format.setComment(comment)
+    } else {
+      settings.setCommentProcessingEnabled(false)
     }
 
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
