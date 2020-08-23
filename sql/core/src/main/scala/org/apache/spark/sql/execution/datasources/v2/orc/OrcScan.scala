@@ -48,7 +48,7 @@ case class OrcScan(
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     OrcPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-      dataSchema, readDataSchema, readPartitionSchema, pushedFilters)
+      dataSchema, readDataSchema, readPartitionSchema)
   }
 
   override def equals(obj: Any): Boolean = obj match {

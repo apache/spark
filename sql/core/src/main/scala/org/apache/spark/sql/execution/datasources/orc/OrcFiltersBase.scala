@@ -39,8 +39,6 @@ trait OrcFiltersBase {
     }
   }
 
-  case class OrcPrimitiveField(fieldName: String, fieldType: DataType)
-
   /**
    * This method returns a map which contains ORC field name and data type. Each key
    * represents a column; `dots` are used as separators for nested columns. If any part
@@ -51,21 +49,19 @@ trait OrcFiltersBase {
    */
   protected[sql] def getSearchableTypeMap(
       schema: StructType,
-      caseSensitive: Boolean): Map[String, OrcPrimitiveField] = {
+      caseSensitive: Boolean): Map[String, DataType] = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
     def getPrimitiveFields(
         fields: Seq[StructField],
-        parentFieldNames: Seq[String] = Seq.empty): Seq[(String, OrcPrimitiveField)] = {
+        parentFieldNames: Seq[String] = Seq.empty): Seq[(String, DataType)] = {
       fields.flatMap { f =>
         f.dataType match {
           case st: StructType =>
             getPrimitiveFields(st.fields, parentFieldNames :+ f.name)
           case BinaryType => None
           case _: AtomicType =>
-            val fieldName = (parentFieldNames :+ f.name).quoted
-            val orcField = OrcPrimitiveField(fieldName, f.dataType)
-            Some((fieldName, orcField))
+            Some(((parentFieldNames :+ f.name).quoted, f.dataType))
           case _ => None
         }
       }
