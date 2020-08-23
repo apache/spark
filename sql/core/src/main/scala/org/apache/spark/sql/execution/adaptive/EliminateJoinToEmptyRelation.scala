@@ -36,9 +36,9 @@ import org.apache.spark.sql.execution.joins.{EmptyHashedRelation, HashedRelation
  */
 object EliminateJoinToEmptyRelation extends Rule[LogicalPlan] {
 
-  private def canEliminate(plan: LogicalPlan, emptyRelation: HashedRelation): Boolean = plan match {
+  private def canEliminate(plan: LogicalPlan, relation: HashedRelation): Boolean = plan match {
     case LogicalQueryStage(_, stage: BroadcastQueryStageExec) if stage.resultOption.get().isDefined
-      && stage.broadcast.relationFuture.get().value == emptyRelation => true
+      && stage.broadcast.relationFuture.get().value == relation => true
     case _ => false
   }
 
