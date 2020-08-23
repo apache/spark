@@ -24,7 +24,6 @@ import java.sql.{Date, Timestamp}
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
-import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
@@ -588,7 +587,8 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           checkAnswer(sql(s"select a from $tableName"), (0 until count).map(c => Row(c - 1)))
 
           val actual = stripSparkFilter(sql(s"select a from $tableName where a < 0"))
-          assert(actual.count() == 1)
+          // TODO: ORC predicate pushdown should work under case-insensitive analysis.
+          // assert(actual.count() == 1)
         }
       }
 
@@ -606,72 +606,6 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
         }
       }
     }
-  }
-
-  test("SPARK-32646: Case-insensitive field resolution for pushdown when reading ORC") {
-    import org.apache.spark.sql.sources._
-
-    def getOrcFilter(
-        schema: StructType,
-        filters: Seq[Filter],
-        caseSensitive: String): Option[SearchArgument] = {
-      var orcFilter: Option[SearchArgument] = None
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
-        orcFilter =
-          OrcFilters.createFilter(schema, filters)
-      }
-      orcFilter
-    }
-
-    def testFilter(
-        schema: StructType,
-        filters: Seq[Filter],
-        expected: SearchArgument): Unit = {
-      val caseSensitiveFilters = getOrcFilter(schema, filters, "true")
-      val caseInsensitiveFilters = getOrcFilter(schema, filters, "false")
-
-      assert(caseSensitiveFilters.isEmpty)
-      assert(caseInsensitiveFilters.isDefined)
-
-      assert(caseInsensitiveFilters.get.getLeaves().size() > 0)
-      assert(caseInsensitiveFilters.get.getLeaves().size() == expected.getLeaves().size())
-      (0 until expected.getLeaves().size()).foreach { index =>
-        assert(caseInsensitiveFilters.get.getLeaves().get(index) == expected.getLeaves().get(index))
-      }
-    }
-
-    val schema1 = StructType(Seq(StructField("cint", IntegerType)))
-    testFilter(schema1, Seq(GreaterThan("CINT", 1)),
-      newBuilder.startNot()
-        .lessThanEquals("cint", OrcFilters.getPredicateLeafType(IntegerType), 1L).`end`().build())
-    testFilter(schema1, Seq(
-      And(GreaterThan("CINT", 1), EqualTo("Cint", 2))),
-      newBuilder.startAnd()
-        .startNot()
-        .lessThanEquals("cint", OrcFilters.getPredicateLeafType(IntegerType), 1L).`end`()
-        .equals("cint", OrcFilters.getPredicateLeafType(IntegerType), 2L)
-        .`end`().build())
-
-    // Nested column case
-    val schema2 = StructType(Seq(StructField("a",
-      StructType(Seq(StructField("cint", IntegerType))))))
-
-    testFilter(schema2, Seq(GreaterThan("A.CINT", 1)),
-      newBuilder.startNot()
-        .lessThanEquals("a.cint", OrcFilters.getPredicateLeafType(IntegerType), 1L).`end`().build())
-    testFilter(schema2, Seq(GreaterThan("a.CINT", 1)),
-      newBuilder.startNot()
-        .lessThanEquals("a.cint", OrcFilters.getPredicateLeafType(IntegerType), 1L).`end`().build())
-    testFilter(schema2, Seq(GreaterThan("A.cint", 1)),
-      newBuilder.startNot()
-        .lessThanEquals("a.cint", OrcFilters.getPredicateLeafType(IntegerType), 1L).`end`().build())
-    testFilter(schema2, Seq(
-      And(GreaterThan("a.CINT", 1), EqualTo("a.Cint", 2))),
-      newBuilder.startAnd()
-        .startNot()
-        .lessThanEquals("a.cint", OrcFilters.getPredicateLeafType(IntegerType), 1L).`end`()
-        .equals("a.cint", OrcFilters.getPredicateLeafType(IntegerType), 2L)
-        .`end`().build())
   }
 }
 
