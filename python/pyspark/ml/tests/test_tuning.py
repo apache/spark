@@ -127,9 +127,9 @@ class CrossValidatorTests(SparkSessionTestCase):
             'foo',
             "Changing the original avgMetrics should not affect the copied model"
         )
-        cvModel.subModels[0] = 'foo'
+        cvModel.subModels[0][0].getInducedError = lambda: 'foo'
         self.assertNotEqual(
-            cvModelCopied.subModels[0],
+            cvModelCopied.subModels[0][0].getInducedError(),
             'foo',
             "Changing the original subModels should not affect the copied model"
         )
@@ -852,9 +852,9 @@ class TrainValidationSplitTests(SparkSessionTestCase):
             'foo',
             "Changing the original validationMetrics should not affect the copied model"
         )
-        tvsModel.subModels[0] = 'foo'
+        tvsModel.subModels[0].getInducedError = lambda: 'foo'
         self.assertNotEqual(
-            tvsModelCopied.subModels[0],
+            tvsModelCopied.subModels[0].getInducedError(),
             'foo',
             "Changing the original subModels should not affect the copied model"
         )
