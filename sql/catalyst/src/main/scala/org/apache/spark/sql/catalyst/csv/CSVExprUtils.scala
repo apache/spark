@@ -28,8 +28,7 @@ object CSVExprUtils {
     if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
       iter.filter { line =>
-        val trimmed = line.trim
-        trimmed.nonEmpty && !trimmed.startsWith(commentPrefix)
+        line.trim.nonEmpty && !line.startsWith(commentPrefix)
       }
     } else {
       iter.filter(_.trim.nonEmpty)
@@ -40,8 +39,7 @@ object CSVExprUtils {
     if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
       iter.dropWhile { line =>
-        val trimmed = line.trim
-        trimmed.isEmpty || trimmed.trim.startsWith(commentPrefix)
+        line.trim.isEmpty || line.startsWith(commentPrefix)
       }
     } else {
       iter.dropWhile(_.trim.isEmpty)
