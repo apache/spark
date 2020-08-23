@@ -73,7 +73,7 @@ object LiteralGenerator {
       f <- Gen.oneOf(
         Gen.oneOf(
           Float.NaN, Float.PositiveInfinity, Float.NegativeInfinity, Float.MinPositiveValue,
-          0.0f, -0.0f, 1.0f, -1.0f),
+          Float.MaxValue, 0.0f, -0.0f, 1.0f, -1.0f),
         Arbitrary.arbFloat.arbitrary
       )
     } yield Literal.create(f, FloatType)
@@ -83,7 +83,7 @@ object LiteralGenerator {
       f <- Gen.oneOf(
         Gen.oneOf(
           Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity, Double.MinPositiveValue,
-          0.0, -0.0, 1.0, -1.0),
+          Double.MaxValue, 0.0, -0.0, 1.0, -1.0),
         Arbitrary.arbDouble.arbitrary
       )
     } yield Literal.create(f, DoubleType)
