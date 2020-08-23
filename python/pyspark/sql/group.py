@@ -18,7 +18,6 @@
 import sys
 
 from pyspark import since
-from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.group_ops import PandasGroupedOpsMixin
@@ -60,7 +59,6 @@ class GroupedData(PandasGroupedOpsMixin):
         self._df = df
         self.sql_ctx = df.sql_ctx
 
-    @ignore_unicode_prefix
     @since(1.3)
     def agg(self, *exprs):
         """Compute aggregates and returns the result as a :class:`DataFrame`.
@@ -91,18 +89,18 @@ class GroupedData(PandasGroupedOpsMixin):
 
         >>> gdf = df.groupBy(df.name)
         >>> sorted(gdf.agg({"*": "count"}).collect())
-        [Row(name=u'Alice', count(1)=1), Row(name=u'Bob', count(1)=1)]
+        [Row(name='Alice', count(1)=1), Row(name='Bob', count(1)=1)]
 
         >>> from pyspark.sql import functions as F
         >>> sorted(gdf.agg(F.min(df.age)).collect())
-        [Row(name=u'Alice', min(age)=2), Row(name=u'Bob', min(age)=5)]
+        [Row(name='Alice', min(age)=2), Row(name='Bob', min(age)=5)]
 
         >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
         >>> @pandas_udf('int', PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
         ... def min_udf(v):
         ...     return v.min()
         >>> sorted(gdf.agg(min_udf(df.age)).collect())  # doctest: +SKIP
-        [Row(name=u'Alice', min_udf(age)=2), Row(name=u'Bob', min_udf(age)=5)]
+        [Row(name='Alice', min_udf(age)=2), Row(name='Bob', min_udf(age)=5)]
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):

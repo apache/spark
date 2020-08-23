@@ -328,8 +328,10 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
     // level 9: {d1 t5 t3 t6 t2 t4 d3 f1 t1 d2 }
     //
     // Number of generated plans: 46 (vs. 82)
+    // TODO(SPARK-32687): find a way to make optimization result of `CostBasedJoinReorder`
+    //  deterministic even if the input order is different.
     val query =
-      d1.join(t3).join(t4).join(f1).join(d2).join(t5).join(t6).join(d3).join(t1).join(t2)
+      d1.join(t3).join(t4).join(f1).join(d3).join(d2).join(t5).join(t6).join(t1).join(t2)
         .where((nameToAttr("d1_c2") === nameToAttr("t3_c1")) &&
           (nameToAttr("t3_c2") === nameToAttr("t4_c2")) &&
           (nameToAttr("d1_pk") === nameToAttr("f1_fk1")) &&
@@ -350,7 +352,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
           Some(nameToAttr("d3_c2") === nameToAttr("t1_c1")))
         .join(t5.join(t6, Inner, Some(nameToAttr("t5_c2") === nameToAttr("t6_c2"))), Inner,
           Some(nameToAttr("d2_c2") === nameToAttr("t5_c1")))
-        .select(outputsOf(d1, t3, t4, f1, d2, t5, t6, d3, t1, t2): _*)
+        .select(outputsOf(d1, t3, t4, f1, d3, d2, t5, t6, t1, t2): _*)
 
     assertEqualPlans(query, expected)
   }

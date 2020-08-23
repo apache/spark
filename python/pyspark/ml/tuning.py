@@ -15,12 +15,11 @@
 # limitations under the License.
 #
 import itertools
-import sys
 from multiprocessing.pool import ThreadPool
 
 import numpy as np
 
-from pyspark import since, keyword_only
+from pyspark import keyword_only
 from pyspark.ml import Estimator, Model
 from pyspark.ml.common import _py2java, _java2py
 from pyspark.ml.param import Params, Param, TypeConverters
@@ -207,6 +206,10 @@ class _CrossValidatorParams(_ValidatorParams):
                     "with range [0, numFolds) and Spark will throw exception on out-of-range " +
                     "fold numbers.", typeConverter=TypeConverters.toString)
 
+    def __init__(self, *args):
+        super(_CrossValidatorParams, self).__init__(*args)
+        self._setDefault(numFolds=3, foldCol="")
+
     @since("1.4.0")
     def getNumFolds(self):
         """
@@ -263,6 +266,8 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
     [0.5, ...
     >>> evaluator.evaluate(cvModel.transform(dataset))
     0.8333...
+    >>> evaluator.evaluate(cvModelRead.transform(dataset))
+    0.8333...
 
     .. versionadded:: 1.4.0
     """
@@ -275,7 +280,7 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
                  seed=None, parallelism=1, collectSubModels=False, foldCol="")
         """
         super(CrossValidator, self).__init__()
-        self._setDefault(numFolds=3, parallelism=1, foldCol="")
+        self._setDefault(parallelism=1)
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
@@ -529,9 +534,9 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
         if extra is None:
             extra = dict()
         bestModel = self.bestModel.copy(extra)
-        avgMetrics = self.avgMetrics
-        subModels = self.subModels
-        return CrossValidatorModel(bestModel, avgMetrics, subModels)
+        avgMetrics = list(self.avgMetrics)
+        subModels = [model.copy() for model in self.subModels]
+        return self._copyValues(CrossValidatorModel(bestModel, avgMetrics, subModels), extra=extra)
 
     @since("2.3.0")
     def write(self):
@@ -555,8 +560,17 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
         avgMetrics = _java2py(sc, java_stage.avgMetrics())
         estimator, epms, evaluator = super(CrossValidatorModel, cls)._from_java_impl(java_stage)
 
-        py_stage = cls(bestModel=bestModel, avgMetrics=avgMetrics)._set(estimator=estimator)
-        py_stage = py_stage._set(estimatorParamMaps=epms)._set(evaluator=evaluator)
+        py_stage = cls(bestModel=bestModel, avgMetrics=avgMetrics)
+        params = {
+            "evaluator": evaluator,
+            "estimator": estimator,
+            "estimatorParamMaps": epms,
+            "numFolds": java_stage.getNumFolds(),
+            "foldCol": java_stage.getFoldCol(),
+            "seed": java_stage.getSeed(),
+        }
+        for param_name, param_val in params.items():
+            py_stage = py_stage._set(**{param_name: param_val})
 
         if java_stage.hasSubModels():
             py_stage.subModels = [[JavaParams._from_java(sub_model)
@@ -580,9 +594,18 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
                                              _py2java(sc, self.avgMetrics))
         estimator, epms, evaluator = super(CrossValidatorModel, self)._to_java_impl()
 
-        _java_obj.set("evaluator", evaluator)
-        _java_obj.set("estimator", estimator)
-        _java_obj.set("estimatorParamMaps", epms)
+        params = {
+            "evaluator": evaluator,
+            "estimator": estimator,
+            "estimatorParamMaps": epms,
+            "numFolds": self.getNumFolds(),
+            "foldCol": self.getFoldCol(),
+            "seed": self.getSeed(),
+        }
+        for param_name, param_val in params.items():
+            java_param = _java_obj.getParam(param_name)
+            pair = java_param.w(param_val)
+            _java_obj.set(pair)
 
         if self.subModels is not None:
             java_sub_models = [[sub_model._to_java() for sub_model in fold_sub_models]
@@ -600,6 +623,10 @@ class _TrainValidationSplitParams(_ValidatorParams):
 
     trainRatio = Param(Params._dummy(), "trainRatio", "Param for ratio between train and\
      validation data. Must be between 0 and 1.", typeConverter=TypeConverters.toFloat)
+
+    def __init__(self, *args):
+        super(_TrainValidationSplitParams, self).__init__(*args)
+        self._setDefault(trainRatio=0.75)
 
     @since("2.0.0")
     def getTrainRatio(self):
@@ -646,8 +673,11 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     [0.5, ...
     >>> evaluator.evaluate(tvsModel.transform(dataset))
     0.833...
+    >>> evaluator.evaluate(tvsModelRead.transform(dataset))
+    0.833...
 
     .. versionadded:: 2.0.0
+
     """
 
     @keyword_only
@@ -658,7 +688,7 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
                  parallelism=1, collectSubModels=False, seed=None)
         """
         super(TrainValidationSplit, self).__init__()
-        self._setDefault(trainRatio=0.75, parallelism=1)
+        self._setDefault(parallelism=1)
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
@@ -862,8 +892,11 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
             extra = dict()
         bestModel = self.bestModel.copy(extra)
         validationMetrics = list(self.validationMetrics)
-        subModels = self.subModels
-        return TrainValidationSplitModel(bestModel, validationMetrics, subModels)
+        subModels = [model.copy() for model in self.subModels]
+        return self._copyValues(
+            TrainValidationSplitModel(bestModel, validationMetrics, subModels),
+            extra=extra
+        )
 
     @since("2.3.0")
     def write(self):
@@ -891,8 +924,16 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
                                            cls)._from_java_impl(java_stage)
         # Create a new instance of this stage.
         py_stage = cls(bestModel=bestModel,
-                       validationMetrics=validationMetrics)._set(estimator=estimator)
-        py_stage = py_stage._set(estimatorParamMaps=epms)._set(evaluator=evaluator)
+                       validationMetrics=validationMetrics)
+        params = {
+            "evaluator": evaluator,
+            "estimator": estimator,
+            "estimatorParamMaps": epms,
+            "trainRatio": java_stage.getTrainRatio(),
+            "seed": java_stage.getSeed(),
+        }
+        for param_name, param_val in params.items():
+            py_stage = py_stage._set(**{param_name: param_val})
 
         if java_stage.hasSubModels():
             py_stage.subModels = [JavaParams._from_java(sub_model)
@@ -915,9 +956,17 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
             _py2java(sc, self.validationMetrics))
         estimator, epms, evaluator = super(TrainValidationSplitModel, self)._to_java_impl()
 
-        _java_obj.set("evaluator", evaluator)
-        _java_obj.set("estimator", estimator)
-        _java_obj.set("estimatorParamMaps", epms)
+        params = {
+            "evaluator": evaluator,
+            "estimator": estimator,
+            "estimatorParamMaps": epms,
+            "trainRatio": self.getTrainRatio(),
+            "seed": self.getSeed(),
+        }
+        for param_name, param_val in params.items():
+            java_param = _java_obj.getParam(param_name)
+            pair = java_param.w(param_val)
+            _java_obj.set(pair)
 
         if self.subModels is not None:
             java_sub_models = [sub_model._to_java() for sub_model in self.subModels]

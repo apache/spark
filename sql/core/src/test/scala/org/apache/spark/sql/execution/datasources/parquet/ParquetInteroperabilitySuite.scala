@@ -165,7 +165,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               // the assumption on column stats, and also the end-to-end behavior.
 
               val hadoopConf = spark.sessionState.newHadoopConf()
-              val fs = FileSystem.get(hadoopConf)
+              val fs = new Path(tableDir.getAbsolutePath).getFileSystem(hadoopConf)
               val parts = fs.listStatus(new Path(tableDir.getAbsolutePath), new PathFilter {
                 override def accept(path: Path): Boolean = !path.getName.startsWith("_")
               })

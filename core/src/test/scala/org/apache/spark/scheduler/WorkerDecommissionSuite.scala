@@ -32,7 +32,7 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
 
   override def beforeEach(): Unit = {
     val conf = new SparkConf().setAppName("test").setMaster("local")
-      .set(config.Worker.WORKER_DECOMMISSION_ENABLED, true)
+      .set(config.DECOMMISSION_ENABLED, true)
 
     sc = new SparkContext("local-cluster[2, 1, 1024]", "test", conf)
   }
@@ -47,7 +47,12 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
     assert(sleepyRdd.count() === 10)
   }
 
-  test("verify a task with all workers decommissioned succeeds") {
+  test("verify a running task with all workers decommissioned succeeds") {
+    // Wait for the executors to come up
+    TestUtils.waitUntilExecutorsUp(sc = sc,
+      numExecutors = 2,
+      timeout = 30000) // 30s
+
     val input = sc.parallelize(1 to 10)
     // Listen for the job
     val sem = new Semaphore(0)
@@ -56,9 +61,7 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
         sem.release()
       }
     })
-    TestUtils.waitUntilExecutorsUp(sc = sc,
-      numExecutors = 2,
-      timeout = 10000) // 10s
+
     val sleepyRdd = input.mapPartitions{ x =>
       Thread.sleep(5000) // 5s
       x
@@ -73,16 +76,10 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
     // decom.sh message passing is tested manually.
     val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
     val execs = sched.getExecutorIds()
-    execs.foreach(execId => sched.decommissionExecutor(execId))
+    // Make the executors decommission, finish, exit, and not be replaced.
+    val execsAndDecomInfo = execs.map((_, ExecutorDecommissionInfo("", false))).toArray
+    sched.decommissionExecutors(execsAndDecomInfo, adjustTargetNumExecutors = true)
     val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 20.seconds)
     assert(asyncCountResult === 10)
-    // Try and launch task after decommissioning, this should fail
-    val postDecommissioned = input.map(x => x)
-    val postDecomAsyncCount = postDecommissioned.countAsync()
-    val thrown = intercept[java.util.concurrent.TimeoutException]{
-      val result = ThreadUtils.awaitResult(postDecomAsyncCount, 20.seconds)
-    }
-    assert(postDecomAsyncCount.isCompleted === false,
-      "After exec decommission new task could not launch")
   }
 }

@@ -28,8 +28,8 @@ import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchFunctionException, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
@@ -3028,6 +3028,77 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         }.getMessage
         assert(msg.contains("is a directory and recursive is not turned on"))
       }
+    }
+  }
+
+  test("REFRESH FUNCTION") {
+    val msg = intercept[AnalysisException] {
+      sql("REFRESH FUNCTION md5")
+    }.getMessage
+    assert(msg.contains("Cannot refresh built-in function"))
+    val msg2 = intercept[NoSuchFunctionException] {
+      sql("REFRESH FUNCTION default.md5")
+    }.getMessage
+    assert(msg2.contains(s"Undefined function: 'md5'. This function is neither a registered " +
+      s"temporary function nor a permanent function registered in the database 'default'."))
+
+    withUserDefinedFunction("func1" -> true) {
+      sql("CREATE TEMPORARY FUNCTION func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+      val msg = intercept[AnalysisException] {
+        sql("REFRESH FUNCTION func1")
+      }.getMessage
+      assert(msg.contains("Cannot refresh temporary function"))
+    }
+
+    withUserDefinedFunction("func1" -> false) {
+      val func = FunctionIdentifier("func1", Some("default"))
+      assert(!spark.sessionState.catalog.isRegisteredFunction(func))
+      intercept[NoSuchFunctionException] {
+        sql("REFRESH FUNCTION func1")
+      }
+      assert(!spark.sessionState.catalog.isRegisteredFunction(func))
+
+      sql("CREATE FUNCTION func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+      assert(!spark.sessionState.catalog.isRegisteredFunction(func))
+      sql("REFRESH FUNCTION func1")
+      assert(spark.sessionState.catalog.isRegisteredFunction(func))
+      val msg = intercept[NoSuchFunctionException] {
+        sql("REFRESH FUNCTION func2")
+      }.getMessage
+      assert(msg.contains(s"Undefined function: 'func2'. This function is neither a registered " +
+        s"temporary function nor a permanent function registered in the database 'default'."))
+      assert(spark.sessionState.catalog.isRegisteredFunction(func))
+
+      spark.sessionState.catalog.externalCatalog.dropFunction("default", "func1")
+      assert(spark.sessionState.catalog.isRegisteredFunction(func))
+      intercept[NoSuchFunctionException] {
+        sql("REFRESH FUNCTION func1")
+      }
+      assert(!spark.sessionState.catalog.isRegisteredFunction(func))
+
+      val function = CatalogFunction(func, "test.non.exists.udf", Seq.empty)
+      spark.sessionState.catalog.createFunction(function, false)
+      assert(!spark.sessionState.catalog.isRegisteredFunction(func))
+      val err = intercept[AnalysisException] {
+        sql("REFRESH FUNCTION func1")
+      }.getMessage
+      assert(err.contains("Can not load class"))
+      assert(!spark.sessionState.catalog.isRegisteredFunction(func))
+    }
+  }
+
+  test("REFRESH FUNCTION persistent function with the same name as the built-in function") {
+    withUserDefinedFunction("default.rand" -> false) {
+      val rand = FunctionIdentifier("rand", Some("default"))
+      sql("CREATE FUNCTION rand AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+      assert(!spark.sessionState.catalog.isRegisteredFunction(rand))
+      val msg = intercept[AnalysisException] {
+        sql("REFRESH FUNCTION rand")
+      }.getMessage
+      assert(msg.contains("Cannot refresh built-in function"))
+      assert(!spark.sessionState.catalog.isRegisteredFunction(rand))
+      sql("REFRESH FUNCTION default.rand")
+      assert(spark.sessionState.catalog.isRegisteredFunction(rand))
     }
   }
 }

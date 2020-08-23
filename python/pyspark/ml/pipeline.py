@@ -15,13 +15,7 @@
 # limitations under the License.
 #
 
-import sys
-import os
-
-if sys.version > '3':
-    basestring = str
-
-from pyspark import since, keyword_only, SparkContext
+from pyspark import keyword_only
 from pyspark.ml.base import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import *

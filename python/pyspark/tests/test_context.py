@@ -126,7 +126,7 @@ class AddFileTests(PySparkTestCase):
         # To ensure that we're actually testing addPyFile's effects, check that
         # this fails due to `userlibrary` not being on the Python path:
         def func():
-            from userlibrary import UserClass
+            from userlibrary import UserClass  # noqa: F401
         self.assertRaises(ImportError, func)
         path = os.path.join(SPARK_HOME, "python/test_support/userlibrary.py")
         self.sc.addPyFile(path)
@@ -137,7 +137,7 @@ class AddFileTests(PySparkTestCase):
         # To ensure that we're actually testing addPyFile's effects, check that
         # this fails due to `userlibrary` not being on the Python path:
         def func():
-            from userlib import UserClass
+            from userlib import UserClass  # noqa: F401
         self.assertRaises(ImportError, func)
         path = os.path.join(SPARK_HOME, "python/test_support/userlib-0.1.zip")
         self.sc.addPyFile(path)
@@ -267,6 +267,25 @@ class ContextTests(unittest.TestCase):
             resources = sc.resources
             self.assertEqual(len(resources), 0)
 
+    def test_disallow_to_create_spark_context_in_executors(self):
+        # SPARK-32160: SparkContext should not be created in executors.
+        with SparkContext("local-cluster[3, 1, 1024]") as sc:
+            with self.assertRaises(Exception) as context:
+                sc.range(2).foreach(lambda _: SparkContext())
+            self.assertIn("SparkContext should only be created and accessed on the driver.",
+                          str(context.exception))
+
+    def test_allow_to_create_spark_context_in_executors(self):
+        # SPARK-32160: SparkContext can be created in executors if the config is set.
+
+        def create_spark_context():
+            conf = SparkConf().set("spark.executor.allowSparkContext", "true")
+            with SparkContext(conf=conf):
+                pass
+
+        with SparkContext("local-cluster[3, 1, 1024]") as sc:
+            sc.range(2).foreach(lambda _: create_spark_context())
+
 
 class ContextTestsWithResources(unittest.TestCase):
 
@@ -299,7 +318,7 @@ class ContextTestsWithResources(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_context import *
+    from pyspark.tests.test_context import *  # noqa: F401
 
     try:
         import xmlrunner

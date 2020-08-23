@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -23,7 +23,7 @@ import sys
 from subprocess import Popen, PIPE
 
 try:
-    from jira.client import JIRA
+    from jira.client import JIRA  # noqa: F401
     # Old versions have JIRAError in exceptions package, new (0.5+) in utils.
     try:
         from jira.exceptions import JIRAError
@@ -35,7 +35,7 @@ except ImportError:
     sys.exit(-1)
 
 try:
-    from github import Github
+    from github import Github  # noqa: F401
     from github import GithubException
 except ImportError:
     print("This tool requires the PyGithub library")
@@ -49,8 +49,6 @@ except ImportError:
     print("Install using 'sudo pip install unidecode'")
     sys.exit(-1)
 
-if sys.version < '3':
-    input = raw_input  # noqa
 
 # Contributors list file name
 contributors_file_name = "contributors.txt"
@@ -152,10 +150,7 @@ def get_commits(tag):
             if not is_valid_author(author):
                 author = github_username
         # Guard against special characters
-        try:               # Python 2
-            author = unicode(author, "UTF-8")
-        except NameError:  # Python 3
-            author = str(author)
+        author = str(author)
         author = unidecode.unidecode(author).strip()
         commit = Commit(_hash, author, title, pr_number)
         commits.append(commit)

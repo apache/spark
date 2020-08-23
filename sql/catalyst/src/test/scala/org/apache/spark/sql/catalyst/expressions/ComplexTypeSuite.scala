@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
@@ -142,21 +143,51 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("GetArrayStructFields") {
-    val typeAS = ArrayType(StructType(StructField("a", IntegerType, false) :: Nil))
-    val typeNullAS = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
-    val arrayStruct = Literal.create(Seq(create_row(1)), typeAS)
-    val nullArrayStruct = Literal.create(null, typeNullAS)
+    // test 4 types: struct field nullability X array element nullability
+    val type1 = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val type2 = ArrayType(StructType(StructField("a", IntegerType, nullable = false) :: Nil))
+    val type3 = ArrayType(StructType(StructField("a", IntegerType) :: Nil), containsNull = false)
+    val type4 = ArrayType(
+      StructType(StructField("a", IntegerType, nullable = false) :: Nil), containsNull = false)
 
-    def getArrayStructFields(expr: Expression, fieldName: String): GetArrayStructFields = {
-      expr.dataType match {
-        case ArrayType(StructType(fields), containsNull) =>
-          val field = fields.find(_.name == fieldName).get
-          GetArrayStructFields(expr, field, fields.indexOf(field), fields.length, containsNull)
-      }
+    val input1 = Literal.create(Seq(create_row(1)), type4)
+    val input2 = Literal.create(Seq(create_row(null)), type3)
+    val input3 = Literal.create(Seq(null), type2)
+    val input4 = Literal.create(null, type1)
+
+    def getArrayStructFields(expr: Expression, fieldName: String): Expression = {
+      ExtractValue.apply(expr, Literal.create(fieldName, StringType), _ == _)
     }
 
-    checkEvaluation(getArrayStructFields(arrayStruct, "a"), Seq(1))
-    checkEvaluation(getArrayStructFields(nullArrayStruct, "a"), null)
+    checkEvaluation(getArrayStructFields(input1, "a"), Seq(1))
+    checkEvaluation(getArrayStructFields(input2, "a"), Seq(null))
+    checkEvaluation(getArrayStructFields(input3, "a"), Seq(null))
+    checkEvaluation(getArrayStructFields(input4, "a"), null)
+  }
+
+  test("SPARK-32167: nullability of GetArrayStructFields") {
+    val resolver = SQLConf.get.resolver
+
+    val array1 = ArrayType(
+      new StructType().add("a", "int", nullable = true),
+      containsNull = false)
+    val data1 = Literal.create(Seq(Row(null)), array1)
+    val get1 = ExtractValue(data1, Literal("a"), resolver).asInstanceOf[GetArrayStructFields]
+    assert(get1.containsNull)
+
+    val array2 = ArrayType(
+      new StructType().add("a", "int", nullable = false),
+      containsNull = true)
+    val data2 = Literal.create(Seq(null), array2)
+    val get2 = ExtractValue(data2, Literal("a"), resolver).asInstanceOf[GetArrayStructFields]
+    assert(get2.containsNull)
+
+    val array3 = ArrayType(
+      new StructType().add("a", "int", nullable = false),
+      containsNull = false)
+    val data3 = Literal.create(Seq(Row(1)), array3)
+    val get3 = ExtractValue(data3, Literal("a"), resolver).asInstanceOf[GetArrayStructFields]
+    assert(!get3.containsNull)
   }
 
   test("CreateArray") {

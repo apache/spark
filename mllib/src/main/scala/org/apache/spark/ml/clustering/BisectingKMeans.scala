@@ -72,6 +72,8 @@ private[clustering] trait BisectingKMeansParams extends Params with HasMaxIter
   @Since("2.0.0")
   def getMinDivisibleClusterSize: Double = $(minDivisibleClusterSize)
 
+  setDefault(k -> 4, maxIter -> 20, minDivisibleClusterSize -> 1.0)
+
   /**
    * Validates and transforms the input schema.
    * @param schema input schema
@@ -225,11 +227,6 @@ object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {
 class BisectingKMeans @Since("2.0.0") (
     @Since("2.0.0") override val uid: String)
   extends Estimator[BisectingKMeansModel] with BisectingKMeansParams with DefaultParamsWritable {
-
-  setDefault(
-    k -> 4,
-    maxIter -> 20,
-    minDivisibleClusterSize -> 1.0)
 
   @Since("2.0.0")
   override def copy(extra: ParamMap): BisectingKMeans = defaultCopy(extra)

@@ -2286,7 +2286,7 @@ setMethod("pmod", signature(y = "Column"),
             column(jc)
           })
 
-#' @param rsd maximum estimation error allowed (default = 0.05).
+#' @param rsd maximum relative standard deviation allowed (default = 0.05).
 #'
 #' @rdname column_aggregate_functions
 #' @aliases approx_count_distinct,Column-method

@@ -2370,8 +2370,8 @@ case class Sentences(
         widx = wi.current
         if (Character.isLetterOrDigit(word.charAt(0))) words += UTF8String.fromString(word)
       }
-      result += new GenericArrayData(words)
+      result += new GenericArrayData(words.toSeq)
     }
-    new GenericArrayData(result)
+    new GenericArrayData(result.toSeq)
   }
 }

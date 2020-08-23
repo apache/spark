@@ -329,7 +329,10 @@ object SQLConf {
 
   val PREFER_SORTMERGEJOIN = buildConf("spark.sql.join.preferSortMergeJoin")
     .internal()
-    .doc("When true, prefer sort merge join over shuffle hash join.")
+    .doc("When true, prefer sort merge join over shuffled hash join. " +
+      "Sort merge join consumes less memory than shuffled hash join and it works efficiently " +
+      "when both join tables are large. On the other hand, shuffled hash join can improve " +
+      "performance (e.g., of full outer joins) when one of join tables is much smaller.")
     .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
@@ -544,19 +547,6 @@ object SQLConf {
     .version("2.2.0")
     .booleanConf
     .createWithDefault(true)
-
-  val MAX_CNF_NODE_COUNT =
-    buildConf("spark.sql.optimizer.maxCNFNodeCount")
-      .internal()
-      .doc("Specifies the maximum allowable number of conjuncts in the result of CNF " +
-        "conversion. If the conversion exceeds the threshold, an empty sequence is returned. " +
-        "For example, CNF conversion of (a && b) || (c && d) generates " +
-        "four conjuncts (a || c) && (a || d) && (b || c) && (b || d).")
-      .version("3.1.0")
-      .intConf
-      .checkValue(_ >= 0,
-        "The depth of the maximum rewriting conjunction normal form must be positive.")
-      .createWithDefault(128)
 
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
@@ -1224,6 +1214,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val REMOVE_REDUNDANT_PROJECTS_ENABLED = buildConf("spark.sql.execution.removeRedundantProjects")
+    .internal()
+    .doc("Whether to remove redundant project exec node based on children's output and " +
+      "ordering requirement.")
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val STATE_STORE_PROVIDER_CLASS =
     buildConf("spark.sql.streaming.stateStore.providerClass")
       .internal()
@@ -1249,9 +1247,9 @@ object SQLConf {
   val STATE_STORE_FORMAT_VALIDATION_ENABLED =
     buildConf("spark.sql.streaming.stateStore.formatValidation.enabled")
       .internal()
-      .doc("When true, check if the UnsafeRow from the state store is valid or not when running " +
-        "streaming queries. This can happen if the state store format has been changed. Note, " +
-        "the feature is only effective in the build-in HDFS state store provider now.")
+      .doc("When true, check if the data from state store is valid or not when running streaming " +
+        "queries. This can happen if the state store format has been changed. Note, the feature " +
+        "is only effective in the build-in HDFS state store provider now.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
@@ -1611,8 +1609,8 @@ object SQLConf {
   val NDV_MAX_ERROR =
     buildConf("spark.sql.statistics.ndv.maxError")
       .internal()
-      .doc("The maximum estimation error allowed in HyperLogLog++ algorithm when generating " +
-        "column level statistics.")
+      .doc("The maximum relative standard deviation allowed in HyperLogLog++ algorithm " +
+        "when generating column level statistics.")
       .version("2.1.1")
       .doubleConf
       .createWithDefault(0.05)
@@ -1723,9 +1721,9 @@ object SQLConf {
   val SESSION_LOCAL_TIMEZONE = buildConf("spark.sql.session.timeZone")
     .doc("The ID of session local timezone in the format of either region-based zone IDs or " +
       "zone offsets. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. " +
-      "Zone offsets must be in the format '(+|-)HH:mm', for example '-08:00' or '+01:00'. " +
-      "Also 'UTC' and 'Z' are supported as aliases of '+00:00'. Other short names are not " +
-      "recommended to use because they can be ambiguous.")
+      "Zone offsets must be in the format '(+|-)HH', '(+|-)HH:mm' or '(+|-)HH:mm:ss', e.g '-08', " +
+      "'+01:00' or '-13:33:33'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'. Other " +
+      "short names are not recommended to use because they can be ambiguous.")
     .version("2.2.0")
     .stringConf
     .checkValue(isValidTimezone, s"Cannot resolve the given timezone with" +
@@ -2106,15 +2104,24 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DISABLE_HINTS =
+    buildConf("spark.sql.optimizer.disableHints")
+      .internal()
+      .doc("When true, the optimizer will disable user-specified hints that are additional " +
+        "directives for better planning of a query.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST =
     buildConf("spark.sql.optimizer.nestedPredicatePushdown.supportedFileSources")
       .internal()
       .doc("A comma-separated list of data source short names or fully qualified data source " +
         "implementation class names for which Spark tries to push down predicates for nested " +
         "columns and/or names containing `dots` to data sources. This configuration is only " +
-        "effective with file-based data source in DSv1. Currently, Parquet implements " +
-        "both optimizations while ORC only supports predicates for names containing `dots`. The " +
-        "other data sources don't support this feature yet. So the default value is 'parquet,orc'.")
+        "effective with file-based data sources in DSv1. Currently, Parquet and ORC implement " +
+        "both optimizations. The other data sources don't support this feature yet. So the " +
+        "default value is 'parquet,orc'.")
       .version("3.0.0")
       .stringConf
       .createWithDefault("parquet,orc")
@@ -2534,6 +2541,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val JSON_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.json.filterPushdown.enabled")
+    .doc("When true, enable filter pushdown to JSON datasource.")
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
+  val AVRO_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.avro.filterPushdown.enabled")
+    .doc("When true, enable filter pushdown to Avro datasource.")
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val ADD_PARTITION_BATCH_SIZE =
     buildConf("spark.sql.addPartitionInBatch.size")
       .internal()
@@ -2634,27 +2653,64 @@ object SQLConf {
         "when false, forbid the cast, more details in SPARK-31710")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
-  val COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED =
-    buildConf("spark.sql.bucketing.coalesceBucketsInSortMergeJoin.enabled")
+  val COALESCE_BUCKETS_IN_JOIN_ENABLED =
+    buildConf("spark.sql.bucketing.coalesceBucketsInJoin.enabled")
       .doc("When true, if two bucketed tables with the different number of buckets are joined, " +
         "the side with a bigger number of buckets will be coalesced to have the same number " +
-        "of buckets as the other side. Bucket coalescing is applied only to sort-merge joins " +
-        "and only when the bigger number of buckets is divisible by the smaller number of buckets.")
+        "of buckets as the other side. Bigger number of buckets is divisible by the smaller " +
+        "number of buckets. Bucket coalescing is applied to sort-merge joins and " +
+        "shuffled hash join. Note: Coalescing bucketed table can avoid unnecessary shuffling " +
+        "in join, but it also reduces parallelism and could possibly cause OOM for " +
+        "shuffled hash join.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
 
-  val COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_BUCKET_RATIO =
-    buildConf("spark.sql.bucketing.coalesceBucketsInSortMergeJoin.maxBucketRatio")
+  val COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO =
+    buildConf("spark.sql.bucketing.coalesceBucketsInJoin.maxBucketRatio")
       .doc("The ratio of the number of two buckets being coalesced should be less than or " +
         "equal to this value for bucket coalescing to be applied. This configuration only " +
-        s"has an effect when '${COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key}' is set to true.")
+        s"has an effect when '${COALESCE_BUCKETS_IN_JOIN_ENABLED.key}' is set to true.")
       .version("3.1.0")
       .intConf
       .checkValue(_ > 0, "The difference must be positive.")
       .createWithDefault(4)
+
+  val BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT =
+    buildConf("spark.sql.execution.broadcastHashJoin.outputPartitioningExpandLimit")
+      .internal()
+      .doc("The maximum number of partitionings that a HashPartitioning can be expanded to. " +
+        "This configuration is applicable only for BroadcastHashJoin inner joins and can be " +
+        "set to '0' to disable this feature.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ >= 0, "The value must be non-negative.")
+      .createWithDefault(8)
+
+  val OPTIMIZE_NULL_AWARE_ANTI_JOIN =
+    buildConf("spark.sql.optimizeNullAwareAntiJoin")
+      .internal()
+      .doc("When true, NULL-aware anti join execution will be planed into " +
+        "BroadcastHashJoinExec with flag isNullAwareAntiJoin enabled, " +
+        "optimized from O(M*N) calculation into O(M) calculation " +
+        "using Hash lookup instead of Looping lookup." +
+        "Only support for singleColumn NAAJ for now.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val LEGACY_COMPLEX_TYPES_TO_STRING =
+    buildConf("spark.sql.legacy.castComplexTypesToString.enabled")
+      .internal()
+      .doc("When true, maps and structs are wrapped by [] in casting to strings, and " +
+        "NULL elements of structs/maps/arrays will be omitted while converting to strings. " +
+        "Otherwise, if this is false, which is the default, maps and structs are wrapped by {}, " +
+        "and NULL elements will be converted to \"null\".")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -2939,8 +2995,6 @@ class SQLConf extends Serializable with Logging {
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
-  def maxCnfNodeCount: Int = getConf(MAX_CNF_NODE_COUNT)
-
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
   def fileCompressionFactor: Double = getConf(FILE_COMPRESSION_FACTOR)
@@ -2965,6 +3019,9 @@ class SQLConf extends Serializable with Logging {
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
   }
+
+  def broadcastHashJoinOutputPartitioningExpandLimit: Int =
+    getConf(BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
@@ -3246,10 +3303,24 @@ class SQLConf extends Serializable with Logging {
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 
+  def jsonFilterPushDown: Boolean = getConf(JSON_FILTER_PUSHDOWN_ENABLED)
+
+  def avroFilterPushDown: Boolean = getConf(AVRO_FILTER_PUSHDOWN_ENABLED)
+
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
 
   def legacyAllowCastNumericToTimestamp: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
+
+  def metadataCacheTTL: Long = getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
+
+  def coalesceBucketsInJoinEnabled: Boolean = getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED)
+
+  def coalesceBucketsInJoinMaxBucketRatio: Int =
+    getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO)
+
+  def optimizeNullAwareAntiJoin: Boolean =
+    getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
 
   /** ********************** SQLConf functionality methods ************ */
 
