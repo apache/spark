@@ -511,7 +511,6 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
             "estimator": estimator,
             "estimatorParamMaps": epms,
             "numFolds": java_stage.getNumFolds(),
-            "foldCol": java_stage.getFoldCol(),
             "seed": java_stage.getSeed(),
         }
         for param_name, param_val in params.items():
@@ -544,7 +543,6 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
             "estimator": estimator,
             "estimatorParamMaps": epms,
             "numFolds": self.getNumFolds(),
-            "foldCol": self.getFoldCol(),
             "seed": self.getSeed(),
         }
         for param_name, param_val in params.items():

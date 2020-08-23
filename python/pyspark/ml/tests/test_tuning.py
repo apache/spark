@@ -101,7 +101,6 @@ class CrossValidatorTests(SparkSessionTestCase):
             lambda x: x.getEstimator().uid,
             # SPARK-32092: CrossValidator.copy() needs to copy all existing params
             lambda x: x.getNumFolds(),
-            lambda x: x.getFoldCol(),
             lambda x: x.getCollectSubModels(),
             lambda x: x.getParallelism(),
             lambda x: x.getSeed()
@@ -116,7 +115,6 @@ class CrossValidatorTests(SparkSessionTestCase):
         # SPARK-32092: CrossValidatorModel.copy() needs to copy all existing params
         for param in [
             lambda x: x.getNumFolds(),
-            lambda x: x.getFoldCol(),
             lambda x: x.getSeed()
         ]:
             self.assertEqual(param(cvModel), param(cvModelCopied))
@@ -224,7 +222,6 @@ class CrossValidatorTests(SparkSessionTestCase):
         loadedCvModel = CrossValidatorModel.load(cvModelPath)
         for param in [
             lambda x: x.getNumFolds(),
-            lambda x: x.getFoldCol(),
             lambda x: x.getSeed(),
             lambda x: len(x.subModels)
         ]:
