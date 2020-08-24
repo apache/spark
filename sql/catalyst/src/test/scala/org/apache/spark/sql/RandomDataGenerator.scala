@@ -360,7 +360,7 @@ object RandomDataGenerator {
               arr += gen()
               i += 1
             }
-            arr
+            arr.toSeq
           }
           fields += data
         case StructType(children) =>

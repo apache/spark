@@ -65,7 +65,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     val migrateDuring = whenToDecom != JobEnded
     val master = s"local-cluster[${numExecs}, 1, 1024]"
     val conf = new SparkConf().setAppName("test").setMaster(master)
-      .set(config.Worker.WORKER_DECOMMISSION_ENABLED, true)
+      .set(config.DECOMMISSION_ENABLED, true)
       .set(config.STORAGE_DECOMMISSION_ENABLED, true)
       .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED, persist)
       .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, shuffle)
@@ -188,9 +188,12 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
 
     val execToDecommission = getCandidateExecutorToDecom.get
     logInfo(s"Decommissioning executor ${execToDecommission}")
+
+    // Decommission executor and ensure it is not relaunched by setting adjustTargetNumExecutors
     sched.decommissionExecutor(
       execToDecommission,
-      ExecutorDecommissionInfo("", isHostDecommissioned = false))
+      ExecutorDecommissionInfo("", isHostDecommissioned = false),
+      adjustTargetNumExecutors = true)
     val decomTime = new SystemClock().getTimeMillis()
 
     // Wait for job to finish.
@@ -276,6 +279,8 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     }
 
     // Wait for the executor to be removed automatically after migration.
+    // This is set to a high value since github actions is sometimes high latency
+    // but I've never seen this go for more than a minute.
     assert(executorRemovedSem.tryAcquire(1, 5L, TimeUnit.MINUTES))
 
     // Since the RDD is cached or shuffled so further usage of same RDD should use the

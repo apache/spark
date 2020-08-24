@@ -1,0 +1,29 @@
+TakeOrderedAndProject [i_product_name]
+  WholeStageCodegen (4)
+    HashAggregate [i_product_name]
+      InputAdapter
+        Exchange [i_product_name] #1
+          WholeStageCodegen (3)
+            HashAggregate [i_product_name]
+              Project [i_product_name]
+                BroadcastHashJoin [i_manufact,i_manufact]
+                  Project [i_manufact,i_product_name]
+                    Filter [i_manufact,i_manufact_id]
+                      ColumnarToRow
+                        InputAdapter
+                          Scan parquet default.item [i_manufact,i_manufact_id,i_product_name]
+                  InputAdapter
+                    BroadcastExchange #2
+                      WholeStageCodegen (2)
+                        Project [i_manufact]
+                          Filter [alwaysTrue,item_cnt]
+                            HashAggregate [count,i_manufact] [alwaysTrue,count,count(1),i_manufact,item_cnt]
+                              InputAdapter
+                                Exchange [i_manufact] #3
+                                  WholeStageCodegen (1)
+                                    HashAggregate [i_manufact] [count,count]
+                                      Project [i_manufact]
+                                        Filter [i_category,i_color,i_manufact,i_size,i_units]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet default.item [i_category,i_color,i_manufact,i_size,i_units]

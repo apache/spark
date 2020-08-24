@@ -20,17 +20,17 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJoin
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.joins.EmptyHashedRelationWithAllNullKeys
+import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
 
 /**
  * This optimization rule detects and convert a NAAJ to an Empty LocalRelation
- * when buildSide is EmptyHashedRelationWithAllNullKeys.
+ * when buildSide is HashedRelationWithAllNullKeys.
  */
 object EliminateNullAwareAntiJoin extends Rule[LogicalPlan] {
 
   private def canEliminate(plan: LogicalPlan): Boolean = plan match {
     case LogicalQueryStage(_, stage: BroadcastQueryStageExec) if stage.resultOption.get().isDefined
-      && stage.broadcast.relationFuture.get().value == EmptyHashedRelationWithAllNullKeys => true
+      && stage.broadcast.relationFuture.get().value == HashedRelationWithAllNullKeys => true
     case _ => false
   }
 
