@@ -93,7 +93,10 @@ jobs:
     - name: Cache Scala, SBT, Maven and Zinc
       uses: actions/cache@v1
       with:
-        path: build
+        path: | 
+            build
+            !build/sbt
+            !build/sbt-launch-lib.bash
         key: build-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           build-
