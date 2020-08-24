@@ -92,7 +92,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val plan2 = DummySparkPlan(
       outputPartitioning = HashPartitioning(exprB :: exprC :: Nil, 5))
 
-    // Test fallback to the right side, which has PartitioningCollection.
+    // Test fallback to the right side, which has HashPartitioning.
     val smjExec1 = SortMergeJoinExec(
       exprA :: exprB :: Nil, exprC :: exprB :: Nil, Inner, None, plan1, plan2)
     EnsureRequirements(spark.sessionState.conf).apply(smjExec1) match {
