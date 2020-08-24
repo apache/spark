@@ -182,7 +182,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           concat_ws("\t",
             'b.cast("string"),
             'c.cast("string"),
-            'd.cast("string"),
+            decimalToString('d),
             'e.cast("string")).as("value")).collect())
 
       // In hive default serde mode, if we don't define output schema,
@@ -238,7 +238,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           concat_ws("\t",
             'b.cast("string"),
             'c.cast("string"),
-            'd.cast("string"),
+            decimalToString('d),
             'e.cast("string")).as("value")).collect())
 
       // In hive default serde mode, if we don't define output schema,
