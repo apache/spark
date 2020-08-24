@@ -192,43 +192,24 @@ final class MutableAny extends MutableValue {
  */
 final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGenericInternalRow {
 
-  private[this] def dataTypeToMutableValue(dataType: DataType): MutableValue = dataType match {
-    // We use INT for DATE internally
-    case IntegerType | DateType => new MutableInt
-    // We use Long for Timestamp internally
-    case LongType | TimestampType => new MutableLong
-    case FloatType => new MutableFloat
-    case DoubleType => new MutableDouble
-    case BooleanType => new MutableBoolean
-    case ByteType => new MutableByte
-    case ShortType => new MutableShort
-    case _ => new MutableAny
-  }
-
-  def this(dataTypes: Seq[DataType]) = {
-    // SPARK-32550: use while loop instead of map
-    this(new Array[MutableValue](dataTypes.length))
-    val length = values.length
-    var i = 0
-    while (i < length) {
-      values(i) = dataTypeToMutableValue(dataTypes(i))
-      i += 1
-    }
-  }
+  def this(dataTypes: Seq[DataType]) =
+    this(
+      dataTypes.map {
+        case BooleanType => new MutableBoolean
+        case ByteType => new MutableByte
+        case ShortType => new MutableShort
+        // We use INT for DATE internally
+        case IntegerType | DateType => new MutableInt
+        // We use Long for Timestamp internally
+        case LongType | TimestampType => new MutableLong
+        case FloatType => new MutableFloat
+        case DoubleType => new MutableDouble
+        case _ => new MutableAny
+      }.toArray)
 
   def this() = this(Seq.empty)
 
-  def this(schema: StructType) = {
-    // SPARK-32550: use while loop instead of map
-    this(new Array[MutableValue](schema.fields.length))
-    val length = values.length
-    val fields = schema.fields
-    var i = 0
-    while (i < length) {
-      values(i) = dataTypeToMutableValue(fields(i).dataType)
-      i += 1
-    }
-  }
+  def this(schema: StructType) = this(schema.fields.map(_.dataType))
 
   override def numFields: Int = values.length
 
