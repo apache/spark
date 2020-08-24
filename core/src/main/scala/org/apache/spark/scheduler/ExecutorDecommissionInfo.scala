@@ -33,7 +33,6 @@ case class ExecutorDecommissionInfo(message: String, isHostDecommissioned: Boole
  * from the message.
  */
 case class ExecutorDecommissionState(
-    message: String,
     // Timestamp the decommissioning commenced as per the Driver's clock,
     // to estimate when the executor might eventually be lost if EXECUTOR_DECOMMISSION_KILL_INTERVAL
     // is configured.

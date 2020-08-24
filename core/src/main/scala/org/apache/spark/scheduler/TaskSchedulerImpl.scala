@@ -927,7 +927,6 @@ private[spark] class TaskSchedulerImpl(
           // This is the first time we are hearing of decommissioning this executor,
           // so create a brand new state.
           ExecutorDecommissionState(
-            decommissionInfo.message,
             clock.getTimeMillis(),
             decommissionInfo.isHostDecommissioned)
         } else {
@@ -938,7 +937,6 @@ private[spark] class TaskSchedulerImpl(
             // manager and is thus authoritative. Flip isHostDecommissioned to true but keep the old
             // decommission start time.
             ExecutorDecommissionState(
-              oldDecomState.message,
               oldDecomState.startTime,
               isHostDecommissioned = true)
           } else {
