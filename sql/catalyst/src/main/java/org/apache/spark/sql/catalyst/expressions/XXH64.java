@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.nio.ByteOrder;
+
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -31,6 +33,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 // scalastyle: on
 public final class XXH64 {
+  private static final boolean isBigEndian = ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
 
   private static final long PRIME64_1 = 0x9E3779B185EBCA87L;
   private static final long PRIME64_2 = 0xC2B2AE3D27D4EB4FL;
@@ -93,7 +96,11 @@ public final class XXH64 {
     offset += length & -8;
 
     if (offset + 4L <= end) {
-      hash ^= (Platform.getInt(base, offset) & 0xFFFFFFFFL) * PRIME64_1;
+      int k1 = Platform.getInt(base, offset);
+      if (isBigEndian) {
+        k1 = Integer.reverseBytes(k1);
+      }
+      hash ^= (k1 & 0xFFFFFFFFL) * PRIME64_1;
       hash = Long.rotateLeft(hash, 23) * PRIME64_2 + PRIME64_3;
       offset += 4L;
     }
@@ -130,21 +137,22 @@ public final class XXH64 {
       long v4 = seed - PRIME64_1;
 
       do {
-        v1 += Platform.getLong(base, offset) * PRIME64_2;
-        v1 = Long.rotateLeft(v1, 31);
-        v1 *= PRIME64_1;
+        long k1 = Platform.getLong(base, offset);
+        long k2 = Platform.getLong(base, offset + 8);
+        long k3 = Platform.getLong(base, offset + 16);
+        long k4 = Platform.getLong(base, offset + 24);
 
-        v2 += Platform.getLong(base, offset + 8) * PRIME64_2;
-        v2 = Long.rotateLeft(v2, 31);
-        v2 *= PRIME64_1;
+        if (isBigEndian) {
+          k1 = Long.reverseBytes(k1);
+          k2 = Long.reverseBytes(k2);
+          k3 = Long.reverseBytes(k3);
+          k4 = Long.reverseBytes(k4);
+        }
 
-        v3 += Platform.getLong(base, offset + 16) * PRIME64_2;
-        v3 = Long.rotateLeft(v3, 31);
-        v3 *= PRIME64_1;
-
-        v4 += Platform.getLong(base, offset + 24) * PRIME64_2;
-        v4 = Long.rotateLeft(v4, 31);
-        v4 *= PRIME64_1;
+        v1 = Long.rotateLeft(v1 + (k1 * PRIME64_2), 31) * PRIME64_1;
+        v2 = Long.rotateLeft(v2 + (k2 * PRIME64_2), 31) * PRIME64_1;
+        v3 = Long.rotateLeft(v3 + (k3 * PRIME64_2), 31) * PRIME64_1;
+        v4 = Long.rotateLeft(v4 + (k4 * PRIME64_2), 31) * PRIME64_1;
 
         offset += 32L;
       } while (offset <= limit);
@@ -186,6 +194,9 @@ public final class XXH64 {
     long limit = end - 8;
     while (offset <= limit) {
       long k1 = Platform.getLong(base, offset);
+      if (isBigEndian) {
+        k1 = Long.reverseBytes(k1);
+      }
       hash ^= Long.rotateLeft(k1 * PRIME64_2, 31) * PRIME64_1;
       hash = Long.rotateLeft(hash, 27) * PRIME64_1 + PRIME64_4;
       offset += 8L;
