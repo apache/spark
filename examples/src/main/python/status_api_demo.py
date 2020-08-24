@@ -17,7 +17,6 @@
 
 import time
 import threading
-import sys
 import queue as Queue
 
 from pyspark import SparkConf, SparkContext

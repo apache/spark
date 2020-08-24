@@ -1246,7 +1246,7 @@ def _test():
     import tempfile
     import py4j
     from pyspark.context import SparkContext
-    from pyspark.sql import SparkSession, Row
+    from pyspark.sql import SparkSession
     import pyspark.sql.readwriter
 
     os.chdir(os.environ["SPARK_HOME"])

@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.quoteIfNeeded
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 
@@ -68,11 +68,9 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    * Create ORC filter as a SearchArgument instance.
    */
   def createFilter(schema: StructType, filters: Seq[Filter]): Option[SearchArgument] = {
-    val dataTypeMap = schema.map(f => quoteIfNeeded(f.name) -> f.dataType).toMap
+    val dataTypeMap = OrcFilters.getSearchableTypeMap(schema, SQLConf.get.caseSensitiveAnalysis)
     // Combines all convertible filters using `And` to produce a single conjunction
-    // TODO (SPARK-25557): ORC doesn't support nested predicate pushdown, so they are removed.
-    val newFilters = filters.filter(!_.containsNestedColumn)
-    val conjunctionOptional = buildTree(convertibleFilters(schema, dataTypeMap, newFilters))
+    val conjunctionOptional = buildTree(convertibleFilters(schema, dataTypeMap, filters))
     conjunctionOptional.map { conjunction =>
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate.
       // The input predicate is fully convertible. There should not be any empty result in the
@@ -228,40 +226,38 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
     // call is mandatory. ORC `SearchArgument` builder requires that all leaf predicates must be
     // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
-    // Since ORC 1.5.0 (ORC-323), we need to quote for column names with `.` characters
-    // in order to distinguish predicate pushdown for nested columns.
     expression match {
-      case EqualTo(name, value) if isSearchableType(dataTypeMap(name)) =>
+      case EqualTo(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name))
         Some(builder.startAnd().equals(name, getType(name), castedValue).end())
 
-      case EqualNullSafe(name, value) if isSearchableType(dataTypeMap(name)) =>
+      case EqualNullSafe(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name))
         Some(builder.startAnd().nullSafeEquals(name, getType(name), castedValue).end())
 
-      case LessThan(name, value) if isSearchableType(dataTypeMap(name)) =>
+      case LessThan(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name))
         Some(builder.startAnd().lessThan(name, getType(name), castedValue).end())
 
-      case LessThanOrEqual(name, value) if isSearchableType(dataTypeMap(name)) =>
+      case LessThanOrEqual(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name))
         Some(builder.startAnd().lessThanEquals(name, getType(name), castedValue).end())
 
-      case GreaterThan(name, value) if isSearchableType(dataTypeMap(name)) =>
+      case GreaterThan(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name))
         Some(builder.startNot().lessThanEquals(name, getType(name), castedValue).end())
 
-      case GreaterThanOrEqual(name, value) if isSearchableType(dataTypeMap(name)) =>
+      case GreaterThanOrEqual(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name))
         Some(builder.startNot().lessThan(name, getType(name), castedValue).end())
 
-      case IsNull(name) if isSearchableType(dataTypeMap(name)) =>
+      case IsNull(name) if dataTypeMap.contains(name) =>
         Some(builder.startAnd().isNull(name, getType(name)).end())
 
-      case IsNotNull(name) if isSearchableType(dataTypeMap(name)) =>
+      case IsNotNull(name) if dataTypeMap.contains(name) =>
         Some(builder.startNot().isNull(name, getType(name)).end())
 
-      case In(name, values) if isSearchableType(dataTypeMap(name)) =>
+      case In(name, values) if dataTypeMap.contains(name) =>
         val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(name)))
         Some(builder.startAnd().in(name, getType(name),
           castedValues.map(_.asInstanceOf[AnyRef]): _*).end())

@@ -24,7 +24,7 @@ from functools import reduce
 from itertools import chain
 import platform
 
-from pyspark import SparkConf, SparkContext, RDD
+from pyspark import SparkConf, SparkContext
 from pyspark.streaming import StreamingContext
 from pyspark.testing.streamingutils import PySparkStreamingTestCase
 
@@ -644,7 +644,7 @@ class CheckpointTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.streaming.tests.test_dstream import *
+    from pyspark.streaming.tests.test_dstream import *  # noqa: F401
 
     try:
         import xmlrunner

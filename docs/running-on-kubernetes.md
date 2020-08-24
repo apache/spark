@@ -23,10 +23,6 @@ license: |
 Spark can run on clusters managed by [Kubernetes](https://kubernetes.io). This feature makes use of native
 Kubernetes scheduler that has been added to Spark.
 
-**The Kubernetes scheduler is currently experimental.
-In future versions, there may be behavioral changes around configuration,
-container images and entrypoints.**
-
 # Security
 
 Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.

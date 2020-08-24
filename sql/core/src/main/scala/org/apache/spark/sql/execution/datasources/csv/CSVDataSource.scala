@@ -155,7 +155,7 @@ object TextInputCSVDataSource extends CSVDataSource {
         sparkSession,
         paths = paths,
         className = classOf[TextFileFormat].getName,
-        options = options.parameters
+        options = options.parameters.originalMap
       ).resolveRelation(checkFilesExist = false))
       .select("value").as[String](Encoders.STRING)
 

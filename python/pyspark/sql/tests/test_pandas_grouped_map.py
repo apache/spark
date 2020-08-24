@@ -17,7 +17,6 @@
 
 import datetime
 import unittest
-import sys
 
 from collections import OrderedDict
 from decimal import Decimal
@@ -35,7 +34,7 @@ if have_pandas:
     from pandas.util.testing import assert_frame_equal
 
 if have_pyarrow:
-    import pyarrow as pa
+    import pyarrow as pa  # noqa: F401
 
 
 @unittest.skipIf(

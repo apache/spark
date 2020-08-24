@@ -302,6 +302,7 @@ private[spark] class IndexShuffleBlockResolver(
         }
       }
     } finally {
+      logDebug(s"Shuffle index for mapId $mapId: ${lengths.mkString("[", ",", "]")}")
       if (indexTmp.exists() && !indexTmp.delete()) {
         logError(s"Failed to delete temporary index file at ${indexTmp.getAbsolutePath}")
       }

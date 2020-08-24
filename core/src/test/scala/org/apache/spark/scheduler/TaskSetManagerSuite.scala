@@ -149,13 +149,12 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
 
   override def taskSetFinished(manager: TaskSetManager): Unit = finishedManagers += manager
 
-  override def isExecutorAlive(execId: String): Boolean = executors.contains(execId)
+  override def isExecutorAlive(execId: String): Boolean =
+    executors.contains(execId) && !isExecutorDecommissioned(execId)
 
-  override def hasExecutorsAliveOnHost(host: String): Boolean = executors.values.exists(_ == host)
-
-  override def hasHostAliveOnRack(rack: String): Boolean = {
-    hostsByRack.get(rack) != None
-  }
+  override def hasExecutorsAliveOnHost(host: String): Boolean =
+    !isHostDecommissioned(host) && executors
+      .exists { case (e, h) => h == host && !isExecutorDecommissioned(e) }
 
   def addExecutor(execId: String, host: String): Unit = {
     executors.put(execId, host)
@@ -653,6 +652,59 @@ class TaskSetManagerSuite
     assert(manager.resourceOffer("execA", "host1", ANY)._1.isDefined)
   }
 
+  test("SPARK-32653: Decommissioned host should not be used to calculate locality levels") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc)
+    val backend = mock(classOf[SchedulerBackend])
+    doNothing().when(backend).reviveOffers()
+    sched.initialize(backend)
+
+    val exec0 = "exec0"
+    val exec1 = "exec1"
+    val host0 = "host0"
+    sched.addExecutor(exec0, host0)
+    sched.addExecutor(exec1, host0)
+
+    val taskSet = FakeTask.createTaskSet(2,
+      Seq(ExecutorCacheTaskLocation(host0, exec0)),
+      Seq(ExecutorCacheTaskLocation(host0, exec1)))
+    sched.submitTasks(taskSet)
+    val manager = sched.taskSetManagerForAttempt(0, 0).get
+
+    assert(manager.myLocalityLevels === Array(PROCESS_LOCAL, NODE_LOCAL, ANY))
+
+    // Decommission all executors on host0, to mimic CoarseGrainedSchedulerBackend.
+    sched.executorDecommission(exec0, ExecutorDecommissionInfo("test", true))
+    sched.executorDecommission(exec1, ExecutorDecommissionInfo("test", true))
+
+    assert(manager.myLocalityLevels === Array(ANY))
+  }
+
+  test("SPARK-32653: Decommissioned executor should not be used to calculate locality levels") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc)
+    val backend = mock(classOf[SchedulerBackend])
+    doNothing().when(backend).reviveOffers()
+    sched.initialize(backend)
+
+    val exec0 = "exec0"
+    val exec1 = "exec1"
+    val host0 = "host0"
+    sched.addExecutor(exec0, host0)
+    sched.addExecutor(exec1, host0)
+
+    val taskSet = FakeTask.createTaskSet(1, Seq(ExecutorCacheTaskLocation(host0, exec0)))
+    sched.submitTasks(taskSet)
+    val manager = sched.taskSetManagerForAttempt(0, 0).get
+
+    assert(manager.myLocalityLevels === Array(PROCESS_LOCAL, NODE_LOCAL, ANY))
+
+    // Decommission the only executor (without the host) that the task is interested in running on.
+    sched.executorDecommission(exec0, ExecutorDecommissionInfo("test", false))
+
+    assert(manager.myLocalityLevels === Array(NODE_LOCAL, ANY))
+  }
+
   test("test RACK_LOCAL tasks") {
     // Assign host1 to rack1
     FakeRackUtil.assignHostToRack("host1", "rack1")
@@ -748,6 +800,14 @@ class TaskSetManagerSuite
       sc.makeRDD(0 until 10, 10).map(genBytes(1 << 20)).collect()
     }
     assert(thrown2.getMessage().contains("bigger than spark.driver.maxResultSize"))
+  }
+
+  test("SPARK-32470: do not check total size of intermediate stages") {
+    val conf = new SparkConf().set(config.MAX_RESULT_SIZE.key, "20k")
+    sc = new SparkContext("local", "test", conf)
+    // final result is below limit.
+    val r = sc.makeRDD(0 until 2000, 2000).distinct(10).filter(_ == 0).collect()
+    assert(1 === r.size)
   }
 
   test("[SPARK-13931] taskSetManager should not send Resubmitted tasks after being a zombie") {

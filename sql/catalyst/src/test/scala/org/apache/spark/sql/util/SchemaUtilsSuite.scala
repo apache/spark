@@ -41,7 +41,7 @@ class SchemaUtilsSuite extends SparkFunSuite {
     test(s"Check column name duplication in $testType cases") {
       def checkExceptionCases(schemaStr: String, duplicatedColumns: Seq[String]): Unit = {
         val expectedErrorMsg = "Found duplicate column(s) in SchemaUtilsSuite: " +
-          duplicatedColumns.map(c => s"`${c.toLowerCase(Locale.ROOT)}`").mkString(", ")
+          duplicatedColumns.sorted.map(c => s"`${c.toLowerCase(Locale.ROOT)}`").mkString(", ")
         val schema = StructType.fromDDL(schemaStr)
         var msg = intercept[AnalysisException] {
           SchemaUtils.checkSchemaColumnNameDuplication(
