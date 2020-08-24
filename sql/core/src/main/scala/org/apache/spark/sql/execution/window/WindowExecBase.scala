@@ -137,10 +137,10 @@ trait WindowExecBase extends UnaryExecNode {
           function match {
             case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
             case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
-            case f: OffsetWindowFunction => if (f.isOffsetPartitionBased) {
-              collect("WHOLE_OFFSET", frame, e, f)
-            } else {
+            case f: OffsetWindowFunction => if (f.startWithCurrentRow) {
               collect("OFFSET", frame, e, f)
+            } else {
+              collect("WHOLE_OFFSET", frame, e, f)
             }
             case f: PythonUDF => collect("AGGREGATE", frame, e, f)
             case f => sys.error(s"Unsupported window function: $f")

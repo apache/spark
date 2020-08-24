@@ -364,11 +364,10 @@ abstract class OffsetWindowFunction
   val direction: SortDirection
 
   /**
-   * Whether the offset is based on the entire window partition. If `isOffsetPartitionBased` is
-   * true, `offset` means the number of rows between the first row and the row where the input
-   * expression is evaluated.
+   * Whether the offset is start with the current row. If `startWithCurrentRow` is false, `offset`
+   * means the offset is start with the first row of the entire window partition.
    */
-  val isOffsetPartitionBased: Boolean = false
+  val startWithCurrentRow: Boolean = true
 
   override def children: Seq[Expression] = Seq(input, offset, default)
 
@@ -502,7 +501,7 @@ case class NthValue(input: Expression, offset: Expression)
 
   override val default = Literal(null)
 
-  override val isOffsetPartitionBased = true
+  override val startWithCurrentRow = false
 
   override val direction = Ascending
 
