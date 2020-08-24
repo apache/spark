@@ -40,10 +40,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
   test("shouldRetain") {
     withFileStreamSinkLog { sinkLog =>
       val log = newFakeSinkFileStatus("/a/b/x", FileStreamSinkLog.ADD_ACTION)
-      val log2 = newFakeSinkFileStatus("/a/b/z", FileStreamSinkLog.DELETE_ACTION)
-
       assert(sinkLog.shouldRetain(log))
-      assert(sinkLog.shouldRetain(log2))
     }
   }
 
@@ -59,14 +56,6 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
           blockSize = 10000L,
           action = FileStreamSinkLog.ADD_ACTION),
         SinkFileStatus(
-          path = "/a/b/y",
-          size = 200L,
-          isDir = false,
-          modificationTime = 2000L,
-          blockReplication = 2,
-          blockSize = 20000L,
-          action = FileStreamSinkLog.DELETE_ACTION),
-        SinkFileStatus(
           path = "/a/b/z",
           size = 300L,
           isDir = false,
@@ -78,7 +67,6 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
       // scalastyle:off
       val expected = s"""v$VERSION
           |{"path":"/a/b/x","size":100,"isDir":false,"modificationTime":1000,"blockReplication":1,"blockSize":10000,"action":"add"}
-          |{"path":"/a/b/y","size":200,"isDir":false,"modificationTime":2000,"blockReplication":2,"blockSize":20000,"action":"delete"}
           |{"path":"/a/b/z","size":300,"isDir":false,"modificationTime":3000,"blockReplication":3,"blockSize":30000,"action":"add"}""".stripMargin
       // scalastyle:on
       val baos = new ByteArrayOutputStream()
@@ -95,7 +83,6 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
       // scalastyle:off
       val logs = s"""v$VERSION
           |{"path":"/a/b/x","size":100,"isDir":false,"modificationTime":1000,"blockReplication":1,"blockSize":10000,"action":"add"}
-          |{"path":"/a/b/y","size":200,"isDir":false,"modificationTime":2000,"blockReplication":2,"blockSize":20000,"action":"delete"}
           |{"path":"/a/b/z","size":300,"isDir":false,"modificationTime":3000,"blockReplication":3,"blockSize":30000,"action":"add"}""".stripMargin
       // scalastyle:on
 
@@ -108,14 +95,6 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
           blockReplication = 1,
           blockSize = 10000L,
           action = FileStreamSinkLog.ADD_ACTION),
-        SinkFileStatus(
-          path = "/a/b/y",
-          size = 200L,
-          isDir = false,
-          modificationTime = 2000L,
-          blockReplication = 2,
-          blockSize = 20000L,
-          action = FileStreamSinkLog.DELETE_ACTION),
         SinkFileStatus(
           path = "/a/b/z",
           size = 300L,
