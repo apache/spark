@@ -224,15 +224,29 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     assert(LastOptions.parameters("opt3") == "3")
   }
 
-  test("SPARK-32364: path argument of load function should override all existing options") {
+  test("SPARK-32364: later option should override earlier options") {
     spark.read
       .format("org.apache.spark.sql.test")
       .option("paTh", "1")
       .option("PATH", "2")
       .option("Path", "3")
       .option("patH", "4")
-      .load("5")
+      .option("path", "5")
+      .load()
     assert(LastOptions.parameters("path") == "5")
+
+    withClue("SPARK-32516: legacy path option behavior") {
+      withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
+        spark.read
+          .format("org.apache.spark.sql.test")
+          .option("paTh", "1")
+          .option("PATH", "2")
+          .option("Path", "3")
+          .option("patH", "4")
+          .load("5")
+        assert(LastOptions.parameters("path") == "5")
+      }
+    }
   }
 
   test("SPARK-32364: path argument of save function should override all existing options") {
@@ -1102,6 +1116,44 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         } finally {
           sparkContext.removeSparkListener(jobListener)
         }
+      }
+    }
+  }
+
+  test("SPARK-32516: 'path' or 'paths' option cannot coexist with load()'s path parameters") {
+    def verifyLoadFails(f: () => DataFrame): Unit = {
+      val e = intercept[AnalysisException](f())
+      assert(e.getMessage.contains(
+        "Either remove the path option if it's the same as the path parameter"))
+    }
+
+    val path = "/tmp"
+    verifyLoadFails(() => spark.read.option("path", path).parquet(path))
+    verifyLoadFails(() => spark.read.option("path", path).format("parquet").load(path))
+    verifyLoadFails(() => spark.read.option("paths", path).parquet(path))
+    verifyLoadFails(() => spark.read.option("paths", path).format("parquet").load(path))
+  }
+
+  test("SPARK-32516: legacy path option behavior in load()") {
+    withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        Seq(1).toDF.write.mode("overwrite").parquet(path)
+
+        // When there is one path parameter to load(), "path" option is overwritten.
+        checkAnswer(spark.read.format("parquet").option("path", path).load(path), Row(1))
+
+        // When there are multiple path parameters to load(), "path" option is added.
+        checkAnswer(
+          spark.read.format("parquet").option("path", path).load(path, path),
+          Seq(Row(1), Row(1), Row(1)))
+
+        // When built-in datasource functions are invoked (e.g, `csv`, `parquet`, etc.),
+        // the path option is always added regardless of the number of path parameters.
+        checkAnswer(spark.read.option("path", path).parquet(path), Seq(Row(1), Row(1)))
+        checkAnswer(
+          spark.read.option("path", path).parquet(path, path),
+          Seq(Row(1), Row(1), Row(1)))
       }
     }
   }
