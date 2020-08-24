@@ -480,7 +480,10 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
             extra = dict()
         bestModel = self.bestModel.copy(extra)
         avgMetrics = list(self.avgMetrics)
-        subModels = [model.copy() for model in self.subModels]
+        subModels = [
+            [sub_model.copy() for sub_model in fold_sub_models]
+            for fold_sub_models in self.subModels
+        ]
         return self._copyValues(CrossValidatorModel(bestModel, avgMetrics, subModels), extra=extra)
 
     @since("2.3.0")
@@ -511,7 +514,6 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
             "estimator": estimator,
             "estimatorParamMaps": epms,
             "numFolds": java_stage.getNumFolds(),
-            "foldCol": java_stage.getFoldCol(),
             "seed": java_stage.getSeed(),
         }
         for param_name, param_val in params.items():
@@ -544,7 +546,6 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
             "estimator": estimator,
             "estimatorParamMaps": epms,
             "numFolds": self.getNumFolds(),
-            "foldCol": self.getFoldCol(),
             "seed": self.getSeed(),
         }
         for param_name, param_val in params.items():

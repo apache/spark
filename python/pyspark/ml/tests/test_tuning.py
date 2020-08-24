@@ -101,7 +101,6 @@ class CrossValidatorTests(SparkSessionTestCase):
             lambda x: x.getEstimator().uid,
             # SPARK-32092: CrossValidator.copy() needs to copy all existing params
             lambda x: x.getNumFolds(),
-            lambda x: x.getFoldCol(),
             lambda x: x.getCollectSubModels(),
             lambda x: x.getParallelism(),
             lambda x: x.getSeed()
@@ -116,7 +115,6 @@ class CrossValidatorTests(SparkSessionTestCase):
         # SPARK-32092: CrossValidatorModel.copy() needs to copy all existing params
         for param in [
             lambda x: x.getNumFolds(),
-            lambda x: x.getFoldCol(),
             lambda x: x.getSeed()
         ]:
             self.assertEqual(param(cvModel), param(cvModelCopied))
@@ -127,9 +125,9 @@ class CrossValidatorTests(SparkSessionTestCase):
             'foo',
             "Changing the original avgMetrics should not affect the copied model"
         )
-        cvModel.subModels[0] = 'foo'
+        cvModel.subModels[0][0].getInducedError = lambda: 'foo'
         self.assertNotEqual(
-            cvModelCopied.subModels[0],
+            cvModelCopied.subModels[0][0].getInducedError(),
             'foo',
             "Changing the original subModels should not affect the copied model"
         )
@@ -224,7 +222,6 @@ class CrossValidatorTests(SparkSessionTestCase):
         loadedCvModel = CrossValidatorModel.load(cvModelPath)
         for param in [
             lambda x: x.getNumFolds(),
-            lambda x: x.getFoldCol(),
             lambda x: x.getSeed(),
             lambda x: len(x.subModels)
         ]:
@@ -780,9 +777,9 @@ class TrainValidationSplitTests(SparkSessionTestCase):
             'foo',
             "Changing the original validationMetrics should not affect the copied model"
         )
-        tvsModel.subModels[0] = 'foo'
+        tvsModel.subModels[0].getInducedError = lambda: 'foo'
         self.assertNotEqual(
-            tvsModelCopied.subModels[0],
+            tvsModelCopied.subModels[0].getInducedError(),
             'foo',
             "Changing the original subModels should not affect the copied model"
         )
