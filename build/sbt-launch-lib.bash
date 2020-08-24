@@ -6,6 +6,9 @@
 
 # TODO - Should we merge the main SBT script with this library?
 
+set -v
+set -x
+
 if test -z "$HOME"; then
   declare -r script_dir="$(dirname "$script_path")"
 else
