@@ -192,24 +192,40 @@ final class MutableAny extends MutableValue {
  */
 final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGenericInternalRow {
 
-  def this(dataTypes: Seq[DataType]) =
-    this(
-      dataTypes.map {
-        case BooleanType => new MutableBoolean
-        case ByteType => new MutableByte
-        case ShortType => new MutableShort
-        // We use INT for DATE internally
-        case IntegerType | DateType => new MutableInt
-        // We use Long for Timestamp internally
-        case LongType | TimestampType => new MutableLong
-        case FloatType => new MutableFloat
-        case DoubleType => new MutableDouble
-        case _ => new MutableAny
-      }.toArray)
+  private[this] def dataTypeToMutableValue(dataType: DataType): MutableValue = dataType match {
+    // We use INT for DATE internally
+    case IntegerType | DateType => new MutableInt
+    // We use Long for Timestamp internally
+    case LongType | TimestampType => new MutableLong
+    case FloatType => new MutableFloat
+    case DoubleType => new MutableDouble
+    case BooleanType => new MutableBoolean
+    case ByteType => new MutableByte
+    case ShortType => new MutableShort
+    case _ => new MutableAny
+  }
+
+  def this(dataTypes: Seq[DataType]) = {
+    // SPARK-32550: use while loop instead of map
+    this(new Array[MutableValue](dataTypes.length))
+    var i = 0
+    dataTypes.foreach { dt =>
+      values(i) = dataTypeToMutableValue(dt)
+      i += 1
+    }
+  }
 
   def this() = this(Seq.empty)
 
-  def this(schema: StructType) = this(schema.fields.map(_.dataType))
+  def this(schema: StructType) = {
+    // SPARK-32550: use while loop instead of map
+    this(new Array[MutableValue](schema.fields.length))
+    var i = 0
+    schema.fields.foreach { field =>
+      values(i) = dataTypeToMutableValue(field.dataType)
+      i += 1
+    }
+  }
 
   override def numFields: Int = values.length
 
