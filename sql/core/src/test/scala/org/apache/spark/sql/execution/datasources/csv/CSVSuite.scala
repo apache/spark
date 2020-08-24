@@ -2369,12 +2369,11 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
 
   test("SPARK-32614: don't treat rows starting with null char as comment") {
     withTempPath { path =>
-      Seq("value", "\u0000foo", "bar", "baz").toDS.write.text(path.getCanonicalPath)
+      Seq("\u0000foo", "bar", "baz").toDS.write.text(path.getCanonicalPath)
       val df = spark.read.format("csv")
-        .option("header", "true")
+        .option("header", "false")
         .option("inferSchema", "true")
         .load(path.getCanonicalPath)
-
       assert(df.count() == 3)
     }
   }
