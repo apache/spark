@@ -1509,7 +1509,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-32641: extracting field from nullable struct column which contains both null and " +
     "non-null values after withField should return null if the original struct was null") {
-    val df = structLevel1.union(nullStructLevel1).cache()
+    val df = spark.createDataFrame(
+      sparkContext.parallelize(Row(Row(1, null, 3)) :: Row(null) :: Nil),
+      StructType(Seq(StructField("a", structType, nullable = true))))
 
     // extract newly added field
     checkAnswerAndSchema(
@@ -1534,7 +1536,5 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       df.withColumn("a", $"a".withField("a", lit(4)).getField("c")),
       Row(3) :: Row(null):: Nil,
       StructType(Seq(StructField("a", IntegerType, nullable = true))))
-
-    df.unpersist()
   }
 }
