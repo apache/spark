@@ -1859,7 +1859,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1 new", false))
 
     assert(scheduler.getExecutorDecommissionState("executor0")
-      === Some(ExecutorDecommissionState("0 new", oldTime, false)))
+      === Some(ExecutorDecommissionState("0", oldTime, false)))
     assert(scheduler.getExecutorDecommissionState("executor1")
       === Some(ExecutorDecommissionState("1", oldTime, true)))
     assert(scheduler.getExecutorDecommissionState("executor2").isEmpty)

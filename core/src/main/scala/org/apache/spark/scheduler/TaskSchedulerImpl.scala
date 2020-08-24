@@ -922,17 +922,30 @@ private[spark] class TaskSchedulerImpl(
     synchronized {
       // Don't bother noting decommissioning for executors that we don't know about
       if (executorIdToHost.contains(executorId)) {
-        // The scheduler can get multiple decommission updates from multiple sources,
-        // and some of those can have isHostDecommissioned false. We merge them such that
-        // if we heard isHostDecommissioned ever true, then we keep that one since it is
-        // most likely coming from the cluster manager and thus authoritative
-        val oldDecomState = executorsPendingDecommission.get(executorId)
-        if (!oldDecomState.exists(_.isHostDecommissioned)) {
-          executorsPendingDecommission(executorId) = ExecutorDecommissionState(
+        val oldDecomStateOpt = executorsPendingDecommission.get(executorId)
+        val newDecomState = if (oldDecomStateOpt.isEmpty) {
+          // This is the first time we are hearing of decommissioning this executor,
+          // so create a brand new state.
+          ExecutorDecommissionState(
             decommissionInfo.message,
-            oldDecomState.map(_.startTime).getOrElse(clock.getTimeMillis()),
+            clock.getTimeMillis(),
             decommissionInfo.isHostDecommissioned)
+        } else {
+          val oldDecomState = oldDecomStateOpt.get
+          if (!oldDecomState.isHostDecommissioned && decommissionInfo.isHostDecommissioned) {
+            // Only the cluster manager is allowed to send decommission messages with
+            // isHostDecommissioned set. So the new decommissionInfo is from the cluster
+            // manager and is thus authoritative. Flip isHostDecommissioned to true but keep the old
+            // decommission start time.
+            ExecutorDecommissionState(
+              oldDecomState.message,
+              oldDecomState.startTime,
+              isHostDecommissioned = true)
+          } else {
+            oldDecomState
+          }
         }
+        executorsPendingDecommission(executorId) = newDecomState
       }
     }
     rootPool.executorDecommission(executorId)

@@ -1033,7 +1033,8 @@ private[spark] class TaskSetManager(
     // No need to speculate if the task set is zombie or is from a barrier stage. If there is only
     // one task we don't speculate since we don't have metrics to decide whether it's taking too
     // long or not, unless a task duration threshold is explicitly provided.
-    if (isZombie || isBarrier || (numTasks == 1 && !speculationTaskDurationThresOpt.isDefined)) {
+    if (!speculationEnabled || isZombie || isBarrier ||
+      (numTasks == 1 && !speculationTaskDurationThresOpt.isDefined)) {
       return false
     }
     var foundTasks = false
