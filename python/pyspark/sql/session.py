@@ -359,18 +359,14 @@ class SparkSession(SparkConversionMixin):
 
     def _inferSchemaFromList(self, data, names=None):
         """
-        Infer schema from list of Row or tuple.
+        Infer schema from list of Row, dict, or tuple.
 
-        :param data: list of Row or tuple
+        :param data: list of Row, dict, or tuple
         :param names: list of column names
         :return: :class:`pyspark.sql.types.StructType`
         """
         if not data:
             raise ValueError("can not infer schema from empty dataset")
-        first = data[0]
-        if type(first) is dict:
-            warnings.warn("inferring schema from dict is deprecated,"
-                          "please use pyspark.sql.Row instead")
         schema = reduce(_merge_type, (_infer_schema(row, names) for row in data))
         if _has_nulltype(schema):
             raise ValueError("Some of types cannot be determined after inferring")
@@ -378,9 +374,9 @@ class SparkSession(SparkConversionMixin):
 
     def _inferSchema(self, rdd, samplingRatio=None, names=None):
         """
-        Infer schema from an RDD of Row or tuple.
+        Infer schema from an RDD of Row, dict, or tuple.
 
-        :param rdd: an RDD of Row or tuple
+        :param rdd: an RDD of Row, dict, or tuple
         :param samplingRatio: sampling ratio, or no sampling (default)
         :return: :class:`pyspark.sql.types.StructType`
         """
@@ -388,9 +384,6 @@ class SparkSession(SparkConversionMixin):
         if not first:
             raise ValueError("The first row in RDD is empty, "
                              "can not infer schema")
-        if type(first) is dict:
-            warnings.warn("Using RDD of dict to inferSchema is deprecated. "
-                          "Use pyspark.sql.Row instead")
 
         if samplingRatio is None:
             schema = _infer_schema(first, names=names)
