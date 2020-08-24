@@ -220,9 +220,11 @@ final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGen
   def this(schema: StructType) = {
     // SPARK-32550: use while loop instead of map
     this(new Array[MutableValue](schema.fields.length))
+    val length = values.length
+    val fields = schema.fields
     var i = 0
-    schema.fields.foreach { field =>
-      values(i) = dataTypeToMutableValue(field.dataType)
+    while (i < length) {
+      values(i) = dataTypeToMutableValue(fields(i).dataType)
       i += 1
     }
   }
