@@ -374,9 +374,9 @@ class SparkSession(SparkConversionMixin):
 
     def _inferSchema(self, rdd, samplingRatio=None, names=None):
         """
-        Infer schema from an RDD of Row or tuple.
+        Infer schema from an RDD of Row, dict, or tuple.
 
-        :param rdd: an RDD of Row or tuple
+        :param rdd: an RDD of Row, dict, or tuple
         :param samplingRatio: sampling ratio, or no sampling (default)
         :return: :class:`pyspark.sql.types.StructType`
         """
@@ -384,9 +384,6 @@ class SparkSession(SparkConversionMixin):
         if not first:
             raise ValueError("The first row in RDD is empty, "
                              "can not infer schema")
-        if type(first) is dict:
-            warnings.warn("Using RDD of dict to inferSchema is deprecated. "
-                          "Use pyspark.sql.Row instead")
 
         if samplingRatio is None:
             schema = _infer_schema(first, names=names)
