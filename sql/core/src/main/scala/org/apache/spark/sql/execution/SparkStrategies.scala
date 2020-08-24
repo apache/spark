@@ -116,7 +116,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *
    * - Shuffle hash join:
    *     Only supported for equi-joins, while the join keys do not need to be sortable.
-   *     Supported for all join types except full outer joins.
+   *     Supported for all join types.
+   *     Building hash map from table is a memory-intensive operation and it could cause OOM
+   *     when the build side is big.
    *
    * - Shuffle sort merge join (SMJ):
    *     Only supported for equi-joins and the join keys have to be sortable.
@@ -260,7 +262,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           // it's a right join, and broadcast right side if it's a left join.
           // TODO: revisit it. If left side is much smaller than the right side, it may be better
           // to broadcast the left side even if it's a left join.
-          if (canBuildLeft(joinType)) BuildLeft else BuildRight
+          if (canBuildBroadcastLeft(joinType)) BuildLeft else BuildRight
         }
 
         def createBroadcastNLJoin(buildLeft: Boolean, buildRight: Boolean) = {

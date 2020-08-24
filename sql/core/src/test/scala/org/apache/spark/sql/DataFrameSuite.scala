@@ -2541,6 +2541,11 @@ class DataFrameSuite extends QueryTest
       assert(df.schema === new StructType().add(StructField("d", DecimalType(38, 0))))
     }
   }
+
+  test("SPARK-32640: ln(NaN) should return NaN") {
+    val df = Seq(Double.NaN).toDF("d")
+    checkAnswer(df.selectExpr("ln(d)"), Row(Double.NaN))
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
