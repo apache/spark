@@ -3157,7 +3157,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("SPARK-32481 Donot move data to trash on truncate table if disabled") {
+  test("SPARK-32481 Do not move data to trash on truncate table if disabled") {
     withTable("tab1") {
       withSQLConf(SQLConf.TRUNCATE_TRASH_ENABLED.key -> "false") {
         sql("CREATE TABLE tab1 (col INT) USING parquet")

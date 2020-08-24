@@ -270,20 +270,21 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Move data to trash on truncate table given
-   * 'spark.sql.truncate.trash.enabled' is true
+   * Move data to trash if 'spark.sql.truncate.trash.enabled' is true
    */
   def moveToTrashIfEnabled(
       fs: FileSystem,
       partitionPath: Path,
       isTrashEnabled: Boolean,
-      hadoopConf: Configuration): Unit = {
+      hadoopConf: Configuration): Boolean = {
     if (isTrashEnabled) {
       logDebug(s"will move data ${partitionPath.toString} to trash")
       val isSuccess = Trash.moveToAppropriateTrash(fs, partitionPath, hadoopConf)
       if (!isSuccess) {
         logWarning(s"Failed to move data ${partitionPath.toString} to trash")
+        return fs.delete(partitionPath, true)
       }
+      isSuccess
     } else {
       fs.delete(partitionPath, true)
     }

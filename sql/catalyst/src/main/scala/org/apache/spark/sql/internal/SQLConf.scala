@@ -2729,6 +2729,7 @@ object SQLConf {
         "fs.trash.interval, and in default, the server side configuration value takes " +
         "precedence over the client-side one. Note that if fs.trash.interval is non-positive, " +
         "this will be a no-op and log a warning message.")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
 
