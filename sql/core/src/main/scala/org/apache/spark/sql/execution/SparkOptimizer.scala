@@ -52,6 +52,7 @@ class SparkOptimizer(
       PushDownPredicates) :+
     Batch("Cleanup filters that cannot be pushed down", Once,
       CleanupDynamicPruningFilters,
+      BooleanSimplification,
       PruneFilters)) ++
     postHocOptimizationBatches :+
     Batch("Extract Python UDFs", Once,

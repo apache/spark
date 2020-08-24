@@ -111,7 +111,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
    * using column statistics if they are available, otherwise we use the config value of
    * `spark.sql.optimizer.joinFilterRatio`.
    */
-  private def pruningHasBenefit(
+  def pruningHasBenefit(
       partExpr: Expression,
       partPlan: LogicalPlan,
       otherExpr: Expression,

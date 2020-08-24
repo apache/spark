@@ -1305,57 +1305,135 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("Infer DPP filter to other partition column") {
-    val df = sql(
-      """
-        |SELECT t11.store_id,
-        |       t11.code,
-        |       t3.product_id
-        |FROM   (SELECT t1.store_id,
-        |               t2.code
-        |        FROM fact_stats t1
-        |        JOIN code_stats t2
-        |            ON t1.store_id = t2.store_id) t11
-        |       JOIN product t3
-        |         ON t11.store_id = t3.store_id AND t3.product_id < 3
-        |""".stripMargin)
+  test("Infer filters from DPP") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      withTable("df1", "df2", "df3", "df4") {
+        spark.range(1000)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df1")
 
-    assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 2)
-    checkDistinctSubqueries(df, 1)
-    checkPartitionPruningPredicate(df, false, true)
-    assert(!checkUnpushedFilters(df), "Inferred dynamic pruning expression has been pushed down.")
+        spark.range(1000)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df2")
 
-    checkAnswer(df,
-      Row(2, 20, 2) ::
-        Row(2, 20, 2) ::
-        Row(1, 10, 1) :: Nil
-    )
-  }
+        spark.range(5)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df3")
 
-  test("Should not infer DPP filter to other non-partition column") {
-    val df = sql(
-      """
-        |SELECT t11.store_id,
-        |       t11.country,
-        |       t3.product_id
-        |FROM   (SELECT t1.store_id,
-        |               t2.country
-        |        FROM fact_stats t1
-        |        JOIN dim_stats t2
-        |            ON t1.store_id = t2.store_id) t11
-        |       JOIN product t3
-        |         ON t11.store_id = t3.store_id AND t3.product_id < 3
-        |""".stripMargin)
+        spark.range(100)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df4")
 
-    assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
-    checkPartitionPruningPredicate(df, false, true)
-    assert(!checkUnpushedFilters(df), "Inferred dynamic pruning expression should be removed.")
+        spark.range(1000)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df5")
 
-    checkAnswer(df,
-      Row(2, "NL", 2) ::
-        Row(2, "NL", 2) ::
-        Row(1, "NL", 1) :: Nil
-    )
+        Given(s"Inferred DPP on partition column")
+        Seq(true, false).foreach { infer =>
+          withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> s"$infer") {
+            val df = sql(
+              """
+                |SELECT t1.id,
+                |       df4.k
+                |FROM (SELECT df2.id,
+                |             df1.k
+                |        FROM df1
+                |        JOIN df2
+                |          ON df1.k = df2.k) t1
+                |     JOIN df4
+                |       ON t1.k = df4.k AND df4.id < 2
+                |""".stripMargin)
+            if (infer) {
+              assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 2)
+            } else {
+              assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
+            }
+            checkDistinctSubqueries(df, 1)
+            checkPartitionPruningPredicate(df, false, true)
+            assert(!checkUnpushedFilters(df))
+
+            checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
+          }
+        }
+
+        Given("Remove no benefit inferred DPP on partition column " +
+          s"when ${SQLConf.EXCHANGE_REUSE_ENABLED.key} is disabled")
+        Seq(true, false).foreach { reuse =>
+          Seq(true, false).foreach { broadcastOnly =>
+            withSQLConf(
+              SQLConf.EXCHANGE_REUSE_ENABLED.key -> s"$reuse",
+              SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> s"$broadcastOnly") {
+              val df = sql(
+                """
+                  |SELECT t1.id,
+                  |       df4.k
+                  |FROM (SELECT df3.id,
+                  |             df1.k
+                  |        FROM df1
+                  |        JOIN df3
+                  |          ON df1.k = df3.k) t1
+                  |     JOIN df4
+                  |       ON t1.k = df4.k AND df4.id < 2
+                  |""".stripMargin)
+
+              if (!reuse) {
+                assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
+                checkDistinctSubqueries(df, 0)
+                checkPartitionPruningPredicate(df, !broadcastOnly, false)
+              } else {
+                assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 2)
+                checkDistinctSubqueries(df, 1)
+                checkPartitionPruningPredicate(df, false, true)
+              }
+              assert(!checkUnpushedFilters(df))
+
+              checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
+            }
+          }
+        }
+
+        Given("Remove inferred DPP on non-partition column")
+        withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "true") {
+          val df = sql(
+            """
+              |SELECT t1.id,
+              |       df4.k
+              |FROM (SELECT df5.id,
+              |             df1.k
+              |        FROM df1
+              |        JOIN df5
+              |          ON df1.k = df5.k) t1
+              |     JOIN df4
+              |       ON t1.k = df4.k AND df4.id < 2
+              |""".stripMargin)
+
+          assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
+          checkDistinctSubqueries(df, 1)
+          checkPartitionPruningPredicate(df, false, true)
+          assert(!checkUnpushedFilters(df))
+
+          checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
+        }
+      }
+    }
   }
 }
 

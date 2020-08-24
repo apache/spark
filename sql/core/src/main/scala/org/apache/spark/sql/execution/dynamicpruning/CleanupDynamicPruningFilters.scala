@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.dynamicpruning.PartitionPruning._
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -32,10 +33,12 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelper {
 
-  private def isFilterOnNonPartition(condition: Expression, child: LogicalPlan): Boolean = {
+  // Check whether need to remove inferred DPP.
+  private def isRemoveInferred(condition: Expression, child: LogicalPlan): Boolean = {
     splitConjunctivePredicates(condition).exists {
-      case DynamicPruningSubquery(pruningKey, _, _, _, _, _) =>
-        PartitionPruning.getPartitionTableScan(pruningKey, child).isEmpty
+      case DynamicPruningSubquery(pruningKey, buildQuery, buildKeys, index, _, _) =>
+        getPartitionTableScan(pruningKey, child).isEmpty || (!SQLConf.get.exchangeReuseEnabled &&
+          !pruningHasBenefit(pruningKey, child, buildKeys(index), buildQuery))
       case _ => false
     }
   }
@@ -46,12 +49,17 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
     }
 
     plan.transform {
-      // Remove any Filters with DynamicPruning that didn't filter on partition column`.
-      // This is inferred by Infer Filters from PartitionPruning.
-      case f @ Filter(condition, child) if isFilterOnNonPartition(condition, child) =>
+      // Remove any DynamicPruning Filters that didn't filter on partition column and
+      // do not have has benefit. This is inferred by Infer Filters from PartitionPruning.
+      case f @ Filter(condition, child)
+        if SQLConf.get.constraintPropagationEnabled && isRemoveInferred(condition, child) =>
         val newCondition = condition.transform {
           case DynamicPruningSubquery(pruningKey, _, _, _, _, _)
-            if PartitionPruning.getPartitionTableScan(pruningKey, child).isEmpty =>
+            if getPartitionTableScan(pruningKey, child).isEmpty =>
+            TrueLiteral
+          case DynamicPruningSubquery(pruningKey, buildQuery, buildKeys, index, _, _)
+            if !SQLConf.get.exchangeReuseEnabled &&
+              !pruningHasBenefit(pruningKey, child, buildKeys(index), buildQuery) =>
             TrueLiteral
         }
         f.copy(condition = newCondition)
