@@ -453,8 +453,7 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](3, 4))), null)
   }
 
-  private val structAttr = AttributeReference("struct1",
-    StructType(Seq(StructField("a", IntegerType, nullable = false))), nullable = false)()
+  private val structAttr = 'struct1.struct('a.int).withNullability(false)
   private val testStructRelation = LocalRelation(structAttr)
 
   private val nullableStructAttr = 'struct1.struct('a.int)
