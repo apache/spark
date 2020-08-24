@@ -28,15 +28,16 @@ class HistoryServerMemoryManagerSuite extends SparkFunSuite {
     val conf = new SparkConf().set(MAX_IN_MEMORY_STORE_USAGE, MAX_USAGE)
     val manager = new HistoryServerMemoryManager(conf)
 
-    manager.lease("app1", None, 1L)
-    manager.lease("app2", None, 1L)
-    manager.lease("app3", None, 1L)
+    // Memory usage estimation for non-compressed log file is filesize / 2
+    manager.lease("app1", None, 2L, None)
+    manager.lease("app2", None, 2L, None)
+    manager.lease("app3", None, 2L, None)
     assert(manager.currentUsage.get === 3L)
     assert(manager.active.size === 3)
     assert(manager.active.get(("app1", None)) === Some(1L))
 
     intercept[RuntimeException] {
-      manager.lease("app4", None, 1L)
+      manager.lease("app4", None, 2L, None)
     }
 
     // Releasing a non-existent app is a no-op
@@ -47,7 +48,7 @@ class HistoryServerMemoryManagerSuite extends SparkFunSuite {
     assert(manager.currentUsage.get === 2L)
     assert(manager.active.size === 2)
 
-    manager.lease("app4", None, 1L)
+    manager.lease("app4", None, 2L, None)
     assert(manager.currentUsage.get === 3L)
     assert(manager.active.size === 3)
   }

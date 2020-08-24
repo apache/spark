@@ -46,7 +46,9 @@ private class HistoryServerMemoryManager(
   def lease(
       appId: String,
       attemptId: Option[String],
-      memoryUsage: Long): Unit = {
+      eventLogSize: Long,
+      codec: Option[String]): Unit = {
+    val memoryUsage = approximateMemoryUsage(eventLogSize, codec)
     if (memoryUsage + currentUsage.get > maxUsage) {
       throw new RuntimeException("Not enough memory to create hybrid store " +
         s"for app $appId / $attemptId.")
@@ -71,7 +73,7 @@ private class HistoryServerMemoryManager(
     }
   }
 
-  def approximateMemoryUsage(eventLogSize: Long, codec: Option[String]): Long = {
+  private def approximateMemoryUsage(eventLogSize: Long, codec: Option[String]): Long = {
     codec match {
       case Some("zstd") =>
         eventLogSize * 10

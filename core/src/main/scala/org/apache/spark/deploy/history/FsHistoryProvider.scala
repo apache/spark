@@ -1214,8 +1214,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // Use InMemoryStore to rebuild app store
     while (hybridStore == null) {
       // A RuntimeException will be thrown if the heap memory is not sufficient
-      memoryManager.lease(appId, attempt.info.attemptId,
-        memoryManager.approximateMemoryUsage(reader.totalSize, reader.compressionCodec))
+      memoryManager.lease(appId, attempt.info.attemptId, reader.totalSize,
+        reader.compressionCodec)
       var store: HybridStore = null
       try {
         store = new HybridStore()
