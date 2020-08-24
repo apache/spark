@@ -80,7 +80,7 @@ case class AdaptiveSparkPlanExec(
     // TODO add more optimization rules
     override protected def batches: Seq[Batch] = Seq(
       Batch("Demote BroadcastHashJoin", Once, DemoteBroadcastHashJoin(conf)),
-      Batch("Eliminate Null Aware Anti Join", Once, EliminateNullAwareAntiJoin)
+      Batch("Eliminate Join to Empty Relation", Once, EliminateJoinToEmptyRelation)
     )
   }
 
