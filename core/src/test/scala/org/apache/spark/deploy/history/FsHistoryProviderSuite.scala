@@ -1522,10 +1522,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
 
     if (!inMemory) {
       conf.set(LOCAL_STORE_DIR, Utils.createTempDir().getAbsolutePath())
-      if (useHybridStore) {
-        conf.set(HYBRID_STORE_ENABLED, true)
-      }
     }
+    conf.set(HYBRID_STORE_ENABLED, useHybridStore)
 
     conf
   }

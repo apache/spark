@@ -23,12 +23,14 @@ import java.util.concurrent.LinkedBlockingQueue
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
+import org.scalatest.concurrent.TimeLimits
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.util.kvstore._
 
-class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter {
+class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits {
 
   private var db: LevelDB = _
   private var dbpath: File = _
@@ -66,7 +68,7 @@ class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter {
       if (switch) switchHybridStore(store)
 
       intercept[NoSuchElementException] {
-       store.read(t2.getClass(), t2.key)
+        store.read(t2.getClass(), t2.key)
       }
       assert(store.read(t1.getClass(), t1.key) === t1)
       assert(store.count(t1.getClass()) === 1L)
@@ -130,7 +132,7 @@ class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter {
     store.write(t)
     switchHybridStore(store)
     intercept[IllegalStateException] {
-     store.delete(t.getClass(), t.key)
+      store.delete(t.getClass(), t.key)
     }
   }
 
@@ -164,7 +166,9 @@ class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter {
     assert(store.getStore().isInstanceOf[InMemoryStore])
     val listener = new SwitchListener()
     store.switchToLevelDB(listener, "test", None)
-    assert(listener.waitUntilDone())
+    failAfter(2.seconds) {
+      assert(listener.waitUntilDone())
+    }
     while (!store.getStore().isInstanceOf[LevelDB]) {
       Thread.sleep(10)
     }
@@ -172,13 +176,12 @@ class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter {
 
   private class SwitchListener extends HybridStore.SwitchToLevelDBListener {
 
-    private val results = new LinkedBlockingQueue[Int]()
-    val SUCCEED = 0
-    val FAILED = 1
+    // Put true to the queue when switch succeeds, and false when fails.
+    private val results = new LinkedBlockingQueue[Boolean]()
 
     override def onSwitchToLevelDBSuccess(): Unit = {
       try {
-        results.put(SUCCEED)
+        results.put(true)
       } catch {
         case _: InterruptedException =>
           // no-op
@@ -187,7 +190,7 @@ class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter {
 
     override def onSwitchToLevelDBFail(e: Exception): Unit = {
       try {
-        results.put(FAILED)
+        results.put(false)
       } catch {
         case _: InterruptedException =>
           // no-op
@@ -195,8 +198,7 @@ class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter {
     }
 
     def waitUntilDone(): Boolean = {
-      val result = results.take()
-      result == SUCCEED
+      results.take()
     }
   }
 }
