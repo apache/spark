@@ -328,19 +328,9 @@ private[spark] object KubernetesUtils extends Logging {
   /**
    * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
    */
-  def executorOffHeapMemorySizeAsMb(kubernetesConf: KubernetesExecutorConf): Int = {
-    val sizeInMB = Utils.memoryStringToMb(kubernetesConf.get(MEMORY_OFFHEAP_SIZE).toString)
-    checkOffHeapEnabled(kubernetesConf, sizeInMB).toInt
-  }
-
-  /**
-   * return 0 if MEMORY_OFFHEAP_ENABLED is false.
-   */
-  def checkOffHeapEnabled(kubernetesConf: KubernetesExecutorConf, offHeapSize: Long): Long = {
+  def executorOffHeapMemorySizeAsMb(kubernetesConf: KubernetesConf): Int = {
     if (kubernetesConf.get(MEMORY_OFFHEAP_ENABLED)) {
-      require(offHeapSize > 0,
-        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
-      offHeapSize
+      Utils.memoryStringToMb(kubernetesConf.get(MEMORY_OFFHEAP_SIZE).toString)
     } else {
       0
     }
