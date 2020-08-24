@@ -1,10 +1,10 @@
 == Physical Plan ==
-TakeOrderedAndProject (22)
-+- * HashAggregate (21)
-   +- Exchange (20)
-      +- * HashAggregate (19)
-         +- * Project (18)
-            +- * SortMergeJoin Inner (17)
+TakeOrderedAndProject (23)
++- * HashAggregate (22)
+   +- Exchange (21)
+      +- * HashAggregate (20)
+         +- * Project (19)
+            +- * SortMergeJoin Inner (18)
                :- * Sort (12)
                :  +- Exchange (11)
                :     +- * Project (10)
@@ -17,10 +17,11 @@ TakeOrderedAndProject (22)
                :                 +- * Filter (6)
                :                    +- * ColumnarToRow (5)
                :                       +- Scan parquet default.reason (4)
-               +- * Sort (16)
-                  +- Exchange (15)
-                     +- * ColumnarToRow (14)
-                        +- Scan parquet default.store_sales (13)
+               +- * Sort (17)
+                  +- Exchange (16)
+                     +- * Filter (15)
+                        +- * ColumnarToRow (14)
+                           +- Scan parquet default.store_sales (13)
 
 
 (1) Scan parquet default.store_returns
@@ -80,47 +81,52 @@ Arguments: [sr_item_sk#1 ASC NULLS FIRST, sr_ticket_number#3 ASC NULLS FIRST], f
 Output [5]: [ss_item_sk#9, ss_customer_sk#10, ss_ticket_number#11, ss_quantity#12, ss_sales_price#13]
 Batched: true
 Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/store_sales]
+PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_ticket_number)]
 ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_ticket_number:int,ss_quantity:int,ss_sales_price:decimal(7,2)>
 
 (14) ColumnarToRow [codegen id : 4]
 Input [5]: [ss_item_sk#9, ss_customer_sk#10, ss_ticket_number#11, ss_quantity#12, ss_sales_price#13]
 
-(15) Exchange
+(15) Filter [codegen id : 4]
+Input [5]: [ss_item_sk#9, ss_customer_sk#10, ss_ticket_number#11, ss_quantity#12, ss_sales_price#13]
+Condition : (isnotnull(ss_item_sk#9) AND isnotnull(ss_ticket_number#11))
+
+(16) Exchange
 Input [5]: [ss_item_sk#9, ss_customer_sk#10, ss_ticket_number#11, ss_quantity#12, ss_sales_price#13]
 Arguments: hashpartitioning(cast(ss_item_sk#9 as bigint), cast(ss_ticket_number#11 as bigint), 5), true, [id=#14]
 
-(16) Sort [codegen id : 5]
+(17) Sort [codegen id : 5]
 Input [5]: [ss_item_sk#9, ss_customer_sk#10, ss_ticket_number#11, ss_quantity#12, ss_sales_price#13]
 Arguments: [cast(ss_item_sk#9 as bigint) ASC NULLS FIRST, cast(ss_ticket_number#11 as bigint) ASC NULLS FIRST], false, 0
 
-(17) SortMergeJoin [codegen id : 6]
+(18) SortMergeJoin [codegen id : 6]
 Left keys [2]: [sr_item_sk#1, sr_ticket_number#3]
 Right keys [2]: [cast(ss_item_sk#9 as bigint), cast(ss_ticket_number#11 as bigint)]
 Join condition: None
 
-(18) Project [codegen id : 6]
+(19) Project [codegen id : 6]
 Output [2]: [ss_customer_sk#10, CASE WHEN isnotnull(sr_return_quantity#4) THEN CheckOverflow((promote_precision(cast(cast((ss_quantity#12 - sr_return_quantity#4) as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#13 as decimal(12,2)))), DecimalType(18,2), true) ELSE CheckOverflow((promote_precision(cast(cast(ss_quantity#12 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#13 as decimal(12,2)))), DecimalType(18,2), true) END AS act_sales#15]
 Input [8]: [sr_item_sk#1, sr_ticket_number#3, sr_return_quantity#4, ss_item_sk#9, ss_customer_sk#10, ss_ticket_number#11, ss_quantity#12, ss_sales_price#13]
 
-(19) HashAggregate [codegen id : 6]
+(20) HashAggregate [codegen id : 6]
 Input [2]: [ss_customer_sk#10, act_sales#15]
 Keys [1]: [ss_customer_sk#10]
 Functions [1]: [partial_sum(act_sales#15)]
 Aggregate Attributes [2]: [sum#16, isEmpty#17]
 Results [3]: [ss_customer_sk#10, sum#18, isEmpty#19]
 
-(20) Exchange
+(21) Exchange
 Input [3]: [ss_customer_sk#10, sum#18, isEmpty#19]
 Arguments: hashpartitioning(ss_customer_sk#10, 5), true, [id=#20]
 
-(21) HashAggregate [codegen id : 7]
+(22) HashAggregate [codegen id : 7]
 Input [3]: [ss_customer_sk#10, sum#18, isEmpty#19]
 Keys [1]: [ss_customer_sk#10]
 Functions [1]: [sum(act_sales#15)]
 Aggregate Attributes [1]: [sum(act_sales#15)#21]
 Results [2]: [ss_customer_sk#10, sum(act_sales#15)#21 AS sumsales#22]
 
-(22) TakeOrderedAndProject
+(23) TakeOrderedAndProject
 Input [2]: [ss_customer_sk#10, sumsales#22]
 Arguments: 100, [sumsales#22 ASC NULLS FIRST, ss_customer_sk#10 ASC NULLS FIRST], [ss_customer_sk#10, sumsales#22]
 

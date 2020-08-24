@@ -114,7 +114,7 @@ Input [4]: [ss_sold_date_sk#1, ss_store_sk#2, ss_net_profit#3, d_date_sk#4]
 Output [3]: [s_store_sk#7, s_county#8, s_state#9]
 Batched: true
 Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/store]
-PushedFilters: [IsNotNull(s_store_sk)]
+PushedFilters: [IsNotNull(s_store_sk), IsNotNull(s_state)]
 ReadSchema: struct<s_store_sk:int,s_county:string,s_state:string>
 
 (12) ColumnarToRow [codegen id : 8]
@@ -122,7 +122,7 @@ Input [3]: [s_store_sk#7, s_county#8, s_state#9]
 
 (13) Filter [codegen id : 8]
 Input [3]: [s_store_sk#7, s_county#8, s_state#9]
-Condition : isnotnull(s_store_sk#7)
+Condition : (isnotnull(s_store_sk#7) AND isnotnull(s_state#9))
 
 (14) Scan parquet default.store_sales
 Output [3]: [ss_sold_date_sk#1, ss_store_sk#2, ss_net_profit#3]
@@ -209,7 +209,7 @@ Arguments: [rank(_w2#16) windowspecdefinition(s_state#9, _w2#16 DESC NULLS LAST,
 
 (32) Filter [codegen id : 7]
 Input [4]: [s_state#15, s_state#9, _w2#16, ranking#18]
-Condition : (isnotnull(ranking#18) AND (ranking#18 <= 5))
+Condition : ((isnotnull(ranking#18) AND (ranking#18 <= 5)) AND isnotnull(s_state#15))
 
 (33) Project [codegen id : 7]
 Output [1]: [s_state#15]

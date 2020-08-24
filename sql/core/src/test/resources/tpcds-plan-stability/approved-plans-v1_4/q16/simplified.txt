@@ -19,7 +19,7 @@ TakeOrderedAndProject [order count ,total net profit ,total shipping cost ]
                                     BroadcastHashJoin [cr_order_number,cs_order_number]
                                       Project [cs_call_center_sk,cs_ext_ship_cost,cs_net_profit,cs_order_number,cs_ship_addr_sk,cs_ship_date_sk]
                                         BroadcastHashJoin [cs_order_number,cs_order_number,cs_warehouse_sk,cs_warehouse_sk]
-                                          Filter [cs_call_center_sk,cs_ship_addr_sk,cs_ship_date_sk]
+                                          Filter [cs_call_center_sk,cs_order_number,cs_ship_addr_sk,cs_ship_date_sk,cs_warehouse_sk]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.catalog_sales [cs_call_center_sk,cs_ext_ship_cost,cs_net_profit,cs_order_number,cs_ship_addr_sk,cs_ship_date_sk,cs_warehouse_sk]
@@ -27,15 +27,17 @@ TakeOrderedAndProject [order count ,total net profit ,total shipping cost ]
                                             BroadcastExchange #3
                                               WholeStageCodegen (1)
                                                 Project [cs_order_number,cs_warehouse_sk]
-                                                  ColumnarToRow
-                                                    InputAdapter
-                                                      Scan parquet default.catalog_sales [cs_order_number,cs_warehouse_sk]
+                                                  Filter [cs_order_number,cs_warehouse_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.catalog_sales [cs_order_number,cs_warehouse_sk]
                                       InputAdapter
                                         BroadcastExchange #4
                                           WholeStageCodegen (2)
-                                            ColumnarToRow
-                                              InputAdapter
-                                                Scan parquet default.catalog_returns [cr_order_number]
+                                            Filter [cr_order_number]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.catalog_returns [cr_order_number]
                                     InputAdapter
                                       BroadcastExchange #5
                                         WholeStageCodegen (3)

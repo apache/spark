@@ -148,7 +148,7 @@ Input [4]: [ss_item_sk#2, ss_addr_sk#3, ss_ext_sales_price#4, ca_address_sk#9]
 Output [2]: [i_item_sk#12, i_manufact_id#13]
 Batched: true
 Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/item]
-PushedFilters: [IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_manufact_id)]
 ReadSchema: struct<i_item_sk:int,i_manufact_id:int>
 
 (19) ColumnarToRow [codegen id : 4]
@@ -156,13 +156,13 @@ Input [2]: [i_item_sk#12, i_manufact_id#13]
 
 (20) Filter [codegen id : 4]
 Input [2]: [i_item_sk#12, i_manufact_id#13]
-Condition : isnotnull(i_item_sk#12)
+Condition : (isnotnull(i_item_sk#12) AND isnotnull(i_manufact_id#13))
 
 (21) Scan parquet default.item
 Output [2]: [i_category#14, i_manufact_id#13]
 Batched: true
 Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/item]
-PushedFilters: [IsNotNull(i_category), EqualTo(i_category,Electronics)]
+PushedFilters: [IsNotNull(i_category), EqualTo(i_category,Electronics), IsNotNull(i_manufact_id)]
 ReadSchema: struct<i_category:string,i_manufact_id:int>
 
 (22) ColumnarToRow [codegen id : 3]
@@ -170,7 +170,7 @@ Input [2]: [i_category#14, i_manufact_id#13]
 
 (23) Filter [codegen id : 3]
 Input [2]: [i_category#14, i_manufact_id#13]
-Condition : (isnotnull(i_category#14) AND (i_category#14 = Electronics))
+Condition : ((isnotnull(i_category#14) AND (i_category#14 = Electronics)) AND isnotnull(i_manufact_id#13))
 
 (24) Project [codegen id : 3]
 Output [1]: [i_manufact_id#13 AS i_manufact_id#13#15]

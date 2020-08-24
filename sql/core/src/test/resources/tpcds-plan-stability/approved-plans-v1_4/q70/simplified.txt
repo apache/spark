@@ -34,7 +34,7 @@ TakeOrderedAndProject [lochierarchy,rank_within_parent,s_county,s_state,total_su
                                       BroadcastExchange #4
                                         WholeStageCodegen (8)
                                           BroadcastHashJoin [s_state,s_state]
-                                            Filter [s_store_sk]
+                                            Filter [s_state,s_store_sk]
                                               ColumnarToRow
                                                 InputAdapter
                                                   Scan parquet default.store [s_county,s_state,s_store_sk]
@@ -42,7 +42,7 @@ TakeOrderedAndProject [lochierarchy,rank_within_parent,s_county,s_state,total_su
                                               BroadcastExchange #5
                                                 WholeStageCodegen (7)
                                                   Project [s_state]
-                                                    Filter [ranking]
+                                                    Filter [ranking,s_state]
                                                       InputAdapter
                                                         Window [_w2,s_state]
                                                           WholeStageCodegen (6)

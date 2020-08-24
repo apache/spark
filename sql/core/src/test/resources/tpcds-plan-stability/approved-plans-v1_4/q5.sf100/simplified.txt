@@ -107,7 +107,7 @@ TakeOrderedAndProject [channel,id,profit,returns,sales]
                                                         InputAdapter
                                                           Exchange [wr_item_sk,wr_order_number] #8
                                                             WholeStageCodegen (14)
-                                                              Filter [wr_returned_date_sk]
+                                                              Filter [wr_item_sk,wr_order_number,wr_returned_date_sk]
                                                                 ColumnarToRow
                                                                   InputAdapter
                                                                     Scan parquet default.web_returns [wr_item_sk,wr_net_loss,wr_order_number,wr_return_amt,wr_returned_date_sk]

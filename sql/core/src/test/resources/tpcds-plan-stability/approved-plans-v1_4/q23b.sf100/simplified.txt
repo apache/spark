@@ -27,7 +27,7 @@ TakeOrderedAndProject [c_first_name,c_last_name,sales]
                                                     InputAdapter
                                                       Exchange [cs_item_sk] #3
                                                         WholeStageCodegen (1)
-                                                          Filter [cs_bill_customer_sk,cs_sold_date_sk]
+                                                          Filter [cs_bill_customer_sk,cs_item_sk,cs_sold_date_sk]
                                                             ColumnarToRow
                                                               InputAdapter
                                                                 Scan parquet default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_list_price,cs_quantity,cs_sold_date_sk]
@@ -209,7 +209,7 @@ TakeOrderedAndProject [c_first_name,c_last_name,sales]
                                                     InputAdapter
                                                       Exchange [ws_item_sk] #19
                                                         WholeStageCodegen (29)
-                                                          Filter [ws_bill_customer_sk,ws_sold_date_sk]
+                                                          Filter [ws_bill_customer_sk,ws_item_sk,ws_sold_date_sk]
                                                             ColumnarToRow
                                                               InputAdapter
                                                                 Scan parquet default.web_sales [ws_bill_customer_sk,ws_item_sk,ws_list_price,ws_quantity,ws_sold_date_sk]

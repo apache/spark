@@ -33,6 +33,7 @@ TakeOrderedAndProject [ss_customer_sk,sumsales]
                         InputAdapter
                           Exchange [ss_item_sk,ss_ticket_number] #4
                             WholeStageCodegen (4)
-                              ColumnarToRow
-                                InputAdapter
-                                  Scan parquet default.store_sales [ss_customer_sk,ss_item_sk,ss_quantity,ss_sales_price,ss_ticket_number]
+                              Filter [ss_item_sk,ss_ticket_number]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.store_sales [ss_customer_sk,ss_item_sk,ss_quantity,ss_sales_price,ss_ticket_number]

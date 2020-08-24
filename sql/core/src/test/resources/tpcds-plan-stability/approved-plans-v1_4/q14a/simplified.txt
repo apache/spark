@@ -72,7 +72,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_category_id,i_class_id,sum(number_sa
                                                   WholeStageCodegen (11)
                                                     Project [i_item_sk]
                                                       BroadcastHashJoin [brand_id,category_id,class_id,i_brand_id,i_category_id,i_class_id]
-                                                        Filter [i_brand_id,i_category_id,i_class_id]
+                                                        Filter [i_brand_id,i_category_id,i_class_id,i_item_sk]
                                                           ColumnarToRow
                                                             InputAdapter
                                                               Scan parquet default.item [i_brand_id,i_category_id,i_class_id,i_item_sk]
