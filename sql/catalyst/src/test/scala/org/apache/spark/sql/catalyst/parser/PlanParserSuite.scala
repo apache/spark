@@ -1111,16 +1111,16 @@ class PlanParserSuite extends AnalysisTest {
           AttributeReference("c", StringType)()),
         UnresolvedRelation(TableIdentifier("testData")),
         ScriptInputOutputSchema(
-          Seq(("TOK_TABLEROWFORMATFIELD", "'\\t'"),
-            ("TOK_TABLEROWFORMATCOLLITEMS", "'\u0002'"),
-            ("TOK_TABLEROWFORMATMAPKEYS", "'\u0003'"),
-            ("TOK_TABLEROWFORMATLINES", "'\\n'"),
-            ("TOK_TABLEROWFORMATNULL", "'null'")),
-          Seq(("TOK_TABLEROWFORMATFIELD", "'\\t'"),
-            ("TOK_TABLEROWFORMATCOLLITEMS", "'\u0004'"),
-            ("TOK_TABLEROWFORMATMAPKEYS", "'\u0005'"),
-            ("TOK_TABLEROWFORMATLINES", "'\\n'"),
-            ("TOK_TABLEROWFORMATNULL", "'NULL'")), None, None,
+          Seq(("TOK_TABLEROWFORMATFIELD", "\t"),
+            ("TOK_TABLEROWFORMATCOLLITEMS", "\u0002"),
+            ("TOK_TABLEROWFORMATMAPKEYS", "\u0003"),
+            ("TOK_TABLEROWFORMATNULL", "null"),
+            ("TOK_TABLEROWFORMATLINES", "\n")),
+          Seq(("TOK_TABLEROWFORMATFIELD", "\t"),
+            ("TOK_TABLEROWFORMATCOLLITEMS", "\u0004"),
+            ("TOK_TABLEROWFORMATMAPKEYS", "\u0005"),
+            ("TOK_TABLEROWFORMATNULL", "NULL"),
+            ("TOK_TABLEROWFORMATLINES", "\n")), None, None,
           List.empty, List.empty, None, None, false)))
 
     // verify with ROW FORMAT SERDE

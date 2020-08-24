@@ -91,24 +91,105 @@ REDUCE a, b USING 'cat' AS (a, b) FROM t;
 -- transform with defined row format delimit
 SELECT TRANSFORM(a, b, c, null)
   ROW FORMAT DELIMITED
-  FIELDS TERMINATED BY '|'
+  FIELDS TERMINATED BY '@'
   LINES TERMINATED BY '\n'
   NULL DEFINED AS 'NULL'
 USING 'cat' AS (a, b, c, d)
   ROW FORMAT DELIMITED
-  FIELDS TERMINATED BY '|'
+  FIELDS TERMINATED BY '@'
   LINES TERMINATED BY '\n'
   NULL DEFINED AS 'NULL'
 FROM t;
 
 SELECT TRANSFORM(a, b, c, null)
   ROW FORMAT DELIMITED
-  FIELDS TERMINATED BY '|'
+  FIELDS TERMINATED BY '@'
   LINES TERMINATED BY '\n'
   NULL DEFINED AS 'NULL'
 USING 'cat' AS (d)
   ROW FORMAT DELIMITED
-  FIELDS TERMINATED BY '||'
+  FIELDS TERMINATED BY '@'
   LINES TERMINATED BY '\n'
   NULL DEFINED AS 'NULL'
 FROM t;
+
+-- transform with defined row format delimit handle schema with correct type
+SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
+  SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k, l)
+    ROW FORMAT DELIMITED
+    FIELDS TERMINATED BY ','
+    LINES TERMINATED BY '\n'
+    NULL DEFINED AS 'NULL'
+    USING 'cat' AS (
+      a string,
+      b boolean,
+      c binary,
+      d tinyint,
+      e int,
+      f smallint,
+      g long,
+      h float,
+      i double,
+      j decimal(38, 18),
+      k timestamp,
+      l date)
+    ROW FORMAT DELIMITED
+    FIELDS TERMINATED BY ','
+    LINES TERMINATED BY '\n'
+    NULL DEFINED AS 'NULL'
+  FROM t
+) tmp;
+
+-- transform with defined row format delimit handle schema with wrong type
+SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
+  SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k, l)
+    ROW FORMAT DELIMITED
+    FIELDS TERMINATED BY ','
+    LINES TERMINATED BY '\n'
+    NULL DEFINED AS 'NULL'
+    USING 'cat' AS (
+      a string,
+      b long,
+      c binary,
+      d tinyint,
+      e int,
+      f smallint,
+      g long,
+      h float,
+      i double,
+      j decimal(38, 18),
+      k int,
+      l long)
+    ROW FORMAT DELIMITED
+    FIELDS TERMINATED BY ','
+    LINES TERMINATED BY '\n'
+    NULL DEFINED AS 'NULL'
+  FROM t
+) tmp;
+
+-- transform with defined row format delimit LINE TERMINATED BY only support '\n'
+SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
+  SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k, l)
+    ROW FORMAT DELIMITED
+    FIELDS TERMINATED BY ','
+    LINES TERMINATED BY '@'
+    NULL DEFINED AS 'NULL'
+    USING 'cat' AS (
+      a string,
+      b string,
+      c string,
+      d string,
+      e string,
+      f string,
+      g string,
+      h string,
+      i string,
+      j string,
+      k string,
+      l string)
+    ROW FORMAT DELIMITED
+    FIELDS TERMINATED BY ','
+    LINES TERMINATED BY '@'
+    NULL DEFINED AS 'NULL'
+  FROM t
+) tmp;

@@ -753,15 +753,18 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     // expects a seq of pairs in which the old parsers' token names are used as keys.
     // Transforming the result of visitRowFormatDelimited would be quite a bit messier than
     // retrieving the key value pairs ourselves.
-    def entry(key: String, value: Token): Seq[(String, String)] = {
-      Option(value).map(t => key -> t.getText).toSeq
-    }
-
     val entries = entry("TOK_TABLEROWFORMATFIELD", ctx.fieldsTerminatedBy) ++
       entry("TOK_TABLEROWFORMATCOLLITEMS", ctx.collectionItemsTerminatedBy) ++
       entry("TOK_TABLEROWFORMATMAPKEYS", ctx.keysTerminatedBy) ++
-      entry("TOK_TABLEROWFORMATLINES", ctx.linesSeparatedBy) ++
-      entry("TOK_TABLEROWFORMATNULL", ctx.nullDefinedAs)
+      entry("TOK_TABLEROWFORMATNULL", ctx.nullDefinedAs) ++
+      Option(ctx.linesSeparatedBy).toSeq.map { token =>
+        val value = string(token)
+        validate(
+          value == "\n",
+          s"LINES TERMINATED BY only supports newline '\\n' right now: $value",
+          ctx)
+        "TOK_TABLEROWFORMATLINES" -> value
+      }
 
     (entries, None, Seq.empty, None)
   }
