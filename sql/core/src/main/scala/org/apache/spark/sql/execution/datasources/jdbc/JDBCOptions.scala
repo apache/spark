@@ -232,7 +232,7 @@ class JdbcOptionsInWrite(
 
 object JDBCOptions {
   private val curId = new java.util.concurrent.atomic.AtomicLong(0L)
-  private val jdbcOptionNames = collection.mutable.Set[String]()
+  val jdbcOptionNames = collection.mutable.Set[String]()
 
   private def newOption(name: String): String = {
     jdbcOptionNames += name.toLowerCase(Locale.ROOT)
