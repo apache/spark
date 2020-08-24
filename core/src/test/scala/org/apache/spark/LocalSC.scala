@@ -55,14 +55,6 @@ trait LocalSC extends BeforeAndAfterEach
     _sc
   }
 
-  def withConf(pairs: (String, String)*): Unit = {
-    if (_sc != null) {
-      logWarning(s"These configurations ${pairs.mkString(", ")} won't take effect " +
-        "since the SparkContext has been already initialized.")
-    }
-    pairs.foreach { case (k, v) => _conf.set(k, v) }
-  }
-
   override def beforeAll(): Unit = {
     super.beforeAll()
     InternalLoggerFactory.setDefaultFactory(Slf4JLoggerFactory.INSTANCE)

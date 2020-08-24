@@ -499,9 +499,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
   }
 
   test("All shuffle files on the storage endpoint should be cleaned up when it is lost") {
-    withConf(
-      config.SHUFFLE_SERVICE_ENABLED.key -> "true",
-      "spark.files.fetchFailure.unRegisterOutputOnHost" -> "true")
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
+    conf.set("spark.files.fetchFailure.unRegisterOutputOnHost", "true")
     runEvent(ExecutorAdded("hostA-exec1", "hostA"))
     runEvent(ExecutorAdded("hostA-exec2", "hostA"))
     runEvent(ExecutorAdded("hostB-exec", "hostB"))
@@ -570,7 +569,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
   }
 
   test("SPARK-32003: All shuffle files for executor should be cleaned up on fetch failure") {
-    withConf(config.SHUFFLE_SERVICE_ENABLED.key -> "true")
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
 
     val shuffleMapRdd = new MyRDD(sc, 3, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(3))
@@ -860,7 +859,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
       "not lost"
     }
     test(s"shuffle files $maybeLost when $eventDescription") {
-      withConf(config.SHUFFLE_SERVICE_ENABLED.key -> shuffleServiceOn.toString)
+      conf.set(config.SHUFFLE_SERVICE_ENABLED.key, shuffleServiceOn.toString)
       assert(sc.env.blockManager.externalShuffleServiceEnabled == shuffleServiceOn)
 
       val shuffleMapRdd = new MyRDD(sc, 2, Nil)
@@ -2875,7 +2874,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
   }
 
   test("SPARK-25341: abort stage while using old fetch protocol") {
-    withConf(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL.key -> "true")
+    conf.set(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL.key, "true")
     // Construct the scenario of indeterminate stage fetch failed.
     constructIndeterminateStageFetchFailed()
     // The job should fail because Spark can't rollback the shuffle map stage while
@@ -3203,7 +3202,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
   }
 
   test("test 2 resource profile with merge conflict config true") {
-    withConf(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key -> "true")
+    conf.set(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key, "true")
 
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
@@ -3221,7 +3220,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
   }
 
   test("test multiple resource profiles created from merging use same rp") {
-    withConf(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key -> "true")
+    conf.set(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key, "true")
 
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
@@ -3314,7 +3313,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSC with TimeLimits {
   }
 
   test("test merge 3 resource profiles") {
-    withConf(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key -> "true")
+    conf.set(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key, "true")
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
     val rp1 = new ResourceProfile(ereqs.requests, treqs.requests)
