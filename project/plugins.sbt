@@ -36,9 +36,6 @@ resolvers += Resolver.url("bintray",
   new java.net.URL("https://dl.bintray.com/typesafe/sbt-plugins"))(Resolver.defaultIvyPatterns)
 addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.3.0")
 
-// sbt 1.0.0 support: https://github.com/AlpineNow/junit_xml_listener/issues/6
-// addSbtPlugin("com.alpinenow" % "junit_xml_listener" % "0.5.1")
-
 addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.4.3")
 
 addSbtPlugin("com.cavorite" % "sbt-avro" % "2.1.1")
