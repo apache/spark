@@ -171,9 +171,8 @@ class RelativeOffsetWindowFunctionFrame(
 }
 
 /**
- * The absolute offset window frame based on the first row calculates frames containing
- * NTH_VALUE statements. The absolute offset window frame based on the first row return
- * the same value for all rows in the window partition.
+ * The absolute offset window frame calculates frames containing NTH_VALUE statements.
+ * The absolute offset window frame return the same value for all rows in the window partition.
  */
 class AbsoluteOffsetWindowFunctionFrame(
     target: InternalRow,

@@ -69,6 +69,62 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         Row(2, "2", null, "2") :: Row(2, null, "4", "2") :: Nil)
   }
 
+  test("lead/lag/nth_value with SpecifiedWindowFrame") {
+    val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
+    val window = Window.partitionBy($"key").orderBy($"value".desc)
+
+    checkAnswer(
+      df.select(
+        $"key",
+        lead("value", 1).over(window.rowsBetween(1, 1)),
+        lag("value", 1).over(window.rowsBetween(-1, -1)),
+        nth_value("value", 1).over(window.rowsBetween(1, 1))),
+      Row(1, "1", null, "1") :: Row(1, null, "3", "1") ::
+        Row(2, "2", null, "2") :: Row(2, null, "4", "2") :: Nil)
+  }
+
+  test("lead/lag/nth_value with not match the required frame") {
+    val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
+    val window = Window.partitionBy($"key").orderBy($"value".desc)
+
+    val e1 = intercept[AnalysisException](
+      df.select(
+        $"key",
+        lead("value", 1).over(window.rowsBetween(-1, 1))))
+    assert(
+      e1.message.contains("must match the required frame specifiedwindowframe(RowFrame, 1, 1)"))
+    val e2 = intercept[AnalysisException](
+      df.select(
+        $"key",
+        lead("value", 1).over(window.rangeBetween(Window.unboundedPreceding, 1))))
+    assert(
+      e2.message.contains("must match the required frame specifiedwindowframe(RowFrame, 1, 1)"))
+    val e3 = intercept[AnalysisException](
+      df.select(
+        $"key",
+        lag("value", 1).over(window.rowsBetween(-1, 1))))
+    assert(
+      e3.message.contains("must match the required frame specifiedwindowframe(RowFrame, -1, -1)"))
+    val e4 = intercept[AnalysisException](
+      df.select(
+        $"key",
+        lag("value", 1).over(window.rangeBetween(Window.unboundedPreceding, 1))))
+    assert(
+      e4.message.contains("must match the required frame specifiedwindowframe(RowFrame, -1, -1)"))
+    val e5 = intercept[AnalysisException](
+      df.select(
+        $"key",
+        nth_value("value", 1).over(window.rowsBetween(-1, 1))))
+    assert(
+      e5.message.contains("must match the required frame specifiedwindowframe(RowFrame, 1, 1)"))
+    val e6 = intercept[AnalysisException](
+      df.select(
+        $"key",
+        nth_value("value", 1).over(window.rangeBetween(Window.unboundedPreceding, 1))))
+    assert(
+      e6.message.contains("must match the required frame specifiedwindowframe(RowFrame, 1, 1)"))
+  }
+
   test("lead/lag with negative offset") {
     val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
     val window = Window.partitionBy($"key").orderBy($"value")

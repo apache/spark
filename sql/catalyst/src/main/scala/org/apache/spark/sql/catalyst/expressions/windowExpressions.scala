@@ -342,8 +342,8 @@ abstract class OffsetWindowFunction
   extends Expression with WindowFunction with Unevaluable with ImplicitCastInputTypes {
   /**
    * Input expression to evaluate against a row which a number of rows below or above (depending on
-   * the value and sign of the offset) the current row or the first row of the entire window
-   * partition.
+   * the value and sign of the offset) the starting row. (current row if isRelative=true, or the
+   * first row of the window frame otherwise).
    */
   val input: Expression
 
@@ -353,8 +353,9 @@ abstract class OffsetWindowFunction
   val default: Expression
 
   /**
-   * (Foldable) expression that contains the number of rows between the current row or the first
-   * row of the entire window partition and the row where the input expression is evaluated.
+   * (Foldable) expression that contains the number of rows between the starting row (current row
+   * if isRelative=true, or the first row of the window frame otherwise) and the row where the
+   * input expression is evaluated.
    */
   val offset: Expression
 
@@ -365,9 +366,9 @@ abstract class OffsetWindowFunction
   val direction: SortDirection
 
   /**
-   * Whether the offset is start with the current row. If `isRelative` is true, `offset` means
+   * Whether the offset is starts with the current row. If `isRelative` is true, `offset` means
    * the offset is start with the current row. otherwise, the offset is start with the first
-   * row of the entire window partition.
+   * row of the entire window frame.
    */
   val isRelative: Boolean = true
 
