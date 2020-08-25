@@ -18,6 +18,7 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
@@ -201,6 +202,22 @@ public class LevelDBSuite {
   }
 
   @Test
+  public void testWriteAll() throws Exception {
+    List<Object> values = new ArrayList<>();
+    for (int i = 0; i < 2; i++) {
+      CustomType1 t1 = createCustomType1(i);
+      values.add(t1);
+
+      CustomType2 t2 = createCustomType2(i, i);
+      values.add(t2);
+    }
+    assertEquals(4, values.size());
+    db.writeAll(values);
+    assertEquals(2, db.count(CustomType1.class));
+    assertEquals(2, db.count(CustomType2.class));
+  }
+
+  @Test
   public void testRemoveAll() throws Exception {
     for (int i = 0; i < 2; i++) {
       for (int j = 0; j < 2; j++) {
@@ -319,6 +336,14 @@ public class LevelDBSuite {
     t.name = "name" + i;
     t.num = i;
     t.child = "child" + i;
+    return t;
+  }
+
+  private CustomType2 createCustomType2(int i, int parentId) {
+    CustomType2 t = new CustomType2();
+    t.key = "key" + i;
+    t.id = "id" + i;
+    t.parentId = "parentId" + parentId;
     return t;
   }
 
