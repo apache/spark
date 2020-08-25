@@ -58,7 +58,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, 
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.DataStreamWriter
+import org.apache.spark.sql.streaming.{DataStreamWriter, DataStreamWriterV2}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
@@ -3380,12 +3380,19 @@ class Dataset[T] private[sql](
    * @since 3.0.0
    */
   def writeTo(table: String): DataFrameWriterV2[T] = {
-    // TODO: streaming could be adapted to use this interface
     if (isStreaming) {
       logicalPlan.failAnalysis(
         "'writeTo' can not be called on streaming Dataset/DataFrame")
     }
     new DataFrameWriterV2[T](table, this)
+  }
+
+  def writeStreamTo(table: String): DataStreamWriterV2[T] = {
+    if (!isStreaming) {
+      logicalPlan.failAnalysis(
+        "'writeStreamTo' can be called only on streaming Dataset/DataFrame")
+    }
+    new DataStreamWriterV2[T](table, this)
   }
 
   /**
