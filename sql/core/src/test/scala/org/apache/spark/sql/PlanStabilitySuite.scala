@@ -117,7 +117,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
    * @param explain the full explain output; this is saved to help debug later as the simplified
    *                plan is not too useful for debugging
    */
-  private def generateApprovedPlanFile(plan: SparkPlan, name: String, explain: String): Unit = {
+  private def generateGoldenFile(plan: SparkPlan, name: String, explain: String): Unit = {
     val dir = getDirForTest(name)
     val simplified = getSimplifiedPlan(plan)
     val foundMatch = dir.exists() && isApproved(dir, simplified)
@@ -254,7 +254,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
     val explain = normalizeLocation(normalizeIds(qe.explainString(FormattedMode)))
 
     if (regenerateGoldenFiles) {
-      generateApprovedPlanFile(plan, query + suffix, explain)
+      generateGoldenFile(plan, query + suffix, explain)
     } else {
       checkWithApproved(plan, query + suffix, explain)
     }
