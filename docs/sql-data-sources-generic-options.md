@@ -125,25 +125,15 @@ To load all files recursively, you can use:
 applied together or separately in order to achieve greater
 granularity over which files may load during a Spark batch query.
 
-When the `timeZone` option is present, modified timestamps will be
-interpreted according to the specified zone. When a timezone option
-is not provided, modified timestamps will be interpreted according
-to the default zone specified within the Spark configuration. Without
-any timezone configuration, modified timestamps are interpreted as UTC.
+* `modifiedBefore`: an optional timestamp to only include files with
+modification times occurring before the specified time. The provided timestamp
+must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+* `modifiedAfter`: an optional timestamp to only include files with
+modification times occurring after the specified time. The provided timestamp
+must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
 
-`modifiedBefore` will only allow files having last modified
-timestamps occurring before the specified time to load. For example,
-when`modifiedBefore` has the timestamp `2020-06-01T12:00:00` applied,
-all files modified after that time will not be considered when loading
-from a file data source.
- 
-`modifiedAfter` only allows files having last modified timestamps
-occurring after the specified timestamp. For example, when`modifiedAfter`
-has the timestamp `2020-06-01T12:00:00` applied, only files modified after 
-this time will be eligible when loading from a file data source. When both
-`modifiedBefore` and `modifiedAfter` are specified together, files having
-last modified timestamps within the resulting time range are the only files
-allowed to load.
+When a timezone option is not provided, the timestamps will be interpreted according
+to the Spark session timezone (`spark.sql.session.timeZone`).
 
 To load files with paths matching a given modified time range, you can use:
 

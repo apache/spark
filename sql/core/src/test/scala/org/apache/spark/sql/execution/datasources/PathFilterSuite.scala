@@ -30,6 +30,76 @@ import org.apache.spark.sql.test.SharedSparkSession
 class PathFilterSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
+  test("SPARK-31962:  when modifiedBefore and modifiedAfter option" +
+      " share same timestamp with file last modified time.") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath)
+      val file = new File(dir, "file1.csv")
+      stringToFile(file, "text")
+
+      val time = LocalDateTime.now()
+      val sameTime = time.toEpochSecond(ZoneOffset.UTC)
+      file.setLastModified(sameTime * 1000)
+
+      val formattedTime = time.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+
+      val msg = intercept[AnalysisException] {
+        spark.read
+            .option("modifiedAfter", formattedTime)
+            .option("modifiedBefore", formattedTime)
+            .format("csv")
+            .load(path.toString)
+      }.getMessage
+      assert(msg.contains("Unable to infer schema for CSV"))
+    }
+  }
+
+  test("SPARK-31962:  when modifiedBefore and modifiedAfter option" +
+      " share same timestamp with earlier file last modified time.") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath)
+      val file = new File(dir, "file1.csv")
+      stringToFile(file, "text")
+
+      val time = LocalDateTime.now()
+      val sameTime = time.minusDays(3).toEpochSecond(ZoneOffset.UTC)
+      file.setLastModified(sameTime * 1000)
+
+      val formattedTime = time.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+      val msg = intercept[AnalysisException] {
+        spark.read
+            .option("modifiedAfter", formattedTime)
+            .option("modifiedBefore", formattedTime)
+            .format("csv")
+            .load(path.toString)
+      }.getMessage
+      assert(msg.contains("Unable to infer schema for CSV"))
+    }
+  }
+
+  test("SPARK-31962:  when modifiedBefore and modifiedAfter option" +
+      " share same timestamp with later file last modified time.") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath)
+      val file = new File(dir, "file1.csv")
+      stringToFile(file, "text")
+
+      val time = LocalDateTime.now()
+      val sameTime = time.plusDays(3).toEpochSecond(ZoneOffset.UTC)
+      file.setLastModified(sameTime * 1000)
+
+      val formattedTime = time.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+      val msg = intercept[AnalysisException] {
+        spark.read
+            .option("modifiedAfter", formattedTime)
+            .option("modifiedBefore", formattedTime)
+            .format("csv")
+            .load(path.toString)
+      }.getMessage
+      assert(msg.contains("Unable to infer schema for CSV"))
+    }
+  }
+
   test("SPARK-31962: when modifiedAfter specified with a past date") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
@@ -49,15 +119,19 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
+
+      val afterTime = LocalDateTime.now().plusDays(25)
+          .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+
       val df = spark.read
-        .option("modifiedBefore", "2090-05-10T01:11:00")
+        .option("modifiedBefore", afterTime)
         .format("csv")
         .load(path.toString)
       assert(df.count() == 1)
     }
   }
 
-  test("SPARK-31962: when modifiedBefore specified with a past date") {
+  test("SPARK-31962: with modifiedBefore option provided using a past date") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
@@ -137,11 +211,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       file1.setLastModified(0)
       file2.setLastModified(0)
 
-      val time = LocalDateTime
-        .now()
-        .plusDays(3)
-        .format(DateTimeFormatter
-          .ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+      val time = LocalDateTime.now().plusDays(3)
+          .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
 
       val df = spark.read
         .option("modifiedBefore", time)
@@ -160,16 +231,12 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       stringToFile(file2, "text")
 
       file1.setLastModified(0)
-
       val failTime =
         LocalDateTime.now().plusDays(3).toEpochSecond(ZoneOffset.UTC)
       file2.setLastModified(failTime * 1000)
 
-      val time = LocalDateTime
-        .now()
-        .plusHours(10)
-        .format(DateTimeFormatter
-          .ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+      val time = LocalDateTime.now().plusHours(10)
+          .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
 
       val df = spark.read
         .option("modifiedBefore", time)
@@ -188,11 +255,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       stringToFile(file1, "text")
       stringToFile(file2, "text")
 
-      val time = LocalDateTime
-        .now()
-        .minusDays(1)
-        .format(DateTimeFormatter
-          .ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+      val time = LocalDateTime.now().minusDays(1)
+          .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
 
       file1.setLastModified(DateTimeUtils.currentTimestamp())
       file2.setLastModified(DateTimeUtils.currentTimestamp())
@@ -244,9 +308,13 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
+
+      val time = LocalDateTime.now().plusDays(10)
+          .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+
       val msg = intercept[AnalysisException] {
         spark.read
-          .option("modifiedAfter", "2050-05-01T01:00:00")
+          .option("modifiedAfter", time)
           .option("pathGlobFilter", "*.csv")
           .format("csv")
           .load(path.toString)
@@ -261,9 +329,13 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
+
+      val time = LocalDateTime.now().plusDays(10)
+          .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+
       val msg = intercept[AnalysisException] {
         spark.read
-          .option("modifiedAfter", "2050-05-01T01:00:00")
+          .option("modifiedAfter", time)
           .option("pathGlobFilter", "*.txt")
           .format("csv")
           .load(path.toString)
@@ -278,10 +350,14 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
+
+      val time = LocalDateTime.now().plusDays(10)
+          .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+
       val msg = intercept[AnalysisException] {
         spark.read
-          .option("modifiedAfter", "2050-05-01T01:00:00")
-          .option("modifiedBefore", "2050-05-01T01:00:00")
+          .option("modifiedAfter", time)
+          .option("modifiedBefore", time)
           .option("pathGlobFilter", "*.csv")
           .format("csv")
           .load(path.toString)
@@ -296,9 +372,16 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
+
+      val beforeTime = LocalDateTime.now().minusDays(25)
+          .format(DateTimeFormatter .ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+
+      val afterTime = LocalDateTime.now().plusDays(25)
+          .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+
       val df = spark.read
-        .option("modifiedAfter", "2019-05-01T01:00:00")
-        .option("modifiedBefore", "2025-05-01T01:00:00")
+        .option("modifiedAfter", beforeTime)
+        .option("modifiedBefore", afterTime)
         .option("pathGlobFilter", "*.csv")
         .format("csv")
         .load(path.toString)
@@ -312,10 +395,17 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
+
+      val beforeTime = LocalDateTime.now().minusDays(25)
+          .format(DateTimeFormatter .ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+
+      val afterTime = LocalDateTime.now().plusDays(25)
+          .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+
       val msg = intercept[AnalysisException] {
         spark.read
-          .option("modifiedAfter", "2019-05-01T01:00:00")
-          .option("modifiedBefore", "2025-05-01T01:00:00")
+          .option("modifiedAfter", beforeTime)
+          .option("modifiedBefore", afterTime)
           .option("pathGlobFilter", "*.txt")
           .format("csv")
           .load(path.toString)
@@ -332,42 +422,14 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
 
       val msg = intercept[AnalysisException] {
         spark.read
-          .option("modifiedAfter", "2024-05+1 01:00:00")
-          .format("csv")
-          .load(path.toString)
+            .option("modifiedAfter", "2024-05+1 01:00:00")
+            .format("csv")
+            .load(path.toString)
       }.getMessage
-      assert(
-        msg.contains("The timestamp provided")
-          && msg.contains("modifiedafter")
-          && msg.contains("2024-05+1 01:00:00"))
+      Seq("The timestamp provided", "modifiedafter", "2024-05+1 01:00:00").foreach { expectedMsg =>
+        assert(msg.contains(expectedMsg))
+      }
     }
-  }
-
-  test("SPARK-31962: PathFilterStrategies - modifiedAfter option") {
-    val options = CaseInsensitiveMap[String](Map("modifiedAfter" -> "2010-10-01T01:01:00"))
-    val strategy = PathFilterFactory.create(options)
-    assert(strategy.head.isInstanceOf[ModifiedAfterFilter])
-    assert(strategy.size == 1)
-  }
-
-  test("SPARK-31962: PathFilterStrategies - modifiedBefore option") {
-    val options = CaseInsensitiveMap[String](Map("modifiedBefore" -> "2020-10-01T01:01:00"))
-    val strategy = PathFilterFactory.create(options)
-    assert(strategy.head.isInstanceOf[ModifiedBeforeFilter])
-    assert(strategy.size == 1)
-  }
-
-  test("SPARK-31962: PathFilterStrategies - pathGlobFilter option") {
-    val options = CaseInsensitiveMap[String](Map("pathGlobFilter" -> "*.txt"))
-    val strategy = PathFilterFactory.create(options)
-    assert(strategy.head.isInstanceOf[PathGlobFilter])
-    assert(strategy.size == 1)
-  }
-
-  test("SPARK-31962: PathFilterStrategies - no options") {
-    val options = CaseInsensitiveMap[String](Map.empty)
-    val strategy = PathFilterFactory.create(options)
-    assert(strategy.isEmpty)
   }
 
   test("SPARK-31962: modifiedBefore - empty option") {
@@ -400,9 +462,9 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
           .format("csv")
           .load(path.toString)
       }.getMessage
-      assert(
-        msg.contains("The timestamp provided for")
-          && msg.contains("modifiedafter"))
+      Seq("The timestamp provided", "modifiedafter").foreach { expectedMsg =>
+        assert(msg.contains(expectedMsg))
+      }
     }
   }
 

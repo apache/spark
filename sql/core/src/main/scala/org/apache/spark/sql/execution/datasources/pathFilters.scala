@@ -105,8 +105,8 @@ object ModifiedDateFilter {
 class ModifiedBeforeFilter(thresholdTime: Long, val timeZoneId: String) extends ModifiedDateFilter {
 
   override def accept(fileStatus: FileStatus): Boolean =
-  // We standardize on microseconds wherever possible
-  // getModificationTime returns in milliseconds
+    // We standardize on microseconds wherever possible
+    // getModificationTime returns in milliseconds
     thresholdTime - localTime(DateTimeUtils.millisToMicros(fileStatus.getModificationTime)) > 0
 }
 
@@ -128,8 +128,8 @@ object ModifiedBeforeFilter extends StrategyBuilder {
 class ModifiedAfterFilter(thresholdTime: Long, val timeZoneId: String) extends ModifiedDateFilter {
 
   override def accept(fileStatus: FileStatus): Boolean =
-  // getModificationTime returns in milliseconds
-  // We standardize on microseconds wherever possible
+    // getModificationTime returns in milliseconds
+    // We standardize on microseconds wherever possible
     localTime(DateTimeUtils.millisToMicros(fileStatus.getModificationTime)) - thresholdTime > 0
 }
 
