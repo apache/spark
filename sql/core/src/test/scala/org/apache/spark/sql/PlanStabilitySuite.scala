@@ -94,6 +94,8 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   private val referenceRegex = "#\\d+".r
   private val normalizeRegex = "#\\d+L?".r
 
+  private val clsName = this.getClass.getCanonicalName
+
   def goldenFilePath: String
 
   private def getDirForTest(name: String): File = {
@@ -228,11 +230,16 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
     getSimplifiedPlan(plan, 0)
   }
 
-  private def normalizeIds(query: String): String = {
+  private def normalizeIds(plan: String): String = {
     val map = new mutable.HashMap[String, String]()
-    normalizeRegex.findAllMatchIn(query).map(_.toString)
+    normalizeRegex.findAllMatchIn(plan).map(_.toString)
       .foreach(map.getOrElseUpdate(_, (map.size + 1).toString))
-    normalizeRegex.replaceAllIn(query, regexMatch => s"#${map(regexMatch.toString)}")
+    normalizeRegex.replaceAllIn(plan, regexMatch => s"#${map(regexMatch.toString)}")
+  }
+
+  private def normalizeLocation(plan: String): String = {
+    plan.replaceAll(s"Location.*$clsName/",
+      "Location [not included in comparison]/{warehouse_dir}/")
   }
 
   /**
@@ -244,7 +251,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       classLoader = Thread.currentThread().getContextClassLoader)
     val qe = sql(queryString).queryExecution
     val plan = qe.executedPlan
-    val explain = normalizeIds(qe.explainString(FormattedMode))
+    val explain = normalizeLocation(normalizeIds(qe.explainString(FormattedMode)))
 
     if (regenerateGoldenFiles) {
       generateApprovedPlanFile(plan, query + suffix, explain)
