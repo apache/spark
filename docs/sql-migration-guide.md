@@ -189,6 +189,69 @@ license: |
 
   - Since Spark 3.0, when using `EXTRACT` expression to extract the second field from date/timestamp values, the result will be a `DecimalType(8, 6)` value with 2 digits for second part, and 6 digits for the fractional part with microsecond precision. e.g. `extract(second from to_timestamp('2019-09-20 10:10:10.1'))` results `10.100000`.  In Spark version 2.4 and earlier, it returns an `IntegerType` value and the result for the former example is `10`.
 
+  - In Spark 3.0, datetime pattern letter `F` represents the concept of the count of days within the period of a week where the weeks are aligned to the start of the month, e.g.
+    ```sql
+    SELECT d, date_format(d, 'F') AS f
+     FROM VALUES
+     (date '2020-07-30'),
+     (date '2020-07-31'),
+     (date '2020-08-01'),
+     (date '2020-08-02'),
+     (date '2020-08-03'),
+     (date '2020-08-04'),
+     (date '2020-08-05'),
+     (date '2020-08-06'),
+     (date '2020-08-07'),
+     (date '2020-08-08'),
+     (date '2020-08-09') tbl(d);
+    +------------+---+
+    |      d     | f |
+    +------------+---+
+    | 2020-07-30 | 2 |
+    | 2020-07-31 | 3 |
+    | 2020-08-01 | 1 |
+    | 2020-08-02 | 2 |
+    | 2020-08-03 | 3 |
+    | 2020-08-04 | 4 |
+    | 2020-08-05 | 5 |
+    | 2020-08-06 | 6 |
+    | 2020-08-07 | 7 |
+    | 2020-08-08 | 1 |
+    | 2020-08-09 | 2 |
+    +------------+---+
+    ```
+    In Spark version 2.4 and earlier, it is the week of month that represents the concept of the count of weeks within the month where weeks start on a fixed day-of-week, e.g.
+    ```sql
+    SELECT d, date_format(d, 'F') AS f
+     FROM VALUES
+     (date '2020-07-30'),
+     (date '2020-07-31'),
+     (date '2020-08-01'),
+     (date '2020-08-02'),
+     (date '2020-08-03'),
+     (date '2020-08-04'),
+     (date '2020-08-05'),
+     (date '2020-08-06'),
+     (date '2020-08-07'),
+     (date '2020-08-08'),
+     (date '2020-08-09') tbl(d);
+    +------------+---+
+    |      d     | f |
+    +------------+---+
+    | 2020-07-30 | 5 |
+    | 2020-07-31 | 5 |
+    | 2020-08-01 | 1 |
+    | 2020-08-02 | 1 |
+    | 2020-08-03 | 1 |
+    | 2020-08-04 | 1 |
+    | 2020-08-05 | 1 |
+    | 2020-08-06 | 1 |
+    | 2020-08-07 | 1 |
+    | 2020-08-08 | 2 |
+    | 2020-08-09 | 2 |
+    +------------+---+
+    ```
+
 ### Data Sources
 
   - In Spark version 2.4 and below, when reading a Hive SerDe table with Spark native data sources(parquet/orc), Spark infers the actual file schema and update the table schema in metastore. In Spark 3.0, Spark doesn't infer the schema anymore. This should not cause any problems to end users, but if it does, set `spark.sql.hive.caseSensitiveInferenceMode` to `INFER_AND_SAVE`.
