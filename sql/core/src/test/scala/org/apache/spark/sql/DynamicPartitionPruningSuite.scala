@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.scalatest.GivenWhenThen
 
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, DynamicPruningExpression, Expression}
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
@@ -1302,6 +1302,55 @@ abstract class DynamicPartitionPruningSuiteBase
         Row(1020, 2, 1, 10) ::
         Row(1030, 3, 2, 10) :: Nil
       )
+    }
+  }
+
+  test("SPARK-32659: Fix the data issue of inserted DPP on non-atomic type") {
+    withSQLConf(
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "2", // Make sure insert DPP
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+      withTable("df1", "df2") {
+        spark.range(1000)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df1")
+
+        spark.range(100)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df2")
+
+        Seq(CodegenObjectFactoryMode.NO_CODEGEN,
+          CodegenObjectFactoryMode.CODEGEN_ONLY).foreach { mode =>
+          Seq(true, false).foreach { pruning =>
+            withSQLConf(
+              SQLConf.CODEGEN_FACTORY_MODE.key -> s"${mode.toString}",
+              SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> s"${pruning}") {
+              val df = sql(
+                """
+                  |SELECT df1.id, df2.k
+                  |FROM df1
+                  |  JOIN df2
+                  |  ON struct(df1.k) = struct(df2.k)
+                  |    AND df2.id < 2
+                  |""".stripMargin)
+              if (pruning) {
+                checkPartitionPruningPredicate(df, true, false)
+              } else {
+                checkPartitionPruningPredicate(df, false, false)
+              }
+
+              checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
+            }
+          }
+        }
+      }
     }
   }
 }
