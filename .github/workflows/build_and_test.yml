@@ -102,7 +102,7 @@ jobs:
       uses: actions/cache@v1
       with:
         path: build
-        key: build-${{ hashFiles('**/pom.xml') }}
+        key: build-${{ hashFiles('**/pom.xml') }}-${{ hashFiles('project/build.properties') }}-${{ hashFiles('build') }}
         restore-keys: |
           build-
     - name: Cache Maven local repository
