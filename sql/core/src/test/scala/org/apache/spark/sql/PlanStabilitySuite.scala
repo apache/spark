@@ -104,8 +104,8 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
 
   private def isApproved(dir: File, actualSimplifiedPlan: String): Boolean = {
     val file = new File(dir, "simplified.txt")
-    val approved = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
-    approved == actualSimplifiedPlan
+    val expected = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
+    expected == actualSimplifiedPlan
   }
 
   /**
