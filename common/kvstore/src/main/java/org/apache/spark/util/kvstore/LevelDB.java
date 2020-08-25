@@ -191,12 +191,12 @@ public class LevelDB implements KVStore {
           final LevelDBTypeInfo.Index naturalIndex = ti.naturalIndex();
           final Collection<LevelDBTypeInfo.Index> indices = ti.indices();
 
-          try (WriteBatch batch = db().createWriteBatch()) {
-            while (valueIter.hasNext()) {
+          while (valueIter.hasNext()) {
+            try (WriteBatch batch = db().createWriteBatch()) {
               updateBatch(batch, valueIter.next(), serializedValueIter.next(), klass,
                 naturalIndex, indices);
+              db().write(batch);
             }
-            db().write(batch);
           }
         }
       }
