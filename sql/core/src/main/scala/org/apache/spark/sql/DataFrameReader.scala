@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
@@ -229,7 +230,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def load(path: String): DataFrame = {
     // force invocation of `load(...varargs...)`
-    option("path", path).load(Seq.empty: _*)
+    if (sparkSession.sessionState.conf.legacyPathOptionBehavior) {
+      option("path", path).load(Seq.empty: _*)
+    } else {
+      load(Seq(path): _*)
+    }
   }
 
   /**
@@ -245,15 +250,30 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
+    val legacyPathOptionBehavior = sparkSession.sessionState.conf.legacyPathOptionBehavior
+    if (!legacyPathOptionBehavior &&
+        (extraOptions.contains("path") || extraOptions.contains("paths")) && paths.nonEmpty) {
+      throw new AnalysisException("There is a 'path' or 'paths' option set and load() is called " +
+        "with path parameters. Either remove the path option if it's the same as the path " +
+        "parameter, or add it to the load() parameter if you do want to read multiple paths.")
+    }
+
+    val updatedPaths = if (!legacyPathOptionBehavior && paths.length == 1) {
+      option("path", paths.head)
+      Seq.empty
+    } else {
+      paths
+    }
+
     DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).map { provider =>
       val catalogManager = sparkSession.sessionState.catalogManager
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         source = provider, conf = sparkSession.sessionState.conf)
-      val pathsOption = if (paths.isEmpty) {
+      val pathsOption = if (updatedPaths.isEmpty) {
         None
       } else {
         val objectMapper = new ObjectMapper()
-        Some("paths" -> objectMapper.writeValueAsString(paths.toArray))
+        Some("paths" -> objectMapper.writeValueAsString(updatedPaths.toArray))
       }
 
       val finalOptions = sessionOptions ++ extraOptions.originalMap ++ pathsOption
@@ -281,9 +301,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
             sparkSession,
             DataSourceV2Relation.create(table, catalog, ident, dsOptions))
 
-        case _ => loadV1Source(paths: _*)
+        case _ => loadV1Source(updatedPaths: _*)
       }
-    }.getOrElse(loadV1Source(paths: _*))
+    }.getOrElse(loadV1Source(updatedPaths: _*))
   }
 
   private def loadV1Source(paths: String*) = {

@@ -20,78 +20,44 @@ package org.apache.spark.sql.hive.execution
 import java.sql.Timestamp
 
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
-import org.scalatest.Assertions._
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.{SparkException, TaskContext, TestUtils}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest, UnaryExecNode}
+import org.apache.spark.{SparkException, TestUtils}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
-class HiveScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with TestHiveSingleton
-  with BeforeAndAfterEach {
-  import spark.implicits._
+class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with TestHiveSingleton {
+  import testImplicits._
 
-  private val noSerdeIOSchema = HiveScriptIOSchema(
-    inputRowFormat = Seq.empty,
-    outputRowFormat = Seq.empty,
-    inputSerdeClass = None,
-    outputSerdeClass = None,
-    inputSerdeProps = Seq.empty,
-    outputSerdeProps = Seq.empty,
-    recordReaderClass = None,
-    recordWriterClass = None,
-    schemaLess = false
-  )
+  import ScriptTransformationIOSchema._
 
-  private val serdeIOSchema = noSerdeIOSchema.copy(
-    inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
-    outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName)
-  )
+  override def isHive23OrSpark: Boolean = HiveUtils.isHive23
 
-  private var defaultUncaughtExceptionHandler: Thread.UncaughtExceptionHandler = _
-
-  private val uncaughtExceptionHandler = new TestUncaughtExceptionHandler
-
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    defaultUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler
-    Thread.setDefaultUncaughtExceptionHandler(uncaughtExceptionHandler)
+  override def createScriptTransformationExec(
+      input: Seq[Expression],
+      script: String,
+      output: Seq[Attribute],
+      child: SparkPlan,
+      ioschema: ScriptTransformationIOSchema): BaseScriptTransformationExec = {
+    HiveScriptTransformationExec(
+      input = input,
+      script = script,
+      output = output,
+      child = child,
+      ioschema = ioschema
+    )
   }
 
-  protected override def afterAll(): Unit = {
-    super.afterAll()
-    Thread.setDefaultUncaughtExceptionHandler(defaultUncaughtExceptionHandler)
-  }
-
-  override protected def afterEach(): Unit = {
-    super.afterEach()
-    uncaughtExceptionHandler.cleanStatus()
-  }
-
-  test("cat without SerDe") {
-    assume(TestUtils.testCommandAvailable("/bin/bash"))
-
-    val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
-    checkAnswer(
-      rowsDf,
-      (child: SparkPlan) => new HiveScriptTransformationExec(
-        input = Seq(rowsDf.col("a").expr),
-        script = "cat",
-        output = Seq(AttributeReference("a", StringType)()),
-        child = child,
-        ioschema = noSerdeIOSchema
-      ),
-      rowsDf.collect())
-    assert(uncaughtExceptionHandler.exception.isEmpty)
+  private val hiveIOSchema: ScriptTransformationIOSchema = {
+    defaultIOSchema.copy(
+      inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
+      outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName)
+    )
   }
 
   test("cat with LazySimpleSerDe") {
@@ -100,30 +66,30 @@ class HiveScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     checkAnswer(
       rowsDf,
-      (child: SparkPlan) => new HiveScriptTransformationExec(
+      (child: SparkPlan) => createScriptTransformationExec(
         input = Seq(rowsDf.col("a").expr),
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
-        ioschema = serdeIOSchema
+        ioschema = hiveIOSchema
       ),
       rowsDf.collect())
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("script transformation should not swallow errors from upstream operators (no serde)") {
+  test("script transformation should not swallow errors from upstream operators (hive serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
 
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     val e = intercept[TestFailedException] {
       checkAnswer(
         rowsDf,
-        (child: SparkPlan) => new HiveScriptTransformationExec(
+        (child: SparkPlan) => createScriptTransformationExec(
           input = Seq(rowsDf.col("a").expr),
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),
-          ioschema = noSerdeIOSchema
+          ioschema = hiveIOSchema
         ),
         rowsDf.collect())
     }
@@ -132,67 +98,65 @@ class HiveScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("script transformation should not swallow errors from upstream operators (with serde)") {
-    assume(TestUtils.testCommandAvailable("/bin/bash"))
-
-    val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
-    val e = intercept[TestFailedException] {
-      checkAnswer(
-        rowsDf,
-        (child: SparkPlan) => new HiveScriptTransformationExec(
-          input = Seq(rowsDf.col("a").expr),
-          script = "cat",
-          output = Seq(AttributeReference("a", StringType)()),
-          child = ExceptionInjectingOperator(child),
-          ioschema = serdeIOSchema
-        ),
-        rowsDf.collect())
-    }
-    assert(e.getMessage().contains("intentional exception"))
-    // Before SPARK-25158, uncaughtExceptionHandler will catch IllegalArgumentException
-    assert(uncaughtExceptionHandler.exception.isEmpty)
-  }
-
-  test("SPARK-14400 script transformation should fail for bad script command") {
+  test("SPARK-14400 script transformation should fail for bad script command (hive serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
 
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
 
     val e = intercept[SparkException] {
       val plan =
-        new HiveScriptTransformationExec(
+        createScriptTransformationExec(
           input = Seq(rowsDf.col("a").expr),
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),
           child = rowsDf.queryExecution.sparkPlan,
-          ioschema = serdeIOSchema)
+          ioschema = hiveIOSchema)
       SparkPlanTest.executePlan(plan, hiveContext)
     }
     assert(e.getMessage.contains("Subprocess exited with status"))
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("SPARK-24339 verify the result after pruning the unused columns") {
+  test("SPARK-24339 verify the result after pruning the unused columns (hive serde)") {
     val rowsDf = Seq(
       ("Bob", 16, 176),
       ("Alice", 32, 164),
       ("David", 60, 192),
-      ("Amy", 24, 180)).toDF("name", "age", "height")
+      ("Amy", 24, 180)
+    ).toDF("name", "age", "height")
 
     checkAnswer(
       rowsDf,
-      (child: SparkPlan) => new HiveScriptTransformationExec(
+      (child: SparkPlan) => createScriptTransformationExec(
         input = Seq(rowsDf.col("name").expr),
         script = "cat",
         output = Seq(AttributeReference("name", StringType)()),
         child = child,
-        ioschema = serdeIOSchema
+        ioschema = hiveIOSchema
       ),
       rowsDf.select("name").collect())
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("SPARK-25990: TRANSFORM should handle different data types correctly") {
+  test("SPARK-30973: TRANSFORM should wait for the termination of the script (hive serde)") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
+    val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
+    val e = intercept[SparkException] {
+      val plan =
+        createScriptTransformationExec(
+          input = Seq(rowsDf.col("a").expr),
+          script = "some_non_existent_command",
+          output = Seq(AttributeReference("a", StringType)()),
+          child = rowsDf.queryExecution.sparkPlan,
+          ioschema = hiveIOSchema)
+      SparkPlanTest.executePlan(plan, hiveContext)
+    }
+    assert(e.getMessage.contains("Subprocess exited with status"))
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("SPARK-25990: TRANSFORM should handle schema less correctly (hive serde)") {
     assume(TestUtils.testCommandAvailable("python"))
     val scriptFilePath = getTestResourcePath("test_script.py")
 
@@ -206,75 +170,142 @@ class HiveScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with
 
       val query = sql(
         s"""
-          |SELECT
-          |TRANSFORM(a, b, c, d, e)
-          |USING 'python $scriptFilePath' AS (a, b, c, d, e)
-          |FROM v
+           |SELECT TRANSFORM(a, b, c, d, e)
+           |USING 'python ${scriptFilePath}'
+           |FROM v
         """.stripMargin)
 
-      // In Hive 1.2, the string representation of a decimal omits trailing zeroes.
-      // But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
-      val decimalToString: Column => Column = if (HiveUtils.isHive23) {
-        c => c.cast("string")
-      } else {
-        c => c.cast("decimal(1, 0)").cast("string")
-      }
-      checkAnswer(query, identity, df.select(
-        'a.cast("string"),
-        'b.cast("string"),
-        'c.cast("string"),
-        decimalToString('d),
-        'e.cast("string")).collect())
+      // In hive default serde mode, if we don't define output schema, it will choose first
+      // two column as output schema (key: String, value: String)
+      checkAnswer(
+        query,
+        identity,
+        df.select(
+          'a.cast("string").as("key"),
+          'b.cast("string").as("value")).collect())
     }
   }
 
-  test("SPARK-30973: TRANSFORM should wait for the termination of the script (no serde)") {
+  testBasicInputDataTypesWith(hiveIOSchema, "hive serde")
+
+  test("SPARK-32400: TRANSFORM supports complex data types type (hive serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withTempView("v") {
+      val df = Seq(
+        (1, "1", Array(0, 1, 2), Map("a" -> 1)),
+        (2, "2", Array(3, 4, 5), Map("b" -> 2))
+      ).toDF("a", "b", "c", "d")
+        .select('a, 'b, 'c, 'd, struct('a, 'b).as("e"))
+      df.createTempView("v")
 
-    val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
-    val e = intercept[SparkException] {
-      val plan =
-        new HiveScriptTransformationExec(
-          input = Seq(rowsDf.col("a").expr),
-          script = "some_non_existent_command",
-          output = Seq(AttributeReference("a", StringType)()),
-          child = rowsDf.queryExecution.sparkPlan,
-          ioschema = noSerdeIOSchema)
-      SparkPlanTest.executePlan(plan, hiveContext)
+      // Hive serde support ArrayType/MapType/StructType as input and output data type
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("c").expr,
+            df.col("d").expr,
+            df.col("e").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("c", ArrayType(IntegerType))(),
+            AttributeReference("d", MapType(StringType, IntegerType))(),
+            AttributeReference("e", StructType(
+              Seq(
+                StructField("col1", IntegerType, false),
+                StructField("col2", StringType, true))))()),
+          child = child,
+          ioschema = hiveIOSchema
+        ),
+        df.select('c, 'd, 'e).collect())
     }
-    assert(e.getMessage.contains("Subprocess exited with status"))
-    assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("SPARK-30973: TRANSFORM should wait for the termination of the script (with serde)") {
+  test("SPARK-32400: TRANSFORM supports complex data types end to end (hive serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withTempView("v") {
+      val df = Seq(
+        (1, "1", Array(0, 1, 2), Map("a" -> 1)),
+        (2, "2", Array(3, 4, 5), Map("b" -> 2))
+      ).toDF("a", "b", "c", "d")
+        .select('a, 'b, 'c, 'd, struct('a, 'b).as("e"))
+      df.createTempView("v")
 
-    val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
-    val e = intercept[SparkException] {
-      val plan =
-        new HiveScriptTransformationExec(
-          input = Seq(rowsDf.col("a").expr),
-          script = "some_non_existent_command",
-          output = Seq(AttributeReference("a", StringType)()),
-          child = rowsDf.queryExecution.sparkPlan,
-          ioschema = serdeIOSchema)
-      SparkPlanTest.executePlan(plan, hiveContext)
-    }
-    assert(e.getMessage.contains("Subprocess exited with status"))
-    assert(uncaughtExceptionHandler.exception.isEmpty)
-  }
-}
-
-private case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {
-  override protected def doExecute(): RDD[InternalRow] = {
-    child.execute().map { x =>
-      assert(TaskContext.get() != null) // Make sure that TaskContext is defined.
-      Thread.sleep(1000) // This sleep gives the external process time to start.
-      throw new IllegalArgumentException("intentional exception")
+      // Hive serde support ArrayType/MapType/StructType as input and output data type
+      val query = sql(
+        """
+          |SELECT TRANSFORM (c, d, e)
+          |USING 'cat' AS (c array<int>, d map<string, int>, e struct<col1:int, col2:string>)
+          |FROM v
+        """.stripMargin)
+      checkAnswer(query, identity, df.select('c, 'd, 'e).collect())
     }
   }
 
-  override def output: Seq[Attribute] = child.output
+  test("SPARK-32400: TRANSFORM doesn't support CalenderIntervalType/UserDefinedType (hive serde)") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withTempView("v") {
+      val df = Seq(
+        (1, new CalendarInterval(7, 1, 1000), new TestUDT.MyDenseVector(Array(1, 2, 3))),
+        (1, new CalendarInterval(7, 1, 1000), new TestUDT.MyDenseVector(Array(1, 2, 3)))
+      ).toDF("a", "b", "c")
+      df.createTempView("v")
 
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+      val e1 = intercept[SparkException] {
+        val plan = createScriptTransformationExec(
+          input = Seq(df.col("a").expr, df.col("b").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("a", IntegerType)(),
+            AttributeReference("b", CalendarIntervalType)()),
+          child = df.queryExecution.sparkPlan,
+          ioschema = hiveIOSchema)
+        SparkPlanTest.executePlan(plan, hiveContext)
+      }.getMessage
+      assert(e1.contains("interval cannot be converted to Hive TypeInfo"))
+
+      val e2 = intercept[SparkException] {
+        val plan = createScriptTransformationExec(
+          input = Seq(df.col("a").expr, df.col("c").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("a", IntegerType)(),
+            AttributeReference("c", new TestUDT.MyDenseVectorUDT)()),
+          child = df.queryExecution.sparkPlan,
+          ioschema = hiveIOSchema)
+        SparkPlanTest.executePlan(plan, hiveContext)
+      }.getMessage
+      assert(e2.contains("array<double> cannot be converted to Hive TypeInfo"))
+    }
+  }
+
+  test("SPARK-32400: TRANSFORM doesn't support" +
+    " CalenderIntervalType/UserDefinedType end to end (hive serde)") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withTempView("v") {
+      val df = Seq(
+        (1, new CalendarInterval(7, 1, 1000), new TestUDT.MyDenseVector(Array(1, 2, 3))),
+        (1, new CalendarInterval(7, 1, 1000), new TestUDT.MyDenseVector(Array(1, 2, 3)))
+      ).toDF("a", "b", "c")
+      df.createTempView("v")
+
+      val e1 = intercept[SparkException] {
+        sql(
+          """
+            |SELECT TRANSFORM(a, b) USING 'cat' AS (a, b)
+            |FROM v
+          """.stripMargin).collect()
+      }.getMessage
+      assert(e1.contains("interval cannot be converted to Hive TypeInfo"))
+
+      val e2 = intercept[SparkException] {
+        sql(
+          """
+            |SELECT TRANSFORM(a, c) USING 'cat' AS (a, c)
+            |FROM v
+          """.stripMargin).collect()
+      }.getMessage
+      assert(e2.contains("array<double> cannot be converted to Hive TypeInfo"))
+    }
+  }
 }

@@ -279,6 +279,7 @@ class KubernetesSuite extends SparkFunSuite
       appArgs = appArgs)
 
     val execPods = scala.collection.mutable.Map[String, Pod]()
+    val podsDeleted = scala.collection.mutable.HashSet[String]()
     val (patienceInterval, patienceTimeout) = {
       executorPatience match {
         case Some(patience) => (patience._1.getOrElse(INTERVAL), patience._2.getOrElse(TIMEOUT))
@@ -339,27 +340,21 @@ class KubernetesSuite extends SparkFunSuite
                 }
                 // Delete the pod to simulate cluster scale down/migration.
                 // This will allow the pod to remain up for the grace period
-                val pod = kubernetesTestComponents.kubernetesClient.pods()
-                  .withName(name)
-                pod.delete()
+                kubernetesTestComponents.kubernetesClient.pods()
+                  .withName(name).delete()
                 logDebug(s"Triggered pod decom/delete: $name deleted")
-                // Look for the string that indicates we should force kill the first
-                // Executor. This simulates the pod being fully lost.
-                logDebug("Waiting for second collect...")
+                // Make sure this pod is deleted
                 Eventually.eventually(TIMEOUT, INTERVAL) {
-                  assert(kubernetesTestComponents.kubernetesClient
-                    .pods()
-                    .withName(driverPodName)
-                    .getLog
-                    .contains("Waiting some more, please kill exec 1."),
-                    "Decommission test did not complete second collect.")
+                  assert(podsDeleted.contains(name))
                 }
-                logDebug("Force deleting")
-                val podNoGrace = pod.withGracePeriod(0)
-                podNoGrace.delete()
+                // Then make sure this pod is replaced
+                Eventually.eventually(TIMEOUT, INTERVAL) {
+                  assert(execPods.size == 3)
+                }
               }
             case Action.DELETED | Action.ERROR =>
               execPods.remove(name)
+              podsDeleted += name
           }
         }
       })
@@ -388,7 +383,6 @@ class KubernetesSuite extends SparkFunSuite
     Eventually.eventually(TIMEOUT, patienceInterval) {
       execPods.values.nonEmpty should be (true)
     }
-    execWatcher.close()
     execPods.values.foreach(executorPodChecker(_))
     Eventually.eventually(patienceTimeout, patienceInterval) {
       expectedLogOnCompletion.foreach { e =>
@@ -400,6 +394,7 @@ class KubernetesSuite extends SparkFunSuite
           s"The application did not complete, did not find str ${e}")
       }
     }
+    execWatcher.close()
   }
 
   protected def doBasicDriverPodCheck(driverPod: Pod): Unit = {
