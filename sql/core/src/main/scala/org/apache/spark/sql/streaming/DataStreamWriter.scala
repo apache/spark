@@ -266,6 +266,11 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * @since 2.0.0
    */
   def start(path: String): StreamingQuery = {
+    if (!df.sparkSession.sessionState.conf.legacyPathOptionBehavior &&
+      extraOptions.contains("path") && path.nonEmpty) {
+      throw new AnalysisException("There is a 'path' option set and start() is called with a " +
+        "path parameter. Either remove the path option, or call start() without the parameter.")
+    }
     option("path", path).start()
   }
 

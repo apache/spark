@@ -2716,8 +2716,9 @@ object SQLConf {
     buildConf("spark.sql.legacy.pathOptionBehavior.enabled")
       .internal()
       .doc("When true, \"path\" option is overwritten if one path parameter is passed to " +
-        "DataFramerReader.load(), or \"path\" option is added to the overall paths if multiple " +
-        "path parameters are passed to DataFramerReader.load()")
+        "DataFrameReader.load(), DataFrameWriter.save(), DataStreamReader.load(), or " +
+        "DataStreamWriter.start(). Also, \"path\" option is added to the overall paths if " +
+        "multiple path parameters are passed to DataFrameReader.load()")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
