@@ -106,13 +106,7 @@ jobs:
           build/zinc-*
           build/scala-*
           build/*.jar
-        key: >-
-          build-${{ hashFiles('**/pom.xml') }}
-          -${{ hashFiles('project/build.properties') }}
-          -${{ hashFiles('build/mvn') }}
-          -${{ hashFiles('build/sbt') }}
-          -${{ hashFiles('build/sbt-launch-lib.bash') }}
-          -${{ hashFiles('build/spark-build-info') }}
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
     - name: Cache Maven local repository
@@ -126,7 +120,7 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ~/.ivy2/cache
-        key: ${{ matrix.java }}-${{ matrix.hadoop }}-ivy-${{ hashFiles('**/pom.xml') }}-${{ hashFiles('**/plugins.sbt') }}
+        key: ${{ matrix.java }}-${{ matrix.hadoop }}-ivy-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           ${{ matrix.java }}-${{ matrix.hadoop }}-ivy-
     - name: Install JDK ${{ matrix.java }}
