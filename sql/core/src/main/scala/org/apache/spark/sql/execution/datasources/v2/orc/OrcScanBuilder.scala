@@ -56,11 +56,6 @@ case class OrcScanBuilder(
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
-      OrcFilters.createFilter(schema, filters).foreach { f =>
-        // The pushed filters will be set in `hadoopConf`. After that, we can simply use the
-        // changed `hadoopConf` in executors.
-        OrcInputFormat.setSearchArgument(hadoopConf, f, schema.fieldNames)
-      }
       val dataTypeMap = OrcFilters.getSearchableTypeMap(schema, SQLConf.get.caseSensitiveAnalysis)
       _pushedFilters = OrcFilters.convertibleFilters(schema, dataTypeMap, filters).toArray
     }
