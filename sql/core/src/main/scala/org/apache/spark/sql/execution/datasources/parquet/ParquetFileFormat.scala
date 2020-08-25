@@ -23,6 +23,7 @@ import java.net.URI
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.{Failure, Try}
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapred.FileSplit
@@ -35,6 +36,7 @@ import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.ParquetOutputFormat.JobSummaryLevel
 import org.apache.parquet.hadoop.codec.CodecConfig
 import org.apache.parquet.hadoop.util.ContextUtil
+import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
