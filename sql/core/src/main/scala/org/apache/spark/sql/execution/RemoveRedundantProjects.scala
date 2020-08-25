@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, PartialMerge}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExecBase
-import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -85,14 +84,19 @@ case class RemoveRedundantProjects(conf: SQLConf) extends Rule[SparkPlan] {
       // to convert the rows to UnsafeRow. See DataSourceV2Strategy for more details.
       case d: DataSourceV2ScanExecBase if !d.supportsColumnar => false
       case _ =>
+        def semanticEquals(exprs1: Seq[Expression], exprs2: Seq[Expression]): Boolean = {
+          exprs1.length == exprs2.length && exprs1.zip(exprs2).forall {
+            case (e1, e2) => e1.semanticEquals(e2)
+          }
+        }
         if (requireOrdering) {
-          project.output.map(_.exprId.id) == child.output.map(_.exprId.id) &&
+          semanticEquals(project.projectList, child.output) &&
             checkNullability(project.output, child.output)
         } else {
-          val orderedProjectOutput = project.output.sortBy(_.exprId.id)
+          val orderedProjectList = project.projectList.sortBy(_.exprId.id)
           val orderedChildOutput = child.output.sortBy(_.exprId.id)
-          orderedProjectOutput.map(_.exprId.id) == orderedChildOutput.map(_.exprId.id) &&
-            checkNullability(orderedProjectOutput, orderedChildOutput)
+          semanticEquals(orderedProjectList, orderedChildOutput) &&
+            checkNullability(orderedProjectList.map(_.toAttribute), orderedChildOutput)
         }
     }
   }
