@@ -342,7 +342,8 @@ abstract class OffsetWindowFunction
   extends Expression with WindowFunction with Unevaluable with ImplicitCastInputTypes {
   /**
    * Input expression to evaluate against a row which a number of rows below or above (depending on
-   * the value and sign of the offset) the current row.
+   * the value and sign of the offset) the current row or the first row of the entire window
+   * partition.
    */
   val input: Expression
 
@@ -352,22 +353,23 @@ abstract class OffsetWindowFunction
   val default: Expression
 
   /**
-   * (Foldable) expression that contains the number of rows between the current row and the row
-   * where the input expression is evaluated.
+   * (Foldable) expression that contains the number of rows between the current row or the first
+   * row of the entire window partition and the row where the input expression is evaluated.
    */
   val offset: Expression
 
   /**
-   * Direction of the number of rows between the current row and the row where the input expression
-   * is evaluated.
+   * Direction of the number of rows between the current row or the first row of the entire
+   * window partition and the row where the input expression is evaluated.
    */
   val direction: SortDirection
 
   /**
-   * Whether the offset is start with the current row. If `startWithCurrentRow` is false, `offset`
-   * means the offset is start with the first row of the entire window partition.
+   * Whether the offset is start with the current row. If `isRelative` is true, `offset` means
+   * the offset is start with the current row. otherwise, the offset is start with the first
+   * row of the entire window partition.
    */
-  val startWithCurrentRow: Boolean = true
+  val isRelative: Boolean = true
 
   override def children: Seq[Expression] = Seq(input, offset, default)
 
@@ -482,7 +484,7 @@ case class Lag(input: Expression, offset: Expression, default: Expression)
 
 /**
  * The NthValue function returns the value of `input` at the `offset`th row from beginning of the
- * window frame. Offsets start at 1. When the value of `input` is null at the `offset`th row or
+ * window frame. Offset starts at 1. When the value of `input` is null at the `offset`th row or
  * there is no such an `offset`th row, null is returned.
  *
  * @param input expression to evaluate `offset`th row of the window frame.
@@ -501,7 +503,7 @@ case class NthValue(input: Expression, offset: Expression)
 
   override val default = Literal(null)
 
-  override val startWithCurrentRow = false
+  override val isRelative = false
 
   override val direction = Ascending
 

@@ -137,10 +137,10 @@ trait WindowExecBase extends UnaryExecNode {
           function match {
             case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
             case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
-            case f: OffsetWindowFunction => if (f.startWithCurrentRow) {
-              collect("OFFSET", frame, e, f)
+            case f: OffsetWindowFunction => if (f.isRelative) {
+              collect("RELATIVE_OFFSET", frame, e, f)
             } else {
-              collect("WHOLE_OFFSET", frame, e, f)
+              collect("ABSOLUTE_OFFSET", frame, e, f)
             }
             case f: PythonUDF => collect("AGGREGATE", frame, e, f)
             case f => sys.error(s"Unsupported window function: $f")
@@ -176,9 +176,9 @@ trait WindowExecBase extends UnaryExecNode {
         // Create the factory to produce WindowFunctionFrame.
         val factory = key match {
           // Offset Frame
-          case ("OFFSET", _, IntegerLiteral(offset), _) =>
+          case ("RELATIVE_OFFSET", _, IntegerLiteral(offset), _) =>
             target: InternalRow =>
-              new OffsetWindowFunctionFrame(
+              new RelativeOffsetWindowFunctionFrame(
                 target,
                 ordinal,
                 // OFFSET frame functions are guaranteed be OffsetWindowFunctions.
@@ -188,9 +188,9 @@ trait WindowExecBase extends UnaryExecNode {
                   MutableProjection.create(expressions, schema),
                 offset)
 
-          case ("WHOLE_OFFSET", _, IntegerLiteral(offset), _) =>
+          case ("ABSOLUTE_OFFSET", _, IntegerLiteral(offset), _) =>
             target: InternalRow =>
-              new PartitionBasedOffsetWindowFunctionFrame(
+              new AbsoluteOffsetWindowFunctionFrame(
                 target,
                 ordinal,
                 // OFFSET frame functions are guaranteed be OffsetWindowFunctions.

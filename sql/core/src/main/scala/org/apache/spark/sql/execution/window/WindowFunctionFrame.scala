@@ -146,9 +146,9 @@ abstract class OffsetWindowFunctionFrameBase(
 }
 
 /**
- * The offset window frame calculates frames containing LEAD/LAG statements.
+ * The relative offset window frame calculates frames containing LEAD/LAG statements.
  */
-class OffsetWindowFunctionFrame(
+class RelativeOffsetWindowFunctionFrame(
     target: InternalRow,
     ordinal: Int,
     expressions: Array[OffsetWindowFunction],
@@ -171,11 +171,11 @@ class OffsetWindowFunctionFrame(
 }
 
 /**
- * The fixed offset window frame calculates frames containing
- * NTH_VALUE statements.
- * The fixed offset window frame return the same value for all rows in the window partition.
+ * The absolute offset window frame based on the first row calculates frames containing
+ * NTH_VALUE statements. The absolute offset window frame based on the first row return
+ * the same value for all rows in the window partition.
  */
-class PartitionBasedOffsetWindowFunctionFrame(
+class AbsoluteOffsetWindowFunctionFrame(
     target: InternalRow,
     ordinal: Int,
     expressions: Array[OffsetWindowFunction],
