@@ -209,7 +209,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
      *   WholeStageCodegen
      *     Project [c_customer_id]
      */
-    def getSimplifiedPlan(node: SparkPlan, depth: Int): String = {
+    def simplifyNode(node: SparkPlan, depth: Int): String = {
       val padding = "  " * depth
       var thisNode = node.nodeName
       if (node.references.nonEmpty) {
@@ -222,12 +222,12 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       if (id > 0) {
         thisNode += s" #$id"
       }
-      val childrenSimplified = node.children.map(getSimplifiedPlan(_, depth + 1))
-      val subqueriesSimplified = node.subqueries.map(getSimplifiedPlan(_, depth + 1))
+      val childrenSimplified = node.children.map(simplifyNode(_, depth + 1))
+      val subqueriesSimplified = node.subqueries.map(simplifyNode(_, depth + 1))
       s"$padding$thisNode\n${subqueriesSimplified.mkString("")}${childrenSimplified.mkString("")}"
     }
 
-    getSimplifiedPlan(plan, 0)
+    simplifyNode(plan, 0)
   }
 
   private def normalizeIds(plan: String): String = {
