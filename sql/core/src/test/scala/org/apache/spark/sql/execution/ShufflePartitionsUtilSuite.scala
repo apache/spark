@@ -34,7 +34,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
     val estimatedPartitionStartIndices = ShufflePartitionsUtil.coalescePartitions(
       mapOutputStatistics,
       targetSize,
-      minNumPartitions)
+      Some(minNumPartitions))
     assert(estimatedPartitionStartIndices === expectedPartitionStartIndices)
   }
 
