@@ -240,7 +240,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    */
   def load(path: String): DataFrame = {
     if (!sparkSession.sessionState.conf.legacyPathOptionBehavior &&
-      extraOptions.contains("path") && path.nonEmpty) {
+        extraOptions.contains("path") && path.nonEmpty) {
       throw new AnalysisException("There is a 'path' option set and load() is called with a path" +
         "parameter. Either remove the path option, or call load() without the parameter.")
     }

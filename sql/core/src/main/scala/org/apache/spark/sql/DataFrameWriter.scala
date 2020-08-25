@@ -285,7 +285,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   def save(path: String): Unit = {
     if (!df.sparkSession.sessionState.conf.legacyPathOptionBehavior &&
-      extraOptions.contains("path") && path.nonEmpty) {
+        extraOptions.contains("path") && path.nonEmpty) {
       throw new AnalysisException("There is a 'path' option set and save() is called with a path " +
         "parameter. Either remove the path option, or call save() without the parameter.")
     }
