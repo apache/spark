@@ -130,8 +130,7 @@ private[hive] class SparkGetColumnsOperation(
    * For array, map, string, and binaries, the column size is variable, return null as unknown.
    */
   private def getColumnSize(typ: DataType): Option[Int] = typ match {
-    case dt @ (BooleanType | _: NumericType | DateType | TimestampType | CalendarIntervalType) =>
-      Some(dt.defaultSize)
+    case dt @ (BooleanType | _: NumericType | DateType | TimestampType) => Some(dt.defaultSize)
     case StructType(fields) =>
       val sizeArr = fields.map(f => getColumnSize(f.dataType))
       if (sizeArr.contains(None)) {
