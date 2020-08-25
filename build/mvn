@@ -17,8 +17,6 @@
 # limitations under the License.
 #
 
-# Change in build
-
 # Determine the current working directory
 _DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Preserve the calling directory
