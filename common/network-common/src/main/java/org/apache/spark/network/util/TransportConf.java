@@ -363,4 +363,16 @@ public class TransportConf {
     return conf.getBoolean("spark.shuffle.useOldFetchProtocol", false);
   }
 
+  /**
+   * The minimum size of a chunk when dividing a merged shuffle file in push based shuffle into
+   * multiple chunks. This is an optimization so that when push based shuffle merges multiple
+   * shuffle blocks belonging to the same shuffle partition into a merged shuffle file, it
+   * divides the merged shuffle file into multiple MB-sized chunks to optimize reading it later.
+   * A corresponding index file for each merged shuffle file will be generated indicating chunk
+   * boundaries.
+   */
+  public int minChunkSizeInMergedShuffleFile() {
+    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+        conf.get("spark.shuffle.server.minChunkSizeInMergedShuffleFile", "2m")));
+  }
 }
