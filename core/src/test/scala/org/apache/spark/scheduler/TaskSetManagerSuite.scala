@@ -2086,27 +2086,6 @@ class TaskSetManagerSuite
     assert(manager.resourceOffer("exec1", "host1", ANY)._1.isEmpty)
   }
 
-  test("Check that speculation does not happen when disabled") {
-    sc = new SparkContext("local", "test")
-    val clock = new ManualClock()
-    sched = new FakeTaskScheduler(sc, clock,
-      ("exec1", "host1"), ("exec2", "host2"), ("exec3", "host3"))
-    sched.backend = mock(classOf[SchedulerBackend])
-    val taskSet = FakeTask.createTaskSet(1)
-    sc.conf.set(config.SPECULATION_ENABLED, false)
-    val manager = sched.createTaskSetManager(taskSet, MAX_TASK_FAILURES)
-    val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)._1
-    assert(taskOption.isDefined)
-    assert(taskOption.get.executorId === "exec1")
-    assert(taskOption.get.index === 0)
-    assert(sched.startedTasks.toSet === Set(0))
-    assert(manager.copiesRunning(0) === 1)
-
-    // Speculation is disabled so nothing should be speculated.
-    assert(!manager.checkSpeculatableTasks(0))
-    assert(sched.speculativeTasks.toSet === Set())
-  }
-
   test("SPARK-29976 Regular speculation configs should still take effect even when a " +
       "threshold is provided") {
     val (manager, clock) = testSpeculationDurationSetup(
