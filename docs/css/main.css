@@ -14,6 +14,10 @@ a:hover {
   color: #05c;
 }
 
+img {
+  max-width: 100%;
+}
+
 table {
   margin: 15px 0;
   padding: 0;
