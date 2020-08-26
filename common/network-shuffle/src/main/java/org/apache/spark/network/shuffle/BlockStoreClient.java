@@ -93,9 +93,9 @@ public abstract class BlockStoreClient implements Closeable {
    *                handler, ExternalShuffleService, can serve multiple executors on the same node.
    *                Or, only one executor Id if BlockStoreClient is implemented by
    *                NettyBlockTransferService.
-   * @param hostLocalDirsCompletable a CompletableFuture which contains a map from executor Id to its
-   *                                 local directories if the request handler replies successfully.
-   *                                 Otherwise, it contains a specific error.
+   * @param hostLocalDirsCompletable a CompletableFuture which contains a map from executor Id
+   *                                to its local directories if the request handler replies
+   *                                successfully. Otherwise, it contains a specific error.
    */
   public void getHostLocalDirs(
       String host,
