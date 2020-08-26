@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.immutable.TreeSet
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -27,9 +26,8 @@ import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{AttributeSeq, CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AtomicType, BinaryType, BooleanType, DataType, NullType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
 
 /**
  * The base class for subquery that is used in SparkPlan.
@@ -119,14 +117,7 @@ case class InSubqueryExec(
     private var resultBroadcast: Broadcast[Set[Any]] = null) extends ExecSubqueryExpression {
 
   @transient private var result: Set[Any] = _
-  @transient private lazy val hasNull: Boolean = result.contains(null)
-  @transient private lazy val set: Set[Any] = child.dataType match {
-    case t: AtomicType if !t.isInstanceOf[BinaryType] => result
-    case _: NullType => result
-    case _ =>
-      // for structs use interpreted ordering to be able to compare UnsafeRows with non-UnsafeRows
-      TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ (result - null)
-  }
+  @transient private lazy val inSet: InSet = InSet(child, result)
 
   override def dataType: DataType = BooleanType
   override def children: Seq[Expression] = child :: Nil
@@ -156,23 +147,12 @@ case class InSubqueryExec(
 
   override def eval(input: InternalRow): Any = {
     prepareResult()
-    val v = child.eval(input)
-    if (v == null) {
-      null
-    } else {
-      if (set.contains(v)) {
-        true
-      } else if (hasNull) {
-        null
-      } else {
-        false
-      }
-    }
+    inSet.eval(input)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     prepareResult()
-    InSet(child, result).doGenCode(ctx, ev)
+    inSet.doGenCode(ctx, ev)
   }
 
   override lazy val canonicalized: InSubqueryExec = {
