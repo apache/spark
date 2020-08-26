@@ -62,7 +62,7 @@ TakeOrderedAndProject (58)
 (1) Scan parquet default.catalog_sales
 Output [4]: [cs_sold_date_sk#1, cs_call_center_sk#2, cs_item_sk#3, cs_sales_price#4]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/catalog_sales]
+Location [not included in comparison]/{warehouse_dir}/catalog_sales]
 PushedFilters: [IsNotNull(cs_item_sk), IsNotNull(cs_sold_date_sk), IsNotNull(cs_call_center_sk)]
 ReadSchema: struct<cs_sold_date_sk:int,cs_call_center_sk:int,cs_item_sk:int,cs_sales_price:decimal(7,2)>
 
@@ -76,7 +76,7 @@ Condition : ((isnotnull(cs_item_sk#3) AND isnotnull(cs_sold_date_sk#1)) AND isno
 (4) Scan parquet default.date_dim
 Output [3]: [d_date_sk#5, d_year#6, d_moy#7]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [Or(Or(EqualTo(d_year,1999),And(EqualTo(d_year,1998),EqualTo(d_moy,12))),And(EqualTo(d_year,2000),EqualTo(d_moy,1))), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
@@ -103,7 +103,7 @@ Input [7]: [cs_sold_date_sk#1, cs_call_center_sk#2, cs_item_sk#3, cs_sales_price
 (10) Scan parquet default.call_center
 Output [2]: [cc_call_center_sk#9, cc_name#10]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/call_center]
+Location [not included in comparison]/{warehouse_dir}/call_center]
 PushedFilters: [IsNotNull(cc_call_center_sk), IsNotNull(cc_name)]
 ReadSchema: struct<cc_call_center_sk:int,cc_name:string>
 
@@ -138,7 +138,7 @@ Arguments: [cs_item_sk#3 ASC NULLS FIRST], false, 0
 (18) Scan parquet default.item
 Output [3]: [i_item_sk#13, i_brand#14, i_category#15]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_category), IsNotNull(i_brand)]
 ReadSchema: struct<i_item_sk:int,i_brand:string,i_category:string>
 
@@ -214,7 +214,7 @@ Arguments: [rank(d_year#6, d_moy#7) windowspecdefinition(i_category#15, i_brand#
 
 (35) Filter [codegen id : 12]
 Input [8]: [i_category#15, i_brand#14, cc_name#10, d_year#6, d_moy#7, sum_sales#21, avg_monthly_sales#24, rn#26]
-Condition : (((((isnotnull(avg_monthly_sales#24) AND isnotnull(d_year#6)) AND (d_year#6 = 1999)) AND (avg_monthly_sales#24 > 0.000000)) AND (CASE WHEN (avg_monthly_sales#24 > 0.000000) THEN CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#21 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#24 as decimal(22,6)))), DecimalType(22,6), true))) / promote_precision(cast(avg_monthly_sales#24 as decimal(22,6)))), DecimalType(38,16), true) ELSE null END > 0.1000000000000000)) AND isnotnull(rn#26))
+Condition : (((((isnotnull(d_year#6) AND isnotnull(avg_monthly_sales#24)) AND (d_year#6 = 1999)) AND (avg_monthly_sales#24 > 0.000000)) AND (CASE WHEN (avg_monthly_sales#24 > 0.000000) THEN CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#21 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#24 as decimal(22,6)))), DecimalType(22,6), true))) / promote_precision(cast(avg_monthly_sales#24 as decimal(22,6)))), DecimalType(38,16), true) ELSE null END > 0.1000000000000000)) AND isnotnull(rn#26))
 
 (36) Exchange
 Input [8]: [i_category#15, i_brand#14, cc_name#10, d_year#6, d_moy#7, sum_sales#21, avg_monthly_sales#24, rn#26]
