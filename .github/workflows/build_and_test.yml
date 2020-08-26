@@ -99,10 +99,14 @@ jobs:
       run: git merge --progress --ff-only origin/${{ github.event.inputs.target }}
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT, Maven and Zinc
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
-        path: build
-        key: build-${{ hashFiles('**/pom.xml') }}
+        path: |
+          build/apache-maven-*
+          build/zinc-*
+          build/scala-*
+          build/*.jar
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
     - name: Cache Maven local repository
@@ -116,7 +120,7 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ~/.ivy2/cache
-        key: ${{ matrix.java }}-${{ matrix.hadoop }}-ivy-${{ hashFiles('**/pom.xml') }}-${{ hashFiles('**/plugins.sbt') }}
+        key: ${{ matrix.java }}-${{ matrix.hadoop }}-ivy-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           ${{ matrix.java }}-${{ matrix.hadoop }}-ivy-
     - name: Install JDK ${{ matrix.java }}
