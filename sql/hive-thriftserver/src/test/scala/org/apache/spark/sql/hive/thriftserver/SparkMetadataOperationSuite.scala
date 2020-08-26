@@ -349,7 +349,7 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
         assert(rowSet.getString("COLUMN_NAME") === "i")
         assert(rowSet.getInt("DATA_TYPE") === java.sql.Types.OTHER)
         assert(rowSet.getString("TYPE_NAME").equalsIgnoreCase(CalendarIntervalType.sql))
-        assert(rowSet.getInt("COLUMN_SIZE") === 0)
+        assert(rowSet.getInt("COLUMN_SIZE") === CalendarIntervalType.defaultSize)
         assert(rowSet.getInt("DECIMAL_DIGITS") === 0)
         assert(rowSet.getInt("NUM_PREC_RADIX") === 0)
         assert(rowSet.getInt("NULLABLE") === 0)
