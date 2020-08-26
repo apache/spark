@@ -44,7 +44,7 @@ object RuleExecutor {
   }
 }
 
-class PlanChangeLogger [TreeType <: TreeNode[_]] extends Logging {
+class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
 
   private val logLevel = SQLConf.get.optimizerPlanChangeLogLevel
 
@@ -89,9 +89,9 @@ class PlanChangeLogger [TreeType <: TreeNode[_]] extends Logging {
       s"""
          |=== Metrics of Executed Rules ===
          |Total number of runs: ${metrics.numRuns}
-         |Total time: ${totalTime} seconds
+         |Total time: $totalTime seconds
          |Total number of effective runs: ${metrics.numEffectiveRuns}
-         |Total time of effective runs: ${totalTimeEffective} seconds
+         |Total time of effective runs: $totalTimeEffective seconds
       """.stripMargin
 
     logBasedOnLevel(message)
