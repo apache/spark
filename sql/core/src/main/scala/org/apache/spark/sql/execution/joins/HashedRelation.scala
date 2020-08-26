@@ -1073,30 +1073,6 @@ private[joins] object LongHashedRelation {
 }
 
 /**
- * Common trait with dummy implementation for NAAJ special HashedRelation
- * HashedRelationWithAllNullKeys
- */
-trait NullAwareHashedRelation extends HashedRelation {
-  override def get(key: InternalRow): Iterator[InternalRow] = {
-    throw new UnsupportedOperationException
-  }
-
-  override def getValue(key: InternalRow): InternalRow = {
-    throw new UnsupportedOperationException
-  }
-
-  override def keyIsUnique: Boolean = true
-
-  override def keys(): Iterator[InternalRow] = {
-    throw new UnsupportedOperationException
-  }
-
-  override def close(): Unit = {}
-
-  override def estimatedSize: Long = 0
-}
-
-/**
  * A special HashedRelation indicates it built from a empty input:Iterator[InternalRow].
  * get & getValue will return null just like
  * empty LongHashedRelation or empty UnsafeHashedRelation does.
@@ -1127,8 +1103,26 @@ case object EmptyHashedRelation extends HashedRelation {
  * A special HashedRelation indicates it built from a non-empty input:Iterator[InternalRow],
  * which contains all null columns key.
  */
-case object HashedRelationWithAllNullKeys extends NullAwareHashedRelation {
+case object HashedRelationWithAllNullKeys extends HashedRelation {
+  override def get(key: InternalRow): Iterator[InternalRow] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def getValue(key: InternalRow): InternalRow = {
+    throw new UnsupportedOperationException
+  }
+
   override def asReadOnlyCopy(): HashedRelationWithAllNullKeys.type = this
+
+  override def keyIsUnique: Boolean = true
+
+  override def keys(): Iterator[InternalRow] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def close(): Unit = {}
+
+  override def estimatedSize: Long = 0
 }
 
 /** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */
