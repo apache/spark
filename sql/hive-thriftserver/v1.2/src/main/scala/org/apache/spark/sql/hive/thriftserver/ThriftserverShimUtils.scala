@@ -28,6 +28,10 @@ import org.apache.hive.service.cli.thrift.TProtocolVersion._
  */
 private[thriftserver] object ThriftserverShimUtils {
 
+  private[thriftserver] object TOperationType {
+    val GET_TYPE_INFO = org.apache.hive.service.cli.thrift.TOperationType.GET_TYPE_INFO
+  }
+
   private[thriftserver] type TProtocolVersion = org.apache.hive.service.cli.thrift.TProtocolVersion
   private[thriftserver] type Client = org.apache.hive.service.cli.thrift.TCLIService.Client
   private[thriftserver] type TOpenSessionReq = org.apache.hive.service.cli.thrift.TOpenSessionReq
@@ -37,6 +41,10 @@ private[thriftserver] object ThriftserverShimUtils {
   private[thriftserver] type TGetInfoReq = org.apache.hive.service.cli.thrift.TGetInfoReq
   private[thriftserver] type TExecuteStatementReq =
     org.apache.hive.service.cli.thrift.TExecuteStatementReq
+  private[thriftserver] type THandleIdentifier =
+    org.apache.hive.service.cli.thrift.THandleIdentifier
+  private[thriftserver] type TOperationType = org.apache.hive.service.cli.thrift.TOperationType
+  private[thriftserver] type TOperationHandle = org.apache.hive.service.cli.thrift.TOperationHandle
 
   private[thriftserver] def getConsole: SessionState.LogHelper = {
     val LOG = LogFactory.getLog(classOf[SparkSQLCLIDriver])
