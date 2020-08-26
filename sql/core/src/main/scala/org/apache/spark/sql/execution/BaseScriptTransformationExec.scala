@@ -107,7 +107,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       val processRowWithoutSerde = if (!ioschema.schemaLess) {
         prevLine: String =>
           new GenericInternalRow(
-            prevLine.split(outputRowFormat)
+            prevLine.split(outputRowFormat).padTo(outputFieldWriters.size, null)
               .zip(outputFieldWriters)
               .map { case (data, writer) => writer(data) })
       } else {

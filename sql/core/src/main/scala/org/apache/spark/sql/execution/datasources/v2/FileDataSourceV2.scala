@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources._
@@ -54,6 +55,13 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
       objectMapper.readValue(pathStr, classOf[Array[String]]).toSeq
     }.getOrElse(Seq.empty)
     paths ++ Option(map.get("path")).toSeq
+  }
+
+  protected def getOptionsWithoutPaths(map: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    val withoutPath = map.asCaseSensitiveMap().asScala.filterKeys { k =>
+      !k.equalsIgnoreCase("path") && !k.equalsIgnoreCase("paths")
+    }
+    new CaseInsensitiveStringMap(withoutPath.asJava)
   }
 
   protected def getTableName(map: CaseInsensitiveStringMap, paths: Seq[String]): String = {

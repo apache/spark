@@ -27,8 +27,8 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
-import org.apache.spark.internal.config.Worker.WORKER_DECOMMISSION_ENABLED
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
@@ -1668,7 +1668,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       // SPARK-22864: effectively disable the allocation schedule by setting the period to a
       // really long value.
       .set(TEST_SCHEDULE_INTERVAL, 30000L)
-      .set(WORKER_DECOMMISSION_ENABLED, decommissioningEnabled)
+      .set(DECOMMISSION_ENABLED, decommissioningEnabled)
     sparkConf
   }
 

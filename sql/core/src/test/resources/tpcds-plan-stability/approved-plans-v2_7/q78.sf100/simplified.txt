@@ -1,0 +1,117 @@
+TakeOrderedAndProject [other_chan_qty,other_chan_sales_price,other_chan_wholesale_cost,ratio,ss_customer_sk,ss_item_sk,ss_qty,ss_sold_year,ss_sp,ss_wc,store_qty,store_sales_price,store_wholesale_cost]
+  WholeStageCodegen (23)
+    Project [cs_qty,cs_sp,cs_wc,ss_customer_sk,ss_item_sk,ss_qty,ss_sold_year,ss_sp,ss_wc,ws_qty,ws_sp,ws_wc]
+      SortMergeJoin [ss_customer_sk,ss_item_sk,ss_sold_year,ws_customer_sk,ws_item_sk,ws_sold_year]
+        InputAdapter
+          WholeStageCodegen (15)
+            Project [cs_qty,cs_sp,cs_wc,ss_customer_sk,ss_item_sk,ss_qty,ss_sold_year,ss_sp,ss_wc]
+              SortMergeJoin [cs_customer_sk,cs_item_sk,cs_sold_year,ss_customer_sk,ss_item_sk,ss_sold_year]
+                InputAdapter
+                  WholeStageCodegen (7)
+                    Sort [ss_customer_sk,ss_item_sk,ss_sold_year]
+                      HashAggregate [d_year,ss_customer_sk,ss_item_sk,sum,sum,sum] [ss_qty,ss_sold_year,ss_sp,ss_wc,sum,sum,sum,sum(UnscaledValue(ss_sales_price)),sum(UnscaledValue(ss_wholesale_cost)),sum(cast(ss_quantity as bigint))]
+                        InputAdapter
+                          Exchange [d_year,ss_customer_sk,ss_item_sk] #1
+                            WholeStageCodegen (6)
+                              HashAggregate [d_year,ss_customer_sk,ss_item_sk,ss_quantity,ss_sales_price,ss_wholesale_cost] [sum,sum,sum,sum,sum,sum]
+                                Project [d_year,ss_customer_sk,ss_item_sk,ss_quantity,ss_sales_price,ss_wholesale_cost]
+                                  BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
+                                    Project [ss_customer_sk,ss_item_sk,ss_quantity,ss_sales_price,ss_sold_date_sk,ss_wholesale_cost]
+                                      Filter [sr_ticket_number]
+                                        InputAdapter
+                                          SortMergeJoin [sr_item_sk,sr_ticket_number,ss_item_sk,ss_ticket_number]
+                                            WholeStageCodegen (2)
+                                              Sort [ss_item_sk,ss_ticket_number]
+                                                InputAdapter
+                                                  Exchange [ss_item_sk,ss_ticket_number] #2
+                                                    WholeStageCodegen (1)
+                                                      Filter [ss_customer_sk,ss_item_sk,ss_sold_date_sk]
+                                                        ColumnarToRow
+                                                          InputAdapter
+                                                            Scan parquet default.store_sales [ss_customer_sk,ss_item_sk,ss_quantity,ss_sales_price,ss_sold_date_sk,ss_ticket_number,ss_wholesale_cost]
+                                            WholeStageCodegen (4)
+                                              Sort [sr_item_sk,sr_ticket_number]
+                                                InputAdapter
+                                                  Exchange [sr_item_sk,sr_ticket_number] #3
+                                                    WholeStageCodegen (3)
+                                                      Filter [sr_item_sk,sr_ticket_number]
+                                                        ColumnarToRow
+                                                          InputAdapter
+                                                            Scan parquet default.store_returns [sr_item_sk,sr_ticket_number]
+                                    InputAdapter
+                                      BroadcastExchange #4
+                                        WholeStageCodegen (5)
+                                          Filter [d_date_sk,d_year]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.date_dim [d_date_sk,d_year]
+                InputAdapter
+                  WholeStageCodegen (14)
+                    Sort [cs_customer_sk,cs_item_sk,cs_sold_year]
+                      Filter [cs_qty]
+                        HashAggregate [cs_bill_customer_sk,cs_item_sk,d_year,sum,sum,sum] [cs_customer_sk,cs_qty,cs_sold_year,cs_sp,cs_wc,sum,sum,sum,sum(UnscaledValue(cs_sales_price)),sum(UnscaledValue(cs_wholesale_cost)),sum(cast(cs_quantity as bigint))]
+                          InputAdapter
+                            Exchange [cs_bill_customer_sk,cs_item_sk,d_year] #5
+                              WholeStageCodegen (13)
+                                HashAggregate [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_sales_price,cs_wholesale_cost,d_year] [sum,sum,sum,sum,sum,sum]
+                                  Project [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_sales_price,cs_wholesale_cost,d_year]
+                                    BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                                      Project [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_sales_price,cs_sold_date_sk,cs_wholesale_cost]
+                                        Filter [cr_order_number]
+                                          InputAdapter
+                                            SortMergeJoin [cr_item_sk,cr_order_number,cs_item_sk,cs_order_number]
+                                              WholeStageCodegen (9)
+                                                Sort [cs_item_sk,cs_order_number]
+                                                  InputAdapter
+                                                    Exchange [cs_item_sk,cs_order_number] #6
+                                                      WholeStageCodegen (8)
+                                                        Filter [cs_bill_customer_sk,cs_item_sk,cs_sold_date_sk]
+                                                          ColumnarToRow
+                                                            InputAdapter
+                                                              Scan parquet default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_order_number,cs_quantity,cs_sales_price,cs_sold_date_sk,cs_wholesale_cost]
+                                              WholeStageCodegen (11)
+                                                Sort [cr_item_sk,cr_order_number]
+                                                  InputAdapter
+                                                    Exchange [cr_item_sk,cr_order_number] #7
+                                                      WholeStageCodegen (10)
+                                                        Filter [cr_item_sk,cr_order_number]
+                                                          ColumnarToRow
+                                                            InputAdapter
+                                                              Scan parquet default.catalog_returns [cr_item_sk,cr_order_number]
+                                      InputAdapter
+                                        ReusedExchange [d_date_sk,d_year] #4
+        InputAdapter
+          WholeStageCodegen (22)
+            Sort [ws_customer_sk,ws_item_sk,ws_sold_year]
+              Filter [ws_qty]
+                HashAggregate [d_year,sum,sum,sum,ws_bill_customer_sk,ws_item_sk] [sum,sum,sum,sum(UnscaledValue(ws_sales_price)),sum(UnscaledValue(ws_wholesale_cost)),sum(cast(ws_quantity as bigint)),ws_customer_sk,ws_qty,ws_sold_year,ws_sp,ws_wc]
+                  InputAdapter
+                    Exchange [d_year,ws_bill_customer_sk,ws_item_sk] #8
+                      WholeStageCodegen (21)
+                        HashAggregate [d_year,ws_bill_customer_sk,ws_item_sk,ws_quantity,ws_sales_price,ws_wholesale_cost] [sum,sum,sum,sum,sum,sum]
+                          Project [d_year,ws_bill_customer_sk,ws_item_sk,ws_quantity,ws_sales_price,ws_wholesale_cost]
+                            BroadcastHashJoin [d_date_sk,ws_sold_date_sk]
+                              Project [ws_bill_customer_sk,ws_item_sk,ws_quantity,ws_sales_price,ws_sold_date_sk,ws_wholesale_cost]
+                                Filter [wr_order_number]
+                                  InputAdapter
+                                    SortMergeJoin [wr_item_sk,wr_order_number,ws_item_sk,ws_order_number]
+                                      WholeStageCodegen (17)
+                                        Sort [ws_item_sk,ws_order_number]
+                                          InputAdapter
+                                            Exchange [ws_item_sk,ws_order_number] #9
+                                              WholeStageCodegen (16)
+                                                Filter [ws_bill_customer_sk,ws_item_sk,ws_sold_date_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.web_sales [ws_bill_customer_sk,ws_item_sk,ws_order_number,ws_quantity,ws_sales_price,ws_sold_date_sk,ws_wholesale_cost]
+                                      WholeStageCodegen (19)
+                                        Sort [wr_item_sk,wr_order_number]
+                                          InputAdapter
+                                            Exchange [wr_item_sk,wr_order_number] #10
+                                              WholeStageCodegen (18)
+                                                Filter [wr_item_sk,wr_order_number]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.web_returns [wr_item_sk,wr_order_number]
+                              InputAdapter
+                                ReusedExchange [d_date_sk,d_year] #4

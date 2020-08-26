@@ -24,6 +24,7 @@ import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.LogicalTypes.{Date, Decimal, TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.Decimal.{maxPrecisionForBytes, minBytesForPrecision}
@@ -32,21 +33,29 @@ import org.apache.spark.sql.types.Decimal.{maxPrecisionForBytes, minBytesForPrec
  * This object contains method that are used to convert sparkSQL schemas to avro schemas and vice
  * versa.
  */
+@DeveloperApi
 object SchemaConverters {
   private lazy val uuidGenerator = RandomUUIDGenerator(new Random().nextLong())
 
   private lazy val nullSchema = Schema.create(Schema.Type.NULL)
 
+  /**
+   * Internal wrapper for SQL data type and nullability.
+   *
+   * @since 2.4.0
+   */
   case class SchemaType(dataType: DataType, nullable: Boolean)
 
   /**
-   * This function takes an avro schema and returns a sql schema.
+   * Converts an Avro schema to a corresponding Spark SQL schema.
+   *
+   * @since 2.4.0
    */
   def toSqlType(avroSchema: Schema): SchemaType = {
     toSqlTypeHelper(avroSchema, Set.empty)
   }
 
-  def toSqlTypeHelper(avroSchema: Schema, existingRecordNames: Set[String]): SchemaType = {
+  private def toSqlTypeHelper(avroSchema: Schema, existingRecordNames: Set[String]): SchemaType = {
     avroSchema.getType match {
       case INT => avroSchema.getLogicalType match {
         case _: Date => SchemaType(DateType, nullable = false)
@@ -133,6 +142,11 @@ object SchemaConverters {
     }
   }
 
+  /**
+   * Converts a Spark SQL schema to a corresponding Avro schema.
+   *
+   * @since 2.4.0
+   */
   def toAvroType(
       catalystType: DataType,
       nullable: Boolean = false,
@@ -192,4 +206,5 @@ object SchemaConverters {
   }
 }
 
-class IncompatibleSchemaException(msg: String, ex: Throwable = null) extends Exception(msg, ex)
+private[avro] class IncompatibleSchemaException(
+  msg: String, ex: Throwable = null) extends Exception(msg, ex)
