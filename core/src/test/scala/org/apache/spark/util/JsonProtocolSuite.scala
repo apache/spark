@@ -170,6 +170,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testStorageLevel(StorageLevel.NONE)
     testStorageLevel(StorageLevel.DISK_ONLY)
     testStorageLevel(StorageLevel.DISK_ONLY_2)
+    testStorageLevel(StorageLevel.DISK_ONLY_3)
     testStorageLevel(StorageLevel.MEMORY_ONLY)
     testStorageLevel(StorageLevel.MEMORY_ONLY_2)
     testStorageLevel(StorageLevel.MEMORY_ONLY_SER)

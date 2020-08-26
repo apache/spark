@@ -118,7 +118,7 @@ private[spark] object SchemaUtils {
         case (x, ys) if ys.length > 1 => s"`$x`"
       }
       throw new AnalysisException(
-        s"Found duplicate column(s) $colType: ${duplicateColumns.mkString(", ")}")
+        s"Found duplicate column(s) $colType: ${duplicateColumns.toSeq.sorted.mkString(", ")}")
     }
   }
 
