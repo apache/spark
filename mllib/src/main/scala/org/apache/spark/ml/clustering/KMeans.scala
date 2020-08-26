@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -85,6 +86,9 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   /** @group expertGetParam */
   @Since("1.5.0")
   def getInitSteps: Int = $(initSteps)
+
+  setDefault(k -> 2, maxIter -> 20, initMode -> MLlibKMeans.K_MEANS_PARALLEL, initSteps -> 2,
+    tol -> 1e-4, distanceMeasure -> DistanceMeasure.EUCLIDEAN)
 
   /**
    * Validates and transforms the input schema.
@@ -270,14 +274,6 @@ class KMeans @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
   extends Estimator[KMeansModel] with KMeansParams with DefaultParamsWritable {
 
-  setDefault(
-    k -> 2,
-    maxIter -> 20,
-    initMode -> MLlibKMeans.K_MEANS_PARALLEL,
-    initSteps -> 2,
-    tol -> 1e-4,
-    distanceMeasure -> DistanceMeasure.EUCLIDEAN)
-
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeans = defaultCopy(extra)
 
@@ -336,7 +332,7 @@ class KMeans @Since("1.5.0") (
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      col($(weightCol)).cast(DoubleType)
+      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
     } else {
       lit(1.0)
     }

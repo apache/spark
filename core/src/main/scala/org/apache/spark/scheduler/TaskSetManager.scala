@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
 import java.nio.ByteBuffer
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.{ConcurrentLinkedQueue, TimeUnit}
 
 import scala.collection.immutable.Map
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
@@ -71,6 +71,7 @@ private[spark] class TaskSetManager(
   val ser = env.closureSerializer.newInstance()
 
   val tasks = taskSet.tasks
+  private val isShuffleMapTasks = tasks(0).isInstanceOf[ShuffleMapTask]
   private[scheduler] val partitionToIndex = tasks.zipWithIndex
     .map { case (t, idx) => t.partitionId -> idx }.toMap
   val numTasks = tasks.length
@@ -102,6 +103,8 @@ private[spark] class TaskSetManager(
     }
     numTasks <= slots
   }
+  val executorDecommissionKillInterval = conf.get(EXECUTOR_DECOMMISSION_KILL_INTERVAL).map(
+    TimeUnit.SECONDS.toMillis)
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not
@@ -165,6 +168,7 @@ private[spark] class TaskSetManager(
 
   // Task index, start and finish time for each task attempt (indexed by task ID)
   private[scheduler] val taskInfos = new HashMap[Long, TaskInfo]
+  private[scheduler] val tidToExecutorKillTimeMapping = new HashMap[Long, Long]
 
   // Use a MedianHeap to record durations of successful tasks so we know when to launch
   // speculative tasks. This is only used when speculation is enabled, to avoid the overhead
@@ -687,12 +691,14 @@ private[spark] class TaskSetManager(
   }
 
   /**
-   * Check whether has enough quota to fetch the result with `size` bytes
+   * Check whether has enough quota to fetch the result with `size` bytes.
+   * This check does not apply to shuffle map tasks as they return map status and metrics updates,
+   * which will be discarded by the driver after being processed.
    */
   def canFetchMoreResults(size: Long): Boolean = sched.synchronized {
     totalResultSize += size
     calculatedTasks += 1
-    if (maxResultSize > 0 && totalResultSize > maxResultSize) {
+    if (!isShuffleMapTasks && maxResultSize > 0 && totalResultSize > maxResultSize) {
       val msg = s"Total size of serialized results of ${calculatedTasks} tasks " +
         s"(${Utils.bytesToString(totalResultSize)}) is bigger than ${config.MAX_RESULT_SIZE.key} " +
         s"(${Utils.bytesToString(maxResultSize)})"
@@ -933,6 +939,7 @@ private[spark] class TaskSetManager(
 
   /** If the given task ID is in the set of running tasks, removes it. */
   def removeRunningTask(tid: Long): Unit = {
+    tidToExecutorKillTimeMapping.remove(tid)
     if (runningTasksSet.remove(tid) && parent != null) {
       parent.decreaseRunningTasks(1)
     }
@@ -958,8 +965,7 @@ private[spark] class TaskSetManager(
     // and we are not using an external shuffle server which could serve the shuffle outputs.
     // The reason is the next stage wouldn't be able to fetch the data from this dead executor
     // so we would need to rerun these tasks on other executors.
-    if (tasks(0).isInstanceOf[ShuffleMapTask] && !env.blockManager.externalShuffleServiceEnabled
-        && !isZombie) {
+    if (isShuffleMapTasks && !env.blockManager.externalShuffleServiceEnabled && !isZombie) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
         // We may have a running task whose partition has been marked as successful,
@@ -981,6 +987,7 @@ private[spark] class TaskSetManager(
       val exitCausedByApp: Boolean = reason match {
         case exited: ExecutorExited => exited.exitCausedByApp
         case ExecutorKilled => false
+        case ExecutorProcessLost(_, _, false) => false
         case _ => true
       }
       handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, exitCausedByApp,
@@ -1042,7 +1049,19 @@ private[spark] class TaskSetManager(
       // bound based on that.
       logDebug("Task length threshold for speculation: " + threshold)
       for (tid <- runningTasksSet) {
-        foundTasks |= checkAndSubmitSpeculatableTask(tid, time, threshold)
+        var speculated = checkAndSubmitSpeculatableTask(tid, time, threshold)
+        if (!speculated && tidToExecutorKillTimeMapping.contains(tid)) {
+          // Check whether this task will finish before the exectorKillTime assuming
+          // it will take medianDuration overall. If this task cannot finish within
+          // executorKillInterval, then this task is a candidate for speculation
+          val taskEndTimeBasedOnMedianDuration = taskInfos(tid).launchTime + medianDuration
+          val canExceedDeadline = tidToExecutorKillTimeMapping(tid) <
+            taskEndTimeBasedOnMedianDuration
+          if (canExceedDeadline) {
+            speculated = checkAndSubmitSpeculatableTask(tid, time, 0)
+          }
+        }
+        foundTasks |= speculated
       }
     } else if (speculationTaskDurationThresOpt.isDefined && speculationTasksLessEqToSlots) {
       val time = clock.getTimeMillis()
@@ -1100,17 +1119,30 @@ private[spark] class TaskSetManager(
 
   def executorDecommission(execId: String): Unit = {
     recomputeLocality()
-    // Future consideration: if an executor is decommissioned it may make sense to add the current
-    // tasks to the spec exec queue.
+    executorDecommissionKillInterval.foreach { interval =>
+      val executorKillTime = clock.getTimeMillis() + interval
+      runningTasksSet.filter(taskInfos(_).executorId == execId).foreach { tid =>
+        tidToExecutorKillTimeMapping(tid) = executorKillTime
+      }
+    }
   }
 
   def recomputeLocality(): Unit = {
     // A zombie TaskSetManager may reach here while executorLost happens
     if (isZombie) return
+    val previousLocalityIndex = currentLocalityIndex
     val previousLocalityLevel = myLocalityLevels(currentLocalityIndex)
+    val previousMyLocalityLevels = myLocalityLevels
     myLocalityLevels = computeValidLocalityLevels()
     localityWaits = myLocalityLevels.map(getLocalityWait)
     currentLocalityIndex = getLocalityIndex(previousLocalityLevel)
+    if (currentLocalityIndex > previousLocalityIndex) {
+      // SPARK-31837: If the new level is more local, shift to the new most local locality
+      // level in terms of better data locality. For example, say the previous locality
+      // levels are [PROCESS, NODE, ANY] and current level is ANY. After recompute, the
+      // locality levels are [PROCESS, NODE, RACK, ANY]. Then, we'll shift to RACK level.
+      currentLocalityIndex = getLocalityIndex(myLocalityLevels.diff(previousMyLocalityLevels).head)
+    }
   }
 
   def executorAdded(): Unit = {

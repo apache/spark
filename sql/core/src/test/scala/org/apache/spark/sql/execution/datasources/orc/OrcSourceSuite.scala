@@ -213,9 +213,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
           Seq(fs.listStatus(path1), fs.listStatus(path2), fs.listStatus(path3)).flatten
 
         val schema = SchemaMergeUtils.mergeSchemasInParallel(
-          spark,
-          fileStatuses,
-          schemaReader)
+          spark, Map.empty, fileStatuses, schemaReader)
 
         assert(schema.isDefined)
         assert(schema.get == StructType(Seq(
@@ -521,10 +519,10 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
   }
 
-  test("SPARK-31284: rebasing timestamps in write") {
+  test("SPARK-31284, SPARK-31423: rebasing timestamps in write") {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
-      Seq("1001-01-01 01:02:03.123456").toDF("tsS")
+      Seq("1001-01-01 01:02:03.123456", "1582-10-10 11:12:13.654321").toDF("tsS")
         .select($"tsS".cast("timestamp").as("ts"))
         .write
         .orc(path)
@@ -533,7 +531,9 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
         withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
           checkAnswer(
             spark.read.orc(path),
-            Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
+            Seq(
+              Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")),
+              Row(java.sql.Timestamp.valueOf("1582-10-15 11:12:13.654321"))))
         }
       }
     }
@@ -586,5 +586,11 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
 
   test("SPARK-11412 read and merge orc schemas in parallel") {
     testMergeSchemasInParallel(OrcUtils.readOrcSchemasInParallel)
+  }
+
+  test("SPARK-31580: Read a file written before ORC-569") {
+    // Test ORC file came from ORC-621
+    val df = readResourceOrcFile("test-data/TestStringDictionary.testRowIndex.orc")
+    assert(df.where("str < 'row 001000'").count() === 1000)
   }
 }

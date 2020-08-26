@@ -296,6 +296,67 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       .flatten.isEmpty)
   }
 
+  test("SPARK-18886 - task set with no locality requirements should not starve one with them") {
+    val clock = new ManualClock()
+    // All tasks created here are local to exec1, host1.
+    // Locality level starts at PROCESS_LOCAL.
+    val taskScheduler = setupTaskSchedulerForLocalityTests(clock)
+    // Locality levels increase at 3000 ms.
+    val advanceAmount = 2000
+
+    val taskSet2 = FakeTask.createTaskSet(8, 2, 0)
+    taskScheduler.submitTasks(taskSet2)
+
+    // Stage 2 takes resource since it has no locality requirements
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten
+      .headOption
+      .map(_.name)
+      .getOrElse("")
+      .contains("stage 2.0"))
+
+    // Clock advances to 2s. No locality changes yet.
+    clock.advance(advanceAmount)
+
+    // Stage 2 takes resource since it has no locality requirements
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten
+      .headOption
+      .map(_.name)
+      .getOrElse("")
+      .contains("stage 2.0"))
+
+    // Simulates:
+    // 1. stage 2 has taken all resource offers through single resource offers
+    // 2. stage 1 is offered 0 cpus on allResourceOffer.
+    // This should not reset timer.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 0)),
+        isAllFreeResources = true)
+      .flatten.length === 0)
+
+    // This should move stage 1 to NODE_LOCAL.
+    clock.advance(advanceAmount)
+
+    // Stage 1 should now accept NODE_LOCAL resource.
+    assert(taskScheduler
+      .resourceOffers(
+        IndexedSeq(WorkerOffer("exec2", "host1", 1)),
+        isAllFreeResources = false)
+      .flatten
+      .headOption
+      .map(_.name)
+      .getOrElse("")
+      .contains("stage 1.1"))
+  }
+
   test("SPARK-18886 - partial resource offers (isAllFreeResources = false) reset " +
     "time if last full resource offer (isAllResources = true) was accepted as well as any " +
     "following partial resource offers") {
@@ -306,12 +367,14 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Locality levels increase at 3000 ms.
     val advanceAmount = 3000
 
-    // PROCESS_LOCAL full resource offer is accepted.
+    // PROCESS_LOCAL full resource offer is not rejected due to locality.
+    // It has 0 available cores, so no task is launched.
+    // Timer is reset and locality level remains at PROCESS_LOCAL.
     assert(taskScheduler
       .resourceOffers(
-        IndexedSeq(WorkerOffer("exec1", "host1", 1)),
+        IndexedSeq(WorkerOffer("exec1", "host1", 0)),
         isAllFreeResources = true)
-      .flatten.length === 1)
+      .flatten.length === 0)
 
     // Advancing clock increases locality level to NODE_LOCAL.
     clock.advance(advanceAmount)
@@ -578,7 +641,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(0 === taskDescriptions2.length)
 
     // provide the actual loss reason for executor0
-    taskScheduler.executorLost("executor0", SlaveLost("oops"))
+    taskScheduler.executorLost("executor0", ExecutorProcessLost("oops"))
 
     // executor0's tasks should have failed now that the loss reason is known, so offering more
     // resources should make them be scheduled on the new executor.
@@ -937,6 +1000,42 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!tsm.isZombie)
   }
 
+  test("SPARK-31418 abort timer should kick in when task is completely blacklisted &" +
+    "allocation manager could not acquire a new executor before the timeout") {
+    // set the abort timer to fail immediately
+    taskScheduler = setupSchedulerWithMockTaskSetBlacklist(
+      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "0",
+      config.DYN_ALLOCATION_ENABLED.key -> "true")
+
+    // We have 2 tasks remaining with 1 executor
+    val taskSet = FakeTask.createTaskSet(numTasks = 2)
+    taskScheduler.submitTasks(taskSet)
+    val tsm = stageToMockTaskSetManager(0)
+
+    // submit an offer with one executor
+    taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("executor0", "host0", 2))).flatten
+
+    // Fail the running task
+    failTask(0, TaskState.FAILED, UnknownReason, tsm)
+    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
+      "executor0", 0)).thenReturn(true)
+
+    // If the executor is busy, then dynamic allocation should kick in and try
+    // to acquire additional executors to schedule the blacklisted task
+    assert(taskScheduler.isExecutorBusy("executor0"))
+
+    // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
+    // timer to kick in immediately
+    assert(taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten.size === 0)
+    // Wait for the abort timer to kick in. Even though we configure the timeout to be 0, there is a
+    // slight delay as the abort timer is launched in a separate thread.
+    eventually(timeout(500.milliseconds)) {
+      assert(tsm.isZombie)
+    }
+  }
+
   /**
    * Helper for performance tests.  Takes the explicitly blacklisted nodes and executors; verifies
    * that the blacklists are used efficiently to ensure scheduling is not O(numPendingTasks).
@@ -1078,7 +1177,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     // Now we fail our second executor.  The other task can still run on executor1, so make an offer
     // on that executor, and make sure that the other task (not the failed one) is assigned there.
-    taskScheduler.executorLost("executor1", SlaveLost("oops"))
+    taskScheduler.executorLost("executor1", ExecutorProcessLost("oops"))
     val nextTaskAttempts =
       taskScheduler.resourceOffers(IndexedSeq(new WorkerOffer("executor0", "host0", 1))).flatten
     // Note: Its OK if some future change makes this already realize the taskset has become
@@ -1145,7 +1244,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   test("SPARK-16106 locality levels updated if executor added to existing host") {
     val taskScheduler = setupScheduler()
 
-    taskScheduler.resourceOffers(IndexedSeq(new WorkerOffer("executor0", "host0", 1)))
     taskScheduler.submitTasks(FakeTask.createTaskSet(2, stageId = 0, stageAttemptId = 0,
       (0 until 2).map { _ => Seq(TaskLocation("host0", "executor2")) }: _*
     ))
@@ -1211,7 +1309,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(1 === taskDescriptions.length)
 
     // mark executor0 as dead
-    taskScheduler.executorLost("executor0", SlaveLost())
+    taskScheduler.executorLost("executor0", ExecutorProcessLost())
     assert(!taskScheduler.isExecutorAlive("executor0"))
     assert(!taskScheduler.hasExecutorsAliveOnHost("host0"))
     assert(taskScheduler.getExecutorsAliveOnHost("host0").isEmpty)
@@ -1702,6 +1800,53 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(2 === taskDescriptions.length)
     assert(taskDescriptions.head.resources.contains(GPU))
     assert(2 == taskDescriptions.head.resources(GPU).addresses.size)
+  }
+
+  private def setupSchedulerForDecommissionTests(): TaskSchedulerImpl = {
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[2]",
+      config.CPUS_PER_TASK.key -> 1.toString)
+    taskScheduler.submitTasks(FakeTask.createTaskSet(2))
+    val multiCoreWorkerOffers = IndexedSeq(WorkerOffer("executor0", "host0", 1),
+      WorkerOffer("executor1", "host1", 1))
+    val taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
+    assert(taskDescriptions.map(_.executorId).sorted === Seq("executor0", "executor1"))
+    taskScheduler
+  }
+
+  test("scheduler should keep the decommission info where host was decommissioned") {
+    val scheduler = setupSchedulerForDecommissionTests()
+
+    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("0", false))
+    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1", true))
+    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("0 new", false))
+    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1 new", false))
+
+    assert(scheduler.getExecutorDecommissionInfo("executor0")
+      === Some(ExecutorDecommissionInfo("0 new", false)))
+    assert(scheduler.getExecutorDecommissionInfo("executor1")
+      === Some(ExecutorDecommissionInfo("1", true)))
+    assert(scheduler.getExecutorDecommissionInfo("executor2").isEmpty)
+  }
+
+  test("scheduler should ignore decommissioning of removed executors") {
+    val scheduler = setupSchedulerForDecommissionTests()
+
+    // executor 0 is decommissioned after loosing
+    assert(scheduler.getExecutorDecommissionInfo("executor0").isEmpty)
+    scheduler.executorLost("executor0", ExecutorExited(0, false, "normal"))
+    assert(scheduler.getExecutorDecommissionInfo("executor0").isEmpty)
+    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("", false))
+    assert(scheduler.getExecutorDecommissionInfo("executor0").isEmpty)
+
+    // executor 1 is decommissioned before loosing
+    assert(scheduler.getExecutorDecommissionInfo("executor1").isEmpty)
+    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("", false))
+    assert(scheduler.getExecutorDecommissionInfo("executor1").isDefined)
+    scheduler.executorLost("executor1", ExecutorExited(0, false, "normal"))
+    assert(scheduler.getExecutorDecommissionInfo("executor1").isEmpty)
+    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("", false))
+    assert(scheduler.getExecutorDecommissionInfo("executor1").isEmpty)
   }
 
   /**

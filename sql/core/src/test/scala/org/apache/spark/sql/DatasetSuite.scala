@@ -1116,8 +1116,8 @@ class DatasetSuite extends QueryTest
       """+--------+
         ||       f|
         |+--------+
-        ||[foo, 1]|
-        ||[bar, 2]|
+        ||{foo, 1}|
+        ||{bar, 2}|
         |+--------+
         |""".stripMargin
 
@@ -1915,6 +1915,16 @@ class DatasetSuite extends QueryTest
     assert(df1.semanticHash === df2.semanticHash)
     assert(df1.semanticHash !== df3.semanticHash)
     assert(df3.semanticHash === df4.semanticHash)
+  }
+
+  test("SPARK-31854: Invoke in MapElementsExec should not propagate null") {
+    Seq("true", "false").foreach { wholeStage =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
+        val ds = Seq(1.asInstanceOf[Integer], null.asInstanceOf[Integer]).toDS()
+        val expectedAnswer = Seq[(Integer, Integer)]((1, 1), (null, null))
+        checkDataset(ds.map(v => (v, v)), expectedAnswer: _*)
+      }
+    }
   }
 }
 

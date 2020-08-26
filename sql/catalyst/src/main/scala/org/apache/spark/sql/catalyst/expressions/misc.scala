@@ -116,6 +116,24 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def prettyName: String = "current_database"
 }
 
+/**
+ * Returns the current catalog.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns the current catalog.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       spark_catalog
+  """,
+  since = "3.1.0")
+case class CurrentCatalog() extends LeafExpression with Unevaluable {
+  override def dataType: DataType = StringType
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+  override def prettyName: String = "current_catalog"
+}
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """_FUNC_() - Returns an universally unique identifier (UUID) string. The value is returned as a canonical UUID 36-character string.""",

@@ -86,7 +86,12 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
     case _ => numeric.negate(input)
   }
 
-  override def sql: String = s"(- ${child.sql})"
+  override def sql: String = {
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("-") match {
+      case "-" => s"(- ${child.sql})"
+      case funcName => s"$funcName(${child.sql})"
+    }
+  }
 }
 
 @ExpressionDescription(
@@ -407,7 +412,7 @@ case class IntegralDivide(
     left: Expression,
     right: Expression) extends DivModLike {
 
-  override def inputType: AbstractDataType = TypeCollection(IntegralType, DecimalType)
+  override def inputType: AbstractDataType = TypeCollection(LongType, DecimalType)
 
   override def dataType: DataType = LongType
 

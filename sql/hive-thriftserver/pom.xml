@@ -95,7 +95,7 @@
     </dependency>
     <dependency>
       <groupId>org.seleniumhq.selenium</groupId>
-      <artifactId>selenium-htmlunit-driver</artifactId>
+      <artifactId>htmlunit-driver</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -149,6 +149,18 @@
                 <source>v${hive.version.short}/src/gen/java</source>
                 <source>v${hive.version.short}/src/main/java</source>
                 <source>v${hive.version.short}/src/main/scala</source>
+              </sources>
+            </configuration>
+          </execution>
+          <execution>
+            <id>add-test-source</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>add-test-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>v${hive.version.short}/src/test/scala</source>
               </sources>
             </configuration>
           </execution>

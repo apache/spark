@@ -30,6 +30,7 @@ import org.apache.spark.sql.types._
       > SELECT _FUNC_(col) FROM VALUES (10), (50), (20) AS tab(col);
        50
   """,
+  group = "agg_funcs",
   since = "1.0.0")
 case class Max(child: Expression) extends DeclarativeAggregate {
 

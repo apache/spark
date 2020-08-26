@@ -248,7 +248,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         _.runningExecutor.map {
           _.executorId
         }
-      }
+      }.toMap
     } else {
       Map.empty
     }
@@ -415,7 +415,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /**
-   * Run the dummy Spark job to ensure that all slaves have registered. This avoids all the
+   * Run the dummy Spark job to ensure that all executors have registered. This avoids all the
    * receivers to be scheduled on the same node.
    *
    * TODO Should poll the executor number and wait for executors according to

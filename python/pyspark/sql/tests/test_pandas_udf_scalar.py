@@ -14,18 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import datetime
 import os
 import random
 import shutil
-import sys
 import tempfile
 import time
 import unittest
-
-if sys.version >= '3':
-    unicode = str
-
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -46,7 +40,7 @@ if have_pandas:
     import pandas as pd
 
 if have_pyarrow:
-    import pyarrow as pa
+    import pyarrow as pa  # noqa: F401
 
 
 @unittest.skipIf(
@@ -319,7 +313,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             StructField('str', StringType())])
 
         def scalar_func(id):
-            return pd.DataFrame({'id': id, 'str': id.apply(unicode)})
+            return pd.DataFrame({'id': id, 'str': id.apply(str)})
 
         def iter_func(it):
             for id in it:
@@ -486,14 +480,14 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         @pandas_udf(return_type)
         def scalar_f(id):
-            return pd.DataFrame({'id': id, 'str': id.apply(unicode)})
+            return pd.DataFrame({'id': id, 'str': id.apply(str)})
 
         scalar_g = pandas_udf(lambda x: x, return_type)
 
         @pandas_udf(return_type, PandasUDFType.SCALAR_ITER)
         def iter_f(it):
             for id in it:
-                yield pd.DataFrame({'id': id, 'str': id.apply(unicode)})
+                yield pd.DataFrame({'id': id, 'str': id.apply(str)})
 
         iter_g = pandas_udf(lambda x: x, return_type, PandasUDFType.SCALAR_ITER)
 
@@ -897,21 +891,30 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             result = df.withColumn('time', foo_udf(df.time))
             self.assertEquals(df.collect(), result.collect())
 
-    @unittest.skipIf(sys.version_info[:2] < (3, 5), "Type hints are supported from Python 3.5.")
+    def test_udf_category_type(self):
+
+        @pandas_udf('string')
+        def to_category_func(x):
+            return x.astype('category')
+
+        pdf = pd.DataFrame({"A": [u"a", u"b", u"c", u"a"]})
+        df = self.spark.createDataFrame(pdf)
+        df = df.withColumn("B", to_category_func(df['A']))
+        result_spark = df.toPandas()
+
+        spark_type = df.dtypes[1][1]
+        # spark data frame and arrow execution mode enabled data frame type must match pandas
+        self.assertEqual(spark_type, 'string')
+
+        # Check result of column 'B' must be equal to column 'A' in type and values
+        pd.testing.assert_series_equal(result_spark["A"], result_spark["B"], check_names=False)
+
     def test_type_annotation(self):
         # Regression test to check if type hints can be used. See SPARK-23569.
-        # Note that it throws an error during compilation in lower Python versions if 'exec'
-        # is not used. Also, note that we explicitly use another dictionary to avoid modifications
-        # in the current 'locals()'.
-        #
-        # Hyukjin: I think it's an ugly way to test issues about syntax specific in
-        # higher versions of Python, which we shouldn't encourage. This was the last resort
-        # I could come up with at that time.
-        _locals = {}
-        exec(
-            "import pandas as pd\ndef noop(col: pd.Series) -> pd.Series: return col",
-            _locals)
-        df = self.spark.range(1).select(pandas_udf(f=_locals['noop'], returnType='bigint')('id'))
+        def noop(col: pd.Series) -> pd.Series:
+            return col
+
+        df = self.spark.range(1).select(pandas_udf(f=noop, returnType='bigint')('id'))
         self.assertEqual(df.first()[0], 0)
 
     def test_mixed_udf(self):

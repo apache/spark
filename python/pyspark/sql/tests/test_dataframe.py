@@ -17,6 +17,8 @@
 
 import os
 import pydoc
+import shutil
+import tempfile
 import time
 import unittest
 
@@ -377,8 +379,6 @@ class DataFrameTests(ReusedSQLTestCase):
 
     # add tests for SPARK-23647 (test more types for hint)
     def test_extended_hint_types(self):
-        from pyspark.sql import DataFrame
-
         df = self.spark.range(10e10).toDF("id")
         such_a_nice_list = ["itworks1", "itworks2", "itworks3"]
         hinted_df = df.hint("my awesome hint", 1.2345, "what", such_a_nice_list)
@@ -642,7 +642,7 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST(col6 AS DOUBLE) AS double,
             CAST(col7 AS BOOLEAN) AS boolean,
             CAST(col8 AS STRING) AS string,
-            CAST(col9 AS TIMESTAMP) AS timestamp
+            timestamp_seconds(col9) AS timestamp
             FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1),
                         (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
             """
@@ -819,6 +819,22 @@ class DataFrameTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(ValueError, "should be of DataFrame.*int"):
                 self.spark.range(10).sameSemantics(1)
+
+    def test_input_files(self):
+        tpath = tempfile.mkdtemp()
+        shutil.rmtree(tpath)
+        try:
+            self.spark.range(1, 100, 1, 10).write.parquet(tpath)
+            # read parquet file and get the input files list
+            input_files_list = self.spark.read.parquet(tpath).inputFiles()
+
+            # input files list should contain 10 entries
+            self.assertEquals(len(input_files_list), 10)
+            # all file paths in list must contain tpath
+            for file_path in input_files_list:
+                self.assertTrue(tpath in file_path)
+        finally:
+            shutil.rmtree(tpath)
 
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):

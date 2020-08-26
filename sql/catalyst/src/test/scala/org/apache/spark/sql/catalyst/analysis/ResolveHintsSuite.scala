@@ -163,7 +163,7 @@ class ResolveHintsSuite extends AnalysisTest {
     checkAnalysis(
       UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("a")), table("TaBlE")),
       RepartitionByExpression(
-        Seq(AttributeReference("a", IntegerType)()), testRelation, conf.numShufflePartitions))
+        Seq(AttributeReference("a", IntegerType)()), testRelation, None))
 
     val e = intercept[IllegalArgumentException] {
       checkAnalysis(
@@ -187,7 +187,7 @@ class ResolveHintsSuite extends AnalysisTest {
         "REPARTITION_BY_RANGE", Seq(UnresolvedAttribute("a")), table("TaBlE")),
       RepartitionByExpression(
         Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
-        testRelation, conf.numShufflePartitions))
+        testRelation, None))
 
     val errMsg2 = "REPARTITION Hint parameter should include columns, but"
 

@@ -144,6 +144,7 @@ class HashedRelationSuite extends SharedSparkSession {
     }
 
     val longRelation2 = LongHashedRelation(rows.iterator ++ rows.iterator, key, 100, mm)
+        .asInstanceOf[LongHashedRelation]
     assert(!longRelation2.keyIsUnique)
     (0 until 100).foreach { i =>
       val rows = longRelation2.get(i).toArray
@@ -578,5 +579,17 @@ class HashedRelationSuite extends SharedSparkSession {
       val proj = UnsafeProjection.create(key)
       assert(proj(packedKeys).get(0, dt) == -i - 1)
     }
+  }
+
+  test("EmptyHashedRelation return null in get / getValue") {
+    val buildKey = Seq(BoundReference(0, LongType, false))
+    val hashed = HashedRelation(Seq.empty[InternalRow].toIterator, buildKey, 1, mm)
+    assert(hashed == EmptyHashedRelation)
+
+    val key = InternalRow(1L)
+    assert(hashed.get(0L) == null)
+    assert(hashed.get(key) == null)
+    assert(hashed.getValue(0L) == null)
+    assert(hashed.getValue(key) == null)
   }
 }

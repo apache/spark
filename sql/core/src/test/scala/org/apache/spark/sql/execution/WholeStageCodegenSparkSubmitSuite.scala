@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.execution
 
-import org.scalatest.{Assertions, BeforeAndAfterEach, Matchers}
-import org.scalatest.concurrent.TimeLimits
+import org.scalatest.{Assertions, BeforeAndAfterEach}
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.SparkSubmitSuite
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{LocalSparkSession, QueryTest, Row, SparkSession}
+import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.functions.{array, col, count, lit}
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.unsafe.Platform
@@ -50,7 +51,7 @@ class WholeStageCodegenSparkSubmitSuite extends SparkFunSuite
       "--conf", "spark.executor.extraJavaOptions=-XX:+UseCompressedOops",
       "--conf", "spark.sql.adaptive.enabled=false",
       unusedJar.toString)
-    SparkSubmitSuite.runSparkSubmit(argsForSparkSubmit, "../..")
+    SparkSubmitSuite.runSparkSubmit(argsForSparkSubmit, "../..", 3.minutes)
   }
 }
 

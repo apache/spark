@@ -51,6 +51,7 @@ abstract class UnevaluableBooleanAggBase(arg: Expression)
       > SELECT _FUNC_(col) FROM VALUES (true), (false), (true) AS tab(col);
        false
   """,
+  group = "agg_funcs",
   since = "3.0.0")
 case class BoolAnd(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
   override def nodeName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("bool_and")
@@ -67,6 +68,7 @@ case class BoolAnd(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
       > SELECT _FUNC_(col) FROM VALUES (false), (false), (NULL) AS tab(col);
        false
   """,
+  group = "agg_funcs",
   since = "3.0.0")
 case class BoolOr(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
   override def nodeName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("bool_or")

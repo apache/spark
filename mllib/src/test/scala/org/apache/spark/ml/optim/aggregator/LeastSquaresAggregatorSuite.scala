@@ -17,7 +17,7 @@
 package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util.TestingUtils._
@@ -28,6 +28,7 @@ class LeastSquaresAggregatorSuite extends SparkFunSuite with MLlibTestSparkConte
   @transient var instances: Array[Instance] = _
   @transient var instancesConstantFeature: Array[Instance] = _
   @transient var instancesConstantLabel: Array[Instance] = _
+  @transient var standardizedInstances: Array[Instance] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -46,6 +47,7 @@ class LeastSquaresAggregatorSuite extends SparkFunSuite with MLlibTestSparkConte
       Instance(1.0, 0.5, Vectors.dense(1.5, 1.0)),
       Instance(1.0, 0.3, Vectors.dense(4.0, 0.5))
     )
+    standardizedInstances = standardize(instances)
   }
 
   /** Get summary statistics for some data and create a new LeastSquaresAggregator. */
@@ -63,6 +65,24 @@ class LeastSquaresAggregatorSuite extends SparkFunSuite with MLlibTestSparkConte
     val bcFeaturesMean = spark.sparkContext.broadcast(featuresMean.toArray)
     val bcCoefficients = spark.sparkContext.broadcast(coefficients)
     new LeastSquaresAggregator(yStd, yMean, fitIntercept, bcFeaturesStd,
+      bcFeaturesMean)(bcCoefficients)
+  }
+
+  /** Get summary statistics for some data and create a new BlockHingeAggregator. */
+  private def getNewBlockAggregator(
+      instances: Array[Instance],
+      coefficients: Vector,
+      fitIntercept: Boolean): BlockLeastSquaresAggregator = {
+    val (featuresSummarizer, ySummarizer) =
+      Summarizer.getRegressionSummarizers(sc.parallelize(instances))
+    val yStd = ySummarizer.std(0)
+    val yMean = ySummarizer.mean(0)
+    val featuresStd = featuresSummarizer.std.toArray
+    val bcFeaturesStd = spark.sparkContext.broadcast(featuresStd)
+    val featuresMean = featuresSummarizer.mean
+    val bcFeaturesMean = spark.sparkContext.broadcast(featuresMean.toArray)
+    val bcCoefficients = spark.sparkContext.broadcast(coefficients)
+    new BlockLeastSquaresAggregator(yStd, yMean, fitIntercept, bcFeaturesStd,
       bcFeaturesMean)(bcCoefficients)
   }
 
@@ -142,6 +162,23 @@ class LeastSquaresAggregatorSuite extends SparkFunSuite with MLlibTestSparkConte
     BLAS.scal(1.0 / weightSum, expectedGradient)
     assert(agg.loss ~== (expectedLoss.sum / weightSum) relTol 1e-5)
     assert(agg.gradient ~== expectedGradient relTol 1e-5)
+
+    Seq(1, 2, 4).foreach { blockSize =>
+      val blocks1 = standardizedInstances
+        .grouped(blockSize)
+        .map(seq => InstanceBlock.fromInstances(seq))
+        .toArray
+      val blocks2 = blocks1.map { block =>
+        new InstanceBlock(block.labels, block.weights, block.matrix.toSparseRowMajor)
+      }
+
+      Seq(blocks1, blocks2).foreach { blocks =>
+        val blockAgg = getNewBlockAggregator(instances, coefficients, fitIntercept = true)
+        blocks.foreach(blockAgg.add)
+        assert(agg.loss ~== blockAgg.loss relTol 1e-9)
+        assert(agg.gradient ~== blockAgg.gradient relTol 1e-9)
+      }
+    }
   }
 
   test("check with zero standard deviation") {

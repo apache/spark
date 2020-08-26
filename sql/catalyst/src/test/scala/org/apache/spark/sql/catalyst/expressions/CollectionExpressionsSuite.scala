@@ -933,6 +933,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Literal(negateExact(stringToInterval("interval 1 month")))),
         EmptyRow,
         s"sequence boundaries: 0 to 2678400000000 by -${28 * MICROS_PER_DAY}")
+
+      // SPARK-32133: Sequence step must be a day interval if start and end values are dates
+      checkExceptionInExpression[IllegalArgumentException](Sequence(
+        Cast(Literal("2011-03-01"), DateType),
+        Cast(Literal("2011-04-01"), DateType),
+        Option(Literal(stringToInterval("interval 1 hour")))), null,
+        "sequence step must be a day interval if start and end values are dates")
     }
   }
 
@@ -1835,5 +1842,23 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayIntersect(oneNull, twoNulls), Seq(null))
     checkEvaluation(ArrayIntersect(empty, oneNull), Seq.empty)
     checkEvaluation(ArrayIntersect(oneNull, empty), Seq.empty)
+  }
+
+  test("SPARK-31980: Start and end equal in month range") {
+    checkEvaluation(new Sequence(
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(stringToInterval("interval 1 day"))),
+      Seq(Date.valueOf("2018-01-01")))
+    checkEvaluation(new Sequence(
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(stringToInterval("interval 1 month"))),
+      Seq(Date.valueOf("2018-01-01")))
+    checkEvaluation(new Sequence(
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(stringToInterval("interval 1 year"))),
+      Seq(Date.valueOf("2018-01-01")))
   }
 }

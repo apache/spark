@@ -185,7 +185,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def map[A](f: BaseType => A): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     foreach(ret += f(_))
-    ret
+    ret.toSeq
   }
 
   /**
@@ -195,7 +195,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def flatMap[A](f: BaseType => TraversableOnce[A]): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     foreach(ret ++= f(_))
-    ret
+    ret.toSeq
   }
 
   /**
@@ -206,7 +206,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     val ret = new collection.mutable.ArrayBuffer[B]()
     val lifted = pf.lift
     foreach(node => lifted(node).foreach(ret.+=))
-    ret
+    ret.toSeq
   }
 
   /**
@@ -588,7 +588,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       addSuffix: Boolean,
       maxFields: Int,
       printOperatorId: Boolean): Unit = {
-    generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields, printOperatorId)
+    generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields, printOperatorId, 0)
   }
 
   /**
@@ -656,8 +656,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       prefix: String = "",
       addSuffix: Boolean = false,
       maxFields: Int,
-      printNodeId: Boolean): Unit = {
-
+      printNodeId: Boolean,
+      indent: Int = 0): Unit = {
+    append("   " * indent)
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
         append(if (isLast) "   " else ":  ")
@@ -681,20 +682,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     if (innerChildren.nonEmpty) {
       innerChildren.init.foreach(_.generateTreeString(
         depth + 2, lastChildren :+ children.isEmpty :+ false, append, verbose,
-        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId))
+        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent))
       innerChildren.last.generateTreeString(
         depth + 2, lastChildren :+ children.isEmpty :+ true, append, verbose,
-        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId)
+        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent)
     }
 
     if (children.nonEmpty) {
       children.init.foreach(_.generateTreeString(
         depth + 1, lastChildren :+ false, append, verbose, prefix, addSuffix,
-        maxFields, printNodeId = printNodeId)
+        maxFields, printNodeId = printNodeId, indent = indent)
       )
       children.last.generateTreeString(
         depth + 1, lastChildren :+ true, append, verbose, prefix,
-        addSuffix, maxFields, printNodeId = printNodeId)
+        addSuffix, maxFields, printNodeId = printNodeId, indent = indent)
     }
   }
 

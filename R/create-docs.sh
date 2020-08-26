@@ -49,7 +49,7 @@ pushd "$FWDIR" > /dev/null
 mkdir -p pkg/html
 pushd pkg/html
 
-"$R_SCRIPT_PATH/Rscript" -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); library(knitr); knit_rd("SparkR", links = tools::findHTMLlinks(paste(libDir, "SparkR", sep="/")))'
+"$R_SCRIPT_PATH/Rscript" -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); knitr::knit_rd("SparkR", links = tools::findHTMLlinks(file.path(libDir, "SparkR")))'
 
 popd
 

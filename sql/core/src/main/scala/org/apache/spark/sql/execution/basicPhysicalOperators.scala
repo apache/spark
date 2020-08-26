@@ -89,10 +89,10 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def verboseStringWithOperatorId(): String = {
     s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |$formattedNodeName
        |${ExplainUtils.generateFieldString("Output", projectList)}
        |${ExplainUtils.generateFieldString("Input", child.output)}
-     """.stripMargin
+       |""".stripMargin
   }
 }
 
@@ -246,10 +246,10 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
   override def verboseStringWithOperatorId(): String = {
     s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |$formattedNodeName
        |${ExplainUtils.generateFieldString("Input", child.output)}
        |Condition : ${condition}
-     """.stripMargin
+       |""".stripMargin
   }
 }
 
@@ -718,7 +718,8 @@ abstract class BaseSubqueryExec extends SparkPlan {
       prefix: String = "",
       addSuffix: Boolean = false,
       maxFields: Int,
-      printNodeId: Boolean): Unit = {
+      printNodeId: Boolean,
+      indent: Int = 0): Unit = {
     /**
      * In the new explain mode `EXPLAIN FORMATTED`, the subqueries are not shown in the
      * main plan and are printed separately along with correlation information with
@@ -734,7 +735,8 @@ abstract class BaseSubqueryExec extends SparkPlan {
         "",
         false,
         maxFields,
-        printNodeId)
+        printNodeId,
+        indent)
     }
   }
 }

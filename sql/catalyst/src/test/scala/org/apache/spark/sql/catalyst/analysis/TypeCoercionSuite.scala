@@ -1541,6 +1541,48 @@ class TypeCoercionSuite extends AnalysisTest {
       Multiply(CaseWhen(Seq((EqualTo(1, 2), Cast(1, DecimalType(34, 24)))),
         Cast(100, DecimalType(34, 24))), Cast(1, IntegerType)))
   }
+
+  test("SPARK-31468: null types should be casted to decimal types in ImplicitTypeCasts") {
+    Seq(AnyTypeBinaryOperator(_, _), NumericTypeBinaryOperator(_, _)).foreach { binaryOp =>
+      // binaryOp(decimal, null) case
+      ruleTest(TypeCoercion.ImplicitTypeCasts,
+        binaryOp(Literal.create(null, DecimalType.SYSTEM_DEFAULT),
+          Literal.create(null, NullType)),
+        binaryOp(Literal.create(null, DecimalType.SYSTEM_DEFAULT),
+          Cast(Literal.create(null, NullType), DecimalType.SYSTEM_DEFAULT)))
+
+      // binaryOp(null, decimal) case
+      ruleTest(TypeCoercion.ImplicitTypeCasts,
+        binaryOp(Literal.create(null, NullType),
+          Literal.create(null, DecimalType.SYSTEM_DEFAULT)),
+        binaryOp(Cast(Literal.create(null, NullType), DecimalType.SYSTEM_DEFAULT),
+          Literal.create(null, DecimalType.SYSTEM_DEFAULT)))
+    }
+  }
+
+  test("SPARK-31761: byte, short and int should be cast to long for IntegralDivide's datatype") {
+    val rules = Seq(FunctionArgumentConversion, Division, ImplicitTypeCasts)
+    // Casts Byte to Long
+    ruleTest(TypeCoercion.IntegralDivision, IntegralDivide(2.toByte, 1.toByte),
+      IntegralDivide(Cast(2.toByte, LongType), Cast(1.toByte, LongType)))
+    // Casts Short to Long
+    ruleTest(TypeCoercion.IntegralDivision, IntegralDivide(2.toShort, 1.toShort),
+      IntegralDivide(Cast(2.toShort, LongType), Cast(1.toShort, LongType)))
+    // Casts Integer to Long
+    ruleTest(TypeCoercion.IntegralDivision, IntegralDivide(2, 1),
+      IntegralDivide(Cast(2, LongType), Cast(1, LongType)))
+    // should not be any change for Long data types
+    ruleTest(TypeCoercion.IntegralDivision, IntegralDivide(2L, 1L), IntegralDivide(2L, 1L))
+    // one of the operand is byte
+    ruleTest(TypeCoercion.IntegralDivision, IntegralDivide(2L, 1.toByte),
+      IntegralDivide(2L, Cast(1.toByte, LongType)))
+    // one of the operand is short
+    ruleTest(TypeCoercion.IntegralDivision, IntegralDivide(2.toShort, 1L),
+      IntegralDivide(Cast(2.toShort, LongType), 1L))
+    // one of the operand is int
+    ruleTest(TypeCoercion.IntegralDivision, IntegralDivide(2, 1L),
+      IntegralDivide(Cast(2, LongType), 1L))
+  }
 }
 
 

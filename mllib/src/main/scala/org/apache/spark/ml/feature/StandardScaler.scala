@@ -281,7 +281,7 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
     values
   }
 
-  private[ml] def getTransformFunc(
+  private[spark] def getTransformFunc(
       shift: Array[Double],
       scale: Array[Double],
       withShift: Boolean,

@@ -44,16 +44,14 @@ case class ShowNamespacesExec(
     }
 
     val rows = new ArrayBuffer[InternalRow]()
-    val encoder = RowEncoder(schema).resolveAndBind()
+    val toRow = RowEncoder(schema).resolveAndBind().createSerializer()
 
     namespaces.map(_.quoted).map { ns =>
       if (pattern.map(StringUtils.filterPattern(Seq(ns), _).nonEmpty).getOrElse(true)) {
-        rows += encoder
-          .toRow(new GenericRowWithSchema(Array(ns), schema))
-          .copy()
+        rows += toRow(new GenericRowWithSchema(Array(ns), schema)).copy()
       }
     }
 
-    rows
+    rows.toSeq
   }
 }

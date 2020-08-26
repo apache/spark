@@ -222,6 +222,16 @@ object SQLMetrics {
     }
   }
 
+  def postDriverMetricsUpdatedByValue(
+      sc: SparkContext,
+      executionId: String,
+      accumUpdates: Seq[(Long, Long)]): Unit = {
+    if (executionId != null) {
+      sc.listenerBus.post(
+        SparkListenerDriverAccumUpdates(executionId.toLong, accumUpdates))
+    }
+  }
+
   /**
    * Updates metrics based on the driver side value. This is useful for certain metrics that
    * are only updated on the driver, e.g. subquery execution time, or number of files.

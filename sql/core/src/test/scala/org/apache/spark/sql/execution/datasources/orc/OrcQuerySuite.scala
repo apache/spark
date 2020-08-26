@@ -34,7 +34,6 @@ import org.apache.orc.mapreduce.OrcInputFormat
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.adaptive.AdaptiveTestUtils.assertExceptionMessage
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -599,19 +598,19 @@ abstract class OrcQueryTest extends OrcTest {
       val e1 = intercept[SparkException] {
         testIgnoreCorruptFiles()
       }
-      assertExceptionMessage(e1, "Malformed ORC file")
+      assert(e1.getMessage.contains("Malformed ORC file"))
       val e2 = intercept[SparkException] {
         testIgnoreCorruptFilesWithoutSchemaInfer()
       }
-      assertExceptionMessage(e2, "Malformed ORC file")
+      assert(e2.getMessage.contains("Malformed ORC file"))
       val e3 = intercept[SparkException] {
         testAllCorruptFiles()
       }
-      assertExceptionMessage(e3, "Could not read footer for file")
+      assert(e3.getMessage.contains("Could not read footer for file"))
       val e4 = intercept[SparkException] {
         testAllCorruptFilesWithoutSchemaInfer()
       }
-      assertExceptionMessage(e4, "Malformed ORC file")
+      assert(e4.getMessage.contains("Malformed ORC file"))
     }
   }
 

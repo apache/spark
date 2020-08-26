@@ -19,11 +19,7 @@ import shutil
 import sys
 import tempfile
 import unittest
-try:
-    from importlib import reload  # Python 3.4+ only.
-except ImportError:
-    # Otherwise, we will stick to Python 2's built-in reload.
-    pass
+from importlib import reload
 
 import py4j
 
@@ -228,7 +224,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         from datetime import date
         df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
         parse_result = df.select(functions.to_date(functions.col("dateCol"))).first()
-        self.assertEquals(date(2017, 1, 22), parse_result['to_date(`dateCol`)'])
+        self.assertEquals(date(2017, 1, 22), parse_result['to_date(dateCol)'])
 
     def test_unbounded_frames(self):
         from pyspark.sql import functions as F
@@ -277,7 +273,7 @@ class SQLContextTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_context import *
+    from pyspark.sql.tests.test_context import *  # noqa: F401
 
     try:
         import xmlrunner

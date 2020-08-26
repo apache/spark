@@ -31,7 +31,7 @@ abstract class ExtractIntervalPart(
     val dataType: DataType,
     func: CalendarInterval => Any,
     funcName: String)
-  extends UnaryExpression with ExpectsInputTypes with Serializable {
+  extends UnaryExpression with ExpectsInputTypes with NullIntolerant with Serializable {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
 
@@ -45,20 +45,8 @@ abstract class ExtractIntervalPart(
   }
 }
 
-case class ExtractIntervalMillenniums(child: Expression)
-  extends ExtractIntervalPart(child, IntegerType, getMillenniums, "getMillenniums")
-
-case class ExtractIntervalCenturies(child: Expression)
-  extends ExtractIntervalPart(child, IntegerType, getCenturies, "getCenturies")
-
-case class ExtractIntervalDecades(child: Expression)
-  extends ExtractIntervalPart(child, IntegerType, getDecades, "getDecades")
-
 case class ExtractIntervalYears(child: Expression)
   extends ExtractIntervalPart(child, IntegerType, getYears, "getYears")
-
-case class ExtractIntervalQuarters(child: Expression)
-  extends ExtractIntervalPart(child, ByteType, getQuarters, "getQuarters")
 
 case class ExtractIntervalMonths(child: Expression)
   extends ExtractIntervalPart(child, ByteType, getMonths, "getMonths")
@@ -75,38 +63,18 @@ case class ExtractIntervalMinutes(child: Expression)
 case class ExtractIntervalSeconds(child: Expression)
   extends ExtractIntervalPart(child, DecimalType(8, 6), getSeconds, "getSeconds")
 
-case class ExtractIntervalMilliseconds(child: Expression)
-  extends ExtractIntervalPart(child, DecimalType(8, 3), getMilliseconds, "getMilliseconds")
-
-case class ExtractIntervalMicroseconds(child: Expression)
-  extends ExtractIntervalPart(child, LongType, getMicroseconds, "getMicroseconds")
-
-// Number of seconds in 10000 years is 315576000001 (30 days per one month)
-// which is 12 digits + 6 digits for the fractional part of seconds.
-case class ExtractIntervalEpoch(child: Expression)
-  extends ExtractIntervalPart(child, DecimalType(18, 6), getEpoch, "getEpoch")
-
 object ExtractIntervalPart {
 
   def parseExtractField(
       extractField: String,
       source: Expression,
       errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
-    case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" => ExtractIntervalMillenniums(source)
-    case "CENTURY" | "CENTURIES" | "C" | "CENT" => ExtractIntervalCenturies(source)
-    case "DECADE" | "DECADES" | "DEC" | "DECS" => ExtractIntervalDecades(source)
     case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => ExtractIntervalYears(source)
-    case "QUARTER" | "QTR" => ExtractIntervalQuarters(source)
     case "MONTH" | "MON" | "MONS" | "MONTHS" => ExtractIntervalMonths(source)
     case "DAY" | "D" | "DAYS" => ExtractIntervalDays(source)
     case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => ExtractIntervalHours(source)
     case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => ExtractIntervalMinutes(source)
     case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => ExtractIntervalSeconds(source)
-    case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
-      ExtractIntervalMilliseconds(source)
-    case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
-      ExtractIntervalMicroseconds(source)
-    case "EPOCH" => ExtractIntervalEpoch(source)
     case _ => errorHandleFunc
   }
 }
@@ -114,7 +82,7 @@ object ExtractIntervalPart {
 abstract class IntervalNumOperation(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -181,6 +149,8 @@ case class DivideInterval(
        100 years 11 months 8 days 12 hours 30 minutes 1.001001 seconds
       > SELECT _FUNC_(100, null, 3);
        NULL
+      > SELECT _FUNC_(0, 1, 0, 1, 0, 0, 100.000001);
+       1 months 1 days 1 minutes 40.000001 seconds
   """,
   since = "3.0.0")
 // scalastyle:on line.size.limit
@@ -192,7 +162,7 @@ case class MakeInterval(
     hours: Expression,
     mins: Expression,
     secs: Expression)
-  extends SeptenaryExpression with ImplicitCastInputTypes {
+  extends SeptenaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   def this(
       years: Expression,
@@ -201,7 +171,7 @@ case class MakeInterval(
       days: Expression,
       hours: Expression,
       mins: Expression) = {
-    this(years, months, weeks, days, hours, mins, Literal(Decimal(0, 8, 6)))
+    this(years, months, weeks, days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
   }
   def this(
       years: Expression,
@@ -223,7 +193,7 @@ case class MakeInterval(
   // Accept `secs` as DecimalType to avoid loosing precision of microseconds while converting
   // them to the fractional part of `secs`.
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, IntegerType,
-    IntegerType, IntegerType, IntegerType, DecimalType(8, 6))
+    IntegerType, IntegerType, IntegerType, DecimalType(Decimal.MAX_LONG_DIGITS, 6))
   override def dataType: DataType = CalendarIntervalType
   override def nullable: Boolean = true
 
@@ -243,7 +213,7 @@ case class MakeInterval(
         day.asInstanceOf[Int],
         hour.asInstanceOf[Int],
         min.asInstanceOf[Int],
-        sec.map(_.asInstanceOf[Decimal]).getOrElse(Decimal(0, 8, 6)))
+        sec.map(_.asInstanceOf[Decimal]).getOrElse(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
     } catch {
       case _: ArithmeticException => null
     }

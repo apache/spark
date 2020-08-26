@@ -143,10 +143,10 @@ trait Block extends TreeNode[Block] with JavaCode {
     case _ => code.trim
   }
 
-  def length: Int = {
-    // Returns a code length without comments
-    CodeFormatter.stripExtraNewLinesAndComments(toString).length
-  }
+  // We could remove comments, extra whitespaces and newlines when calculating length as it is used
+  // only for codegen method splitting, but SPARK-30564 showed that this is a performance critical
+  // function so we decided not to do so.
+  def length: Int = toString.length
 
   def isEmpty: Boolean = toString.isEmpty
 

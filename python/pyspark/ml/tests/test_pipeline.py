@@ -59,7 +59,7 @@ class PipelineTests(PySparkTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_pipeline import *
+    from pyspark.ml.tests.test_pipeline import *  # noqa: F401
 
     try:
         import xmlrunner

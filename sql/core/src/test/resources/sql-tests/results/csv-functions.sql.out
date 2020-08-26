@@ -130,7 +130,7 @@ struct<to_csv(named_struct(a, 1, b, 2)):string>
 -- !query
 select to_csv(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'))
 -- !query schema
-struct<to_csv(named_struct(time, to_timestamp('2015-08-26', 'yyyy-MM-dd'))):string>
+struct<to_csv(named_struct(time, to_timestamp(2015-08-26, yyyy-MM-dd))):string>
 -- !query output
 26/08/2015
 

@@ -181,17 +181,19 @@ class ContinuousSuite extends ContinuousSuiteBase {
   }
 
   test("subquery alias") {
-    val input = ContinuousMemoryStream[Int]
-    input.toDF().createOrReplaceTempView("memory")
-    val test = spark.sql("select value from memory where value > 2")
+    withTempView("memory") {
+      val input = ContinuousMemoryStream[Int]
+      input.toDF().createOrReplaceTempView("memory")
+      val test = spark.sql("select value from memory where value > 2")
 
-    testStream(test)(
-      AddData(input, 0, 1),
-      CheckAnswer(),
-      StopStream,
-      AddData(input, 2, 3, 4),
-      StartStream(),
-      CheckAnswer(3, 4))
+      testStream(test)(
+        AddData(input, 0, 1),
+        CheckAnswer(),
+        StopStream,
+        AddData(input, 2, 3, 4),
+        StartStream(),
+        CheckAnswer(3, 4))
+    }
   }
 
   test("repeatedly restart") {

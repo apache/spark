@@ -25,7 +25,7 @@ The `CREATE TABLE` statement defines a new table using Hive format.
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ ( col_name1[:] col_type1 [ COMMENT col_comment1 ], ... ) ]
     [ COMMENT table_comment ]
@@ -36,67 +36,102 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ LOCATION path ]
     [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
     [ AS select_statement ]
-{% endhighlight %}
+
+row_format:    
+    : SERDE serde_class [ WITH SERDEPROPERTIES (k1=v1, k2=v2, ... ) ]
+    | DELIMITED [ FIELDS TERMINATED BY fields_termiated_char [ ESCAPED BY escaped_char ] ] 
+        [ COLLECTION ITEMS TERMINATED BY collection_items_termiated_char ] 
+        [ MAP KEYS TERMINATED BY map_key_termiated_char ]
+        [ LINES TERMINATED BY row_termiated_char ]
+        [ NULL DEFINED AS null_char ]
+```
 
 Note that, the clauses between the columns definition clause and the AS SELECT clause can come in
 as any order. For example, you can write COMMENT table_comment after TBLPROPERTIES.
 
 ### Parameters
 
-<dl>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
-    Specifies a table name, which may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] table_name
-      </code>
-  </dd>
-</dl>
+* **table_identifier**
 
-<dl>
-  <dt><code><em>EXTERNAL</em></code></dt>
-  <dd>Table is defined using the path provided as LOCATION, does not use default location for this table.</dd>
-</dl>
+    Specifies a table name, which may be optionally qualified with a database name.
 
-<dl>
-  <dt><code><em>PARTITIONED BY</em></code></dt>
-  <dd>Partitions are created on the table, based on the columns specified.</dd>
-</dl>
+    **Syntax:** `[ database_name. ] table_name`
 
-<dl>
-  <dt><code><em>ROW FORMAT</em></code></dt>
-  <dd>SERDE is used to specify a custom SerDe or the DELIMITED clause in order to use the native SerDe.</dd>
-</dl>
+* **EXTERNAL**
 
-<dl>
-  <dt><code><em>STORED AS</em></code></dt>
-    <dd>File format for table storage, could be TEXTFILE, ORC, PARQUET,etc.</dd>
-</dl>
+    Table is defined using the path provided as `LOCATION`, does not use default location for this table.
 
-<dl>
-  <dt><code><em>LOCATION</em></code></dt>
-  <dd>Path to the directory where table data is stored, Path to the directory where table data is stored, which could be a path on distributed storage like HDFS, etc.</dd>
-</dl>
+* **PARTITIONED BY**
 
-<dl>
-  <dt><code><em>COMMENT</em></code></dt>
-  <dd>A string literal to describe the table.</dd>
-</dl>
+    Partitions are created on the table, based on the columns specified.
+    
+* **row_format**    
 
-<dl>
-  <dt><code><em>TBLPROPERTIES</em></code></dt>
-  <dd>A list of key-value pairs that is used to tag the table definition.</dd>
-</dl>
+    Use the `SERDE` clause to specify a custom SerDe for one table. Otherwise, use the `DELIMITED` clause to use the native SerDe and specify the delimiter, escape character, null character and so on.
+    
+* **SERDE**
 
-<dl>
-  <dt><code><em>AS select_statement</em></code></dt>
-  <dd>The table is populated using the data from the select statement.</dd>
-</dl>
+    Specifies a custom SerDe for one table.
+    
+* **serde_class**
+
+    Specifies a fully-qualified class name of a custom SerDe.
+
+* **SERDEPROPERTIES**
+
+    A list of key-value pairs that is used to tag the SerDe definition.
+    
+* **DELIMITED**
+
+    The `DELIMITED` clause can be used to specify the native SerDe and state the delimiter, escape character, null character and so on.
+    
+* **FIELDS TERMINATED BY**
+
+    Used to define a column separator.
+    
+* **COLLECTION ITEMS TERMINATED BY**
+
+    Used to define a collection item separator.
+   
+* **MAP KEYS TERMINATED BY**
+
+    Used to define a map key separator.
+    
+* **LINES TERMINATED BY**
+
+    Used to define a row separator.
+    
+* **NULL DEFINED AS**
+
+    Used to define the specific value for NULL.
+    
+* **ESCAPED BY**
+
+    Used for escape mechanism.
+
+* **STORED AS**
+
+    File format for table storage, could be TEXTFILE, ORC, PARQUET, etc.
+
+* **LOCATION**
+
+    Path to the directory where table data is stored, which could be a path on distributed storage like HDFS, etc.
+
+* **COMMENT**
+
+    A string literal to describe the table.
+
+* **TBLPROPERTIES**
+
+    A list of key-value pairs that is used to tag the table definition.
+
+* **AS select_statement**
+
+    The table is populated using the data from the select statement.
 
 ### Examples
 
-{% highlight sql %}
+```sql
 --Use hive format
 CREATE TABLE student (id INT, name STRING, age INT) STORED AS ORC;
 
@@ -127,12 +162,50 @@ CREATE TABLE student (id INT, name STRING)
     PARTITIONED BY (age INT);
 
 --Use Row Format and file format
-CREATE TABLE student (id INT,name STRING)
+CREATE TABLE student (id INT, name STRING)
     ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
     STORED AS TEXTFILE;
-{% endhighlight %}
+
+--Use complex datatype
+CREATE EXTERNAL TABLE family(
+        name STRING,
+        friends ARRAY<STRING>,
+        children MAP<STRING, INT>,
+        address STRUCT<street: STRING, city: STRING>
+    )
+    ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' ESCAPED BY '\\'
+    COLLECTION ITEMS TERMINATED BY '_'
+    MAP KEYS TERMINATED BY ':'
+    LINES TERMINATED BY '\n'
+    NULL DEFINED AS 'foonull'
+    STORED AS TEXTFILE
+    LOCATION '/tmp/family/';
+
+--Use predefined custom SerDe
+CREATE TABLE avroExample
+    ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+    STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+        OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+    TBLPROPERTIES ('avro.schema.literal'='{ "namespace": "org.apache.hive",
+        "name": "first_schema",
+        "type": "record",
+        "fields": [
+                { "name":"string1", "type":"string" },
+                { "name":"string2", "type":"string" }
+            ] }');
+
+--Use personalized custom SerDe(we may need to `ADD JAR xxx.jar` first to ensure we can find the serde_class,
+--or you may run into `CLASSNOTFOUND` exception)
+ADD JAR /tmp/hive_serde_example.jar;
+
+CREATE EXTERNAL TABLE family (id INT, name STRING)
+    ROW FORMAT SERDE 'com.ly.spark.serde.SerDeExample'
+    STORED AS INPUTFORMAT 'com.ly.spark.example.serde.io.SerDeExampleInputFormat'
+        OUTPUTFORMAT 'com.ly.spark.example.serde.io.SerDeExampleOutputFormat'
+    LOCATION '/tmp/family/';
+```
 
 ### Related Statements
 
- * [CREATE TABLE USING DATASOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
- * [CREATE TABLE LIKE](sql-ref-syntax-ddl-create-table-like.html)
+* [CREATE TABLE USING DATASOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
+* [CREATE TABLE LIKE](sql-ref-syntax-ddl-create-table-like.html)

@@ -208,11 +208,12 @@ private[netty] class NettyRpcEnv(
       message: RequestMessage, timeout: RpcTimeout): AbortableRpcFuture[T] = {
     val promise = Promise[Any]()
     val remoteAddr = message.receiver.address
+    var rpcMsg: Option[RpcOutboxMessage] = None
 
     def onFailure(e: Throwable): Unit = {
       if (!promise.tryFailure(e)) {
         e match {
-          case e : RpcEnvStoppedException => logDebug (s"Ignored failure: $e")
+          case e : RpcEnvStoppedException => logDebug(s"Ignored failure: $e")
           case _ => logWarning(s"Ignored failure: $e")
         }
       }
@@ -226,8 +227,9 @@ private[netty] class NettyRpcEnv(
         }
     }
 
-    def onAbort(reason: String): Unit = {
-      onFailure(new RpcAbortException(reason))
+    def onAbort(t: Throwable): Unit = {
+      onFailure(t)
+      rpcMsg.foreach(_.onAbort())
     }
 
     try {
@@ -242,17 +244,24 @@ private[netty] class NettyRpcEnv(
         val rpcMessage = RpcOutboxMessage(message.serialize(this),
           onFailure,
           (client, response) => onSuccess(deserialize[Any](client, response)))
+        rpcMsg = Option(rpcMessage)
         postToOutbox(message.receiver, rpcMessage)
         promise.future.failed.foreach {
           case _: TimeoutException => rpcMessage.onTimeout()
-          case _: RpcAbortException => rpcMessage.onAbort()
           case _ =>
         }(ThreadUtils.sameThread)
       }
 
       val timeoutCancelable = timeoutScheduler.schedule(new Runnable {
         override def run(): Unit = {
-          onFailure(new TimeoutException(s"Cannot receive any reply from ${remoteAddr} " +
+          val remoteReceAddr = if (remoteAddr == null) {
+            Try {
+              message.receiver.client.getChannel.remoteAddress()
+            }.toOption.orNull
+          } else {
+            remoteAddr
+          }
+          onFailure(new TimeoutException(s"Cannot receive any reply from ${remoteReceAddr} " +
             s"in ${timeout.duration}"))
         }
       }, timeout.duration.toNanos, TimeUnit.NANOSECONDS)
@@ -270,7 +279,7 @@ private[netty] class NettyRpcEnv(
   }
 
   private[netty] def ask[T: ClassTag](message: RequestMessage, timeout: RpcTimeout): Future[T] = {
-    askAbortable(message, timeout).toFuture
+    askAbortable(message, timeout).future
   }
 
   private[netty] def serialize(content: Any): ByteBuffer = {
@@ -547,7 +556,7 @@ private[netty] class NettyRpcEndpointRef(
   }
 
   override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
-    askAbortable(message, timeout).toFuture
+    askAbortable(message, timeout).future
   }
 
   override def send(message: Any): Unit = {

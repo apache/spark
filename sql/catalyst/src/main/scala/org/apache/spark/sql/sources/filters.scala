@@ -25,7 +25,8 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * A filter predicate for data sources.
+ * A filter predicate for data sources. Mapping between Spark SQL types and filter value
+ * types follow the convention for return type of [[org.apache.spark.sql.Row#get(int)]].
  *
  * @since 1.3.0
  */

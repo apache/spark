@@ -42,13 +42,6 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
     val targetSize = 100
 
     {
-      // All bytes per partition are 0.
-      val bytesByPartitionId = Array[Long](0, 0, 0, 0, 0)
-      val expectedPartitionSpecs = Seq(CoalescedPartitionSpec(0, 5))
-      checkEstimation(Array(bytesByPartitionId), expectedPartitionSpecs, targetSize)
-    }
-
-    {
       // Some bytes per partition are 0 and total size is less than the target size.
       // 1 coalesced partition is expected.
       val bytesByPartitionId = Array[Long](10, 0, 20, 0, 0)
@@ -70,8 +63,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
         CoalescedPartitionSpec(0, 1),
         CoalescedPartitionSpec(1, 2),
         CoalescedPartitionSpec(2, 3),
-        CoalescedPartitionSpec(3, 4),
-        CoalescedPartitionSpec(4, 5))
+        CoalescedPartitionSpec(3, 4))
       checkEstimation(Array(bytesByPartitionId), expectedPartitionSpecs, targetSize)
     }
 
@@ -106,17 +98,6 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
       intercept[AssertionError] {
         checkEstimation(Array(bytesByPartitionId1, bytesByPartitionId2), Seq.empty, targetSize)
       }
-    }
-
-    {
-      // All bytes per partition are 0.
-      val bytesByPartitionId1 = Array[Long](0, 0, 0, 0, 0)
-      val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0)
-      val expectedPartitionSpecs = Seq(CoalescedPartitionSpec(0, 5))
-      checkEstimation(
-        Array(bytesByPartitionId1, bytesByPartitionId2),
-        expectedPartitionSpecs,
-        targetSize)
     }
 
     {
@@ -217,7 +198,20 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
       // the size of data is 0.
       val bytesByPartitionId1 = Array[Long](0, 0, 0, 0, 0)
       val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0)
+      // Create at least one partition spec
       val expectedPartitionSpecs = Seq(CoalescedPartitionSpec(0, 5))
+      checkEstimation(
+        Array(bytesByPartitionId1, bytesByPartitionId2),
+        expectedPartitionSpecs, targetSize, minNumPartitions)
+    }
+
+
+    {
+      // The minimal number of coalesced partitions is not enforced because
+      // there are too many 0-size partitions.
+      val bytesByPartitionId1 = Array[Long](200, 0, 0)
+      val bytesByPartitionId2 = Array[Long](100, 0, 0)
+      val expectedPartitionSpecs = Seq(CoalescedPartitionSpec(0, 1))
       checkEstimation(
         Array(bytesByPartitionId1, bytesByPartitionId2),
         expectedPartitionSpecs,
@@ -244,6 +238,40 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
         CoalescedPartitionSpec(1, 3),
         CoalescedPartitionSpec(3, 4),
         CoalescedPartitionSpec(4, 5))
+      checkEstimation(
+        Array(bytesByPartitionId1, bytesByPartitionId2),
+        expectedPartitionSpecs,
+        targetSize, minNumPartitions)
+    }
+  }
+
+  test("do not create partition spec for 0-size partitions") {
+    val targetSize = 100
+    val minNumPartitions = 2
+
+    {
+      // 1 shuffle: All bytes per partition are 0, 1 empty partition spec created.
+      val bytesByPartitionId = Array[Long](0, 0, 0, 0, 0)
+      val expectedPartitionSpecs = Seq(CoalescedPartitionSpec(0, 5))
+      checkEstimation(Array(bytesByPartitionId), expectedPartitionSpecs, targetSize)
+    }
+
+    {
+      // 2 shuffles: All bytes per partition are 0, 1 empty partition spec created.
+      val bytesByPartitionId1 = Array[Long](0, 0, 0, 0, 0)
+      val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0)
+      val expectedPartitionSpecs = Seq(CoalescedPartitionSpec(0, 5))
+      checkEstimation(
+        Array(bytesByPartitionId1, bytesByPartitionId2), expectedPartitionSpecs, targetSize)
+    }
+
+    {
+      // No partition spec created for the 0-size partitions.
+      val bytesByPartitionId1 = Array[Long](200, 0, 0, 0, 0)
+      val bytesByPartitionId2 = Array[Long](100, 0, 300, 0, 0)
+      val expectedPartitionSpecs = Seq(
+        CoalescedPartitionSpec(0, 1),
+        CoalescedPartitionSpec(2, 3))
       checkEstimation(
         Array(bytesByPartitionId1, bytesByPartitionId2),
         expectedPartitionSpecs,

@@ -208,3 +208,161 @@ object ExtractPythonUDFFromJoinCondition extends Rule[LogicalPlan] with Predicat
       }
   }
 }
+
+sealed abstract class BuildSide
+
+case object BuildRight extends BuildSide
+
+case object BuildLeft extends BuildSide
+
+trait JoinSelectionHelper {
+
+  def getBroadcastBuildSide(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      joinType: JoinType,
+      hint: JoinHint,
+      hintOnly: Boolean,
+      conf: SQLConf): Option[BuildSide] = {
+    val buildLeft = if (hintOnly) {
+      hintToBroadcastLeft(hint)
+    } else {
+      canBroadcastBySize(left, conf) && !hintToNotBroadcastLeft(hint)
+    }
+    val buildRight = if (hintOnly) {
+      hintToBroadcastRight(hint)
+    } else {
+      canBroadcastBySize(right, conf) && !hintToNotBroadcastRight(hint)
+    }
+    getBuildSide(
+      canBuildLeft(joinType) && buildLeft,
+      canBuildRight(joinType) && buildRight,
+      left,
+      right
+    )
+  }
+
+  def getShuffleHashJoinBuildSide(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      joinType: JoinType,
+      hint: JoinHint,
+      hintOnly: Boolean,
+      conf: SQLConf): Option[BuildSide] = {
+    val buildLeft = if (hintOnly) {
+      hintToShuffleHashJoinLeft(hint)
+    } else {
+      canBuildLocalHashMapBySize(left, conf) && muchSmaller(left, right)
+    }
+    val buildRight = if (hintOnly) {
+      hintToShuffleHashJoinRight(hint)
+    } else {
+      canBuildLocalHashMapBySize(right, conf) && muchSmaller(right, left)
+    }
+    getBuildSide(
+      canBuildLeft(joinType) && buildLeft,
+      canBuildRight(joinType) && buildRight,
+      left,
+      right
+    )
+  }
+
+  def getSmallerSide(left: LogicalPlan, right: LogicalPlan): BuildSide = {
+    if (right.stats.sizeInBytes <= left.stats.sizeInBytes) BuildRight else BuildLeft
+  }
+
+  /**
+   * Matches a plan whose output should be small enough to be used in broadcast join.
+   */
+  def canBroadcastBySize(plan: LogicalPlan, conf: SQLConf): Boolean = {
+    plan.stats.sizeInBytes >= 0 && plan.stats.sizeInBytes <= conf.autoBroadcastJoinThreshold
+  }
+
+  def canBuildLeft(joinType: JoinType): Boolean = {
+    joinType match {
+      case _: InnerLike | RightOuter => true
+      case _ => false
+    }
+  }
+
+  def canBuildRight(joinType: JoinType): Boolean = {
+    joinType match {
+      case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin => true
+      case _ => false
+    }
+  }
+
+  def hintToBroadcastLeft(hint: JoinHint): Boolean = {
+    hint.leftHint.exists(_.strategy.contains(BROADCAST))
+  }
+
+  def hintToBroadcastRight(hint: JoinHint): Boolean = {
+    hint.rightHint.exists(_.strategy.contains(BROADCAST))
+  }
+
+  def hintToNotBroadcastLeft(hint: JoinHint): Boolean = {
+    hint.leftHint.exists(_.strategy.contains(NO_BROADCAST_HASH))
+  }
+
+  def hintToNotBroadcastRight(hint: JoinHint): Boolean = {
+    hint.rightHint.exists(_.strategy.contains(NO_BROADCAST_HASH))
+  }
+
+  def hintToShuffleHashJoinLeft(hint: JoinHint): Boolean = {
+    hint.leftHint.exists(_.strategy.contains(SHUFFLE_HASH))
+  }
+
+  def hintToShuffleHashJoinRight(hint: JoinHint): Boolean = {
+    hint.rightHint.exists(_.strategy.contains(SHUFFLE_HASH))
+  }
+
+  def hintToSortMergeJoin(hint: JoinHint): Boolean = {
+    hint.leftHint.exists(_.strategy.contains(SHUFFLE_MERGE)) ||
+      hint.rightHint.exists(_.strategy.contains(SHUFFLE_MERGE))
+  }
+
+  def hintToShuffleReplicateNL(hint: JoinHint): Boolean = {
+    hint.leftHint.exists(_.strategy.contains(SHUFFLE_REPLICATE_NL)) ||
+      hint.rightHint.exists(_.strategy.contains(SHUFFLE_REPLICATE_NL))
+  }
+
+  private def getBuildSide(
+      canBuildLeft: Boolean,
+      canBuildRight: Boolean,
+      left: LogicalPlan,
+      right: LogicalPlan): Option[BuildSide] = {
+    if (canBuildLeft && canBuildRight) {
+      // returns the smaller side base on its estimated physical size, if we want to build the
+      // both sides.
+      Some(getSmallerSide(left, right))
+    } else if (canBuildLeft) {
+      Some(BuildLeft)
+    } else if (canBuildRight) {
+      Some(BuildRight)
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Matches a plan whose single partition should be small enough to build a hash table.
+   *
+   * Note: this assume that the number of partition is fixed, requires additional work if it's
+   * dynamic.
+   */
+  private def canBuildLocalHashMapBySize(plan: LogicalPlan, conf: SQLConf): Boolean = {
+    plan.stats.sizeInBytes < conf.autoBroadcastJoinThreshold * conf.numShufflePartitions
+  }
+
+  /**
+   * Returns whether plan a is much smaller (3X) than plan b.
+   *
+   * The cost to build hash map is higher than sorting, we should only build hash map on a table
+   * that is much smaller than other one. Since we does not have the statistic for number of rows,
+   * use the size of bytes here as estimation.
+   */
+  private def muchSmaller(a: LogicalPlan, b: LogicalPlan): Boolean = {
+    a.stats.sizeInBytes * 3 <= b.stats.sizeInBytes
+  }
+}
+

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint}
@@ -200,6 +201,14 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
     Seq(Row(2, 1.0), Row(2, 1.0), Row(3, 3.0), Row(6, null)))
 
   testExistenceJoin(
+    "test single unique condition (equal) for left semi join",
+    LeftSemi,
+    left,
+    right.select(right.col("c")).distinct(), /* Trigger BHJs and SHJs unique key code path! */
+    singleConditionEQ,
+    Seq(Row(2, 1.0), Row(2, 1.0), Row(3, 3.0), Row(6, null)))
+
+  testExistenceJoin(
     "test composed condition (equal & non-equal) for left semi join",
     LeftSemi,
     left,
@@ -228,7 +237,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
     "test single unique condition (equal) for left Anti join",
     LeftAnti,
     left,
-    right.select(right.col("c")).distinct(), /* Trigger BHJs unique key code path! */
+    right.select(right.col("c")).distinct(), /* Trigger BHJs and SHJs unique key code path! */
     singleConditionEQ,
     Seq(Row(1, 2.0), Row(1, 2.0), Row(null, null), Row(null, 5.0)))
 

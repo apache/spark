@@ -23,26 +23,27 @@ import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZoneId}
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   private def defaultZoneId = ZoneId.systemDefault()
 
   test("nanoseconds truncation") {
-    val tf = TimestampFormatter.getFractionFormatter(DateTimeUtils.defaultTimeZone.toZoneId)
+    val tf = TimestampFormatter.getFractionFormatter(ZoneId.systemDefault())
     def checkStringToTimestamp(originalTime: String, expectedParsedTime: String): Unit = {
       val parsedTimestampOp = DateTimeUtils.stringToTimestamp(
         UTF8String.fromString(originalTime), defaultZoneId)
       assert(parsedTimestampOp.isDefined, "timestamp with nanoseconds was not parsed correctly")
-      assert(DateTimeUtils.timestampToString(tf, parsedTimestampOp.get) === expectedParsedTime)
+      assert(tf.format(parsedTimestampOp.get) === expectedParsedTime)
     }
 
     checkStringToTimestamp("2015-01-02 00:00:00.123456789", "2015-01-02 00:00:00.123456")
@@ -121,7 +122,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkFromToJavaDate(new Date(df2.parse("1776-07-04 18:30:00 UTC").getTime))
   }
 
-  private def toDate(s: String, zoneId: ZoneId = UTC): Option[SQLDate] = {
+  private def toDate(s: String, zoneId: ZoneId = UTC): Option[Int] = {
     stringToDate(UTF8String.fromString(s), zoneId)
   }
 
@@ -149,7 +150,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(toDate("1999 08").isEmpty)
   }
 
-  private def toTimestamp(str: String, zoneId: ZoneId): Option[SQLTimestamp] = {
+  private def toTimestamp(str: String, zoneId: ZoneId): Option[Long] = {
     stringToTimestamp(UTF8String.fromString(str), zoneId)
   }
 
@@ -386,9 +387,17 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("date add months") {
-    val input = days(1997, 2, 28, 10, 30)
+    val input = days(1997, 2, 28)
     assert(dateAddMonths(input, 36) === days(2000, 2, 28))
     assert(dateAddMonths(input, -13) === days(1996, 1, 28))
+  }
+
+  test("date add interval with day precision") {
+    val input = days(1997, 2, 28)
+    assert(dateAddInterval(input, new CalendarInterval(36, 0, 0)) === days(2000, 2, 28))
+    assert(dateAddInterval(input, new CalendarInterval(36, 47, 0)) === days(2000, 4, 15))
+    assert(dateAddInterval(input, new CalendarInterval(-13, 0, 0)) === days(1996, 1, 28))
+    intercept[IllegalArgumentException](dateAddInterval(input, new CalendarInterval(36, 47, 1)))
   }
 
   test("timestamp add months") {
@@ -512,7 +521,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     def testTrunc(
         level: Int,
         expected: String,
-        inputTS: SQLTimestamp,
+        inputTS: Long,
         zoneId: ZoneId = defaultZoneId): Unit = {
       val truncated =
         DateTimeUtils.truncTimestamp(inputTS, level, zoneId)
@@ -547,9 +556,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-04-01T00:00:00", defaultInputTS2.get)
     testTrunc(DateTimeUtils.TRUNC_TO_MICROSECOND, "2015-03-05T09:32:05.359123", defaultInputTS.get)
     testTrunc(DateTimeUtils.TRUNC_TO_MILLISECOND, "2015-03-05T09:32:05.359", defaultInputTS.get)
-    testTrunc(DateTimeUtils.TRUNC_TO_DECADE, "2010-01-01", defaultInputTS.get)
-    testTrunc(DateTimeUtils.TRUNC_TO_CENTURY, "2001-01-01", defaultInputTS.get)
-    testTrunc(DateTimeUtils.TRUNC_TO_MILLENNIUM, "2001-01-01", defaultInputTS.get)
 
     for (zid <- ALL_TIMEZONES) {
       withDefaultTimeZone(zid) {
@@ -580,9 +586,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-01-01T00:00:00", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-01-01T00:00:00", inputTS1.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-04-01T00:00:00", inputTS2.get, zid)
-        testTrunc(DateTimeUtils.TRUNC_TO_DECADE, "1990-01-01", inputTS5.get, zid)
-        testTrunc(DateTimeUtils.TRUNC_TO_CENTURY, "1901-01-01", inputTS5.get, zid)
-        testTrunc(DateTimeUtils.TRUNC_TO_MILLENNIUM, "2001-01-01", inputTS.get, zid)
       }
     }
   }

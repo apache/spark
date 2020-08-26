@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 
@@ -46,6 +47,65 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.selectExpr("concat_ws('||', a, b, c)"),
       Row("a||b"))
+  }
+
+  test("SPARK-31993: concat_ws in agg function with plenty of string/array types columns") {
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1024",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+
+      val (df, genColNames, genColValues) = prepareTestConcatWsColumns()
+      val groupedCols = Seq($"a") ++ genColNames.map(col)
+      val concatCols = Seq(collect_list($"b"), collect_list($"c")) ++ genColNames.map(col)
+      val df2 = df
+        .groupBy(groupedCols: _*)
+        .agg(concat_ws(",", concatCols: _*).as("con"))
+        .select("con")
+
+      val expected = Seq(
+        Row((Seq("b1", "b2") ++ genColValues).mkString(",")),
+        Row((Seq("b3", "b4") ++ genColValues).mkString(","))
+      )
+
+      checkAnswer(df2, expected)
+    }
+  }
+
+  // This test doesn't fail without SPARK-31993, but still be useful for regression test.
+  test("SPARK-31993: concat_ws in agg function with plenty of string types columns") {
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1024",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+
+      val (df, genColNames, genColValues) = prepareTestConcatWsColumns()
+      val groupedCols = Seq($"a") ++ genColNames.map(col)
+      val concatCols = groupedCols
+      val df2 = df
+        .groupBy(groupedCols: _*)
+        .agg(concat_ws(",", concatCols: _*).as("con"))
+        .select("con")
+
+      val expected = Seq(
+        Row((Seq("a") ++ genColValues).mkString(",")),
+        Row((Seq("b") ++ genColValues).mkString(","))
+      )
+
+      checkAnswer(df2, expected)
+    }
+  }
+
+  private def prepareTestConcatWsColumns(): (DataFrame, Seq[String], Seq[String]) = {
+    val genColNames = (1 to 30).map { idx => s"col_$idx" }
+    val genColValues = (1 to 30).map { _.toString }
+    val genCols = genColValues.map(lit)
+
+    val df = Seq[(String, String, String)](
+      ("a", "b1", null),
+      ("a", "b2", null),
+      ("b", "b3", null),
+      ("b", "b4", null))
+      .toDF("a", "b", "c")
+      .withColumns(genColNames, genCols)
+
+    (df, genColNames, genColValues)
   }
 
   test("string elt") {
@@ -94,8 +154,25 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("300", "100") :: Row("400", "100") :: Row("400-400", "100") :: Nil)
   }
 
+  test("string regex_extract_all") {
+    val df = Seq(
+      ("100-200,300-400", "(\\d+)-(\\d+)"),
+      ("101-201,301-401", "(\\d+)-(\\d+)"),
+      ("102-202,302-402", "(\\d+)")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(
+        regexp_extract_all($"a", "(\\d+)-(\\d+)", 1),
+        regexp_extract_all($"a", "(\\d+)-(\\d+)", 2)),
+      Row(Seq("100", "300"), Seq("200", "400")) ::
+        Row(Seq("101", "301"), Seq("201", "401")) ::
+        Row(Seq("102", "302"), Seq("202", "402")) :: Nil)
+  }
+
   test("non-matching optional group") {
     val df = Seq(Tuple1("aaaac")).toDF("s")
+
+    // regexp_extract
     checkAnswer(
       df.select(regexp_extract($"s", "(foo)", 1)),
       Row("")
@@ -103,6 +180,16 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(regexp_extract($"s", "(a+)(b)?(c)", 2)),
       Row("")
+    )
+
+    // regexp_extract_all
+    checkAnswer(
+      df.select(regexp_extract_all($"s", "(foo)", 1)),
+      Row(Seq())
+    )
+    checkAnswer(
+      df.select(regexp_extract_all($"s", "(a+)(b)?(c)", 2)),
+      Row(Seq(""))
     )
   }
 

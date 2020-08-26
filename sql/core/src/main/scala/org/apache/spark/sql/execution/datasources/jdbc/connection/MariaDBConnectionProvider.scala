@@ -18,33 +18,26 @@
 package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 import java.sql.Driver
-import javax.security.auth.login.Configuration
-
-import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 private[jdbc] class MariaDBConnectionProvider(driver: Driver, options: JDBCOptions)
-    extends SecureConnectionProvider(driver, options) {
+  extends SecureConnectionProvider(driver, options) {
   override val appEntry: String = {
     "Krb5ConnectorContext"
   }
 
-  override def setAuthenticationConfigIfNeeded(): Unit = {
-    val parent = Configuration.getConfiguration
-    val configEntry = parent.getAppConfigurationEntry(appEntry)
+  override def setAuthenticationConfigIfNeeded(): Unit = SecurityConfigurationLock.synchronized {
+    val (parent, configEntry) = getConfigWithAppEntry()
     /**
-     * Couple of things to mention here:
+     * Couple of things to mention here (v2.5.4 client):
      * 1. MariaDB doesn't support JAAS application name configuration
      * 2. MariaDB sets a default JAAS config if "java.security.auth.login.config" is not set
      */
     val entryUsesKeytab = configEntry != null &&
       configEntry.exists(_.getOptions().get("useKeyTab") == "true")
     if (configEntry == null || configEntry.isEmpty || !entryUsesKeytab) {
-      val config = new SecureConnectionProvider.JDBCConfiguration(
-        parent, appEntry, options.keytab, options.principal)
-      logDebug("Adding database specific security configuration")
-      Configuration.setConfiguration(config)
+      setAuthenticationConfig(parent)
     }
   }
 }

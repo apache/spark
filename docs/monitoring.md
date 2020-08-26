@@ -373,6 +373,25 @@ Security options for the Spark History Server are covered more detail in the
     </td>
     <td>3.0.0</td>
   </tr>
+  <tr>
+    <td>spark.history.store.hybridStore.enabled</td>
+    <td>false</td>
+    <td>
+      Whether to use HybridStore as the store when parsing event logs. HybridStore will first write data
+      to an in-memory store and having a background thread that dumps data to a disk store after the writing
+      to in-memory store is completed.
+    </td>
+    <td>3.1.0</td>
+  </tr>
+  <tr>
+    <td>spark.history.store.hybridStore.maxMemoryUsage</td>
+    <td>2g</td>
+    <td>
+      Maximum memory space that can be used to create HybridStore. The HybridStore co-uses the heap memory,
+      so the heap memory should be increased through the memory option for SHS if the HybridStore is enabled.
+    </td>
+    <td>3.1.0</td>
+  </tr>
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,
@@ -480,7 +499,8 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
        A list of all tasks for the given stage attempt.
       <br><code>?offset=[offset]&amp;length=[len]</code> list tasks in the given range.
       <br><code>?sortBy=[runtime|-runtime]</code> sort the tasks.
-      <br>Example: <code>?offset=10&amp;length=50&amp;sortBy=runtime</code>
+      <br><code>?status=[running|success|killed|failed|unknown]</code> list only tasks in the state.
+      <br>Example: <code>?offset=10&amp;length=50&amp;sortBy=runtime&amp;status=running</code>
     </td>
   </tr>
   <tr>
@@ -543,6 +563,26 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   <tr>
     <td><code>/applications/[app-id]/streaming/batches/[batch-id]/operations/[outputOp-id]</code></td>
     <td>Details of the given operation and given batch.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/sql</code></td>
+    <td>A list of all queries for a given application.
+    <br>
+    <code>?details=[true (default) | false]</code> lists/hides details of Spark plan nodes.
+    <br>
+    <code>?planDescription=[true (default) | false]</code> enables/disables Physical <code>planDescription</code> on demand when Physical Plan size is high.
+    <br>
+    <code>?offset=[offset]&length=[len]</code> lists queries in the given range.
+    </td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/sql/[execution-id]</code></td>
+    <td>Details for the given query.
+    <br>
+    <code>?details=[true (default) | false]</code> lists/hides metric details in addition to given query details.
+    <br>
+    <code>?planDescription=[true (default) | false]</code> enables/disables Physical <code>planDescription</code> on demand for the given query when Physical Plan size is high.
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/environment</code></td>
@@ -715,7 +755,7 @@ A list of the available metrics, with a short description:
 Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe the performance metrics of Executor itself like JVM heap memory, GC information.
 Executor metric values and their measured memory peak values per executor are exposed via the REST API in JSON format and in Prometheus format.
 The JSON end point is exposed at: `/applications/[app-id]/executors`, and the Prometheus endpoint at: `/metrics/executors/prometheus`.
-The Prometheus endpoint is conditional to a configuration parameter: `spark.ui.prometheus.enabled=true` (the default is `false`).
+The Prometheus endpoint is experimental and conditional to a configuration parameter: `spark.ui.prometheus.enabled=true` (the default is `false`).
 In addition, aggregated per-stage peak values of the executor memory metrics are written to the event log if
 `spark.eventLog.logStageExecutorMetrics` is true.  
 Executor memory metrics are also exposed via the Spark metrics system based on the Dropwizard metrics library.
@@ -963,7 +1003,7 @@ Each instance can report to zero or more _sinks_. Sinks are contained in the
 * `CSVSink`: Exports metrics data to CSV files at regular intervals.
 * `JmxSink`: Registers metrics for viewing in a JMX console.
 * `MetricsServlet`: Adds a servlet within the existing Spark UI to serve metrics data as JSON data.
-* `PrometheusServlet`: Adds a servlet within the existing Spark UI to serve metrics data in Prometheus format.
+* `PrometheusServlet`: (Experimental) Adds a servlet within the existing Spark UI to serve metrics data in Prometheus format.
 * `GraphiteSink`: Sends metrics to a Graphite node.
 * `Slf4jSink`: Sends metrics to slf4j as log entries.
 * `StatsdSink`: Sends metrics to a StatsD node.
@@ -1042,7 +1082,7 @@ This is the component with the largest amount of instrumented metrics
   - memory.remainingOnHeapMem_MB
 
 - namespace=HiveExternalCatalog
-  - **note:**: these metrics are conditional to a configuration parameter:
+  - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.staticSources.enabled` (default is true) 
   - fileCacheHits.count
   - filesDiscovered.count
@@ -1051,12 +1091,11 @@ This is the component with the largest amount of instrumented metrics
   - partitionsFetched.count
 
 - namespace=CodeGenerator
-  - **note:**: these metrics are conditional to a configuration parameter:
+  - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.staticSources.enabled` (default is true) 
   - compilationTime (histogram)
   - generatedClassSize (histogram)
   - generatedMethodSize (histogram)
-  - hiveClientCalls.count
   - sourceCodeSize (histogram)
 
 - namespace=DAGScheduler
@@ -1215,7 +1254,7 @@ when running in local mode.
   - shuffle-server.usedHeapMemory
 
 - namespace=HiveExternalCatalog
-  - **note:**: these metrics are conditional to a configuration parameter:
+  - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.staticSources.enabled` (default is true) 
   - fileCacheHits.count
   - filesDiscovered.count
@@ -1224,7 +1263,7 @@ when running in local mode.
   - partitionsFetched.count
 
 - namespace=CodeGenerator
-  - **note:**: these metrics are conditional to a configuration parameter:
+  - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.staticSources.enabled` (default is true) 
   - compilationTime (histogram)
   - generatedClassSize (histogram)
@@ -1241,6 +1280,8 @@ when running in local mode.
 Notes: 
   - Activate this source by setting the relevant `metrics.properties` file entry or the 
   configuration parameter:`spark.metrics.conf.*.source.jvm.class=org.apache.spark.metrics.source.JvmSource`  
+  - These metrics are conditional to a configuration parameter:
+    `spark.metrics.staticSources.enabled` (default is true)
   - This source is available for driver and executor instances and is also available for other instances.  
   - This source provides information on JVM metrics using the 
   [Dropwizard/Codahale Metric Sets for JVM instrumentation](https://metrics.dropwizard.io/3.1.0/manual/jvm/)

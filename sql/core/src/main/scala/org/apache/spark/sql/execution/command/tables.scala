@@ -657,7 +657,7 @@ case class DescribeTableCommand(
       }
     }
 
-    result
+    result.toSeq
   }
 
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
@@ -740,7 +740,7 @@ case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
     val result = new ArrayBuffer[Row]
     val queryExecution = sparkSession.sessionState.executePlan(plan)
     describeSchema(queryExecution.analyzed.schema, result, header = false)
-    result
+    result.toSeq
   }
 }
 
@@ -815,7 +815,7 @@ case class DescribeColumnCommand(
       } yield histogramDescription(hist)
       buffer ++= histDesc.getOrElse(Seq(Row("histogram", "NULL")))
     }
-    buffer
+    buffer.toSeq
   }
 
   private def histogramDescription(histogram: Histogram): Seq[Row] = {
@@ -918,15 +918,20 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalogTable = sparkSession.sessionState.catalog.getTableMetadata(table)
-    propertyKey match {
-      case Some(p) =>
-        val propValue = catalogTable
-          .properties
-          .getOrElse(p, s"Table ${catalogTable.qualifiedName} does not have property: $p")
-        Seq(Row(propValue))
-      case None =>
-        catalogTable.properties.map(p => Row(p._1, p._2)).toSeq
+    val catalog = sparkSession.sessionState.catalog
+    if (catalog.isTemporaryTable(table)) {
+      Seq.empty[Row]
+    } else {
+      val catalogTable = catalog.getTableMetadata(table)
+      propertyKey match {
+        case Some(p) =>
+          val propValue = catalogTable
+            .properties
+            .getOrElse(p, s"Table ${catalogTable.qualifiedName} does not have property: $p")
+          Seq(Row(propValue))
+        case None =>
+          catalogTable.properties.map(p => Row(p._1, p._2)).toSeq
+      }
     }
   }
 }

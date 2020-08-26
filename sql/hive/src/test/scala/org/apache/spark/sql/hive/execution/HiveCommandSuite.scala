@@ -179,7 +179,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val message = intercept[AnalysisException] {
       sql("SHOW TBLPROPERTIES badtable")
     }.getMessage
-    assert(message.contains("Table not found: badtable"))
+    assert(message.contains("Table or view not found: badtable"))
 
     // When key is not found, a row containing the error is returned.
     checkAnswer(
@@ -191,21 +191,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   test("show tblproperties for hive table") {
     checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('prop1Key')"), Row("prop1Val"))
     checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('`prop2Key`')"), Row("prop2Val"))
-  }
-
-  test("show tblproperties for spark temporary table - AnalysisException is thrown") {
-    withTempView("parquet_temp") {
-      sql(
-        """
-         |CREATE TEMPORARY VIEW parquet_temp (c1 INT, c2 STRING)
-         |USING org.apache.spark.sql.parquet.DefaultSource
-        """.stripMargin)
-
-      val message = intercept[AnalysisException] {
-        sql("SHOW TBLPROPERTIES parquet_temp")
-      }.getMessage
-      assert(message.contains("parquet_temp is a temp view not table"))
-    }
   }
 
   Seq(true, false).foreach { local =>

@@ -126,11 +126,18 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
     val schema = CatalogV2Util.applySchemaChanges(catalogTable.schema, changes)
     val comment = properties.get(TableCatalog.PROP_COMMENT)
     val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
+    val location = properties.get(TableCatalog.PROP_LOCATION).map(CatalogUtils.stringToURI)
+    val storage = if (location.isDefined) {
+      catalogTable.storage.copy(locationUri = location)
+    } else {
+      catalogTable.storage
+    }
 
     try {
       catalog.alterTable(
-        catalogTable
-          .copy(properties = properties, schema = schema, owner = owner, comment = comment))
+        catalogTable.copy(
+          properties = properties, schema = schema, owner = owner, comment = comment,
+          storage = storage))
     } catch {
       case _: NoSuchTableException =>
         throw new NoSuchTableException(ident)
@@ -288,7 +295,7 @@ private[sql] object V2SessionCatalog {
           s"SessionCatalog does not support partition transform: $transform")
     }
 
-    (identityCols, bucketSpec)
+    (identityCols.toSeq, bucketSpec)
   }
 
   private def toCatalogDatabase(

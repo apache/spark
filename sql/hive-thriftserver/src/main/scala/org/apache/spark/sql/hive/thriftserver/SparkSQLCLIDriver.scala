@@ -380,10 +380,18 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
           ret = rc.getResponseCode
           if (ret != 0) {
-            // For analysis exception, only the error is printed out to the console.
-            rc.getException() match {
-              case e : AnalysisException =>
-                err.println(s"""Error in query: ${e.getMessage}""")
+            rc.getException match {
+              case e: AnalysisException => e.cause match {
+                case Some(_) if !sessionState.getIsSilent =>
+                  err.println(
+                    s"""Error in query: ${e.getMessage}
+                       |${org.apache.hadoop.util.StringUtils.stringifyException(e)}
+                     """.stripMargin)
+                // For analysis exceptions in silent mode or simple ones that only related to the
+                // query itself, such as `NoSuchDatabaseException`, only the error is printed out
+                // to the console.
+                case _ => err.println(s"""Error in query: ${e.getMessage}""")
+              }
               case _ => err.println(rc.getErrorMessage())
             }
             driver.close()
@@ -507,25 +515,29 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   }
 
   // Adapted splitSemiColon from Hive 2.3's CliDriver.splitSemiColon.
+  // Note: [SPARK-31595] if there is a `'` in a double quoted string, or a `"` in a single quoted
+  // string, the origin implementation from Hive will not drop the trailing semicolon as expected,
+  // hence we refined this function a little bit.
   private def splitSemiColon(line: String): JList[String] = {
     var insideSingleQuote = false
     var insideDoubleQuote = false
     var insideComment = false
     var escape = false
     var beginIndex = 0
-    var endIndex = line.length
     val ret = new JArrayList[String]
 
     for (index <- 0 until line.length) {
       if (line.charAt(index) == '\'' && !insideComment) {
         // take a look to see if it is escaped
-        if (!escape) {
+        // See the comment above about SPARK-31595
+        if (!escape && !insideDoubleQuote) {
           // flip the boolean variable
           insideSingleQuote = !insideSingleQuote
         }
       } else if (line.charAt(index) == '\"' && !insideComment) {
         // take a look to see if it is escaped
-        if (!escape) {
+        // See the comment above about SPARK-31595
+        if (!escape && !insideSingleQuote) {
           // flip the boolean variable
           insideDoubleQuote = !insideDoubleQuote
         }
@@ -539,8 +551,6 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         } else if (hasNext && line.charAt(index + 1) == '-') {
           // ignore quotes and ;
           insideComment = true
-          // ignore eol
-          endIndex = index
         }
       } else if (line.charAt(index) == ';') {
         if (insideSingleQuote || insideDoubleQuote || insideComment) {
@@ -550,8 +560,11 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           ret.add(line.substring(beginIndex, index))
           beginIndex = index + 1
         }
-      } else {
-        // nothing to do
+      } else if (line.charAt(index) == '\n') {
+        // with a new line the inline comment should end.
+        if (!escape) {
+          insideComment = false
+        }
       }
       // set the escape
       if (escape) {
@@ -560,7 +573,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         escape = true
       }
     }
-    ret.add(line.substring(beginIndex, endIndex))
+    ret.add(line.substring(beginIndex))
     ret
   }
 }

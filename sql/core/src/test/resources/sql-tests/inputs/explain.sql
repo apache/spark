@@ -117,3 +117,4 @@ EXPLAIN FORMATTED
 DROP TABLE explain_temp1;
 DROP TABLE explain_temp2;
 DROP TABLE explain_temp3;
+DROP TABLE explain_temp4;

@@ -16,7 +16,7 @@
 
 grammar SqlBase;
 
-@members {
+@parser::members {
   /**
    * When false, INTERSECT is given the greater precedence over the other set
    * operations (UNION, EXCEPT and MINUS) as per the SQL standard.
@@ -30,11 +30,12 @@ grammar SqlBase;
   public boolean legacy_exponent_literal_as_decimal_enabled = false;
 
   /**
-   * When false, CREATE TABLE syntax without a provider will use
-   * the value of spark.sql.sources.default as its provider.
+   * When true, the behavior of keywords follows ANSI SQL standard.
    */
-  public boolean legacy_create_hive_table_by_default_enabled = false;
+  public boolean SQL_standard_keyword_behavior = false;
+}
 
+@lexer::members {
   /**
    * Verify whether current token is a valid decimal token (which contains dot).
    * Returns true if the character that follows the token is not a digit or letter or underscore.
@@ -56,11 +57,6 @@ grammar SqlBase;
       return true;
     }
   }
-
-  /**
-   * When true, the behavior of keywords follows ANSI SQL standard.
-   */
-  public boolean SQL_standard_keyword_behavior = false;
 
   /**
    * This method will be called when we see '/*' and try to match it as a bracketed comment.
@@ -123,12 +119,7 @@ statement
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showNamespaces
-    | {!legacy_create_hive_table_by_default_enabled}?
-        createTableHeader ('(' colTypeList ')')? tableProvider?
-        createTableClauses
-        (AS? query)?                                                   #createTable
-    | {legacy_create_hive_table_by_default_enabled}?
-        createTableHeader ('(' colTypeList ')')? tableProvider
+    | createTableHeader ('(' colTypeList ')')? tableProvider
         createTableClauses
         (AS? query)?                                                   #createTable
     | createTableHeader ('(' columns=colTypeList ')')?
@@ -240,6 +231,7 @@ statement
         comment=(STRING | NULL)                                        #commentNamespace
     | COMMENT ON TABLE multipartIdentifier IS comment=(STRING | NULL)  #commentTable
     | REFRESH TABLE multipartIdentifier                                #refreshTable
+    | REFRESH FUNCTION multipartIdentifier                             #refreshFunction
     | REFRESH (STRING | .*?)                                           #refreshResource
     | CACHE LAZY? TABLE multipartIdentifier
         (OPTIONS options=tablePropertyList)? (AS? query)?              #cacheTable
@@ -251,9 +243,18 @@ statement
     | MSCK REPAIR TABLE multipartIdentifier                            #repairTable
     | op=(ADD | LIST) identifier (STRING | .*?)                        #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
+    | SET TIME ZONE interval                                           #setTimeZone
+    | SET TIME ZONE timezone=(STRING | LOCAL)                          #setTimeZone
+    | SET TIME ZONE .*?                                                #setTimeZone
+    | SET configKey (EQ .*?)?                                          #setQuotedConfiguration
     | SET .*?                                                          #setConfiguration
-    | RESET                                                            #resetConfiguration
+    | RESET configKey                                                  #resetQuotedConfiguration
+    | RESET .*?                                                        #resetConfiguration
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
+    ;
+
+configKey
+    : quotedIdentifier
     ;
 
 unsupportedHiveNativeCommands
@@ -766,6 +767,7 @@ predicate
     | NOT? kind=IN '(' expression (',' expression)* ')'
     | NOT? kind=IN '(' query ')'
     | NOT? kind=RLIKE pattern=valueExpression
+    | NOT? kind=LIKE quantifier=(ANY | SOME | ALL) ('('')' | '(' expression (',' expression)* ')')
     | NOT? kind=LIKE pattern=valueExpression (ESCAPE escapeChar=STRING)?
     | IS NOT? kind=NULL
     | IS NOT? kind=(TRUE | FALSE | UNKNOWN)
@@ -998,6 +1000,7 @@ number
     | MINUS? SMALLINT_LITERAL         #smallIntLiteral
     | MINUS? TINYINT_LITERAL          #tinyIntLiteral
     | MINUS? DOUBLE_LITERAL           #doubleLiteral
+    | MINUS? FLOAT_LITERAL            #floatLiteral
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
@@ -1019,10 +1022,12 @@ alterColumnAction
 // You can find the full keywords list by searching "Start of the keywords list" in this file.
 // The non-reserved keywords are listed below. Keywords not in this list are reserved keywords.
 ansiNonReserved
+//--ANSI-NON-RESERVED-START
     : ADD
     | AFTER
     | ALTER
     | ANALYZE
+    | ANTI
     | ARCHIVE
     | ARRAY
     | ASC
@@ -1155,10 +1160,12 @@ ansiNonReserved
     | ROW
     | ROWS
     | SCHEMA
+    | SEMI
     | SEPARATED
     | SERDE
     | SERDEPROPERTIES
     | SET
+    | SETMINUS
     | SETS
     | SHOW
     | SKEWED
@@ -1183,6 +1190,7 @@ ansiNonReserved
     | TRIM
     | TRUE
     | TRUNCATE
+    | TYPE
     | UNARCHIVE
     | UNBOUNDED
     | UNCACHE
@@ -1194,6 +1202,8 @@ ansiNonReserved
     | VIEW
     | VIEWS
     | WINDOW
+    | ZONE
+//--ANSI-NON-RESERVED-END
     ;
 
 // When `SQL_standard_keyword_behavior=false`, there are 2 kinds of keywords in Spark SQL.
@@ -1224,6 +1234,7 @@ strictNonReserved
     ;
 
 nonReserved
+//--DEFAULT-NON-RESERVED-START
     : ADD
     | AFTER
     | ALL
@@ -1434,6 +1445,7 @@ nonReserved
     | TEMPORARY
     | TERMINATED
     | THEN
+    | TIME
     | TO
     | TOUCH
     | TRAILING
@@ -1462,15 +1474,17 @@ nonReserved
     | WINDOW
     | WITH
     | YEAR
+    | ZONE
+//--DEFAULT-NON-RESERVED-END
     ;
 
 // NOTE: If you add a new token in the list below, you should update the list of keywords
-// in `docs/sql-keywords.md`. If the token is a non-reserved keyword,
-// please update `ansiNonReserved` and `nonReserved` as well.
+// and reserved tag in `docs/sql-ref-ansi-compliance.md#sql-keywords`.
 
 //============================
 // Start of the keywords list
 //============================
+//--SPARK-KEYWORD-LIST-START
 ADD: 'ADD';
 AFTER: 'AFTER';
 ALL: 'ALL';
@@ -1535,6 +1549,7 @@ DIRECTORIES: 'DIRECTORIES';
 DIRECTORY: 'DIRECTORY';
 DISTINCT: 'DISTINCT';
 DISTRIBUTE: 'DISTRIBUTE';
+DIV: 'DIV';
 DROP: 'DROP';
 ELSE: 'ELSE';
 END: 'END';
@@ -1693,6 +1708,7 @@ TBLPROPERTIES: 'TBLPROPERTIES';
 TEMPORARY: 'TEMPORARY' | 'TEMP';
 TERMINATED: 'TERMINATED';
 THEN: 'THEN';
+TIME: 'TIME';
 TO: 'TO';
 TOUCH: 'TOUCH';
 TRAILING: 'TRAILING';
@@ -1723,6 +1739,8 @@ WHERE: 'WHERE';
 WINDOW: 'WINDOW';
 WITH: 'WITH';
 YEAR: 'YEAR';
+ZONE: 'ZONE';
+//--SPARK-KEYWORD-LIST-END
 //============================
 // End of the keywords list
 //============================
@@ -1741,7 +1759,6 @@ MINUS: '-';
 ASTERISK: '*';
 SLASH: '/';
 PERCENT: '%';
-DIV: 'DIV';
 TILDE: '~';
 AMPERSAND: '&';
 PIPE: '|';
@@ -1776,6 +1793,11 @@ EXPONENT_VALUE
 
 DECIMAL_VALUE
     : DECIMAL_DIGITS {isValidDecimal()}?
+    ;
+
+FLOAT_LITERAL
+    : DIGIT+ EXPONENT? 'F'
+    | DECIMAL_DIGITS EXPONENT? 'F' {isValidDecimal()}?
     ;
 
 DOUBLE_LITERAL
@@ -1814,7 +1836,7 @@ fragment LETTER
     ;
 
 SIMPLE_COMMENT
-    : '--' ~[\r\n]* '\r'? '\n'? -> channel(HIDDEN)
+    : '--' ('\\\n' | ~[\r\n])* '\r'? '\n'? -> channel(HIDDEN)
     ;
 
 BRACKETED_COMMENT

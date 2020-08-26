@@ -289,14 +289,26 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
   test("SPARK-31027 test `PushableColumn.unapply` that finds the column name of " +
     "an expression that can be pushed down") {
     attrInts.foreach { case (attrInt, colName) =>
-      assert(PushableColumn.unapply(attrInt) === Some(colName))
+      assert(PushableColumnAndNestedColumn.unapply(attrInt) === Some(colName))
+
+      if (colName.contains(".")) {
+        assert(PushableColumnWithoutNestedColumn.unapply(attrInt) === None)
+      } else {
+        assert(PushableColumnWithoutNestedColumn.unapply(attrInt) === Some(colName))
+      }
     }
     attrStrs.foreach { case (attrStr, colName) =>
-      assert(PushableColumn.unapply(attrStr) === Some(colName))
+      assert(PushableColumnAndNestedColumn.unapply(attrStr) === Some(colName))
+
+      if (colName.contains(".")) {
+        assert(PushableColumnWithoutNestedColumn.unapply(attrStr) === None)
+      } else {
+        assert(PushableColumnWithoutNestedColumn.unapply(attrStr) === Some(colName))
+      }
     }
 
     // `Abs(col)` can not be pushed down, so it returns `None`
-    assert(PushableColumn.unapply(Abs('col.int)) === None)
+    assert(PushableColumnAndNestedColumn.unapply(Abs('col.int)) === None)
   }
 
   /**
@@ -305,7 +317,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
    */
   def testTranslateFilter(catalystFilter: Expression, result: Option[sources.Filter]): Unit = {
     assertResult(result) {
-      DataSourceStrategy.translateFilter(catalystFilter)
+      DataSourceStrategy.translateFilter(catalystFilter, true)
     }
   }
 }

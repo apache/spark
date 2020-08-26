@@ -29,6 +29,8 @@ select make_interval(1, 2, 3, 4);
 select make_interval(1, 2, 3, 4, 5);
 select make_interval(1, 2, 3, 4, 5, 6);
 select make_interval(1, 2, 3, 4, 5, 6, 7.008009);
+select make_interval(1, 2, 3, 4, 0, 0, 123456789012.123456);
+select make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789);
 
 -- cast string to intervals
 select cast('1 second' as interval);
@@ -71,6 +73,7 @@ select map(1, interval 1 day, 2, interval 3 week);
 -- typed interval expression
 select interval 'interval 3 year 1 hour';
 select interval '3 year 1 hour';
+SELECT interval '1 year 3 months 2 weeks 2 days 1 hour 3 minutes 2 seconds 100 millisecond 200 microseconds';
 
 -- malformed interval literal
 select interval;
@@ -91,7 +94,7 @@ select interval 30 day day day;
 -- Interval year-month arithmetic
 
 create temporary view interval_arithmetic as
-  select CAST(dateval AS date), CAST(tsval AS timestamp) from values
+  select CAST(dateval AS date), CAST(tsval AS timestamp), dateval as strval from values
     ('2012-01-01', '2012-01-01')
     as interval_arithmetic(dateval, tsval);
 
@@ -142,6 +145,17 @@ select
   interval '99 11:22:33.123456789' day to second + tsval
 from interval_arithmetic;
 
+-- datetimes(in string representation) + intervals
+select
+  strval,
+  strval - interval '99 11:22:33.123456789' day to second,
+  strval - interval '-99 11:22:33.123456789' day to second,
+  strval + interval '99 11:22:33.123456789' day to second,
+  strval + interval '-99 11:22:33.123456789' day to second,
+  -interval '99 11:22:33.123456789' day to second + strval,
+  interval '99 11:22:33.123456789' day to second + strval
+from interval_arithmetic;
+
 select
   interval '99 11:22:33.123456789' day to second + interval '10 9:8:7.123456789' day to second,
   interval '99 11:22:33.123456789' day to second - interval '10 9:8:7.123456789' day to second
@@ -157,6 +171,7 @@ select interval '2-2\t' year to month;
 select interval '-\t2-2\t' year to month;
 select interval '\n0 12:34:46.789\t' day to second;
 select interval '\n-\t10\t 12:34:46.789\t' day to second;
+select interval '中文 interval 1 day';
 
 -- interval overflow if (ansi) exception else NULL
 select -(a) from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
