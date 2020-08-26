@@ -1073,7 +1073,7 @@ private[joins] object LongHashedRelation {
 }
 
 /**
- * A special HashedRelation indicates it built from a empty input:Iterator[InternalRow].
+ * A special HashedRelation indicating that it's built from a empty input:Iterator[InternalRow].
  * get & getValue will return null just like
  * empty LongHashedRelation or empty UnsafeHashedRelation does.
  */
@@ -1100,8 +1100,8 @@ case object EmptyHashedRelation extends HashedRelation {
 }
 
 /**
- * A special HashedRelation indicates it built from a non-empty input:Iterator[InternalRow],
- * which contains all null columns key.
+ * A special HashedRelation indicating that it's built from a non-empty input:Iterator[InternalRow]
+ * with all the keys to be null.
  */
 case object HashedRelationWithAllNullKeys extends HashedRelation {
   override def get(key: InternalRow): Iterator[InternalRow] = {
