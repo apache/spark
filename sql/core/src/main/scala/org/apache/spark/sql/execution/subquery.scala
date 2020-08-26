@@ -117,7 +117,7 @@ case class InSubqueryExec(
     private var resultBroadcast: Broadcast[Set[Any]] = null) extends ExecSubqueryExpression {
 
   @transient private var result: Set[Any] = _
-  @transient private lazy val inSet: InSet = InSet(child, result)
+  @transient private lazy val inSet = InSet(child, result)
 
   override def dataType: DataType = BooleanType
   override def children: Seq[Expression] = child :: Nil

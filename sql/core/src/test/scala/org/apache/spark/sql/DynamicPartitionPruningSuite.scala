@@ -1305,7 +1305,7 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("SPARK-32659: Fix the data issue of inserted DPP on non-atomic type") {
+  test("SPARK-32659: Fix the data issue when pruning DPP on non-atomic type") {
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "2", // Make sure insert DPP
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
@@ -1330,8 +1330,8 @@ abstract class DynamicPartitionPruningSuiteBase
           CodegenObjectFactoryMode.CODEGEN_ONLY).foreach { mode =>
           Seq(true, false).foreach { pruning =>
             withSQLConf(
-              SQLConf.CODEGEN_FACTORY_MODE.key -> s"${mode.toString}",
-              SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> s"${pruning}") {
+              SQLConf.CODEGEN_FACTORY_MODE.key -> mode.toString,
+              SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> s"$pruning") {
               val df = sql(
                 """
                   |SELECT df1.id, df2.k
