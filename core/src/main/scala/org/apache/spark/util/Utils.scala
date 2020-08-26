@@ -273,7 +273,7 @@ private[spark] object Utils extends Logging {
    * Move data to trash if 'spark.sql.truncate.trash.enabled' is true, else
    * delete the data permanently. If move data to trash failed fallback to hard deletion.
    */
-  def moveToTrashIfEnabled(
+  def moveToTrashOrDelete(
       fs: FileSystem,
       partitionPath: Path,
       isTrashEnabled: Boolean,
