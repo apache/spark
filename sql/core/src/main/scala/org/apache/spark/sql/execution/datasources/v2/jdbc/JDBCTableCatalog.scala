@@ -21,7 +21,6 @@ import java.sql.{Connection, SQLException}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException}
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -95,14 +94,8 @@ class JDBCTableCatalog extends TableCatalog with Logging {
 
   override def loadTable(ident: Identifier): Table = {
     checkNamespace(ident.namespace())
-    var newOptions = options.parameters
-    SparkSession.active.sessionState.conf.settings.asScala.foreach {
-      case (key, value) =>
-        for (option <- JDBCOptions.jdbcOptionNames)
-          if (key.equalsIgnoreCase(option)) newOptions += (key -> value)
-    }
     val optionsWithTableName = new JDBCOptions(
-      newOptions + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
+      options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
     try {
       val schema = JDBCRDD.resolveTable(optionsWithTableName)
       JDBCTable(ident, schema, optionsWithTableName)

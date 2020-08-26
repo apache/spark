@@ -21,6 +21,7 @@ import java.util
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
@@ -37,7 +38,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CaseInsensitiveMap}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
@@ -846,9 +847,9 @@ class Analyzer(
    */
   object ResolveTempViews extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case u @ UnresolvedRelation(ident) =>
+      case u @ UnresolvedRelation(ident, _) =>
         lookupTempView(ident).getOrElse(u)
-      case i @ InsertIntoStatement(UnresolvedRelation(ident), _, _, _, _) =>
+      case i @ InsertIntoStatement(UnresolvedRelation(ident, _), _, _, _, _) =>
         lookupTempView(ident)
           .map(view => i.copy(table = view))
           .getOrElse(i)
@@ -895,7 +896,7 @@ class Analyzer(
   object ResolveTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case u: UnresolvedRelation =>
-        lookupV2Relation(u.multipartIdentifier)
+        lookupV2Relation(u.multipartIdentifier, u.options)
           .map { rel =>
             val ident = rel.identifier.get
             SubqueryAlias(rel.catalog.get.name +: ident.namespace :+ ident.name, rel)
@@ -912,7 +913,7 @@ class Analyzer(
           .getOrElse(u)
 
       case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
-        lookupV2Relation(u.multipartIdentifier)
+        lookupV2Relation(u.multipartIdentifier, u.options)
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
 
@@ -928,12 +929,16 @@ class Analyzer(
     /**
      * Performs the lookup of DataSourceV2 Tables from v2 catalog.
      */
-    private def lookupV2Relation(identifier: Seq[String]): Option[DataSourceV2Relation] =
+    private def lookupV2Relation(
+        identifier: Seq[String],
+        options: CaseInsensitiveMap[String] = CaseInsensitiveMap[String](Map.empty))
+    : Option[DataSourceV2Relation] =
       expandRelationName(identifier) match {
         case NonSessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident) match {
             case Some(table) =>
-              Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
+              Some(DataSourceV2Relation.create(
+                table, Some(catalog), Some(ident), new CaseInsensitiveStringMap(options.asJava)))
             case None => None
           }
         case _ => None
@@ -975,7 +980,7 @@ class Analyzer(
       case i @ InsertIntoStatement(table, _, _, _, _) if i.query.resolved =>
         val relation = table match {
           case u: UnresolvedRelation =>
-            lookupRelation(u.multipartIdentifier).getOrElse(u)
+            lookupRelation(u.multipartIdentifier, u.options).getOrElse(u)
           case other => other
         }
 
@@ -986,7 +991,7 @@ class Analyzer(
         }
 
       case u: UnresolvedRelation =>
-        lookupRelation(u.multipartIdentifier).map(resolveViews).getOrElse(u)
+        lookupRelation(u.multipartIdentifier, u.options).map(resolveViews).getOrElse(u)
 
       case u @ UnresolvedTable(identifier) =>
         lookupTableOrView(identifier).map {
@@ -1016,7 +1021,10 @@ class Analyzer(
     // 1) If the resolved catalog is not session catalog, return None.
     // 2) If a relation is not found in the catalog, return None.
     // 3) If a v1 table is found, create a v1 relation. Otherwise, create a v2 relation.
-    private def lookupRelation(identifier: Seq[String]): Option[LogicalPlan] = {
+    private def lookupRelation(
+        identifier: Seq[String],
+        options: CaseInsensitiveMap[String] = CaseInsensitiveMap[String](Map.empty))
+    : Option[LogicalPlan] = {
       expandRelationName(identifier) match {
         case SessionCatalogAndIdentifier(catalog, ident) =>
           lazy val loaded = CatalogV2Util.loadTable(catalog, ident).map {
@@ -1025,7 +1033,8 @@ class Analyzer(
             case table =>
               SubqueryAlias(
                 catalog.name +: ident.asMultipartIdentifier,
-                DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
+                DataSourceV2Relation.create(table, Some(catalog), Some(ident),
+                  new CaseInsensitiveStringMap(options.asJava)))
           }
           val key = catalog.name +: ident.namespace :+ ident.name
           AnalysisContext.get.relationCache.get(key).map(_.transform {

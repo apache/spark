@@ -23,9 +23,9 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.ParserUtils
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CaseInsensitiveMap}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 
@@ -42,7 +42,9 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
  * @param multipartIdentifier table name
  */
 case class UnresolvedRelation(
-    multipartIdentifier: Seq[String]) extends LeafNode with NamedRelation {
+    multipartIdentifier: Seq[String],
+    options: CaseInsensitiveMap[String] = CaseInsensitiveMap[String](Map.empty))
+  extends LeafNode with NamedRelation {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   /** Returns a `.` separated name for this relation. */
