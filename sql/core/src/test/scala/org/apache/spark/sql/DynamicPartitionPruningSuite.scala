@@ -319,6 +319,8 @@ abstract class DynamicPartitionPruningSuiteBase
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
       withTable("fact", "dim") {
+        val numPartitions = 10
+
         spark.range(10)
           .map { x => Tuple3(x, x + 1, 0) }
           .toDF("did", "d1", "d2")
@@ -328,7 +330,7 @@ abstract class DynamicPartitionPruningSuiteBase
           .saveAsTable("dim")
 
         spark.range(100)
-          .map { x => Tuple2(x, x % 10) }
+          .map { x => Tuple2(x, x % numPartitions) }
           .toDF("f1", "fid")
           .write.partitionBy("fid")
           .format(tableFormat)
@@ -355,6 +357,7 @@ abstract class DynamicPartitionPruningSuiteBase
         assert(!scan1.metrics.contains("staticFilesSize"))
         val allFilesNum = scan1.metrics("numFiles").value
         val allFilesSize = scan1.metrics("filesSize").value
+        assert(scan1.metrics("numPartitions").value === numPartitions)
 
         // No dynamic partition pruning, so no static metrics
         // Only files from fid = 5 partition are scanned
@@ -367,6 +370,7 @@ abstract class DynamicPartitionPruningSuiteBase
         val partFilesSize = scan2.metrics("filesSize").value
         assert(0 < partFilesNum && partFilesNum < allFilesNum)
         assert(0 < partFilesSize && partFilesSize < allFilesSize)
+        assert(scan2.metrics("numPartitions").value === 1)
 
         // Dynamic partition pruning is used
         // Static metrics are as-if reading the whole fact table
@@ -378,6 +382,7 @@ abstract class DynamicPartitionPruningSuiteBase
         assert(scan3.metrics("staticFilesSize").value == allFilesSize)
         assert(scan3.metrics("numFiles").value == partFilesNum)
         assert(scan3.metrics("filesSize").value == partFilesSize)
+        assert(scan3.metrics("numPartitions").value === 1)
       }
     }
   }

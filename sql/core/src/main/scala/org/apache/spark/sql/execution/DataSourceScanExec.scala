@@ -241,6 +241,7 @@ case class FileSourceScanExec(
       setFilesNumAndSizeMetric(ret, false)
       val timeTakenMs = (System.nanoTime() - startTime) / 1000 / 1000
       driverMetrics("pruningTime") = timeTakenMs
+      driverMetrics("numPartitions") = ret.length
       ret
     } else {
       selectedPartitions
