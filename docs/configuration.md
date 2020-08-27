@@ -1761,11 +1761,16 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version</code></td>
-  <td>1</td>
+  <td>Dependent on environment</td>
   <td>
     The file output committer algorithm version, valid algorithm version number: 1 or 2.
     Version 2 may have better performance, but version 1 may handle failures better in certain situations,
     as per <a href="https://issues.apache.org/jira/browse/MAPREDUCE-4815">MAPREDUCE-4815</a>.
+    The default value depends on the Hadoop version used in an environment:
+    1 for Hadoop versions lower than 3.0
+    2 for Hadoop versions 3.0 and higher
+    It's important to note that this can change back to 1 again in the future once <a href="https://issues.apache.org/jira/browse/MAPREDUCE-7282">MAPREDUCE-7282</a>
+    is fixed and merged.
   </td>
   <td>2.2.0</td>
 </tr>
