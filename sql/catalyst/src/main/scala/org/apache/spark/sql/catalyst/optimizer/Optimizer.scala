@@ -477,8 +477,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
 object RemoveNoopOperators extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Eliminate no-op Projects
-    case Project(projList, child) if projList.length == child.output.length &&
-      projList.zip(child.output).forall { case (e1, e2) => e1.semanticEquals(e2) } => child
+    case p @ Project(_, child) if child.sameOutput(p) => child
 
     // Eliminate no-op Window
     case w: Window if w.windowExpressions.isEmpty => w.child
