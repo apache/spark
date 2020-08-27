@@ -1452,4 +1452,89 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         .select($"struct_col".withField("a.c", lit(3)))
     }.getMessage should include("Ambiguous reference to fields")
   }
+
+  test("SPARK-32641: extracting field from non-null struct column after withField should return " +
+    "field value") {
+    // extract newly added field
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", $"a".withField("d", lit(4)).getField("d")),
+      Row(4) :: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = false))))
+
+    // extract newly replaced field
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", $"a".withField("a", lit(4)).getField("a")),
+      Row(4) :: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = false))))
+
+    // add new field, extract another field from original struct
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", $"a".withField("d", lit(4)).getField("c")),
+      Row(3):: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = false))))
+
+    // replace field, extract another field from original struct
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", $"a".withField("a", lit(4)).getField("c")),
+      Row(3):: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = false))))
+  }
+
+  test("SPARK-32641: extracting field from null struct column after withField should return " +
+    "null if the original struct was null") {
+    // extract newly added field
+    checkAnswerAndSchema(
+      nullStructLevel1.withColumn("a", $"a".withField("d", lit(4)).getField("d")),
+      Row(null) :: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = true))))
+
+    // extract newly replaced field
+    checkAnswerAndSchema(
+      nullStructLevel1.withColumn("a", $"a".withField("a", lit(4)).getField("a")),
+      Row(null):: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = true))))
+
+    // add new field, extract another field from original struct
+    checkAnswerAndSchema(
+      nullStructLevel1.withColumn("a", $"a".withField("d", lit(4)).getField("c")),
+      Row(null):: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = true))))
+
+    // replace field, extract another field from original struct
+    checkAnswerAndSchema(
+      nullStructLevel1.withColumn("a", $"a".withField("a", lit(4)).getField("c")),
+      Row(null):: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = true))))
+  }
+
+  test("SPARK-32641: extracting field from nullable struct column which contains both null and " +
+    "non-null values after withField should return null if the original struct was null") {
+    val df = spark.createDataFrame(
+      sparkContext.parallelize(Row(Row(1, null, 3)) :: Row(null) :: Nil),
+      StructType(Seq(StructField("a", structType, nullable = true))))
+
+    // extract newly added field
+    checkAnswerAndSchema(
+      df.withColumn("a", $"a".withField("d", lit(4)).getField("d")),
+      Row(4) :: Row(null) :: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = true))))
+
+    // extract newly replaced field
+    checkAnswerAndSchema(
+      df.withColumn("a", $"a".withField("a", lit(4)).getField("a")),
+      Row(4) :: Row(null):: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = true))))
+
+    // add new field, extract another field from original struct
+    checkAnswerAndSchema(
+      df.withColumn("a", $"a".withField("d", lit(4)).getField("c")),
+      Row(3) :: Row(null):: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = true))))
+
+    // replace field, extract another field from original struct
+    checkAnswerAndSchema(
+      df.withColumn("a", $"a".withField("a", lit(4)).getField("c")),
+      Row(3) :: Row(null):: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = true))))
+  }
 }

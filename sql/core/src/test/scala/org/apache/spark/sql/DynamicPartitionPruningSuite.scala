@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.scalatest.GivenWhenThen
 
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, DynamicPruningExpression, Expression}
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
@@ -319,6 +319,8 @@ abstract class DynamicPartitionPruningSuiteBase
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
       withTable("fact", "dim") {
+        val numPartitions = 10
+
         spark.range(10)
           .map { x => Tuple3(x, x + 1, 0) }
           .toDF("did", "d1", "d2")
@@ -328,7 +330,7 @@ abstract class DynamicPartitionPruningSuiteBase
           .saveAsTable("dim")
 
         spark.range(100)
-          .map { x => Tuple2(x, x % 10) }
+          .map { x => Tuple2(x, x % numPartitions) }
           .toDF("f1", "fid")
           .write.partitionBy("fid")
           .format(tableFormat)
@@ -355,6 +357,7 @@ abstract class DynamicPartitionPruningSuiteBase
         assert(!scan1.metrics.contains("staticFilesSize"))
         val allFilesNum = scan1.metrics("numFiles").value
         val allFilesSize = scan1.metrics("filesSize").value
+        assert(scan1.metrics("numPartitions").value === numPartitions)
 
         // No dynamic partition pruning, so no static metrics
         // Only files from fid = 5 partition are scanned
@@ -367,6 +370,7 @@ abstract class DynamicPartitionPruningSuiteBase
         val partFilesSize = scan2.metrics("filesSize").value
         assert(0 < partFilesNum && partFilesNum < allFilesNum)
         assert(0 < partFilesSize && partFilesSize < allFilesSize)
+        assert(scan2.metrics("numPartitions").value === 1)
 
         // Dynamic partition pruning is used
         // Static metrics are as-if reading the whole fact table
@@ -378,6 +382,7 @@ abstract class DynamicPartitionPruningSuiteBase
         assert(scan3.metrics("staticFilesSize").value == allFilesSize)
         assert(scan3.metrics("numFiles").value == partFilesNum)
         assert(scan3.metrics("filesSize").value == partFilesSize)
+        assert(scan3.metrics("numPartitions").value === 1)
       }
     }
   }
@@ -1302,6 +1307,55 @@ abstract class DynamicPartitionPruningSuiteBase
         Row(1020, 2, 1, 10) ::
         Row(1030, 3, 2, 10) :: Nil
       )
+    }
+  }
+
+  test("SPARK-32659: Fix the data issue when pruning DPP on non-atomic type") {
+    withSQLConf(
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "2", // Make sure insert DPP
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+      withTable("df1", "df2") {
+        spark.range(1000)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df1")
+
+        spark.range(100)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df2")
+
+        Seq(CodegenObjectFactoryMode.NO_CODEGEN,
+          CodegenObjectFactoryMode.CODEGEN_ONLY).foreach { mode =>
+          Seq(true, false).foreach { pruning =>
+            withSQLConf(
+              SQLConf.CODEGEN_FACTORY_MODE.key -> mode.toString,
+              SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> s"$pruning") {
+              val df = sql(
+                """
+                  |SELECT df1.id, df2.k
+                  |FROM df1
+                  |  JOIN df2
+                  |  ON struct(df1.k) = struct(df2.k)
+                  |    AND df2.id < 2
+                  |""".stripMargin)
+              if (pruning) {
+                checkPartitionPruningPredicate(df, true, false)
+              } else {
+                checkPartitionPruningPredicate(df, false, false)
+              }
+
+              checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
+            }
+          }
+        }
+      }
     }
   }
 }

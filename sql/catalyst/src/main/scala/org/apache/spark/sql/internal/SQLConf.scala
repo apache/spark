@@ -329,7 +329,10 @@ object SQLConf {
 
   val PREFER_SORTMERGEJOIN = buildConf("spark.sql.join.preferSortMergeJoin")
     .internal()
-    .doc("When true, prefer sort merge join over shuffle hash join.")
+    .doc("When true, prefer sort merge join over shuffled hash join. " +
+      "Sort merge join consumes less memory than shuffled hash join and it works efficiently " +
+      "when both join tables are large. On the other hand, shuffled hash join can improve " +
+      "performance (e.g., of full outer joins) when one of join tables is much smaller.")
     .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
@@ -1606,8 +1609,8 @@ object SQLConf {
   val NDV_MAX_ERROR =
     buildConf("spark.sql.statistics.ndv.maxError")
       .internal()
-      .doc("The maximum estimation error allowed in HyperLogLog++ algorithm when generating " +
-        "column level statistics.")
+      .doc("The maximum relative standard deviation allowed in HyperLogLog++ algorithm " +
+        "when generating column level statistics.")
       .version("2.1.1")
       .doubleConf
       .createWithDefault(0.05)
@@ -2722,6 +2725,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_PATH_OPTION_BEHAVIOR =
+    buildConf("spark.sql.legacy.pathOptionBehavior.enabled")
+      .internal()
+      .doc("When true, \"path\" option is overwritten if one path parameter is passed to " +
+        "DataFrameReader.load(), DataFrameWriter.save(), DataStreamReader.load(), or " +
+        "DataStreamWriter.start(). Also, \"path\" option is added to the overall paths if " +
+        "multiple path parameters are passed to DataFrameReader.load()")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3334,6 +3348,8 @@ class SQLConf extends Serializable with Logging {
 
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
+
+  def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -536,7 +536,9 @@ private[spark] class MesosClusterScheduler(
     val formattedFiles = pyFiles.map { path =>
       new File(sandboxPath, path.split("/").last).toString()
     }.mkString(",")
-    options ++= Seq("--py-files", formattedFiles)
+    if (!formattedFiles.equals("")) {
+      options ++= Seq("--py-files", formattedFiles)
+    }
 
     // --conf
     val replicatedOptionsExcludeList = Set(
