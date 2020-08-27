@@ -113,7 +113,9 @@ private[spark] class NettyBlockTransferService(
       blockIds: Array[String],
       listener: BlockFetchingListener,
       tempFileManager: DownloadFileManager): Unit = {
-    logger.trace(s"Fetch blocks from $host:$port (executor id $execId)")
+    if (logger.isTraceEnabled) {
+      logger.trace(s"Fetch blocks from $host:$port (executor id $execId)")
+    }
     try {
       val maxRetries = transportConf.maxIORetries()
       val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
@@ -174,7 +176,9 @@ private[spark] class NettyBlockTransferService(
       blockId.isShuffle)
     val callback = new RpcResponseCallback {
       override def onSuccess(response: ByteBuffer): Unit = {
-        logger.trace(s"Successfully uploaded block $blockId${if (asStream) " as stream" else ""}")
+        if (logger.isTraceEnabled) {
+          logger.trace(s"Successfully uploaded block $blockId${if (asStream) " as stream" else ""}")
+        }
         result.success((): Unit)
       }
 

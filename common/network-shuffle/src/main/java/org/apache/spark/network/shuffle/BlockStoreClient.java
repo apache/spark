@@ -83,7 +83,6 @@ public abstract class BlockStoreClient implements Closeable {
    * Request the local disk directories for executors which are located at the same host with
    * the current BlockStoreClient(it can be ExternalBlockStoreClient or NettyBlockTransferService).
    *
-   *
    * @param host the host of BlockManager or ExternalShuffleService. It's the same with current
    *             BlockStoreClient.
    * @param port the port of BlockManager or ExternalShuffleService.
@@ -94,8 +93,8 @@ public abstract class BlockStoreClient implements Closeable {
    *                Or, only one executor Id if BlockStoreClient is implemented by
    *                NettyBlockTransferService.
    * @param hostLocalDirsCompletable a CompletableFuture which contains a map from executor Id
-   *                                to its local directories if the request handler replies
-   *                                successfully. Otherwise, it contains a specific error.
+   *                                 to its local directories if the request handler replies
+   *                                 successfully. Otherwise, it contains a specific error.
    */
   public void getHostLocalDirs(
       String host,
