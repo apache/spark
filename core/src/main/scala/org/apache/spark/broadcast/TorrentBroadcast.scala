@@ -138,15 +138,23 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     if (checksumEnabled) {
       checksums = new Array[Int](blocks.length)
     }
-    blocks.zipWithIndex.foreach { case (block, i) =>
-      if (checksumEnabled) {
-        checksums(i) = calcChecksum(block)
+    try {
+      blocks.zipWithIndex.foreach { case (block, i) =>
+        if (checksumEnabled) {
+          checksums(i) = calcChecksum(block)
+        }
+        val pieceId = BroadcastBlockId(id, "piece" + i)
+        val bytes = new ChunkedByteBuffer(block.duplicate())
+        if (!blockManager.putBytes(pieceId, bytes, MEMORY_AND_DISK_SER, tellMaster = true)) {
+          throw new SparkException(s"Failed to store $pieceId of $broadcastId " +
+            s"in local BlockManager")
+        }
       }
-      val pieceId = BroadcastBlockId(id, "piece" + i)
-      val bytes = new ChunkedByteBuffer(block.duplicate())
-      if (!blockManager.putBytes(pieceId, bytes, MEMORY_AND_DISK_SER, tellMaster = true)) {
-        throw new SparkException(s"Failed to store $pieceId of $broadcastId in local BlockManager")
-      }
+    } catch {
+      case t: Throwable =>
+        logError(s"Store broadcast $broadcastId fail, remove all pieces of the broadcast")
+        blockManager.removeBroadcast(id, tellMaster = true)
+        throw t
     }
     blocks.length
   }
