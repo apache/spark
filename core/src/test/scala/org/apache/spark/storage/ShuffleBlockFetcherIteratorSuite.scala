@@ -204,7 +204,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     // 2 remote blocks are read from the same block manager
     verify(transfer, times(1)).fetchBlocks(any(), any(), any(), any(), any(), any())
-    assert(blockManager.hostLocalDirManager.get.getCachedHostLocalDirs().size === 1)
+    assert(blockManager.hostLocalDirManager.get.getCachedHostLocalDirs.size === 1)
   }
 
   test("error during accessing host local dirs for executors") {
@@ -426,7 +426,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     verify(blockManager, times(1))
       .getHostLocalShuffleData(any(), meq(Array("local-dir")))
 
-    assert(blockManager.hostLocalDirManager.get.getCachedHostLocalDirs().size === 1)
+    assert(blockManager.hostLocalDirManager.get.getCachedHostLocalDirs.size === 1)
   }
 
   test("fetch continuous blocks in batch should respect maxBytesInFlight") {

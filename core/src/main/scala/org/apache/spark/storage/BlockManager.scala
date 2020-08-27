@@ -128,17 +128,16 @@ private[spark] class HostLocalDirManager(
       .maximumSize(cacheSize)
       .build[String, Array[String]]()
 
-  private[spark] def getCachedHostLocalDirs()
-      : scala.collection.Map[String, Array[String]] = executorIdToLocalDirsCache.synchronized {
-    import scala.collection.JavaConverters._
-    return executorIdToLocalDirsCache.asMap().asScala
-  }
+  private[spark] def getCachedHostLocalDirs: Map[String, Array[String]] =
+   executorIdToLocalDirsCache.synchronized {
+      executorIdToLocalDirsCache.asMap().asScala.toMap
+   }
 
   private[spark] def getHostLocalDirs(
       host: String,
       port: Int,
       executorIds: Array[String])(
-      callback: Try[java.util.Map[String, Array[String]]] => Unit): Unit = {
+      callback: Try[Map[String, Array[String]]] => Unit): Unit = {
     val hostLocalDirsCompletable = new CompletableFuture[java.util.Map[String, Array[String]]]
     blockStoreClient.getHostLocalDirs(
       host,
@@ -147,7 +146,7 @@ private[spark] class HostLocalDirManager(
       hostLocalDirsCompletable)
     hostLocalDirsCompletable.whenComplete { (hostLocalDirs, throwable) =>
       if (hostLocalDirs != null) {
-        callback(Success(hostLocalDirs))
+        callback(Success(hostLocalDirs.asScala.toMap))
         executorIdToLocalDirsCache.synchronized {
           executorIdToLocalDirsCache.putAll(hostLocalDirs)
         }

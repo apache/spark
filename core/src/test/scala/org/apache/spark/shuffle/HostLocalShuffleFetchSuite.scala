@@ -49,7 +49,7 @@ class HostLocalShuffleFetchSuite extends SparkFunSuite with Matchers with LocalS
 
     val cachedExecutors = rdd.mapPartitions { _ =>
       SparkEnv.get.blockManager.hostLocalDirManager.map { localDirManager =>
-        localDirManager.getCachedHostLocalDirs().keySet.iterator
+        localDirManager.getCachedHostLocalDirs.keySet.iterator
       }.getOrElse(Iterator.empty)
     }.collect().toSet
 

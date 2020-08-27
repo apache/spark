@@ -210,13 +210,18 @@ final class ShuffleBlockFetcherIterator(
     while (iter.hasNext) {
       val result = iter.next()
       result match {
-        case SuccessFetchResult(_, _, address, _, buf, _) =>
+        case SuccessFetchResult(blockId, mapIndex, address, _, buf, _) =>
           if (address != blockManager.blockManagerId) {
-            shuffleMetrics.incRemoteBytesRead(buf.size)
-            if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
-              shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
+            if (hostLocalBlocks.contains(blockId -> mapIndex)) {
+              shuffleMetrics.incLocalBlocksFetched(1)
+              shuffleMetrics.incLocalBytesRead(buf.size)
+            } else {
+              shuffleMetrics.incRemoteBytesRead(buf.size)
+              if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
+                shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
+              }
+              shuffleMetrics.incRemoteBlocksFetched(1)
             }
-            shuffleMetrics.incRemoteBlocksFetched(1)
           }
           buf.release()
         case _ =>
@@ -461,63 +466,73 @@ final class ShuffleBlockFetcherIterator(
    * track in-memory are the ManagedBuffer references themselves.
    */
   private[this] def fetchHostLocalBlocks(hostLocalDirManager: HostLocalDirManager): Unit = {
-    val cachedDirsByExec = hostLocalDirManager.getCachedHostLocalDirs()
-    val (hostLocalBlocksWithCachedDirs, hostLocalBlocksWithMissingDirs) =
-      hostLocalBlocksByExecutor
-        .map { case (hostLocalBmId, blockInfos) =>
-          (hostLocalBmId, blockInfos, cachedDirsByExec.get(hostLocalBmId.executorId))
-        }.partition(_._3.isDefined)
-    val immutableHostLocalBlocksWithoutDirs =
-      hostLocalBlocksWithMissingDirs.map { case (hostLocalBmId, blockInfos, _) =>
-        hostLocalBmId -> blockInfos
-      }.toMap
-    if (immutableHostLocalBlocksWithoutDirs.nonEmpty) {
+    val cachedDirsByExec = hostLocalDirManager.getCachedHostLocalDirs
+    val (hostLocalBlocksWithCachedDirs, hostLocalBlocksWithMissingDirs) = {
+      val (hasCache, noCache) = hostLocalBlocksByExecutor.partition { case (hostLocalBmId, _) =>
+        cachedDirsByExec.contains(hostLocalBmId.executorId)
+      }
+      (hasCache.toMap, noCache.toMap)
+    }
+
+    if (hostLocalBlocksWithMissingDirs.nonEmpty) {
       logDebug(s"Asynchronous fetching host-local blocks without cached executors' dir: " +
-        s"${immutableHostLocalBlocksWithoutDirs.mkString(", ")}")
+        s"${hostLocalBlocksWithMissingDirs.mkString(", ")}")
+
+      // If the external shuffle service is enabled, we'll fetch the local directories for
+      // multiple executors from the external shuffle service, which located at the same host
+      // with the executors, in once. Otherwise, we'll fetch the local directories from those
+      // executors directly one by one. The fetch requests won't be too much since one host is
+      // almost impossible to have many executors at the same time practically.
       val dirFetchRequests = if (blockManager.externalShuffleServiceEnabled) {
         val host = blockManager.blockManagerId.host
         val port = blockManager.externalShuffleServicePort
-        Seq((host, port, immutableHostLocalBlocksWithoutDirs.keys.toArray))
+        Seq((host, port, hostLocalBlocksWithMissingDirs.keys.toArray))
       } else {
-        immutableHostLocalBlocksWithoutDirs.keys
-          .map(bmId => (bmId.host, bmId.port, Array(bmId))).toSeq
+        hostLocalBlocksWithMissingDirs.keys.map(bmId => (bmId.host, bmId.port, Array(bmId))).toSeq
       }
 
       dirFetchRequests.foreach { case (host, port, bmIds) =>
         hostLocalDirManager.getHostLocalDirs(host, port, bmIds.map(_.executorId)) {
           case Success(dirsByExecId) =>
-            bmIds.foreach { bmId =>
-              val dirs = dirsByExecId.get(bmId.executorId)
-              immutableHostLocalBlocksWithoutDirs(bmId)
-                .takeWhile { case (blockId, _, mapIndex) =>
-                  fetchHostLocalBlock(blockId, mapIndex, dirs, bmId)
-                }
-            }
-            logDebug("Got host-local blocks (without cached executors' dir) in " +
-              s"${Utils.getUsedTimeNs(startTimeNs)}")
+            fetchMultipleHostLocalBlocks(
+              hostLocalBlocksWithMissingDirs.filterKeys(bmIds.contains),
+              dirsByExecId,
+              cached = false)
 
           case Failure(throwable) =>
             logError("Error occurred while fetching host local blocks", throwable)
             val bmId = bmIds.head
-            val blockInfoSeq = immutableHostLocalBlocksWithoutDirs(bmId)
+            val blockInfoSeq = hostLocalBlocksWithMissingDirs(bmId)
             val (blockId, _, mapIndex) = blockInfoSeq.head
             results.put(FailureFetchResult(blockId, mapIndex, bmId, throwable))
         }
       }
     }
+
     if (hostLocalBlocksWithCachedDirs.nonEmpty) {
       logDebug(s"Synchronous fetching host-local blocks with cached executors' dir: " +
           s"${hostLocalBlocksWithCachedDirs.mkString(", ")}")
-      val bmId = blockManager.blockManagerId
-      hostLocalBlocksWithCachedDirs.foreach { case (_, blockInfos, localDirs) =>
-        blockInfos.foreach { case (blockId, _, mapIndex) =>
-          if (!fetchHostLocalBlock(blockId, mapIndex, localDirs.get, bmId)) {
-            return
-          }
-        }
+      fetchMultipleHostLocalBlocks(hostLocalBlocksWithCachedDirs, cachedDirsByExec, cached = true)
+    }
+  }
+
+  private def fetchMultipleHostLocalBlocks(
+      bmIdToBlocks: Map[BlockManagerId, Seq[(BlockId, Long, Int)]],
+      localDirsByExecId: Map[String, Array[String]],
+      cached: Boolean)
+    : Unit = {
+    // We use `forall` because once there's a block fetch is failed, `fetchHostLocalBlock` will put
+    // a `FailureFetchResult` immediately to the `results`. So there's no reason to fetch the
+    // remaining blocks.
+    val allFetchSucceed = bmIdToBlocks.forall { case (bmId, blockInfos) =>
+      blockInfos.forall { case (blockId, _, mapIndex) =>
+        fetchHostLocalBlock(blockId, mapIndex, localDirsByExecId(bmId.executorId), bmId)
       }
-      logDebug(s"Got host-local blocks (with cached executors' dir) in " +
-        s"${Utils.getUsedTimeNs(startTimeNs)}")
+    }
+    if (allFetchSucceed) {
+      logDebug(s"Got host-local blocks from ${bmIdToBlocks.keys.mkString(", ")} " +
+        s"(${if (cached) "with" else "without"} cached executors' dir) " +
+        s"in ${Utils.getUsedTimeNs(startTimeNs)}")
     }
   }
 
