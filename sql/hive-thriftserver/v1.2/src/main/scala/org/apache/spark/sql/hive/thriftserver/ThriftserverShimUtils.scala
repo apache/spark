@@ -49,8 +49,6 @@ private[thriftserver] object ThriftserverShimUtils {
     RowSetFactory.create(getResultSetSchema, getProtocolVersion)
   }
 
-  private[thriftserver] def toJavaSQLType(s: String): Int = Type.getType(s).toJavaSQLType
-
   private[thriftserver] def supportedType(): Seq[Type] = {
     Seq(NULL_TYPE, BOOLEAN_TYPE, STRING_TYPE, BINARY_TYPE,
       TINYINT_TYPE, SMALLINT_TYPE, INT_TYPE, BIGINT_TYPE,
