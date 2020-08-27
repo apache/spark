@@ -1576,6 +1576,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }
     assert(thrownException.message.contains("Cannot up cast `id` from bigint to tinyint"))
   }
+
+  test("SPARK-31854: Invoke in MapElementsExec should not propagate null") {
+    Seq("true", "false").foreach { wholeStage =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
+        val ds = Seq(1.asInstanceOf[Integer], null.asInstanceOf[Integer]).toDS()
+        val expectedAnswer = Seq[(Integer, Integer)]((1, 1), (null, null))
+        checkDataset(ds.map(v => (v, v)), expectedAnswer: _*)
+      }
+    }
+  }
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)

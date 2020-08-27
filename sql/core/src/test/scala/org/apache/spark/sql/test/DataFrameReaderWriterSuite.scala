@@ -212,6 +212,28 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     assert(LastOptions.parameters("opt3") == "3")
   }
 
+  test("SPARK-32364: path argument of load function should override all existing options") {
+    spark.read
+      .format("org.apache.spark.sql.test")
+      .option("paTh", "1")
+      .option("PATH", "2")
+      .option("Path", "3")
+      .option("patH", "4")
+      .load("5")
+    assert(LastOptions.parameters("path") == "5")
+  }
+
+  test("SPARK-32364: path argument of save function should override all existing options") {
+    Seq(1).toDF.write
+      .format("org.apache.spark.sql.test")
+      .option("paTh", "1")
+      .option("PATH", "2")
+      .option("Path", "3")
+      .option("patH", "4")
+      .save("5")
+    assert(LastOptions.parameters("path") == "5")
+  }
+
   test("pass partitionBy as options") {
     Seq(true, false).foreach { flag =>
       withSQLConf(SQLConf.LEGACY_PASS_PARTITION_BY_AS_OPTIONS.key -> s"$flag") {

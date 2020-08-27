@@ -24,7 +24,7 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import org.apache.spark.TestUtils
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
@@ -154,6 +154,14 @@ class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
         // if there isn't timeZone option, then use session local timezone.
         checkPartitionValues(files.head, "2016-12-01 08:00:00")
       }
+    }
+  }
+
+  test("SPARK-31968: duplicate partition columns check") {
+    withTempPath { f =>
+      val e = intercept[AnalysisException](
+        Seq((3, 2)).toDF("a", "b").write.partitionBy("b", "b").csv(f.getAbsolutePath))
+      assert(e.getMessage.contains("Found duplicate column(s) b, b: `b`;"))
     }
   }
 }
