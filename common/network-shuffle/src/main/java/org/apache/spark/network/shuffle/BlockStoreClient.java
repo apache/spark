@@ -117,8 +117,6 @@ public abstract class BlockStoreClient implements Closeable {
             logger.warn("Error trying to get the host local dirs for " +
               Arrays.toString(getLocalDirsMessage.execIds), t.getCause());
             hostLocalDirsCompletable.completeExceptionally(t);
-          } finally {
-            client.close();
           }
         }
 
@@ -127,7 +125,6 @@ public abstract class BlockStoreClient implements Closeable {
           logger.warn("Error trying to get the host local dirs for " +
             Arrays.toString(getLocalDirsMessage.execIds), t.getCause());
           hostLocalDirsCompletable.completeExceptionally(t);
-          client.close();
         }
       });
     } catch (IOException | InterruptedException e) {
