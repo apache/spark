@@ -127,18 +127,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
 
   // TODO (SPARK-32603): Operation not allowed: CREATE TABLE ... STORED AS ... does not support
   // multi-part identifiers
-  ignore("create/drop table") {
-    sql("CREATE TABLE h2.test.abc(i INT, j STRING)")
-    checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people"), Row("test", "abc")))
-    sql("DROP TABLE h2.test.abc")
-    checkAnswer(sql("SHOW TABLES IN h2.test"), Row("test", "people"))
-  }
-
-  // TODO (SPARK-32603): Operation not allowed: CREATE TABLE ... STORED AS ... does not support
-  // multi-part identifiers
-  ignore("SQL API: create table as select") {
+  test("SQL API: create table as select") {
     withTable("h2.test.abc") {
-      sql("CREATE TABLE h2.test.abc AS SELECT * FROM h2.test.people")
+      sql("CREATE TABLE h2.test.abc USING _ AS SELECT * FROM h2.test.people")
       checkAnswer(sql("SELECT name, id FROM h2.test.abc"), Seq(Row("fred", 1), Row("mary", 2)))
     }
   }
@@ -151,14 +142,14 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
   }
 
   // TODO (SPARK-32603): ParseException: mismatched input 'AS' expecting {'(', 'USING'}
-  ignore("SQL API: replace table as select") {
+  test("SQL API: replace table as select") {
     withTable("h2.test.abc") {
       intercept[CannotReplaceMissingTableException] {
-        sql("REPLACE TABLE h2.test.abc AS SELECT 1 as col")
+        sql("REPLACE TABLE h2.test.abc USING _ AS SELECT 1 as col")
       }
-      sql("CREATE OR REPLACE TABLE h2.test.abc AS SELECT 1 as col")
+      sql("CREATE OR REPLACE TABLE h2.test.abc USING _ AS SELECT 1 as col")
       checkAnswer(sql("SELECT col FROM h2.test.abc"), Row(1))
-      sql("REPLACE TABLE h2.test.abc AS SELECT * FROM h2.test.people")
+      sql("REPLACE TABLE h2.test.abc USING _ AS SELECT * FROM h2.test.people")
       checkAnswer(sql("SELECT name, id FROM h2.test.abc"), Seq(Row("fred", 1), Row("mary", 2)))
     }
   }
@@ -177,9 +168,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
 
   // TODO (SPARK-32603): Operation not allowed: CREATE TABLE ... STORED AS ... does not support
   // multi-part identifiers
-  ignore("SQL API: insert and overwrite") {
+  test("SQL API: insert and overwrite") {
     withTable("h2.test.abc") {
-      sql("CREATE TABLE h2.test.abc AS SELECT * FROM h2.test.people")
+      sql("CREATE TABLE h2.test.abc USING _ AS SELECT * FROM h2.test.people")
 
       sql("INSERT INTO h2.test.abc SELECT 'lucy', 3")
       checkAnswer(
@@ -193,9 +184,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
 
   // TODO (SPARK-32603): Operation not allowed: CREATE TABLE ... STORED AS ... does not support
   // multi-part identifiers
-  ignore("DataFrameWriterV2: insert and overwrite") {
+  test("DataFrameWriterV2: insert and overwrite") {
     withTable("h2.test.abc") {
-      sql("CREATE TABLE h2.test.abc AS SELECT * FROM h2.test.people")
+      sql("CREATE TABLE h2.test.abc USING _ AS SELECT * FROM h2.test.people")
 
       // `DataFrameWriterV2` is by-name.
       sql("SELECT 3 AS ID, 'lucy' AS NAME").writeTo("h2.test.abc").append()
