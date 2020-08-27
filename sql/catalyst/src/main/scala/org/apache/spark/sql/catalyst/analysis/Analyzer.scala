@@ -930,8 +930,7 @@ class Analyzer(
      */
     private def lookupV2Relation(
         identifier: Seq[String],
-        options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
-    : Option[DataSourceV2Relation] =
+        options: CaseInsensitiveStringMap): Option[DataSourceV2Relation] =
       expandRelationName(identifier) match {
         case NonSessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident) match {
@@ -1021,8 +1020,7 @@ class Analyzer(
     // 3) If a v1 table is found, create a v1 relation. Otherwise, create a v2 relation.
     private def lookupRelation(
         identifier: Seq[String],
-        options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
-    : Option[LogicalPlan] = {
+        options: CaseInsensitiveStringMap): Option[LogicalPlan] = {
       expandRelationName(identifier) match {
         case SessionCatalogAndIdentifier(catalog, ident) =>
           lazy val loaded = CatalogV2Util.loadTable(catalog, ident).map {
