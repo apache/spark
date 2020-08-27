@@ -27,6 +27,9 @@ import org.apache.spark.storage.{BlockId, ShuffleBlockId, StorageLevel}
 private[spark]
 trait BlockDataManager {
 
+  /**
+   * Get the local directories that used by BlockManager to save the blocks to disk
+   */
   def getLocalDiskDirs: Array[String]
 
   /**
