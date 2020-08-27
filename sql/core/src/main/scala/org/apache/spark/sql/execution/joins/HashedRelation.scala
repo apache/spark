@@ -71,7 +71,9 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    *
    * Returns null if there is no matched rows.
    */
-  def getWithKeyIndex(key: InternalRow): Iterator[ValueRowWithKeyIndex]
+  def getWithKeyIndex(key: InternalRow): Iterator[ValueRowWithKeyIndex] = {
+    throw new UnsupportedOperationException
+  }
 
   /**
    * Returns key index and matched single row.
@@ -79,17 +81,23 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    *
    * Returns null if there is no matched rows.
    */
-  def getValueWithKeyIndex(key: InternalRow): ValueRowWithKeyIndex
+  def getValueWithKeyIndex(key: InternalRow): ValueRowWithKeyIndex = {
+    throw new UnsupportedOperationException
+  }
 
   /**
    * Returns an iterator for keys index and rows of InternalRow type.
    */
-  def valuesWithKeyIndex(): Iterator[ValueRowWithKeyIndex]
+  def valuesWithKeyIndex(): Iterator[ValueRowWithKeyIndex] = {
+    throw new UnsupportedOperationException
+  }
 
   /**
    * Returns the maximum number of allowed keys index.
    */
-  def maxNumKeysIndex: Int
+  def maxNumKeysIndex: Int = {
+    throw new UnsupportedOperationException
+  }
 
   /**
    * Returns true iff all the keys are unique.
@@ -1065,56 +1073,11 @@ private[joins] object LongHashedRelation {
 }
 
 /**
- * Common trait with dummy implementation for NAAJ special HashedRelation
- * EmptyHashedRelation
- * HashedRelationWithAllNullKeys
- */
-trait NullAwareHashedRelation extends HashedRelation with Externalizable {
-  override def get(key: InternalRow): Iterator[InternalRow] = {
-    throw new UnsupportedOperationException
-  }
-
-  override def getValue(key: InternalRow): InternalRow = {
-    throw new UnsupportedOperationException
-  }
-
-  override def getWithKeyIndex(key: InternalRow): Iterator[ValueRowWithKeyIndex] = {
-    throw new UnsupportedOperationException
-  }
-
-  override def getValueWithKeyIndex(key: InternalRow): ValueRowWithKeyIndex = {
-    throw new UnsupportedOperationException
-  }
-
-  override def valuesWithKeyIndex(): Iterator[ValueRowWithKeyIndex] = {
-    throw new UnsupportedOperationException
-  }
-
-  override def maxNumKeysIndex: Int = {
-    throw new UnsupportedOperationException
-  }
-
-  override def keyIsUnique: Boolean = true
-
-  override def keys(): Iterator[InternalRow] = {
-    throw new UnsupportedOperationException
-  }
-
-  override def close(): Unit = {}
-
-  override def writeExternal(out: ObjectOutput): Unit = {}
-
-  override def readExternal(in: ObjectInput): Unit = {}
-
-  override def estimatedSize: Long = 0
-}
-
-/**
- * A special HashedRelation indicates it built from a empty input:Iterator[InternalRow].
+ * A special HashedRelation indicating that it's built from a empty input:Iterator[InternalRow].
  * get & getValue will return null just like
  * empty LongHashedRelation or empty UnsafeHashedRelation does.
  */
-object EmptyHashedRelation extends NullAwareHashedRelation {
+case object EmptyHashedRelation extends HashedRelation {
   override def get(key: Long): Iterator[InternalRow] = null
 
   override def get(key: InternalRow): Iterator[InternalRow] = null
@@ -1124,14 +1087,42 @@ object EmptyHashedRelation extends NullAwareHashedRelation {
   override def getValue(key: InternalRow): InternalRow = null
 
   override def asReadOnlyCopy(): EmptyHashedRelation.type = this
+
+  override def keyIsUnique: Boolean = true
+
+  override def keys(): Iterator[InternalRow] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def close(): Unit = {}
+
+  override def estimatedSize: Long = 0
 }
 
 /**
- * A special HashedRelation indicates it built from a non-empty input:Iterator[InternalRow],
- * which contains all null columns key.
+ * A special HashedRelation indicating that it's built from a non-empty input:Iterator[InternalRow]
+ * with all the keys to be null.
  */
-object HashedRelationWithAllNullKeys extends NullAwareHashedRelation {
+case object HashedRelationWithAllNullKeys extends HashedRelation {
+  override def get(key: InternalRow): Iterator[InternalRow] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def getValue(key: InternalRow): InternalRow = {
+    throw new UnsupportedOperationException
+  }
+
   override def asReadOnlyCopy(): HashedRelationWithAllNullKeys.type = this
+
+  override def keyIsUnique: Boolean = true
+
+  override def keys(): Iterator[InternalRow] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def close(): Unit = {}
+
+  override def estimatedSize: Long = 0
 }
 
 /** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */
