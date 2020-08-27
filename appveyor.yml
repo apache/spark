@@ -41,8 +41,8 @@ cache:
 install:
   # Install maven and dependencies
   - ps: .\dev\appveyor-install-dependencies.ps1
-  # Required package for R unit tests
-  - cmd: R -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow'), repos='https://cloud.r-project.org/')"
+  # Required package for R unit tests. xml2 is required to use jUnit reporter in testthat.
+  - cmd: R -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow', 'xml2'), repos='https://cloud.r-project.org/')"
   - cmd: R -e "packageVersion('knitr'); packageVersion('rmarkdown'); packageVersion('testthat'); packageVersion('e1071'); packageVersion('survival'); packageVersion('arrow')"
 
 build_script:
