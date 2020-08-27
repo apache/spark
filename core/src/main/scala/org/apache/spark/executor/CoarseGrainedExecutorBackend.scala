@@ -394,7 +394,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         arguments.hostname,
         -1,
         executorConf,
-        new SecurityManager(executorConf),
+        new SecurityManager(executorConf, None, AUTH_SECRET_FILE_EXECUTOR),
         numUsableCores = 0,
         clientMode = true)
 
