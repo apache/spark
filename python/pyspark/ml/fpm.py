@@ -428,6 +428,7 @@ class PrefixSpan(JavaParams):
 
 if __name__ == "__main__":
     import doctest
+    import sys
     import pyspark.ml.fpm
     from pyspark.sql import SparkSession
     globs = pyspark.ml.fpm.__dict__.copy()

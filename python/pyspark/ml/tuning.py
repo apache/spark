@@ -977,6 +977,7 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
 
 if __name__ == "__main__":
     import doctest
+    import sys
 
     from pyspark.sql import SparkSession
     globs = globals().copy()

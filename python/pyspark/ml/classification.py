@@ -18,7 +18,7 @@
 import sys
 import operator
 import warnings
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod
 from multiprocessing.pool import ThreadPool
 
 from pyspark import keyword_only

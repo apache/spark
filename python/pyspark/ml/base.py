@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod
 
 import copy
 import threading

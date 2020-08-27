@@ -2669,6 +2669,7 @@ class FMRegressionModel(_JavaRegressionModel, _FactorizationMachinesParams, Java
 
 
 if __name__ == "__main__":
+    import sys
     import doctest
     import pyspark.ml.regression
     from pyspark.sql import SparkSession
