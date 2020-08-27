@@ -994,6 +994,32 @@ object functions {
   }
 
   /**
+   * Window function: returns the value that is the `offset`th row of the window frame
+   * (counting from 1), and `null` if the size of window frame is less than `offset` rows.
+   *
+   * This is equivalent to the nth_value function in SQL.
+   *
+   * @group window_funcs
+   * @since 3.1.0
+   */
+  def nth_value(columnName: String, offset: Int): Column = {
+    nth_value(Column(columnName), offset)
+  }
+
+  /**
+   * Window function: returns the value that is the `offset`th row of the window frame
+   * (counting from 1), and `null` if the size of window frame is less than `offset` rows.
+   *
+   * This is equivalent to the nth_value function in SQL.
+   *
+   * @group window_funcs
+   * @since 3.1.0
+   */
+  def nth_value(e: Column, offset: Int): Column = withExpr {
+    new NthValue(e.expr, Literal(offset))
+  }
+
+  /**
    * Window function: returns the ntile group id (from 1 to `n` inclusive) in an ordered window
    * partition. For example, if `n` is 4, the first quarter of the rows will get value 1, the second
    * quarter will get 2, the third quarter will get 3, and the last quarter will get 4.

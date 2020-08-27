@@ -494,6 +494,29 @@ abstract class RowNumberLike extends AggregateWindowFunction {
   override val updateExpressions: Seq[Expression] = rowNumber + one :: Nil
 }
 
+/**
+ * The NthValue function returns the value of `input` at the `offset`th row from beginning of the
+ * window frame. Offset starts at 1. When the value of `input` is null at the `offset`th row or
+ * there is no such an `offset`th row, null is returned.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(input[, offset]) - Returns the value of `input` at the row that is the `offset`th row
+      from beginning of the window frame. Offsets start at 1. If the value of `input` at the
+      `offset`th row is null, null is returned. If there is no such an offset row (e.g., when the
+      offset is 10, size of the window frame less than 10), null is returned.
+  """,
+  arguments = """
+    Arguments:
+      * input - the target column or expression that the function operates on.
+      * offset - an int expression which determines the row number relative to the first row in
+          the window for which to return the expression. The offset can be a constant or an
+          expression and must be a positive integer that is greater than 0.
+      * ignoreNulls - an optional specification that indicates the NthValue should skip null
+          values in the determination of which row to use.
+  """,
+  since = "3.1.0",
+  group = "window_funcs")
 case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
   extends AggregateWindowFunction with ImplicitCastInputTypes {
 
@@ -514,7 +537,16 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
     } else if (!offset.foldable) {
       TypeCheckFailure(s"Offset expression '$offset' must be a literal.")
     } else {
-      TypeCheckSuccess
+      offset.dataType match {
+        case IntegerType | ShortType | ByteType =>
+          offset.eval().asInstanceOf[Int] match {
+            case i: Int if i <= 0 => TypeCheckFailure(
+              s"The 'offset' argument of nth_value must be greater than zero but it is $i.")
+            case _ => TypeCheckSuccess
+          }
+        case _ => TypeCheckFailure(
+          s"The 'offset' parameter must be a int literal but it is ${offset.dataType}.")
+      }
     }
   }
 

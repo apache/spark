@@ -105,7 +105,7 @@ FROM tenk1 WHERE unique1 < 10;
 -- select sum(salary) over (order by enroll_date range between '1 year' preceding and '1 year' following
 --   exclude ties), salary, enroll_date from empsalary;
 
--- [SPARK-27951] ANSI SQL: NTH_VALUE function
+-- [SPARK-28310] ANSI SQL grammar support: first_value/last_value(expression, [RESPECT NULLS | IGNORE NULLS])
 -- select first_value(salary) over(order by salary range between 1000 preceding and 1000 following),
 -- lead(salary) over(order by salary range between 1000 preceding and 1000 following),
 -- nth_value(salary, 1) over(order by salary range between 1000 preceding and 1000 following),
@@ -116,7 +116,7 @@ FROM tenk1 WHERE unique1 < 10;
 -- lag(salary) over(order by salary range between 1000 preceding and 1000 following),
 -- salary from empsalary;
 
--- [SPARK-27951] ANSI SQL: NTH_VALUE function
+-- [SPARK-28310] ANSI SQL grammar support: first_value/last_value(expression, [RESPECT NULLS | IGNORE NULLS])
 -- select first_value(salary) over(order by salary range between 1000 following and 3000 following
 --   exclude current row),
 -- lead(salary) over(order by salary range between 1000 following and 3000 following exclude ties),
