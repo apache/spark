@@ -224,7 +224,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     assert(LastOptions.parameters("opt3") == "3")
   }
 
-  test("SPARK-32364: later option should override earlier options") {
+  test("SPARK-32364: later option should override earlier options for load()") {
     spark.read
       .format("org.apache.spark.sql.test")
       .option("paTh", "1")
@@ -249,15 +249,29 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     }
   }
 
-  test("SPARK-32364: path argument of save function should override all existing options") {
+  test("SPARK-32364: later option should override earlier options for save()") {
     Seq(1).toDF.write
       .format("org.apache.spark.sql.test")
       .option("paTh", "1")
       .option("PATH", "2")
       .option("Path", "3")
       .option("patH", "4")
-      .save("5")
+      .option("path", "5")
+      .save()
     assert(LastOptions.parameters("path") == "5")
+
+    withClue("SPARK-32516: legacy path option behavior") {
+      withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
+        Seq(1).toDF.write
+          .format("org.apache.spark.sql.test")
+          .option("paTh", "1")
+          .option("PATH", "2")
+          .option("Path", "3")
+          .option("patH", "4")
+          .save("5")
+        assert(LastOptions.parameters("path") == "5")
+      }
+    }
   }
 
   test("pass partitionBy as options") {
@@ -1156,5 +1170,18 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           Seq(Row(1), Row(1), Row(1)))
       }
     }
+  }
+
+  test("SPARK-32516: 'path' option cannot coexist with save()'s path parameter") {
+    def verifyLoadFails(f: => Unit): Unit = {
+      val e = intercept[AnalysisException](f)
+      assert(e.getMessage.contains(
+        "Either remove the path option, or call save() without the parameter"))
+    }
+
+    val df = Seq(1).toDF
+    val path = "tmp"
+    verifyLoadFails(df.write.option("path", path).parquet(path))
+    verifyLoadFails(df.write.option("path", path).format("parquet").save(path))
   }
 }
