@@ -28,7 +28,7 @@ TakeOrderedAndProject (24)
 (1) Scan parquet default.web_sales
 Output [3]: [ws_sold_date_sk#1, ws_item_sk#2, ws_ext_sales_price#3]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/web_sales]
+Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_item_sk), IsNotNull(ws_sold_date_sk)]
 ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_ext_sales_price:decimal(7,2)>
 
@@ -42,7 +42,7 @@ Condition : (isnotnull(ws_item_sk#2) AND isnotnull(ws_sold_date_sk#1))
 (4) Scan parquet default.item
 Output [6]: [i_item_sk#4, i_item_id#5, i_item_desc#6, i_current_price#7, i_class#8, i_category#9]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [In(i_category, [Sports,Books,Home]), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_item_id:string,i_item_desc:string,i_current_price:decimal(7,2),i_class:string,i_category:string>
 
@@ -69,7 +69,7 @@ Input [9]: [ws_sold_date_sk#1, ws_item_sk#2, ws_ext_sales_price#3, i_item_sk#4, 
 (10) Scan parquet default.date_dim
 Output [2]: [d_date_sk#11, d_date#12]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,1999-02-22), LessThanOrEqual(d_date,1999-03-24), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 

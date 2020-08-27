@@ -1825,7 +1825,7 @@ private[spark] class DAGScheduler(
           if (bmAddress != null) {
             val externalShuffleServiceEnabled = env.blockManager.externalShuffleServiceEnabled
             val isHostDecommissioned = taskScheduler
-              .getExecutorDecommissionInfo(bmAddress.executorId)
+              .getExecutorDecommissionState(bmAddress.executorId)
               .exists(_.isHostDecommissioned)
 
             // Shuffle output of all executors on host `bmAddress.host` may be lost if:

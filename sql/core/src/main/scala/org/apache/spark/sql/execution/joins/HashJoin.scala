@@ -155,7 +155,9 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     val joinRow = new JoinedRow
     val joinKeys = streamSideKeyGenerator()
 
-    if (hashedRelation.keyIsUnique) {
+    if (hashedRelation == EmptyHashedRelation) {
+      Iterator.empty
+    } else if (hashedRelation.keyIsUnique) {
       streamIter.flatMap { srow =>
         joinRow.withLeft(srow)
         val matched = hashedRelation.getValue(joinKeys(srow))
@@ -230,7 +232,9 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     val joinKeys = streamSideKeyGenerator()
     val joinedRow = new JoinedRow
 
-    if (hashedRelation.keyIsUnique) {
+    if (hashedRelation == EmptyHashedRelation) {
+      Iterator.empty
+    } else if (hashedRelation.keyIsUnique) {
       streamIter.filter { current =>
         val key = joinKeys(current)
         lazy val matched = hashedRelation.getValue(key)
@@ -432,7 +436,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
    * Generates the code for Inner join.
    */
   protected def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val HashedRelationInfo(relationTerm, keyIsUnique, _) = prepareRelation(ctx)
+    val HashedRelationInfo(relationTerm, keyIsUnique, isEmptyHashedRelation) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val (matched, checkCondition, buildVars) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
@@ -442,7 +446,11 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
       case BuildRight => input ++ buildVars
     }
 
-    if (keyIsUnique) {
+    if (isEmptyHashedRelation) {
+      """
+        |// If HashedRelation is empty, hash inner join simply returns nothing.
+      """.stripMargin
+    } else if (keyIsUnique) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
@@ -559,12 +567,16 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
    * Generates the code for left semi join.
    */
   protected def codegenSemi(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val HashedRelationInfo(relationTerm, keyIsUnique, _) = prepareRelation(ctx)
+    val HashedRelationInfo(relationTerm, keyIsUnique, isEmptyHashedRelation) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val (matched, checkCondition, _) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    if (keyIsUnique) {
+    if (isEmptyHashedRelation) {
+      """
+        |// If HashedRelation is empty, hash semi join simply returns nothing.
+      """.stripMargin
+    } else if (keyIsUnique) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
@@ -612,10 +624,10 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     val numOutput = metricTerm(ctx, "numOutputRows")
     if (isEmptyHashedRelation) {
       return s"""
-                |// If the right side is empty, Anti Join simply returns the left side.
+                |// If HashedRelation is empty, hash anti join simply returns the stream side.
                 |$numOutput.add(1);
                 |${consume(ctx, input)}
-                |""".stripMargin
+              """.stripMargin
     }
 
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)

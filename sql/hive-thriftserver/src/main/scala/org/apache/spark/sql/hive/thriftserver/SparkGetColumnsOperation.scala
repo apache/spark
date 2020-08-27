@@ -31,7 +31,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
-import org.apache.spark.sql.hive.thriftserver.ThriftserverShimUtils.toJavaSQLType
 import org.apache.spark.sql.types._
 
 /**
@@ -131,7 +130,8 @@ private[hive] class SparkGetColumnsOperation(
    * For array, map, string, and binaries, the column size is variable, return null as unknown.
    */
   private def getColumnSize(typ: DataType): Option[Int] = typ match {
-    case dt @ (BooleanType | _: NumericType | DateType | TimestampType) => Some(dt.defaultSize)
+    case dt @ (BooleanType | _: NumericType | DateType | TimestampType | CalendarIntervalType) =>
+      Some(dt.defaultSize)
     case StructType(fields) =>
       val sizeArr = fields.map(f => getColumnSize(f.dataType))
       if (sizeArr.contains(None)) {
@@ -164,6 +164,28 @@ private[hive] class SparkGetColumnsOperation(
     case _ => None
   }
 
+  private def toJavaSQLType(typ: DataType): Integer = typ match {
+    case NullType => java.sql.Types.NULL
+    case BooleanType => java.sql.Types.BOOLEAN
+    case ByteType => java.sql.Types.TINYINT
+    case ShortType => java.sql.Types.SMALLINT
+    case IntegerType => java.sql.Types.INTEGER
+    case LongType => java.sql.Types.BIGINT
+    case FloatType => java.sql.Types.FLOAT
+    case DoubleType => java.sql.Types.DOUBLE
+    case _: DecimalType => java.sql.Types.DECIMAL
+    case StringType => java.sql.Types.VARCHAR
+    case BinaryType => java.sql.Types.BINARY
+    case DateType => java.sql.Types.DATE
+    case TimestampType => java.sql.Types.TIMESTAMP
+    case _: ArrayType => java.sql.Types.ARRAY
+    case _: MapType => java.sql.Types.JAVA_OBJECT
+    case _: StructType => java.sql.Types.STRUCT
+    // Hive's year-month and day-time intervals are mapping to java.sql.Types.OTHER
+    case _: CalendarIntervalType => java.sql.Types.OTHER
+    case _ => throw new IllegalArgumentException(s"Unrecognized type name: ${typ.sql}")
+  }
+
   private def addToRowSet(
       columnPattern: Pattern,
       dbName: String,
@@ -177,7 +199,7 @@ private[hive] class SparkGetColumnsOperation(
           dbName, // TABLE_SCHEM
           tableName, // TABLE_NAME
           column.name, // COLUMN_NAME
-          toJavaSQLType(column.dataType.sql).asInstanceOf[AnyRef], // DATA_TYPE
+          toJavaSQLType(column.dataType), // DATA_TYPE
           column.dataType.sql, // TYPE_NAME
           getColumnSize(column.dataType).map(_.asInstanceOf[AnyRef]).orNull, // COLUMN_SIZE
           null, // BUFFER_LENGTH, unused

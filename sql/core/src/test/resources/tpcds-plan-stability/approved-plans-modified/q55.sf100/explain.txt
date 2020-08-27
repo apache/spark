@@ -25,7 +25,7 @@ TakeOrderedAndProject (21)
 (1) Scan parquet default.date_dim
 Output [3]: [d_date_sk#1, d_year#2, d_moy#3]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilityWithStatsSuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), EqualTo(d_moy,11), EqualTo(d_year,2001), GreaterThanOrEqual(d_date_sk,2452215), LessThanOrEqual(d_date_sk,2452244), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
@@ -47,7 +47,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (6) Scan parquet default.store_sales
 Output [3]: [ss_sold_date_sk#5, ss_item_sk#6, ss_ext_sales_price#7]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilityWithStatsSuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_sold_date_sk), GreaterThanOrEqual(ss_sold_date_sk,2452215), LessThanOrEqual(ss_sold_date_sk,2452244), IsNotNull(ss_item_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_ext_sales_price:decimal(7,2)>
 
@@ -70,7 +70,7 @@ Input [4]: [d_date_sk#1, ss_sold_date_sk#5, ss_item_sk#6, ss_ext_sales_price#7]
 (11) Scan parquet default.item
 Output [4]: [i_item_sk#8, i_brand_id#9, i_brand#10, i_manager_id#11]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilityWithStatsSuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_manager_id), EqualTo(i_manager_id,48), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_brand:string,i_manager_id:int>
 

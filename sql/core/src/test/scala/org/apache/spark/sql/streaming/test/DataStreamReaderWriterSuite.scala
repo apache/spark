@@ -109,6 +109,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
 }
 
 class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
+  import testImplicits._
 
   private def newMetadataDir =
     Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -435,7 +436,6 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   }
 
   private def testMemorySinkCheckpointRecovery(chkLoc: String, provideInWriter: Boolean): Unit = {
-    import testImplicits._
     val ms = new MemoryStream[Int](0, sqlContext)
     val df = ms.toDF().toDF("a")
     val tableName = "test"
@@ -701,6 +701,55 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       queries.foreach(_.processAllAvailable())
     } finally {
       queries.foreach(_.stop())
+    }
+  }
+
+  test("SPARK-32516: 'path' cannot coexist with load()'s path parameter") {
+    def verifyLoadFails(f: => DataFrame): Unit = {
+      val e = intercept[AnalysisException](f)
+      assert(e.getMessage.contains(
+        "Either remove the path option, or call load() without the parameter"))
+    }
+
+    verifyLoadFails(spark.readStream.option("path", "tmp1").parquet("tmp2"))
+    verifyLoadFails(spark.readStream.option("path", "tmp1").format("parquet").load("tmp2"))
+
+    withClue("SPARK-32516: legacy behavior") {
+      withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
+        spark.readStream
+          .format("org.apache.spark.sql.streaming.test")
+          .option("path", "tmp1")
+          .load("tmp2")
+        // The legacy behavior overwrites the path option.
+        assert(LastOptions.parameters("path") == "tmp2")
+      }
+    }
+  }
+
+  test("SPARK-32516: 'path' cannot coexist with start()'s path parameter") {
+    val df = spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .load("tmp1")
+
+    val e = intercept[AnalysisException] {
+      df.writeStream
+        .format("org.apache.spark.sql.streaming.test")
+        .option("path", "tmp2")
+        .start("tmp3")
+        .stop()
+    }
+    assert(e.getMessage.contains(
+      "Either remove the path option, or call start() without the parameter"))
+
+    withClue("SPARK-32516: legacy behavior") {
+      withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
+        spark.readStream
+          .format("org.apache.spark.sql.streaming.test")
+          .option("path", "tmp4")
+          .load("tmp5")
+        // The legacy behavior overwrites the path option.
+        assert(LastOptions.parameters("path") == "tmp5")
+      }
     }
   }
 }

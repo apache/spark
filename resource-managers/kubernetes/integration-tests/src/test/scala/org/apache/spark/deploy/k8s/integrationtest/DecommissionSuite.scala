@@ -17,7 +17,6 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.Worker
 
 private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
 
@@ -26,7 +25,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
 
   test("Test basic decommissioning", k8sTestTag) {
     sparkAppConf
-      .set(Worker.WORKER_DECOMMISSION_ENABLED.key, "true")
+      .set(config.DECOMMISSION_ENABLED.key, "true")
       .set("spark.kubernetes.pyspark.pythonVersion", "3")
       .set("spark.kubernetes.container.image", pyImage)
       .set(config.STORAGE_DECOMMISSION_ENABLED.key, "true")
@@ -42,7 +41,8 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       mainClass = "",
       expectedLogOnCompletion = Seq(
         "Finished waiting, stopping Spark",
-        "decommissioning executor",
+        "Received decommission executor message",
+        "Finished decommissioning",
         "Final accumulator value is: 100"),
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
