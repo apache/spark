@@ -522,6 +522,15 @@ object SQLConf {
       .checkValue(_ >= 0, "The non-empty partition ratio must be positive number.")
       .createWithDefault(0.2)
 
+  val ADAPTIVE_OPTIMIZER_EXCLUDED_RULES =
+   buildConf("spark.sql.adaptive.optimizer.excludedRules")
+    .doc("Configures a list of rules to be disabled in the adaptive optimizer, in which the " +
+     "rules are specified by their rule names and separated by comma. The optimizer will log " +
+      "the rules that have indeed been excluded.")
+    .version("3.1.0")
+    .stringConf
+    .createOptional
+
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
       .internal()

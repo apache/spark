@@ -76,13 +76,7 @@ case class AdaptiveSparkPlanExec(
   }
 
   // The logical plan optimizer for re-optimizing the current logical plan.
-  @transient private val optimizer = new RuleExecutor[LogicalPlan] {
-    // TODO add more optimization rules
-    override protected def batches: Seq[Batch] = Seq(
-      Batch("Demote BroadcastHashJoin", Once, DemoteBroadcastHashJoin(conf)),
-      Batch("Eliminate Join to Empty Relation", Once, EliminateJoinToEmptyRelation)
-    )
-  }
+  @transient private val optimizer = new AQEOptimizer(conf)
 
   @transient private val removeRedundantProjects = RemoveRedundantProjects(conf)
   @transient private val ensureRequirements = EnsureRequirements(conf)
