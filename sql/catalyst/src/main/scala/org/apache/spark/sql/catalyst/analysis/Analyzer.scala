@@ -48,6 +48,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 /**
  * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
@@ -135,6 +136,10 @@ class Analyzer(
   extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
+
+  override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
+    !Utils.isTesting || LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(plan)
+  }
 
   override def isView(nameParts: Seq[String]): Boolean = v1SessionCatalog.isView(nameParts)
 
@@ -2618,13 +2623,13 @@ class Analyzer(
         case ne: NamedExpression =>
           // If a named expression is not in regularExpressions, add it to
           // extractedExprBuffer and replace it with an AttributeReference.
+          val attr = ne.toAttribute
           val missingExpr =
-            AttributeSet(Seq(expr)) -- (regularExpressions ++ extractedExprBuffer)
+            AttributeSet(Seq(attr)) -- (regularExpressions ++ extractedExprBuffer)
           if (missingExpr.nonEmpty) {
             extractedExprBuffer += ne
           }
-          // alias will be cleaned in the rule CleanupAliases
-          ne
+          attr
         case e: Expression if e.foldable =>
           e // No need to create an attribute reference if it will be evaluated as a Literal.
         case e: Expression =>
@@ -2755,7 +2760,7 @@ class Analyzer(
       val windowOps =
         groupedWindowExpressions.foldLeft(child) {
           case (last, ((partitionSpec, orderSpec, _), windowExpressions)) =>
-            Window(windowExpressions.toSeq, partitionSpec, orderSpec, last)
+            Window(windowExpressions, partitionSpec, orderSpec, last)
         }
 
       // Finally, we create a Project to output windowOps's output
@@ -2777,8 +2782,8 @@ class Analyzer(
       // a resolved Aggregate will not have Window Functions.
       case f @ UnresolvedHaving(condition, a @ Aggregate(groupingExprs, aggregateExprs, child))
         if child.resolved &&
-           hasWindowFunction(aggregateExprs) &&
-           a.expressions.forall(_.resolved) =>
+          hasWindowFunction(aggregateExprs) &&
+          a.expressions.forall(_.resolved) =>
         val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
@@ -2795,7 +2800,7 @@ class Analyzer(
       // Aggregate without Having clause.
       case a @ Aggregate(groupingExprs, aggregateExprs, child)
         if hasWindowFunction(aggregateExprs) &&
-           a.expressions.forall(_.resolved) =>
+          a.expressions.forall(_.resolved) =>
         val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)

@@ -203,3 +203,58 @@ abstract class BinaryNode extends LogicalPlan {
 abstract class OrderPreservingUnaryNode extends UnaryNode {
   override final def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }
+
+object LogicalPlanIntegrity {
+
+  private def canGetOutputAttrs(p: LogicalPlan): Boolean = {
+    p.resolved && !p.expressions.exists { e =>
+      e.collectFirst {
+        // We cannot call `output` in plans with a `ScalarSubquery` expr having no column,
+        // so, we filter out them in advance.
+        case s: ScalarSubquery if s.plan.schema.fields.isEmpty => true
+      }.isDefined
+    }
+  }
+
+  /**
+   * Since some logical plans (e.g., `Union`) can build `AttributeReference`s in their `output`,
+   * this method checks if the same `ExprId` refers to a semantically-equal attribute
+   * in a plan output.
+   */
+  def hasUniqueExprIdsForOutput(plan: LogicalPlan): Boolean = {
+    val allOutputAttrs = plan.collect { case p if canGetOutputAttrs(p) =>
+      p.output.filter(_.resolved).map(_.canonicalized.asInstanceOf[Attribute])
+    }
+    val groupedAttrsByExprId = allOutputAttrs
+      .flatten.groupBy(_.exprId).values.map(_.distinct)
+    groupedAttrsByExprId.forall(_.length == 1)
+  }
+
+  /**
+   * This method checks if reference `ExprId`s are not reused when assigning a new `ExprId`.
+   * For example, it returns false if plan transformers create an alias having the same `ExprId`
+   * with one of reference attributes, e.g., `a#1 + 1 AS a#1`.
+   */
+  def checkIfSameExprIdNotReused(plan: LogicalPlan): Boolean = {
+    plan.collect { case p if p.resolved =>
+      val inputExprIds = p.inputSet.filter(_.resolved).map(_.exprId).toSet
+      val newExprIds = p.expressions.filter(_.resolved).flatMap { e =>
+        e.collect {
+          // Only accepts the case of aliases renaming foldable expressions, e.g.,
+          // `FoldablePropagation` generates this renaming pattern.
+          case a: Alias if !a.child.foldable => a.exprId
+        }
+      }.toSet
+      inputExprIds.intersect(newExprIds).isEmpty
+    }.forall(identity)
+  }
+
+  /**
+   * This method checks if the same `ExprId` refers to an unique attribute in a plan tree.
+   * Some plan transformers (e.g., `RemoveNoopOperators`) rewrite logical
+   * plans based on this assumption.
+   */
+  def checkIfExprIdsAreGloballyUnique(plan: LogicalPlan): Boolean = {
+    checkIfSameExprIdNotReused(plan) && hasUniqueExprIdsForOutput(plan)
+  }
+}

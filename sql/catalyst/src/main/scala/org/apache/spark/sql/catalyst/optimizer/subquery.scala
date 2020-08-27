@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.CleanupAliases
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, CleanupAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -458,7 +458,10 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
         sys.error(s"Unexpected operator in scalar subquery: $lp")
     }
 
-    val resultMap = evalPlan(plan)
+    val resultMap = evalPlan(plan).mapValues { _.transform {
+        case a: Alias => a.newInstance() // Assigns a new `ExprId`
+      }
+    }
 
     // By convention, the scalar subquery result is the leftmost field.
     resultMap.get(plan.output.head.exprId) match {
@@ -510,8 +513,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
    */
   private def constructLeftJoins(
       child: LogicalPlan,
-      subqueries: ArrayBuffer[ScalarSubquery]): LogicalPlan = {
-    subqueries.foldLeft(child) {
+      subqueries: ArrayBuffer[ScalarSubquery]): (LogicalPlan, Seq[(LogicalPlan, LogicalPlan)]) = {
+    val rewritePlanMap = ArrayBuffer[(LogicalPlan, LogicalPlan)]()
+    val newPlan = subqueries.foldLeft(child) {
       case (currentChild, ScalarSubquery(query, conditions, _)) =>
         val origOutput = query.output.head
 
@@ -539,16 +543,23 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
 
           if (havingNode.isEmpty) {
             // CASE 2: Subquery with no HAVING clause
-            Project(
-              currentChild.output :+
-                Alias(
-                  If(IsNull(alwaysTrueRef),
-                    resultWithZeroTups.get,
-                    aggValRef), origOutput.name)(exprId = origOutput.exprId),
-              Join(currentChild,
-                Project(query.output :+ alwaysTrueExpr, query),
-                LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
+            val joinPlan = Join(currentChild,
+              Project(query.output :+ alwaysTrueExpr, query),
+              LeftOuter, conditions.reduceOption(And), JoinHint.NONE)
 
+            def buildPlan(exprId: ExprId): LogicalPlan = {
+              Project(
+                currentChild.output :+
+                  Alias(
+                    If(IsNull(alwaysTrueRef),
+                      resultWithZeroTups.get,
+                      aggValRef), origOutput.name)(exprId),
+                joinPlan)
+            }
+
+            val newPlan = buildPlan(origOutput.exprId)
+            rewritePlanMap += newPlan -> buildPlan(NamedExpression.newExprId)
+            newPlan
           } else {
             // CASE 3: Subquery with HAVING clause. Pull the HAVING clause above the join.
             // Need to modify any operators below the join to pass through all columns
@@ -564,60 +575,85 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
               case op => sys.error(s"Unexpected operator $op in corelated subquery")
             }
 
-            // CASE WHEN alwaysTrue IS NULL THEN resultOnZeroTups
-            //      WHEN NOT (original HAVING clause expr) THEN CAST(null AS <type of aggVal>)
-            //      ELSE (aggregate value) END AS (original column name)
-            val caseExpr = Alias(CaseWhen(Seq(
-              (IsNull(alwaysTrueRef), resultWithZeroTups.get),
-              (Not(havingNode.get.condition), Literal.create(null, aggValRef.dataType))),
-              aggValRef),
-              origOutput.name)(exprId = origOutput.exprId)
+            val joinPlan = Join(currentChild,
+              Project(subqueryRoot.output :+ alwaysTrueExpr, subqueryRoot),
+              LeftOuter, conditions.reduceOption(And), JoinHint.NONE)
 
-            Project(
-              currentChild.output :+ caseExpr,
-              Join(currentChild,
-                Project(subqueryRoot.output :+ alwaysTrueExpr, subqueryRoot),
-                LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
+            def buildPlan(exprId: ExprId): LogicalPlan = {
+              // CASE WHEN alwaysTrue IS NULL THEN resultOnZeroTups
+              //      WHEN NOT (original HAVING clause expr) THEN CAST(null AS <type of aggVal>)
+              //      ELSE (aggregate value) END AS (original column name)
+              val caseExpr = Alias(CaseWhen(Seq(
+                (IsNull(alwaysTrueRef), resultWithZeroTups.get),
+                (Not(havingNode.get.condition), Literal.create(null, aggValRef.dataType))),
+                aggValRef),
+                origOutput.name)(exprId)
 
+              Project(
+                currentChild.output :+ caseExpr,
+                joinPlan)
+            }
+
+            val newPlan = buildPlan(origOutput.exprId)
+            rewritePlanMap += newPlan -> buildPlan(NamedExpression.newExprId)
+            newPlan
           }
         }
     }
+
+    (newPlan, rewritePlanMap)
   }
 
   /**
    * Rewrite [[Filter]], [[Project]] and [[Aggregate]] plans containing correlated scalar
    * subqueries.
    */
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case a @ Aggregate(grouping, expressions, child) =>
-      val subqueries = ArrayBuffer.empty[ScalarSubquery]
-      val newExpressions = expressions.map(extractCorrelatedScalarSubqueries(_, subqueries))
-      if (subqueries.nonEmpty) {
-        // We currently only allow correlated subqueries in an aggregate if they are part of the
-        // grouping expressions. As a result we need to replace all the scalar subqueries in the
-        // grouping expressions by their result.
-        val newGrouping = grouping.map { e =>
-          subqueries.find(_.semanticEquals(e)).map(_.plan.output.head).getOrElse(e)
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val rewritePlanMap = ArrayBuffer[(LogicalPlan, LogicalPlan)]()
+    val newPlan = plan transform {
+      case a @ Aggregate(grouping, expressions, child) =>
+        val subqueries = ArrayBuffer.empty[ScalarSubquery]
+        val newExpressions = expressions.map(extractCorrelatedScalarSubqueries(_, subqueries))
+        if (subqueries.nonEmpty) {
+          // We currently only allow correlated subqueries in an aggregate if they are part of the
+          // grouping expressions. As a result we need to replace all the scalar subqueries in the
+          // grouping expressions by their result.
+          val newGrouping = grouping.map { e =>
+            subqueries.find(_.semanticEquals(e)).map(_.plan.output.head).getOrElse(e)
+          }
+          val (newChild, rewriteMap) = constructLeftJoins(child, subqueries)
+          rewritePlanMap ++= rewriteMap
+          Aggregate(newGrouping, newExpressions, newChild)
+        } else {
+          a
         }
-        Aggregate(newGrouping, newExpressions, constructLeftJoins(child, subqueries))
-      } else {
-        a
-      }
-    case p @ Project(expressions, child) =>
-      val subqueries = ArrayBuffer.empty[ScalarSubquery]
-      val newExpressions = expressions.map(extractCorrelatedScalarSubqueries(_, subqueries))
-      if (subqueries.nonEmpty) {
-        Project(newExpressions, constructLeftJoins(child, subqueries))
-      } else {
-        p
-      }
-    case f @ Filter(condition, child) =>
-      val subqueries = ArrayBuffer.empty[ScalarSubquery]
-      val newCondition = extractCorrelatedScalarSubqueries(condition, subqueries)
-      if (subqueries.nonEmpty) {
-        Project(f.output, Filter(newCondition, constructLeftJoins(child, subqueries)))
-      } else {
-        f
-      }
+      case p @ Project(expressions, child) =>
+        val subqueries = ArrayBuffer.empty[ScalarSubquery]
+        val newExpressions = expressions.map(extractCorrelatedScalarSubqueries(_, subqueries))
+        if (subqueries.nonEmpty) {
+          val (newChild, rewriteMap) = constructLeftJoins(child, subqueries)
+          rewritePlanMap ++= rewriteMap
+          Project(newExpressions, newChild)
+        } else {
+          p
+        }
+      case f @ Filter(condition, child) =>
+        val subqueries = ArrayBuffer.empty[ScalarSubquery]
+        val newCondition = extractCorrelatedScalarSubqueries(condition, subqueries)
+        if (subqueries.nonEmpty) {
+          val (newChild, rewriteMap) = constructLeftJoins(child, subqueries)
+          rewritePlanMap ++= rewriteMap
+          Project(f.output, Filter(newCondition, newChild))
+        } else {
+          f
+        }
+    }
+
+    if (rewritePlanMap.nonEmpty) {
+      assert(!plan.fastEquals(newPlan))
+      Analyzer.rewritePlan(newPlan, rewritePlanMap.toMap)._1
+    } else {
+      newPlan
+    }
   }
 }
