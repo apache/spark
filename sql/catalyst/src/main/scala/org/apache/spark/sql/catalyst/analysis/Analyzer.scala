@@ -21,7 +21,6 @@ import java.util
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
@@ -38,7 +37,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, CaseInsensitiveMap}
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
@@ -931,14 +930,13 @@ class Analyzer(
      */
     private def lookupV2Relation(
         identifier: Seq[String],
-        options: CaseInsensitiveMap[String] = CaseInsensitiveMap[String](Map.empty))
+        options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
     : Option[DataSourceV2Relation] =
       expandRelationName(identifier) match {
         case NonSessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident) match {
             case Some(table) =>
-              Some(DataSourceV2Relation.create(
-                table, Some(catalog), Some(ident), new CaseInsensitiveStringMap(options.asJava)))
+              Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), options))
             case None => None
           }
         case _ => None
@@ -1023,7 +1021,7 @@ class Analyzer(
     // 3) If a v1 table is found, create a v1 relation. Otherwise, create a v2 relation.
     private def lookupRelation(
         identifier: Seq[String],
-        options: CaseInsensitiveMap[String] = CaseInsensitiveMap[String](Map.empty))
+        options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
     : Option[LogicalPlan] = {
       expandRelationName(identifier) match {
         case SessionCatalogAndIdentifier(catalog, ident) =>
@@ -1033,8 +1031,7 @@ class Analyzer(
             case table =>
               SubqueryAlias(
                 catalog.name +: ident.asMultipartIdentifier,
-                DataSourceV2Relation.create(table, Some(catalog), Some(ident),
-                  new CaseInsensitiveStringMap(options.asJava)))
+                DataSourceV2Relation.create(table, Some(catalog), Some(ident), options))
           }
           val key = catalog.name +: ident.namespace :+ ident.name
           AnalysisContext.get.relationCache.get(key).map(_.transform {

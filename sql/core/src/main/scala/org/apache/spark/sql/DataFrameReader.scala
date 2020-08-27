@@ -825,7 +825,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     assertNoSpecifiedSchema("table")
     val multipartIdentifier =
       sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
-    Dataset.ofRows(sparkSession, UnresolvedRelation(multipartIdentifier, extraOptions))
+    Dataset.ofRows(sparkSession, UnresolvedRelation(multipartIdentifier,
+      new CaseInsensitiveStringMap(extraOptions.toMap.asJava)))
   }
 
   /**
