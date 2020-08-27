@@ -425,7 +425,7 @@ class DenseVector(Vector):
         return DenseVector(-self.array)
 
     def _delegate(op: str):  # type: ignore
-        def func(self, other) -> DenseVector:
+        def func(self, other) -> 'DenseVector':
             if isinstance(other, DenseVector):
                 other = other.array
             return DenseVector(getattr(self.array, op)(other))
