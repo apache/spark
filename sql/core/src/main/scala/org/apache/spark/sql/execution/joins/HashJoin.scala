@@ -106,11 +106,11 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
   }
 
   protected lazy val (buildKeys, streamedKeys) = {
-    require(
+    require(leftKeys.length == rightKeys.length &&
       leftKeys.map(_.dataType)
         .zip(rightKeys.map(_.dataType))
         .forall(types => types._1.sameType(types._2)),
-      "Join keys from two sides should have same types")
+      "Join keys from two sides should have same length and types")
     buildSide match {
       case BuildLeft => (leftKeys, rightKeys)
       case BuildRight => (rightKeys, leftKeys)
