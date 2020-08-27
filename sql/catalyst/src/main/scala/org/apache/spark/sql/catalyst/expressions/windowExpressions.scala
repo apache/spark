@@ -476,7 +476,8 @@ case class Lag(input: Expression, offset: Expression, default: Expression)
 
 abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowFunction {
   self: Product =>
-  override val frame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
+  override def frame: WindowFrame =
+    SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override lazy val mergeExpressions =
@@ -491,6 +492,60 @@ abstract class RowNumberLike extends AggregateWindowFunction {
   override val aggBufferAttributes: Seq[AttributeReference] = rowNumber :: Nil
   override val initialValues: Seq[Expression] = zero :: Nil
   override val updateExpressions: Seq[Expression] = rowNumber + one :: Nil
+}
+
+case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
+  extends AggregateWindowFunction with ImplicitCastInputTypes {
+
+  def this(child: Expression, offset: Expression) = this(child, offset, false)
+
+  override def children: Seq[Expression] = Nil
+
+  override def dataType: DataType = input.dataType
+
+  override def frame: WindowFrame = UnspecifiedFrame
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegerType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val check = super.checkInputDataTypes()
+    if (check.isFailure) {
+      check
+    } else if (!offset.foldable) {
+      TypeCheckFailure(s"Offset expression '$offset' must be a literal.")
+    } else {
+      TypeCheckSuccess
+    }
+  }
+
+  private lazy val result = AttributeReference("result", dataType)()
+  private lazy val count = AttributeReference("count", LongType)()
+  private lazy val valueSet = AttributeReference("valueSet", BooleanType)()
+  override val aggBufferAttributes: Seq[AttributeReference] = result :: count :: valueSet :: Nil
+
+  override lazy val initialValues: Seq[Literal] = Seq(
+    /* result = */ Literal.create(null, dataType),
+    /* count = */ Literal(1L),
+    /* valueSet = */ Literal.create(false, BooleanType)
+  )
+
+  override lazy val updateExpressions: Seq[Expression] = {
+    if (ignoreNulls) {
+      Seq(
+        /* result = */ If(valueSet || input.isNull, result, If(count >= offset, input, result)),
+        /* count = */ If(input.isNull, count, count + 1L),
+        /* valueSet = */ valueSet || (input.isNotNull && count >= offset)
+      )
+    } else {
+      Seq(
+        /* result = */ If(valueSet, result, If(count >= offset, input, result)),
+        /* count = */ count + 1L,
+        /* valueSet = */ If(count >= offset, Literal.create(true, BooleanType), valueSet)
+      )
+    }
+  }
+
+  override val evaluateExpression = result
 }
 
 /**

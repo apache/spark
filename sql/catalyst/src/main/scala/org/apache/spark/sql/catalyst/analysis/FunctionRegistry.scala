@@ -508,6 +508,7 @@ object FunctionRegistry {
     // window functions
     expression[Lead]("lead"),
     expression[Lag]("lag"),
+    expression[NthValue]("nth_value"),
     expression[RowNumber]("row_number"),
     expression[CumeDist]("cume_dist"),
     expression[NTile]("ntile"),
