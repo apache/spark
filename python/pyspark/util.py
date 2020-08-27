@@ -20,11 +20,10 @@ import threading
 import re
 import sys
 import traceback
-from typing import List
 
 from py4j.clientserver import ClientServer
 
-__all__: List[str] = []
+__all__ = []
 
 
 def print_exec(stream):

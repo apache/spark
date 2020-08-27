@@ -19,7 +19,6 @@ import sys
 import warnings
 from functools import reduce
 from threading import RLock
-from typing import Dict
 
 from pyspark import since
 from pyspark.rdd import RDD
@@ -77,7 +76,7 @@ class SparkSession(SparkConversionMixin):
         """
 
         _lock = RLock()
-        _options: Dict = {}
+        _options = {}  # type: ignore
         _sc = None
 
         @since(2.0)

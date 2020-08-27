@@ -57,7 +57,6 @@ class StorageLevel(object):
         result += "%sx Replicated" % self.replication
         return result
 
-
 StorageLevel.DISK_ONLY = StorageLevel(True, False, False, False)
 StorageLevel.DISK_ONLY_2 = StorageLevel(True, False, False, False, 2)
 StorageLevel.DISK_ONLY_3 = StorageLevel(True, False, False, False, 3)

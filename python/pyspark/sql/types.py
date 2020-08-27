@@ -25,7 +25,6 @@ import re
 import base64
 from array import array
 import ctypes
-from typing import Dict, List, Type
 
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import JavaClass
@@ -95,7 +94,7 @@ class DataType(object):
 class DataTypeSingleton(type):
     """Metaclass for DataType"""
 
-    _instances: Dict = {}
+    _instances = {}
 
     def __call__(cls):
         if cls not in cls._instances:
@@ -737,13 +736,11 @@ class UserDefinedType(DataType):
     def __eq__(self, other):
         return type(self) == type(other)
 
-
-_atomic_types: List[Type[DataType]] = [StringType, BinaryType, BooleanType, DecimalType, FloatType,
-                                       DoubleType, ByteType, ShortType, IntegerType, LongType,
-                                       DateType, TimestampType, NullType]
+_atomic_types = [StringType, BinaryType, BooleanType, DecimalType, FloatType, DoubleType,
+                 ByteType, ShortType, IntegerType, LongType, DateType, TimestampType, NullType]
 _all_atomic_types = dict((t.typeName(), t) for t in _atomic_types)
-_complex_types: List[Type[DataType]] = [ArrayType, MapType, StructType]
-_all_complex_types = dict((v.typeName(), v) for v in _complex_types)
+_all_complex_types = dict((v.typeName(), v)
+                          for v in [ArrayType, MapType, StructType])
 
 
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
@@ -943,7 +940,7 @@ def _int_size_to_type(size):
 
 
 # The list of all supported array typecodes, is stored here
-_array_type_mappings: Dict[str, Type[DataType]] = {
+_array_type_mappings = {
     # Warning: Actual properties for float and double in C is not specified in C.
     # On almost every system supported by both python and JVM, they are IEEE 754
     # single-precision binary floating-point format and IEEE 754 double-precision
