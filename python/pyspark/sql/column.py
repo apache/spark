@@ -21,7 +21,7 @@ import warnings
 
 from pyspark import copy_func, since
 from pyspark.context import SparkContext
-from pyspark.sql.types import *
+from pyspark.sql.types import DataType, StructField, StructType, IntegerType, StringType
 
 __all__ = ["Column"]
 
