@@ -32,7 +32,7 @@ class AQEOptimizer(conf: SQLConf) extends RuleExecutor[LogicalPlan] {
     Batch("Eliminate Join to Empty Relation", Once, EliminateJoinToEmptyRelation)
   )
 
-  override protected def batches: Seq[Batch] = {
+  final override protected def batches: Seq[Batch] = {
     val excludedRules = conf.getConf(SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES)
       .toSeq.flatMap(Utils.stringToSeq)
     defaultBatches.flatMap { batch =>
