@@ -32,8 +32,9 @@ import org.apache.spark.sql.types._
  */
 class OrcSerializer(dataSchema: StructType) {
 
-  // TODO: repeating steps here. Can pass as parameter to newConverter, but only done once at the
-  //  schema level.
+  // TODO(SPARK-32732)
+  //  Repeating steps here. Can convert at top level only once and pass as parameter to newConverter
+  //  However, steps are repeated only at the schema level.
   def schemaConverter(schema: DataType): TypeDescription = {
     TypeDescription.fromString(OrcFileFormat.getQuotedSchemaString(schema))
   }
