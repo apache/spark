@@ -17,23 +17,23 @@ CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
 AS testData(val, val_long, val_double, val_date, val_timestamp, cate);
 
 CREATE OR REPLACE TEMPORARY VIEW basic_pays AS SELECT * FROM VALUES
-('Diane Murphy','Accounting',8435),
-('Mary Patterson','Accounting',9998),
-('Jeff Firrelli','Accounting',8992),
-('William Patterson','Accounting',8870),
-('Gerard Bondur','Accounting',11472),
-('Anthony Bow','Accounting',6627),
-('Leslie Jennings','IT',8113),
-('Leslie Thompson','IT',5186),
-('Julie Firrelli','Sales',9181),
-('Steve Patterson','Sales',9441),
-('Foon Yue Tseng','Sales',6660),
-('George Vanauf','Sales',10563),
-('Loui Bondur','SCM',10449),
-('Gerard Hernandez','SCM',6949),
-('Pamela Castillo','SCM',11303),
-('Larry Bott','SCM',11798),
-('Barry Jones','SCM',10586)
+('Diane Murphy','Accounting',8435L),
+('Mary Patterson','Accounting',9998L),
+('Jeff Firrelli','Accounting',8992L),
+('William Patterson','Accounting',8870L),
+('Gerard Bondur','Accounting',11472L),
+('Anthony Bow','Accounting',6627L),
+('Leslie Jennings','IT',8113L),
+('Leslie Thompson','IT',5186L),
+('Julie Firrelli','Sales',9181L),
+('Steve Patterson','Sales',9441L),
+('Foon Yue Tseng','Sales',6660L),
+('George Vanauf','Sales',10563L),
+('Loui Bondur','SCM',10449L),
+('Gerard Hernandez','SCM',6949L),
+('Pamela Castillo','SCM',11303L),
+('Larry Bott','SCM',11798L),
+('Barry Jones','SCM',10586L)
 AS basic_pays(employee_name, department, salary);
 
 -- RowsBetween
