@@ -216,7 +216,7 @@ object SQLConf {
         "for using switch statements in InSet must be non-negative and less than or equal to 600")
       .createWithDefault(400)
 
-  val OPTIMIZER_PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.optimizer.planChangeLog.level")
+  val PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
       "plan after a rule or batch is applied. The value can be 'trace', 'debug', 'info', " +
@@ -229,17 +229,17 @@ object SQLConf {
         "'trace', 'debug', 'info', 'warn' and 'error'.")
     .createWithDefault("trace")
 
-  val OPTIMIZER_PLAN_CHANGE_LOG_RULES = buildConf("spark.sql.optimizer.planChangeLog.rules")
+  val PLAN_CHANGE_LOG_RULES = buildConf("spark.sql.planChangeLog.rules")
     .internal()
-    .doc("Configures a list of rules to be logged in the optimizer, in which the rules are " +
+    .doc("Configures a list of rules for logging plan changes, in which the rules are " +
       "specified by their rule names and separated by comma.")
     .version("3.0.0")
     .stringConf
     .createOptional
 
-  val OPTIMIZER_PLAN_CHANGE_LOG_BATCHES = buildConf("spark.sql.optimizer.planChangeLog.batches")
+  val PLAN_CHANGE_LOG_BATCHES = buildConf("spark.sql.planChangeLog.batches")
     .internal()
-    .doc("Configures a list of batches to be logged in the optimizer, in which the batches " +
+    .doc("Configures a list of batches for logging plan changes, in which the batches " +
       "are specified by their batch names and separated by comma.")
     .version("3.0.0")
     .stringConf
@@ -2804,7 +2804,13 @@ object SQLConf {
         s"Use '${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}' instead of it."),
       RemovedConfig("spark.sql.execution.pandas.respectSessionTimeZone", "3.0.0", "true",
         "The non-default behavior is considered as a bug, see SPARK-22395. " +
-        "The config was deprecated since Spark 2.3.")
+        "The config was deprecated since Spark 2.3."),
+      RemovedConfig("spark.sql.optimizer.planChangeLog.level", "3.1.0", "trace",
+        s"Please use `${PLAN_CHANGE_LOG_LEVEL.key}` instead."),
+      RemovedConfig("spark.sql.optimizer.planChangeLog.rules", "3.1.0", "",
+        s"Please use `${PLAN_CHANGE_LOG_RULES.key}` instead."),
+      RemovedConfig("spark.sql.optimizer.planChangeLog.batches", "3.1.0", "",
+        s"Please use `${PLAN_CHANGE_LOG_BATCHES.key}` instead.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -2841,11 +2847,11 @@ class SQLConf extends Serializable with Logging {
 
   def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
 
-  def optimizerPlanChangeLogLevel: String = getConf(OPTIMIZER_PLAN_CHANGE_LOG_LEVEL)
+  def planChangeLogLevel: String = getConf(PLAN_CHANGE_LOG_LEVEL)
 
-  def optimizerPlanChangeRules: Option[String] = getConf(OPTIMIZER_PLAN_CHANGE_LOG_RULES)
+  def planChangeRules: Option[String] = getConf(PLAN_CHANGE_LOG_RULES)
 
-  def optimizerPlanChangeBatches: Option[String] = getConf(OPTIMIZER_PLAN_CHANGE_LOG_BATCHES)
+  def planChangeBatches: Option[String] = getConf(PLAN_CHANGE_LOG_BATCHES)
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
 
