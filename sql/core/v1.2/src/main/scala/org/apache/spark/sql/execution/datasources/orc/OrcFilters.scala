@@ -139,7 +139,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   /**
    * Get PredicateLeafType which is corresponding to the given DataType.
    */
-  private def getPredicateLeafType(dataType: DataType) = dataType match {
+  def getPredicateLeafType(dataType: DataType): PredicateLeaf.Type = dataType match {
     case BooleanType => PredicateLeaf.Type.BOOLEAN
     case ByteType | ShortType | IntegerType | LongType => PredicateLeaf.Type.LONG
     case FloatType | DoubleType => PredicateLeaf.Type.FLOAT
@@ -219,7 +219,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       expression: Filter,
       builder: Builder): Option[Builder] = {
     def getType(attribute: String): PredicateLeaf.Type =
-      getPredicateLeafType(dataTypeMap(attribute))
+      getPredicateLeafType(dataTypeMap(attribute).fieldType)
 
     import org.apache.spark.sql.sources._
 

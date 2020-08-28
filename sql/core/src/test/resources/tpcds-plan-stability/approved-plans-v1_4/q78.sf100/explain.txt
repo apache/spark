@@ -74,7 +74,7 @@ TakeOrderedAndProject (70)
 (1) Scan parquet default.store_sales
 Output [7]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_ticket_number#4, ss_quantity#5, ss_wholesale_cost#6, ss_sales_price#7]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_sold_date_sk), IsNotNull(ss_item_sk), IsNotNull(ss_customer_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_customer_sk:int,ss_ticket_number:int,ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_sales_price:decimal(7,2)>
 
@@ -96,7 +96,7 @@ Arguments: [cast(ss_ticket_number#4 as bigint) ASC NULLS FIRST, cast(ss_item_sk#
 (6) Scan parquet default.store_returns
 Output [2]: [sr_item_sk#9, sr_ticket_number#10]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/store_returns]
+Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
 ReadSchema: struct<sr_item_sk:bigint,sr_ticket_number:bigint>
 
@@ -131,7 +131,7 @@ Input [9]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_ticket_number#
 (14) Scan parquet default.date_dim
 Output [2]: [d_date_sk#12, d_year#13]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
@@ -180,7 +180,7 @@ Arguments: [ss_sold_year#25 ASC NULLS FIRST, ss_item_sk#2 ASC NULLS FIRST, ss_cu
 (24) Scan parquet default.catalog_sales
 Output [7]: [cs_sold_date_sk#29, cs_bill_customer_sk#30, cs_item_sk#31, cs_order_number#32, cs_quantity#33, cs_wholesale_cost#34, cs_sales_price#35]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/catalog_sales]
+Location [not included in comparison]/{warehouse_dir}/catalog_sales]
 PushedFilters: [IsNotNull(cs_sold_date_sk), IsNotNull(cs_item_sk), IsNotNull(cs_bill_customer_sk)]
 ReadSchema: struct<cs_sold_date_sk:int,cs_bill_customer_sk:int,cs_item_sk:int,cs_order_number:int,cs_quantity:int,cs_wholesale_cost:decimal(7,2),cs_sales_price:decimal(7,2)>
 
@@ -202,7 +202,7 @@ Arguments: [cs_order_number#32 ASC NULLS FIRST, cs_item_sk#31 ASC NULLS FIRST], 
 (29) Scan parquet default.catalog_returns
 Output [2]: [cr_item_sk#37, cr_order_number#38]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/catalog_returns]
+Location [not included in comparison]/{warehouse_dir}/catalog_returns]
 PushedFilters: [IsNotNull(cr_order_number), IsNotNull(cr_item_sk)]
 ReadSchema: struct<cr_item_sk:int,cr_order_number:int>
 
@@ -284,7 +284,7 @@ Input [12]: [ss_sold_year#25, ss_item_sk#2, ss_customer_sk#3, ss_qty#26, ss_wc#2
 (47) Scan parquet default.web_sales
 Output [7]: [ws_sold_date_sk#55, ws_item_sk#56, ws_bill_customer_sk#57, ws_order_number#58, ws_quantity#59, ws_wholesale_cost#60, ws_sales_price#61]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/web_sales]
+Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_sold_date_sk), IsNotNull(ws_bill_customer_sk), IsNotNull(ws_item_sk)]
 ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_bill_customer_sk:int,ws_order_number:int,ws_quantity:int,ws_wholesale_cost:decimal(7,2),ws_sales_price:decimal(7,2)>
 
@@ -306,7 +306,7 @@ Arguments: [cast(ws_order_number#58 as bigint) ASC NULLS FIRST, cast(ws_item_sk#
 (52) Scan parquet default.web_returns
 Output [2]: [wr_item_sk#63, wr_order_number#64]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/web_returns]
+Location [not included in comparison]/{warehouse_dir}/web_returns]
 PushedFilters: [IsNotNull(wr_order_number), IsNotNull(wr_item_sk)]
 ReadSchema: struct<wr_item_sk:bigint,wr_order_number:bigint>
 

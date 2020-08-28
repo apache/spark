@@ -139,7 +139,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   /**
    * Get PredicateLeafType which is corresponding to the given DataType.
    */
-  private[sql] def getPredicateLeafType(dataType: DataType) = dataType match {
+  def getPredicateLeafType(dataType: DataType): PredicateLeaf.Type = dataType match {
     case BooleanType => PredicateLeaf.Type.BOOLEAN
     case ByteType | ShortType | IntegerType | LongType => PredicateLeaf.Type.LONG
     case FloatType | DoubleType => PredicateLeaf.Type.FLOAT
