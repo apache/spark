@@ -134,10 +134,10 @@ case class ShuffledHashJoinExec(
    * Full outer shuffled hash join with unique join keys:
    * 1. Process rows from stream side by looking up hash relation.
    *    Mark the matched rows from build side be looked up.
-   *    A [[BitSet]] is used to track matched rows with key index.
+   *    A bit set is used to track matched rows with key index.
    * 2. Process rows from build side by iterating hash relation.
    *    Filter out rows from build side being matched already,
-   *    by checking key index from [[BitSet]].
+   *    by checking key index from bit set.
    */
   private def fullOuterJoinWithUniqueKey(
       streamIter: Iterator[InternalRow],
@@ -149,8 +149,7 @@ case class ShuffledHashJoinExec(
       buildNullRow: GenericInternalRow,
       streamNullRow: GenericInternalRow): Iterator[InternalRow] = {
     val matchedKeys = new BitSet(hashedRelation.maxNumKeysIndex)
-    val buildDataSize = longMetric("buildDataSize")
-    buildDataSize += matchedKeys.capacity / 8
+    longMetric("buildDataSize") += matchedKeys.capacity / 8
 
     // Process stream side with looking up hash relation
     val streamResultIter = streamIter.map { srow =>
@@ -221,10 +220,9 @@ case class ShuffledHashJoinExec(
       // At the end of the task, update the task's memory usage for this
       // [[OpenHashSet]] to track matched rows, which has two parts:
       // [[OpenHashSet._bitset]] and [[OpenHashSet._data]].
-      val buildDataSize = longMetric("buildDataSize")
       val bitSetEstimatedSize = matchedRows.getBitSet.capacity / 8
       val dataEstimatedSize = matchedRows.capacity * 8
-      buildDataSize += bitSetEstimatedSize + dataEstimatedSize
+      longMetric("buildDataSize") += bitSetEstimatedSize + dataEstimatedSize
     })
 
     def markRowMatched(keyIndex: Int, valueIndex: Int): Unit = {
