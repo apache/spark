@@ -208,8 +208,19 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       FalseLiteral)
     val branches = Seq((UnresolvedAttribute("i") > Literal(10)) -> branchValue)
     val condition = CaseWhen(branches)
-    testFilter(originalCond = condition, expectedCond = condition)
-    testJoin(originalCond = condition, expectedCond = condition)
+    val simplifiedCond = If(
+      UnresolvedAttribute("i") > Literal(10),
+      If(
+        Literal(2) === If(
+          UnresolvedAttribute("i") > Literal(20),
+          Literal(2),
+          Literal(null, IntegerType)
+        ),
+        TrueLiteral,
+        FalseLiteral),
+      FalseLiteral)
+    testFilter(originalCond = condition, expectedCond = simplifiedCond)
+    testJoin(originalCond = condition, expectedCond = simplifiedCond)
   }
 
   test("inability to replace null in non-boolean branches of If inside another If") {
@@ -305,7 +316,8 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       UnresolvedAttribute("i"),
       If(UnresolvedAttribute("b"), Literal(null, IntegerType), Literal(4)))
     val column = CaseWhen(Seq(condition -> Literal(5)), Literal(2)).as("out")
-    testProjection(originalExpr = column, expectedExpr = column)
+    val simplifiedColumn = If(condition, Literal(5), Literal(2)).as("out")
+    testProjection(originalExpr = column, expectedExpr = simplifiedColumn)
   }
 
   private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
