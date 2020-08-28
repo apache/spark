@@ -956,7 +956,8 @@ case class Pow(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(2, 1);
        4
-  """)
+  """,
+  since = "1.5.0")
 case class ShiftLeft(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -990,7 +991,8 @@ case class ShiftLeft(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(4, 1);
        2
-  """)
+  """,
+  since = "1.5.0")
 case class ShiftRight(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -1024,7 +1026,8 @@ case class ShiftRight(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(4, 1);
        2
-  """)
+  """,
+  since = "1.5.0")
 case class ShiftRightUnsigned(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
