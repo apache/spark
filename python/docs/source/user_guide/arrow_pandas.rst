@@ -77,7 +77,7 @@ configuration is required. A Pandas UDF behaves as a regular PySpark function AP
 
 Before Spark 3.0, Pandas UDFs used to be defined with ``pyspark.sql.functions.PandasUDFType``. From Spark 3.0
 with Python 3.6+, you can also use `Python type hints <https://www.python.org/dev/peps/pep-0484>`_.
-Using Python type hints are preferred and using ``pyspark.sql.functions.PandasUDFType`` will be deprecated in
+Using Python type hints is preferred and using ``pyspark.sql.functions.PandasUDFType`` will be deprecated in
 the future release.
 
 .. currentmodule:: pyspark.sql.types
@@ -219,7 +219,7 @@ Pandas Function APIs
 
 Pandas Function APIs can directly apply a Python native function against the whole :class:`DataFrame` by
 using Pandas instances. Internally it works similarly with Pandas UDFs by using Arrow to transfer
-data and Pandas to work with the data, which allows vectorized operations. However, A Pandas Function
+data and Pandas to work with the data, which allows vectorized operations. However, a Pandas Function
 API behaves as a regular API under PySpark :class:`DataFrame` instead of :class:`Column`, and Python type hints in Pandas
 Functions APIs are optional and do not affect how it works internally at this moment although they
 might be required in the future.
@@ -257,7 +257,7 @@ To use ``DataFrame.groupBy().applyInPandas()``, the user needs to define the fol
 
 The column labels of the returned ``pandas.DataFrame`` must either match the field names in the
 defined output schema if specified as strings, or match the field data types by position if not
-strings, e.g. integer indices. See `pandas.DataFrame <https://pandas.pydata.org/pandas-docs/stable/generated/pandas.DataFrame.html#pandas.DataFrame>`_.
+strings, e.g. integer indices. See `pandas.DataFrame <https://pandas.pydata.org/pandas-docs/stable/generated/pandas.DataFrame.html#pandas.DataFrame>`_
 on how to label columns when constructing a ``pandas.DataFrame``.
 
 Note that all data for a group will be loaded into memory before the function is applied. This can
@@ -280,7 +280,7 @@ Map
 
 Map operations with Pandas instances are supported by :meth:`DataFrame.mapInPandas` which maps an iterator
 of ``pandas.DataFrame``\s to another iterator of ``pandas.DataFrame``\s that represents the current
-PySpark :class:`DataFrame` and returns the result as a PySpark :class:`DataFrame`. The functions takes and outputs
+PySpark :class:`DataFrame` and returns the result as a PySpark :class:`DataFrame`. The function takes and outputs
 an iterator of ``pandas.DataFrame``. It can return the output of arbitrary length in contrast to some
 Pandas UDFs although internally it works similarly with Series to Series Pandas UDF.
 
@@ -363,7 +363,7 @@ Timestamp with Time Zone Semantics
 Spark internally stores timestamps as UTC values, and timestamp data that is brought in without
 a specified time zone is converted as local time to UTC with microsecond resolution. When timestamp
 data is exported or displayed in Spark, the session time zone is used to localize the timestamp
-values. The session time zone is set with the configuration 'spark.sql.session.timeZone' and will
+values. The session time zone is set with the configuration ``spark.sql.session.timeZone`` and will
 default to the JVM system local time zone if not set. Pandas uses a ``datetime64`` type with nanosecond
 resolution, ``datetime64[ns]``, with optional time zone on a per-column basis.
 
