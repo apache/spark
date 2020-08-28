@@ -522,13 +522,13 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
 
   def this(child: Expression, offset: Expression) = this(child, offset, false)
 
-  override def children: Seq[Expression] = Nil
-
-  override def dataType: DataType = input.dataType
+  override def children: Seq[Expression] = input :: Nil
 
   override def frame: WindowFrame = UnspecifiedFrame
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegerType)
+  override def dataType: DataType = input.dataType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegerType, BooleanType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val check = super.checkInputDataTypes()
@@ -550,13 +550,14 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
     }
   }
 
-  private lazy val result = AttributeReference("result", dataType)()
+  private lazy val result = AttributeReference("result", input.dataType)()
   private lazy val count = AttributeReference("count", LongType)()
   private lazy val valueSet = AttributeReference("valueSet", BooleanType)()
-  override val aggBufferAttributes: Seq[AttributeReference] = result :: count :: valueSet :: Nil
+  override lazy val aggBufferAttributes: Seq[AttributeReference] =
+    result :: count :: valueSet :: Nil
 
   override lazy val initialValues: Seq[Literal] = Seq(
-    /* result = */ Literal.create(null, dataType),
+    /* result = */ Literal.create(null, input.dataType),
     /* count = */ Literal(1L),
     /* valueSet = */ Literal.create(false, BooleanType)
   )
@@ -577,7 +578,9 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
     }
   }
 
-  override val evaluateExpression = result
+  override lazy val evaluateExpression: AttributeReference = result
+
+  override def toString: String = s"$prettyName($input, $offset)${if (ignoreNulls) " ignore nulls"}"
 }
 
 /**
