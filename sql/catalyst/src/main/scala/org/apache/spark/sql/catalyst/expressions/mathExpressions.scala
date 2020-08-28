@@ -550,7 +550,8 @@ case class Log10(child: Expression) extends UnaryLogExpression(StrictMath.log10,
     Examples:
       > SELECT _FUNC_(0);
        0.0
-  """)
+  """,
+  since = "1.4.0")
 case class Log1p(child: Expression) extends UnaryLogExpression(StrictMath.log1p, "LOG1P") {
   protected override val yAsymptote: Double = -1.0
 }
@@ -1335,7 +1336,8 @@ abstract class RoundBase(child: Expression, scale: Expression,
     Examples:
       > SELECT _FUNC_(2.5, 0);
        3
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class Round(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_UP, "ROUND_HALF_UP")
@@ -1355,7 +1357,8 @@ case class Round(child: Expression, scale: Expression)
     Examples:
       > SELECT _FUNC_(2.5, 0);
        2
-  """)
+  """,
+  since = "2.0.0")
 // scalastyle:on line.size.limit
 case class BRound(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN")
