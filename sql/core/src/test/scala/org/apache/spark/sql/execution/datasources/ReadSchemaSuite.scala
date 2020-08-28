@@ -84,9 +84,7 @@ class JsonReadSchemaSuite
   with IntegralTypeTest
   with ToDoubleTypeTest
   with ToDecimalTypeTest
-  with ToStringTypeTest
-  with ArrayWithNestedStructTest
-  with MapWithNestedStructTest {
+  with ToStringTypeTest {
 
   override val format: String = "json"
 }
@@ -97,9 +95,7 @@ class OrcReadSchemaSuite
   with HideColumnInTheMiddleTest
   with AddNestedColumnTest
   with HideNestedColumnTest
-  with ChangePositionTest
-  with ArrayWithNestedStructTest
-  with MapWithNestedStructTest {
+  with ChangePositionTest {
 
   override val format: String = "orc"
 
@@ -149,9 +145,7 @@ class MergedOrcReadSchemaSuite
   with ChangePositionTest
   with BooleanTypeTest
   with IntegralTypeTest
-  with ToDoubleTypeTest
-  with ArrayWithNestedStructTest
-  with MapWithNestedStructTest {
+  with ToDoubleTypeTest {
 
   override val format: String = "orc"
 
@@ -167,9 +161,7 @@ class ParquetReadSchemaSuite
   with HideColumnInTheMiddleTest
   with AddNestedColumnTest
   with HideNestedColumnTest
-  with ChangePositionTest
-  with ArrayWithNestedStructTest
-  with MapWithNestedStructTest {
+  with ChangePositionTest {
 
   override val format: String = "parquet"
 
@@ -213,9 +205,7 @@ class MergedParquetReadSchemaSuite
   with HideColumnInTheMiddleTest
   with AddNestedColumnTest
   with HideNestedColumnTest
-  with ChangePositionTest
-  with ArrayWithNestedStructTest
-  with MapWithNestedStructTest {
+  with ChangePositionTest {
 
   override val format: String = "parquet"
 

@@ -23,9 +23,7 @@ class AvroReadSchemaSuite
   with HideColumnInTheMiddleTest
   with AddNestedColumnTest
   with HideNestedColumnTest
-  with ChangePositionTest
-  with ArrayWithNestedStructTest
-  with MapWithNestedStructTest {
+  with ChangePositionTest {
 
   override val format: String = "avro"
 }
