@@ -146,7 +146,7 @@ case class SortMergeJoinExec(
         case _: InnerLike =>
           new RowIterator {
             private[this] var currentLeftRow: InternalRow = _
-            private[this] var currentRightMatches: ExternalAppendOnlyUnsafeRowArray = _
+            private[this] var currentRightMatches: AppendOnlyUnsafeRowArray = _
             private[this] var rightMatchesIterator: Iterator[UnsafeRow] = null
             private[this] val smjScanner = new SortMergeJoinScanner(
               createLeftKeyGenerator(),
@@ -156,7 +156,8 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
-              cleanupResources
+              cleanupResources,
+              false
             )
             private[this] val joinRow = new JoinedRow
 
@@ -201,7 +202,8 @@ case class SortMergeJoinExec(
             bufferedIter = RowIterator.fromScala(rightIter),
             inMemoryThreshold,
             spillThreshold,
-            cleanupResources
+            cleanupResources,
+            false
           )
           val rightNullRow = new GenericInternalRow(right.output.length)
           new LeftOuterIterator(
@@ -216,7 +218,8 @@ case class SortMergeJoinExec(
             bufferedIter = RowIterator.fromScala(leftIter),
             inMemoryThreshold,
             spillThreshold,
-            cleanupResources
+            cleanupResources,
+            false
           )
           val leftNullRow = new GenericInternalRow(left.output.length)
           new RightOuterIterator(
@@ -251,7 +254,8 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
-              cleanupResources
+              cleanupResources,
+              condition.isEmpty
             )
             private[this] val joinRow = new JoinedRow
 
@@ -287,7 +291,8 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
-              cleanupResources
+              cleanupResources,
+              false
             )
             private[this] val joinRow = new JoinedRow
 
@@ -330,7 +335,8 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
-              cleanupResources
+              cleanupResources,
+              condition.isEmpty
             )
             private[this] val joinRow = new JoinedRow
 
@@ -662,7 +668,8 @@ private[joins] class SortMergeJoinScanner(
     bufferedIter: RowIterator,
     inMemoryThreshold: Int,
     spillThreshold: Int,
-    eagerCleanupResources: () => Unit) {
+    eagerCleanupResources: () => Unit,
+    bufferFirstOnly: Boolean) {
   private[this] var streamedRow: InternalRow = _
   private[this] var streamedRowKey: InternalRow = _
   private[this] var bufferedRow: InternalRow = _
@@ -673,8 +680,29 @@ private[joins] class SortMergeJoinScanner(
    */
   private[this] var matchJoinKey: InternalRow = _
   /** Buffered rows from the buffered side of the join. This is empty if there are no matches. */
-  private[this] val bufferedMatches =
+  private[this] val bufferedMatches: AppendOnlyUnsafeRowArray = if (bufferFirstOnly) {
+    new AppendOnlyUnsafeRowArray {
+      var buffer: UnsafeRow = null
+
+      override def clear(): Unit = {
+        buffer = null
+      }
+
+      override def add(row: UnsafeRow): Unit = {
+        assert(buffer == null)
+
+        buffer = row
+      }
+
+      override def isEmpty: Boolean = buffer == null
+
+      override def length: Int = if (buffer == null) 0 else 1
+
+      override def generateIterator(): Iterator[UnsafeRow] = Iterator(buffer)
+    }
+  } else {
     new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
+  }
 
   // Initialization (note: do _not_ want to advance streamed here).
   advancedBufferedToRowWithNullFreeJoinKey()
@@ -683,7 +711,7 @@ private[joins] class SortMergeJoinScanner(
 
   def getStreamedRow: InternalRow = streamedRow
 
-  def getBufferedMatches: ExternalAppendOnlyUnsafeRowArray = bufferedMatches
+  def getBufferedMatches: AppendOnlyUnsafeRowArray = bufferedMatches
 
   /**
    * Advances both input iterators, stopping when we have found rows with matching join keys. If no
@@ -834,7 +862,9 @@ private[joins] class SortMergeJoinScanner(
     matchJoinKey = streamedRowKey.copy()
     bufferedMatches.clear()
     do {
-      bufferedMatches.add(bufferedRow.asInstanceOf[UnsafeRow])
+      if (!bufferFirstOnly || bufferedMatches.isEmpty) {
+        bufferedMatches.add(bufferedRow.asInstanceOf[UnsafeRow])
+      }
       advancedBufferedToRowWithNullFreeJoinKey()
     } while (bufferedRow != null && keyOrdering.compare(streamedRowKey, bufferedRowKey) == 0)
   }

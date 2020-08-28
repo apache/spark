@@ -30,6 +30,14 @@ import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray.DefaultIn
 import org.apache.spark.storage.BlockManager
 import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, UnsafeSorterIterator}
 
+trait AppendOnlyUnsafeRowArray {
+  def clear()
+  def add(row: UnsafeRow)
+  def isEmpty: Boolean
+  def length: Int
+  def generateIterator(): Iterator[UnsafeRow]
+}
+
 /**
  * An append-only array for [[UnsafeRow]]s that strictly keeps content in an in-memory array
  * until [[numRowsInMemoryBufferThreshold]] is reached post which it will switch to a mode which
@@ -50,7 +58,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
     initialSize: Int,
     pageSizeBytes: Long,
     numRowsInMemoryBufferThreshold: Int,
-    numRowsSpillThreshold: Int) extends Logging {
+    numRowsSpillThreshold: Int) extends AppendOnlyUnsafeRowArray with Logging {
 
   def this(numRowsInMemoryBufferThreshold: Int, numRowsSpillThreshold: Int) {
     this(
