@@ -2794,7 +2794,13 @@ object SQLConf {
         s"Use '${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}' instead of it."),
       RemovedConfig("spark.sql.execution.pandas.respectSessionTimeZone", "3.0.0", "true",
         "The non-default behavior is considered as a bug, see SPARK-22395. " +
-        "The config was deprecated since Spark 2.3.")
+        "The config was deprecated since Spark 2.3."),
+      RemovedConfig("spark.sql.optimizer.planChangeLog.level", "3.1.0", "trace",
+        s"Please use `${PLAN_CHANGE_LOG_LEVEL.key}` instead."),
+      RemovedConfig("spark.sql.optimizer.planChangeLog.rules", "3.1.0", "",
+        s"Please use `${PLAN_CHANGE_LOG_RULES.key}` instead."),
+      RemovedConfig("spark.sql.optimizer.planChangeLog.batches", "3.1.0", "",
+        s"Please use `${PLAN_CHANGE_LOG_BATCHES.key}` instead.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)

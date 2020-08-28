@@ -220,11 +220,10 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             if (effective) {
               queryExecutionMetrics.incNumEffectiveExecution(rule.ruleName)
               queryExecutionMetrics.incTimeEffectiveExecutionBy(rule.ruleName, runTime)
+              planChangeLogger.logRule(rule.ruleName, plan, result)
             }
             queryExecutionMetrics.incExecutionTimeBy(rule.ruleName, runTime)
             queryExecutionMetrics.incNumExecution(rule.ruleName)
-
-            planChangeLogger.logRule(rule.ruleName, plan, result)
 
             // Record timing information using QueryPlanningTracker
             tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))
