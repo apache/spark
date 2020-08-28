@@ -1,6 +1,6 @@
 TakeOrderedAndProject [i_item_id,sales_after,sales_before,w_state]
   WholeStageCodegen (6)
-    HashAggregate [i_item_id,isEmpty,isEmpty,sum,sum,w_state] [isEmpty,isEmpty,sales_after,sales_before,sum,sum,sum(CASE WHEN (d_date < 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END),sum(CASE WHEN (d_date >= 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)]
+    HashAggregate [i_item_id,isEmpty,isEmpty,sum,sum,w_state] [isEmpty,isEmpty,sales_after,sales_before,sum,sum,sum(if ((d_date < 11027)) CheckOverflow((promote_precision(cast(cs_sales_price as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) else 0.00),sum(if ((d_date >= 11027)) CheckOverflow((promote_precision(cast(cs_sales_price as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) else 0.00)]
       InputAdapter
         Exchange [i_item_id,w_state] #1
           WholeStageCodegen (5)

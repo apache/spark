@@ -1,7 +1,7 @@
 TakeOrderedAndProject [i_item_id,inv_after,inv_before,w_warehouse_name]
   WholeStageCodegen (5)
     Filter [inv_after,inv_before]
-      HashAggregate [i_item_id,sum,sum,w_warehouse_name] [inv_after,inv_before,sum,sum,sum(cast(CASE WHEN (d_date < 11027) THEN inv_quantity_on_hand ELSE 0 END as bigint)),sum(cast(CASE WHEN (d_date >= 11027) THEN inv_quantity_on_hand ELSE 0 END as bigint))]
+      HashAggregate [i_item_id,sum,sum,w_warehouse_name] [inv_after,inv_before,sum,sum,sum(cast(if ((d_date < 11027)) inv_quantity_on_hand else 0 as bigint)),sum(cast(if ((d_date >= 11027)) inv_quantity_on_hand else 0 as bigint))]
         InputAdapter
           Exchange [i_item_id,w_warehouse_name] #1
             WholeStageCodegen (4)

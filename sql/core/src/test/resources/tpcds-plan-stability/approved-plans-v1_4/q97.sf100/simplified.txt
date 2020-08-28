@@ -1,6 +1,6 @@
 CollectLimit
   WholeStageCodegen (8)
-    HashAggregate [sum,sum,sum] [catalog_only,store_and_catalog,store_only,sum,sum,sum,sum(cast(CASE WHEN (isnotnull(customer_sk) AND isnotnull(customer_sk)) THEN 1 ELSE 0 END as bigint)),sum(cast(CASE WHEN (isnotnull(customer_sk) AND isnull(customer_sk)) THEN 1 ELSE 0 END as bigint)),sum(cast(CASE WHEN (isnull(customer_sk) AND isnotnull(customer_sk)) THEN 1 ELSE 0 END as bigint))]
+    HashAggregate [sum,sum,sum] [catalog_only,store_and_catalog,store_only,sum,sum,sum,sum(cast(if ((isnotnull(customer_sk) AND isnotnull(customer_sk))) 1 else 0 as bigint)),sum(cast(if ((isnotnull(customer_sk) AND isnull(customer_sk))) 1 else 0 as bigint)),sum(cast(if ((isnull(customer_sk) AND isnotnull(customer_sk))) 1 else 0 as bigint))]
       InputAdapter
         Exchange #1
           WholeStageCodegen (7)
