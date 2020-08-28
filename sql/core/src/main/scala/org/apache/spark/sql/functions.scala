@@ -1026,27 +1026,27 @@ object functions {
   }
 
   /**
-    * Window function: returns the value that is the `offset`th row of the window frame
-    * (counting from 1), and `null` if the size of window frame is less than `offset` rows.
-    *
-    * This is equivalent to the nth_value function in SQL.
-    *
-    * @group window_funcs
-    * @since 3.1.0
-    */
+   * Window function: returns the value that is the `offset`th row of the window frame
+   * (counting from 1), and `null` if the size of window frame is less than `offset` rows.
+   *
+   * This is equivalent to the nth_value function in SQL.
+   *
+   * @group window_funcs
+   * @since 3.1.0
+   */
   def nth_value(columnName: String, offset: Int): Column = {
     nth_value(Column(columnName), offset, false)
   }
 
   /**
-    * Window function: returns the value that is the `offset`th row of the window frame
-    * (counting from 1), and `null` if the size of window frame is less than `offset` rows.
-    *
-    * This is equivalent to the nth_value function in SQL.
-    *
-    * @group window_funcs
-    * @since 3.1.0
-    */
+   * Window function: returns the value that is the `offset`th row of the window frame
+   * (counting from 1), and `null` if the size of window frame is less than `offset` rows.
+   *
+   * This is equivalent to the nth_value function in SQL.
+   *
+   * @group window_funcs
+   * @since 3.1.0
+   */
   def nth_value(e: Column, offset: Int): Column = withExpr {
     NthValue(e.expr, Literal(offset), false)
   }
