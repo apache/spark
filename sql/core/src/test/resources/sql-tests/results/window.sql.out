@@ -432,23 +432,23 @@ DESC
 -- !query schema
 struct<employee_name:string,salary:bigint,second_highest_salary:string>
 -- !query output
-Larry Bott  11798 NULL
-Gerard Bondur 11472 Gerard Bondur
-Pamela Castillo 11303 Gerard Bondur
-Barry Jones 10586 Gerard Bondur
-George Vanauf 10563 Gerard Bondur
-Loui Bondur 10449 Gerard Bondur
-Mary Patterson  9998  Gerard Bondur
-Steve Patterson 9441  Gerard Bondur
-Julie Firrelli  9181  Gerard Bondur
-Jeff Firrelli 8992  Gerard Bondur
-William Patterson 8870  Gerard Bondur
-Diane Murphy  8435  Gerard Bondur
-Leslie Jennings 8113  Gerard Bondur
-Gerard Hernandez  6949  Gerard Bondur
-Foon Yue Tseng  6660  Gerard Bondur
-Anthony Bow 6627  Gerard Bondur
-Leslie Thompson 5186  Gerard Bondur
+Larry Bott	11798	NULL
+Gerard Bondur	11472	Gerard Bondur
+Pamela Castillo	11303	Gerard Bondur
+Barry Jones	10586	Gerard Bondur
+George Vanauf	10563	Gerard Bondur
+Loui Bondur	10449	Gerard Bondur
+Mary Patterson	9998	Gerard Bondur
+Steve Patterson	9441	Gerard Bondur
+Julie Firrelli	9181	Gerard Bondur
+Jeff Firrelli	8992	Gerard Bondur
+William Patterson	8870	Gerard Bondur
+Diane Murphy	8435	Gerard Bondur
+Leslie Jennings	8113	Gerard Bondur
+Gerard Hernandez	6949	Gerard Bondur
+Foon Yue Tseng	6660	Gerard Bondur
+Anthony Bow	6627	Gerard Bondur
+Leslie Thompson	5186	Gerard Bondur
 
 
 -- !query
