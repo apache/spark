@@ -215,7 +215,7 @@ class QueryExecutionSuite extends SharedSparkSession {
   test("Logging plan changes for execution") {
     val testAppender = new LogAppender("plan changes")
     withLogAppender(testAppender) {
-      withSQLConf(SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
+      withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
         spark.range(1).groupBy("id").count().queryExecution.executedPlan
       }
     }

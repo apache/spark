@@ -46,22 +46,24 @@ object RuleExecutor {
 
 class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
 
-  private val logLevel = SQLConf.get.optimizerPlanChangeLogLevel
+  private val logLevel = SQLConf.get.planChangeLogLevel
 
-  private val logRules = SQLConf.get.optimizerPlanChangeRules.map(Utils.stringToSeq)
+  private val logRules = SQLConf.get.planChangeRules.map(Utils.stringToSeq)
 
-  private val logBatches = SQLConf.get.optimizerPlanChangeBatches.map(Utils.stringToSeq)
+  private val logBatches = SQLConf.get.planChangeBatches.map(Utils.stringToSeq)
 
   def logRule(ruleName: String, oldPlan: TreeType, newPlan: TreeType): Unit = {
-    if (logRules.isEmpty || logRules.get.contains(ruleName)) {
-      def message(): String = {
-        s"""
-           |=== Applying Rule $ruleName ===
-           |${sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n")}
-         """.stripMargin
-      }
+    if (!newPlan.fastEquals(oldPlan)) {
+      if (logRules.isEmpty || logRules.get.contains(ruleName)) {
+        def message(): String = {
+          s"""
+             |=== Applying Rule $ruleName ===
+             |${sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n")}
+           """.stripMargin
+        }
 
-      logBasedOnLevel(message)
+        logBasedOnLevel(message)
+      }
     }
   }
 
@@ -218,10 +220,11 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             if (effective) {
               queryExecutionMetrics.incNumEffectiveExecution(rule.ruleName)
               queryExecutionMetrics.incTimeEffectiveExecutionBy(rule.ruleName, runTime)
-              planChangeLogger.logRule(rule.ruleName, plan, result)
             }
             queryExecutionMetrics.incExecutionTimeBy(rule.ruleName, runTime)
             queryExecutionMetrics.incNumExecution(rule.ruleName)
+
+            planChangeLogger.logRule(rule.ruleName, plan, result)
 
             // Record timing information using QueryPlanningTracker
             tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))

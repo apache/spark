@@ -362,10 +362,7 @@ object QueryExecution {
     val planChangeLogger = new PlanChangeLogger[SparkPlan]()
     val preparedPlan = preparations.foldLeft(plan) { case (sp, rule) =>
       val result = rule.apply(sp)
-      val effective = !result.fastEquals(sp)
-      if (effective) {
-        planChangeLogger.logRule(rule.ruleName, sp, result)
-      }
+      planChangeLogger.logRule(rule.ruleName, sp, result)
       result
     }
     planChangeLogger.logBatch("Preparations", plan, preparedPlan)
