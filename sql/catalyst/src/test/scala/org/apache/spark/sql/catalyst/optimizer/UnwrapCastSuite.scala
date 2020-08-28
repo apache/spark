@@ -23,21 +23,16 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.DoubleType
 
 class UnwrapCastSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches: List[Batch] =
-      Batch("Unwrap casts", FixedPoint(10),
-        NullPropagation,
-        ConstantFolding,
-        BooleanSimplification,
-        SimplifyConditionals,
-        SimplifyCasts,
-        UnwrapCast) :: Nil
+      Batch("Unwrap casts", FixedPoint(10), ConstantFolding, UnwrapCast) :: Nil
   }
 
-  val testRelation: LocalRelation = LocalRelation('a.short)
+  val testRelation: LocalRelation = LocalRelation('a.short, 'b.float)
 
   test("unwrap casts when literal == max") {
     val v = Short.MaxValue
@@ -98,6 +93,21 @@ class UnwrapCastSuite extends PlanTest {
     assertEquivalent(Literal(v.toInt) > 'a, 'a =!= v)
 
     assertEquivalent(Literal(30) <= 'a, Literal(30.toShort) <= 'a)
+  }
+
+  test("unwrap cast should have no effect when input is not integral type") {
+    assertEquivalent('b > 42.0, Cast('b, DoubleType) > 42.0)
+    assertEquivalent('b >= 42.0, Cast('b, DoubleType) >= 42.0)
+    assertEquivalent('b === 42.0, Cast('b, DoubleType) === 42.0)
+    assertEquivalent('b <=> 42.0, Cast('b, DoubleType) <=> 42.0)
+    assertEquivalent('b <= 42.0, Cast('b, DoubleType) <= 42.0)
+    assertEquivalent('b < 42.0, Cast('b, DoubleType) < 42.0)
+    assertEquivalent(Literal(42.0) > 'b, Literal(42.0) > Cast('b, DoubleType))
+    assertEquivalent(Literal(42.0) >= 'b, Literal(42.0) >= Cast('b, DoubleType))
+    assertEquivalent(Literal(42.0) === 'b, Literal(42.0) === Cast('b, DoubleType))
+    assertEquivalent(Literal(42.0) <=> 'b, Literal(42.0) <=> Cast('b, DoubleType))
+    assertEquivalent(Literal(42.0) <= 'b, Literal(42.0) <= Cast('b, DoubleType))
+    assertEquivalent(Literal(42.0) < 'b, Literal(42.0) < Cast('b, DoubleType))
   }
 
   private def assertEquivalent(e1: Expression, e2: Expression): Unit = {
