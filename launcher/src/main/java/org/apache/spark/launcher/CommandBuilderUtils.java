@@ -31,11 +31,6 @@ class CommandBuilderUtils {
   static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
   static final String ENV_SPARK_HOME = "SPARK_HOME";
 
-  /** The set of known JVM vendors. */
-  enum JavaVendor {
-    Oracle, IBM, OpenJDK, Unknown
-  }
-
   /** Returns whether the given string is null or empty. */
   static boolean isEmpty(String s) {
     return s == null || s.isEmpty();
@@ -110,21 +105,6 @@ class CommandBuilderUtils {
   static boolean isWindows() {
     String os = System.getProperty("os.name");
     return os.startsWith("Windows");
-  }
-
-  /** Returns an enum value indicating whose JVM is being used. */
-  static JavaVendor getJavaVendor() {
-    String vendorString = System.getProperty("java.vendor");
-    if (vendorString.contains("Oracle")) {
-      return JavaVendor.Oracle;
-    }
-    if (vendorString.contains("IBM")) {
-      return JavaVendor.IBM;
-    }
-    if (vendorString.contains("OpenJDK")) {
-      return JavaVendor.OpenJDK;
-    }
-    return JavaVendor.Unknown;
   }
 
   /**

@@ -27,27 +27,38 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.{DataSourceScanExec, SortExec}
+import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
-class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedSQLContext {
+class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedSparkSession {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+    assert(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
   }
 }
 
 
 abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   import testImplicits._
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.sessionState.conf.setConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING, true)
+  }
+
+  protected override def afterAll(): Unit = {
+    spark.sessionState.conf.unsetConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING)
+    super.afterAll()
+  }
 
   private val maxI = 5
   private val maxJ = 13
@@ -89,6 +100,12 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  private def getFileScan(plan: SparkPlan): FileSourceScanExec = {
+    val fileScan = plan.collect { case f: FileSourceScanExec => f }
+    assert(fileScan.nonEmpty, plan)
+    fileScan.head
+  }
+
   // To verify if the bucket pruning works, this function checks two conditions:
   //   1) Check if the pruned buckets (before filtering) are empty.
   //   2) Verify the final result is the same as the expected one
@@ -108,8 +125,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
       // Filter could hide the bug in bucket pruning. Thus, skipping all the filters
       val plan = bucketedDataFrame.filter(filterCondition).queryExecution.executedPlan
-      val rdd = plan.find(_.isInstanceOf[DataSourceScanExec])
-      assert(rdd.isDefined, plan)
+      val fileScan = getFileScan(plan)
 
       // if nothing should be pruned, skip the pruning test
       if (bucketValues.nonEmpty) {
@@ -117,7 +133,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         bucketValues.foreach { value =>
           matchedBuckets.set(BucketingUtils.getBucketIdFromValue(bucketColumn, numBuckets, value))
         }
-        val invalidBuckets = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
+        val invalidBuckets = fileScan.execute().mapPartitionsWithIndex { case (index, iter) =>
           // return indexes of partitions that should have been pruned and are not empty
           if (!matchedBuckets.get(index % numBuckets) && iter.nonEmpty) {
             Iterator(index)
@@ -286,10 +302,9 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
       val bucketedDataFrame = spark.table("bucketed_table").select("i", "j", "k")
       val plan = bucketedDataFrame.queryExecution.executedPlan
-      val rdd = plan.find(_.isInstanceOf[DataSourceScanExec])
-      assert(rdd.isDefined, plan)
+      val fileScan = getFileScan(plan)
 
-      val emptyBuckets = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
+      val emptyBuckets = fileScan.execute().mapPartitionsWithIndex { case (index, iter) =>
         // return indexes of empty partitions
         if (iter.isEmpty) {
           Iterator(index)
@@ -317,7 +332,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       bucketSpec: Option[BucketSpec],
       numPartitions: Int = 10,
       expectedShuffle: Boolean = true,
-      expectedSort: Boolean = true)
+      expectedSort: Boolean = true,
+      expectedNumOutputPartitions: Option[Int] = None)
 
   /**
    * A helper method to test the bucket read functionality using join.  It will save `df1` and `df2`
@@ -330,10 +346,18 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       bucketedTableTestSpecRight: BucketedTableTestSpec,
       joinType: String = "inner",
       joinCondition: (DataFrame, DataFrame) => Column): Unit = {
-    val BucketedTableTestSpec(bucketSpecLeft, numPartitionsLeft, shuffleLeft, sortLeft) =
-      bucketedTableTestSpecLeft
-    val BucketedTableTestSpec(bucketSpecRight, numPartitionsRight, shuffleRight, sortRight) =
-      bucketedTableTestSpecRight
+    val BucketedTableTestSpec(
+      bucketSpecLeft,
+      numPartitionsLeft,
+      shuffleLeft,
+      sortLeft,
+      numOutputPartitionsLeft) = bucketedTableTestSpecLeft
+    val BucketedTableTestSpec(
+      bucketSpecRight,
+      numPartitionsRight,
+      shuffleRight,
+      sortRight,
+      numOutputPartitionsRight) = bucketedTableTestSpecRight
 
     withTable("bucketed_table1", "bucketed_table2") {
       def withBucket(
@@ -372,8 +396,16 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
           joined.sort("bucketed_table1.k", "bucketed_table2.k"),
           df1.join(df2, joinCondition(df1, df2), joinType).sort("df1.k", "df2.k"))
 
-        assert(joined.queryExecution.executedPlan.isInstanceOf[SortMergeJoinExec])
-        val joinOperator = joined.queryExecution.executedPlan.asInstanceOf[SortMergeJoinExec]
+        val joinOperator = if (joined.sqlContext.conf.adaptiveExecutionEnabled) {
+          val executedPlan =
+            joined.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+          assert(executedPlan.isInstanceOf[SortMergeJoinExec])
+          executedPlan.asInstanceOf[SortMergeJoinExec]
+        } else {
+          val executedPlan = joined.queryExecution.executedPlan
+          assert(executedPlan.isInstanceOf[SortMergeJoinExec])
+          executedPlan.asInstanceOf[SortMergeJoinExec]
+        }
 
         // check existence of shuffle
         assert(
@@ -390,6 +422,16 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         assert(
           joinOperator.right.find(_.isInstanceOf[SortExec]).isDefined == sortRight,
           s"expected sort in the right child to be $sortRight but found\n${joinOperator.right}")
+
+        // check the output partitioning
+        if (numOutputPartitionsLeft.isDefined) {
+          assert(joinOperator.left.outputPartitioning.numPartitions ===
+            numOutputPartitionsLeft.get)
+        }
+        if (numOutputPartitionsRight.isDefined) {
+          assert(joinOperator.right.outputPartitioning.numPartitions ===
+            numOutputPartitionsRight.get)
+        }
       }
     }
   }
@@ -585,6 +627,32 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("sort should not be introduced when aliases are used") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      withTable("t") {
+        df1.repartition(1).write.format("parquet").bucketBy(8, "i").sortBy("i").saveAsTable("t")
+        val t1 = spark.table("t")
+        val t2 = t1.selectExpr("i as ii")
+        val plan = t1.join(t2, t1("i") === t2("ii")).queryExecution.executedPlan
+        assert(plan.collect { case sort: SortExec => sort }.isEmpty)
+      }
+    }
+  }
+
+  test("bucket join should work with SubqueryAlias plan") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      withTable("t") {
+        withView("v") {
+          spark.range(20).selectExpr("id as i").write.bucketBy(8, "i").saveAsTable("t")
+          sql("CREATE VIEW v AS SELECT * FROM t").collect()
+
+          val plan = sql("SELECT * FROM t a JOIN v b ON a.i = b.i").queryExecution.executedPlan
+          assert(plan.collect { case exchange: ShuffleExchangeExec => exchange }.isEmpty)
+        }
+      }
+    }
+  }
+
   test("avoid shuffle when grouping keys are a super-set of bucket keys") {
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
@@ -729,10 +797,189 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
 
-      checkAnswer(spark.table("bucketed_table").select("j"), df1.select("j"))
+      val scanDF = spark.table("bucketed_table").select("j")
+      assert(!getFileScan(scanDF.queryExecution.executedPlan).bucketedScan)
+      checkAnswer(scanDF, df1.select("j"))
 
-      checkAnswer(spark.table("bucketed_table").groupBy("j").agg(max("k")),
-        df1.groupBy("j").agg(max("k")))
+      val aggDF = spark.table("bucketed_table").groupBy("j").agg(max("k"))
+      assert(!getFileScan(aggDF.queryExecution.executedPlan).bucketedScan)
+      checkAnswer(aggDF, df1.groupBy("j").agg(max("k")))
+    }
+  }
+
+  //  A test with a partition where the number of files in the partition is
+  //  large. tests for the condition where the serialization of such a task may result in a stack
+  //  overflow if the files list is stored in a recursive data structure
+  //  This test is ignored because it takes long to run (~3 min)
+  ignore("SPARK-27100 stack overflow: read data with large partitions") {
+    val nCount = 20000
+    // reshuffle data so that many small files are created
+    val nShufflePartitions = 10000
+    // and with one table partition, should result in 10000 files in one partition
+    val nPartitions = 1
+    val nBuckets = 2
+    val dfPartitioned = (0 until nCount)
+      .map(i => (i % nPartitions, i % nBuckets, i.toString)).toDF("i", "j", "k")
+
+    // non-bucketed tables. This part succeeds without the fix for SPARK-27100
+    try {
+      withTable("non_bucketed_table") {
+        dfPartitioned.repartition(nShufflePartitions)
+          .write
+          .format("parquet")
+          .partitionBy("i")
+          .saveAsTable("non_bucketed_table")
+
+        val table = spark.table("non_bucketed_table")
+        val nValues = table.select("j", "k").count()
+        assert(nValues == nCount)
+      }
+    } catch {
+      case e: Exception => fail("Failed due to exception: " + e)
+    }
+    // bucketed tables. This fails without the fix for SPARK-27100
+    try {
+      withTable("bucketed_table") {
+        dfPartitioned.repartition(nShufflePartitions)
+          .write
+          .format("parquet")
+          .partitionBy("i")
+          .bucketBy(nBuckets, "j")
+          .saveAsTable("bucketed_table")
+
+        val table = spark.table("bucketed_table")
+        val nValues = table.select("j", "k").count()
+        assert(nValues == nCount)
+      }
+    } catch {
+      case e: Exception => fail("Failed due to exception: " + e)
+    }
+  }
+
+  test("SPARK-29655 Read bucketed tables obeys spark.sql.shuffle.partitions") {
+    withSQLConf(
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "7")  {
+      val bucketSpec = Some(BucketSpec(6, Seq("i", "j"), Nil))
+      Seq(false, true).foreach { enableAdaptive =>
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> s"$enableAdaptive") {
+          val bucketedTableTestSpecLeft = BucketedTableTestSpec(bucketSpec, expectedShuffle = false)
+          val bucketedTableTestSpecRight = BucketedTableTestSpec(None, expectedShuffle = true)
+          testBucketing(
+            bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
+            bucketedTableTestSpecRight = bucketedTableTestSpecRight,
+            joinCondition = joinCondition(Seq("i", "j"))
+          )
+        }
+      }
+    }
+  }
+
+  test("bucket coalescing eliminates shuffle") {
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+      // The side with bucketedTableTestSpec1 will be coalesced to have 4 output partitions.
+      // Currently, sort will be introduced for the side that is coalesced.
+      val testSpec1 = BucketedTableTestSpec(
+        Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
+        numPartitions = 1,
+        expectedShuffle = false,
+        expectedSort = true,
+        expectedNumOutputPartitions = Some(4))
+      val testSpec2 = BucketedTableTestSpec(
+        Some(BucketSpec(4, Seq("i", "j"), Seq("i", "j"))),
+        numPartitions = 1,
+        expectedShuffle = false,
+        expectedSort = false,
+        expectedNumOutputPartitions = Some(4))
+
+      Seq((testSpec1, testSpec2), (testSpec2, testSpec1)).foreach { specs =>
+        testBucketing(
+          bucketedTableTestSpecLeft = specs._1,
+          bucketedTableTestSpecRight = specs._2,
+          joinCondition = joinCondition(Seq("i", "j")))
+      }
+    }
+  }
+
+  test("bucket coalescing is not satisfied") {
+    def run(testSpec1: BucketedTableTestSpec, testSpec2: BucketedTableTestSpec): Unit = {
+      Seq((testSpec1, testSpec2), (testSpec2, testSpec1)).foreach { specs =>
+        testBucketing(
+          bucketedTableTestSpecLeft = specs._1,
+          bucketedTableTestSpecRight = specs._2,
+          joinCondition = joinCondition(Seq("i", "j")))
+      }
+    }
+
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "false") {
+      // Coalescing buckets is disabled by a config.
+      run(
+        BucketedTableTestSpec(
+          Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = false),
+        BucketedTableTestSpec(
+          Some(BucketSpec(4, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = true))
+    }
+
+    withSQLConf(
+      SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
+      SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.key -> "2") {
+      // Coalescing buckets is not applied because the ratio of the number of buckets (3)
+      // is greater than max allowed (2).
+      run(
+        BucketedTableTestSpec(
+          Some(BucketSpec(12, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = false),
+        BucketedTableTestSpec(
+          Some(BucketSpec(4, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = true))
+    }
+
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+      run(
+        // Coalescing buckets is not applied because the bigger number of buckets (8) is not
+        // divisible by the smaller number of buckets (7).
+        BucketedTableTestSpec(
+          Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = false),
+        BucketedTableTestSpec(
+          Some(BucketSpec(7, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = true))
+    }
+  }
+
+  test("bucket coalescing is applied when join expressions match with partitioning expressions") {
+    withTable("t1", "t2") {
+      df1.write.format("parquet").bucketBy(8, "i", "j").saveAsTable("t1")
+      df2.write.format("parquet").bucketBy(4, "i", "j").saveAsTable("t2")
+
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
+        SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+        def verify(
+            query: String,
+            expectedNumShuffles: Int,
+            expectedCoalescedNumBuckets: Option[Int]): Unit = {
+          val plan = sql(query).queryExecution.executedPlan
+          val shuffles = plan.collect { case s: ShuffleExchangeExec => s }
+          assert(shuffles.length == expectedNumShuffles)
+
+          val scans = plan.collect {
+            case f: FileSourceScanExec if f.optionalNumCoalescedBuckets.isDefined => f
+          }
+          if (expectedCoalescedNumBuckets.isDefined) {
+            assert(scans.length == 1)
+            assert(scans.head.optionalNumCoalescedBuckets == expectedCoalescedNumBuckets)
+          } else {
+            assert(scans.isEmpty)
+          }
+        }
+
+        // Coalescing applied since join expressions match with the bucket columns.
+        verify("SELECT * FROM t1 JOIN t2 ON t1.i = t2.i AND t1.j = t2.j", 0, Some(4))
+        // Coalescing applied when columns are aliased.
+        verify(
+          "SELECT * FROM t1 JOIN (SELECT i AS x, j AS y FROM t2) ON t1.i = x AND t1.j = y",
+          0,
+          Some(4))
+        // Coalescing is not applied when join expressions do not match with bucket columns.
+        verify("SELECT * FROM t1 JOIN t2 ON t1.i = t2.i", 2, None)
+      }
     }
   }
 }

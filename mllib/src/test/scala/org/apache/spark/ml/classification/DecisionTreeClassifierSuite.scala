@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.tree.LeafNode
+import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
@@ -42,7 +42,9 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
   private var continuousDataPointsForMulticlassRDD: RDD[LabeledPoint] = _
   private var categoricalDataPointsForMulticlassForOrderedFeaturesRDD: RDD[LabeledPoint] = _
 
-  override def beforeAll() {
+  private val seed = 42
+
+  override def beforeAll(): Unit = {
     super.beforeAll()
     categoricalDataPointsRDD =
       sc.parallelize(OldDecisionTreeSuite.generateCategoricalDataPoints()).map(_.asML)
@@ -247,10 +249,17 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
 
     val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
     val newTree = dt.fit(newData)
+    newTree.setLeafCol("predictedLeafId")
+
+    val transformed = newTree.transform(newData)
+    checkNominalOnDF(transformed, "prediction", newTree.numClasses)
+    checkNominalOnDF(transformed, "predictedLeafId", newTree.numLeave)
+    checkVectorSizeOnDF(transformed, "rawPrediction", newTree.numClasses)
+    checkVectorSizeOnDF(transformed, "probability", newTree.numClasses)
 
     MLTestingUtils.checkCopyAndUids(dt, newTree)
 
-    testTransformer[(Vector, Double)](newData, newTree,
+    testTransformer[(Vector, Double, Double)](newData, newTree,
       "prediction", "rawPrediction", "probability") {
       case Row(pred: Double, rawPred: Vector, probPred: Vector) =>
         assert(pred === rawPred.argmax,
@@ -277,6 +286,8 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
     val newTree = dt.fit(newData)
 
     testPredictionModelSinglePrediction(newTree, newData)
+    testClassificationModelSingleRawPrediction(newTree, newData)
+    testProbClassificationModelSingleProbPrediction(newTree, newData)
   }
 
   test("training with 1-category categorical feature") {
@@ -313,6 +324,24 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
     assert(importances.toArray.forall(_ >= 0.0))
   }
 
+  test("model support predict leaf index") {
+    val model = new DecisionTreeClassificationModel("dtc", TreeTests.root0, 3, 2)
+    model.setLeafCol("predictedLeafId")
+      .setRawPredictionCol("")
+      .setPredictionCol("")
+      .setProbabilityCol("")
+
+    val data = TreeTests.getSingleTreeLeafData
+    data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
+
+    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    model.transform(df).select("leafId", "predictedLeafId")
+      .collect()
+      .foreach { case Row(leafId: Double, predictedLeafId: Double) =>
+        assert(leafId === predictedLeafId)
+    }
+  }
+
   test("should support all NumericType labels and not support other types") {
     val dt = new DecisionTreeClassifier().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[DecisionTreeClassificationModel, DecisionTreeClassifier](
@@ -325,6 +354,49 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
     val df: DataFrame = TreeTests.featureImportanceData(sc).toDF()
     val dt = new DecisionTreeClassifier().setMaxDepth(1)
     dt.fit(df)
+  }
+
+  test("training with sample weights") {
+    val df = {
+      val nPoints = 100
+      val coefficients = Array(
+        -0.57997, 0.912083, -0.371077,
+        -0.16624, -0.84355, -0.048509)
+
+      val xMean = Array(5.843, 3.057)
+      val xVariance = Array(0.6856, 0.1899)
+
+      val testData = LogisticRegressionSuite.generateMultinomialLogisticInput(
+        coefficients, xMean, xVariance, addIntercept = true, nPoints, seed)
+
+      sc.parallelize(testData, 4).toDF()
+    }
+    val numClasses = 3
+    val predEquals = (x: Double, y: Double) => x == y
+    // (impurity, maxDepth)
+    val testParams = Seq(
+      ("gini", 10),
+      ("entropy", 10),
+      ("gini", 5)
+    )
+    for ((impurity, maxDepth) <- testParams) {
+      val estimator = new DecisionTreeClassifier()
+        .setMaxDepth(maxDepth)
+        .setSeed(seed)
+        .setMinWeightFractionPerNode(0.049)
+        .setImpurity(impurity)
+
+      MLTestingUtils.testArbitrarilyScaledWeights[DecisionTreeClassificationModel,
+        DecisionTreeClassifier](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, predEquals, 0.7))
+      MLTestingUtils.testOutliersWithSmallWeights[DecisionTreeClassificationModel,
+        DecisionTreeClassifier](df.as[LabeledPoint], estimator,
+        numClasses, MLTestingUtils.modelPredictionEquals(df, predEquals, 0.8),
+        outlierRatio = 2)
+      MLTestingUtils.testOversamplingVsWeighting[DecisionTreeClassificationModel,
+        DecisionTreeClassifier](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, predEquals, 0.7), seed)
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -350,7 +422,6 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
       TreeTests.setMetadata(rdd, Map(0 -> 2, 1 -> 3), numClasses = 2)
     testEstimatorAndModelReadWrite(dt, categoricalData, allParamSettings,
       allParamSettings, checkModelData)
-
     // Continuous splits with tree depth 2
     val continuousData: DataFrame =
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)

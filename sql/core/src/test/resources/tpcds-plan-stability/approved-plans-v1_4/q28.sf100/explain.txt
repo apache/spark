@@ -1,0 +1,437 @@
+== Physical Plan ==
+CollectLimit (71)
++- BroadcastNestedLoopJoin Inner BuildRight (70)
+   :- BroadcastNestedLoopJoin Inner BuildRight (58)
+   :  :- BroadcastNestedLoopJoin Inner BuildRight (46)
+   :  :  :- BroadcastNestedLoopJoin Inner BuildRight (34)
+   :  :  :  :- BroadcastNestedLoopJoin Inner BuildRight (22)
+   :  :  :  :  :- * HashAggregate (10)
+   :  :  :  :  :  +- Exchange (9)
+   :  :  :  :  :     +- * HashAggregate (8)
+   :  :  :  :  :        +- * HashAggregate (7)
+   :  :  :  :  :           +- Exchange (6)
+   :  :  :  :  :              +- * HashAggregate (5)
+   :  :  :  :  :                 +- * Project (4)
+   :  :  :  :  :                    +- * Filter (3)
+   :  :  :  :  :                       +- * ColumnarToRow (2)
+   :  :  :  :  :                          +- Scan parquet default.store_sales (1)
+   :  :  :  :  +- BroadcastExchange (21)
+   :  :  :  :     +- * HashAggregate (20)
+   :  :  :  :        +- Exchange (19)
+   :  :  :  :           +- * HashAggregate (18)
+   :  :  :  :              +- * HashAggregate (17)
+   :  :  :  :                 +- Exchange (16)
+   :  :  :  :                    +- * HashAggregate (15)
+   :  :  :  :                       +- * Project (14)
+   :  :  :  :                          +- * Filter (13)
+   :  :  :  :                             +- * ColumnarToRow (12)
+   :  :  :  :                                +- Scan parquet default.store_sales (11)
+   :  :  :  +- BroadcastExchange (33)
+   :  :  :     +- * HashAggregate (32)
+   :  :  :        +- Exchange (31)
+   :  :  :           +- * HashAggregate (30)
+   :  :  :              +- * HashAggregate (29)
+   :  :  :                 +- Exchange (28)
+   :  :  :                    +- * HashAggregate (27)
+   :  :  :                       +- * Project (26)
+   :  :  :                          +- * Filter (25)
+   :  :  :                             +- * ColumnarToRow (24)
+   :  :  :                                +- Scan parquet default.store_sales (23)
+   :  :  +- BroadcastExchange (45)
+   :  :     +- * HashAggregate (44)
+   :  :        +- Exchange (43)
+   :  :           +- * HashAggregate (42)
+   :  :              +- * HashAggregate (41)
+   :  :                 +- Exchange (40)
+   :  :                    +- * HashAggregate (39)
+   :  :                       +- * Project (38)
+   :  :                          +- * Filter (37)
+   :  :                             +- * ColumnarToRow (36)
+   :  :                                +- Scan parquet default.store_sales (35)
+   :  +- BroadcastExchange (57)
+   :     +- * HashAggregate (56)
+   :        +- Exchange (55)
+   :           +- * HashAggregate (54)
+   :              +- * HashAggregate (53)
+   :                 +- Exchange (52)
+   :                    +- * HashAggregate (51)
+   :                       +- * Project (50)
+   :                          +- * Filter (49)
+   :                             +- * ColumnarToRow (48)
+   :                                +- Scan parquet default.store_sales (47)
+   +- BroadcastExchange (69)
+      +- * HashAggregate (68)
+         +- Exchange (67)
+            +- * HashAggregate (66)
+               +- * HashAggregate (65)
+                  +- Exchange (64)
+                     +- * HashAggregate (63)
+                        +- * Project (62)
+                           +- * Filter (61)
+                              +- * ColumnarToRow (60)
+                                 +- Scan parquet default.store_sales (59)
+
+
+(1) Scan parquet default.store_sales
+Output [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store_sales]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,0), LessThanOrEqual(ss_quantity,5)]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(2) ColumnarToRow [codegen id : 1]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+
+(3) Filter [codegen id : 1]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+Condition : (((isnotnull(ss_quantity#1) AND (ss_quantity#1 >= 0)) AND (ss_quantity#1 <= 5)) AND ((((ss_list_price#3 >= 8.00) AND (cast(ss_list_price#3 as decimal(12,2)) <= 18.00)) OR ((ss_coupon_amt#4 >= 459.00) AND (cast(ss_coupon_amt#4 as decimal(12,2)) <= 1459.00))) OR ((ss_wholesale_cost#2 >= 57.00) AND (cast(ss_wholesale_cost#2 as decimal(12,2)) <= 77.00))))
+
+(4) Project [codegen id : 1]
+Output [1]: [ss_list_price#3]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+
+(5) HashAggregate [codegen id : 1]
+Input [1]: [ss_list_price#3]
+Keys [1]: [ss_list_price#3]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#3)), partial_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#5, count(ss_list_price#3)#6]
+Results [4]: [ss_list_price#3, sum#7, count#8, count#9]
+
+(6) Exchange
+Input [4]: [ss_list_price#3, sum#7, count#8, count#9]
+Arguments: hashpartitioning(ss_list_price#3, 5), true, [id=#10]
+
+(7) HashAggregate [codegen id : 2]
+Input [4]: [ss_list_price#3, sum#7, count#8, count#9]
+Keys [1]: [ss_list_price#3]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#5, count(ss_list_price#3)#6]
+Results [4]: [ss_list_price#3, sum#7, count#8, count#9]
+
+(8) HashAggregate [codegen id : 2]
+Input [4]: [ss_list_price#3, sum#7, count#8, count#9]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3), partial_count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#5, count(ss_list_price#3)#6, count(ss_list_price#3)#11]
+Results [4]: [sum#7, count#8, count#9, count#12]
+
+(9) Exchange
+Input [4]: [sum#7, count#8, count#9, count#12]
+Arguments: SinglePartition, true, [id=#13]
+
+(10) HashAggregate [codegen id : 3]
+Input [4]: [sum#7, count#8, count#9, count#12]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#3)), count(ss_list_price#3), count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#5, count(ss_list_price#3)#6, count(ss_list_price#3)#11]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#3))#5 / 100.0) as decimal(11,6)) AS B1_LP#14, count(ss_list_price#3)#6 AS B1_CNT#15, count(ss_list_price#3)#11 AS B1_CNTD#16]
+
+(11) Scan parquet default.store_sales
+Output [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store_sales]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,6), LessThanOrEqual(ss_quantity,10)]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(12) ColumnarToRow [codegen id : 4]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+
+(13) Filter [codegen id : 4]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+Condition : (((isnotnull(ss_quantity#1) AND (ss_quantity#1 >= 6)) AND (ss_quantity#1 <= 10)) AND ((((ss_list_price#3 >= 90.00) AND (cast(ss_list_price#3 as decimal(12,2)) <= 100.00)) OR ((ss_coupon_amt#4 >= 2323.00) AND (cast(ss_coupon_amt#4 as decimal(12,2)) <= 3323.00))) OR ((ss_wholesale_cost#2 >= 31.00) AND (cast(ss_wholesale_cost#2 as decimal(12,2)) <= 51.00))))
+
+(14) Project [codegen id : 4]
+Output [1]: [ss_list_price#3]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+
+(15) HashAggregate [codegen id : 4]
+Input [1]: [ss_list_price#3]
+Keys [1]: [ss_list_price#3]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#3)), partial_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#17, count(ss_list_price#3)#18]
+Results [4]: [ss_list_price#3, sum#19, count#20, count#21]
+
+(16) Exchange
+Input [4]: [ss_list_price#3, sum#19, count#20, count#21]
+Arguments: hashpartitioning(ss_list_price#3, 5), true, [id=#22]
+
+(17) HashAggregate [codegen id : 5]
+Input [4]: [ss_list_price#3, sum#19, count#20, count#21]
+Keys [1]: [ss_list_price#3]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#17, count(ss_list_price#3)#18]
+Results [4]: [ss_list_price#3, sum#19, count#20, count#21]
+
+(18) HashAggregate [codegen id : 5]
+Input [4]: [ss_list_price#3, sum#19, count#20, count#21]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3), partial_count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#17, count(ss_list_price#3)#18, count(ss_list_price#3)#23]
+Results [4]: [sum#19, count#20, count#21, count#24]
+
+(19) Exchange
+Input [4]: [sum#19, count#20, count#21, count#24]
+Arguments: SinglePartition, true, [id=#25]
+
+(20) HashAggregate [codegen id : 6]
+Input [4]: [sum#19, count#20, count#21, count#24]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#3)), count(ss_list_price#3), count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#17, count(ss_list_price#3)#18, count(ss_list_price#3)#23]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#3))#17 / 100.0) as decimal(11,6)) AS B2_LP#26, count(ss_list_price#3)#18 AS B2_CNT#27, count(ss_list_price#3)#23 AS B2_CNTD#28]
+
+(21) BroadcastExchange
+Input [3]: [B2_LP#26, B2_CNT#27, B2_CNTD#28]
+Arguments: IdentityBroadcastMode, [id=#29]
+
+(22) BroadcastNestedLoopJoin
+Join condition: None
+
+(23) Scan parquet default.store_sales
+Output [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store_sales]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,11), LessThanOrEqual(ss_quantity,15)]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(24) ColumnarToRow [codegen id : 7]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+
+(25) Filter [codegen id : 7]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+Condition : (((isnotnull(ss_quantity#1) AND (ss_quantity#1 >= 11)) AND (ss_quantity#1 <= 15)) AND ((((ss_list_price#3 >= 142.00) AND (cast(ss_list_price#3 as decimal(12,2)) <= 152.00)) OR ((ss_coupon_amt#4 >= 12214.00) AND (cast(ss_coupon_amt#4 as decimal(12,2)) <= 13214.00))) OR ((ss_wholesale_cost#2 >= 79.00) AND (cast(ss_wholesale_cost#2 as decimal(12,2)) <= 99.00))))
+
+(26) Project [codegen id : 7]
+Output [1]: [ss_list_price#3]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+
+(27) HashAggregate [codegen id : 7]
+Input [1]: [ss_list_price#3]
+Keys [1]: [ss_list_price#3]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#3)), partial_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#30, count(ss_list_price#3)#31]
+Results [4]: [ss_list_price#3, sum#32, count#33, count#34]
+
+(28) Exchange
+Input [4]: [ss_list_price#3, sum#32, count#33, count#34]
+Arguments: hashpartitioning(ss_list_price#3, 5), true, [id=#35]
+
+(29) HashAggregate [codegen id : 8]
+Input [4]: [ss_list_price#3, sum#32, count#33, count#34]
+Keys [1]: [ss_list_price#3]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#30, count(ss_list_price#3)#31]
+Results [4]: [ss_list_price#3, sum#32, count#33, count#34]
+
+(30) HashAggregate [codegen id : 8]
+Input [4]: [ss_list_price#3, sum#32, count#33, count#34]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3), partial_count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#30, count(ss_list_price#3)#31, count(ss_list_price#3)#36]
+Results [4]: [sum#32, count#33, count#34, count#37]
+
+(31) Exchange
+Input [4]: [sum#32, count#33, count#34, count#37]
+Arguments: SinglePartition, true, [id=#38]
+
+(32) HashAggregate [codegen id : 9]
+Input [4]: [sum#32, count#33, count#34, count#37]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#3)), count(ss_list_price#3), count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#30, count(ss_list_price#3)#31, count(ss_list_price#3)#36]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#3))#30 / 100.0) as decimal(11,6)) AS B3_LP#39, count(ss_list_price#3)#31 AS B3_CNT#40, count(ss_list_price#3)#36 AS B3_CNTD#41]
+
+(33) BroadcastExchange
+Input [3]: [B3_LP#39, B3_CNT#40, B3_CNTD#41]
+Arguments: IdentityBroadcastMode, [id=#42]
+
+(34) BroadcastNestedLoopJoin
+Join condition: None
+
+(35) Scan parquet default.store_sales
+Output [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store_sales]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,16), LessThanOrEqual(ss_quantity,20)]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(36) ColumnarToRow [codegen id : 10]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+
+(37) Filter [codegen id : 10]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+Condition : (((isnotnull(ss_quantity#1) AND (ss_quantity#1 >= 16)) AND (ss_quantity#1 <= 20)) AND ((((ss_list_price#3 >= 135.00) AND (cast(ss_list_price#3 as decimal(12,2)) <= 145.00)) OR ((ss_coupon_amt#4 >= 6071.00) AND (cast(ss_coupon_amt#4 as decimal(12,2)) <= 7071.00))) OR ((ss_wholesale_cost#2 >= 38.00) AND (cast(ss_wholesale_cost#2 as decimal(12,2)) <= 58.00))))
+
+(38) Project [codegen id : 10]
+Output [1]: [ss_list_price#3]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+
+(39) HashAggregate [codegen id : 10]
+Input [1]: [ss_list_price#3]
+Keys [1]: [ss_list_price#3]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#3)), partial_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#43, count(ss_list_price#3)#44]
+Results [4]: [ss_list_price#3, sum#45, count#46, count#47]
+
+(40) Exchange
+Input [4]: [ss_list_price#3, sum#45, count#46, count#47]
+Arguments: hashpartitioning(ss_list_price#3, 5), true, [id=#48]
+
+(41) HashAggregate [codegen id : 11]
+Input [4]: [ss_list_price#3, sum#45, count#46, count#47]
+Keys [1]: [ss_list_price#3]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#43, count(ss_list_price#3)#44]
+Results [4]: [ss_list_price#3, sum#45, count#46, count#47]
+
+(42) HashAggregate [codegen id : 11]
+Input [4]: [ss_list_price#3, sum#45, count#46, count#47]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3), partial_count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#43, count(ss_list_price#3)#44, count(ss_list_price#3)#49]
+Results [4]: [sum#45, count#46, count#47, count#50]
+
+(43) Exchange
+Input [4]: [sum#45, count#46, count#47, count#50]
+Arguments: SinglePartition, true, [id=#51]
+
+(44) HashAggregate [codegen id : 12]
+Input [4]: [sum#45, count#46, count#47, count#50]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#3)), count(ss_list_price#3), count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#43, count(ss_list_price#3)#44, count(ss_list_price#3)#49]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#3))#43 / 100.0) as decimal(11,6)) AS B4_LP#52, count(ss_list_price#3)#44 AS B4_CNT#53, count(ss_list_price#3)#49 AS B4_CNTD#54]
+
+(45) BroadcastExchange
+Input [3]: [B4_LP#52, B4_CNT#53, B4_CNTD#54]
+Arguments: IdentityBroadcastMode, [id=#55]
+
+(46) BroadcastNestedLoopJoin
+Join condition: None
+
+(47) Scan parquet default.store_sales
+Output [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store_sales]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,21), LessThanOrEqual(ss_quantity,25)]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(48) ColumnarToRow [codegen id : 13]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+
+(49) Filter [codegen id : 13]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+Condition : (((isnotnull(ss_quantity#1) AND (ss_quantity#1 >= 21)) AND (ss_quantity#1 <= 25)) AND ((((ss_list_price#3 >= 122.00) AND (cast(ss_list_price#3 as decimal(12,2)) <= 132.00)) OR ((ss_coupon_amt#4 >= 836.00) AND (cast(ss_coupon_amt#4 as decimal(12,2)) <= 1836.00))) OR ((ss_wholesale_cost#2 >= 17.00) AND (cast(ss_wholesale_cost#2 as decimal(12,2)) <= 37.00))))
+
+(50) Project [codegen id : 13]
+Output [1]: [ss_list_price#3]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+
+(51) HashAggregate [codegen id : 13]
+Input [1]: [ss_list_price#3]
+Keys [1]: [ss_list_price#3]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#3)), partial_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#56, count(ss_list_price#3)#57]
+Results [4]: [ss_list_price#3, sum#58, count#59, count#60]
+
+(52) Exchange
+Input [4]: [ss_list_price#3, sum#58, count#59, count#60]
+Arguments: hashpartitioning(ss_list_price#3, 5), true, [id=#61]
+
+(53) HashAggregate [codegen id : 14]
+Input [4]: [ss_list_price#3, sum#58, count#59, count#60]
+Keys [1]: [ss_list_price#3]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#56, count(ss_list_price#3)#57]
+Results [4]: [ss_list_price#3, sum#58, count#59, count#60]
+
+(54) HashAggregate [codegen id : 14]
+Input [4]: [ss_list_price#3, sum#58, count#59, count#60]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3), partial_count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#56, count(ss_list_price#3)#57, count(ss_list_price#3)#62]
+Results [4]: [sum#58, count#59, count#60, count#63]
+
+(55) Exchange
+Input [4]: [sum#58, count#59, count#60, count#63]
+Arguments: SinglePartition, true, [id=#64]
+
+(56) HashAggregate [codegen id : 15]
+Input [4]: [sum#58, count#59, count#60, count#63]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#3)), count(ss_list_price#3), count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#56, count(ss_list_price#3)#57, count(ss_list_price#3)#62]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#3))#56 / 100.0) as decimal(11,6)) AS B5_LP#65, count(ss_list_price#3)#57 AS B5_CNT#66, count(ss_list_price#3)#62 AS B5_CNTD#67]
+
+(57) BroadcastExchange
+Input [3]: [B5_LP#65, B5_CNT#66, B5_CNTD#67]
+Arguments: IdentityBroadcastMode, [id=#68]
+
+(58) BroadcastNestedLoopJoin
+Join condition: None
+
+(59) Scan parquet default.store_sales
+Output [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store_sales]
+PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,26), LessThanOrEqual(ss_quantity,30)]
+ReadSchema: struct<ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(60) ColumnarToRow [codegen id : 16]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+
+(61) Filter [codegen id : 16]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+Condition : (((isnotnull(ss_quantity#1) AND (ss_quantity#1 >= 26)) AND (ss_quantity#1 <= 30)) AND ((((ss_list_price#3 >= 154.00) AND (cast(ss_list_price#3 as decimal(12,2)) <= 164.00)) OR ((ss_coupon_amt#4 >= 7326.00) AND (cast(ss_coupon_amt#4 as decimal(12,2)) <= 8326.00))) OR ((ss_wholesale_cost#2 >= 7.00) AND (cast(ss_wholesale_cost#2 as decimal(12,2)) <= 27.00))))
+
+(62) Project [codegen id : 16]
+Output [1]: [ss_list_price#3]
+Input [4]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4]
+
+(63) HashAggregate [codegen id : 16]
+Input [1]: [ss_list_price#3]
+Keys [1]: [ss_list_price#3]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#3)), partial_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#69, count(ss_list_price#3)#70]
+Results [4]: [ss_list_price#3, sum#71, count#72, count#73]
+
+(64) Exchange
+Input [4]: [ss_list_price#3, sum#71, count#72, count#73]
+Arguments: hashpartitioning(ss_list_price#3, 5), true, [id=#74]
+
+(65) HashAggregate [codegen id : 17]
+Input [4]: [ss_list_price#3, sum#71, count#72, count#73]
+Keys [1]: [ss_list_price#3]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#69, count(ss_list_price#3)#70]
+Results [4]: [ss_list_price#3, sum#71, count#72, count#73]
+
+(66) HashAggregate [codegen id : 17]
+Input [4]: [ss_list_price#3, sum#71, count#72, count#73]
+Keys: []
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3), partial_count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#69, count(ss_list_price#3)#70, count(ss_list_price#3)#75]
+Results [4]: [sum#71, count#72, count#73, count#76]
+
+(67) Exchange
+Input [4]: [sum#71, count#72, count#73, count#76]
+Arguments: SinglePartition, true, [id=#77]
+
+(68) HashAggregate [codegen id : 18]
+Input [4]: [sum#71, count#72, count#73, count#76]
+Keys: []
+Functions [3]: [avg(UnscaledValue(ss_list_price#3)), count(ss_list_price#3), count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#69, count(ss_list_price#3)#70, count(ss_list_price#3)#75]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#3))#69 / 100.0) as decimal(11,6)) AS B6_LP#78, count(ss_list_price#3)#70 AS B6_CNT#79, count(ss_list_price#3)#75 AS B6_CNTD#80]
+
+(69) BroadcastExchange
+Input [3]: [B6_LP#78, B6_CNT#79, B6_CNTD#80]
+Arguments: IdentityBroadcastMode, [id=#81]
+
+(70) BroadcastNestedLoopJoin
+Join condition: None
+
+(71) CollectLimit
+Input [18]: [B1_LP#14, B1_CNT#15, B1_CNTD#16, B2_LP#26, B2_CNT#27, B2_CNTD#28, B3_LP#39, B3_CNT#40, B3_CNTD#41, B4_LP#52, B4_CNT#53, B4_CNTD#54, B5_LP#65, B5_CNT#66, B5_CNTD#67, B6_LP#78, B6_CNT#79, B6_CNTD#80]
+Arguments: 100
+

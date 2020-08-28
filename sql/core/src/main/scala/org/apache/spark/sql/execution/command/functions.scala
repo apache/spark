@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
@@ -112,14 +113,6 @@ case class DescribeFunctionCommand(
     schema.toAttributes
   }
 
-  private def replaceFunctionName(usage: String, functionName: String): String = {
-    if (usage == null) {
-      "N/A."
-    } else {
-      usage.replaceAll("_FUNC_", functionName)
-    }
-  }
-
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
     functionName.funcName.toLowerCase(Locale.ROOT) match {
@@ -148,11 +141,11 @@ case class DescribeFunctionCommand(
           val result =
             Row(s"Function: $name") ::
               Row(s"Class: ${info.getClassName}") ::
-              Row(s"Usage: ${replaceFunctionName(info.getUsage, info.getName)}") :: Nil
+              Row(s"Usage: ${info.getUsage}") :: Nil
 
           if (isExtended) {
             result :+
-              Row(s"Extended Usage:${replaceFunctionName(info.getExtended, info.getName)}")
+              Row(s"Extended Usage:${info.getExtended}")
           } else {
             result
           }
@@ -230,6 +223,60 @@ case class ShowFunctionsCommand(
           case (f, "USER") if showUserFunctions => f.unquotedString
           case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
         }
-    functionNames.sorted.map(Row(_))
+    // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
+    // "<>", "!=", "between", and "case" is SystemFunctions, only show when showSystemFunctions=true
+    if (showSystemFunctions) {
+      (functionNames ++
+        StringUtils.filterPattern(FunctionsCommand.virtualOperators, pattern.getOrElse("*")))
+        .sorted.map(Row(_))
+    } else {
+      functionNames.sorted.map(Row(_))
+    }
+
   }
+}
+
+
+/**
+ * A command for users to refresh the persistent function.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    REFRESH FUNCTION functionName
+ * }}}
+ */
+case class RefreshFunctionCommand(
+    databaseName: Option[String],
+    functionName: String)
+  extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    if (FunctionRegistry.builtin.functionExists(FunctionIdentifier(functionName, databaseName))) {
+      throw new AnalysisException(s"Cannot refresh built-in function $functionName")
+    }
+    if (catalog.isTemporaryFunction(FunctionIdentifier(functionName, databaseName))) {
+      throw new AnalysisException(s"Cannot refresh temporary function $functionName")
+    }
+
+    val identifier = FunctionIdentifier(
+      functionName, Some(databaseName.getOrElse(catalog.getCurrentDatabase)))
+    // we only refresh the permanent function.
+    if (catalog.isPersistentFunction(identifier)) {
+      // register overwrite function.
+      val func = catalog.getFunctionMetadata(identifier)
+      catalog.registerFunction(func, true)
+    } else {
+      // clear cached function and throw exception
+      catalog.unregisterFunction(identifier)
+      throw new NoSuchFunctionException(identifier.database.get, identifier.funcName)
+    }
+
+    Seq.empty[Row]
+  }
+}
+
+object FunctionsCommand {
+  // operators that do not have corresponding functions.
+  // They should be handled `DescribeFunctionCommand`, `ShowFunctionsCommand`
+  val virtualOperators = Seq("!=", "<>", "between", "case")
 }

@@ -23,7 +23,7 @@ package org.apache.spark.examples.graphx
  * http://snap.stanford.edu/data/soc-LiveJournal1.html.
  */
 object LiveJournalPageRank {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 1) {
       System.err.println(
         "Usage: LiveJournalPageRank <edge_list_file>\n" +

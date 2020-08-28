@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
@@ -48,6 +48,15 @@ private[sql] object Column {
       case expr => toPrettySQL(expr)
     }
   }
+
+  private[sql] def stripColumnReferenceMetadata(a: AttributeReference): AttributeReference = {
+    val metadataWithoutId = new MetadataBuilder()
+      .withMetadata(a.metadata)
+      .remove(Dataset.DATASET_ID_KEY)
+      .remove(Dataset.COL_POS_KEY)
+      .build()
+    a.withMetadata(metadataWithoutId)
+  }
 }
 
 /**
@@ -60,7 +69,7 @@ private[sql] object Column {
  *
  * @since 1.6.0
  */
-@InterfaceStability.Stable
+@Stable
 class TypedColumn[-T, U](
     expr: Expression,
     private[sql] val encoder: ExpressionEncoder[U])
@@ -74,6 +83,9 @@ class TypedColumn[-T, U](
       inputEncoder: ExpressionEncoder[_],
       inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
     val unresolvedDeserializer = UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
+
+    // This only inserts inputs into typed aggregate expressions. For untyped aggregate expressions,
+    // the resolving is handled in the analyzer directly.
     val newExpr = expr transform {
       case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
         ta.withInputInfo(
@@ -127,7 +139,7 @@ class TypedColumn[-T, U](
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 class Column(val expr: Expression) extends Logging {
 
   def this(name: String) = this(name match {
@@ -141,11 +153,15 @@ class Column(val expr: Expression) extends Logging {
   override def toString: String = toPrettySQL(expr)
 
   override def equals(that: Any): Boolean = that match {
-    case that: Column => that.expr.equals(this.expr)
+    case that: Column => that.normalizedExpr() == this.normalizedExpr()
     case _ => false
   }
 
-  override def hashCode: Int = this.expr.hashCode()
+  override def hashCode: Int = this.normalizedExpr().hashCode()
+
+  private def normalizedExpr(): Expression = expr transform {
+    case a: AttributeReference => Column.stripColumnReferenceMetadata(a)
+  }
 
   /** Creates a column based on the given expression. */
   private def withExpr(newExpr: Expression): Column = new Column(newExpr)
@@ -183,7 +199,7 @@ class Column(val expr: Expression) extends Logging {
       UnresolvedAlias(a, Some(Column.generateAlias))
 
     // Wait until the struct is resolved. This will generate a nicer looking alias.
-    case struct: CreateNamedStructLike => UnresolvedAlias(struct)
+    case struct: CreateNamedStruct => UnresolvedAlias(struct)
 
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
@@ -835,7 +851,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def like(literal: String): Column = withExpr { Like(expr, lit(literal).expr) }
+  def like(literal: String): Column = withExpr { new Like(expr, lit(literal).expr) }
 
   /**
    * SQL RLIKE expression (LIKE with Regex). Returns a boolean column based on a regex
@@ -854,6 +870,72 @@ class Column(val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def getItem(key: Any): Column = withExpr { UnresolvedExtractValue(expr, Literal(key)) }
+
+  // scalastyle:off line.size.limit
+  /**
+   * An expression that adds/replaces field in `StructType` by name.
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".withField("c", lit(3)))
+   *   // result: {"a":1,"b":2,"c":3}
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".withField("b", lit(3)))
+   *   // result: {"a":1,"b":3}
+   *
+   *   val df = sql("SELECT CAST(NULL AS struct<a:int,b:int>) struct_col")
+   *   df.select($"struct_col".withField("c", lit(3)))
+   *   // result: null of type struct<a:int,b:int,c:int>
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2, 'b', 3) struct_col")
+   *   df.select($"struct_col".withField("b", lit(100)))
+   *   // result: {"a":1,"b":100,"b":100}
+   *
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".withField("a.c", lit(3)))
+   *   // result: {"a":{"a":1,"b":2,"c":3}}
+   *
+   *   val df = sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
+   *   df.select($"struct_col".withField("a.c", lit(3)))
+   *   // result: org.apache.spark.sql.AnalysisException: Ambiguous reference to fields
+   * }}}
+   *
+   * @group expr_ops
+   * @since 3.1.0
+   */
+  // scalastyle:on line.size.limit
+  def withField(fieldName: String, col: Column): Column = withExpr {
+    require(fieldName != null, "fieldName cannot be null")
+    require(col != null, "col cannot be null")
+
+    val nameParts = if (fieldName.isEmpty) {
+      fieldName :: Nil
+    } else {
+      CatalystSqlParser.parseMultipartIdentifier(fieldName)
+    }
+    withFieldHelper(expr, nameParts, Nil, col.expr)
+  }
+
+  private def withFieldHelper(
+      struct: Expression,
+      namePartsRemaining: Seq[String],
+      namePartsDone: Seq[String],
+      value: Expression) : WithFields = {
+    val name = namePartsRemaining.head
+    if (namePartsRemaining.length == 1) {
+      WithFields(struct, name :: Nil, value :: Nil)
+    } else {
+      val newNamesRemaining = namePartsRemaining.tail
+      val newNamesDone = namePartsDone :+ name
+      val newValue = withFieldHelper(
+        struct = UnresolvedExtractValue(struct, Literal(name)),
+        namePartsRemaining = newNamesRemaining,
+        namePartsDone = newNamesDone,
+        value = value)
+      WithFields(struct, name :: Nil, newValue :: Nil)
+    }
+  }
 
   /**
    * An expression that gets a field by name in a `StructType`.
@@ -949,7 +1031,8 @@ class Column(val expr: Expression) extends Logging {
    * }}}
    *
    * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
+   * with explicit metadata.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -988,7 +1071,8 @@ class Column(val expr: Expression) extends Logging {
    * }}}
    *
    * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
+   * with explicit metadata.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -1017,16 +1101,14 @@ class Column(val expr: Expression) extends Logging {
    * }}}
    *
    * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
+   * with explicit metadata.
    *
    * @group expr_ops
    * @since 2.0.0
    */
   def name(alias: String): Column = withExpr {
-    expr match {
-      case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
-      case other => Alias(other, alias)()
-    }
+    Alias(normalizedExpr(), alias)()
   }
 
   /**
@@ -1242,7 +1324,7 @@ class Column(val expr: Expression) extends Logging {
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 class ColumnName(name: String) extends Column(name) {
 
   /**

@@ -106,7 +106,7 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
           StructField("a", dataType, nullable = true) ::
             StructField("b", dataType, nullable = true) :: Nil)
         val maybeDataGenerator = RandomDataGenerator.forType(rowType, nullable = false)
-        assume(maybeDataGenerator.isDefined)
+        assert(maybeDataGenerator.isDefined)
         val randGenerator = maybeDataGenerator.get
         val toCatalyst = CatalystTypeConverters.createToCatalystConverter(rowType)
         for (_ <- 1 to 50) {
@@ -128,7 +128,7 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-16845: GeneratedClass$SpecificOrdering grows beyond 64 KB") {
+  test("SPARK-16845: GeneratedClass$SpecificOrdering grows beyond 64 KiB") {
     val sortOrder = Literal("abc").asc
 
     // this is passing prior to SPARK-16845, and it should also be passing after SPARK-16845

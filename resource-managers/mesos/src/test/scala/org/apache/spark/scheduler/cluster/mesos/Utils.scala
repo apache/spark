@@ -25,8 +25,10 @@ import org.apache.mesos.Protos._
 import org.apache.mesos.Protos.Value.{Range => MesosRange, Ranges, Scalar}
 import org.apache.mesos.SchedulerDriver
 import org.apache.mesos.protobuf.ByteString
-import org.mockito.{ArgumentCaptor, Matchers}
-import org.mockito.Mockito._
+import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.{any, eq => meq}
+import org.mockito.Mockito.{times, verify}
+import org.scalatest.Assertions._
 
 import org.apache.spark.deploy.mesos.config.MesosSecretConfig
 
@@ -44,7 +46,7 @@ object Utils {
 
   def createOffer(
                    offerId: String,
-                   slaveId: String,
+                   agentId: String,
                    mem: Int,
                    cpus: Int,
                    ports: Option[(Long, Long)] = None,
@@ -75,8 +77,8 @@ object Utils {
     builder.setId(createOfferId(offerId))
       .setFrameworkId(FrameworkID.newBuilder()
       .setValue("f1"))
-      .setSlaveId(SlaveID.newBuilder().setValue(slaveId))
-      .setHostname(s"host${slaveId}")
+      .setSlaveId(SlaveID.newBuilder().setValue(agentId))
+      .setHostname(s"host${agentId}")
       .addAllAttributes(attributes.asJava)
       .build()
   }
@@ -84,23 +86,23 @@ object Utils {
   def verifyTaskLaunched(driver: SchedulerDriver, offerId: String): List[TaskInfo] = {
     val captor = ArgumentCaptor.forClass(classOf[java.util.Collection[TaskInfo]])
     verify(driver, times(1)).launchTasks(
-      Matchers.eq(Collections.singleton(createOfferId(offerId))),
+      meq(Collections.singleton(createOfferId(offerId))),
       captor.capture())
     captor.getValue.asScala.toList
   }
 
   def verifyTaskNotLaunched(driver: SchedulerDriver, offerId: String): Unit = {
     verify(driver, times(0)).launchTasks(
-      Matchers.eq(Collections.singleton(createOfferId(offerId))),
-      Matchers.any(classOf[java.util.Collection[TaskInfo]]))
+      meq(Collections.singleton(createOfferId(offerId))),
+      any(classOf[java.util.Collection[TaskInfo]]))
   }
 
   def createOfferId(offerId: String): OfferID = {
     OfferID.newBuilder().setValue(offerId).build()
   }
 
-  def createSlaveId(slaveId: String): SlaveID = {
-    SlaveID.newBuilder().setValue(slaveId).build()
+  def createAgentId(agentId: String): SlaveID = {
+    SlaveID.newBuilder().setValue(agentId).build()
   }
 
   def createExecutorId(executorId: String): ExecutorID = {
@@ -160,12 +162,14 @@ object Utils {
     val variableOne = envVars.filter(_.getName == "USER").head
     assert(variableOne.getSecret.isInitialized)
     assert(variableOne.getSecret.getType == Secret.Type.VALUE)
-    assert(variableOne.getSecret.getValue.getData == ByteString.copyFrom("user".getBytes))
+    assert(variableOne.getSecret.getValue.getData ==
+      ByteString.copyFrom("user".getBytes))
     assert(variableOne.getType == Environment.Variable.Type.SECRET)
     val variableTwo = envVars.filter(_.getName == "PASSWORD").head
     assert(variableTwo.getSecret.isInitialized)
     assert(variableTwo.getSecret.getType == Secret.Type.VALUE)
-    assert(variableTwo.getSecret.getValue.getData == ByteString.copyFrom("password".getBytes))
+    assert(variableTwo.getSecret.getValue.getData ==
+      ByteString.copyFrom("password".getBytes))
     assert(variableTwo.getType == Environment.Variable.Type.SECRET)
   }
 
@@ -223,4 +227,3 @@ object Utils {
       .build()
   }
 }
-

@@ -25,6 +25,7 @@ import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.deploy.mesos.ui.MesosClusterUI
 import org.apache.spark.deploy.rest.mesos.MesosRestServer
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.scheduler.cluster.mesos._
 import org.apache.spark.util.{CommandLineUtils, ShutdownHookManager, SparkUncaughtExceptionHandler, Utils}
 
@@ -105,7 +106,7 @@ private[mesos] object MesosClusterDispatcher
   extends Logging
   with CommandLineUtils {
 
-  override def main(args: Array[String]) {
+  override def main(args: Array[String]): Unit = {
     Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler)
     Utils.initDaemon(log)
     val conf = new SparkConf

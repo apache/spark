@@ -80,6 +80,13 @@ DESC EXTENDED v;
 -- AnalysisException DESC PARTITION is not allowed on a view
 DESC v PARTITION (c='Us', d=1);
 
+-- Explain Describe Table
+EXPLAIN DESC t;
+EXPLAIN DESC EXTENDED t;
+EXPLAIN EXTENDED DESC t;
+EXPLAIN DESCRIBE t b;
+EXPLAIN DESCRIBE t PARTITION (c='Us', d=2);
+
 -- DROP TEST TABLES/VIEWS
 DROP TABLE t;
 

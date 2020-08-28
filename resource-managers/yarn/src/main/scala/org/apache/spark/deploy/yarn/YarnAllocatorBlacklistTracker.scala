@@ -56,6 +56,8 @@ private[spark] class YarnAllocatorBlacklistTracker(
 
   private val maxFailuresPerHost = sparkConf.get(MAX_FAILED_EXEC_PER_NODE)
 
+  private val excludeNodes = sparkConf.get(YARN_EXCLUDE_NODES).toSet
+
   private val allocatorBlacklist = new HashMap[String, Long]()
 
   private var currentBlacklistedYarnNodes = Set.empty[String]
@@ -101,11 +103,18 @@ private[spark] class YarnAllocatorBlacklistTracker(
     refreshBlacklistedNodes()
   }
 
-  def isAllNodeBlacklisted: Boolean = currentBlacklistedYarnNodes.size >= numClusterNodes
+  def isAllNodeBlacklisted: Boolean = {
+    if (numClusterNodes <= 0) {
+      logWarning("No available nodes reported, please check Resource Manager.")
+      false
+    } else {
+      currentBlacklistedYarnNodes.size >= numClusterNodes
+    }
+  }
 
   private def refreshBlacklistedNodes(): Unit = {
     removeExpiredYarnBlacklistedNodes()
-    val allBlacklistedNodes = schedulerBlacklist ++ allocatorBlacklist.keySet
+    val allBlacklistedNodes = excludeNodes ++ schedulerBlacklist ++ allocatorBlacklist.keySet
     synchronizeBlacklistedNodeWithYarn(allBlacklistedNodes)
   }
 
@@ -120,7 +129,9 @@ private[spark] class YarnAllocatorBlacklistTracker(
     if (removals.nonEmpty) {
       logInfo(s"removing nodes from YARN application master's blacklist: $removals")
     }
-    amClient.updateBlacklist(additions.asJava, removals.asJava)
+    if (additions.nonEmpty || removals.nonEmpty) {
+      amClient.updateBlacklist(additions.asJava, removals.asJava)
+    }
     currentBlacklistedYarnNodes = nodesToBlacklist
   }
 

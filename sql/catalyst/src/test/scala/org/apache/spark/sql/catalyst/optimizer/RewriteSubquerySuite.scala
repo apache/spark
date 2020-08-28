@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{IsNotNull, ListQuery}
-import org.apache.spark.sql.catalyst.plans.{LeftSemi, PlanTest}
+import org.apache.spark.sql.catalyst.expressions.{IsNotNull, IsNull, ListQuery, Not}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
@@ -38,7 +38,7 @@ class RewriteSubquerySuite extends PlanTest {
         PushDownPredicate,
         CollapseProject,
         CombineFilters,
-        RemoveRedundantProject) :: Nil
+        RemoveNoopOperators) :: Nil
   }
 
   val relation = LocalRelation('a.int, 'b.int)
@@ -80,9 +80,20 @@ class RewriteSubquerySuite extends PlanTest {
       .where(IsNotNull('a)).select('a)
       .join(relInSubquery.where(IsNotNull('x) && IsNotNull('y) && 'y > 1).select('x),
         LeftSemi, Some('a === 'x))
+
+  test("NOT-IN subquery nested inside OR") {
+    val relation1 = LocalRelation('a.int, 'b.int)
+    val relation2 = LocalRelation('c.int, 'd.int)
+    val exists = 'exists.boolean.notNull
+
+    val query = relation1.where('b === 1 || Not('a.in(ListQuery(relation2.select('c))))).select('a)
+    val correctAnswer = relation1
+      .join(relation2.select('c), ExistenceJoin(exists), Some('a === 'c || IsNull('a === 'c)))
+      .where('b === 1 || Not(exists))
+      .select('a)
       .analyze
+    val optimized = Optimize.execute(query.analyze)
 
     comparePlans(optimized, correctAnswer)
   }
-
 }

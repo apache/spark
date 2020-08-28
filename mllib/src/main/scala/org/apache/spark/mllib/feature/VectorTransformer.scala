@@ -17,17 +17,15 @@
 
 package org.apache.spark.mllib.feature
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 
 /**
- * :: DeveloperApi ::
  * Trait for transformation of a vector
  */
 @Since("1.1.0")
-@DeveloperApi
 trait VectorTransformer extends Serializable {
 
   /**

@@ -31,6 +31,7 @@ import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
+import org.scalatest.Assertions
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 
@@ -51,8 +52,6 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
       // Set up the streaming context and input streams
       withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
-        ssc.addStreamingListener(ssc.progressListener)
-
         val input = Seq(1, 2, 3, 4, 5)
         // Use "batchCount" to make sure we check the result after all batches finish
         val batchCounter = new BatchCounter(ssc)
@@ -105,8 +104,6 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       testServer.start()
 
       withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
-        ssc.addStreamingListener(ssc.progressListener)
-
         val batchCounter = new BatchCounter(ssc)
         val networkStream = ssc.socketTextStream(
           "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
@@ -292,8 +289,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         val textPath = new Path(generatedSubDir, "renamed.txt")
         write(textPath, "renamed\n")
         val now = clock.getTimeMillis()
-        val modTime = now + durationMs / 2
-        fs.setTimes(textPath, modTime, modTime)
+        fs.setTimes(textPath, now, now)
         val textFilestatus = fs.getFileStatus(existingFile)
         assert(textFilestatus.getModificationTime < now + durationMs)
 
@@ -334,9 +330,9 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
       // Let the data from the receiver be received
       val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-      val startTime = System.currentTimeMillis()
+      val startTimeNs = System.nanoTime()
       while ((!MultiThreadTestReceiver.haveAllThreadsFinished || output.sum < numTotalRecords) &&
-        System.currentTimeMillis() - startTime < 5000) {
+        System.nanoTime() - startTimeNs < TimeUnit.SECONDS.toNanos(5)) {
         Thread.sleep(100)
         clock.advance(batchDuration.milliseconds)
       }
@@ -453,9 +449,9 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
 
       class TestInputDStream extends InputDStream[String](ssc) {
-        def start() {}
+        def start(): Unit = {}
 
-        def stop() {}
+        def stop(): Unit = {}
 
         def compute(validTime: Time): Option[RDD[String]] = None
       }
@@ -477,7 +473,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
   }
 
-  def testFileStream(newFilesOnly: Boolean) {
+  def testFileStream(newFilesOnly: Boolean): Unit = {
     withTempDir { testDir =>
       val batchDuration = Seconds(2)
       // Create a file that exists before the StreamingContext is created:
@@ -532,7 +528,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
 
 /** This is a server to test the network input stream */
-class TestServer(portToBind: Int = 0) extends Logging {
+class TestServer(portToBind: Int = 0) extends Logging with Assertions {
 
   val queue = new ArrayBlockingQueue[String](100)
 
@@ -541,7 +537,7 @@ class TestServer(portToBind: Int = 0) extends Logging {
   private val startLatch = new CountDownLatch(1)
 
   val servingThread = new Thread() {
-    override def run() {
+    override def run(): Unit = {
       try {
         while (true) {
           logInfo("Accepting connections on port " + port)
@@ -592,7 +588,7 @@ class TestServer(portToBind: Int = 0) extends Logging {
     servingThread.start()
     if (!waitForStart(10000)) {
       stop()
-      throw new AssertionError("Timeout: TestServer cannot start in 10 seconds")
+      fail("Timeout: TestServer cannot start in 10 seconds")
     }
   }
 
@@ -612,9 +608,9 @@ class TestServer(portToBind: Int = 0) extends Logging {
     }
   }
 
-  def send(msg: String) { queue.put(msg) }
+  def send(msg: String): Unit = { queue.put(msg) }
 
-  def stop() { servingThread.interrupt() }
+  def stop(): Unit = { servingThread.interrupt() }
 
   def port: Int = serverSocket.getLocalPort
 }
@@ -625,10 +621,10 @@ class MultiThreadTestReceiver(numThreads: Int, numRecordsPerThread: Int)
   lazy val executorPool = Executors.newFixedThreadPool(numThreads)
   lazy val finishCount = new AtomicInteger(0)
 
-  def onStart() {
+  def onStart(): Unit = {
     (1 to numThreads).map(threadId => {
       val runnable = new Runnable {
-        def run() {
+        def run(): Unit = {
           (1 to numRecordsPerThread).foreach(i =>
             store(threadId * numRecordsPerThread + i) )
           if (finishCount.incrementAndGet == numThreads) {
@@ -641,7 +637,7 @@ class MultiThreadTestReceiver(numThreads: Int, numRecordsPerThread: Int)
     })
   }
 
-  def onStop() {
+  def onStop(): Unit = {
     executorPool.shutdown()
   }
 }

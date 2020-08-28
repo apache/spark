@@ -32,18 +32,20 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
  */
 object UDTSerializationBenchmark extends BenchmarkBase {
 
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
 
     runBenchmark("VectorUDT de/serialization") {
       val iters = 1e2.toInt
       val numRows = 1e3.toInt
 
-      val encoder = ExpressionEncoder[Vector].resolveAndBind()
+      val encoder = ExpressionEncoder[Vector]().resolveAndBind()
+      val toRow = encoder.createSerializer()
+      val fromRow = encoder.createDeserializer()
 
       val vectors = (1 to numRows).map { i =>
         Vectors.dense(Array.fill(1e5.toInt)(1.0 * i))
       }.toArray
-      val rows = vectors.map(encoder.toRow)
+      val rows = vectors.map(toRow)
 
       val benchmark = new Benchmark("VectorUDT de/serialization", numRows, iters, output = output)
 
@@ -51,7 +53,7 @@ object UDTSerializationBenchmark extends BenchmarkBase {
         var sum = 0
         var i = 0
         while (i < numRows) {
-          sum += encoder.toRow(vectors(i)).numFields
+          sum += toRow(vectors(i)).numFields
           i += 1
         }
       }
@@ -60,7 +62,7 @@ object UDTSerializationBenchmark extends BenchmarkBase {
         var sum = 0
         var i = 0
         while (i < numRows) {
-          sum += encoder.fromRow(rows(i)).numActives
+          sum += fromRow(rows(i)).numActives
           i += 1
         }
       }

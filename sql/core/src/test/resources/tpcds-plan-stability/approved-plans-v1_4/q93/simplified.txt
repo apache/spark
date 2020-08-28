@@ -1,0 +1,29 @@
+TakeOrderedAndProject [ss_customer_sk,sumsales]
+  WholeStageCodegen (4)
+    HashAggregate [isEmpty,ss_customer_sk,sum] [isEmpty,sum,sum(act_sales),sumsales]
+      InputAdapter
+        Exchange [ss_customer_sk] #1
+          WholeStageCodegen (3)
+            HashAggregate [act_sales,ss_customer_sk] [isEmpty,isEmpty,sum,sum]
+              Project [sr_return_quantity,ss_customer_sk,ss_quantity,ss_sales_price]
+                BroadcastHashJoin [r_reason_sk,sr_reason_sk]
+                  Project [sr_reason_sk,sr_return_quantity,ss_customer_sk,ss_quantity,ss_sales_price]
+                    BroadcastHashJoin [sr_item_sk,sr_ticket_number,ss_item_sk,ss_ticket_number]
+                      ColumnarToRow
+                        InputAdapter
+                          Scan parquet default.store_sales [ss_customer_sk,ss_item_sk,ss_quantity,ss_sales_price,ss_ticket_number]
+                      InputAdapter
+                        BroadcastExchange #2
+                          WholeStageCodegen (1)
+                            Filter [sr_item_sk,sr_reason_sk,sr_ticket_number]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.store_returns [sr_item_sk,sr_reason_sk,sr_return_quantity,sr_ticket_number]
+                  InputAdapter
+                    BroadcastExchange #3
+                      WholeStageCodegen (2)
+                        Project [r_reason_sk]
+                          Filter [r_reason_desc,r_reason_sk]
+                            ColumnarToRow
+                              InputAdapter
+                                Scan parquet default.reason [r_reason_desc,r_reason_sk]

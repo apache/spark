@@ -54,9 +54,7 @@ private[netty] case class RemoteProcessConnectionError(cause: Throwable, remoteA
 /**
  * An inbox that stores messages for an [[RpcEndpoint]] and posts messages to it thread-safely.
  */
-private[netty] class Inbox(
-    val endpointRef: NettyRpcEndpointRef,
-    val endpoint: RpcEndpoint)
+private[netty] class Inbox(val endpointName: String, val endpoint: RpcEndpoint)
   extends Logging {
 
   inbox =>  // Give this an alias so we can use it more clearly in closures.
@@ -106,7 +104,7 @@ private[netty] class Inbox(
                 throw new SparkException(s"Unsupported message $message from ${_sender}")
               })
             } catch {
-              case NonFatal(e) =>
+              case e: Throwable =>
                 context.sendFailure(e)
                 // Throw the exception -- this exception will be caught by the safelyCall function.
                 // The endpoint's onError function will be called.
@@ -195,7 +193,7 @@ private[netty] class Inbox(
    * Exposed for testing.
    */
   protected def onDrop(message: InboxMessage): Unit = {
-    logWarning(s"Drop $message because $endpointRef is stopped")
+    logWarning(s"Drop $message because endpoint $endpointName is stopped")
   }
 
   /**

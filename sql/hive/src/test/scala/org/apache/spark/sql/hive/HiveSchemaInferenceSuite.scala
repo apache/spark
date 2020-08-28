@@ -264,6 +264,32 @@ class HiveSchemaInferenceSuite
         StructType(Seq(StructField("lowerCase", BinaryType))))
     }
 
+    // Parquet schema is subset of metaStore schema and has uppercase field name
+    assertResult(
+      StructType(Seq(
+        StructField("UPPERCase", DoubleType, nullable = true),
+        StructField("lowerCase", BinaryType, nullable = true)))) {
+
+      HiveMetastoreCatalog.mergeWithMetastoreSchema(
+        StructType(Seq(
+          StructField("UPPERCase", DoubleType, nullable = true),
+          StructField("lowerCase", BinaryType, nullable = true))),
+
+        StructType(Seq(
+          StructField("lowerCase", BinaryType, nullable = true))))
+    }
+
+    // Metastore schema contains additional nullable fields.
+    assert(intercept[Throwable] {
+      HiveMetastoreCatalog.mergeWithMetastoreSchema(
+        StructType(Seq(
+          StructField("UPPERCase", DoubleType, nullable = false),
+          StructField("lowerCase", BinaryType, nullable = true))),
+
+        StructType(Seq(
+          StructField("lowerCase", BinaryType, nullable = true))))
+    }.getMessage.contains("Detected conflicting schemas"))
+
     // Check that merging missing nullable fields works as expected.
     assertResult(
       StructType(Seq(

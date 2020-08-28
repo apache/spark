@@ -123,8 +123,8 @@ class StorageSuite extends SparkFunSuite {
 
   // For testing StorageUtils.updateRddInfo
   private def stockRDDInfos: Seq[RDDInfo] = {
-    val info0 = new RDDInfo(0, "0", 10, memAndDisk, Seq(3))
-    val info1 = new RDDInfo(1, "1", 3, memAndDisk, Seq(4))
+    val info0 = new RDDInfo(0, "0", 10, memAndDisk, false, Seq(3))
+    val info1 = new RDDInfo(1, "1", 3, memAndDisk, false, Seq(4))
     Seq(info0, info1)
   }
 

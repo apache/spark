@@ -23,7 +23,6 @@ import java.util.Random
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, WrappedArray}
-import scala.language.existentials
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.commons.io.FileUtils
@@ -308,7 +307,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     }
     logInfo(s"Generated an explicit feedback dataset with ${training.size} ratings for training " +
       s"and ${test.size} for test.")
-    (sc.parallelize(training, 2), sc.parallelize(test, 2))
+    (sc.parallelize(training.toSeq, 2), sc.parallelize(test.toSeq, 2))
   }
 
   /**
@@ -489,8 +488,8 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
   }
 
   test("implicit feedback regression") {
-    val trainingWithNeg = sc.parallelize(Array(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, -3)))
-    val trainingWithZero = sc.parallelize(Array(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, 0)))
+    val trainingWithNeg = sc.parallelize(Seq(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, -3)))
+    val trainingWithZero = sc.parallelize(Seq(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, 0)))
     val modelWithNeg =
       trainALS(trainingWithNeg, rank = 1, maxIter = 5, regParam = 0.01, implicitPrefs = true)
     val modelWithZero =
@@ -601,7 +600,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val df = maybeDf.get._2
 
     val expected = estimator.fit(df)
-    val actuals = dfs.filter(_ != baseType).map(t => (t, estimator.fit(t._2)))
+    val actuals = dfs.map(t => (t, estimator.fit(t._2)))
     actuals.foreach { case (_, actual) => check(expected, actual) }
     actuals.foreach { case (t, actual) => check2(expected, actual, t._2, t._1.encoder) }
 
@@ -662,11 +661,12 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
           (ex, act) =>
             ex.userFactors.first().getSeq[Float](1) === act.userFactors.first().getSeq[Float](1)
         } { (ex, act, df, enc) =>
+          // With AQE on/off, the order of result may be different. Here sortby the result.
           val expected = ex.transform(df).selectExpr("prediction")
-            .first().getFloat(0)
+            .sort("prediction").first().getFloat(0)
           testTransformerByGlobalCheckFunc(df, act, "prediction") {
             case rows: Seq[Row] =>
-              expected ~== rows.head.getFloat(0) absTol 1e-6
+              expected ~== rows.sortBy(_.getFloat(0)).head.getFloat(0) absTol 1e-6
           }(enc)
         }
     }
@@ -696,12 +696,14 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     withClue("transform should fail when ids exceed integer range. ") {
       val model = als.fit(df)
       def testTransformIdExceedsIntRange[A : Encoder](dataFrame: DataFrame): Unit = {
-        assert(intercept[SparkException] {
-          model.transform(dataFrame).first
-        }.getMessage.contains(msg))
-        assert(intercept[StreamingQueryException] {
+        val e1 = intercept[SparkException] {
+          model.transform(dataFrame).collect()
+        }
+        TestUtils.assertExceptionMsg(e1, msg)
+        val e2 = intercept[StreamingQueryException] {
           testTransformer[A](dataFrame, model, "prediction") { _ => }
-        }.getMessage.contains(msg))
+        }
+        TestUtils.assertExceptionMsg(e2, msg)
       }
       testTransformIdExceedsIntRange[(Long, Int)](df.select(df("user_big").as("user"),
         df("item")))
@@ -808,7 +810,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       val topItems = model.recommendForAllUsers(k)
       assert(topItems.count() == numUsers)
       assert(topItems.columns.contains("user"))
-      checkRecommendations(topItems, expectedUpToN, "item")
+      checkRecommendations(topItems, expectedUpToN.toMap, "item")
     }
   }
 
@@ -829,7 +831,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       val topUsers = getALSModel.recommendForAllItems(k)
       assert(topUsers.count() == numItems)
       assert(topUsers.columns.contains("item"))
-      checkRecommendations(topUsers, expectedUpToN, "user")
+      checkRecommendations(topUsers, expectedUpToN.toMap, "user")
     }
   }
 
@@ -851,7 +853,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       val topItems = model.recommendForUserSubset(userSubset, k)
       assert(topItems.count() == numUsersSubset)
       assert(topItems.columns.contains("user"))
-      checkRecommendations(topItems, expectedUpToN, "item")
+      checkRecommendations(topItems, expectedUpToN.toMap, "item")
     }
   }
 
@@ -873,7 +875,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       val topUsers = model.recommendForItemSubset(itemSubset, k)
       assert(topUsers.count() == numItemsSubset)
       assert(topUsers.columns.contains("item"))
-      checkRecommendations(topUsers, expectedUpToN, "user")
+      checkRecommendations(topUsers, expectedUpToN.toMap, "user")
     }
   }
 
@@ -917,6 +919,38 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     checkRecommendations(itemSubsetRecs, allItemRecs, "user")
   }
 
+  test("ALS should not introduce unnecessary shuffle") {
+    def getShuffledDependencies(rdd: RDD[_]): Seq[ShuffleDependency[_, _, _]] = {
+      rdd.dependencies.flatMap {
+        case s: ShuffleDependency[_, _, _] =>
+          Seq(s) ++ getShuffledDependencies(s.rdd)
+        case o =>
+          Seq.empty ++ getShuffledDependencies(o.rdd)
+      }
+    }
+
+    val spark = this.spark
+    import spark.implicits._
+    val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
+    val data = ratings.toDF
+    val model = new ALS()
+      .setMaxIter(2)
+      .setImplicitPrefs(true)
+      .setCheckpointInterval(-1)
+      .fit(data)
+
+    val userFactors = model.userFactors
+    val itemFactors = model.itemFactors
+    val shuffledUserFactors = getShuffledDependencies(userFactors.rdd).filter { dep =>
+      dep.rdd.name != null && dep.rdd.name.contains("userFactors")
+    }
+    val shuffledItemFactors = getShuffledDependencies(itemFactors.rdd).filter { dep =>
+      dep.rdd.name != null && dep.rdd.name.contains("itemFactors")
+    }
+    assert(shuffledUserFactors.size == 0)
+    assert(shuffledItemFactors.size == 0)
+  }
+
   private def checkRecommendations(
       topK: DataFrame,
       expected: Map[Int, Seq[(Int, Float)]],
@@ -950,49 +984,27 @@ class ALSCleanerSuite extends SparkFunSuite with BeforeAndAfterEach {
     super.afterEach()
   }
 
-  test("ALS shuffle cleanup standalone") {
-    val conf = new SparkConf()
-    val localDir = Utils.createTempDir()
-    val checkpointDir = Utils.createTempDir()
-    def getAllFiles: Set[File] =
-      FileUtils.listFiles(localDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
-    try {
-      conf.set("spark.local.dir", localDir.getAbsolutePath)
-      val sc = new SparkContext("local[2]", "test", conf)
-      try {
-        sc.setCheckpointDir(checkpointDir.getAbsolutePath)
-        // Test checkpoint and clean parents
-        val input = sc.parallelize(1 to 1000)
-        val keyed = input.map(x => (x % 20, 1))
-        val shuffled = keyed.reduceByKey(_ + _)
-        val keysOnly = shuffled.keys
-        val deps = keysOnly.dependencies
-        keysOnly.count()
-        ALS.cleanShuffleDependencies(sc, deps, true)
-        val resultingFiles = getAllFiles
-        assert(resultingFiles === Set())
-        // Ensure running count again works fine even if we kill the shuffle files.
-        keysOnly.count()
-      } finally {
-        sc.stop()
-      }
-    } finally {
-      Utils.deleteRecursively(localDir)
-      Utils.deleteRecursively(checkpointDir)
-    }
-  }
-
   test("ALS shuffle cleanup in algorithm") {
     val conf = new SparkConf()
     val localDir = Utils.createTempDir()
     val checkpointDir = Utils.createTempDir()
-    def getAllFiles: Set[File] =
-      FileUtils.listFiles(localDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
+    def getAllFiles: Set[File] = {
+      val files = FileUtils.listFiles(
+        localDir,
+        TrueFileFilter.INSTANCE,
+        TrueFileFilter.INSTANCE).asScala.toSet
+      files
+    }
     try {
       conf.set("spark.local.dir", localDir.getAbsolutePath)
       val sc = new SparkContext("local[2]", "ALSCleanerSuite", conf)
+      val pattern = "shuffle_(\\d+)_.+\\.data".r
       try {
         sc.setCheckpointDir(checkpointDir.getAbsolutePath)
+        // There should be 0 shuffle files at the start
+        val initialIds = getAllFiles.flatMap { f =>
+          pattern.findAllIn(f.getName()).matchData.map { _.group(1) } }
+        assert(initialIds.size === 0)
         // Generate test data
         val (training, _) = ALSSuite.genImplicitTestData(sc, 20, 5, 1, 0.2, 0)
         // Implicitly test the cleaning of parents during ALS training
@@ -1010,7 +1022,6 @@ class ALSCleanerSuite extends SparkFunSuite with BeforeAndAfterEach {
         val resultingFiles = getAllFiles
         // We expect the last shuffles files, block ratings, user factors, and item factors to be
         // around but no more.
-        val pattern = "shuffle_(\\d+)_.+\\.data".r
         val rddIds = resultingFiles.flatMap { f =>
           pattern.findAllIn(f.getName()).matchData.map { _.group(1) } }
         assert(rddIds.size === 4)
@@ -1200,6 +1211,6 @@ object ALSSuite extends Logging {
     }
     logInfo(s"Generated an implicit feedback dataset with ${training.size} ratings for training " +
       s"and ${test.size} for test.")
-    (sc.parallelize(training, 2), sc.parallelize(test, 2))
+    (sc.parallelize(training.toSeq, 2), sc.parallelize(test.toSeq, 2))
   }
 }

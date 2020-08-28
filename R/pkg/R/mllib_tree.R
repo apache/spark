@@ -135,7 +135,7 @@ print.summary.decisionTree <- function(x) {
 #'
 #' @param data a SparkDataFrame for training.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
-#'                operators are supported, including '~', ':', '+', and '-'.
+#'                operators are supported, including '~', ':', '+', '-', '*', and '^'.
 #' @param type type of model, one of "regression" or "classification", to fit
 #' @param maxDepth Maximum depth of the tree (>= 0).
 #' @param maxBins Maximum number of bins used for discretizing continuous features and for choosing
@@ -157,7 +157,7 @@ print.summary.decisionTree <- function(x) {
 #' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
 #'                           Note: this setting will be ignored if the checkpoint directory is not
 #'                           set.
-#' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
+#' @param maxMemoryInMB Maximum memory in MiB allocated to histogram aggregation.
 #' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the
@@ -382,7 +382,7 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
 #'                           Note: this setting will be ignored if the checkpoint directory is not
 #'                           set.
-#' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
+#' @param maxMemoryInMB Maximum memory in MiB allocated to histogram aggregation.
 #' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the
@@ -393,6 +393,7 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #'                                         "error" (throw an error), "keep" (put invalid data in
 #'                                         a special additional bucket, at index numLabels). Default
 #'                                         is "error".
+#' @param bootstrap Whether bootstrap samples are used when building trees.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.randomForest,SparkDataFrame,formula-method
 #' @return \code{spark.randomForest} returns a fitted Random Forest model.
@@ -428,7 +429,8 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
                    featureSubsetStrategy = "auto", seed = NULL, subsamplingRate = 1.0,
                    minInstancesPerNode = 1, minInfoGain = 0.0, checkpointInterval = 10,
                    maxMemoryInMB = 256, cacheNodeIds = FALSE,
-                   handleInvalid = c("error", "keep", "skip")) {
+                   handleInvalid = c("error", "keep", "skip"),
+                   bootstrap = TRUE) {
             type <- match.arg(type)
             formula <- paste(deparse(formula), collapse = "")
             if (!is.null(seed)) {
@@ -445,7 +447,8 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
                                          as.numeric(minInfoGain), as.integer(checkpointInterval),
                                          as.character(featureSubsetStrategy), seed,
                                          as.numeric(subsamplingRate),
-                                         as.integer(maxMemoryInMB), as.logical(cacheNodeIds))
+                                         as.integer(maxMemoryInMB), as.logical(cacheNodeIds),
+                                         as.logical(bootstrap))
                      new("RandomForestRegressionModel", jobj = jobj)
                    },
                    classification = {
@@ -460,7 +463,7 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
                                          as.character(featureSubsetStrategy), seed,
                                          as.numeric(subsamplingRate),
                                          as.integer(maxMemoryInMB), as.logical(cacheNodeIds),
-                                         handleInvalid)
+                                         handleInvalid, as.logical(bootstrap))
                      new("RandomForestClassificationModel", jobj = jobj)
                    }
             )
@@ -588,7 +591,7 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
 #' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
 #'                           Note: this setting will be ignored if the checkpoint directory is not
 #'                           set.
-#' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
+#' @param maxMemoryInMB Maximum memory in MiB allocated to histogram aggregation.
 #' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the

@@ -347,17 +347,18 @@ public class SparkSaslSuite {
     verify(handler).getStreamManager();
 
     saslHandler.channelInactive(null);
-    verify(handler).channelInactive(any(TransportClient.class));
+    verify(handler).channelInactive(isNull());
 
     saslHandler.exceptionCaught(null, null);
-    verify(handler).exceptionCaught(any(Throwable.class), any(TransportClient.class));
+    verify(handler).exceptionCaught(isNull(), isNull());
   }
 
   @Test
   public void testDelegates() throws Exception {
     Method[] rpcHandlerMethods = RpcHandler.class.getDeclaredMethods();
     for (Method m : rpcHandlerMethods) {
-      SaslRpcHandler.class.getDeclaredMethod(m.getName(), m.getParameterTypes());
+      Method delegate = SaslRpcHandler.class.getMethod(m.getName(), m.getParameterTypes());
+      assertNotEquals(delegate.getDeclaringClass(), RpcHandler.class);
     }
   }
 
@@ -365,6 +366,7 @@ public class SparkSaslSuite {
 
     final TransportClient client;
     final TransportServer server;
+    final TransportContext ctx;
 
     private final boolean encrypt;
     private final boolean disableClientEncryption;
@@ -396,7 +398,7 @@ public class SparkSaslSuite {
       when(keyHolder.getSaslUser(anyString())).thenReturn("user");
       when(keyHolder.getSecretKey(anyString())).thenReturn("secret");
 
-      TransportContext ctx = new TransportContext(conf, rpcHandler);
+      this.ctx = new TransportContext(conf, rpcHandler);
 
       this.checker = new EncryptionCheckerBootstrap(SaslEncryption.ENCRYPTION_HANDLER_NAME);
 
@@ -430,6 +432,9 @@ public class SparkSaslSuite {
       }
       if (server != null) {
         server.close();
+      }
+      if (ctx != null) {
+        ctx.close();
       }
     }
 

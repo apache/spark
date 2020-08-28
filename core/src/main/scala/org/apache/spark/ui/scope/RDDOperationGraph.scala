@@ -21,8 +21,9 @@ import java.util.Objects
 
 import scala.collection.mutable
 import scala.collection.mutable.{ListBuffer, StringBuilder}
+import scala.xml.Utility
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.StageInfo
@@ -42,7 +43,12 @@ private[spark] case class RDDOperationGraph(
     rootCluster: RDDOperationCluster)
 
 /** A node in an RDDOperationGraph. This represents an RDD. */
-private[spark] case class RDDOperationNode(id: Int, name: String, cached: Boolean, callsite: String)
+private[spark] case class RDDOperationNode(
+    id: Int,
+    name: String,
+    cached: Boolean,
+    barrier: Boolean,
+    callsite: String)
 
 /**
  * A directed edge connecting two nodes in an RDDOperationGraph.
@@ -56,7 +62,10 @@ private[spark] case class RDDOperationEdge(fromId: Int, toId: Int)
  * This represents any grouping of RDDs, including operation scopes (e.g. textFile, flatMap),
  * stages, jobs, or any higher level construct. A cluster may be nested inside of other clusters.
  */
-private[spark] class RDDOperationCluster(val id: String, private var _name: String) {
+private[spark] class RDDOperationCluster(
+    val id: String,
+    val barrier: Boolean,
+    private var _name: String) {
   private val _childNodes = new ListBuffer[RDDOperationNode]
   private val _childClusters = new ListBuffer[RDDOperationCluster]
 
@@ -72,7 +81,11 @@ private[spark] class RDDOperationCluster(val id: String, private var _name: Stri
 
   /** Return all the nodes which are cached. */
   def getCachedNodes: Seq[RDDOperationNode] = {
-    _childNodes.filter(_.cached) ++ _childClusters.flatMap(_.getCachedNodes)
+    (_childNodes.filter(_.cached) ++ _childClusters.flatMap(_.getCachedNodes)).toSeq
+  }
+
+  def getBarrierClusters: Seq[RDDOperationCluster] = {
+    (_childClusters.filter(_.barrier) ++ _childClusters.flatMap(_.getBarrierClusters)).toSeq
   }
 
   def canEqual(other: Any): Boolean = other.isInstanceOf[RDDOperationCluster]
@@ -117,7 +130,7 @@ private[spark] object RDDOperationGraph extends Logging {
     val stageClusterId = STAGE_CLUSTER_PREFIX + stage.stageId
     val stageClusterName = s"Stage ${stage.stageId}" +
       { if (stage.attemptNumber == 0) "" else s" (attempt ${stage.attemptNumber})" }
-    val rootCluster = new RDDOperationCluster(stageClusterId, stageClusterName)
+    val rootCluster = new RDDOperationCluster(stageClusterId, false, stageClusterName)
 
     var rootNodeCount = 0
     val addRDDIds = new mutable.HashSet[Int]()
@@ -143,7 +156,7 @@ private[spark] object RDDOperationGraph extends Logging {
 
       // TODO: differentiate between the intention to cache an RDD and whether it's actually cached
       val node = nodes.getOrElseUpdate(rdd.id, RDDOperationNode(
-        rdd.id, rdd.name, rdd.storageLevel != StorageLevel.NONE, rdd.callSite))
+        rdd.id, rdd.name, rdd.storageLevel != StorageLevel.NONE, rdd.isBarrier, rdd.callSite))
       if (rdd.scope.isEmpty) {
         // This RDD has no encompassing scope, so we put it directly in the root cluster
         // This should happen only if an RDD is instantiated outside of a public RDD API
@@ -157,7 +170,8 @@ private[spark] object RDDOperationGraph extends Logging {
         val rddClusters = rddScopes.map { scope =>
           val clusterId = scope.id
           val clusterName = scope.name.replaceAll("\\n", "\\\\n")
-          clusters.getOrElseUpdate(clusterId, new RDDOperationCluster(clusterId, clusterName))
+          clusters.getOrElseUpdate(
+            clusterId, new RDDOperationCluster(clusterId, false, clusterName))
         }
         // Build the cluster hierarchy for this RDD
         rddClusters.sliding(2).foreach { pc =>
@@ -196,7 +210,7 @@ private[spark] object RDDOperationGraph extends Logging {
       }
     }
 
-    RDDOperationGraph(internalEdges, outgoingEdges, incomingEdges, rootCluster)
+    RDDOperationGraph(internalEdges.toSeq, outgoingEdges.toSeq, incomingEdges.toSeq, rootCluster)
   }
 
   /**
@@ -227,8 +241,14 @@ private[spark] object RDDOperationGraph extends Logging {
     } else {
       ""
     }
-    val label = s"${node.name} [${node.id}]$isCached\n${node.callsite}"
-    s"""${node.id} [label="${StringEscapeUtils.escapeJava(label)}"]"""
+    val isBarrier = if (node.barrier) {
+      " [Barrier]"
+    } else {
+      ""
+    }
+    val escapedCallsite = Utility.escape(node.callsite)
+    val label = s"${node.name} [${node.id}]$isCached$isBarrier<br>${escapedCallsite}"
+    s"""${node.id} [labelType="html" label="${StringEscapeUtils.escapeJava(label)}"]"""
   }
 
   /** Update the dot representation of the RDDOperationGraph in cluster to subgraph. */

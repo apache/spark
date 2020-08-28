@@ -100,7 +100,7 @@ private[deploy] class ClientArguments(args: Array[String]) {
   /**
    * Print usage and exit JVM with the given exit code.
    */
-  private def printUsageAndExit(exitCode: Int) {
+  private def printUsageAndExit(exitCode: Int): Unit = {
     // TODO: It wouldn't be too hard to allow users to submit their app and dependency jars
     //       separately similar to in the YARN client.
     val usage =

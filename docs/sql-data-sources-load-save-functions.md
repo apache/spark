@@ -2,6 +2,21 @@
 layout: global
 title: Generic Load/Save Functions
 displayTitle: Generic Load/Save Functions
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -40,6 +55,11 @@ that you would like to pass to the data source. Data sources are specified by th
 name (i.e., `org.apache.spark.sql.parquet`), but for built-in sources you can also use their short
 names (`json`, `parquet`, `jdbc`, `orc`, `libsvm`, `csv`, `text`). DataFrames loaded from any data
 source type can be converted into other types using this syntax.
+
+Please refer the API documentation for available options of built-in sources, for example,
+`org.apache.spark.sql.DataFrameReader` and `org.apache.spark.sql.DataFrameWriter`. The
+options documented there should be applicable through non-Scala Spark APIs (e.g. PySpark)
+as well. For other formats, refer to the API documentation of the particular format.
 
 To load a JSON file you can use:
 
@@ -80,6 +100,50 @@ To load a CSV file you can use:
 {% include_example manual_load_options_csv r/RSparkSQLExample.R %}
 
 </div>
+</div>
+
+The extra options are also used during write operation.
+For example, you can control bloom filters and dictionary encodings for ORC data sources.
+The following ORC example will create bloom filter and use dictionary encoding only for `favorite_color`.
+For Parquet, there exists `parquet.enable.dictionary`, too.
+To find more detailed information about the extra ORC/Parquet options,
+visit the official Apache ORC/Parquet websites.
+
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+{% include_example manual_save_options_orc scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% include_example manual_save_options_orc java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% include_example manual_save_options_orc python/sql/datasource.py %}
+</div>
+
+<div data-lang="r"  markdown="1">
+{% include_example manual_save_options_orc r/RSparkSQLExample.R %}
+</div>
+
+<div data-lang="SQL"  markdown="1">
+
+{% highlight sql %}
+CREATE TABLE users_with_options (
+  name STRING,
+  favorite_color STRING,
+  favorite_numbers array<integer>
+) USING ORC
+OPTIONS (
+  orc.bloom.filter.columns 'favorite_color',
+  orc.dictionary.key.threshold '1.0',
+  orc.column.encoding.direct 'name'
+)
+{% endhighlight %}
+
+</div>
+
 </div>
 
 ### Run SQL on files directly
@@ -193,7 +257,7 @@ Bucketing and sorting are applicable only to persistent tables:
 {% include_example write_sorting_and_bucketing python/sql/datasource.py %}
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 
@@ -227,7 +291,7 @@ while partitioning can be used with both `save` and `saveAsTable` when using the
 {% include_example write_partitioning python/sql/datasource.py %}
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 
@@ -259,7 +323,7 @@ It is possible to use both partitioning and bucketing for a single table:
 {% include_example write_partition_and_bucket python/sql/datasource.py %}
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 
@@ -280,4 +344,4 @@ CLUSTERED BY(name) SORTED BY (favorite_numbers) INTO 42 BUCKETS;
 `partitionBy` creates a directory structure as described in the [Partition Discovery](sql-data-sources-parquet.html#partition-discovery) section.
 Thus, it has limited applicability to columns with high cardinality. In contrast
  `bucketBy` distributes
-data across a fixed number of buckets and can be used when a number of unique values is unbounded.
+data across a fixed number of buckets and can be used when the number of unique values is unbounded.

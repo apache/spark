@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
-import org.apache.spark.sql.KeyValueGroupedDataset
+import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
 
 /**
@@ -94,7 +93,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
  *      any trigger and timeout function call will not occur until there is data.
  *    - Since the processing time timeout is based on the clock time, it is affected by the
  *      variations in the system clock (i.e. time zone changes, clock skew, etc.).
- *  - With `EventTimeTimeout`, the user also has to specify the the the event time watermark in
+ *  - With `EventTimeTimeout`, the user also has to specify the event time watermark in
  *    the query using `Dataset.withWatermark()`. With this setting, data that is older than the
  *    watermark are filtered out. The timeout can be set for a group by setting a timeout timestamp
  *    using`GroupState.setTimeoutTimestamp()`, and the timeout would occur when the watermark
@@ -192,7 +191,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
  * @since 2.2.0
  */
 @Experimental
-@InterfaceStability.Evolving
+@Evolving
 trait GroupState[S] extends LogicalGroupState[S] {
 
   /** Whether state exists or not. */

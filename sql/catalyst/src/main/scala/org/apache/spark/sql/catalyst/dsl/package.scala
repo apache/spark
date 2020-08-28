@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
+import java.time.{Instant, LocalDate}
 
 import scala.language.implicitConversions
 
@@ -64,6 +65,7 @@ package object dsl {
   trait ImplicitOperators {
     def expr: Expression
 
+    def unary_+ : Expression = UnaryPositive(expr)
     def unary_- : Expression = UnaryMinus(expr)
     def unary_! : Predicate = Not(expr)
     def unary_~ : Expression = BitwiseNot(expr)
@@ -97,7 +99,8 @@ package object dsl {
       case _ => In(expr, list)
     }
 
-    def like(other: Expression): Expression = Like(expr, other)
+    def like(other: Expression, escapeChar: Char = '\\'): Expression =
+      Like(expr, other, escapeChar)
     def rlike(other: Expression): Expression = RLike(expr, other)
     def contains(other: Expression): Expression = Contains(expr, other)
     def startsWith(other: Expression): Expression = StartsWith(expr, other)
@@ -114,7 +117,13 @@ package object dsl {
     def getField(fieldName: String): UnresolvedExtractValue =
       UnresolvedExtractValue(expr, Literal(fieldName))
 
-    def cast(to: DataType): Expression = Cast(expr, to)
+    def cast(to: DataType): Expression = {
+      if (expr.resolved && expr.dataType.sameType(to)) {
+        expr
+      } else {
+        Cast(expr, to)
+      }
+    }
 
     def asc: SortOrder = SortOrder(expr, Ascending)
     def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Set.empty)
@@ -136,12 +145,14 @@ package object dsl {
     implicit def longToLiteral(l: Long): Literal = Literal(l)
     implicit def floatToLiteral(f: Float): Literal = Literal(f)
     implicit def doubleToLiteral(d: Double): Literal = Literal(d)
-    implicit def stringToLiteral(s: String): Literal = Literal(s)
+    implicit def stringToLiteral(s: String): Literal = Literal.create(s, StringType)
     implicit def dateToLiteral(d: Date): Literal = Literal(d)
+    implicit def localDateToLiteral(d: LocalDate): Literal = Literal(d)
     implicit def bigDecimalToLiteral(d: BigDecimal): Literal = Literal(d.underlying())
     implicit def bigDecimalToLiteral(d: java.math.BigDecimal): Literal = Literal(d)
     implicit def decimalToLiteral(d: Decimal): Literal = Literal(d)
     implicit def timestampToLiteral(t: Timestamp): Literal = Literal(t)
+    implicit def instantToLiteral(i: Instant): Literal = Literal(i)
     implicit def binaryToLiteral(a: Array[Byte]): Literal = Literal(a)
 
     implicit def symbolToUnresolvedAttribute(s: Symbol): analysis.UnresolvedAttribute =
@@ -157,20 +168,35 @@ package object dsl {
     }
 
     def rand(e: Long): Expression = Rand(e)
-    def sum(e: Expression): Expression = Sum(e).toAggregateExpression()
-    def sumDistinct(e: Expression): Expression = Sum(e).toAggregateExpression(isDistinct = true)
-    def count(e: Expression): Expression = Count(e).toAggregateExpression()
+    def sum(e: Expression, filter: Option[Expression] = None): Expression =
+      Sum(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def sumDistinct(e: Expression, filter: Option[Expression] = None): Expression =
+      Sum(e).toAggregateExpression(isDistinct = true, filter = filter)
+    def count(e: Expression, filter: Option[Expression] = None): Expression =
+      Count(e).toAggregateExpression(isDistinct = false, filter = filter)
     def countDistinct(e: Expression*): Expression =
       Count(e).toAggregateExpression(isDistinct = true)
-    def approxCountDistinct(e: Expression, rsd: Double = 0.05): Expression =
-      HyperLogLogPlusPlus(e, rsd).toAggregateExpression()
-    def avg(e: Expression): Expression = Average(e).toAggregateExpression()
-    def first(e: Expression): Expression = new First(e).toAggregateExpression()
-    def last(e: Expression): Expression = new Last(e).toAggregateExpression()
-    def min(e: Expression): Expression = Min(e).toAggregateExpression()
-    def minDistinct(e: Expression): Expression = Min(e).toAggregateExpression(isDistinct = true)
-    def max(e: Expression): Expression = Max(e).toAggregateExpression()
-    def maxDistinct(e: Expression): Expression = Max(e).toAggregateExpression(isDistinct = true)
+    def countDistinctWithFilter(filter: Expression, e: Expression*): Expression =
+      Count(e).toAggregateExpression(isDistinct = true, filter = Some(filter))
+    def approxCountDistinct(
+        e: Expression,
+        rsd: Double = 0.05,
+        filter: Option[Expression] = None): Expression =
+      HyperLogLogPlusPlus(e, rsd).toAggregateExpression(isDistinct = false, filter = filter)
+    def avg(e: Expression, filter: Option[Expression] = None): Expression =
+      Average(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def first(e: Expression, filter: Option[Expression] = None): Expression =
+      new First(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def last(e: Expression, filter: Option[Expression] = None): Expression =
+      new Last(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def min(e: Expression, filter: Option[Expression] = None): Expression =
+      Min(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def minDistinct(e: Expression, filter: Option[Expression] = None): Expression =
+      Min(e).toAggregateExpression(isDistinct = true, filter = filter)
+    def max(e: Expression, filter: Option[Expression] = None): Expression =
+      Max(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def maxDistinct(e: Expression, filter: Option[Expression] = None): Expression =
+      Max(e).toAggregateExpression(isDistinct = true, filter = filter)
     def upper(e: Expression): Expression = Upper(e)
     def lower(e: Expression): Expression = Lower(e)
     def coalesce(args: Expression*): Expression = Coalesce(args)
@@ -295,10 +321,7 @@ package object dsl {
   object expressions extends ExpressionConversions  // scalastyle:ignore
 
   object plans {  // scalastyle:ignore
-    def table(ref: String): LogicalPlan = UnresolvedRelation(TableIdentifier(ref))
-
-    def table(db: String, ref: String): LogicalPlan =
-      UnresolvedRelation(TableIdentifier(ref, Option(db)))
+    def table(parts: String*): LogicalPlan = UnresolvedRelation(parts)
 
     implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) {
       def select(exprs: Expression*): LogicalPlan = {
@@ -325,7 +348,7 @@ package object dsl {
         otherPlan: LogicalPlan,
         joinType: JoinType = Inner,
         condition: Option[Expression] = None): LogicalPlan =
-        Join(logicalPlan, otherPlan, joinType, condition)
+        Join(logicalPlan, otherPlan, joinType, condition, JoinHint.NONE)
 
       def cogroup[Key: Encoder, Left: Encoder, Right: Encoder, Result: Encoder](
           otherPlan: LogicalPlan,
@@ -357,6 +380,14 @@ package object dsl {
         Aggregate(groupingExprs, aliasedExprs, logicalPlan)
       }
 
+      def having(
+          groupingExprs: Expression*)(
+          aggregateExprs: Expression*)(
+          havingCondition: Expression): LogicalPlan = {
+        UnresolvedHaving(havingCondition,
+          groupBy(groupingExprs: _*)(aggregateExprs: _*).asInstanceOf[Aggregate])
+      }
+
       def window(
           windowExpressions: Seq[NamedExpression],
           partitionSpec: Seq[Expression],
@@ -382,10 +413,14 @@ package object dsl {
         Generate(generator, unrequiredChildIndex, outer,
           alias, outputNames.map(UnresolvedAttribute(_)), logicalPlan)
 
-      def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =
-        InsertIntoTable(
-          analysis.UnresolvedRelation(TableIdentifier(tableName)),
-          Map.empty, logicalPlan, overwrite, ifPartitionNotExists = false)
+      def insertInto(tableName: String): LogicalPlan = insertInto(table(tableName))
+
+      def insertInto(
+          table: LogicalPlan,
+          partition: Map[String, Option[String]] = Map.empty,
+          overwrite: Boolean = false,
+          ifPartitionNotExists: Boolean = false): LogicalPlan =
+        InsertIntoStatement(table, partition, logicalPlan, overwrite, ifPartitionNotExists)
 
       def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 
@@ -398,8 +433,11 @@ package object dsl {
       def distribute(exprs: Expression*)(n: Int): LogicalPlan =
         RepartitionByExpression(exprs, logicalPlan, numPartitions = n)
 
-      def analyze: LogicalPlan =
-        EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(logicalPlan))
+      def analyze: LogicalPlan = {
+        val analyzed = analysis.SimpleAnalyzer.execute(logicalPlan)
+        analysis.SimpleAnalyzer.checkAnalysis(analyzed)
+        EliminateSubqueryAliases(analyzed)
+      }
 
       def hint(name: String, parameters: Any*): LogicalPlan =
         UnresolvedHint(name, parameters, logicalPlan)

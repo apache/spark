@@ -26,7 +26,7 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
 
   private val thread = new Thread("RecurringTimer - " + name) {
     setDaemon(true)
-    override def run() { loop }
+    override def run(): Unit = { loop }
   }
 
   @volatile private var prevTime = -1L
@@ -100,7 +100,7 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
   /**
    * Repeatedly call the callback every interval.
    */
-  private def loop() {
+  private def loop(): Unit = {
     try {
       while (!stopped) {
         triggerActionForNextInterval()
@@ -115,11 +115,11 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
 private[streaming]
 object RecurringTimer extends Logging {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     var lastRecurTime = 0L
     val period = 1000
 
-    def onRecur(time: Long) {
+    def onRecur(time: Long): Unit = {
       val currentTime = System.currentTimeMillis()
       logInfo("" + currentTime + ": " + (currentTime - lastRecurTime))
       lastRecurTime = currentTime

@@ -20,7 +20,6 @@ package org.apache.spark.streaming
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.mutable
-import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.scalatest.concurrent.Eventually.eventually
@@ -656,12 +655,12 @@ class BasicOperationsSuite extends TestSuiteBase {
 
     runCleanupTest(
         conf,
-        operation _,
+        operation,
         numExpectedOutput = cleanupTestInput.size / 2,
         rememberDuration = Seconds(3)) { operatedStream =>
       eventually(eventuallyTimeout) {
-        val windowedStream2 = operatedStream.asInstanceOf[WindowedDStream[_]]
-        val windowedStream1 = windowedStream2.dependencies.head.asInstanceOf[WindowedDStream[_]]
+        val windowedStream2 = operatedStream.asInstanceOf[WindowedDStream[Int]]
+        val windowedStream1 = windowedStream2.dependencies.head.asInstanceOf[WindowedDStream[Int]]
         val mappedStream = windowedStream1.dependencies.head
 
         // Checkpoint remember durations
@@ -733,7 +732,7 @@ class BasicOperationsSuite extends TestSuiteBase {
         val blockRdds = new mutable.HashMap[Time, BlockRDD[_]]
         val persistentRddIds = new mutable.HashMap[Time, Int]
 
-        def collectRddInfo() { // get all RDD info required for verification
+        def collectRddInfo(): Unit = { // get all RDD info required for verification
           networkStream.generatedRDDs.foreach { case (time, rdd) =>
             blockRdds(time) = rdd.asInstanceOf[BlockRDD[_]]
           }

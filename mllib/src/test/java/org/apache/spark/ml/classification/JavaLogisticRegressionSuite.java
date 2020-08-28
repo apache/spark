@@ -50,7 +50,7 @@ public class JavaLogisticRegressionSuite extends SharedSparkSession {
   @Test
   public void logisticRegressionDefaultParams() {
     LogisticRegression lr = new LogisticRegression();
-    Assert.assertEquals(lr.getLabelCol(), "label");
+    Assert.assertEquals("label", lr.getLabelCol());
     LogisticRegressionModel model = lr.fit(dataset);
     model.transform(dataset).createOrReplaceTempView("prediction");
     Dataset<Row> predictions = spark.sql("SELECT label, probability, prediction FROM prediction");
@@ -119,8 +119,8 @@ public class JavaLogisticRegressionSuite extends SharedSparkSession {
     for (Row row : trans1.collectAsList()) {
       Vector raw = (Vector) row.get(0);
       Vector prob = (Vector) row.get(1);
-      Assert.assertEquals(raw.size(), 2);
-      Assert.assertEquals(prob.size(), 2);
+      Assert.assertEquals(2, raw.size());
+      Assert.assertEquals(2, prob.size());
       double probFromRaw1 = 1.0 / (1.0 + Math.exp(-raw.apply(1)));
       Assert.assertEquals(0, Math.abs(prob.apply(1) - probFromRaw1), eps);
       Assert.assertEquals(0, Math.abs(prob.apply(0) - (1.0 - probFromRaw1)), eps);
@@ -143,6 +143,6 @@ public class JavaLogisticRegressionSuite extends SharedSparkSession {
     LogisticRegressionModel model = lr.fit(dataset);
 
     LogisticRegressionTrainingSummary summary = model.summary();
-    Assert.assertEquals(summary.totalIterations(), summary.objectiveHistory().length);
+    Assert.assertEquals(summary.totalIterations(), summary.objectiveHistory().length - 1);
   }
 }

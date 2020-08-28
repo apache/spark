@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -111,6 +110,13 @@ public class ExternalShuffleBlockResolverSuite {
         CharStreams.toString(new InputStreamReader(block1Stream, StandardCharsets.UTF_8));
       assertEquals(sortBlock1, block1);
     }
+
+    try (InputStream blocksStream = resolver.getContinuousBlocksData(
+        "app0", "exec0", 0, 0, 0, 2).createInputStream()) {
+      String blocks =
+        CharStreams.toString(new InputStreamReader(blocksStream, StandardCharsets.UTF_8));
+      assertEquals(sortBlock0 + sortBlock1, blocks);
+    }
   }
 
   @Test
@@ -137,22 +143,4 @@ public class ExternalShuffleBlockResolverSuite {
     assertEquals(shuffleInfo, mapper.readValue(legacyShuffleJson, ExecutorShuffleInfo.class));
   }
 
-  @Test
-  public void testNormalizeAndInternPathname() {
-    assertPathsMatch("/foo", "bar", "baz", "/foo/bar/baz");
-    assertPathsMatch("//foo/", "bar/", "//baz", "/foo/bar/baz");
-    assertPathsMatch("foo", "bar", "baz///", "foo/bar/baz");
-    assertPathsMatch("/foo/", "/bar//", "/baz", "/foo/bar/baz");
-    assertPathsMatch("/", "", "", "/");
-    assertPathsMatch("/", "/", "/", "/");
-  }
-
-  private void assertPathsMatch(String p1, String p2, String p3, String expectedPathname) {
-    String normPathname =
-      ExternalShuffleBlockResolver.createNormalizedInternedPathname(p1, p2, p3);
-    assertEquals(expectedPathname, normPathname);
-    File file = new File(normPathname);
-    String returnedPath = file.getPath();
-    assertTrue(normPathname == returnedPath);
-  }
 }

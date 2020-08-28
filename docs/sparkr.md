@@ -2,6 +2,21 @@
 layout: global
 displayTitle: SparkR (R on Spark)
 title: SparkR (R on Spark)
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -133,7 +148,7 @@ specifying `--packages` with `spark-submit` or `sparkR` commands, or if initiali
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
-sparkR.session(sparkPackages = "com.databricks:spark-avro_2.11:3.0.0")
+sparkR.session(sparkPackages = "org.apache.spark:spark-avro_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION}}")
 {% endhighlight %}
 </div>
 
@@ -296,7 +311,7 @@ head(agg(rollup(df, "cyl", "disp", "gear"), avg(df$mpg)))
 
 ### Operating on Columns
 
-SparkR also provides a number of functions that can directly applied to columns for data processing and during aggregation. The example below shows the use of basic arithmetic functions.
+SparkR also provides a number of functions that can be directly applied to columns for data processing and during aggregation. The example below shows the use of basic arithmetic functions.
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
@@ -450,6 +465,48 @@ print(model.summaries)
 {% endhighlight %}
 </div>
 
+### Eager execution
+
+If eager execution is enabled, the data will be returned to R client immediately when the `SparkDataFrame` is created. By default, eager execution is not enabled and can be enabled by setting the configuration property `spark.sql.repl.eagerEval.enabled` to `true` when the `SparkSession` is started up.
+
+Maximum number of rows and maximum number of characters per column of data to display can be controlled by `spark.sql.repl.eagerEval.maxNumRows` and `spark.sql.repl.eagerEval.truncate` configuration properties, respectively. These properties are only effective when eager execution is enabled. If these properties are not set explicitly, by default, data up to 20 rows and up to 20 characters per column will be showed.
+
+<div data-lang="r" markdown="1">
+{% highlight r %}
+
+# Start up spark session with eager execution enabled
+sparkR.session(master = "local[*]",
+               sparkConfig = list(spark.sql.repl.eagerEval.enabled = "true",
+                                  spark.sql.repl.eagerEval.maxNumRows = as.integer(10)))
+
+# Create a grouped and sorted SparkDataFrame
+df <- createDataFrame(faithful)
+df2 <- arrange(summarize(groupBy(df, df$waiting), count = n(df$waiting)), "waiting")
+
+# Similar to R data.frame, displays the data returned, instead of SparkDataFrame class string
+df2
+
+##+-------+-----+
+##|waiting|count|
+##+-------+-----+
+##|   43.0|    1|
+##|   45.0|    3|
+##|   46.0|    5|
+##|   47.0|    4|
+##|   48.0|    3|
+##|   49.0|    5|
+##|   50.0|    5|
+##|   51.0|    6|
+##|   52.0|    5|
+##|   53.0|    7|
+##+-------+-----+
+##only showing top 10 rows
+
+{% endhighlight %}
+</div>
+
+Note that to enable eager execution in `sparkR` shell, add `spark.sql.repl.eagerEval.enabled=true` configuration property to the `--conf` option.
+
 ## Running SQL Queries from SparkR
 A SparkDataFrame can also be registered as a temporary view in Spark SQL and that allows you to run SQL queries over its data.
 The `sql` function enables applications to run SQL queries programmatically and returns the result as a `SparkDataFrame`.
@@ -483,12 +540,15 @@ SparkR supports the following machine learning algorithms currently:
 * [`spark.mlp`](api/R/spark.mlp.html): [`Multilayer Perceptron (MLP)`](ml-classification-regression.html#multilayer-perceptron-classifier)
 * [`spark.naiveBayes`](api/R/spark.naiveBayes.html): [`Naive Bayes`](ml-classification-regression.html#naive-bayes)
 * [`spark.svmLinear`](api/R/spark.svmLinear.html): [`Linear Support Vector Machine`](ml-classification-regression.html#linear-support-vector-machine)
+* [`spark.fmClassifier`](api/R/fmClassifier.html): [`Factorization Machines classifier`](ml-classification-regression.html#factorization-machines-classifier)
 
 #### Regression
 
 * [`spark.survreg`](api/R/spark.survreg.html): [`Accelerated Failure Time (AFT) Survival  Model`](ml-classification-regression.html#survival-regression)
 * [`spark.glm`](api/R/spark.glm.html) or [`glm`](api/R/glm.html): [`Generalized Linear Model (GLM)`](ml-classification-regression.html#generalized-linear-regression)
 * [`spark.isoreg`](api/R/spark.isoreg.html): [`Isotonic Regression`](ml-classification-regression.html#isotonic-regression)
+* [`spark.lm`](api/R/spark.lm.html): [`Linear Regression`](ml-classification-regression.html#linear-regression)
+* [`spark.fmRegressor`](api/R/spark.fmRegressor.html): [`Factorization Machines regressor`](ml-classification-regression.html#factorization-machines-regressor)
 
 #### Tree
 
@@ -502,6 +562,7 @@ SparkR supports the following machine learning algorithms currently:
 * [`spark.gaussianMixture`](api/R/spark.gaussianMixture.html): [`Gaussian Mixture Model (GMM)`](ml-clustering.html#gaussian-mixture-model-gmm)
 * [`spark.kmeans`](api/R/spark.kmeans.html): [`K-Means`](ml-clustering.html#k-means)
 * [`spark.lda`](api/R/spark.lda.html): [`Latent Dirichlet Allocation (LDA)`](ml-clustering.html#latent-dirichlet-allocation-lda)
+* [`spark.powerIterationClustering (PIC)`](api/R/spark.powerIterationClustering.html): [`Power Iteration Clustering (PIC)`](ml-clustering.html#power-iteration-clustering-pic)
 
 #### Collaborative Filtering
 
@@ -510,6 +571,7 @@ SparkR supports the following machine learning algorithms currently:
 #### Frequent Pattern Mining
 
 * [`spark.fpGrowth`](api/R/spark.fpGrowth.html) : [`FP-growth`](ml-frequent-pattern-mining.html#fp-growth)
+* [`spark.prefixSpan`](api/R/spark.prefixSpan.html) : [`PrefixSpan`](ml-frequent-pattern-mining.html#prefixSpan)
 
 #### Statistics
 
@@ -598,6 +660,67 @@ The following example shows how to save/load a MLlib model by SparkR.
 
 SparkR supports the Structured Streaming API. Structured Streaming is a scalable and fault-tolerant stream processing engine built on the Spark SQL engine. For more information see the R API on the [Structured Streaming Programming Guide](structured-streaming-programming-guide.html)
 
+# Apache Arrow in SparkR
+
+Apache Arrow is an in-memory columnar data format that is used in Spark to efficiently transfer data between JVM and R processes. See also PySpark optimization done, [PySpark Usage Guide for Pandas with Apache Arrow](sql-pyspark-pandas-with-arrow.html). This guide targets to explain how to use Arrow optimization in SparkR with some key points.
+
+## Ensure Arrow Installed
+
+Arrow R library is available on CRAN and it can be installed as below.
+
+```bash
+Rscript -e 'install.packages("arrow", repos="https://cloud.r-project.org/")'
+```
+Please refer [the official documentation of Apache Arrow](https://arrow.apache.org/docs/r/) for more detials.
+
+Note that you must ensure that Arrow R package is installed and available on all cluster nodes.
+The current supported minimum version is 1.0.0; however, this might change between the minor releases since Arrow optimization in SparkR is experimental.
+
+## Enabling for Conversion to/from R DataFrame, `dapply` and `gapply`
+
+Arrow optimization is available when converting a Spark DataFrame to an R DataFrame using the call `collect(spark_df)`,
+when creating a Spark DataFrame from an R DataFrame with `createDataFrame(r_df)`, when applying an R native function to each partition
+via `dapply(...)` and when applying an R native function to grouped data via `gapply(...)`.
+To use Arrow when executing these, users need to set the Spark configuration ‘spark.sql.execution.arrow.sparkr.enabled’
+to ‘true’ first. This is disabled by default.
+
+Whether the optimization is enabled or not, SparkR produces the same results. In addition, the conversion
+between Spark DataFrame and R DataFrame falls back automatically to non-Arrow optimization implementation
+when the optimization fails for any reasons before the actual computation.
+
+<div data-lang="r" markdown="1">
+{% highlight r %}
+# Start up spark session with Arrow optimization enabled
+sparkR.session(master = "local[*]",
+               sparkConfig = list(spark.sql.execution.arrow.sparkr.enabled = "true"))
+
+# Converts Spark DataFrame from an R DataFrame
+spark_df <- createDataFrame(mtcars)
+
+# Converts Spark DataFrame to an R DataFrame
+collect(spark_df)
+
+# Apply an R native function to each partition.
+collect(dapply(spark_df, function(rdf) { data.frame(rdf$gear + 1) }, structType("gear double")))
+
+# Apply an R native function to grouped data.
+collect(gapply(spark_df,
+               "gear",
+               function(key, group) {
+                 data.frame(gear = key[[1]], disp = mean(group$disp) > group$disp)
+               },
+               structType("gear double, disp boolean")))
+{% endhighlight %}
+</div>
+
+Note that even with Arrow, `collect(spark_df)` results in the collection of all records in the DataFrame to
+the driver program and should be done on a small subset of the data. In addition, the specified output schema
+in `gapply(...)` and `dapply(...)` should be matched to the R DataFrame's returned by the given function.
+
+## Supported SQL Types
+
+Currently, all Spark SQL data types are supported by Arrow-based conversion except `FloatType`, `BinaryType`, `ArrayType`, `StructType` and `MapType`.
+
 # R Function Name Conflicts
 
 When loading and attaching a new package in R, it is possible to have a name [conflict](https://stat.ethz.ch/R-manual/R-devel/library/base/html/library.html), where a
@@ -630,44 +753,4 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
 
 # Migration Guide
 
-## Upgrading From SparkR 1.5.x to 1.6.x
-
- - Before Spark 1.6.0, the default mode for writes was `append`. It was changed in Spark 1.6.0 to `error` to match the Scala API.
- - SparkSQL converts `NA` in R to `null` and vice-versa.
-
-## Upgrading From SparkR 1.6.x to 2.0
-
- - The method `table` has been removed and replaced by `tableToDF`.
- - The class `DataFrame` has been renamed to `SparkDataFrame` to avoid name conflicts.
- - Spark's `SQLContext` and `HiveContext` have been deprecated to be replaced by `SparkSession`. Instead of `sparkR.init()`, call `sparkR.session()` in its place to instantiate the SparkSession. Once that is done, that currently active SparkSession will be used for SparkDataFrame operations.
- - The parameter `sparkExecutorEnv` is not supported by `sparkR.session`. To set environment for the executors, set Spark config properties with the prefix "spark.executorEnv.VAR_NAME", for example, "spark.executorEnv.PATH"
- - The `sqlContext` parameter is no longer required for these functions: `createDataFrame`, `as.DataFrame`, `read.json`, `jsonFile`, `read.parquet`, `parquetFile`, `read.text`, `sql`, `tables`, `tableNames`, `cacheTable`, `uncacheTable`, `clearCache`, `dropTempTable`, `read.df`, `loadDF`, `createExternalTable`.
- - The method `registerTempTable` has been deprecated to be replaced by `createOrReplaceTempView`.
- - The method `dropTempTable` has been deprecated to be replaced by `dropTempView`.
- - The `sc` SparkContext parameter is no longer required for these functions: `setJobGroup`, `clearJobGroup`, `cancelJobGroup`
-
-## Upgrading to SparkR 2.1.0
-
- - `join` no longer performs Cartesian Product by default, use `crossJoin` instead.
-
-## Upgrading to SparkR 2.2.0
-
- - A `numPartitions` parameter has been added to `createDataFrame` and `as.DataFrame`. When splitting the data, the partition position calculation has been made to match the one in Scala.
- - The method `createExternalTable` has been deprecated to be replaced by `createTable`. Either methods can be called to create external or managed table. Additional catalog methods have also been added.
- - By default, derby.log is now saved to `tempdir()`. This will be created when instantiating the SparkSession with `enableHiveSupport` set to `TRUE`.
- - `spark.lda` was not setting the optimizer correctly. It has been corrected.
- - Several model summary outputs are updated to have `coefficients` as `matrix`. This includes `spark.logit`, `spark.kmeans`, `spark.glm`. Model summary outputs for `spark.gaussianMixture` have added log-likelihood as `loglik`.
-
-## Upgrading to SparkR 2.3.0
-
- - The `stringsAsFactors` parameter was previously ignored with `collect`, for example, in `collect(createDataFrame(iris), stringsAsFactors = TRUE))`. It has been corrected.
- - For `summary`, option for statistics to compute has been added. Its output is changed from that from `describe`.
- - A warning can be raised if versions of SparkR package and the Spark JVM do not match.
-
-## Upgrading to SparkR 2.3.1 and above
-
- - In SparkR 2.3.0 and earlier, the `start` parameter of `substr` method was wrongly subtracted by one and considered as 0-based. This can lead to inconsistent substring results and also does not match with the behaviour with `substr` in R. In version 2.3.1 and later, it has been fixed so the `start` parameter of `substr` method is now 1-base. As an example, `substr(lit('abcdef'), 2, 4))` would result to `abc` in SparkR 2.3.0, and the result would be `bcd` in SparkR 2.3.1.
-
-## Upgrading to SparkR 2.4.0
-
- - Previously, we don't check the validity of the size of the last layer in `spark.mlp`. For example, if the training data only has two labels, a `layers` param like `c(1, 3)` doesn't cause an error previously, now it does.
+The migration guide is now archived [on this page](sparkr-migration-guide.html).

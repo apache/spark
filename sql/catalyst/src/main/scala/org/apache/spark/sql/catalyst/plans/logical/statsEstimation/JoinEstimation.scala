@@ -56,7 +56,7 @@ case class JoinEstimation(join: Join) extends Logging {
     case _ if !rowCountsExist(join.left, join.right) =>
       None
 
-    case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, _) =>
+    case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, _, _) =>
       // 1. Compute join selectivity
       val joinKeyPairs = extractJoinKeysWithColStats(leftKeys, rightKeys)
       val (numInnerJoinedRows, keyStatsAfterJoin) = computeCardinalityAndStats(joinKeyPairs)
@@ -323,7 +323,7 @@ case class JoinEstimation(join: Join) extends Logging {
         outputAttrStats += a -> newColStat
       }
     }
-    outputAttrStats
+    outputAttrStats.toSeq
   }
 
   private def extractJoinKeysWithColStats(

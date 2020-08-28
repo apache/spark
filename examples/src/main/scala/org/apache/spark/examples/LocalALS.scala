@@ -93,7 +93,7 @@ object LocalALS {
     new CholeskyDecomposition(XtX).getSolver.solve(Xty)
   }
 
-  def showWarning() {
+  def showWarning(): Unit = {
     System.err.println(
       """WARN: This is a naive implementation of ALS and is given as an example!
         |Please use org.apache.spark.ml.recommendation.ALS
@@ -101,7 +101,7 @@ object LocalALS {
       """.stripMargin)
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     args match {
       case Array(m, u, f, iters) =>

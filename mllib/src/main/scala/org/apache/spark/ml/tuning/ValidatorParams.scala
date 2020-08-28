@@ -18,7 +18,7 @@
 package org.apache.spark.ml.tuning
 
 import org.apache.hadoop.fs.Path
-import org.json4s.{DefaultFormats, _}
+import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
@@ -140,8 +140,8 @@ private[ml] object ValidatorParams {
                 "value" -> compact(render(JString(relativePath))),
                 "isJson" -> compact(render(JBool(false))))
             case _: MLWritable =>
-              throw new NotImplementedError("ValidatorParams.saveImpl does not handle parameters " +
-                "of type: MLWritable that are not DefaultParamsWritable")
+              throw new UnsupportedOperationException("ValidatorParams.saveImpl does not handle" +
+                " parameters of type: MLWritable that are not DefaultParamsWritable")
             case _ =>
               Map("parent" -> p.parent, "name" -> p.name, "value" -> p.jsonEncode(v),
                 "isJson" -> compact(render(JBool(true))))

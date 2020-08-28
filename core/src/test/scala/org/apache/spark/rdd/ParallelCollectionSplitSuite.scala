@@ -22,7 +22,7 @@ import scala.collection.immutable.NumericRange
 import org.scalacheck.Arbitrary._
 import org.scalacheck.Gen
 import org.scalacheck.Prop._
-import org.scalatest.prop.Checkers
+import org.scalatestplus.scalacheck.Checkers
 
 import org.apache.spark.SparkFunSuite
 
@@ -140,7 +140,7 @@ class ParallelCollectionSplitSuite extends SparkFunSuite with Checkers {
       assert(slices(i).isInstanceOf[Range])
       val range = slices(i).asInstanceOf[Range]
       assert(range.start === i * (N / 40), "slice " + i + " start")
-      assert(range.end   === (i + 1) * (N / 40), "slice " + i + " end")
+      assert(range.last  === (i + 1) * (N / 40) - 1, "slice " + i + " end")
       assert(range.step  === 1, "slice " + i + " step")
     }
   }
@@ -215,7 +215,7 @@ class ParallelCollectionSplitSuite extends SparkFunSuite with Checkers {
   }
 
   test("exclusive ranges of doubles") {
-    val data = 1.0 until 100.0 by 1.0
+    val data = Range.BigDecimal(1, 100, 1)
     val slices = ParallelCollectionRDD.slice(data, 3)
     assert(slices.size === 3)
     assert(slices.map(_.size).sum === 99)
@@ -223,7 +223,7 @@ class ParallelCollectionSplitSuite extends SparkFunSuite with Checkers {
   }
 
   test("inclusive ranges of doubles") {
-    val data = 1.0 to 100.0 by 1.0
+    val data = Range.BigDecimal.inclusive(1, 100, 1)
     val slices = ParallelCollectionRDD.slice(data, 3)
     assert(slices.size === 3)
     assert(slices.map(_.size).sum === 100)

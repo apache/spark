@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
@@ -32,7 +34,7 @@ final class TestProbabilisticClassificationModel(
 
   override def copy(extra: org.apache.spark.ml.param.ParamMap): this.type = defaultCopy(extra)
 
-  override protected def predictRaw(input: Vector): Vector = {
+  override def predictRaw(input: Vector): Vector = {
     input
   }
 

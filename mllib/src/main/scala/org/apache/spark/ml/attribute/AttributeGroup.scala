@@ -19,12 +19,10 @@ package org.apache.spark.ml.attribute
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField}
 
 /**
- * :: DeveloperApi ::
  * Attributes that describe a vector ML column.
  *
  * @param name name of the attribute group (the ML column name)
@@ -33,7 +31,6 @@ import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField}
  * @param attrs optional array of attributes. Attribute will be copied with their corresponding
  *              indices in the array.
  */
-@DeveloperApi
 class AttributeGroup private (
     val name: String,
     val numAttributes: Option[Int],
@@ -67,14 +64,12 @@ class AttributeGroup private (
   /**
    * Optional array of attributes. At most one of `numAttributes` and `attributes` can be defined.
    */
-  val attributes: Option[Array[Attribute]] = attrs.map(_.view.zipWithIndex.map { case (attr, i) =>
-    attr.withIndex(i)
-  }.toArray)
+  val attributes: Option[Array[Attribute]] = attrs.map(_.iterator.zipWithIndex
+    .map { case (attr, i) => attr.withIndex(i) }.toArray)
 
   private lazy val nameToIndex: Map[String, Int] = {
-    attributes.map(_.view.flatMap { attr =>
-      attr.name.map(_ -> attr.index.get)
-    }.toMap).getOrElse(Map.empty)
+    attributes.map(_.iterator.flatMap { attr => attr.name.map(_ -> attr.index.get)}.toMap)
+      .getOrElse(Map.empty)
   }
 
   /** Size of the attribute group. Returns -1 if the size is unknown. */
@@ -188,10 +183,8 @@ class AttributeGroup private (
 }
 
 /**
- * :: DeveloperApi ::
  * Factory methods to create attribute groups.
  */
-@DeveloperApi
 object AttributeGroup {
 
   import AttributeKeys._

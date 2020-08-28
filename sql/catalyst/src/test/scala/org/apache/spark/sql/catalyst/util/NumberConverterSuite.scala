@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder.BIG_ENDIAN
+
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.NumberConverter.convert
+import org.apache.spark.sql.catalyst.util.NumberConverter.{convert, toBinary}
 import org.apache.spark.unsafe.types.UTF8String
 
 class NumberConverterSuite extends SparkFunSuite {
@@ -35,6 +38,49 @@ class NumberConverterSuite extends SparkFunSuite {
     checkConv("big", 36, 16, "3A48")
     checkConv("9223372036854775807", 36, 16, "FFFFFFFFFFFFFFFF")
     checkConv("11abc", 10, 16, "B")
+  }
+
+  test("byte to binary") {
+    checkToBinary(0.toByte)
+    checkToBinary(1.toByte)
+    checkToBinary(-1.toByte)
+    checkToBinary(Byte.MaxValue)
+    checkToBinary(Byte.MinValue)
+  }
+
+  test("short to binary") {
+    checkToBinary(0.toShort)
+    checkToBinary(1.toShort)
+    checkToBinary(-1.toShort)
+    checkToBinary(Short.MaxValue)
+    checkToBinary(Short.MinValue)
+  }
+
+  test("integer to binary") {
+    checkToBinary(0)
+    checkToBinary(1)
+    checkToBinary(-1)
+    checkToBinary(Int.MaxValue)
+    checkToBinary(Int.MinValue)
+  }
+
+  test("long to binary") {
+    checkToBinary(0L)
+    checkToBinary(1L)
+    checkToBinary(-1L)
+    checkToBinary(Long.MaxValue)
+    checkToBinary(Long.MinValue)
+  }
+
+  def checkToBinary[T](in: T): Unit = in match {
+    case b: Byte =>
+      assert(toBinary(b) === ByteBuffer.allocate(1).order(BIG_ENDIAN).put(b).array())
+    case s: Short =>
+      assert(toBinary(s) === ByteBuffer.allocate(2).order(BIG_ENDIAN).putShort(s).array())
+    case i: Int =>
+      assert(toBinary(i) === ByteBuffer.allocate(4).order(BIG_ENDIAN).putInt(i).array())
+    case l: Long =>
+      assert(toBinary(l) === ByteBuffer.allocate(8).order(BIG_ENDIAN).putLong(l).array())
   }
 
 }

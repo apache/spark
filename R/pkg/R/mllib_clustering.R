@@ -41,6 +41,12 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' @note LDAModel since 2.1.0
 setClass("LDAModel", representation(jobj = "jobj"))
 
+#' S4 class that represents a PowerIterationClustering
+#'
+#' @param jobj a Java object reference to the backing Scala PowerIterationClustering
+#' @note PowerIterationClustering since 3.0.0
+setClass("PowerIterationClustering", slots = list(jobj = "jobj"))
+
 #' Bisecting K-Means Clustering Model
 #'
 #' Fits a bisecting k-means clustering model against a SparkDataFrame.
@@ -49,7 +55,7 @@ setClass("LDAModel", representation(jobj = "jobj"))
 #'
 #' @param data a SparkDataFrame for training.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
-#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#'                operators are supported, including '~', '.', ':', '+', '-', '*', and '^'.
 #'                Note that the response variable of formula is empty in spark.bisectingKmeans.
 #' @param k the desired number of leaf clusters. Must be > 1.
 #'          The actual number could be smaller if there are no divisible leaf clusters.
@@ -609,4 +615,57 @@ setMethod("spark.posterior", signature(object = "LDAModel", newData = "SparkData
 setMethod("write.ml", signature(object = "LDAModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             write_internal(object, path, overwrite)
+          })
+
+#' PowerIterationClustering
+#'
+#' A scalable graph clustering algorithm. Users can call \code{spark.assignClusters} to
+#' return a cluster assignment for each input vertex.
+#' Run the PIC algorithm and returns a cluster assignment for each input vertex.
+#' @param data a SparkDataFrame.
+#' @param k the number of clusters to create.
+#' @param initMode the initialization algorithm; "random" or "degree"
+#' @param maxIter the maximum number of iterations.
+#' @param sourceCol the name of the input column for source vertex IDs.
+#' @param destinationCol the name of the input column for destination vertex IDs
+#' @param weightCol weight column name. If this is not set or \code{NULL},
+#'                  we treat all instance weights as 1.0.
+#' @param ... additional argument(s) passed to the method.
+#' @return A dataset that contains columns of vertex id and the corresponding cluster for the id.
+#'         The schema of it will be: \code{id: integer}, \code{cluster: integer}
+#' @rdname spark.powerIterationClustering
+#' @aliases spark.assignClusters,SparkDataFrame-method
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(list(list(0L, 1L, 1.0), list(0L, 2L, 1.0),
+#'                            list(1L, 2L, 1.0), list(3L, 4L, 1.0),
+#'                            list(4L, 0L, 0.1)),
+#'                       schema = c("src", "dst", "weight"))
+#' clusters <- spark.assignClusters(df, initMode = "degree", weightCol = "weight")
+#' showDF(clusters)
+#' }
+#' @note spark.assignClusters(SparkDataFrame) since 3.0.0
+setMethod("spark.assignClusters",
+          signature(data = "SparkDataFrame"),
+          function(data, k = 2L, initMode = c("random", "degree"), maxIter = 20L,
+            sourceCol = "src", destinationCol = "dst", weightCol = NULL) {
+            if (!is.integer(k) || k < 1) {
+              stop("k should be a number with value >= 1.")
+            }
+            if (!is.integer(maxIter) || maxIter <= 0) {
+              stop("maxIter should be a number with value > 0.")
+            }
+            initMode <- match.arg(initMode)
+            if (!is.null(weightCol) && weightCol == "") {
+              weightCol <- NULL
+            } else if (!is.null(weightCol)) {
+              weightCol <- as.character(weightCol)
+            }
+            jobj <- callJStatic("org.apache.spark.ml.r.PowerIterationClusteringWrapper",
+                                "getPowerIterationClustering",
+                                as.integer(k), initMode,
+                                as.integer(maxIter), as.character(sourceCol),
+                                as.character(destinationCol), weightCol)
+            object <- new("PowerIterationClustering", jobj = jobj)
+            dataFrame(callJMethod(object@jobj, "assignClusters", data@sdf))
           })

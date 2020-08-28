@@ -70,33 +70,33 @@ case class StreamingListenerReceiverStopped(receiverInfo: ReceiverInfo)
 trait StreamingListener {
 
   /** Called when the streaming has been started */
-  def onStreamingStarted(streamingStarted: StreamingListenerStreamingStarted) { }
+  def onStreamingStarted(streamingStarted: StreamingListenerStreamingStarted): Unit = { }
 
   /** Called when a receiver has been started */
-  def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) { }
+  def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted): Unit = { }
 
   /** Called when a receiver has reported an error */
-  def onReceiverError(receiverError: StreamingListenerReceiverError) { }
+  def onReceiverError(receiverError: StreamingListenerReceiverError): Unit = { }
 
   /** Called when a receiver has been stopped */
-  def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped) { }
+  def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped): Unit = { }
 
   /** Called when a batch of jobs has been submitted for processing. */
-  def onBatchSubmitted(batchSubmitted: StreamingListenerBatchSubmitted) { }
+  def onBatchSubmitted(batchSubmitted: StreamingListenerBatchSubmitted): Unit = { }
 
   /** Called when processing of a batch of jobs has started.  */
-  def onBatchStarted(batchStarted: StreamingListenerBatchStarted) { }
+  def onBatchStarted(batchStarted: StreamingListenerBatchStarted): Unit = { }
 
   /** Called when processing of a batch of jobs has completed. */
-  def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) { }
+  def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = { }
 
   /** Called when processing of a job of a batch has started. */
   def onOutputOperationStarted(
-      outputOperationStarted: StreamingListenerOutputOperationStarted) { }
+      outputOperationStarted: StreamingListenerOutputOperationStarted): Unit = { }
 
   /** Called when processing of a job of a batch has completed. */
   def onOutputOperationCompleted(
-      outputOperationCompleted: StreamingListenerOutputOperationCompleted) { }
+      outputOperationCompleted: StreamingListenerOutputOperationCompleted): Unit = { }
 }
 
 
@@ -110,18 +110,18 @@ class StatsReportListener(numBatchInfos: Int = 10) extends StreamingListener {
   // Queue containing latest completed batches
   val batchInfos = new Queue[BatchInfo]()
 
-  override def onBatchCompleted(batchStarted: StreamingListenerBatchCompleted) {
+  override def onBatchCompleted(batchStarted: StreamingListenerBatchCompleted): Unit = {
     batchInfos.enqueue(batchStarted.batchInfo)
     if (batchInfos.size > numBatchInfos) batchInfos.dequeue()
     printStats()
   }
 
-  def printStats() {
+  def printStats(): Unit = {
     showMillisDistribution("Total delay: ", _.totalDelay)
     showMillisDistribution("Processing time: ", _.processingDelay)
   }
 
-  def showMillisDistribution(heading: String, getMetric: BatchInfo => Option[Long]) {
+  def showMillisDistribution(heading: String, getMetric: BatchInfo => Option[Long]): Unit = {
     org.apache.spark.scheduler.StatsReportListener.showMillisDistribution(
       heading, extractDistribution(getMetric))
   }

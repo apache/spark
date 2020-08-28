@@ -174,7 +174,7 @@ private[streaming] object PythonDStream {
    * helper function for DStream.foreachRDD(),
    * cannot be `foreachRDD`, it will confusing py4j
    */
-  def callForeachRDD(jdstream: JavaDStream[Array[Byte]], pfunc: PythonTransformFunction) {
+  def callForeachRDD(jdstream: JavaDStream[Array[Byte]], pfunc: PythonTransformFunction): Unit = {
     val func = new TransformFunction((pfunc))
     jdstream.dstream.foreachRDD((rdd, time) => func(Some(rdd), time))
   }

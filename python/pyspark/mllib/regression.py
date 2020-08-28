@@ -19,12 +19,11 @@ import sys
 import warnings
 
 import numpy as np
-from numpy import array
 
 from pyspark import RDD, since
 from pyspark.streaming.dstream import DStream
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
-from pyspark.mllib.linalg import SparseVector, Vectors, _convert_to_vector
+from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.util import Saveable, Loader
 
 __all__ = ['LabeledPoint', 'LinearModel',
@@ -103,6 +102,7 @@ class LinearRegressionModelBase(LinearModel):
 
     """A linear regression model.
 
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> lrmb = LinearRegressionModelBase(np.array([1.0, 2.0]), 0.1)
     >>> abs(lrmb.predict(np.array([-1.03, 7.777])) - 14.624) < 1e-6
     True
@@ -129,6 +129,7 @@ class LinearRegressionModel(LinearRegressionModelBase):
 
     """A linear regression model derived from a least-squares fit.
 
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> from pyspark.mllib.regression import LabeledPoint
     >>> data = [
     ...     LabeledPoint(0.0, [0.0]),
@@ -168,15 +169,15 @@ class LinearRegressionModel(LinearRegressionModelBase):
     ...     LabeledPoint(2.0, SparseVector(1, {0: 3.0}))
     ... ]
     >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10,
-    ...     initialWeights=array([1.0]))
-    >>> abs(lrm.predict(array([0.0])) - 0) < 0.5
+    ...     initialWeights=np.array([1.0]))
+    >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
     >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10, step=1.0,
-    ...    miniBatchFraction=1.0, initialWeights=array([1.0]), regParam=0.1, regType="l2",
+    ...    miniBatchFraction=1.0, initialWeights=np.array([1.0]), regParam=0.1, regType="l2",
     ...    intercept=True, validateData=True)
-    >>> abs(lrm.predict(array([0.0])) - 0) < 0.5
+    >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
@@ -298,6 +299,7 @@ class LassoModel(LinearRegressionModelBase):
     """A linear regression model derived from a least-squares fit with
     an l_1 penalty term.
 
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> from pyspark.mllib.regression import LabeledPoint
     >>> data = [
     ...     LabeledPoint(0.0, [0.0]),
@@ -305,7 +307,8 @@ class LassoModel(LinearRegressionModelBase):
     ...     LabeledPoint(3.0, [2.0]),
     ...     LabeledPoint(2.0, [3.0])
     ... ]
-    >>> lrm = LassoWithSGD.train(sc.parallelize(data), iterations=10, initialWeights=array([1.0]))
+    >>> lrm = LassoWithSGD.train(
+    ...     sc.parallelize(data), iterations=10, initialWeights=np.array([1.0]))
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
@@ -336,13 +339,13 @@ class LassoModel(LinearRegressionModelBase):
     ...     LabeledPoint(2.0, SparseVector(1, {0: 3.0}))
     ... ]
     >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10,
-    ...     initialWeights=array([1.0]))
+    ...     initialWeights=np.array([1.0]))
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
     >>> lrm = LassoWithSGD.train(sc.parallelize(data), iterations=10, step=1.0,
-    ...     regParam=0.01, miniBatchFraction=1.0, initialWeights=array([1.0]), intercept=True,
+    ...     regParam=0.01, miniBatchFraction=1.0, initialWeights=np.array([1.0]), intercept=True,
     ...     validateData=True)
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True
@@ -441,6 +444,7 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     """A linear regression model derived from a least-squares fit with
     an l_2 penalty term.
 
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> from pyspark.mllib.regression import LabeledPoint
     >>> data = [
     ...     LabeledPoint(0.0, [0.0]),
@@ -449,7 +453,7 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     ...     LabeledPoint(2.0, [3.0])
     ... ]
     >>> lrm = RidgeRegressionWithSGD.train(sc.parallelize(data), iterations=10,
-    ...     initialWeights=array([1.0]))
+    ...     initialWeights=np.array([1.0]))
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
@@ -480,13 +484,13 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     ...     LabeledPoint(2.0, SparseVector(1, {0: 3.0}))
     ... ]
     >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), iterations=10,
-    ...     initialWeights=array([1.0]))
+    ...     initialWeights=np.array([1.0]))
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
     >>> lrm = RidgeRegressionWithSGD.train(sc.parallelize(data), iterations=10, step=1.0,
-    ...     regParam=0.01, miniBatchFraction=1.0, initialWeights=array([1.0]), intercept=True,
+    ...     regParam=0.01, miniBatchFraction=1.0, initialWeights=np.array([1.0]), intercept=True,
     ...     validateData=True)
     >>> abs(lrm.predict(np.array([0.0])) - 0) < 0.5
     True

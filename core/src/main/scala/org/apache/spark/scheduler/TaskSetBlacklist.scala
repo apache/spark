@@ -69,7 +69,6 @@ private[scheduler] class TaskSetBlacklist(
 
   /**
    * Get the most recent failure reason of this TaskSet.
-   * @return
    */
   def getLatestFailureReason: String = {
     latestFailureReason

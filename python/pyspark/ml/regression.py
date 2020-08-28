@@ -15,13 +15,17 @@
 # limitations under the License.
 #
 
-import sys
-import warnings
+from abc import ABCMeta
 
-from pyspark import since, keyword_only
+from pyspark import keyword_only
+from pyspark.ml import Predictor, PredictionModel
+from pyspark.ml.base import _PredictorParams
 from pyspark.ml.param.shared import *
+from pyspark.ml.tree import _DecisionTreeModel, _DecisionTreeParams, \
+    _TreeEnsembleModel, _RandomForestParams, _GBTParams, _TreeRegressorParams
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, \
+    JavaPredictor, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import DataFrame
 
@@ -34,14 +38,85 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'IsotonicRegression', 'IsotonicRegressionModel',
            'LinearRegression', 'LinearRegressionModel',
            'LinearRegressionSummary', 'LinearRegressionTrainingSummary',
-           'RandomForestRegressor', 'RandomForestRegressionModel']
+           'RandomForestRegressor', 'RandomForestRegressionModel',
+           'FMRegressor', 'FMRegressionModel']
+
+
+class Regressor(Predictor, _PredictorParams):
+    """
+    Regressor for regression tasks.
+
+    .. versionadded:: 3.0.0
+    """
+
+    __metaclass__ = ABCMeta
+
+
+class RegressionModel(PredictionModel, _PredictorParams):
+    """
+    Model produced by a ``Regressor``.
+
+    .. versionadded:: 3.0.0
+    """
+
+    __metaclass__ = ABCMeta
+
+
+class _JavaRegressor(Regressor, JavaPredictor):
+    """
+    Java Regressor for regression tasks.
+
+    .. versionadded:: 3.0.0
+    """
+
+    __metaclass__ = ABCMeta
+
+
+class _JavaRegressionModel(RegressionModel, JavaPredictionModel):
+    """
+    Java Model produced by a ``_JavaRegressor``.
+    To be mixed in with :class:`pyspark.ml.JavaModel`
+
+    .. versionadded:: 3.0.0
+    """
+
+    __metaclass__ = ABCMeta
+
+
+class _LinearRegressionParams(_PredictorParams, HasRegParam, HasElasticNetParam, HasMaxIter,
+                              HasTol, HasFitIntercept, HasStandardization, HasWeightCol, HasSolver,
+                              HasAggregationDepth, HasLoss, HasBlockSize):
+    """
+    Params for :py:class:`LinearRegression` and :py:class:`LinearRegressionModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: auto, normal, l-bfgs.", typeConverter=TypeConverters.toString)
+
+    loss = Param(Params._dummy(), "loss", "The loss function to be optimized. Supported " +
+                 "options: squaredError, huber.", typeConverter=TypeConverters.toString)
+
+    epsilon = Param(Params._dummy(), "epsilon", "The shape parameter to control the amount of " +
+                    "robustness. Must be > 1.0. Only valid when loss is huber",
+                    typeConverter=TypeConverters.toFloat)
+
+    def __init__(self, *args):
+        super(_LinearRegressionParams, self).__init__(*args)
+        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, loss="squaredError", epsilon=1.35,
+                         blockSize=1)
+
+    @since("2.3.0")
+    def getEpsilon(self):
+        """
+        Gets the value of epsilon or its default value.
+        """
+        return self.getOrDefault(self.epsilon)
 
 
 @inherit_doc
-class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                       HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
-                       HasStandardization, HasSolver, HasWeightCol, HasAggregationDepth, HasLoss,
-                       JavaMLWritable, JavaMLReadable):
+class LinearRegression(_JavaRegressor, _LinearRegressionParams, JavaMLWritable, JavaMLReadable):
     """
     Linear regression.
 
@@ -65,17 +140,37 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     >>> df = spark.createDataFrame([
     ...     (1.0, 2.0, Vectors.dense(1.0)),
     ...     (0.0, 2.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
-    >>> lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal", weightCol="weight")
+    >>> lr = LinearRegression(regParam=0.0, solver="normal", weightCol="weight")
+    >>> lr.setMaxIter(5)
+    LinearRegression...
+    >>> lr.getMaxIter()
+    5
+    >>> lr.setRegParam(0.1)
+    LinearRegression...
+    >>> lr.getRegParam()
+    0.1
+    >>> lr.setRegParam(0.0)
+    LinearRegression...
     >>> model = lr.fit(df)
+    >>> model.setFeaturesCol("features")
+    LinearRegressionModel...
+    >>> model.setPredictionCol("newPrediction")
+    LinearRegressionModel...
+    >>> model.getMaxIter()
+    5
+    >>> model.getBlockSize()
+    1
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> abs(model.transform(test0).head().prediction - (-1.0)) < 0.001
+    >>> abs(model.predict(test0.head().features) - (-1.0)) < 0.001
+    True
+    >>> abs(model.transform(test0).head().newPrediction - (-1.0)) < 0.001
     True
     >>> abs(model.coefficients[0] - 1.0) < 0.001
     True
     >>> abs(model.intercept - 0.0) < 0.001
     True
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
-    >>> abs(model.transform(test1).head().prediction - 1.0) < 0.001
+    >>> abs(model.transform(test1).head().newPrediction - 1.0) < 0.001
     True
     >>> lr.setParams("vector")
     Traceback (most recent call last):
@@ -93,6 +188,8 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     True
     >>> model.intercept == model2.intercept
     True
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    True
     >>> model.numFeatures
     1
     >>> model.write().format("pmml").save(model_path + "_2")
@@ -100,31 +197,20 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     .. versionadded:: 1.4.0
     """
 
-    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
-                   "options: auto, normal, l-bfgs.", typeConverter=TypeConverters.toString)
-
-    loss = Param(Params._dummy(), "loss", "The loss function to be optimized. Supported " +
-                 "options: squaredError, huber.", typeConverter=TypeConverters.toString)
-
-    epsilon = Param(Params._dummy(), "epsilon", "The shape parameter to control the amount of " +
-                    "robustness. Must be > 1.0. Only valid when loss is huber",
-                    typeConverter=TypeConverters.toFloat)
-
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2,
-                 loss="squaredError", epsilon=1.35):
+                 loss="squaredError", epsilon=1.35, blockSize=1):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
-                 loss="squaredError", epsilon=1.35)
+                 loss="squaredError", epsilon=1.35, blockSize=1)
         """
         super(LinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.LinearRegression", self.uid)
-        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, loss="squaredError", epsilon=1.35)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -133,12 +219,12 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                   standardization=True, solver="auto", weightCol=None, aggregationDepth=2,
-                  loss="squaredError", epsilon=1.35):
+                  loss="squaredError", epsilon=1.35, blockSize=1):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                   standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
-                  loss="squaredError", epsilon=1.35)
+                  loss="squaredError", epsilon=1.35, blockSize=1)
         Sets params for linear regression.
         """
         kwargs = self._input_kwargs
@@ -154,15 +240,76 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         """
         return self._set(epsilon=value)
 
-    @since("2.3.0")
-    def getEpsilon(self):
+    def setMaxIter(self, value):
         """
-        Gets the value of epsilon or its default value.
+        Sets the value of :py:attr:`maxIter`.
         """
-        return self.getOrDefault(self.epsilon)
+        return self._set(maxIter=value)
+
+    def setRegParam(self, value):
+        """
+        Sets the value of :py:attr:`regParam`.
+        """
+        return self._set(regParam=value)
+
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
+
+    def setElasticNetParam(self, value):
+        """
+        Sets the value of :py:attr:`elasticNetParam`.
+        """
+        return self._set(elasticNetParam=value)
+
+    def setFitIntercept(self, value):
+        """
+        Sets the value of :py:attr:`fitIntercept`.
+        """
+        return self._set(fitIntercept=value)
+
+    def setStandardization(self, value):
+        """
+        Sets the value of :py:attr:`standardization`.
+        """
+        return self._set(standardization=value)
+
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+    def setSolver(self, value):
+        """
+        Sets the value of :py:attr:`solver`.
+        """
+        return self._set(solver=value)
+
+    def setAggregationDepth(self, value):
+        """
+        Sets the value of :py:attr:`aggregationDepth`.
+        """
+        return self._set(aggregationDepth=value)
+
+    def setLoss(self, value):
+        """
+        Sets the value of :py:attr:`loss`.
+        """
+        return self._set(lossType=value)
+
+    @since("3.1.0")
+    def setBlockSize(self, value):
+        """
+        Sets the value of :py:attr:`blockSize`.
+        """
+        return self._set(blockSize=value)
 
 
-class LinearRegressionModel(JavaModel, JavaPredictionModel, GeneralJavaMLWritable, JavaMLReadable):
+class LinearRegressionModel(_JavaRegressionModel, _LinearRegressionParams, GeneralJavaMLWritable,
+                            JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by :class:`LinearRegression`.
 
@@ -202,20 +349,10 @@ class LinearRegressionModel(JavaModel, JavaPredictionModel, GeneralJavaMLWritabl
         `trainingSummary is None`.
         """
         if self.hasSummary:
-            java_lrt_summary = self._call_java("summary")
-            return LinearRegressionTrainingSummary(java_lrt_summary)
+            return LinearRegressionTrainingSummary(super(LinearRegressionModel, self).summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
-
-    @property
-    @since("2.0.0")
-    def hasSummary(self):
-        """
-        Indicates whether a training summary exists for this model
-        instance.
-        """
-        return self._call_java("hasSummary")
 
     @since("2.0.0")
     def evaluate(self, dataset):
@@ -234,8 +371,6 @@ class LinearRegressionModel(JavaModel, JavaPredictionModel, GeneralJavaMLWritabl
 
 class LinearRegressionSummary(JavaWrapper):
     """
-    .. note:: Experimental
-
     Linear regression results evaluated on a dataset.
 
     .. versionadded:: 2.0.0
@@ -441,8 +576,6 @@ class LinearRegressionSummary(JavaWrapper):
 @inherit_doc
 class LinearRegressionTrainingSummary(LinearRegressionSummary):
     """
-    .. note:: Experimental
-
     Linear regression training results. Currently, the training summary ignores the
     training weights except for the objective trace.
 
@@ -473,9 +606,42 @@ class LinearRegressionTrainingSummary(LinearRegressionSummary):
         return self._call_java("totalIterations")
 
 
+class _IsotonicRegressionParams(HasFeaturesCol, HasLabelCol, HasPredictionCol, HasWeightCol):
+    """
+    Params for :py:class:`IsotonicRegression` and :py:class:`IsotonicRegressionModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    isotonic = Param(
+        Params._dummy(), "isotonic",
+        "whether the output sequence should be isotonic/increasing (true) or" +
+        "antitonic/decreasing (false).", typeConverter=TypeConverters.toBoolean)
+    featureIndex = Param(
+        Params._dummy(), "featureIndex",
+        "The index of the feature if featuresCol is a vector column, no effect otherwise.",
+        typeConverter=TypeConverters.toInt)
+
+    def __init__(self, *args):
+        super(_IsotonicRegressionParams, self).__init__(*args)
+        self._setDefault(isotonic=True, featureIndex=0)
+
+    def getIsotonic(self):
+        """
+        Gets the value of isotonic or its default value.
+        """
+        return self.getOrDefault(self.isotonic)
+
+    def getFeatureIndex(self):
+        """
+        Gets the value of featureIndex or its default value.
+        """
+        return self.getOrDefault(self.featureIndex)
+
+
 @inherit_doc
-class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                         HasWeightCol, JavaMLWritable, JavaMLReadable):
+class IsotonicRegression(JavaEstimator, _IsotonicRegressionParams, HasWeightCol,
+                         JavaMLWritable, JavaMLReadable):
     """
     Currently implemented using parallelized pool adjacent violators algorithm.
     Only univariate (single feature) algorithm supported.
@@ -486,8 +652,14 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> ir = IsotonicRegression()
     >>> model = ir.fit(df)
+    >>> model.setFeaturesCol("features")
+    IsotonicRegressionModel...
+    >>> model.numFeatures
+    1
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
+    0.0
+    >>> model.predict(test0.head().features[model.getFeatureIndex()])
     0.0
     >>> model.boundaries
     DenseVector([0.0, 1.0])
@@ -503,19 +675,11 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     True
     >>> model.predictions == model2.predictions
     True
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    True
 
     .. versionadded:: 1.6.0
     """
-
-    isotonic = \
-        Param(Params._dummy(), "isotonic",
-              "whether the output sequence should be isotonic/increasing (true) or" +
-              "antitonic/decreasing (false).", typeConverter=TypeConverters.toBoolean)
-    featureIndex = \
-        Param(Params._dummy(), "featureIndex",
-              "The index of the feature if featuresCol is a vector column, no effect otherwise.",
-              typeConverter=TypeConverters.toInt)
-
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  weightCol=None, isotonic=True, featureIndex=0):
@@ -526,7 +690,6 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         super(IsotonicRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.IsotonicRegression", self.uid)
-        self._setDefault(isotonic=True, featureIndex=0)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -550,31 +713,68 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         return self._set(isotonic=value)
 
-    def getIsotonic(self):
-        """
-        Gets the value of isotonic or its default value.
-        """
-        return self.getOrDefault(self.isotonic)
-
     def setFeatureIndex(self, value):
         """
         Sets the value of :py:attr:`featureIndex`.
         """
         return self._set(featureIndex=value)
 
-    def getFeatureIndex(self):
+    @since("1.6.0")
+    def setFeaturesCol(self, value):
         """
-        Gets the value of featureIndex or its default value.
+        Sets the value of :py:attr:`featuresCol`.
         """
-        return self.getOrDefault(self.featureIndex)
+        return self._set(featuresCol=value)
+
+    @since("1.6.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @since("1.6.0")
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    @since("1.6.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
 
 
-class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class IsotonicRegressionModel(JavaModel, _IsotonicRegressionParams, JavaMLWritable,
+                              JavaMLReadable):
     """
     Model fitted by :class:`IsotonicRegression`.
 
     .. versionadded:: 1.6.0
     """
+
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    def setFeatureIndex(self, value):
+        """
+        Sets the value of :py:attr:`featureIndex`.
+        """
+        return self._set(featureIndex=value)
 
     @property
     @since("1.6.0")
@@ -593,129 +793,39 @@ class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("predictions")
 
+    @property
+    @since("3.0.0")
+    def numFeatures(self):
+        """
+        Returns the number of features the model was trained on. If unknown, returns -1
+        """
+        return self._call_java("numFeatures")
 
-class TreeEnsembleParams(DecisionTreeParams):
+    @since("3.0.0")
+    def predict(self, value):
+        """
+        Predict label for the given features.
+        """
+        return self._call_java("predict", value)
+
+
+class _DecisionTreeRegressorParams(_DecisionTreeParams, _TreeRegressorParams, HasVarianceCol):
     """
-    Mixin for Decision Tree-based ensemble algorithms parameters.
-    """
+    Params for :py:class:`DecisionTreeRegressor` and :py:class:`DecisionTreeRegressionModel`.
 
-    subsamplingRate = Param(Params._dummy(), "subsamplingRate", "Fraction of the training data " +
-                            "used for learning each decision tree, in range (0, 1].",
-                            typeConverter=TypeConverters.toFloat)
-
-    supportedFeatureSubsetStrategies = ["auto", "all", "onethird", "sqrt", "log2"]
-
-    featureSubsetStrategy = \
-        Param(Params._dummy(), "featureSubsetStrategy",
-              "The number of features to consider for splits at each tree node. Supported " +
-              "options: 'auto' (choose automatically for task: If numTrees == 1, set to " +
-              "'all'. If numTrees > 1 (forest), set to 'sqrt' for classification and to " +
-              "'onethird' for regression), 'all' (use all features), 'onethird' (use " +
-              "1/3 of the features), 'sqrt' (use sqrt(number of features)), 'log2' (use " +
-              "log2(number of features)), 'n' (when n is in the range (0, 1.0], use " +
-              "n * number of features. When n is in the range (1, number of features), use" +
-              " n features). default = 'auto'", typeConverter=TypeConverters.toString)
-
-    def __init__(self):
-        super(TreeEnsembleParams, self).__init__()
-
-    @since("1.4.0")
-    def setSubsamplingRate(self, value):
-        """
-        Sets the value of :py:attr:`subsamplingRate`.
-        """
-        return self._set(subsamplingRate=value)
-
-    @since("1.4.0")
-    def getSubsamplingRate(self):
-        """
-        Gets the value of subsamplingRate or its default value.
-        """
-        return self.getOrDefault(self.subsamplingRate)
-
-    @since("1.4.0")
-    def setFeatureSubsetStrategy(self, value):
-        """
-        Sets the value of :py:attr:`featureSubsetStrategy`.
-
-        .. note:: Deprecated in 2.4.0 and will be removed in 3.0.0.
-        """
-        return self._set(featureSubsetStrategy=value)
-
-    @since("1.4.0")
-    def getFeatureSubsetStrategy(self):
-        """
-        Gets the value of featureSubsetStrategy or its default value.
-        """
-        return self.getOrDefault(self.featureSubsetStrategy)
-
-
-class TreeRegressorParams(Params):
-    """
-    Private class to track supported impurity measures.
+    .. versionadded:: 3.0.0
     """
 
-    supportedImpurities = ["variance"]
-    impurity = Param(Params._dummy(), "impurity",
-                     "Criterion used for information gain calculation (case-insensitive). " +
-                     "Supported options: " +
-                     ", ".join(supportedImpurities), typeConverter=TypeConverters.toString)
-
-    def __init__(self):
-        super(TreeRegressorParams, self).__init__()
-
-    @since("1.4.0")
-    def setImpurity(self, value):
-        """
-        Sets the value of :py:attr:`impurity`.
-        """
-        return self._set(impurity=value)
-
-    @since("1.4.0")
-    def getImpurity(self):
-        """
-        Gets the value of impurity or its default value.
-        """
-        return self.getOrDefault(self.impurity)
-
-
-class RandomForestParams(TreeEnsembleParams):
-    """
-    Private class to track supported random forest parameters.
-    """
-
-    numTrees = Param(Params._dummy(), "numTrees", "Number of trees to train (>= 1).",
-                     typeConverter=TypeConverters.toInt)
-
-    def __init__(self):
-        super(RandomForestParams, self).__init__()
-
-    @since("1.4.0")
-    def setNumTrees(self, value):
-        """
-        Sets the value of :py:attr:`numTrees`.
-        """
-        return self._set(numTrees=value)
-
-    @since("1.4.0")
-    def getNumTrees(self):
-        """
-        Gets the value of numTrees or its default value.
-        """
-        return self.getOrDefault(self.numTrees)
-
-
-class GBTParams(TreeEnsembleParams):
-    """
-    Private class to track supported GBT params.
-    """
-    supportedLossTypes = ["squared", "absolute"]
+    def __init__(self, *args):
+        super(_DecisionTreeRegressorParams, self).__init__(*args)
+        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
+                         impurity="variance", leafCol="", minWeightFractionPerNode=0.0)
 
 
 @inherit_doc
-class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                            DecisionTreeParams, TreeRegressorParams, HasCheckpointInterval,
-                            HasSeed, JavaMLWritable, JavaMLReadable, HasVarianceCol):
+class DecisionTreeRegressor(_JavaRegressor, _DecisionTreeRegressorParams, JavaMLWritable,
+                            JavaMLReadable):
     """
     `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
     learning algorithm for regression.
@@ -725,8 +835,14 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> dt = DecisionTreeRegressor(maxDepth=2, varianceCol="variance")
+    >>> dt = DecisionTreeRegressor(maxDepth=2)
+    >>> dt.setVarianceCol("variance")
+    DecisionTreeRegressor...
     >>> model = dt.fit(df)
+    >>> model.getVarianceCol()
+    'variance'
+    >>> model.setLeafCol("leafId")
+    DecisionTreeRegressionModel...
     >>> model.depth
     1
     >>> model.numNodes
@@ -736,7 +852,14 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> model.numFeatures
     1
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.transform(test0).head().prediction
+    >>> model.predict(test0.head().features)
+    0.0
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
+    0.0
+    >>> model.predictLeaf(test0.head().features)
+    0.0
+    >>> result.leafId
     0.0
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
@@ -755,6 +878,16 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     True
     >>> model.transform(test1).head().variance
     0.0
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    True
+    >>> df3 = spark.createDataFrame([
+    ...     (1.0, 0.2, Vectors.dense(1.0)),
+    ...     (1.0, 0.8, Vectors.dense(1.0)),
+    ...     (0.0, 1.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
+    >>> dt3 = DecisionTreeRegressor(maxDepth=2, weightCol="weight", varianceCol="variance")
+    >>> model3 = dt3.fit(df3)
+    >>> print(model3.toDebugString)
+    DecisionTreeRegressionModel...depth=1, numNodes=3...
 
     .. versionadded:: 1.4.0
     """
@@ -763,19 +896,18 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance",
-                 seed=None, varianceCol=None):
+                 seed=None, varianceCol=None, weightCol=None, leafCol="",
+                 minWeightFractionPerNode=0.0):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                 impurity="variance", seed=None, varianceCol=None)
+                 impurity="variance", seed=None, varianceCol=None, weightCol=None, \
+                 leafCol="", minWeightFractionPerNode=0.0)
         """
         super(DecisionTreeRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.DecisionTreeRegressor", self.uid)
-        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="variance")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -784,12 +916,14 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  impurity="variance", seed=None, varianceCol=None):
+                  impurity="variance", seed=None, varianceCol=None, weightCol=None,
+                  leafCol="", minWeightFractionPerNode=0.0):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                  impurity="variance", seed=None, varianceCol=None)
+                  impurity="variance", seed=None, varianceCol=None, weightCol=None, \
+                  leafCol="", minWeightFractionPerNode=0.0)
         Sets params for the DecisionTreeRegressor.
         """
         kwargs = self._input_kwargs
@@ -798,86 +932,107 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     def _create_model(self, java_model):
         return DecisionTreeRegressionModel(java_model)
 
+    @since("1.4.0")
+    def setMaxDepth(self, value):
+        """
+        Sets the value of :py:attr:`maxDepth`.
+        """
+        return self._set(maxDepth=value)
+
+    @since("1.4.0")
+    def setMaxBins(self, value):
+        """
+        Sets the value of :py:attr:`maxBins`.
+        """
+        return self._set(maxBins=value)
+
+    @since("1.4.0")
+    def setMinInstancesPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minInstancesPerNode`.
+        """
+        return self._set(minInstancesPerNode=value)
+
+    @since("3.0.0")
+    def setMinWeightFractionPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minWeightFractionPerNode`.
+        """
+        return self._set(minWeightFractionPerNode=value)
+
+    @since("1.4.0")
+    def setMinInfoGain(self, value):
+        """
+        Sets the value of :py:attr:`minInfoGain`.
+        """
+        return self._set(minInfoGain=value)
+
+    @since("1.4.0")
+    def setMaxMemoryInMB(self, value):
+        """
+        Sets the value of :py:attr:`maxMemoryInMB`.
+        """
+        return self._set(maxMemoryInMB=value)
+
+    @since("1.4.0")
+    def setCacheNodeIds(self, value):
+        """
+        Sets the value of :py:attr:`cacheNodeIds`.
+        """
+        return self._set(cacheNodeIds=value)
+
+    @since("1.4.0")
+    def setImpurity(self, value):
+        """
+        Sets the value of :py:attr:`impurity`.
+        """
+        return self._set(impurity=value)
+
+    @since("1.4.0")
+    def setCheckpointInterval(self, value):
+        """
+        Sets the value of :py:attr:`checkpointInterval`.
+        """
+        return self._set(checkpointInterval=value)
+
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("3.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+    @since("2.0.0")
+    def setVarianceCol(self, value):
+        """
+        Sets the value of :py:attr:`varianceCol`.
+        """
+        return self._set(varianceCol=value)
+
 
 @inherit_doc
-class DecisionTreeModel(JavaModel, JavaPredictionModel):
-    """
-    Abstraction for Decision Tree models.
-
-    .. versionadded:: 1.5.0
-    """
-
-    @property
-    @since("1.5.0")
-    def numNodes(self):
-        """Return number of nodes of the decision tree."""
-        return self._call_java("numNodes")
-
-    @property
-    @since("1.5.0")
-    def depth(self):
-        """Return depth of the decision tree."""
-        return self._call_java("depth")
-
-    @property
-    @since("2.0.0")
-    def toDebugString(self):
-        """Full description of model."""
-        return self._call_java("toDebugString")
-
-    def __repr__(self):
-        return self._call_java("toString")
-
-
-@inherit_doc
-class TreeEnsembleModel(JavaModel):
-    """
-    (private abstraction)
-
-    Represents a tree ensemble model.
-    """
-
-    @property
-    @since("2.0.0")
-    def trees(self):
-        """Trees in this ensemble. Warning: These have null parent Estimators."""
-        return [DecisionTreeModel(m) for m in list(self._call_java("trees"))]
-
-    @property
-    @since("2.0.0")
-    def getNumTrees(self):
-        """Number of trees in ensemble."""
-        return self._call_java("getNumTrees")
-
-    @property
-    @since("1.5.0")
-    def treeWeights(self):
-        """Return the weights for each tree"""
-        return list(self._call_java("javaTreeWeights"))
-
-    @property
-    @since("2.0.0")
-    def totalNumNodes(self):
-        """Total number of nodes, summed over all trees in the ensemble."""
-        return self._call_java("totalNumNodes")
-
-    @property
-    @since("2.0.0")
-    def toDebugString(self):
-        """Full description of model."""
-        return self._call_java("toDebugString")
-
-    def __repr__(self):
-        return self._call_java("toString")
-
-
-@inherit_doc
-class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReadable):
+class DecisionTreeRegressionModel(
+    _JavaRegressionModel, _DecisionTreeModel, _DecisionTreeRegressorParams,
+    JavaMLWritable, JavaMLReadable
+):
     """
     Model fitted by :class:`DecisionTreeRegressor`.
 
     .. versionadded:: 1.4.0
     """
+
+    @since("3.0.0")
+    def setVarianceCol(self, value):
+        """
+        Sets the value of :py:attr:`varianceCol`.
+        """
+        return self._set(varianceCol=value)
 
     @property
     @since("2.0.0")
@@ -901,10 +1056,25 @@ class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReada
         return self._call_java("featureImportances")
 
 
+class _RandomForestRegressorParams(_RandomForestParams, _TreeRegressorParams):
+    """
+    Params for :py:class:`RandomForestRegressor` and :py:class:`RandomForestRegressionModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    def __init__(self, *args):
+        super(_RandomForestRegressorParams, self).__init__(*args)
+        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
+                         impurity="variance", subsamplingRate=1.0, numTrees=20,
+                         featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0,
+                         bootstrap=True)
+
+
 @inherit_doc
-class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasSeed,
-                            RandomForestParams, TreeRegressorParams, HasCheckpointInterval,
-                            JavaMLWritable, JavaMLReadable):
+class RandomForestRegressor(_JavaRegressor, _RandomForestRegressorParams, JavaMLWritable,
+                            JavaMLReadable):
     """
     `Random Forest <http://en.wikipedia.org/wiki/Random_forest>`_
     learning algorithm for regression.
@@ -915,19 +1085,36 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> rf = RandomForestRegressor(numTrees=2, maxDepth=2, seed=42)
+    >>> rf = RandomForestRegressor(numTrees=2, maxDepth=2)
+    >>> rf.getMinWeightFractionPerNode()
+    0.0
+    >>> rf.setSeed(42)
+    RandomForestRegressor...
     >>> model = rf.fit(df)
+    >>> model.getBootstrap()
+    True
+    >>> model.getSeed()
+    42
+    >>> model.setLeafCol("leafId")
+    RandomForestRegressionModel...
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 1.0])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.transform(test0).head().prediction
+    >>> model.predict(test0.head().features)
     0.0
+    >>> model.predictLeaf(test0.head().features)
+    DenseVector([0.0, 0.0])
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
+    0.0
+    >>> result.leafId
+    DenseVector([0.0, 0.0])
     >>> model.numFeatures
     1
     >>> model.trees
-    [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
+    [DecisionTreeRegressionModel...depth=..., DecisionTreeRegressionModel...]
     >>> model.getNumTrees
     2
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
@@ -943,6 +1130,8 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> model2 = RandomForestRegressionModel.load(model_path)
     >>> model.featureImportances == model2.featureImportances
     True
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -952,21 +1141,19 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                  impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20,
-                 featureSubsetStrategy="auto"):
+                 featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0,
+                 weightCol=None, bootstrap=True):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                  impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20, \
-                 featureSubsetStrategy="auto")
+                 featureSubsetStrategy="auto", leafCol=", minWeightFractionPerNode=0.0", \
+                 weightCol=None, bootstrap=True)
         """
         super(RandomForestRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.RandomForestRegressor", self.uid)
-        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="variance", subsamplingRate=1.0, numTrees=20,
-                         featureSubsetStrategy="auto")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -976,13 +1163,15 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                   impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20,
-                  featureSubsetStrategy="auto"):
+                  featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0,
+                  weightCol=None, bootstrap=True):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20, \
-                  featureSubsetStrategy="auto")
+                  featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0, \
+                  weightCol=None, bootstrap=True)
         Sets params for linear regression.
         """
         kwargs = self._input_kwargs
@@ -991,6 +1180,70 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     def _create_model(self, java_model):
         return RandomForestRegressionModel(java_model)
 
+    def setMaxDepth(self, value):
+        """
+        Sets the value of :py:attr:`maxDepth`.
+        """
+        return self._set(maxDepth=value)
+
+    def setMaxBins(self, value):
+        """
+        Sets the value of :py:attr:`maxBins`.
+        """
+        return self._set(maxBins=value)
+
+    def setMinInstancesPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minInstancesPerNode`.
+        """
+        return self._set(minInstancesPerNode=value)
+
+    def setMinInfoGain(self, value):
+        """
+        Sets the value of :py:attr:`minInfoGain`.
+        """
+        return self._set(minInfoGain=value)
+
+    def setMaxMemoryInMB(self, value):
+        """
+        Sets the value of :py:attr:`maxMemoryInMB`.
+        """
+        return self._set(maxMemoryInMB=value)
+
+    def setCacheNodeIds(self, value):
+        """
+        Sets the value of :py:attr:`cacheNodeIds`.
+        """
+        return self._set(cacheNodeIds=value)
+
+    @since("1.4.0")
+    def setImpurity(self, value):
+        """
+        Sets the value of :py:attr:`impurity`.
+        """
+        return self._set(impurity=value)
+
+    @since("1.4.0")
+    def setNumTrees(self, value):
+        """
+        Sets the value of :py:attr:`numTrees`.
+        """
+        return self._set(numTrees=value)
+
+    @since("3.0.0")
+    def setBootstrap(self, value):
+        """
+        Sets the value of :py:attr:`bootstrap`.
+        """
+        return self._set(bootstrap=value)
+
+    @since("1.4.0")
+    def setSubsamplingRate(self, value):
+        """
+        Sets the value of :py:attr:`subsamplingRate`.
+        """
+        return self._set(subsamplingRate=value)
+
     @since("2.4.0")
     def setFeatureSubsetStrategy(self, value):
         """
@@ -998,9 +1251,37 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         return self._set(featureSubsetStrategy=value)
 
+    def setCheckpointInterval(self, value):
+        """
+        Sets the value of :py:attr:`checkpointInterval`.
+        """
+        return self._set(checkpointInterval=value)
 
-class RandomForestRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable,
-                                  JavaMLReadable):
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("3.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+    @since("3.0.0")
+    def setMinWeightFractionPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minWeightFractionPerNode`.
+        """
+        return self._set(minWeightFractionPerNode=value)
+
+
+class RandomForestRegressionModel(
+    _JavaRegressionModel, _TreeEnsembleModel, _RandomForestRegressorParams,
+    JavaMLWritable, JavaMLReadable
+):
     """
     Model fitted by :class:`RandomForestRegressor`.
 
@@ -1029,10 +1310,38 @@ class RandomForestRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaML
         return self._call_java("featureImportances")
 
 
+class _GBTRegressorParams(_GBTParams, _TreeRegressorParams):
+    """
+    Params for :py:class:`GBTRegressor` and :py:class:`GBTRegressorModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    supportedLossTypes = ["squared", "absolute"]
+
+    lossType = Param(Params._dummy(), "lossType",
+                     "Loss function which GBT tries to minimize (case-insensitive). " +
+                     "Supported options: " + ", ".join(supportedLossTypes),
+                     typeConverter=TypeConverters.toString)
+
+    def __init__(self, *args):
+        super(_GBTRegressorParams, self).__init__(*args)
+        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                         maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
+                         checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1,
+                         impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
+                         leafCol="", minWeightFractionPerNode=0.0)
+
+    @since("1.4.0")
+    def getLossType(self):
+        """
+        Gets the value of lossType or its default value.
+        """
+        return self.getOrDefault(self.lossType)
+
+
 @inherit_doc
-class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                   GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
-                   JavaMLReadable, TreeRegressorParams):
+class GBTRegressor(_JavaRegressor, _GBTRegressorParams, JavaMLWritable, JavaMLReadable):
     """
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for regression.
@@ -1043,7 +1352,13 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> gbt = GBTRegressor(maxIter=5, maxDepth=2, seed=42)
+    >>> gbt = GBTRegressor(maxDepth=2, seed=42, leafCol="leafId")
+    >>> gbt.setMaxIter(5)
+    GBTRegressor...
+    >>> gbt.setMinWeightFractionPerNode(0.049)
+    GBTRegressor...
+    >>> gbt.getMaxIter()
+    5
     >>> print(gbt.getImpurity())
     variance
     >>> print(gbt.getFeatureSubsetStrategy())
@@ -1056,8 +1371,15 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.transform(test0).head().prediction
+    >>> model.predict(test0.head().features)
     0.0
+    >>> model.predictLeaf(test0.head().features)
+    DenseVector([0.0, 0.0, 0.0, 0.0, 0.0])
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
+    0.0
+    >>> result.leafId
+    DenseVector([0.0, 0.0, 0.0, 0.0, 0.0])
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
@@ -1073,45 +1395,42 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     True
     >>> model.treeWeights == model2.treeWeights
     True
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    True
     >>> model.trees
-    [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
+    [DecisionTreeRegressionModel...depth=..., DecisionTreeRegressionModel...]
     >>> validation = spark.createDataFrame([(0.0, Vectors.dense(-1.0))],
     ...              ["label", "features"])
     >>> model.evaluateEachIteration(validation, "squared")
     [0.0, 0.0, 0.0, 0.0, 0.0]
+    >>> gbt = gbt.setValidationIndicatorCol("validationIndicator")
+    >>> gbt.getValidationIndicatorCol()
+    'validationIndicator'
+    >>> gbt.getValidationTol()
+    0.01
 
     .. versionadded:: 1.4.0
     """
-
-    lossType = Param(Params._dummy(), "lossType",
-                     "Loss function which GBT tries to minimize (case-insensitive). " +
-                     "Supported options: " + ", ".join(GBTParams.supportedLossTypes),
-                     typeConverter=TypeConverters.toString)
-
-    stepSize = Param(Params._dummy(), "stepSize",
-                     "Step size (a.k.a. learning rate) in interval (0, 1] for shrinking " +
-                     "the contribution of each estimator.",
-                     typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
-                 impurity="variance", featureSubsetStrategy="all"):
+                 impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
+                 validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0,
+                 weightCol=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
-                 impurity="variance", featureSubsetStrategy="all")
+                 impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
+                 validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0,
+                 weightCol=None)
         """
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
-        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                         maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
-                         checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1,
-                         impurity="variance", featureSubsetStrategy="all")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1121,13 +1440,17 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                   checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
-                  impuriy="variance", featureSubsetStrategy="all"):
+                  impuriy="variance", featureSubsetStrategy="all", validationTol=0.01,
+                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0,
+                  weightCol=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
                   checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
-                  impurity="variance", featureSubsetStrategy="all")
+                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
+                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0, \
+                  weightCol=None)
         Sets params for Gradient Boosted Tree Regression.
         """
         kwargs = self._input_kwargs
@@ -1137,6 +1460,55 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return GBTRegressionModel(java_model)
 
     @since("1.4.0")
+    def setMaxDepth(self, value):
+        """
+        Sets the value of :py:attr:`maxDepth`.
+        """
+        return self._set(maxDepth=value)
+
+    @since("1.4.0")
+    def setMaxBins(self, value):
+        """
+        Sets the value of :py:attr:`maxBins`.
+        """
+        return self._set(maxBins=value)
+
+    @since("1.4.0")
+    def setMinInstancesPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minInstancesPerNode`.
+        """
+        return self._set(minInstancesPerNode=value)
+
+    @since("1.4.0")
+    def setMinInfoGain(self, value):
+        """
+        Sets the value of :py:attr:`minInfoGain`.
+        """
+        return self._set(minInfoGain=value)
+
+    @since("1.4.0")
+    def setMaxMemoryInMB(self, value):
+        """
+        Sets the value of :py:attr:`maxMemoryInMB`.
+        """
+        return self._set(maxMemoryInMB=value)
+
+    @since("1.4.0")
+    def setCacheNodeIds(self, value):
+        """
+        Sets the value of :py:attr:`cacheNodeIds`.
+        """
+        return self._set(cacheNodeIds=value)
+
+    @since("1.4.0")
+    def setImpurity(self, value):
+        """
+        Sets the value of :py:attr:`impurity`.
+        """
+        return self._set(impurity=value)
+
+    @since("1.4.0")
     def setLossType(self, value):
         """
         Sets the value of :py:attr:`lossType`.
@@ -1144,11 +1516,11 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return self._set(lossType=value)
 
     @since("1.4.0")
-    def getLossType(self):
+    def setSubsamplingRate(self, value):
         """
-        Gets the value of lossType or its default value.
+        Sets the value of :py:attr:`subsamplingRate`.
         """
-        return self.getOrDefault(self.lossType)
+        return self._set(subsamplingRate=value)
 
     @since("2.4.0")
     def setFeatureSubsetStrategy(self, value):
@@ -1157,8 +1529,60 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         """
         return self._set(featureSubsetStrategy=value)
 
+    @since("3.0.0")
+    def setValidationIndicatorCol(self, value):
+        """
+        Sets the value of :py:attr:`validationIndicatorCol`.
+        """
+        return self._set(validationIndicatorCol=value)
 
-class GBTRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable, JavaMLReadable):
+    @since("1.4.0")
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    @since("1.4.0")
+    def setCheckpointInterval(self, value):
+        """
+        Sets the value of :py:attr:`checkpointInterval`.
+        """
+        return self._set(checkpointInterval=value)
+
+    @since("1.4.0")
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("1.4.0")
+    def setStepSize(self, value):
+        """
+        Sets the value of :py:attr:`stepSize`.
+        """
+        return self._set(stepSize=value)
+
+    @since("3.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+    @since("3.0.0")
+    def setMinWeightFractionPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minWeightFractionPerNode`.
+        """
+        return self._set(minWeightFractionPerNode=value)
+
+
+class GBTRegressionModel(
+    _JavaRegressionModel, _TreeEnsembleModel, _GBTRegressorParams,
+    JavaMLWritable, JavaMLReadable
+):
     """
     Model fitted by :class:`GBTRegressor`.
 
@@ -1201,13 +1625,62 @@ class GBTRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable,
         return self._call_java("evaluateEachIteration", dataset, loss)
 
 
+class _AFTSurvivalRegressionParams(_PredictorParams, HasMaxIter, HasTol, HasFitIntercept,
+                                   HasAggregationDepth, HasBlockSize):
+    """
+    Params for :py:class:`AFTSurvivalRegression` and :py:class:`AFTSurvivalRegressionModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    censorCol = Param(
+        Params._dummy(), "censorCol",
+        "censor column name. The value of this column could be 0 or 1. " +
+        "If the value is 1, it means the event has occurred i.e. " +
+        "uncensored; otherwise censored.", typeConverter=TypeConverters.toString)
+    quantileProbabilities = Param(
+        Params._dummy(), "quantileProbabilities",
+        "quantile probabilities array. Values of the quantile probabilities array " +
+        "should be in the range (0, 1) and the array should be non-empty.",
+        typeConverter=TypeConverters.toListFloat)
+    quantilesCol = Param(
+        Params._dummy(), "quantilesCol",
+        "quantiles column name. This column will output quantiles of " +
+        "corresponding quantileProbabilities if it is set.",
+        typeConverter=TypeConverters.toString)
+
+    def __init__(self, *args):
+        super(_AFTSurvivalRegressionParams, self).__init__(*args)
+        self._setDefault(censorCol="censor",
+                         quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
+                         maxIter=100, tol=1E-6, blockSize=1)
+
+    @since("1.6.0")
+    def getCensorCol(self):
+        """
+        Gets the value of censorCol or its default value.
+        """
+        return self.getOrDefault(self.censorCol)
+
+    @since("1.6.0")
+    def getQuantileProbabilities(self):
+        """
+        Gets the value of quantileProbabilities or its default value.
+        """
+        return self.getOrDefault(self.quantileProbabilities)
+
+    @since("1.6.0")
+    def getQuantilesCol(self):
+        """
+        Gets the value of quantilesCol or its default value.
+        """
+        return self.getOrDefault(self.quantilesCol)
+
+
 @inherit_doc
-class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                            HasFitIntercept, HasMaxIter, HasTol, HasAggregationDepth,
+class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
                             JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Accelerated Failure Time (AFT) Model Survival Regression
 
     Fit a parametric AFT survival regression model based on the Weibull distribution
@@ -1220,7 +1693,16 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     ...     (1.0, Vectors.dense(1.0), 1.0),
     ...     (1e-40, Vectors.sparse(1, [], []), 0.0)], ["label", "features", "censor"])
     >>> aftsr = AFTSurvivalRegression()
+    >>> aftsr.setMaxIter(10)
+    AFTSurvivalRegression...
+    >>> aftsr.getMaxIter()
+    10
+    >>> aftsr.clear(aftsr.maxIter)
     >>> model = aftsr.fit(df)
+    >>> model.getBlockSize()
+    1
+    >>> model.setFeaturesCol("features")
+    AFTSurvivalRegressionModel...
     >>> model.predict(Vectors.dense(6.3))
     1.0
     >>> model.predictQuantiles(Vectors.dense(6.3))
@@ -1247,41 +1729,26 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     True
     >>> model.scale == model2.scale
     True
+    >>> model.transform(df).take(1) == model2.transform(df).take(1)
+    True
 
     .. versionadded:: 1.6.0
     """
-
-    censorCol = Param(Params._dummy(), "censorCol",
-                      "censor column name. The value of this column could be 0 or 1. " +
-                      "If the value is 1, it means the event has occurred i.e. " +
-                      "uncensored; otherwise censored.", typeConverter=TypeConverters.toString)
-    quantileProbabilities = \
-        Param(Params._dummy(), "quantileProbabilities",
-              "quantile probabilities array. Values of the quantile probabilities array " +
-              "should be in the range (0, 1) and the array should be non-empty.",
-              typeConverter=TypeConverters.toListFloat)
-    quantilesCol = Param(Params._dummy(), "quantilesCol",
-                         "quantiles column name. This column will output quantiles of " +
-                         "corresponding quantileProbabilities if it is set.",
-                         typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
                  quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
-                 quantilesCol=None, aggregationDepth=2):
+                 quantilesCol=None, aggregationDepth=2, blockSize=1):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
                  quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
-                 quantilesCol=None, aggregationDepth=2)
+                 quantilesCol=None, aggregationDepth=2, blockSize=1)
         """
         super(AFTSurvivalRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.AFTSurvivalRegression", self.uid)
-        self._setDefault(censorCol="censor",
-                         quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
-                         maxIter=100, tol=1E-6)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1290,12 +1757,12 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
                   quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
-                  quantilesCol=None, aggregationDepth=2):
+                  quantilesCol=None, aggregationDepth=2, blockSize=1):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
                   quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
-                  quantilesCol=None, aggregationDepth=2):
+                  quantilesCol=None, aggregationDepth=2, blockSize=1):
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
@@ -1311,25 +1778,11 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return self._set(censorCol=value)
 
     @since("1.6.0")
-    def getCensorCol(self):
-        """
-        Gets the value of censorCol or its default value.
-        """
-        return self.getOrDefault(self.censorCol)
-
-    @since("1.6.0")
     def setQuantileProbabilities(self, value):
         """
         Sets the value of :py:attr:`quantileProbabilities`.
         """
         return self._set(quantileProbabilities=value)
-
-    @since("1.6.0")
-    def getQuantileProbabilities(self):
-        """
-        Gets the value of quantileProbabilities or its default value.
-        """
-        return self.getOrDefault(self.quantileProbabilities)
 
     @since("1.6.0")
     def setQuantilesCol(self, value):
@@ -1339,21 +1792,62 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return self._set(quantilesCol=value)
 
     @since("1.6.0")
-    def getQuantilesCol(self):
+    def setMaxIter(self, value):
         """
-        Gets the value of quantilesCol or its default value.
+        Sets the value of :py:attr:`maxIter`.
         """
-        return self.getOrDefault(self.quantilesCol)
+        return self._set(maxIter=value)
+
+    @since("1.6.0")
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
+
+    @since("1.6.0")
+    def setFitIntercept(self, value):
+        """
+        Sets the value of :py:attr:`fitIntercept`.
+        """
+        return self._set(fitIntercept=value)
+
+    @since("2.1.0")
+    def setAggregationDepth(self, value):
+        """
+        Sets the value of :py:attr:`aggregationDepth`.
+        """
+        return self._set(aggregationDepth=value)
+
+    @since("3.1.0")
+    def setBlockSize(self, value):
+        """
+        Sets the value of :py:attr:`blockSize`.
+        """
+        return self._set(blockSize=value)
 
 
-class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class AFTSurvivalRegressionModel(_JavaRegressionModel, _AFTSurvivalRegressionParams,
+                                 JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Model fitted by :class:`AFTSurvivalRegression`.
 
     .. versionadded:: 1.6.0
     """
+
+    @since("3.0.0")
+    def setQuantileProbabilities(self, value):
+        """
+        Sets the value of :py:attr:`quantileProbabilities`.
+        """
+        return self._set(quantileProbabilities=value)
+
+    @since("3.0.0")
+    def setQuantilesCol(self, value):
+        """
+        Sets the value of :py:attr:`quantilesCol`.
+        """
+        return self._set(quantilesCol=value)
 
     @property
     @since("2.0.0")
@@ -1386,21 +1880,93 @@ class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("predictQuantiles", features)
 
+
+class _GeneralizedLinearRegressionParams(_PredictorParams, HasFitIntercept, HasMaxIter,
+                                         HasTol, HasRegParam, HasWeightCol, HasSolver,
+                                         HasAggregationDepth):
+    """
+    Params for :py:class:`GeneralizedLinearRegression` and
+    :py:class:`GeneralizedLinearRegressionModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    family = Param(Params._dummy(), "family", "The name of family which is a description of " +
+                   "the error distribution to be used in the model. Supported options: " +
+                   "gaussian (default), binomial, poisson, gamma and tweedie.",
+                   typeConverter=TypeConverters.toString)
+    link = Param(Params._dummy(), "link", "The name of link function which provides the " +
+                 "relationship between the linear predictor and the mean of the distribution " +
+                 "function. Supported options: identity, log, inverse, logit, probit, cloglog " +
+                 "and sqrt.", typeConverter=TypeConverters.toString)
+    linkPredictionCol = Param(Params._dummy(), "linkPredictionCol", "link prediction (linear " +
+                              "predictor) column name", typeConverter=TypeConverters.toString)
+    variancePower = Param(Params._dummy(), "variancePower", "The power in the variance function " +
+                          "of the Tweedie distribution which characterizes the relationship " +
+                          "between the variance and mean of the distribution. Only applicable " +
+                          "for the Tweedie family. Supported values: 0 and [1, Inf).",
+                          typeConverter=TypeConverters.toFloat)
+    linkPower = Param(Params._dummy(), "linkPower", "The index in the power link function. " +
+                      "Only applicable to the Tweedie family.",
+                      typeConverter=TypeConverters.toFloat)
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: irls.", typeConverter=TypeConverters.toString)
+    offsetCol = Param(Params._dummy(), "offsetCol", "The offset column name. If this is not set " +
+                      "or empty, we treat all instance offsets as 0.0",
+                      typeConverter=TypeConverters.toString)
+
+    def __init__(self, *args):
+        super(_GeneralizedLinearRegressionParams, self).__init__(*args)
+        self._setDefault(family="gaussian", maxIter=25, tol=1e-6, regParam=0.0, solver="irls",
+                         variancePower=0.0, aggregationDepth=2)
+
     @since("2.0.0")
-    def predict(self, features):
+    def getFamily(self):
         """
-        Predicted value
+        Gets the value of family or its default value.
         """
-        return self._call_java("predict", features)
+        return self.getOrDefault(self.family)
+
+    @since("2.0.0")
+    def getLinkPredictionCol(self):
+        """
+        Gets the value of linkPredictionCol or its default value.
+        """
+        return self.getOrDefault(self.linkPredictionCol)
+
+    @since("2.0.0")
+    def getLink(self):
+        """
+        Gets the value of link or its default value.
+        """
+        return self.getOrDefault(self.link)
+
+    @since("2.2.0")
+    def getVariancePower(self):
+        """
+        Gets the value of variancePower or its default value.
+        """
+        return self.getOrDefault(self.variancePower)
+
+    @since("2.2.0")
+    def getLinkPower(self):
+        """
+        Gets the value of linkPower or its default value.
+        """
+        return self.getOrDefault(self.linkPower)
+
+    @since("2.3.0")
+    def getOffsetCol(self):
+        """
+        Gets the value of offsetCol or its default value.
+        """
+        return self.getOrDefault(self.offsetCol)
 
 
 @inherit_doc
-class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, HasPredictionCol,
-                                  HasFitIntercept, HasMaxIter, HasTol, HasRegParam, HasWeightCol,
-                                  HasSolver, JavaMLWritable, JavaMLReadable):
+class GeneralizedLinearRegression(_JavaRegressor, _GeneralizedLinearRegressionParams,
+                                  JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Generalized Linear Regression.
 
     Fit a Generalized Linear Model specified by giving a symbolic description of the linear
@@ -1428,7 +1994,23 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
     ...     (2.0, Vectors.dense(0.0, 0.0)),
     ...     (2.0, Vectors.dense(1.0, 1.0)),], ["label", "features"])
     >>> glr = GeneralizedLinearRegression(family="gaussian", link="identity", linkPredictionCol="p")
+    >>> glr.setRegParam(0.1)
+    GeneralizedLinearRegression...
+    >>> glr.getRegParam()
+    0.1
+    >>> glr.clear(glr.regParam)
+    >>> glr.setMaxIter(10)
+    GeneralizedLinearRegression...
+    >>> glr.getMaxIter()
+    10
+    >>> glr.clear(glr.maxIter)
     >>> model = glr.fit(df)
+    >>> model.setFeaturesCol("features")
+    GeneralizedLinearRegressionModel...
+    >>> model.getMaxIter()
+    25
+    >>> model.getAggregationDepth()
+    2
     >>> transformed = model.transform(df)
     >>> abs(transformed.head().prediction - 1.5) < 0.001
     True
@@ -1452,50 +2034,26 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
     True
     >>> model.coefficients[0] == model2.coefficients[0]
     True
+    >>> model.transform(df).take(1) == model2.transform(df).take(1)
+    True
 
     .. versionadded:: 2.0.0
     """
-
-    family = Param(Params._dummy(), "family", "The name of family which is a description of " +
-                   "the error distribution to be used in the model. Supported options: " +
-                   "gaussian (default), binomial, poisson, gamma and tweedie.",
-                   typeConverter=TypeConverters.toString)
-    link = Param(Params._dummy(), "link", "The name of link function which provides the " +
-                 "relationship between the linear predictor and the mean of the distribution " +
-                 "function. Supported options: identity, log, inverse, logit, probit, cloglog " +
-                 "and sqrt.", typeConverter=TypeConverters.toString)
-    linkPredictionCol = Param(Params._dummy(), "linkPredictionCol", "link prediction (linear " +
-                              "predictor) column name", typeConverter=TypeConverters.toString)
-    variancePower = Param(Params._dummy(), "variancePower", "The power in the variance function " +
-                          "of the Tweedie distribution which characterizes the relationship " +
-                          "between the variance and mean of the distribution. Only applicable " +
-                          "for the Tweedie family. Supported values: 0 and [1, Inf).",
-                          typeConverter=TypeConverters.toFloat)
-    linkPower = Param(Params._dummy(), "linkPower", "The index in the power link function. " +
-                      "Only applicable to the Tweedie family.",
-                      typeConverter=TypeConverters.toFloat)
-    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
-                   "options: irls.", typeConverter=TypeConverters.toString)
-    offsetCol = Param(Params._dummy(), "offsetCol", "The offset column name. If this is not set " +
-                      "or empty, we treat all instance offsets as 0.0",
-                      typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction",
                  family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6,
                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None,
-                 variancePower=0.0, linkPower=None, offsetCol=None):
+                 variancePower=0.0, linkPower=None, offsetCol=None, aggregationDepth=2):
         """
         __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
                  family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None, \
-                 variancePower=0.0, linkPower=None, offsetCol=None)
+                 variancePower=0.0, linkPower=None, offsetCol=None, aggregationDepth=2)
         """
         super(GeneralizedLinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.GeneralizedLinearRegression", self.uid)
-        self._setDefault(family="gaussian", maxIter=25, tol=1e-6, regParam=0.0, solver="irls",
-                         variancePower=0.0)
         kwargs = self._input_kwargs
 
         self.setParams(**kwargs)
@@ -1505,12 +2063,12 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
     def setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction",
                   family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6,
                   regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None,
-                  variancePower=0.0, linkPower=None, offsetCol=None):
+                  variancePower=0.0, linkPower=None, offsetCol=None, aggregationDepth=2):
         """
         setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
                   family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
                   regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None, \
-                  variancePower=0.0, linkPower=None, offsetCol=None)
+                  variancePower=0.0, linkPower=None, offsetCol=None, aggregationDepth=2)
         Sets params for generalized linear regression.
         """
         kwargs = self._input_kwargs
@@ -1527,13 +2085,6 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         return self._set(family=value)
 
     @since("2.0.0")
-    def getFamily(self):
-        """
-        Gets the value of family or its default value.
-        """
-        return self.getOrDefault(self.family)
-
-    @since("2.0.0")
     def setLinkPredictionCol(self, value):
         """
         Sets the value of :py:attr:`linkPredictionCol`.
@@ -1541,25 +2092,11 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         return self._set(linkPredictionCol=value)
 
     @since("2.0.0")
-    def getLinkPredictionCol(self):
-        """
-        Gets the value of linkPredictionCol or its default value.
-        """
-        return self.getOrDefault(self.linkPredictionCol)
-
-    @since("2.0.0")
     def setLink(self, value):
         """
         Sets the value of :py:attr:`link`.
         """
         return self._set(link=value)
-
-    @since("2.0.0")
-    def getLink(self):
-        """
-        Gets the value of link or its default value.
-        """
-        return self.getOrDefault(self.link)
 
     @since("2.2.0")
     def setVariancePower(self, value):
@@ -1569,25 +2106,11 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         return self._set(variancePower=value)
 
     @since("2.2.0")
-    def getVariancePower(self):
-        """
-        Gets the value of variancePower or its default value.
-        """
-        return self.getOrDefault(self.variancePower)
-
-    @since("2.2.0")
     def setLinkPower(self, value):
         """
         Sets the value of :py:attr:`linkPower`.
         """
         return self._set(linkPower=value)
-
-    @since("2.2.0")
-    def getLinkPower(self):
-        """
-        Gets the value of linkPower or its default value.
-        """
-        return self.getOrDefault(self.linkPower)
 
     @since("2.3.0")
     def setOffsetCol(self, value):
@@ -1596,23 +2119,70 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         """
         return self._set(offsetCol=value)
 
-    @since("2.3.0")
-    def getOffsetCol(self):
+    @since("2.0.0")
+    def setMaxIter(self, value):
         """
-        Gets the value of offsetCol or its default value.
+        Sets the value of :py:attr:`maxIter`.
         """
-        return self.getOrDefault(self.offsetCol)
+        return self._set(maxIter=value)
+
+    @since("2.0.0")
+    def setRegParam(self, value):
+        """
+        Sets the value of :py:attr:`regParam`.
+        """
+        return self._set(regParam=value)
+
+    @since("2.0.0")
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
+
+    @since("2.0.0")
+    def setFitIntercept(self, value):
+        """
+        Sets the value of :py:attr:`fitIntercept`.
+        """
+        return self._set(fitIntercept=value)
+
+    @since("2.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+    @since("2.0.0")
+    def setSolver(self, value):
+        """
+        Sets the value of :py:attr:`solver`.
+        """
+        return self._set(solver=value)
+
+    @since("3.0.0")
+    def setAggregationDepth(self, value):
+        """
+        Sets the value of :py:attr:`aggregationDepth`.
+        """
+        return self._set(aggregationDepth=value)
 
 
-class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable,
-                                       JavaMLReadable):
+class GeneralizedLinearRegressionModel(_JavaRegressionModel, _GeneralizedLinearRegressionParams,
+                                       JavaMLWritable, JavaMLReadable, HasTrainingSummary):
     """
-    .. note:: Experimental
-
     Model fitted by :class:`GeneralizedLinearRegression`.
 
     .. versionadded:: 2.0.0
     """
+
+    @since("3.0.0")
+    def setLinkPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`linkPredictionCol`.
+        """
+        return self._set(linkPredictionCol=value)
 
     @property
     @since("2.0.0")
@@ -1639,20 +2209,11 @@ class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWri
         `trainingSummary is None`.
         """
         if self.hasSummary:
-            java_glrt_summary = self._call_java("summary")
-            return GeneralizedLinearRegressionTrainingSummary(java_glrt_summary)
+            return GeneralizedLinearRegressionTrainingSummary(
+                super(GeneralizedLinearRegressionModel, self).summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
-
-    @property
-    @since("2.0.0")
-    def hasSummary(self):
-        """
-        Indicates whether a training summary exists for this model
-        instance.
-        """
-        return self._call_java("hasSummary")
 
     @since("2.0.0")
     def evaluate(self, dataset):
@@ -1671,8 +2232,6 @@ class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWri
 
 class GeneralizedLinearRegressionSummary(JavaWrapper):
     """
-    .. note:: Experimental
-
     Generalized linear regression results evaluated on a dataset.
 
     .. versionadded:: 2.0.0
@@ -1784,8 +2343,6 @@ class GeneralizedLinearRegressionSummary(JavaWrapper):
 @inherit_doc
 class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSummary):
     """
-    .. note:: Experimental
-
     Generalized linear regression training results.
 
     .. versionadded:: 2.0.0
@@ -1842,6 +2399,273 @@ class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSumm
 
     def __repr__(self):
         return self._call_java("toString")
+
+
+class _FactorizationMachinesParams(_PredictorParams, HasMaxIter, HasStepSize, HasTol,
+                                   HasSolver, HasSeed, HasFitIntercept, HasRegParam, HasWeightCol):
+    """
+    Params for :py:class:`FMRegressor`, :py:class:`FMRegressionModel`, :py:class:`FMClassifier`
+    and :py:class:`FMClassifierModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    factorSize = Param(Params._dummy(), "factorSize", "Dimensionality of the factor vectors, " +
+                       "which are used to get pairwise interactions between variables",
+                       typeConverter=TypeConverters.toInt)
+
+    fitLinear = Param(Params._dummy(), "fitLinear", "whether to fit linear term (aka 1-way term)",
+                      typeConverter=TypeConverters.toBoolean)
+
+    miniBatchFraction = Param(Params._dummy(), "miniBatchFraction", "fraction of the input data " +
+                              "set that should be used for one iteration of gradient descent",
+                              typeConverter=TypeConverters.toFloat)
+
+    initStd = Param(Params._dummy(), "initStd", "standard deviation of initial coefficients",
+                    typeConverter=TypeConverters.toFloat)
+
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: gd, adamW. (Default adamW)", typeConverter=TypeConverters.toString)
+
+    def __init__(self, *args):
+        super(_FactorizationMachinesParams, self).__init__(*args)
+        self._setDefault(factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
+                         miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
+                         tol=1e-6, solver="adamW")
+
+    @since("3.0.0")
+    def getFactorSize(self):
+        """
+        Gets the value of factorSize or its default value.
+        """
+        return self.getOrDefault(self.factorSize)
+
+    @since("3.0.0")
+    def getFitLinear(self):
+        """
+        Gets the value of fitLinear or its default value.
+        """
+        return self.getOrDefault(self.fitLinear)
+
+    @since("3.0.0")
+    def getMiniBatchFraction(self):
+        """
+        Gets the value of miniBatchFraction or its default value.
+        """
+        return self.getOrDefault(self.miniBatchFraction)
+
+    @since("3.0.0")
+    def getInitStd(self):
+        """
+        Gets the value of initStd or its default value.
+        """
+        return self.getOrDefault(self.initStd)
+
+
+@inherit_doc
+class FMRegressor(_JavaRegressor, _FactorizationMachinesParams, JavaMLWritable, JavaMLReadable):
+    """
+    Factorization Machines learning algorithm for regression.
+
+    solver Supports:
+
+    * gd (normal mini-batch gradient descent)
+    * adamW (default)
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> from pyspark.ml.regression import FMRegressor
+    >>> df = spark.createDataFrame([
+    ...     (2.0, Vectors.dense(2.0)),
+    ...     (1.0, Vectors.dense(1.0)),
+    ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
+    >>>
+    >>> fm = FMRegressor(factorSize=2)
+    >>> fm.setSeed(16)
+    FMRegressor...
+    >>> model = fm.fit(df)
+    >>> model.getMaxIter()
+    100
+    >>> test0 = spark.createDataFrame([
+    ...     (Vectors.dense(-2.0),),
+    ...     (Vectors.dense(0.5),),
+    ...     (Vectors.dense(1.0),),
+    ...     (Vectors.dense(4.0),)], ["features"])
+    >>> model.transform(test0).show(10, False)
+    +--------+-------------------+
+    |features|prediction         |
+    +--------+-------------------+
+    |[-2.0]  |-1.9989237712341565|
+    |[0.5]   |0.4956682219523814 |
+    |[1.0]   |0.994586620589689  |
+    |[4.0]   |3.9880970124135344 |
+    +--------+-------------------+
+    ...
+    >>> model.intercept
+    -0.0032501766849261557
+    >>> model.linear
+    DenseVector([0.9978])
+    >>> model.factors
+    DenseMatrix(1, 2, [0.0173, 0.0021], 1)
+    >>> model_path = temp_path + "/fm_model"
+    >>> model.save(model_path)
+    >>> model2 = FMRegressionModel.load(model_path)
+    >>> model2.intercept
+    -0.0032501766849261557
+    >>> model2.linear
+    DenseVector([0.9978])
+    >>> model2.factors
+    DenseMatrix(1, 2, [0.0173, 0.0021], 1)
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    True
+
+    .. versionadded:: 3.0.0
+    """
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
+                 miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
+                 tol=1e-6, solver="adamW", seed=None):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
+                 miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
+                 tol=1e-6, solver="adamW", seed=None)
+        """
+        super(FMRegressor, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.regression.FMRegressor", self.uid)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("3.0.0")
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
+                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
+                  tol=1e-6, solver="adamW", seed=None):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
+                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
+                  tol=1e-6, solver="adamW", seed=None)
+        Sets Params for FMRegressor.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return FMRegressionModel(java_model)
+
+    @since("3.0.0")
+    def setFactorSize(self, value):
+        """
+        Sets the value of :py:attr:`factorSize`.
+        """
+        return self._set(factorSize=value)
+
+    @since("3.0.0")
+    def setFitLinear(self, value):
+        """
+        Sets the value of :py:attr:`fitLinear`.
+        """
+        return self._set(fitLinear=value)
+
+    @since("3.0.0")
+    def setMiniBatchFraction(self, value):
+        """
+        Sets the value of :py:attr:`miniBatchFraction`.
+        """
+        return self._set(miniBatchFraction=value)
+
+    @since("3.0.0")
+    def setInitStd(self, value):
+        """
+        Sets the value of :py:attr:`initStd`.
+        """
+        return self._set(initStd=value)
+
+    @since("3.0.0")
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    @since("3.0.0")
+    def setStepSize(self, value):
+        """
+        Sets the value of :py:attr:`stepSize`.
+        """
+        return self._set(stepSize=value)
+
+    @since("3.0.0")
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
+
+    @since("3.0.0")
+    def setSolver(self, value):
+        """
+        Sets the value of :py:attr:`solver`.
+        """
+        return self._set(solver=value)
+
+    @since("3.0.0")
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("3.0.0")
+    def setFitIntercept(self, value):
+        """
+        Sets the value of :py:attr:`fitIntercept`.
+        """
+        return self._set(fitIntercept=value)
+
+    @since("3.0.0")
+    def setRegParam(self, value):
+        """
+        Sets the value of :py:attr:`regParam`.
+        """
+        return self._set(regParam=value)
+
+
+class FMRegressionModel(_JavaRegressionModel, _FactorizationMachinesParams, JavaMLWritable,
+                        JavaMLReadable):
+    """
+    Model fitted by :class:`FMRegressor`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    @property
+    @since("3.0.0")
+    def intercept(self):
+        """
+        Model intercept.
+        """
+        return self._call_java("intercept")
+
+    @property
+    @since("3.0.0")
+    def linear(self):
+        """
+        Model linear term.
+        """
+        return self._call_java("linear")
+
+    @property
+    @since("3.0.0")
+    def factors(self):
+        """
+        Model factor term.
+        """
+        return self._call_java("factors")
 
 
 if __name__ == "__main__":

@@ -15,19 +15,15 @@
 # limitations under the License.
 #
 
-import sys
-if sys.version > '3':
-    basestring = str
-
 from pyspark import since, keyword_only, SparkContext
-from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml.linalg import _convert_to_vector
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, _jvm
 from pyspark.ml.common import inherit_doc
 
-__all__ = ['Binarizer',
+__all__ = ['ANOVASelector', 'ANOVASelectorModel',
+           'Binarizer',
            'BucketedRandomProjectionLSH', 'BucketedRandomProjectionLSHModel',
            'Bucketizer',
            'ChiSqSelector', 'ChiSqSelectorModel',
@@ -35,20 +31,22 @@ __all__ = ['Binarizer',
            'DCT',
            'ElementwiseProduct',
            'FeatureHasher',
+           'FValueSelector', 'FValueSelectorModel',
            'HashingTF',
            'IDF', 'IDFModel',
            'Imputer', 'ImputerModel',
            'IndexToString',
+           'Interaction',
            'MaxAbsScaler', 'MaxAbsScalerModel',
            'MinHashLSH', 'MinHashLSHModel',
            'MinMaxScaler', 'MinMaxScalerModel',
            'NGram',
            'Normalizer',
-           'OneHotEncoder',
-           'OneHotEncoderEstimator', 'OneHotEncoderModel',
+           'OneHotEncoder', 'OneHotEncoderModel',
            'PCA', 'PCAModel',
            'PolynomialExpansion',
            'QuantileDiscretizer',
+           'RobustScaler', 'RobustScalerModel',
            'RegexTokenizer',
            'RFormula', 'RFormulaModel',
            'SQLTransformer',
@@ -56,6 +54,7 @@ __all__ = ['Binarizer',
            'StopWordsRemover',
            'StringIndexer', 'StringIndexerModel',
            'Tokenizer',
+           'VarianceThresholdSelector', 'VarianceThresholdSelectorModel',
            'VectorAssembler',
            'VectorIndexer', 'VectorIndexerModel',
            'VectorSizeHint',
@@ -64,12 +63,23 @@ __all__ = ['Binarizer',
 
 
 @inherit_doc
-class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class Binarizer(JavaTransformer, HasThreshold, HasThresholds, HasInputCol, HasOutputCol,
+                HasInputCols, HasOutputCols, JavaMLReadable, JavaMLWritable):
     """
-    Binarize a column of continuous features given a threshold.
+    Binarize a column of continuous features given a threshold. Since 3.0.0,
+    :py:class:`Binarize` can map multiple columns at once by setting the :py:attr:`inputCols`
+    parameter. Note that when both the :py:attr:`inputCol` and :py:attr:`inputCols` parameters
+    are set, an Exception will be thrown. The :py:attr:`threshold` parameter is used for
+    single column usage, and :py:attr:`thresholds` is for multiple columns.
 
     >>> df = spark.createDataFrame([(0.5,)], ["values"])
     >>> binarizer = Binarizer(threshold=1.0, inputCol="values", outputCol="features")
+    >>> binarizer.setThreshold(1.0)
+    Binarizer...
+    >>> binarizer.setInputCol("values")
+    Binarizer...
+    >>> binarizer.setOutputCol("features")
+    Binarizer...
     >>> binarizer.transform(df).head().features
     0.0
     >>> binarizer.setParams(outputCol="freqs").transform(df).head().freqs
@@ -82,18 +92,41 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
     >>> loadedBinarizer = Binarizer.load(binarizerPath)
     >>> loadedBinarizer.getThreshold() == binarizer.getThreshold()
     True
+    >>> loadedBinarizer.transform(df).take(1) == binarizer.transform(df).take(1)
+    True
+    >>> df2 = spark.createDataFrame([(0.5, 0.3)], ["values1", "values2"])
+    >>> binarizer2 = Binarizer(thresholds=[0.0, 1.0])
+    >>> binarizer2.setInputCols(["values1", "values2"]).setOutputCols(["output1", "output2"])
+    Binarizer...
+    >>> binarizer2.transform(df2).show()
+    +-------+-------+-------+-------+
+    |values1|values2|output1|output2|
+    +-------+-------+-------+-------+
+    |    0.5|    0.3|    1.0|    0.0|
+    +-------+-------+-------+-------+
+    ...
 
     .. versionadded:: 1.4.0
     """
 
     threshold = Param(Params._dummy(), "threshold",
-                      "threshold in binary classification prediction, in range [0, 1]",
+                      "Param for threshold used to binarize continuous features. " +
+                      "The features greater than the threshold will be binarized to 1.0. " +
+                      "The features equal to or less than the threshold will be binarized to 0.0",
                       typeConverter=TypeConverters.toFloat)
+    thresholds = Param(Params._dummy(), "thresholds",
+                       "Param for array of threshold used to binarize continuous features. " +
+                       "This is for multiple columns input. If transforming multiple columns " +
+                       "and thresholds is not set, but threshold is set, then threshold will " +
+                       "be applied across all columns.",
+                       typeConverter=TypeConverters.toListFloat)
 
     @keyword_only
-    def __init__(self, threshold=0.0, inputCol=None, outputCol=None):
+    def __init__(self, threshold=0.0, inputCol=None, outputCol=None, thresholds=None,
+                 inputCols=None, outputCols=None):
         """
-        __init__(self, threshold=0.0, inputCol=None, outputCol=None)
+        __init__(self, threshold=0.0, inputCol=None, outputCol=None, thresholds=None, \
+                 inputCols=None, outputCols=None)
         """
         super(Binarizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Binarizer", self.uid)
@@ -103,9 +136,11 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, threshold=0.0, inputCol=None, outputCol=None):
+    def setParams(self, threshold=0.0, inputCol=None, outputCol=None, thresholds=None,
+                  inputCols=None, outputCols=None):
         """
-        setParams(self, threshold=0.0, inputCol=None, outputCol=None)
+        setParams(self, threshold=0.0, inputCol=None, outputCol=None, thresholds=None, \
+                  inputCols=None, outputCols=None)
         Sets params for this Binarizer.
         """
         kwargs = self._input_kwargs
@@ -118,15 +153,41 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
         """
         return self._set(threshold=value)
 
-    @since("1.4.0")
-    def getThreshold(self):
+    @since("3.0.0")
+    def setThresholds(self, value):
         """
-        Gets the value of threshold or its default value.
+        Sets the value of :py:attr:`thresholds`.
         """
-        return self.getOrDefault(self.threshold)
+        return self._set(thresholds=value)
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
 
 
-class LSHParams(Params):
+class _LSHParams(HasInputCol, HasOutputCol):
     """
     Mixin for Locality Sensitive Hashing (LSH) algorithm parameters.
     """
@@ -136,14 +197,9 @@ class LSHParams(Params):
                           "and decreasing it improves the running performance.",
                           typeConverter=TypeConverters.toInt)
 
-    def __init__(self):
-        super(LSHParams, self).__init__()
-
-    def setNumHashTables(self, value):
-        """
-        Sets the value of :py:attr:`numHashTables`.
-        """
-        return self._set(numHashTables=value)
+    def __init__(self, *args):
+        super(_LSHParams, self).__init__(*args)
+        self._setDefault(numHashTables=1)
 
     def getNumHashTables(self):
         """
@@ -152,10 +208,46 @@ class LSHParams(Params):
         return self.getOrDefault(self.numHashTables)
 
 
-class LSHModel(JavaModel):
+class _LSH(JavaEstimator, _LSHParams, JavaMLReadable, JavaMLWritable):
+    """
+    Mixin for Locality Sensitive Hashing (LSH).
+    """
+
+    def setNumHashTables(self, value):
+        """
+        Sets the value of :py:attr:`numHashTables`.
+        """
+        return self._set(numHashTables=value)
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+
+class _LSHModel(JavaModel, _LSHParams):
     """
     Mixin for Locality Sensitive Hashing (LSH) models.
     """
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     def approxNearestNeighbors(self, dataset, key, numNearestNeighbors, distCol="distCol"):
         """
@@ -193,15 +285,34 @@ class LSHModel(JavaModel):
                  "datasetA" and "datasetB", and a column "distCol" is added to show the distance
                  between each pair.
         """
+        threshold = TypeConverters.toFloat(threshold)
         return self._call_java("approxSimilarityJoin", datasetA, datasetB, threshold, distCol)
 
 
-@inherit_doc
-class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
-                                  JavaMLReadable, JavaMLWritable):
+class _BucketedRandomProjectionLSHParams():
     """
-    .. note:: Experimental
+    Params for :py:class:`BucketedRandomProjectionLSH` and
+    :py:class:`BucketedRandomProjectionLSHModel`.
 
+    .. versionadded:: 3.0.0
+    """
+
+    bucketLength = Param(Params._dummy(), "bucketLength", "the length of each hash bucket, " +
+                         "a larger bucket lowers the false negative rate.",
+                         typeConverter=TypeConverters.toFloat)
+
+    @since("2.2.0")
+    def getBucketLength(self):
+        """
+        Gets the value of bucketLength or its default value.
+        """
+        return self.getOrDefault(self.bucketLength)
+
+
+@inherit_doc
+class BucketedRandomProjectionLSH(_LSH, _BucketedRandomProjectionLSHParams,
+                                  HasSeed, JavaMLReadable, JavaMLWritable):
+    """
     LSH class for Euclidean distance metrics.
     The input is dense or sparse vectors, each of which represents a point in the Euclidean
     distance space. The output will be vectors of configurable dimension. Hash values in the same
@@ -218,9 +329,20 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     ...         (2, Vectors.dense([1.0, -1.0 ]),),
     ...         (3, Vectors.dense([1.0, 1.0]),)]
     >>> df = spark.createDataFrame(data, ["id", "features"])
-    >>> brp = BucketedRandomProjectionLSH(inputCol="features", outputCol="hashes",
-    ...                                   seed=12345, bucketLength=1.0)
+    >>> brp = BucketedRandomProjectionLSH()
+    >>> brp.setInputCol("features")
+    BucketedRandomProjectionLSH...
+    >>> brp.setOutputCol("hashes")
+    BucketedRandomProjectionLSH...
+    >>> brp.setSeed(12345)
+    BucketedRandomProjectionLSH...
+    >>> brp.setBucketLength(1.0)
+    BucketedRandomProjectionLSH...
     >>> model = brp.fit(df)
+    >>> model.getBucketLength()
+    1.0
+    >>> model.setOutputCol("hashes")
+    BucketedRandomProjectionLSHModel...
     >>> model.transform(df).head()
     Row(id=0, features=DenseVector([-1.0, -1.0]), hashes=[DenseVector([-1.0])])
     >>> data2 = [(4, Vectors.dense([2.0, 2.0 ]),),
@@ -231,6 +353,16 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     >>> model.approxNearestNeighbors(df2, Vectors.dense([1.0, 2.0]), 1).collect()
     [Row(id=4, features=DenseVector([2.0, 2.0]), hashes=[DenseVector([1.0])], distCol=1.0)]
     >>> model.approxSimilarityJoin(df, df2, 3.0, distCol="EuclideanDistance").select(
+    ...     col("datasetA.id").alias("idA"),
+    ...     col("datasetB.id").alias("idB"),
+    ...     col("EuclideanDistance")).show()
+    +---+---+-----------------+
+    |idA|idB|EuclideanDistance|
+    +---+---+-----------------+
+    |  3|  6| 2.23606797749979|
+    +---+---+-----------------+
+    ...
+    >>> model.approxSimilarityJoin(df, df2, 3, distCol="EuclideanDistance").select(
     ...     col("datasetA.id").alias("idA"),
     ...     col("datasetB.id").alias("idB"),
     ...     col("EuclideanDistance")).show()
@@ -254,10 +386,6 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     .. versionadded:: 2.2.0
     """
 
-    bucketLength = Param(Params._dummy(), "bucketLength", "the length of each hash bucket, " +
-                         "a larger bucket lowers the false negative rate.",
-                         typeConverter=TypeConverters.toFloat)
-
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1,
                  bucketLength=None):
@@ -268,7 +396,6 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
         super(BucketedRandomProjectionLSH, self).__init__()
         self._java_obj = \
             self._new_java_obj("org.apache.spark.ml.feature.BucketedRandomProjectionLSH", self.uid)
-        self._setDefault(numHashTables=1)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -291,21 +418,19 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
         """
         return self._set(bucketLength=value)
 
-    @since("2.2.0")
-    def getBucketLength(self):
+    def setSeed(self, value):
         """
-        Gets the value of bucketLength or its default value.
+        Sets the value of :py:attr:`seed`.
         """
-        return self.getOrDefault(self.bucketLength)
+        return self._set(seed=value)
 
     def _create_model(self, java_model):
         return BucketedRandomProjectionLSHModel(java_model)
 
 
-class BucketedRandomProjectionLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
+class BucketedRandomProjectionLSHModel(_LSHModel, _BucketedRandomProjectionLSHParams,
+                                       JavaMLReadable, JavaMLWritable):
     r"""
-    .. note:: Experimental
-
     Model fitted by :py:class:`BucketedRandomProjectionLSH`, where multiple random vectors are
     stored. The vectors are normalized to be unit vectors and each vector is used in a hash
     function: :math:`h_i(x) = floor(r_i \cdot x / bucketLength)` where :math:`r_i` is the
@@ -317,26 +442,39 @@ class BucketedRandomProjectionLSHModel(LSHModel, JavaMLReadable, JavaMLWritable)
 
 
 @inherit_doc
-class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
-                 JavaMLReadable, JavaMLWritable):
+class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOutputCols,
+                 HasHandleInvalid, JavaMLReadable, JavaMLWritable):
     """
-    Maps a column of continuous features to a column of feature buckets.
+    Maps a column of continuous features to a column of feature buckets. Since 3.0.0,
+    :py:class:`Bucketizer` can map multiple columns at once by setting the :py:attr:`inputCols`
+    parameter. Note that when both the :py:attr:`inputCol` and :py:attr:`inputCols` parameters
+    are set, an Exception will be thrown. The :py:attr:`splits` parameter is only used for single
+    column usage, and :py:attr:`splitsArray` is for multiple columns.
 
-    >>> values = [(0.1,), (0.4,), (1.2,), (1.5,), (float("nan"),), (float("nan"),)]
-    >>> df = spark.createDataFrame(values, ["values"])
-    >>> bucketizer = Bucketizer(splits=[-float("inf"), 0.5, 1.4, float("inf")],
-    ...     inputCol="values", outputCol="buckets")
+    >>> values = [(0.1, 0.0), (0.4, 1.0), (1.2, 1.3), (1.5, float("nan")),
+    ...     (float("nan"), 1.0), (float("nan"), 0.0)]
+    >>> df = spark.createDataFrame(values, ["values1", "values2"])
+    >>> bucketizer = Bucketizer()
+    >>> bucketizer.setSplits([-float("inf"), 0.5, 1.4, float("inf")])
+    Bucketizer...
+    >>> bucketizer.setInputCol("values1")
+    Bucketizer...
+    >>> bucketizer.setOutputCol("buckets")
+    Bucketizer...
     >>> bucketed = bucketizer.setHandleInvalid("keep").transform(df).collect()
-    >>> len(bucketed)
-    6
-    >>> bucketed[0].buckets
-    0.0
-    >>> bucketed[1].buckets
-    0.0
-    >>> bucketed[2].buckets
-    1.0
-    >>> bucketed[3].buckets
-    2.0
+    >>> bucketed = bucketizer.setHandleInvalid("keep").transform(df.select("values1"))
+    >>> bucketed.show(truncate=False)
+    +-------+-------+
+    |values1|buckets|
+    +-------+-------+
+    |0.1    |0.0    |
+    |0.4    |0.0    |
+    |1.2    |1.0    |
+    |1.5    |2.0    |
+    |NaN    |3.0    |
+    |NaN    |3.0    |
+    +-------+-------+
+    ...
     >>> bucketizer.setParams(outputCol="b").transform(df).head().b
     0.0
     >>> bucketizerPath = temp_path + "/bucketizer"
@@ -344,9 +482,27 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
     >>> loadedBucketizer = Bucketizer.load(bucketizerPath)
     >>> loadedBucketizer.getSplits() == bucketizer.getSplits()
     True
+    >>> loadedBucketizer.transform(df).take(1) == bucketizer.transform(df).take(1)
+    True
     >>> bucketed = bucketizer.setHandleInvalid("skip").transform(df).collect()
     >>> len(bucketed)
     4
+    >>> bucketizer2 = Bucketizer(splitsArray=
+    ...     [[-float("inf"), 0.5, 1.4, float("inf")], [-float("inf"), 0.5, float("inf")]],
+    ...     inputCols=["values1", "values2"], outputCols=["buckets1", "buckets2"])
+    >>> bucketed2 = bucketizer2.setHandleInvalid("keep").transform(df)
+    >>> bucketed2.show(truncate=False)
+    +-------+-------+--------+--------+
+    |values1|values2|buckets1|buckets2|
+    +-------+-------+--------+--------+
+    |0.1    |0.0    |0.0     |0.0     |
+    |0.4    |1.0    |0.0     |1.0     |
+    |1.2    |1.3    |1.0     |1.0     |
+    |1.5    |NaN    |2.0     |2.0     |
+    |NaN    |1.0    |3.0     |1.0     |
+    |NaN    |0.0    |3.0     |0.0     |
+    +-------+-------+--------+--------+
+    ...
 
     .. versionadded:: 1.4.0
     """
@@ -361,16 +517,33 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
               "splits specified will be treated as errors.",
               typeConverter=TypeConverters.toListFloat)
 
-    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
-                          "Options are 'skip' (filter out rows with invalid values), " +
-                          "'error' (throw an error), or 'keep' (keep invalid values in a special " +
-                          "additional bucket).",
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries "
+                          "containing NaN values. Values outside the splits will always be treated "
+                          "as errors. Options are 'skip' (filter out rows with invalid values), " +
+                          "'error' (throw an error), or 'keep' (keep invalid values in a " +
+                          "special additional bucket). Note that in the multiple column " +
+                          "case, the invalid handling is applied to all columns. That said " +
+                          "for 'error' it will throw an error if any invalids are found in " +
+                          "any column, for 'skip' it will skip rows with any invalids in " +
+                          "any columns, etc.",
                           typeConverter=TypeConverters.toString)
 
+    splitsArray = Param(Params._dummy(), "splitsArray", "The array of split points for mapping " +
+                        "continuous features into buckets for multiple columns. For each input " +
+                        "column, with n+1 splits, there are n buckets. A bucket defined by " +
+                        "splits x,y holds values in the range [x,y) except the last bucket, " +
+                        "which also includes y. The splits should be of length >= 3 and " +
+                        "strictly increasing. Values at -inf, inf must be explicitly provided " +
+                        "to cover all Double values; otherwise, values outside the splits " +
+                        "specified will be treated as errors.",
+                        typeConverter=TypeConverters.toListListFloat)
+
     @keyword_only
-    def __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error"):
+    def __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error",
+                 splitsArray=None, inputCols=None, outputCols=None):
         """
-        __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error")
+        __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error", \
+                 splitsArray=None, inputCols=None, outputCols=None)
         """
         super(Bucketizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Bucketizer", self.uid)
@@ -380,9 +553,11 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error"):
+    def setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error",
+                  splitsArray=None, inputCols=None, outputCols=None):
         """
-        setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error")
+        setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error", \
+                  splitsArray=None, inputCols=None, outputCols=None)
         Sets params for this Bucketizer.
         """
         kwargs = self._input_kwargs
@@ -402,10 +577,56 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
         """
         return self.getOrDefault(self.splits)
 
+    @since("3.0.0")
+    def setSplitsArray(self, value):
+        """
+        Sets the value of :py:attr:`splitsArray`.
+        """
+        return self._set(splitsArray=value)
+
+    @since("3.0.0")
+    def getSplitsArray(self):
+        """
+        Gets the array of split points or its default value.
+        """
+        return self.getOrDefault(self.splitsArray)
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
 
 class _CountVectorizerParams(JavaParams, HasInputCol, HasOutputCol):
     """
-    Params for :py:attr:`CountVectorizer` and :py:attr:`CountVectorizerModel`.
+    Params for :py:class:`CountVectorizer` and :py:class:`CountVectorizerModel`.
     """
 
     minTF = Param(
@@ -487,8 +708,14 @@ class CountVectorizer(JavaEstimator, _CountVectorizerParams, JavaMLReadable, Jav
     >>> df = spark.createDataFrame(
     ...    [(0, ["a", "b", "c"]), (1, ["a", "b", "b", "c", "a"])],
     ...    ["label", "raw"])
-    >>> cv = CountVectorizer(inputCol="raw", outputCol="vectors")
+    >>> cv = CountVectorizer()
+    >>> cv.setInputCol("raw")
+    CountVectorizer...
+    >>> cv.setOutputCol("vectors")
+    CountVectorizer...
     >>> model = cv.fit(df)
+    >>> model.setInputCol("raw")
+    CountVectorizerModel...
     >>> model.transform(df).show(truncate=False)
     +-----+---------------+-------------------------+
     |label|raw            |vectors                  |
@@ -512,6 +739,8 @@ class CountVectorizer(JavaEstimator, _CountVectorizerParams, JavaMLReadable, Jav
     >>> model.save(modelPath)
     >>> loadedModel = CountVectorizerModel.load(modelPath)
     >>> loadedModel.vocabulary == model.vocabulary
+    True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
     True
     >>> fromVocabModel = CountVectorizerModel.from_vocabulary(["a", "b", "c"],
     ...     inputCol="raw", outputCol="vectors")
@@ -587,6 +816,18 @@ class CountVectorizer(JavaEstimator, _CountVectorizerParams, JavaMLReadable, Jav
         """
         return self._set(binary=value)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
     def _create_model(self, java_model):
         return CountVectorizerModel(java_model)
 
@@ -598,6 +839,20 @@ class CountVectorizerModel(JavaModel, _CountVectorizerParams, JavaMLReadable, Ja
 
     .. versionadded:: 1.6.0
     """
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @classmethod
     @since("2.4.0")
@@ -658,7 +913,13 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWrit
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df1 = spark.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
-    >>> dct = DCT(inverse=False, inputCol="vec", outputCol="resultVec")
+    >>> dct = DCT( )
+    >>> dct.setInverse(False)
+    DCT...
+    >>> dct.setInputCol("vec")
+    DCT...
+    >>> dct.setOutputCol("resultVec")
+    DCT...
     >>> df2 = dct.transform(df1)
     >>> df2.head().resultVec
     DenseVector([10.969..., -0.707..., -2.041...])
@@ -668,6 +929,8 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWrit
     >>> dctPath = temp_path + "/dct"
     >>> dct.save(dctPath)
     >>> loadedDtc = DCT.load(dctPath)
+    >>> loadedDtc.transform(df1).take(1) == dct.transform(df1).take(1)
+    True
     >>> loadedDtc.getInverse()
     False
 
@@ -712,6 +975,18 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWrit
         """
         return self.getOrDefault(self.inverse)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
 
 @inherit_doc
 class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
@@ -723,8 +998,13 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([2.0, 1.0, 3.0]),)], ["values"])
-    >>> ep = ElementwiseProduct(scalingVec=Vectors.dense([1.0, 2.0, 3.0]),
-    ...     inputCol="values", outputCol="eprod")
+    >>> ep = ElementwiseProduct()
+    >>> ep.setScalingVec(Vectors.dense([1.0, 2.0, 3.0]))
+    ElementwiseProduct...
+    >>> ep.setInputCol("values")
+    ElementwiseProduct...
+    >>> ep.setOutputCol("eprod")
+    ElementwiseProduct...
     >>> ep.transform(df).head().eprod
     DenseVector([2.0, 2.0, 9.0])
     >>> ep.setParams(scalingVec=Vectors.dense([2.0, 3.0, 5.0])).transform(df).head().eprod
@@ -733,6 +1013,8 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
     >>> ep.save(elementwiseProductPath)
     >>> loadedEp = ElementwiseProduct.load(elementwiseProductPath)
     >>> loadedEp.getScalingVec() == ep.getScalingVec()
+    True
+    >>> loadedEp.transform(df).take(1) == ep.transform(df).take(1)
     True
 
     .. versionadded:: 1.5.0
@@ -776,13 +1058,23 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
         """
         return self.getOrDefault(self.scalingVec)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
 
 @inherit_doc
 class FeatureHasher(JavaTransformer, HasInputCols, HasOutputCol, HasNumFeatures, JavaMLReadable,
                     JavaMLWritable):
     """
-    .. note:: Experimental
-
     Feature hashing projects a set of categorical or numerical features into a feature vector of
     specified dimension (typically substantially smaller than that of the original feature
     space). This is done using the hashing trick (https://en.wikipedia.org/wiki/Feature_hashing)
@@ -817,7 +1109,11 @@ class FeatureHasher(JavaTransformer, HasInputCols, HasOutputCol, HasNumFeatures,
     >>> data = [(2.0, True, "1", "foo"), (3.0, False, "2", "bar")]
     >>> cols = ["real", "bool", "stringNum", "string"]
     >>> df = spark.createDataFrame(data, cols)
-    >>> hasher = FeatureHasher(inputCols=cols, outputCol="features")
+    >>> hasher = FeatureHasher()
+    >>> hasher.setInputCols(cols)
+    FeatureHasher...
+    >>> hasher.setOutputCol("features")
+    FeatureHasher...
     >>> hasher.transform(df).head().features
     SparseVector(262144, {174475: 2.0, 247670: 1.0, 257907: 1.0, 262126: 1.0})
     >>> hasher.setCategoricalCols(["real"]).transform(df).head().features
@@ -872,6 +1168,24 @@ class FeatureHasher(JavaTransformer, HasInputCols, HasOutputCol, HasNumFeatures,
         """
         return self.getOrDefault(self.categoricalCols)
 
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    def setNumFeatures(self, value):
+        """
+        Sets the value of :py:attr:`numFeatures`.
+        """
+        return self._set(numFeatures=value)
+
 
 @inherit_doc
 class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, JavaMLReadable,
@@ -885,19 +1199,25 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
     otherwise the features will not be mapped evenly to the columns.
 
     >>> df = spark.createDataFrame([(["a", "b", "c"],)], ["words"])
-    >>> hashingTF = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
+    >>> hashingTF = HashingTF(inputCol="words", outputCol="features")
+    >>> hashingTF.setNumFeatures(10)
+    HashingTF...
     >>> hashingTF.transform(df).head().features
-    SparseVector(10, {0: 1.0, 1: 1.0, 2: 1.0})
+    SparseVector(10, {5: 1.0, 7: 1.0, 8: 1.0})
     >>> hashingTF.setParams(outputCol="freqs").transform(df).head().freqs
-    SparseVector(10, {0: 1.0, 1: 1.0, 2: 1.0})
+    SparseVector(10, {5: 1.0, 7: 1.0, 8: 1.0})
     >>> params = {hashingTF.numFeatures: 5, hashingTF.outputCol: "vector"}
     >>> hashingTF.transform(df, params).head().vector
-    SparseVector(5, {0: 1.0, 1: 1.0, 2: 1.0})
+    SparseVector(5, {0: 1.0, 2: 1.0, 3: 1.0})
     >>> hashingTFPath = temp_path + "/hashing-tf"
     >>> hashingTF.save(hashingTFPath)
     >>> loadedHashingTF = HashingTF.load(hashingTFPath)
     >>> loadedHashingTF.getNumFeatures() == hashingTF.getNumFeatures()
     True
+    >>> loadedHashingTF.transform(df).take(1) == hashingTF.transform(df).take(1)
+    True
+    >>> hashingTF.indexOf("b")
+    5
 
     .. versionadded:: 1.3.0
     """
@@ -942,19 +1262,80 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
         """
         return self.getOrDefault(self.binary)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    def setNumFeatures(self, value):
+        """
+        Sets the value of :py:attr:`numFeatures`.
+        """
+        return self._set(numFeatures=value)
+
+    @since("3.0.0")
+    def indexOf(self, term):
+        """
+        Returns the index of the input term.
+        """
+        self._transfer_params_to_java()
+        return self._java_obj.indexOf(term)
+
+
+class _IDFParams(HasInputCol, HasOutputCol):
+    """
+    Params for :py:class:`IDF` and :py:class:`IDFModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    minDocFreq = Param(Params._dummy(), "minDocFreq",
+                       "minimum number of documents in which a term should appear for filtering",
+                       typeConverter=TypeConverters.toInt)
+
+    @since("1.4.0")
+    def getMinDocFreq(self):
+        """
+        Gets the value of minDocFreq or its default value.
+        """
+        return self.getOrDefault(self.minDocFreq)
+
+    def __init__(self, *args):
+        super(_IDFParams, self).__init__(*args)
+        self._setDefault(minDocFreq=0)
+
 
 @inherit_doc
-class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class IDF(JavaEstimator, _IDFParams, JavaMLReadable, JavaMLWritable):
     """
     Compute the Inverse Document Frequency (IDF) given a collection of documents.
 
     >>> from pyspark.ml.linalg import DenseVector
     >>> df = spark.createDataFrame([(DenseVector([1.0, 2.0]),),
     ...     (DenseVector([0.0, 1.0]),), (DenseVector([3.0, 0.2]),)], ["tf"])
-    >>> idf = IDF(minDocFreq=3, inputCol="tf", outputCol="idf")
+    >>> idf = IDF(minDocFreq=3)
+    >>> idf.setInputCol("tf")
+    IDF...
+    >>> idf.setOutputCol("idf")
+    IDF...
     >>> model = idf.fit(df)
+    >>> model.setOutputCol("idf")
+    IDFModel...
+    >>> model.getMinDocFreq()
+    3
     >>> model.idf
     DenseVector([0.0, 0.0])
+    >>> model.docFreq
+    [0, 3]
+    >>> model.numDocs == df.count()
+    True
     >>> model.transform(df).head().idf
     DenseVector([0.0, 0.0])
     >>> idf.setParams(outputCol="freqs").fit(df).transform(df).collect()[1].freqs
@@ -976,10 +1357,6 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
     .. versionadded:: 1.4.0
     """
 
-    minDocFreq = Param(Params._dummy(), "minDocFreq",
-                       "minimum number of documents in which a term should appear for filtering",
-                       typeConverter=TypeConverters.toInt)
-
     @keyword_only
     def __init__(self, minDocFreq=0, inputCol=None, outputCol=None):
         """
@@ -987,7 +1364,6 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
         """
         super(IDF, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IDF", self.uid)
-        self._setDefault(minDocFreq=0)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1008,23 +1384,42 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
         """
         return self._set(minDocFreq=value)
 
-    @since("1.4.0")
-    def getMinDocFreq(self):
+    def setInputCol(self, value):
         """
-        Gets the value of minDocFreq or its default value.
+        Sets the value of :py:attr:`inputCol`.
         """
-        return self.getOrDefault(self.minDocFreq)
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     def _create_model(self, java_model):
         return IDFModel(java_model)
 
 
-class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class IDFModel(JavaModel, _IDFParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`IDF`.
 
     .. versionadded:: 1.4.0
     """
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @property
     @since("2.0.0")
@@ -1034,15 +1429,65 @@ class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
         """
         return self._call_java("idf")
 
+    @property
+    @since("3.0.0")
+    def docFreq(self):
+        """
+        Returns the document frequency.
+        """
+        return self._call_java("docFreq")
+
+    @property
+    @since("3.0.0")
+    def numDocs(self):
+        """
+        Returns number of documents evaluated to compute idf
+        """
+        return self._call_java("numDocs")
+
+
+class _ImputerParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, HasRelativeError):
+    """
+    Params for :py:class:`Imputer` and :py:class:`ImputerModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    strategy = Param(Params._dummy(), "strategy",
+                     "strategy for imputation. If mean, then replace missing values using the mean "
+                     "value of the feature. If median, then replace missing values using the "
+                     "median value of the feature.",
+                     typeConverter=TypeConverters.toString)
+
+    missingValue = Param(Params._dummy(), "missingValue",
+                         "The placeholder for the missing values. All occurrences of missingValue "
+                         "will be imputed.", typeConverter=TypeConverters.toFloat)
+
+    def __init__(self, *args):
+        super(_ImputerParams, self).__init__(*args)
+        self._setDefault(strategy="mean", missingValue=float("nan"), relativeError=0.001)
+
+    @since("2.2.0")
+    def getStrategy(self):
+        """
+        Gets the value of :py:attr:`strategy` or its default value.
+        """
+        return self.getOrDefault(self.strategy)
+
+    @since("2.2.0")
+    def getMissingValue(self):
+        """
+        Gets the value of :py:attr:`missingValue` or its default value.
+        """
+        return self.getOrDefault(self.missingValue)
+
 
 @inherit_doc
-class Imputer(JavaEstimator, HasInputCols, JavaMLReadable, JavaMLWritable):
+class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Imputation estimator for completing missing values, either using the mean or the median
     of the columns in which the missing values are located. The input columns should be of
-    DoubleType or FloatType. Currently Imputer does not support categorical features and
+    numeric type. Currently Imputer does not support categorical features and
     possibly creates incorrect values for a categorical feature.
 
     Note that the mean/median value is computed after filtering out missing values.
@@ -1052,8 +1497,18 @@ class Imputer(JavaEstimator, HasInputCols, JavaMLReadable, JavaMLWritable):
 
     >>> df = spark.createDataFrame([(1.0, float("nan")), (2.0, float("nan")), (float("nan"), 3.0),
     ...                             (4.0, 4.0), (5.0, 5.0)], ["a", "b"])
-    >>> imputer = Imputer(inputCols=["a", "b"], outputCols=["out_a", "out_b"])
+    >>> imputer = Imputer()
+    >>> imputer.setInputCols(["a", "b"])
+    Imputer...
+    >>> imputer.setOutputCols(["out_a", "out_b"])
+    Imputer...
+    >>> imputer.getRelativeError()
+    0.001
     >>> model = imputer.fit(df)
+    >>> model.setInputCols(["a", "b"])
+    ImputerModel...
+    >>> model.getStrategy()
+    'mean'
     >>> model.surrogateDF.show()
     +---+---+
     |  a|  b|
@@ -1075,6 +1530,55 @@ class Imputer(JavaEstimator, HasInputCols, JavaMLReadable, JavaMLWritable):
     +---+---+-----+-----+
     |1.0|NaN|  4.0|  NaN|
     ...
+    >>> df1 = spark.createDataFrame([(1.0,), (2.0,), (float("nan"),), (4.0,), (5.0,)], ["a"])
+    >>> imputer1 = Imputer(inputCol="a", outputCol="out_a")
+    >>> model1 = imputer1.fit(df1)
+    >>> model1.surrogateDF.show()
+    +---+
+    |  a|
+    +---+
+    |3.0|
+    +---+
+    ...
+    >>> model1.transform(df1).show()
+    +---+-----+
+    |  a|out_a|
+    +---+-----+
+    |1.0|  1.0|
+    |2.0|  2.0|
+    |NaN|  3.0|
+    ...
+    >>> imputer1.setStrategy("median").setMissingValue(1.0).fit(df1).transform(df1).show()
+    +---+-----+
+    |  a|out_a|
+    +---+-----+
+    |1.0|  4.0|
+    ...
+    >>> df2 = spark.createDataFrame([(float("nan"),), (float("nan"),), (3.0,), (4.0,), (5.0,)],
+    ...                             ["b"])
+    >>> imputer2 = Imputer(inputCol="b", outputCol="out_b")
+    >>> model2 = imputer2.fit(df2)
+    >>> model2.surrogateDF.show()
+    +---+
+    |  b|
+    +---+
+    |4.0|
+    +---+
+    ...
+    >>> model2.transform(df2).show()
+    +---+-----+
+    |  b|out_b|
+    +---+-----+
+    |NaN|  4.0|
+    |NaN|  4.0|
+    |3.0|  3.0|
+    ...
+    >>> imputer2.setStrategy("median").setMissingValue(1.0).fit(df2).transform(df2).show()
+    +---+-----+
+    |  b|out_b|
+    +---+-----+
+    |NaN|  NaN|
+    ...
     >>> imputerPath = temp_path + "/imputer"
     >>> imputer.save(imputerPath)
     >>> loadedImputer = Imputer.load(imputerPath)
@@ -1091,57 +1595,29 @@ class Imputer(JavaEstimator, HasInputCols, JavaMLReadable, JavaMLWritable):
     .. versionadded:: 2.2.0
     """
 
-    outputCols = Param(Params._dummy(), "outputCols",
-                       "output column names.", typeConverter=TypeConverters.toListString)
-
-    strategy = Param(Params._dummy(), "strategy",
-                     "strategy for imputation. If mean, then replace missing values using the mean "
-                     "value of the feature. If median, then replace missing values using the "
-                     "median value of the feature.",
-                     typeConverter=TypeConverters.toString)
-
-    missingValue = Param(Params._dummy(), "missingValue",
-                         "The placeholder for the missing values. All occurrences of missingValue "
-                         "will be imputed.", typeConverter=TypeConverters.toFloat)
-
     @keyword_only
     def __init__(self, strategy="mean", missingValue=float("nan"), inputCols=None,
-                 outputCols=None):
+                 outputCols=None, inputCol=None, outputCol=None, relativeError=0.001):
         """
         __init__(self, strategy="mean", missingValue=float("nan"), inputCols=None, \
-                 outputCols=None):
+                 outputCols=None, inputCol=None, outputCol=None, relativeError=0.001):
         """
         super(Imputer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Imputer", self.uid)
-        self._setDefault(strategy="mean", missingValue=float("nan"))
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.2.0")
     def setParams(self, strategy="mean", missingValue=float("nan"), inputCols=None,
-                  outputCols=None):
+                  outputCols=None, inputCol=None, outputCol=None, relativeError=0.001):
         """
         setParams(self, strategy="mean", missingValue=float("nan"), inputCols=None, \
-                  outputCols=None)
+                  outputCols=None, inputCol=None, outputCol=None, relativeError=0.001)
         Sets params for this Imputer.
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
-
-    @since("2.2.0")
-    def setOutputCols(self, value):
-        """
-        Sets the value of :py:attr:`outputCols`.
-        """
-        return self._set(outputCols=value)
-
-    @since("2.2.0")
-    def getOutputCols(self):
-        """
-        Gets the value of :py:attr:`outputCols` or its default value.
-        """
-        return self.getOrDefault(self.outputCols)
 
     @since("2.2.0")
     def setStrategy(self, value):
@@ -1151,13 +1627,6 @@ class Imputer(JavaEstimator, HasInputCols, JavaMLReadable, JavaMLWritable):
         return self._set(strategy=value)
 
     @since("2.2.0")
-    def getStrategy(self):
-        """
-        Gets the value of :py:attr:`strategy` or its default value.
-        """
-        return self.getOrDefault(self.strategy)
-
-    @since("2.2.0")
     def setMissingValue(self, value):
         """
         Sets the value of :py:attr:`missingValue`.
@@ -1165,24 +1634,78 @@ class Imputer(JavaEstimator, HasInputCols, JavaMLReadable, JavaMLWritable):
         return self._set(missingValue=value)
 
     @since("2.2.0")
-    def getMissingValue(self):
+    def setInputCols(self, value):
         """
-        Gets the value of :py:attr:`missingValue` or its default value.
+        Sets the value of :py:attr:`inputCols`.
         """
-        return self.getOrDefault(self.missingValue)
+        return self._set(inputCols=value)
+
+    @since("2.2.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setRelativeError(self, value):
+        """
+        Sets the value of :py:attr:`relativeError`.
+        """
+        return self._set(relativeError=value)
 
     def _create_model(self, java_model):
         return ImputerModel(java_model)
 
 
-class ImputerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class ImputerModel(JavaModel, _ImputerParams, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Model fitted by :py:class:`Imputer`.
 
     .. versionadded:: 2.2.0
     """
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @property
     @since("2.2.0")
@@ -1195,7 +1718,87 @@ class ImputerModel(JavaModel, JavaMLReadable, JavaMLWritable):
 
 
 @inherit_doc
-class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class Interaction(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadable, JavaMLWritable):
+    """
+    Implements the feature interaction transform. This transformer takes in Double and Vector type
+    columns and outputs a flattened vector of their feature interactions. To handle interaction,
+    we first one-hot encode any nominal features. Then, a vector of the feature cross-products is
+    produced.
+
+    For example, given the input feature values `Double(2)` and `Vector(3, 4)`, the output would be
+    `Vector(6, 8)` if all input features were numeric. If the first feature was instead nominal
+    with four categories, the output would then be `Vector(0, 0, 0, 0, 3, 4, 0, 0)`.
+
+    >>> df = spark.createDataFrame([(0.0, 1.0), (2.0, 3.0)], ["a", "b"])
+    >>> interaction = Interaction()
+    >>> interaction.setInputCols(["a", "b"])
+    Interaction...
+    >>> interaction.setOutputCol("ab")
+    Interaction...
+    >>> interaction.transform(df).show()
+    +---+---+-----+
+    |  a|  b|   ab|
+    +---+---+-----+
+    |0.0|1.0|[0.0]|
+    |2.0|3.0|[6.0]|
+    +---+---+-----+
+    ...
+    >>> interactionPath = temp_path + "/interaction"
+    >>> interaction.save(interactionPath)
+    >>> loadedInteraction = Interaction.load(interactionPath)
+    >>> loadedInteraction.transform(df).head().ab == interaction.transform(df).head().ab
+    True
+
+    .. versionadded:: 3.0.0
+    """
+
+    @keyword_only
+    def __init__(self, inputCols=None, outputCol=None):
+        """
+        __init__(self, inputCols=None, outputCol=None):
+        """
+        super(Interaction, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Interaction", self.uid)
+        self._setDefault()
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("3.0.0")
+    def setParams(self, inputCols=None, outputCol=None):
+        """
+        setParams(self, inputCols=None, outputCol=None)
+        Sets params for this Interaction.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+
+class _MaxAbsScalerParams(HasInputCol, HasOutputCol):
+    """
+    Params for :py:class:`MaxAbsScaler` and :py:class:`MaxAbsScalerModel`.
+
+    .. versionadded:: 3.0.0
+    """
+    pass
+
+
+@inherit_doc
+class MaxAbsScaler(JavaEstimator, _MaxAbsScalerParams, JavaMLReadable, JavaMLWritable):
     """
     Rescale each feature individually to range [-1, 1] by dividing through the largest maximum
     absolute value in each feature. It does not shift/center the data, and thus does not destroy
@@ -1203,15 +1806,19 @@ class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([1.0]),), (Vectors.dense([2.0]),)], ["a"])
-    >>> maScaler = MaxAbsScaler(inputCol="a", outputCol="scaled")
+    >>> maScaler = MaxAbsScaler(outputCol="scaled")
+    >>> maScaler.setInputCol("a")
+    MaxAbsScaler...
     >>> model = maScaler.fit(df)
+    >>> model.setOutputCol("scaledOutput")
+    MaxAbsScalerModel...
     >>> model.transform(df).show()
-    +-----+------+
-    |    a|scaled|
-    +-----+------+
-    |[1.0]| [0.5]|
-    |[2.0]| [1.0]|
-    +-----+------+
+    +-----+------------+
+    |    a|scaledOutput|
+    +-----+------------+
+    |[1.0]|       [0.5]|
+    |[2.0]|       [1.0]|
+    +-----+------------+
     ...
     >>> scalerPath = temp_path + "/max-abs-scaler"
     >>> maScaler.save(scalerPath)
@@ -1224,6 +1831,8 @@ class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     >>> model.save(modelPath)
     >>> loadedModel = MaxAbsScalerModel.load(modelPath)
     >>> loadedModel.maxAbs == model.maxAbs
+    True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
     True
 
     .. versionadded:: 2.0.0
@@ -1250,16 +1859,42 @@ class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
     def _create_model(self, java_model):
         return MaxAbsScalerModel(java_model)
 
 
-class MaxAbsScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class MaxAbsScalerModel(JavaModel, _MaxAbsScalerParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`MaxAbsScaler`.
 
     .. versionadded:: 2.0.0
     """
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @property
     @since("2.0.0")
@@ -1271,12 +1906,9 @@ class MaxAbsScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
 
 
 @inherit_doc
-class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
-                 JavaMLReadable, JavaMLWritable):
+class MinHashLSH(_LSH, HasInputCol, HasOutputCol, HasSeed, JavaMLReadable, JavaMLWritable):
 
     """
-    .. note:: Experimental
-
     LSH class for Jaccard distance.
     The input can be dense or sparse vectors, but it is more efficient if it is sparse.
     For example, `Vectors.sparse(10, [(2, 1.0), (3, 1.0), (5, 1.0)])` means there are 10 elements
@@ -1291,8 +1923,16 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     ...         (1, Vectors.sparse(6, [2, 3, 4], [1.0, 1.0, 1.0]),),
     ...         (2, Vectors.sparse(6, [0, 2, 4], [1.0, 1.0, 1.0]),)]
     >>> df = spark.createDataFrame(data, ["id", "features"])
-    >>> mh = MinHashLSH(inputCol="features", outputCol="hashes", seed=12345)
+    >>> mh = MinHashLSH()
+    >>> mh.setInputCol("features")
+    MinHashLSH...
+    >>> mh.setOutputCol("hashes")
+    MinHashLSH...
+    >>> mh.setSeed(12345)
+    MinHashLSH...
     >>> model = mh.fit(df)
+    >>> model.setInputCol("features")
+    MinHashLSHModel...
     >>> model.transform(df).head()
     Row(id=0, features=SparseVector(6, {0: 1.0, 1: 1.0, 2: 1.0}), hashes=[DenseVector([6179668...
     >>> data2 = [(3, Vectors.sparse(6, [1, 3, 5], [1.0, 1.0, 1.0]),),
@@ -1334,7 +1974,6 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
         """
         super(MinHashLSH, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinHashLSH", self.uid)
-        self._setDefault(numHashTables=1)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1348,14 +1987,18 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
     def _create_model(self, java_model):
         return MinHashLSHModel(java_model)
 
 
-class MinHashLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
+class MinHashLSHModel(_LSHModel, JavaMLReadable, JavaMLWritable):
     r"""
-    .. note:: Experimental
-
     Model produced by :py:class:`MinHashLSH`, where where multiple hash functions are stored. Each
     hash function is picked from the following family of hash functions, where :math:`a_i` and
     :math:`b_i` are randomly chosen integers less than prime:
@@ -1369,8 +2012,39 @@ class MinHashLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
     """
 
 
+class _MinMaxScalerParams(HasInputCol, HasOutputCol):
+    """
+    Params for :py:class:`MinMaxScaler` and :py:class:`MinMaxScalerModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    min = Param(Params._dummy(), "min", "Lower bound of the output feature range",
+                typeConverter=TypeConverters.toFloat)
+    max = Param(Params._dummy(), "max", "Upper bound of the output feature range",
+                typeConverter=TypeConverters.toFloat)
+
+    def __init__(self, *args):
+        super(_MinMaxScalerParams, self).__init__(*args)
+        self._setDefault(min=0.0, max=1.0)
+
+    @since("1.6.0")
+    def getMin(self):
+        """
+        Gets the value of min or its default value.
+        """
+        return self.getOrDefault(self.min)
+
+    @since("1.6.0")
+    def getMax(self):
+        """
+        Gets the value of max or its default value.
+        """
+        return self.getOrDefault(self.max)
+
+
 @inherit_doc
-class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class MinMaxScaler(JavaEstimator, _MinMaxScalerParams, JavaMLReadable, JavaMLWritable):
     """
     Rescale each feature individually to a common range [min, max] linearly using column summary
     statistics, which is also known as min-max normalization or Rescaling. The rescaled value for
@@ -1385,19 +2059,23 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
-    >>> mmScaler = MinMaxScaler(inputCol="a", outputCol="scaled")
+    >>> mmScaler = MinMaxScaler(outputCol="scaled")
+    >>> mmScaler.setInputCol("a")
+    MinMaxScaler...
     >>> model = mmScaler.fit(df)
+    >>> model.setOutputCol("scaledOutput")
+    MinMaxScalerModel...
     >>> model.originalMin
     DenseVector([0.0])
     >>> model.originalMax
     DenseVector([2.0])
     >>> model.transform(df).show()
-    +-----+------+
-    |    a|scaled|
-    +-----+------+
-    |[0.0]| [0.0]|
-    |[2.0]| [1.0]|
-    +-----+------+
+    +-----+------------+
+    |    a|scaledOutput|
+    +-----+------------+
+    |[0.0]|       [0.0]|
+    |[2.0]|       [1.0]|
+    +-----+------------+
     ...
     >>> minMaxScalerPath = temp_path + "/min-max-scaler"
     >>> mmScaler.save(minMaxScalerPath)
@@ -1413,14 +2091,11 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     True
     >>> loadedModel.originalMax == model.originalMax
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
 
     .. versionadded:: 1.6.0
     """
-
-    min = Param(Params._dummy(), "min", "Lower bound of the output feature range",
-                typeConverter=TypeConverters.toFloat)
-    max = Param(Params._dummy(), "max", "Upper bound of the output feature range",
-                typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, min=0.0, max=1.0, inputCol=None, outputCol=None):
@@ -1429,7 +2104,6 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         """
         super(MinMaxScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinMaxScaler", self.uid)
-        self._setDefault(min=0.0, max=1.0)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1451,36 +2125,62 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         return self._set(min=value)
 
     @since("1.6.0")
-    def getMin(self):
-        """
-        Gets the value of min or its default value.
-        """
-        return self.getOrDefault(self.min)
-
-    @since("1.6.0")
     def setMax(self, value):
         """
         Sets the value of :py:attr:`max`.
         """
         return self._set(max=value)
 
-    @since("1.6.0")
-    def getMax(self):
+    def setInputCol(self, value):
         """
-        Gets the value of max or its default value.
+        Sets the value of :py:attr:`inputCol`.
         """
-        return self.getOrDefault(self.max)
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     def _create_model(self, java_model):
         return MinMaxScalerModel(java_model)
 
 
-class MinMaxScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class MinMaxScalerModel(JavaModel, _MinMaxScalerParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`MinMaxScaler`.
 
     .. versionadded:: 1.6.0
     """
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setMin(self, value):
+        """
+        Sets the value of :py:attr:`min`.
+        """
+        return self._set(min=value)
+
+    @since("3.0.0")
+    def setMax(self, value):
+        """
+        Sets the value of :py:attr:`max`.
+        """
+        return self._set(max=value)
 
     @property
     @since("2.0.0")
@@ -1500,7 +2200,6 @@ class MinMaxScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
 
 
 @inherit_doc
-@ignore_unicode_prefix
 class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     A feature transformer that converts the input array of strings into an array of n-grams. Null
@@ -1512,17 +2211,21 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWr
     returned.
 
     >>> df = spark.createDataFrame([Row(inputTokens=["a", "b", "c", "d", "e"])])
-    >>> ngram = NGram(n=2, inputCol="inputTokens", outputCol="nGrams")
+    >>> ngram = NGram(n=2)
+    >>> ngram.setInputCol("inputTokens")
+    NGram...
+    >>> ngram.setOutputCol("nGrams")
+    NGram...
     >>> ngram.transform(df).head()
-    Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b', u'b c', u'c d', u'd e'])
+    Row(inputTokens=['a', 'b', 'c', 'd', 'e'], nGrams=['a b', 'b c', 'c d', 'd e'])
     >>> # Change n-gram length
     >>> ngram.setParams(n=4).transform(df).head()
-    Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b c d', u'b c d e'])
+    Row(inputTokens=['a', 'b', 'c', 'd', 'e'], nGrams=['a b c d', 'b c d e'])
     >>> # Temporarily modify output column.
     >>> ngram.transform(df, {ngram.outputCol: "output"}).head()
-    Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], output=[u'a b c d', u'b c d e'])
+    Row(inputTokens=['a', 'b', 'c', 'd', 'e'], output=['a b c d', 'b c d e'])
     >>> ngram.transform(df).head()
-    Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b c d', u'b c d e'])
+    Row(inputTokens=['a', 'b', 'c', 'd', 'e'], nGrams=['a b c d', 'b c d e'])
     >>> # Must use keyword arguments to specify params.
     >>> ngram.setParams("text")
     Traceback (most recent call last):
@@ -1532,6 +2235,8 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWr
     >>> ngram.save(ngramPath)
     >>> loadedNGram = NGram.load(ngramPath)
     >>> loadedNGram.getN() == ngram.getN()
+    True
+    >>> loadedNGram.transform(df).take(1) == ngram.transform(df).take(1)
     True
 
     .. versionadded:: 1.5.0
@@ -1575,6 +2280,18 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWr
         """
         return self.getOrDefault(self.n)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
 
 @inherit_doc
 class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
@@ -1584,7 +2301,11 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     >>> from pyspark.ml.linalg import Vectors
     >>> svec = Vectors.sparse(4, {1: 4.0, 3: 3.0})
     >>> df = spark.createDataFrame([(Vectors.dense([3.0, -4.0]), svec)], ["dense", "sparse"])
-    >>> normalizer = Normalizer(p=2.0, inputCol="dense", outputCol="features")
+    >>> normalizer = Normalizer(p=2.0)
+    >>> normalizer.setInputCol("dense")
+    Normalizer...
+    >>> normalizer.setOutputCol("features")
+    Normalizer...
     >>> normalizer.transform(df).head().features
     DenseVector([0.6, -0.8])
     >>> normalizer.setParams(inputCol="sparse", outputCol="freqs").transform(df).head().freqs
@@ -1596,6 +2317,8 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     >>> normalizer.save(normalizerPath)
     >>> loadedNormalizer = Normalizer.load(normalizerPath)
     >>> loadedNormalizer.getP() == normalizer.getP()
+    True
+    >>> loadedNormalizer.transform(df).take(1) == normalizer.transform(df).take(1)
     True
 
     .. versionadded:: 1.4.0
@@ -1639,133 +2362,25 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         """
         return self.getOrDefault(self.p)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
 
-@inherit_doc
-class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+
+class _OneHotEncoderParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols,
+                           HasHandleInvalid):
     """
-    A one-hot encoder that maps a column of category indices to a
-    column of binary vectors, with at most a single one-value per row
-    that indicates the input category index.
-    For example with 5 categories, an input value of 2.0 would map to
-    an output vector of `[0.0, 0.0, 1.0, 0.0]`.
-    The last category is not included by default (configurable via
-    :py:attr:`dropLast`) because it makes the vector entries sum up to
-    one, and hence linearly dependent.
-    So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
+    Params for :py:class:`OneHotEncoder` and :py:class:`OneHotEncoderModel`.
 
-    .. note:: This is different from scikit-learn's OneHotEncoder,
-        which keeps all categories. The output vectors are sparse.
-
-    .. note:: Deprecated in 2.3.0. :py:class:`OneHotEncoderEstimator` will be renamed to
-        :py:class:`OneHotEncoder` and this :py:class:`OneHotEncoder` will be removed in 3.0.0.
-
-    .. seealso::
-
-       :py:class:`StringIndexer` for converting categorical values into
-       category indices
-
-    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
-    >>> model = stringIndexer.fit(stringIndDf)
-    >>> td = model.transform(stringIndDf)
-    >>> encoder = OneHotEncoder(inputCol="indexed", outputCol="features")
-    >>> encoder.transform(td).head().features
-    SparseVector(2, {0: 1.0})
-    >>> encoder.setParams(outputCol="freqs").transform(td).head().freqs
-    SparseVector(2, {0: 1.0})
-    >>> params = {encoder.dropLast: False, encoder.outputCol: "test"}
-    >>> encoder.transform(td, params).head().test
-    SparseVector(3, {0: 1.0})
-    >>> onehotEncoderPath = temp_path + "/onehot-encoder"
-    >>> encoder.save(onehotEncoderPath)
-    >>> loadedEncoder = OneHotEncoder.load(onehotEncoderPath)
-    >>> loadedEncoder.getDropLast() == encoder.getDropLast()
-    True
-
-    .. versionadded:: 1.4.0
-    """
-
-    dropLast = Param(Params._dummy(), "dropLast", "whether to drop the last category",
-                     typeConverter=TypeConverters.toBoolean)
-
-    @keyword_only
-    def __init__(self, dropLast=True, inputCol=None, outputCol=None):
-        """
-        __init__(self, dropLast=True, inputCol=None, outputCol=None)
-        """
-        super(OneHotEncoder, self).__init__()
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.OneHotEncoder", self.uid)
-        self._setDefault(dropLast=True)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
-
-    @keyword_only
-    @since("1.4.0")
-    def setParams(self, dropLast=True, inputCol=None, outputCol=None):
-        """
-        setParams(self, dropLast=True, inputCol=None, outputCol=None)
-        Sets params for this OneHotEncoder.
-        """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
-
-    @since("1.4.0")
-    def setDropLast(self, value):
-        """
-        Sets the value of :py:attr:`dropLast`.
-        """
-        return self._set(dropLast=value)
-
-    @since("1.4.0")
-    def getDropLast(self):
-        """
-        Gets the value of dropLast or its default value.
-        """
-        return self.getOrDefault(self.dropLast)
-
-
-@inherit_doc
-class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHandleInvalid,
-                             JavaMLReadable, JavaMLWritable):
-    """
-    A one-hot encoder that maps a column of category indices to a column of binary vectors, with
-    at most a single one-value per row that indicates the input category index.
-    For example with 5 categories, an input value of 2.0 would map to an output vector of
-    `[0.0, 0.0, 1.0, 0.0]`.
-    The last category is not included by default (configurable via `dropLast`),
-    because it makes the vector entries sum up to one, and hence linearly dependent.
-    So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
-
-    Note: This is different from scikit-learn's OneHotEncoder, which keeps all categories.
-    The output vectors are sparse.
-
-    When `handleInvalid` is configured to 'keep', an extra "category" indicating invalid values is
-    added as last category. So when `dropLast` is true, invalid values are encoded as all-zeros
-    vector.
-
-    Note: When encoding multi-column by using `inputCols` and `outputCols` params, input/output
-    cols come in pairs, specified by the order in the arrays, and each pair is treated
-    independently.
-
-    See `StringIndexer` for converting categorical values into category indices
-
-    >>> from pyspark.ml.linalg import Vectors
-    >>> df = spark.createDataFrame([(0.0,), (1.0,), (2.0,)], ["input"])
-    >>> ohe = OneHotEncoderEstimator(inputCols=["input"], outputCols=["output"])
-    >>> model = ohe.fit(df)
-    >>> model.transform(df).head().output
-    SparseVector(2, {0: 1.0})
-    >>> ohePath = temp_path + "/oheEstimator"
-    >>> ohe.save(ohePath)
-    >>> loadedOHE = OneHotEncoderEstimator.load(ohePath)
-    >>> loadedOHE.getInputCols() == ohe.getInputCols()
-    True
-    >>> modelPath = temp_path + "/ohe-model"
-    >>> model.save(modelPath)
-    >>> loadedModel = OneHotEncoderModel.load(modelPath)
-    >>> loadedModel.categorySizes == model.categorySizes
-    True
-
-    .. versionadded:: 2.3.0
+    .. versionadded:: 3.0.0
     """
 
     handleInvalid = Param(Params._dummy(), "handleInvalid", "How to handle invalid data during " +
@@ -1778,24 +2393,97 @@ class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHand
     dropLast = Param(Params._dummy(), "dropLast", "whether to drop the last category",
                      typeConverter=TypeConverters.toBoolean)
 
-    @keyword_only
-    def __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True):
-        """
-        __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True)
-        """
-        super(OneHotEncoderEstimator, self).__init__()
-        self._java_obj = self._new_java_obj(
-            "org.apache.spark.ml.feature.OneHotEncoderEstimator", self.uid)
+    def __init__(self, *args):
+        super(_OneHotEncoderParams, self).__init__(*args)
         self._setDefault(handleInvalid="error", dropLast=True)
+
+    @since("2.3.0")
+    def getDropLast(self):
+        """
+        Gets the value of dropLast or its default value.
+        """
+        return self.getOrDefault(self.dropLast)
+
+
+@inherit_doc
+class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLWritable):
+    """
+    A one-hot encoder that maps a column of category indices to a column of binary vectors, with
+    at most a single one-value per row that indicates the input category index.
+    For example with 5 categories, an input value of 2.0 would map to an output vector of
+    `[0.0, 0.0, 1.0, 0.0]`.
+    The last category is not included by default (configurable via :py:attr:`dropLast`),
+    because it makes the vector entries sum up to one, and hence linearly dependent.
+    So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
+
+    .. note:: This is different from scikit-learn's OneHotEncoder, which keeps all categories.
+        The output vectors are sparse.
+
+    When :py:attr:`handleInvalid` is configured to 'keep', an extra "category" indicating invalid
+    values is added as last category. So when :py:attr:`dropLast` is true, invalid values are
+    encoded as all-zeros vector.
+
+    .. note:: When encoding multi-column by using :py:attr:`inputCols` and
+        :py:attr:`outputCols` params, input/output cols come in pairs, specified by the order in
+        the arrays, and each pair is treated independently.
+
+    .. seealso:: :py:class:`StringIndexer` for converting categorical values into category indices
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([(0.0,), (1.0,), (2.0,)], ["input"])
+    >>> ohe = OneHotEncoder()
+    >>> ohe.setInputCols(["input"])
+    OneHotEncoder...
+    >>> ohe.setOutputCols(["output"])
+    OneHotEncoder...
+    >>> model = ohe.fit(df)
+    >>> model.setOutputCols(["output"])
+    OneHotEncoderModel...
+    >>> model.getHandleInvalid()
+    'error'
+    >>> model.transform(df).head().output
+    SparseVector(2, {0: 1.0})
+    >>> single_col_ohe = OneHotEncoder(inputCol="input", outputCol="output")
+    >>> single_col_model = single_col_ohe.fit(df)
+    >>> single_col_model.transform(df).head().output
+    SparseVector(2, {0: 1.0})
+    >>> ohePath = temp_path + "/ohe"
+    >>> ohe.save(ohePath)
+    >>> loadedOHE = OneHotEncoder.load(ohePath)
+    >>> loadedOHE.getInputCols() == ohe.getInputCols()
+    True
+    >>> modelPath = temp_path + "/ohe-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = OneHotEncoderModel.load(modelPath)
+    >>> loadedModel.categorySizes == model.categorySizes
+    True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
+
+    .. versionadded:: 2.3.0
+    """
+
+    @keyword_only
+    def __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True,
+                 inputCol=None, outputCol=None):
+        """
+        __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True, \
+                 inputCol=None, outputCol=None)
+        """
+        super(OneHotEncoder, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.feature.OneHotEncoder", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.3.0")
-    def setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True):
+    def setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True,
+                  inputCol=None, outputCol=None):
         """
-        setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True)
-        Sets params for this OneHotEncoderEstimator.
+        setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True, \
+                  inputCol=None, outputCol=None)
+        Sets params for this OneHotEncoder.
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
@@ -1807,23 +2495,93 @@ class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHand
         """
         return self._set(dropLast=value)
 
-    @since("2.3.0")
-    def getDropLast(self):
+    @since("3.0.0")
+    def setInputCols(self, value):
         """
-        Gets the value of dropLast or its default value.
+        Sets the value of :py:attr:`inputCols`.
         """
-        return self.getOrDefault(self.dropLast)
+        return self._set(inputCols=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    @since("3.0.0")
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     def _create_model(self, java_model):
         return OneHotEncoderModel(java_model)
 
 
-class OneHotEncoderModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class OneHotEncoderModel(JavaModel, _OneHotEncoderParams, JavaMLReadable, JavaMLWritable):
     """
-    Model fitted by :py:class:`OneHotEncoderEstimator`.
+    Model fitted by :py:class:`OneHotEncoder`.
 
     .. versionadded:: 2.3.0
     """
+
+    @since("3.0.0")
+    def setDropLast(self, value):
+        """
+        Sets the value of :py:attr:`dropLast`.
+        """
+        return self._set(dropLast=value)
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
 
     @property
     @since("2.3.0")
@@ -1847,7 +2605,11 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([0.5, 2.0]),)], ["dense"])
-    >>> px = PolynomialExpansion(degree=2, inputCol="dense", outputCol="expanded")
+    >>> px = PolynomialExpansion(degree=2)
+    >>> px.setInputCol("dense")
+    PolynomialExpansion...
+    >>> px.setOutputCol("expanded")
+    PolynomialExpansion...
     >>> px.transform(df).head().expanded
     DenseVector([0.5, 0.25, 2.0, 1.0, 4.0])
     >>> px.setParams(outputCol="test").transform(df).head().test
@@ -1856,6 +2618,8 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
     >>> px.save(polyExpansionPath)
     >>> loadedPx = PolynomialExpansion.load(polyExpansionPath)
     >>> loadedPx.getDegree() == px.getDegree()
+    True
+    >>> loadedPx.transform(df).take(1) == px.transform(df).take(1)
     True
 
     .. versionadded:: 1.4.0
@@ -1900,21 +2664,36 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
         """
         return self.getOrDefault(self.degree)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
 
 @inherit_doc
-class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid,
-                          JavaMLReadable, JavaMLWritable):
+class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols, HasOutputCols,
+                          HasHandleInvalid, HasRelativeError, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
-    `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
-    categorical features. The number of bins can be set using the :py:attr:`numBuckets` parameter.
-    It is possible that the number of buckets used will be less than this value, for example, if
-    there are too few distinct values of the input to create enough distinct quantiles.
+    :py:class:`QuantileDiscretizer` takes a column with continuous features and outputs a column
+    with binned categorical features. The number of bins can be set using the :py:attr:`numBuckets`
+    parameter. It is possible that the number of buckets used will be less than this value, for
+    example, if there are too few distinct values of the input to create enough distinct quantiles.
+    Since 3.0.0, :py:class:`QuantileDiscretizer` can map multiple columns at once by setting the
+    :py:attr:`inputCols` parameter. If both of the :py:attr:`inputCol` and :py:attr:`inputCols`
+    parameters are set, an Exception will be thrown. To specify the number of buckets for each
+    column, the :py:attr:`numBucketsArray` parameter can be set, or if the number of buckets
+    should be the same across columns, :py:attr:`numBuckets` can be set as a convenience.
 
     NaN handling: Note also that
-    QuantileDiscretizer will raise an error when it finds NaN values in the dataset, but the user
-    can also choose to either keep or remove NaN values within the dataset by setting
+    :py:class:`QuantileDiscretizer` will raise an error when it finds NaN values in the dataset,
+    but the user can also choose to either keep or remove NaN values within the dataset by setting
     :py:attr:`handleInvalid` parameter. If the user chooses to keep NaN values, they will be
     handled specially and placed into their own bucket, for example, if 4 buckets are used, then
     non-NaN data will be put into buckets[0-3], but NaNs will be counted in a special bucket[4].
@@ -1926,29 +2705,66 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInv
     The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
 
     >>> values = [(0.1,), (0.4,), (1.2,), (1.5,), (float("nan"),), (float("nan"),)]
-    >>> df = spark.createDataFrame(values, ["values"])
-    >>> qds = QuantileDiscretizer(numBuckets=2,
-    ...     inputCol="values", outputCol="buckets", relativeError=0.01, handleInvalid="error")
-    >>> qds.getRelativeError()
+    >>> df1 = spark.createDataFrame(values, ["values"])
+    >>> qds1 = QuantileDiscretizer(inputCol="values", outputCol="buckets")
+    >>> qds1.setNumBuckets(2)
+    QuantileDiscretizer...
+    >>> qds1.setRelativeError(0.01)
+    QuantileDiscretizer...
+    >>> qds1.setHandleInvalid("error")
+    QuantileDiscretizer...
+    >>> qds1.getRelativeError()
     0.01
-    >>> bucketizer = qds.fit(df)
-    >>> qds.setHandleInvalid("keep").fit(df).transform(df).count()
+    >>> bucketizer = qds1.fit(df1)
+    >>> qds1.setHandleInvalid("keep").fit(df1).transform(df1).count()
     6
-    >>> qds.setHandleInvalid("skip").fit(df).transform(df).count()
+    >>> qds1.setHandleInvalid("skip").fit(df1).transform(df1).count()
     4
     >>> splits = bucketizer.getSplits()
     >>> splits[0]
     -inf
     >>> print("%2.1f" % round(splits[1], 1))
     0.4
-    >>> bucketed = bucketizer.transform(df).head()
+    >>> bucketed = bucketizer.transform(df1).head()
     >>> bucketed.buckets
     0.0
     >>> quantileDiscretizerPath = temp_path + "/quantile-discretizer"
-    >>> qds.save(quantileDiscretizerPath)
+    >>> qds1.save(quantileDiscretizerPath)
     >>> loadedQds = QuantileDiscretizer.load(quantileDiscretizerPath)
-    >>> loadedQds.getNumBuckets() == qds.getNumBuckets()
+    >>> loadedQds.getNumBuckets() == qds1.getNumBuckets()
     True
+    >>> inputs = [(0.1, 0.0), (0.4, 1.0), (1.2, 1.3), (1.5, 1.5),
+    ...     (float("nan"), float("nan")), (float("nan"), float("nan"))]
+    >>> df2 = spark.createDataFrame(inputs, ["input1", "input2"])
+    >>> qds2 = QuantileDiscretizer(relativeError=0.01, handleInvalid="error", numBuckets=2,
+    ...     inputCols=["input1", "input2"], outputCols=["output1", "output2"])
+    >>> qds2.getRelativeError()
+    0.01
+    >>> qds2.setHandleInvalid("keep").fit(df2).transform(df2).show()
+    +------+------+-------+-------+
+    |input1|input2|output1|output2|
+    +------+------+-------+-------+
+    |   0.1|   0.0|    0.0|    0.0|
+    |   0.4|   1.0|    1.0|    1.0|
+    |   1.2|   1.3|    1.0|    1.0|
+    |   1.5|   1.5|    1.0|    1.0|
+    |   NaN|   NaN|    2.0|    2.0|
+    |   NaN|   NaN|    2.0|    2.0|
+    +------+------+-------+-------+
+    ...
+    >>> qds3 = QuantileDiscretizer(relativeError=0.01, handleInvalid="error",
+    ...      numBucketsArray=[5, 10], inputCols=["input1", "input2"],
+    ...      outputCols=["output1", "output2"])
+    >>> qds3.setHandleInvalid("skip").fit(df2).transform(df2).show()
+    +------+------+-------+-------+
+    |input1|input2|output1|output2|
+    +------+------+-------+-------+
+    |   0.1|   0.0|    1.0|    1.0|
+    |   0.4|   1.0|    2.0|    2.0|
+    |   1.2|   1.3|    3.0|    3.0|
+    |   1.5|   1.5|    4.0|    4.0|
+    +------+------+-------+-------+
+    ...
 
     .. versionadded:: 2.0.0
     """
@@ -1958,23 +2774,29 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInv
                        "categories) into which data points are grouped. Must be >= 2.",
                        typeConverter=TypeConverters.toInt)
 
-    relativeError = Param(Params._dummy(), "relativeError", "The relative target precision for " +
-                          "the approximate quantile algorithm used to generate buckets. " +
-                          "Must be in the range [0, 1].",
-                          typeConverter=TypeConverters.toFloat)
-
     handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
                           "Options are skip (filter out rows with invalid values), " +
                           "error (throw an error), or keep (keep invalid values in a special " +
-                          "additional bucket).",
+                          "additional bucket). Note that in the multiple columns " +
+                          "case, the invalid handling is applied to all columns. That said " +
+                          "for 'error' it will throw an error if any invalids are found in " +
+                          "any columns, for 'skip' it will skip rows with any invalids in " +
+                          "any columns, etc.",
                           typeConverter=TypeConverters.toString)
+
+    numBucketsArray = Param(Params._dummy(), "numBucketsArray", "Array of number of buckets " +
+                            "(quantiles, or categories) into which data points are grouped. " +
+                            "This is for multiple columns input. If transforming multiple " +
+                            "columns and numBucketsArray is not set, but numBuckets is set, " +
+                            "then numBuckets will be applied across all columns.",
+                            typeConverter=TypeConverters.toListInt)
 
     @keyword_only
     def __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001,
-                 handleInvalid="error"):
+                 handleInvalid="error", numBucketsArray=None, inputCols=None, outputCols=None):
         """
         __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001, \
-                 handleInvalid="error")
+                 handleInvalid="error", numBucketsArray=None, inputCols=None, outputCols=None)
         """
         super(QuantileDiscretizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.QuantileDiscretizer",
@@ -1986,10 +2808,10 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInv
     @keyword_only
     @since("2.0.0")
     def setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001,
-                  handleInvalid="error"):
+                  handleInvalid="error", numBucketsArray=None, inputCols=None, outputCols=None):
         """
         setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001, \
-                  handleInvalid="error")
+                  handleInvalid="error", numBucketsArray=None, inputCols=None, outputCols=None)
         Set the params for the QuantileDiscretizer
         """
         kwargs = self._input_kwargs
@@ -2009,6 +2831,20 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInv
         """
         return self.getOrDefault(self.numBuckets)
 
+    @since("3.0.0")
+    def setNumBucketsArray(self, value):
+        """
+        Sets the value of :py:attr:`numBucketsArray`.
+        """
+        return self._set(numBucketsArray=value)
+
+    @since("3.0.0")
+    def getNumBucketsArray(self):
+        """
+        Gets the value of numBucketsArray or its default value.
+        """
+        return self.getOrDefault(self.numBucketsArray)
+
     @since("2.0.0")
     def setRelativeError(self, value):
         """
@@ -2016,25 +2852,273 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInv
         """
         return self._set(relativeError=value)
 
-    @since("2.0.0")
-    def getRelativeError(self):
+    def setInputCol(self, value):
         """
-        Gets the value of relativeError or its default value.
+        Sets the value of :py:attr:`inputCol`.
         """
-        return self.getOrDefault(self.relativeError)
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
 
     def _create_model(self, java_model):
         """
         Private method to convert the java_model to a Python model.
         """
-        return Bucketizer(splits=list(java_model.getSplits()),
-                          inputCol=self.getInputCol(),
-                          outputCol=self.getOutputCol(),
-                          handleInvalid=self.getHandleInvalid())
+        if (self.isSet(self.inputCol)):
+            return Bucketizer(splits=list(java_model.getSplits()),
+                              inputCol=self.getInputCol(),
+                              outputCol=self.getOutputCol(),
+                              handleInvalid=self.getHandleInvalid())
+        else:
+            splitsArrayList = [list(x) for x in list(java_model.getSplitsArray())]
+            return Bucketizer(splitsArray=splitsArrayList,
+                              inputCols=self.getInputCols(),
+                              outputCols=self.getOutputCols(),
+                              handleInvalid=self.getHandleInvalid())
+
+
+class _RobustScalerParams(HasInputCol, HasOutputCol, HasRelativeError):
+    """
+    Params for :py:class:`RobustScaler` and :py:class:`RobustScalerModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    lower = Param(Params._dummy(), "lower", "Lower quantile to calculate quantile range",
+                  typeConverter=TypeConverters.toFloat)
+    upper = Param(Params._dummy(), "upper", "Upper quantile to calculate quantile range",
+                  typeConverter=TypeConverters.toFloat)
+    withCentering = Param(Params._dummy(), "withCentering", "Whether to center data with median",
+                          typeConverter=TypeConverters.toBoolean)
+    withScaling = Param(Params._dummy(), "withScaling", "Whether to scale the data to "
+                        "quantile range", typeConverter=TypeConverters.toBoolean)
+
+    def __init__(self, *args):
+        super(_RobustScalerParams, self).__init__(*args)
+        self._setDefault(lower=0.25, upper=0.75, withCentering=False, withScaling=True,
+                         relativeError=0.001)
+
+    @since("3.0.0")
+    def getLower(self):
+        """
+        Gets the value of lower or its default value.
+        """
+        return self.getOrDefault(self.lower)
+
+    @since("3.0.0")
+    def getUpper(self):
+        """
+        Gets the value of upper or its default value.
+        """
+        return self.getOrDefault(self.upper)
+
+    @since("3.0.0")
+    def getWithCentering(self):
+        """
+        Gets the value of withCentering or its default value.
+        """
+        return self.getOrDefault(self.withCentering)
+
+    @since("3.0.0")
+    def getWithScaling(self):
+        """
+        Gets the value of withScaling or its default value.
+        """
+        return self.getOrDefault(self.withScaling)
 
 
 @inherit_doc
-@ignore_unicode_prefix
+class RobustScaler(JavaEstimator, _RobustScalerParams, JavaMLReadable, JavaMLWritable):
+    """
+    RobustScaler removes the median and scales the data according to the quantile range.
+    The quantile range is by default IQR (Interquartile Range, quantile range between the
+    1st quartile = 25th quantile and the 3rd quartile = 75th quantile) but can be configured.
+    Centering and scaling happen independently on each feature by computing the relevant
+    statistics on the samples in the training set. Median and quantile range are then
+    stored to be used on later data using the transform method.
+    Note that NaN values are ignored in the computation of medians and ranges.
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> data = [(0, Vectors.dense([0.0, 0.0]),),
+    ...         (1, Vectors.dense([1.0, -1.0]),),
+    ...         (2, Vectors.dense([2.0, -2.0]),),
+    ...         (3, Vectors.dense([3.0, -3.0]),),
+    ...         (4, Vectors.dense([4.0, -4.0]),),]
+    >>> df = spark.createDataFrame(data, ["id", "features"])
+    >>> scaler = RobustScaler()
+    >>> scaler.setInputCol("features")
+    RobustScaler...
+    >>> scaler.setOutputCol("scaled")
+    RobustScaler...
+    >>> model = scaler.fit(df)
+    >>> model.setOutputCol("output")
+    RobustScalerModel...
+    >>> model.median
+    DenseVector([2.0, -2.0])
+    >>> model.range
+    DenseVector([2.0, 2.0])
+    >>> model.transform(df).collect()[1].output
+    DenseVector([0.5, -0.5])
+    >>> scalerPath = temp_path + "/robust-scaler"
+    >>> scaler.save(scalerPath)
+    >>> loadedScaler = RobustScaler.load(scalerPath)
+    >>> loadedScaler.getWithCentering() == scaler.getWithCentering()
+    True
+    >>> loadedScaler.getWithScaling() == scaler.getWithScaling()
+    True
+    >>> modelPath = temp_path + "/robust-scaler-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = RobustScalerModel.load(modelPath)
+    >>> loadedModel.median == model.median
+    True
+    >>> loadedModel.range == model.range
+    True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
+
+    .. versionadded:: 3.0.0
+    """
+
+    @keyword_only
+    def __init__(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True,
+                 inputCol=None, outputCol=None, relativeError=0.001):
+        """
+        __init__(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True, \
+                 inputCol=None, outputCol=None, relativeError=0.001)
+        """
+        super(RobustScaler, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RobustScaler", self.uid)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("3.0.0")
+    def setParams(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True,
+                  inputCol=None, outputCol=None, relativeError=0.001):
+        """
+        setParams(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True, \
+                  inputCol=None, outputCol=None, relativeError=0.001)
+        Sets params for this RobustScaler.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("3.0.0")
+    def setLower(self, value):
+        """
+        Sets the value of :py:attr:`lower`.
+        """
+        return self._set(lower=value)
+
+    @since("3.0.0")
+    def setUpper(self, value):
+        """
+        Sets the value of :py:attr:`upper`.
+        """
+        return self._set(upper=value)
+
+    @since("3.0.0")
+    def setWithCentering(self, value):
+        """
+        Sets the value of :py:attr:`withCentering`.
+        """
+        return self._set(withCentering=value)
+
+    @since("3.0.0")
+    def setWithScaling(self, value):
+        """
+        Sets the value of :py:attr:`withScaling`.
+        """
+        return self._set(withScaling=value)
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setRelativeError(self, value):
+        """
+        Sets the value of :py:attr:`relativeError`.
+        """
+        return self._set(relativeError=value)
+
+    def _create_model(self, java_model):
+        return RobustScalerModel(java_model)
+
+
+class RobustScalerModel(JavaModel, _RobustScalerParams, JavaMLReadable, JavaMLWritable):
+    """
+    Model fitted by :py:class:`RobustScaler`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @property
+    @since("3.0.0")
+    def median(self):
+        """
+        Median of the RobustScalerModel.
+        """
+        return self._call_java("median")
+
+    @property
+    @since("3.0.0")
+    def range(self):
+        """
+        Quantile range of the RobustScalerModel.
+        """
+        return self._call_java("range")
+
+
+@inherit_doc
 class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     A regex based tokenizer that extracts tokens either by using the
@@ -2045,17 +3129,21 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
     It returns an array of strings that can be empty.
 
     >>> df = spark.createDataFrame([("A B  c",)], ["text"])
-    >>> reTokenizer = RegexTokenizer(inputCol="text", outputCol="words")
+    >>> reTokenizer = RegexTokenizer()
+    >>> reTokenizer.setInputCol("text")
+    RegexTokenizer...
+    >>> reTokenizer.setOutputCol("words")
+    RegexTokenizer...
     >>> reTokenizer.transform(df).head()
-    Row(text=u'A B  c', words=[u'a', u'b', u'c'])
+    Row(text='A B  c', words=['a', 'b', 'c'])
     >>> # Change a parameter.
     >>> reTokenizer.setParams(outputCol="tokens").transform(df).head()
-    Row(text=u'A B  c', tokens=[u'a', u'b', u'c'])
+    Row(text='A B  c', tokens=['a', 'b', 'c'])
     >>> # Temporarily modify a parameter.
     >>> reTokenizer.transform(df, {reTokenizer.outputCol: "words"}).head()
-    Row(text=u'A B  c', words=[u'a', u'b', u'c'])
+    Row(text='A B  c', words=['a', 'b', 'c'])
     >>> reTokenizer.transform(df).head()
-    Row(text=u'A B  c', tokens=[u'a', u'b', u'c'])
+    Row(text='A B  c', tokens=['a', 'b', 'c'])
     >>> # Must use keyword arguments to specify params.
     >>> reTokenizer.setParams("text")
     Traceback (most recent call last):
@@ -2067,6 +3155,8 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
     >>> loadedReTokenizer.getMinTokenLength() == reTokenizer.getMinTokenLength()
     True
     >>> loadedReTokenizer.getGaps() == reTokenizer.getGaps()
+    True
+    >>> loadedReTokenizer.transform(df).take(1) == reTokenizer.transform(df).take(1)
     True
 
     .. versionadded:: 1.4.0
@@ -2162,6 +3252,18 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
         """
         return self.getOrDefault(self.toLowercase)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
 
 @inherit_doc
 class SQLTransformer(JavaTransformer, JavaMLReadable, JavaMLWritable):
@@ -2179,6 +3281,8 @@ class SQLTransformer(JavaTransformer, JavaMLReadable, JavaMLWritable):
     >>> sqlTrans.save(sqlTransformerPath)
     >>> loadedSqlTrans = SQLTransformer.load(sqlTransformerPath)
     >>> loadedSqlTrans.getStatement() == sqlTrans.getStatement()
+    True
+    >>> loadedSqlTrans.transform(df).take(1) == sqlTrans.transform(df).take(1)
     True
 
     .. versionadded:: 1.6.0
@@ -2222,8 +3326,39 @@ class SQLTransformer(JavaTransformer, JavaMLReadable, JavaMLWritable):
         return self.getOrDefault(self.statement)
 
 
+class _StandardScalerParams(HasInputCol, HasOutputCol):
+    """
+    Params for :py:class:`StandardScaler` and :py:class:`StandardScalerModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    withMean = Param(Params._dummy(), "withMean", "Center data with mean",
+                     typeConverter=TypeConverters.toBoolean)
+    withStd = Param(Params._dummy(), "withStd", "Scale to unit standard deviation",
+                    typeConverter=TypeConverters.toBoolean)
+
+    def __init__(self, *args):
+        super(_StandardScalerParams, self).__init__(*args)
+        self._setDefault(withMean=False, withStd=True)
+
+    @since("1.4.0")
+    def getWithMean(self):
+        """
+        Gets the value of withMean or its default value.
+        """
+        return self.getOrDefault(self.withMean)
+
+    @since("1.4.0")
+    def getWithStd(self):
+        """
+        Gets the value of withStd or its default value.
+        """
+        return self.getOrDefault(self.withStd)
+
+
 @inherit_doc
-class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class StandardScaler(JavaEstimator, _StandardScalerParams, JavaMLReadable, JavaMLWritable):
     """
     Standardizes features by removing the mean and scaling to unit variance using column summary
     statistics on the samples in the training set.
@@ -2234,13 +3369,21 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, J
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
-    >>> standardScaler = StandardScaler(inputCol="a", outputCol="scaled")
+    >>> standardScaler = StandardScaler()
+    >>> standardScaler.setInputCol("a")
+    StandardScaler...
+    >>> standardScaler.setOutputCol("scaled")
+    StandardScaler...
     >>> model = standardScaler.fit(df)
+    >>> model.getInputCol()
+    'a'
+    >>> model.setOutputCol("output")
+    StandardScalerModel...
     >>> model.mean
     DenseVector([1.0])
     >>> model.std
     DenseVector([1.4142])
-    >>> model.transform(df).collect()[1].scaled
+    >>> model.transform(df).collect()[1].output
     DenseVector([1.4142])
     >>> standardScalerPath = temp_path + "/standard-scaler"
     >>> standardScaler.save(standardScalerPath)
@@ -2256,14 +3399,11 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, J
     True
     >>> loadedModel.mean == model.mean
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
 
     .. versionadded:: 1.4.0
     """
-
-    withMean = Param(Params._dummy(), "withMean", "Center data with mean",
-                     typeConverter=TypeConverters.toBoolean)
-    withStd = Param(Params._dummy(), "withStd", "Scale to unit standard deviation",
-                    typeConverter=TypeConverters.toBoolean)
 
     @keyword_only
     def __init__(self, withMean=False, withStd=True, inputCol=None, outputCol=None):
@@ -2272,7 +3412,6 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, J
         """
         super(StandardScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StandardScaler", self.uid)
-        self._setDefault(withMean=False, withStd=True)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -2294,36 +3433,46 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, J
         return self._set(withMean=value)
 
     @since("1.4.0")
-    def getWithMean(self):
-        """
-        Gets the value of withMean or its default value.
-        """
-        return self.getOrDefault(self.withMean)
-
-    @since("1.4.0")
     def setWithStd(self, value):
         """
         Sets the value of :py:attr:`withStd`.
         """
         return self._set(withStd=value)
 
-    @since("1.4.0")
-    def getWithStd(self):
+    def setInputCol(self, value):
         """
-        Gets the value of withStd or its default value.
+        Sets the value of :py:attr:`inputCol`.
         """
-        return self.getOrDefault(self.withStd)
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     def _create_model(self, java_model):
         return StandardScalerModel(java_model)
 
 
-class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class StandardScalerModel(JavaModel, _StandardScalerParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`StandardScaler`.
 
     .. versionadded:: 1.4.0
     """
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @property
     @since("2.0.0")
@@ -2342,15 +3491,19 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
         return self._call_java("mean")
 
 
-class _StringIndexerParams(JavaParams, HasHandleInvalid, HasInputCol, HasOutputCol):
+class _StringIndexerParams(JavaParams, HasHandleInvalid, HasInputCol, HasOutputCol,
+                           HasInputCols, HasOutputCols):
     """
-    Params for :py:attr:`StringIndexer` and :py:attr:`StringIndexerModel`.
+    Params for :py:class:`StringIndexer` and :py:class:`StringIndexerModel`.
     """
 
     stringOrderType = Param(Params._dummy(), "stringOrderType",
                             "How to order labels of string column. The first label after " +
                             "ordering is assigned an index of 0. Supported options: " +
-                            "frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc.",
+                            "frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc. " +
+                            "Default is frequencyDesc. In case of equal frequency when " +
+                            "under frequencyDesc/Asc, the strings are further sorted " +
+                            "alphabetically",
                             typeConverter=TypeConverters.toString)
 
     handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid data (unseen " +
@@ -2381,9 +3534,13 @@ class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLW
     so the most frequent label gets index 0. The ordering behavior is controlled by
     setting :py:attr:`stringOrderType`. Its default value is 'frequencyDesc'.
 
-    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed", handleInvalid="error",
+    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed",
     ...     stringOrderType="frequencyDesc")
+    >>> stringIndexer.setHandleInvalid("error")
+    StringIndexer...
     >>> model = stringIndexer.fit(stringIndDf)
+    >>> model.setHandleInvalid("error")
+    StringIndexerModel...
     >>> td = model.transform(stringIndDf)
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
     ...     key=lambda x: x[0])
@@ -2408,6 +3565,8 @@ class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLW
     >>> loadedInverter = IndexToString.load(indexToStringPath)
     >>> loadedInverter.getLabels() == inverter.getLabels()
     True
+    >>> loadedModel.transform(stringIndDf).take(1) == model.transform(stringIndDf).take(1)
+    True
     >>> stringIndexer.getStringOrderType()
     'frequencyDesc'
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed", handleInvalid="error",
@@ -2423,16 +3582,37 @@ class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLW
     >>> sorted(set([(i[0], i[1]) for i in result.select(result.id, result.indexed).collect()]),
     ...     key=lambda x: x[0])
     [(0, 0.0), (1, 1.0), (2, 2.0), (3, 0.0), (4, 0.0), (5, 2.0)]
+    >>> testData = sc.parallelize([Row(id=0, label1="a", label2="e"),
+    ...                            Row(id=1, label1="b", label2="f"),
+    ...                            Row(id=2, label1="c", label2="e"),
+    ...                            Row(id=3, label1="a", label2="f"),
+    ...                            Row(id=4, label1="a", label2="f"),
+    ...                            Row(id=5, label1="c", label2="f")], 3)
+    >>> multiRowDf = spark.createDataFrame(testData)
+    >>> inputs = ["label1", "label2"]
+    >>> outputs = ["index1", "index2"]
+    >>> stringIndexer = StringIndexer(inputCols=inputs, outputCols=outputs)
+    >>> model = stringIndexer.fit(multiRowDf)
+    >>> result = model.transform(multiRowDf)
+    >>> sorted(set([(i[0], i[1], i[2]) for i in result.select(result.id, result.index1,
+    ...     result.index2).collect()]), key=lambda x: x[0])
+    [(0, 0.0, 1.0), (1, 2.0, 0.0), (2, 1.0, 1.0), (3, 0.0, 0.0), (4, 0.0, 0.0), (5, 1.0, 0.0)]
+    >>> fromlabelsModel = StringIndexerModel.from_arrays_of_labels([["a", "b", "c"], ["e", "f"]],
+    ...     inputCols=inputs, outputCols=outputs)
+    >>> result = fromlabelsModel.transform(multiRowDf)
+    >>> sorted(set([(i[0], i[1], i[2]) for i in result.select(result.id, result.index1,
+    ...     result.index2).collect()]), key=lambda x: x[0])
+    [(0, 0.0, 0.0), (1, 1.0, 1.0), (2, 2.0, 0.0), (3, 0.0, 1.0), (4, 0.0, 1.0), (5, 2.0, 1.0)]
 
     .. versionadded:: 1.4.0
     """
 
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, handleInvalid="error",
-                 stringOrderType="frequencyDesc"):
+    def __init__(self, inputCol=None, outputCol=None, inputCols=None, outputCols=None,
+                 handleInvalid="error", stringOrderType="frequencyDesc"):
         """
-        __init__(self, inputCol=None, outputCol=None, handleInvalid="error", \
-                 stringOrderType="frequencyDesc")
+        __init__(self, inputCol=None, outputCol=None, inputCols=None, outputCols=None, \
+                 handleInvalid="error", stringOrderType="frequencyDesc")
         """
         super(StringIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexer", self.uid)
@@ -2441,11 +3621,11 @@ class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLW
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, inputCol=None, outputCol=None, handleInvalid="error",
-                  stringOrderType="frequencyDesc"):
+    def setParams(self, inputCol=None, outputCol=None, inputCols=None, outputCols=None,
+                  handleInvalid="error", stringOrderType="frequencyDesc"):
         """
-        setParams(self, inputCol=None, outputCol=None, handleInvalid="error", \
-                  stringOrderType="frequencyDesc")
+        setParams(self, inputCol=None, outputCol=None, inputCols=None, outputCols=None, \
+                  handleInvalid="error", stringOrderType="frequencyDesc")
         Sets params for this StringIndexer.
         """
         kwargs = self._input_kwargs
@@ -2461,6 +3641,38 @@ class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLW
         """
         return self._set(stringOrderType=value)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
 
 class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaMLWritable):
     """
@@ -2468,6 +3680,39 @@ class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaML
 
     .. versionadded:: 1.4.0
     """
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    @since("2.4.0")
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
 
     @classmethod
     @since("2.4.0")
@@ -2488,6 +3733,26 @@ class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaML
             model.setHandleInvalid(handleInvalid)
         return model
 
+    @classmethod
+    @since("3.0.0")
+    def from_arrays_of_labels(cls, arrayOfLabels, inputCols, outputCols=None,
+                              handleInvalid=None):
+        """
+        Construct the model directly from an array of array of label strings,
+        requires an active SparkContext.
+        """
+        sc = SparkContext._active_spark_context
+        java_class = sc._gateway.jvm.java.lang.String
+        jlabels = StringIndexerModel._new_java_array(arrayOfLabels, java_class)
+        model = StringIndexerModel._create_from_java_class(
+            "org.apache.spark.ml.feature.StringIndexerModel", jlabels)
+        model.setInputCols(inputCols)
+        if outputCols is not None:
+            model.setOutputCols(outputCols)
+        if handleInvalid is not None:
+            model.setHandleInvalid(handleInvalid)
+        return model
+
     @property
     @since("1.5.0")
     def labels(self):
@@ -2495,13 +3760,6 @@ class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaML
         Ordered list of labels, corresponding to indices to be assigned.
         """
         return self._call_java("labels")
-
-    @since("2.4.0")
-    def setHandleInvalid(self, value):
-        """
-        Sets the value of :py:attr:`handleInvalid`.
-        """
-        return self._set(handleInvalid=value)
 
 
 @inherit_doc
@@ -2511,7 +3769,7 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
     corresponding string values.
     The index-string mapping is either from the ML attributes of the input column,
     or from user-supplied labels (which take precedence over ML attributes).
-    See L{StringIndexer} for converting strings into indices.
+    See :class:`StringIndexer` for converting strings into indices.
 
     .. versionadded:: 1.6.0
     """
@@ -2556,15 +3814,35 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
         """
         return self.getOrDefault(self.labels)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
 
-class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+
+class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOutputCols,
+                       JavaMLReadable, JavaMLWritable):
     """
     A feature transformer that filters out stop words from input.
+    Since 3.0.0, :py:class:`StopWordsRemover` can filter out multiple columns at once by setting
+    the :py:attr:`inputCols` parameter. Note that when both the :py:attr:`inputCol` and
+    :py:attr:`inputCols` parameters are set, an Exception will be thrown.
 
     .. note:: null values from input array are preserved unless adding null to stopWords explicitly.
 
     >>> df = spark.createDataFrame([(["a", "b", "c"],)], ["text"])
-    >>> remover = StopWordsRemover(inputCol="text", outputCol="words", stopWords=["b"])
+    >>> remover = StopWordsRemover(stopWords=["b"])
+    >>> remover.setInputCol("text")
+    StopWordsRemover...
+    >>> remover.setOutputCol("words")
+    StopWordsRemover...
     >>> remover.transform(df).head().words == ['a', 'c']
     True
     >>> stopWordsRemoverPath = temp_path + "/stopwords-remover"
@@ -2574,6 +3852,19 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
     True
     >>> loadedRemover.getCaseSensitive() == remover.getCaseSensitive()
     True
+    >>> loadedRemover.transform(df).take(1) == remover.transform(df).take(1)
+    True
+    >>> df2 = spark.createDataFrame([(["a", "b", "c"], ["a", "b"])], ["text1", "text2"])
+    >>> remover2 = StopWordsRemover(stopWords=["b"])
+    >>> remover2.setInputCols(["text1", "text2"]).setOutputCols(["words1", "words2"])
+    StopWordsRemover...
+    >>> remover2.transform(df2).show()
+    +---------+------+------+------+
+    |    text1| text2|words1|words2|
+    +---------+------+------+------+
+    |[a, b, c]|[a, b]|[a, c]|   [a]|
+    +---------+------+------+------+
+    ...
 
     .. versionadded:: 1.6.0
     """
@@ -2587,10 +3878,10 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
 
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False,
-                 locale=None):
+                 locale=None, inputCols=None, outputCols=None):
         """
         __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, \
-        locale=None)
+                 locale=None, inputCols=None, outputCols=None)
         """
         super(StopWordsRemover, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
@@ -2603,10 +3894,10 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
     @keyword_only
     @since("1.6.0")
     def setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False,
-                  locale=None):
+                  locale=None, inputCols=None, outputCols=None):
         """
         setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, \
-        locale=None)
+                  locale=None, inputCols=None, outputCols=None)
         Sets params for this StopWordRemover.
         """
         kwargs = self._input_kwargs
@@ -2654,6 +3945,32 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
         """
         return self.getOrDefault(self.locale)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
     @staticmethod
     @since("2.0.0")
     def loadDefaultStopWords(language):
@@ -2667,24 +3984,25 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
 
 
 @inherit_doc
-@ignore_unicode_prefix
 class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     A tokenizer that converts the input string to lowercase and then
     splits it by white spaces.
 
     >>> df = spark.createDataFrame([("a b c",)], ["text"])
-    >>> tokenizer = Tokenizer(inputCol="text", outputCol="words")
+    >>> tokenizer = Tokenizer(outputCol="words")
+    >>> tokenizer.setInputCol("text")
+    Tokenizer...
     >>> tokenizer.transform(df).head()
-    Row(text=u'a b c', words=[u'a', u'b', u'c'])
+    Row(text='a b c', words=['a', 'b', 'c'])
     >>> # Change a parameter.
     >>> tokenizer.setParams(outputCol="tokens").transform(df).head()
-    Row(text=u'a b c', tokens=[u'a', u'b', u'c'])
+    Row(text='a b c', tokens=['a', 'b', 'c'])
     >>> # Temporarily modify a parameter.
     >>> tokenizer.transform(df, {tokenizer.outputCol: "words"}).head()
-    Row(text=u'a b c', words=[u'a', u'b', u'c'])
+    Row(text='a b c', words=['a', 'b', 'c'])
     >>> tokenizer.transform(df).head()
-    Row(text=u'a b c', tokens=[u'a', u'b', u'c'])
+    Row(text='a b c', tokens=['a', 'b', 'c'])
     >>> # Must use keyword arguments to specify params.
     >>> tokenizer.setParams("text")
     Traceback (most recent call last):
@@ -2719,6 +4037,18 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
 
 @inherit_doc
 class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, HasHandleInvalid, JavaMLReadable,
@@ -2727,7 +4057,9 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, HasHandleInva
     A feature transformer that merges multiple columns into a vector column.
 
     >>> df = spark.createDataFrame([(1, 0, 3)], ["a", "b", "c"])
-    >>> vecAssembler = VectorAssembler(inputCols=["a", "b", "c"], outputCol="features")
+    >>> vecAssembler = VectorAssembler(outputCol="features")
+    >>> vecAssembler.setInputCols(["a", "b", "c"])
+    VectorAssembler...
     >>> vecAssembler.transform(df).head().features
     DenseVector([1.0, 0.0, 3.0])
     >>> vecAssembler.setParams(outputCol="freqs").transform(df).head().freqs
@@ -2795,10 +4127,58 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, HasHandleInva
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
+
+class _VectorIndexerParams(HasInputCol, HasOutputCol, HasHandleInvalid):
+    """
+    Params for :py:class:`VectorIndexer` and :py:class:`VectorIndexerModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    maxCategories = Param(Params._dummy(), "maxCategories",
+                          "Threshold for the number of values a categorical feature can take " +
+                          "(>= 2). If a feature is found to have > maxCategories values, then " +
+                          "it is declared continuous.", typeConverter=TypeConverters.toInt)
+
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "How to handle invalid data " +
+                          "(unseen labels or NULL values). Options are 'skip' (filter out " +
+                          "rows with invalid data), 'error' (throw an error), or 'keep' (put " +
+                          "invalid data in a special additional bucket, at index of the number " +
+                          "of categories of the feature).",
+                          typeConverter=TypeConverters.toString)
+
+    def __init__(self, *args):
+        super(_VectorIndexerParams, self).__init__(*args)
+        self._setDefault(maxCategories=20, handleInvalid="error")
+
+    @since("1.4.0")
+    def getMaxCategories(self):
+        """
+        Gets the value of maxCategories or its default value.
+        """
+        return self.getOrDefault(self.maxCategories)
+
 
 @inherit_doc
-class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, JavaMLReadable,
-                    JavaMLWritable):
+class VectorIndexer(JavaEstimator, _VectorIndexerParams, JavaMLReadable, JavaMLWritable):
     """
     Class for indexing categorical feature columns in a dataset of `Vector`.
 
@@ -2837,9 +4217,15 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([-1.0, 0.0]),),
     ...     (Vectors.dense([0.0, 1.0]),), (Vectors.dense([0.0, 2.0]),)], ["a"])
-    >>> indexer = VectorIndexer(maxCategories=2, inputCol="a", outputCol="indexed")
+    >>> indexer = VectorIndexer(maxCategories=2, inputCol="a")
+    >>> indexer.setOutputCol("indexed")
+    VectorIndexer...
     >>> model = indexer.fit(df)
-    >>> model.transform(df).head().indexed
+    >>> indexer.getHandleInvalid()
+    'error'
+    >>> model.setOutputCol("output")
+    VectorIndexerModel...
+    >>> model.transform(df).head().output
     DenseVector([1.0, 0.0])
     >>> model.numFeatures
     2
@@ -2863,6 +4249,8 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     True
     >>> loadedModel.categoryMaps == model.categoryMaps
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
     >>> dfWithInvalid = spark.createDataFrame([(Vectors.dense([3.0, 1.0]),)], ["a"])
     >>> indexer.getHandleInvalid()
     'error'
@@ -2876,18 +4264,6 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     .. versionadded:: 1.4.0
     """
 
-    maxCategories = Param(Params._dummy(), "maxCategories",
-                          "Threshold for the number of values a categorical feature can take " +
-                          "(>= 2). If a feature is found to have > maxCategories values, then " +
-                          "it is declared continuous.", typeConverter=TypeConverters.toInt)
-
-    handleInvalid = Param(Params._dummy(), "handleInvalid", "How to handle invalid data " +
-                          "(unseen labels or NULL values). Options are 'skip' (filter out " +
-                          "rows with invalid data), 'error' (throw an error), or 'keep' (put " +
-                          "invalid data in a special additional bucket, at index of the number " +
-                          "of categories of the feature).",
-                          typeConverter=TypeConverters.toString)
-
     @keyword_only
     def __init__(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error"):
         """
@@ -2895,7 +4271,6 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
         """
         super(VectorIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorIndexer", self.uid)
-        self._setDefault(maxCategories=20, handleInvalid="error")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -2916,18 +4291,29 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
         """
         return self._set(maxCategories=value)
 
-    @since("1.4.0")
-    def getMaxCategories(self):
+    def setInputCol(self, value):
         """
-        Gets the value of maxCategories or its default value.
+        Sets the value of :py:attr:`inputCol`.
         """
-        return self.getOrDefault(self.maxCategories)
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
 
     def _create_model(self, java_model):
         return VectorIndexerModel(java_model)
 
 
-class VectorIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class VectorIndexerModel(JavaModel, _VectorIndexerParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`VectorIndexer`.
 
@@ -2943,6 +4329,20 @@ class VectorIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
 
     .. versionadded:: 1.4.0
     """
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @property
     @since("1.4.0")
@@ -2981,7 +4381,9 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, J
     ...     (Vectors.dense([-2.0, 2.3, 0.0, 0.0, 1.0]),),
     ...     (Vectors.dense([0.0, 0.0, 0.0, 0.0, 0.0]),),
     ...     (Vectors.dense([0.6, -1.1, -3.0, 4.5, 3.3]),)], ["features"])
-    >>> vs = VectorSlicer(inputCol="features", outputCol="sliced", indices=[1, 4])
+    >>> vs = VectorSlicer(outputCol="sliced", indices=[1, 4])
+    >>> vs.setInputCol("features")
+    VectorSlicer...
     >>> vs.transform(df).head().sliced
     DenseVector([2.3, 1.0])
     >>> vectorSlicerPath = temp_path + "/vector-slicer"
@@ -2990,6 +4392,8 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, J
     >>> loadedVs.getIndices() == vs.getIndices()
     True
     >>> loadedVs.getNames() == vs.getNames()
+    True
+    >>> loadedVs.transform(df).take(1) == vs.transform(df).take(1)
     True
 
     .. versionadded:: 1.6.0
@@ -3052,59 +4456,24 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, J
         """
         return self.getOrDefault(self.names)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
 
-@inherit_doc
-@ignore_unicode_prefix
-class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCol,
-               JavaMLReadable, JavaMLWritable):
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+
+class _Word2VecParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCol):
     """
-    Word2Vec trains a model of `Map(String, Vector)`, i.e. transforms a word into a code for further
-    natural language processing or machine learning process.
+    Params for :py:class:`Word2Vec` and :py:class:`Word2VecModel`.
 
-    >>> sent = ("a b " * 100 + "a c " * 10).split(" ")
-    >>> doc = spark.createDataFrame([(sent,), (sent,)], ["sentence"])
-    >>> word2Vec = Word2Vec(vectorSize=5, seed=42, inputCol="sentence", outputCol="model")
-    >>> model = word2Vec.fit(doc)
-    >>> model.getVectors().show()
-    +----+--------------------+
-    |word|              vector|
-    +----+--------------------+
-    |   a|[0.09461779892444...|
-    |   b|[1.15474212169647...|
-    |   c|[-0.3794820010662...|
-    +----+--------------------+
-    ...
-    >>> model.findSynonymsArray("a", 2)
-    [(u'b', 0.25053444504737854), (u'c', -0.6980510950088501)]
-    >>> from pyspark.sql.functions import format_number as fmt
-    >>> model.findSynonyms("a", 2).select("word", fmt("similarity", 5).alias("similarity")).show()
-    +----+----------+
-    |word|similarity|
-    +----+----------+
-    |   b|   0.25053|
-    |   c|  -0.69805|
-    +----+----------+
-    ...
-    >>> model.transform(doc).head().model
-    DenseVector([0.5524, -0.4995, -0.3599, 0.0241, 0.3461])
-    >>> word2vecPath = temp_path + "/word2vec"
-    >>> word2Vec.save(word2vecPath)
-    >>> loadedWord2Vec = Word2Vec.load(word2vecPath)
-    >>> loadedWord2Vec.getVectorSize() == word2Vec.getVectorSize()
-    True
-    >>> loadedWord2Vec.getNumPartitions() == word2Vec.getNumPartitions()
-    True
-    >>> loadedWord2Vec.getMinCount() == word2Vec.getMinCount()
-    True
-    >>> modelPath = temp_path + "/word2vec-model"
-    >>> model.save(modelPath)
-    >>> loadedModel = Word2VecModel.load(modelPath)
-    >>> loadedModel.getVectors().first().word == model.getVectors().first().word
-    True
-    >>> loadedModel.getVectors().first().vector == model.getVectors().first().vector
-    True
-
-    .. versionadded:: 1.4.0
+    .. versionadded:: 3.0.0
     """
 
     vectorSize = Param(Params._dummy(), "vectorSize",
@@ -3125,6 +4494,110 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
                               "be divided into chunks up to the size.",
                               typeConverter=TypeConverters.toInt)
 
+    def __init__(self, *args):
+        super(_Word2VecParams, self).__init__(*args)
+        self._setDefault(vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
+                         windowSize=5, maxSentenceLength=1000)
+
+    @since("1.4.0")
+    def getVectorSize(self):
+        """
+        Gets the value of vectorSize or its default value.
+        """
+        return self.getOrDefault(self.vectorSize)
+
+    @since("1.4.0")
+    def getNumPartitions(self):
+        """
+        Gets the value of numPartitions or its default value.
+        """
+        return self.getOrDefault(self.numPartitions)
+
+    @since("1.4.0")
+    def getMinCount(self):
+        """
+        Gets the value of minCount or its default value.
+        """
+        return self.getOrDefault(self.minCount)
+
+    @since("2.0.0")
+    def getWindowSize(self):
+        """
+        Gets the value of windowSize or its default value.
+        """
+        return self.getOrDefault(self.windowSize)
+
+    @since("2.0.0")
+    def getMaxSentenceLength(self):
+        """
+        Gets the value of maxSentenceLength or its default value.
+        """
+        return self.getOrDefault(self.maxSentenceLength)
+
+
+@inherit_doc
+class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
+    """
+    Word2Vec trains a model of `Map(String, Vector)`, i.e. transforms a word into a code for further
+    natural language processing or machine learning process.
+
+    >>> sent = ("a b " * 100 + "a c " * 10).split(" ")
+    >>> doc = spark.createDataFrame([(sent,), (sent,)], ["sentence"])
+    >>> word2Vec = Word2Vec(vectorSize=5, seed=42, inputCol="sentence", outputCol="model")
+    >>> word2Vec.setMaxIter(10)
+    Word2Vec...
+    >>> word2Vec.getMaxIter()
+    10
+    >>> word2Vec.clear(word2Vec.maxIter)
+    >>> model = word2Vec.fit(doc)
+    >>> model.getMinCount()
+    5
+    >>> model.setInputCol("sentence")
+    Word2VecModel...
+    >>> model.getVectors().show()
+    +----+--------------------+
+    |word|              vector|
+    +----+--------------------+
+    |   a|[0.09511678665876...|
+    |   b|[-1.2028766870498...|
+    |   c|[0.30153277516365...|
+    +----+--------------------+
+    ...
+    >>> model.findSynonymsArray("a", 2)
+    [('b', 0.015859870240092278), ('c', -0.5680795907974243)]
+    >>> from pyspark.sql.functions import format_number as fmt
+    >>> model.findSynonyms("a", 2).select("word", fmt("similarity", 5).alias("similarity")).show()
+    +----+----------+
+    |word|similarity|
+    +----+----------+
+    |   b|   0.01586|
+    |   c|  -0.56808|
+    +----+----------+
+    ...
+    >>> model.transform(doc).head().model
+    DenseVector([-0.4833, 0.1855, -0.273, -0.0509, -0.4769])
+    >>> word2vecPath = temp_path + "/word2vec"
+    >>> word2Vec.save(word2vecPath)
+    >>> loadedWord2Vec = Word2Vec.load(word2vecPath)
+    >>> loadedWord2Vec.getVectorSize() == word2Vec.getVectorSize()
+    True
+    >>> loadedWord2Vec.getNumPartitions() == word2Vec.getNumPartitions()
+    True
+    >>> loadedWord2Vec.getMinCount() == word2Vec.getMinCount()
+    True
+    >>> modelPath = temp_path + "/word2vec-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = Word2VecModel.load(modelPath)
+    >>> loadedModel.getVectors().first().word == model.getVectors().first().word
+    True
+    >>> loadedModel.getVectors().first().vector == model.getVectors().first().vector
+    True
+    >>> loadedModel.transform(doc).take(1) == model.transform(doc).take(1)
+    True
+
+    .. versionadded:: 1.4.0
+    """
+
     @keyword_only
     def __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
                  seed=None, inputCol=None, outputCol=None, windowSize=5, maxSentenceLength=1000):
@@ -3134,8 +4607,6 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         """
         super(Word2Vec, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Word2Vec", self.uid)
-        self._setDefault(vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
-                         windowSize=5, maxSentenceLength=1000)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -3159,13 +4630,6 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         return self._set(vectorSize=value)
 
     @since("1.4.0")
-    def getVectorSize(self):
-        """
-        Gets the value of vectorSize or its default value.
-        """
-        return self.getOrDefault(self.vectorSize)
-
-    @since("1.4.0")
     def setNumPartitions(self, value):
         """
         Sets the value of :py:attr:`numPartitions`.
@@ -3173,25 +4637,11 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         return self._set(numPartitions=value)
 
     @since("1.4.0")
-    def getNumPartitions(self):
-        """
-        Gets the value of numPartitions or its default value.
-        """
-        return self.getOrDefault(self.numPartitions)
-
-    @since("1.4.0")
     def setMinCount(self, value):
         """
         Sets the value of :py:attr:`minCount`.
         """
         return self._set(minCount=value)
-
-    @since("1.4.0")
-    def getMinCount(self):
-        """
-        Gets the value of minCount or its default value.
-        """
-        return self.getOrDefault(self.minCount)
 
     @since("2.0.0")
     def setWindowSize(self, value):
@@ -3201,31 +4651,48 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         return self._set(windowSize=value)
 
     @since("2.0.0")
-    def getWindowSize(self):
-        """
-        Gets the value of windowSize or its default value.
-        """
-        return self.getOrDefault(self.windowSize)
-
-    @since("2.0.0")
     def setMaxSentenceLength(self, value):
         """
         Sets the value of :py:attr:`maxSentenceLength`.
         """
         return self._set(maxSentenceLength=value)
 
-    @since("2.0.0")
-    def getMaxSentenceLength(self):
+    def setMaxIter(self, value):
         """
-        Gets the value of maxSentenceLength or its default value.
+        Sets the value of :py:attr:`maxIter`.
         """
-        return self.getOrDefault(self.maxSentenceLength)
+        return self._set(maxIter=value)
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("1.4.0")
+    def setStepSize(self, value):
+        """
+        Sets the value of :py:attr:`stepSize`.
+        """
+        return self._set(stepSize=value)
 
     def _create_model(self, java_model):
         return Word2VecModel(java_model)
 
 
-class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`Word2Vec`.
 
@@ -3240,6 +4707,18 @@ class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
         """
         return self._call_java("getVectors")
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
     @since("1.5.0")
     def findSynonyms(self, word, num):
         """
@@ -3248,7 +4727,7 @@ class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
         Returns a dataframe with two fields word and similarity (which
         gives the cosine similarity).
         """
-        if not isinstance(word, basestring):
+        if not isinstance(word, str):
             word = _convert_to_vector(word)
         return self._call_java("findSynonyms", word, num)
 
@@ -3260,14 +4739,32 @@ class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
         Returns an array with two fields word and similarity (which
         gives the cosine similarity).
         """
-        if not isinstance(word, basestring):
+        if not isinstance(word, str):
             word = _convert_to_vector(word)
         tuples = self._java_obj.findSynonymsArray(word, num)
         return list(map(lambda st: (st._1(), st._2()), list(tuples)))
 
 
+class _PCAParams(HasInputCol, HasOutputCol):
+    """
+    Params for :py:class:`PCA` and :py:class:`PCAModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    k = Param(Params._dummy(), "k", "the number of principal components",
+              typeConverter=TypeConverters.toInt)
+
+    @since("1.5.0")
+    def getK(self):
+        """
+        Gets the value of k or its default value.
+        """
+        return self.getOrDefault(self.k)
+
+
 @inherit_doc
-class PCA(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class PCA(JavaEstimator, _PCAParams, JavaMLReadable, JavaMLWritable):
     """
     PCA trains a model to project vectors to a lower dimensional space of the
     top :py:attr:`k` principal components.
@@ -3277,9 +4774,15 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
     ...     (Vectors.dense([2.0, 0.0, 3.0, 4.0, 5.0]),),
     ...     (Vectors.dense([4.0, 0.0, 0.0, 6.0, 7.0]),)]
     >>> df = spark.createDataFrame(data,["features"])
-    >>> pca = PCA(k=2, inputCol="features", outputCol="pca_features")
+    >>> pca = PCA(k=2, inputCol="features")
+    >>> pca.setOutputCol("pca_features")
+    PCA...
     >>> model = pca.fit(df)
-    >>> model.transform(df).collect()[0].pca_features
+    >>> model.getK()
+    2
+    >>> model.setOutputCol("output")
+    PCAModel...
+    >>> model.transform(df).collect()[0].output
     DenseVector([1.648..., -4.013...])
     >>> model.explainedVariance
     DenseVector([0.794..., 0.205...])
@@ -3295,12 +4798,11 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
     True
     >>> loadedModel.explainedVariance == model.explainedVariance
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
 
     .. versionadded:: 1.5.0
     """
-
-    k = Param(Params._dummy(), "k", "the number of principal components",
-              typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, k=None, inputCol=None, outputCol=None):
@@ -3329,23 +4831,42 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
         """
         return self._set(k=value)
 
-    @since("1.5.0")
-    def getK(self):
+    def setInputCol(self, value):
         """
-        Gets the value of k or its default value.
+        Sets the value of :py:attr:`inputCol`.
         """
-        return self.getOrDefault(self.k)
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     def _create_model(self, java_model):
         return PCAModel(java_model)
 
 
-class PCAModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class PCAModel(JavaModel, _PCAParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`PCA`. Transforms vectors to a lower dimensional space.
 
     .. versionadded:: 1.5.0
     """
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @property
     @since("2.0.0")
@@ -3366,15 +4887,69 @@ class PCAModel(JavaModel, JavaMLReadable, JavaMLWritable):
         return self._call_java("explainedVariance")
 
 
-@inherit_doc
-class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, HasHandleInvalid,
-               JavaMLReadable, JavaMLWritable):
+class _RFormulaParams(HasFeaturesCol, HasLabelCol, HasHandleInvalid):
     """
-    .. note:: Experimental
+    Params for :py:class:`RFormula` and :py:class:`RFormula`.
 
+    .. versionadded:: 3.0.0
+    """
+
+    formula = Param(Params._dummy(), "formula", "R model formula",
+                    typeConverter=TypeConverters.toString)
+
+    forceIndexLabel = Param(Params._dummy(), "forceIndexLabel",
+                            "Force to index label whether it is numeric or string",
+                            typeConverter=TypeConverters.toBoolean)
+
+    stringIndexerOrderType = Param(Params._dummy(), "stringIndexerOrderType",
+                                   "How to order categories of a string feature column used by " +
+                                   "StringIndexer. The last category after ordering is dropped " +
+                                   "when encoding strings. Supported options: frequencyDesc, " +
+                                   "frequencyAsc, alphabetDesc, alphabetAsc. The default value " +
+                                   "is frequencyDesc. When the ordering is set to alphabetDesc, " +
+                                   "RFormula drops the same category as R when encoding strings.",
+                                   typeConverter=TypeConverters.toString)
+
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
+                          "Options are 'skip' (filter out rows with invalid values), " +
+                          "'error' (throw an error), or 'keep' (put invalid data in a special " +
+                          "additional bucket, at index numLabels).",
+                          typeConverter=TypeConverters.toString)
+
+    def __init__(self, *args):
+        super(_RFormulaParams, self).__init__(*args)
+        self._setDefault(forceIndexLabel=False, stringIndexerOrderType="frequencyDesc",
+                         handleInvalid="error")
+
+    @since("1.5.0")
+    def getFormula(self):
+        """
+        Gets the value of :py:attr:`formula`.
+        """
+        return self.getOrDefault(self.formula)
+
+    @since("2.1.0")
+    def getForceIndexLabel(self):
+        """
+        Gets the value of :py:attr:`forceIndexLabel`.
+        """
+        return self.getOrDefault(self.forceIndexLabel)
+
+    @since("2.3.0")
+    def getStringIndexerOrderType(self):
+        """
+        Gets the value of :py:attr:`stringIndexerOrderType` or its default value 'frequencyDesc'.
+        """
+        return self.getOrDefault(self.stringIndexerOrderType)
+
+
+@inherit_doc
+class RFormula(JavaEstimator, _RFormulaParams, JavaMLReadable, JavaMLWritable):
+    """
     Implements the transforms required for fitting a dataset against an
     R model formula. Currently we support a limited subset of the R
-    operators, including '~', '.', ':', '+', and '-'. Also see the `R formula docs
+    operators, including '~', '.', ':', '+', '-', '*', and '^'.
+    Also see the `R formula docs
     <http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html>`_.
 
     >>> df = spark.createDataFrame([
@@ -3384,6 +4959,8 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, HasHandleInvalid,
     ... ], ["y", "x", "s"])
     >>> rf = RFormula(formula="y ~ x + s")
     >>> model = rf.fit(df)
+    >>> model.getLabelCol()
+    'label'
     >>> model.transform(df).show()
     +---+---+---+---------+-----+
     |  y|  x|  s| features|label|
@@ -3435,28 +5012,6 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, HasHandleInvalid,
     .. versionadded:: 1.5.0
     """
 
-    formula = Param(Params._dummy(), "formula", "R model formula",
-                    typeConverter=TypeConverters.toString)
-
-    forceIndexLabel = Param(Params._dummy(), "forceIndexLabel",
-                            "Force to index label whether it is numeric or string",
-                            typeConverter=TypeConverters.toBoolean)
-
-    stringIndexerOrderType = Param(Params._dummy(), "stringIndexerOrderType",
-                                   "How to order categories of a string feature column used by " +
-                                   "StringIndexer. The last category after ordering is dropped " +
-                                   "when encoding strings. Supported options: frequencyDesc, " +
-                                   "frequencyAsc, alphabetDesc, alphabetAsc. The default value " +
-                                   "is frequencyDesc. When the ordering is set to alphabetDesc, " +
-                                   "RFormula drops the same category as R when encoding strings.",
-                                   typeConverter=TypeConverters.toString)
-
-    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
-                          "Options are 'skip' (filter out rows with invalid values), " +
-                          "'error' (throw an error), or 'keep' (put invalid data in a special " +
-                          "additional bucket, at index numLabels).",
-                          typeConverter=TypeConverters.toString)
-
     @keyword_only
     def __init__(self, formula=None, featuresCol="features", labelCol="label",
                  forceIndexLabel=False, stringIndexerOrderType="frequencyDesc",
@@ -3468,8 +5023,6 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, HasHandleInvalid,
         """
         super(RFormula, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RFormula", self.uid)
-        self._setDefault(forceIndexLabel=False, stringIndexerOrderType="frequencyDesc",
-                         handleInvalid="error")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -3494,26 +5047,12 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, HasHandleInvalid,
         """
         return self._set(formula=value)
 
-    @since("1.5.0")
-    def getFormula(self):
-        """
-        Gets the value of :py:attr:`formula`.
-        """
-        return self.getOrDefault(self.formula)
-
     @since("2.1.0")
     def setForceIndexLabel(self, value):
         """
         Sets the value of :py:attr:`forceIndexLabel`.
         """
         return self._set(forceIndexLabel=value)
-
-    @since("2.1.0")
-    def getForceIndexLabel(self):
-        """
-        Gets the value of :py:attr:`forceIndexLabel`.
-        """
-        return self.getOrDefault(self.forceIndexLabel)
 
     @since("2.3.0")
     def setStringIndexerOrderType(self, value):
@@ -3522,12 +5061,23 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, HasHandleInvalid,
         """
         return self._set(stringIndexerOrderType=value)
 
-    @since("2.3.0")
-    def getStringIndexerOrderType(self):
+    def setFeaturesCol(self, value):
         """
-        Gets the value of :py:attr:`stringIndexerOrderType` or its default value 'frequencyDesc'.
+        Sets the value of :py:attr:`featuresCol`.
         """
-        return self.getOrDefault(self.stringIndexerOrderType)
+        return self._set(featuresCol=value)
+
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
 
     def _create_model(self, java_model):
         return RFormulaModel(java_model)
@@ -3537,10 +5087,8 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, HasHandleInvalid,
         return "RFormula(%s) (uid=%s)" % (formulaStr, self.uid)
 
 
-class RFormulaModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class RFormulaModel(JavaModel, _RFormulaParams, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Model fitted by :py:class:`RFormula`. Fitting is required to determine the
     factor levels of formula terms.
 
@@ -3552,12 +5100,290 @@ class RFormulaModel(JavaModel, JavaMLReadable, JavaMLWritable):
         return "RFormulaModel(%s) (uid=%s)" % (resolvedFormula, self.uid)
 
 
-@inherit_doc
-class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, JavaMLReadable,
-                    JavaMLWritable):
+class _SelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol):
     """
-    .. note:: Experimental
+    Params for :py:class:`Selector` and :py:class:`SelectorModel`.
 
+    .. versionadded:: 3.1.0
+    """
+
+    selectorType = Param(Params._dummy(), "selectorType",
+                         "The selector type. " +
+                         "Supported options: numTopFeatures (default), percentile, fpr, fdr, fwe.",
+                         typeConverter=TypeConverters.toString)
+
+    numTopFeatures = \
+        Param(Params._dummy(), "numTopFeatures",
+              "Number of features that selector will select, ordered by ascending p-value. " +
+              "If the number of features is < numTopFeatures, then this will select " +
+              "all features.", typeConverter=TypeConverters.toInt)
+
+    percentile = Param(Params._dummy(), "percentile", "Percentile of features that selector " +
+                       "will select, ordered by ascending p-value.",
+                       typeConverter=TypeConverters.toFloat)
+
+    fpr = Param(Params._dummy(), "fpr", "The highest p-value for features to be kept.",
+                typeConverter=TypeConverters.toFloat)
+
+    fdr = Param(Params._dummy(), "fdr", "The upper bound of the expected false discovery rate.",
+                typeConverter=TypeConverters.toFloat)
+
+    fwe = Param(Params._dummy(), "fwe", "The upper bound of the expected family-wise error rate.",
+                typeConverter=TypeConverters.toFloat)
+
+    def __init__(self, *args):
+        super(_SelectorParams, self).__init__(*args)
+        self._setDefault(numTopFeatures=50, selectorType="numTopFeatures", percentile=0.1,
+                         fpr=0.05, fdr=0.05, fwe=0.05)
+
+    @since("2.1.0")
+    def getSelectorType(self):
+        """
+        Gets the value of selectorType or its default value.
+        """
+        return self.getOrDefault(self.selectorType)
+
+    @since("2.0.0")
+    def getNumTopFeatures(self):
+        """
+        Gets the value of numTopFeatures or its default value.
+        """
+        return self.getOrDefault(self.numTopFeatures)
+
+    @since("2.1.0")
+    def getPercentile(self):
+        """
+        Gets the value of percentile or its default value.
+        """
+        return self.getOrDefault(self.percentile)
+
+    @since("2.1.0")
+    def getFpr(self):
+        """
+        Gets the value of fpr or its default value.
+        """
+        return self.getOrDefault(self.fpr)
+
+    @since("2.2.0")
+    def getFdr(self):
+        """
+        Gets the value of fdr or its default value.
+        """
+        return self.getOrDefault(self.fdr)
+
+    @since("2.2.0")
+    def getFwe(self):
+        """
+        Gets the value of fwe or its default value.
+        """
+        return self.getOrDefault(self.fwe)
+
+
+class _Selector(JavaEstimator, _SelectorParams, JavaMLReadable, JavaMLWritable):
+    """
+    Mixin for Selectors.
+    """
+
+    @since("2.1.0")
+    def setSelectorType(self, value):
+        """
+        Sets the value of :py:attr:`selectorType`.
+        """
+        return self._set(selectorType=value)
+
+    @since("2.0.0")
+    def setNumTopFeatures(self, value):
+        """
+        Sets the value of :py:attr:`numTopFeatures`.
+        Only applicable when selectorType = "numTopFeatures".
+        """
+        return self._set(numTopFeatures=value)
+
+    @since("2.1.0")
+    def setPercentile(self, value):
+        """
+        Sets the value of :py:attr:`percentile`.
+        Only applicable when selectorType = "percentile".
+        """
+        return self._set(percentile=value)
+
+    @since("2.1.0")
+    def setFpr(self, value):
+        """
+        Sets the value of :py:attr:`fpr`.
+        Only applicable when selectorType = "fpr".
+        """
+        return self._set(fpr=value)
+
+    @since("2.2.0")
+    def setFdr(self, value):
+        """
+        Sets the value of :py:attr:`fdr`.
+        Only applicable when selectorType = "fdr".
+        """
+        return self._set(fdr=value)
+
+    @since("2.2.0")
+    def setFwe(self, value):
+        """
+        Sets the value of :py:attr:`fwe`.
+        Only applicable when selectorType = "fwe".
+        """
+        return self._set(fwe=value)
+
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+
+class _SelectorModel(JavaModel, _SelectorParams):
+    """
+    Mixin for Selector models.
+    """
+
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @property
+    @since("2.0.0")
+    def selectedFeatures(self):
+        """
+        List of indices to select (filter).
+        """
+        return self._call_java("selectedFeatures")
+
+
+@inherit_doc
+class ANOVASelector(_Selector, JavaMLReadable, JavaMLWritable):
+    """
+    ANOVA F-value Classification selector, which selects continuous features to use for predicting
+    a categorical label.
+    The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`,
+    `fdr`, `fwe`.
+
+     * `numTopFeatures` chooses a fixed number of top features according to a F value
+        classification test.
+
+     * `percentile` is similar but chooses a fraction of all features
+       instead of a fixed number.
+
+     * `fpr` chooses all features whose p-values are below a threshold,
+       thus controlling the false positive rate of selection.
+
+     * `fdr` uses the `Benjamini-Hochberg procedure <https://en.wikipedia.org/wiki/
+       False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure>`_
+       to choose all features whose false discovery rate is below a threshold.
+
+     * `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by
+       1/numFeatures, thus controlling the family-wise error rate of selection.
+
+    By default, the selection method is `numTopFeatures`, with the default number of top features
+    set to 50.
+
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame(
+    ...    [(Vectors.dense([1.7, 4.4, 7.6, 5.8, 9.6, 2.3]), 3.0),
+    ...     (Vectors.dense([8.8, 7.3, 5.7, 7.3, 2.2, 4.1]), 2.0),
+    ...     (Vectors.dense([1.2, 9.5, 2.5, 3.1, 8.7, 2.5]), 1.0),
+    ...     (Vectors.dense([3.7, 9.2, 6.1, 4.1, 7.5, 3.8]), 2.0),
+    ...     (Vectors.dense([8.9, 5.2, 7.8, 8.3, 5.2, 3.0]), 4.0),
+    ...     (Vectors.dense([7.9, 8.5, 9.2, 4.0, 9.4, 2.1]), 4.0)],
+    ...    ["features", "label"])
+    >>> selector = ANOVASelector(numTopFeatures=1, outputCol="selectedFeatures")
+    >>> model = selector.fit(df)
+    >>> model.getFeaturesCol()
+    'features'
+    >>> model.setFeaturesCol("features")
+    ANOVASelectorModel...
+    >>> model.transform(df).head().selectedFeatures
+    DenseVector([7.6])
+    >>> model.selectedFeatures
+    [2]
+    >>> anovaSelectorPath = temp_path + "/anova-selector"
+    >>> selector.save(anovaSelectorPath)
+    >>> loadedSelector = ANOVASelector.load(anovaSelectorPath)
+    >>> loadedSelector.getNumTopFeatures() == selector.getNumTopFeatures()
+    True
+    >>> modelPath = temp_path + "/anova-selector-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = ANOVASelectorModel.load(modelPath)
+    >>> loadedModel.selectedFeatures == model.selectedFeatures
+    True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
+
+    .. versionadded:: 3.1.0
+    """
+
+    @keyword_only
+    def __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None,
+                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05,
+                 fdr=0.05, fwe=0.05):
+        """
+        __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
+                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05, \
+                 fdr=0.05, fwe=0.05)
+        """
+        super(ANOVASelector, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ANOVASelector", self.uid)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("3.1.0")
+    def setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,
+                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05,
+                  fdr=0.05, fwe=0.05):
+        """
+        setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
+                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05, \
+                  fdr=0.05, fwe=0.05)
+        Sets params for this ANOVASelector.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return ANOVASelectorModel(java_model)
+
+
+class ANOVASelectorModel(_SelectorModel, JavaMLReadable, JavaMLWritable):
+    """
+    Model fitted by :py:class:`ANOVASelector`.
+
+    .. versionadded:: 3.1.0
+    """
+
+
+@inherit_doc
+class ChiSqSelector(_Selector, JavaMLReadable, JavaMLWritable):
+    """
     Chi-Squared feature selection, which selects categorical features to use for predicting a
     categorical label.
     The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`,
@@ -3590,6 +5416,10 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     ...    ["features", "label"])
     >>> selector = ChiSqSelector(numTopFeatures=1, outputCol="selectedFeatures")
     >>> model = selector.fit(df)
+    >>> model.getFeaturesCol()
+    'features'
+    >>> model.setFeaturesCol("features")
+    ChiSqSelectorModel...
     >>> model.transform(df).head().selectedFeatures
     DenseVector([18.0])
     >>> model.selectedFeatures
@@ -3604,33 +5434,11 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     >>> loadedModel = ChiSqSelectorModel.load(modelPath)
     >>> loadedModel.selectedFeatures == model.selectedFeatures
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
 
     .. versionadded:: 2.0.0
     """
-
-    selectorType = Param(Params._dummy(), "selectorType",
-                         "The selector type of the ChisqSelector. " +
-                         "Supported options: numTopFeatures (default), percentile, fpr, fdr, fwe.",
-                         typeConverter=TypeConverters.toString)
-
-    numTopFeatures = \
-        Param(Params._dummy(), "numTopFeatures",
-              "Number of features that selector will select, ordered by ascending p-value. " +
-              "If the number of features is < numTopFeatures, then this will select " +
-              "all features.", typeConverter=TypeConverters.toInt)
-
-    percentile = Param(Params._dummy(), "percentile", "Percentile of features that selector " +
-                       "will select, ordered by ascending p-value.",
-                       typeConverter=TypeConverters.toFloat)
-
-    fpr = Param(Params._dummy(), "fpr", "The highest p-value for features to be kept.",
-                typeConverter=TypeConverters.toFloat)
-
-    fdr = Param(Params._dummy(), "fdr", "The upper bound of the expected false discovery rate.",
-                typeConverter=TypeConverters.toFloat)
-
-    fwe = Param(Params._dummy(), "fwe", "The upper bound of the expected family-wise error rate.",
-                typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None,
@@ -3643,8 +5451,6 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
         """
         super(ChiSqSelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ChiSqSelector", self.uid)
-        self._setDefault(numTopFeatures=50, selectorType="numTopFeatures", percentile=0.1,
-                         fpr=0.05, fdr=0.05, fwe=0.05)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -3662,123 +5468,125 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
-    @since("2.1.0")
-    def setSelectorType(self, value):
-        """
-        Sets the value of :py:attr:`selectorType`.
-        """
-        return self._set(selectorType=value)
-
-    @since("2.1.0")
-    def getSelectorType(self):
-        """
-        Gets the value of selectorType or its default value.
-        """
-        return self.getOrDefault(self.selectorType)
-
-    @since("2.0.0")
-    def setNumTopFeatures(self, value):
-        """
-        Sets the value of :py:attr:`numTopFeatures`.
-        Only applicable when selectorType = "numTopFeatures".
-        """
-        return self._set(numTopFeatures=value)
-
-    @since("2.0.0")
-    def getNumTopFeatures(self):
-        """
-        Gets the value of numTopFeatures or its default value.
-        """
-        return self.getOrDefault(self.numTopFeatures)
-
-    @since("2.1.0")
-    def setPercentile(self, value):
-        """
-        Sets the value of :py:attr:`percentile`.
-        Only applicable when selectorType = "percentile".
-        """
-        return self._set(percentile=value)
-
-    @since("2.1.0")
-    def getPercentile(self):
-        """
-        Gets the value of percentile or its default value.
-        """
-        return self.getOrDefault(self.percentile)
-
-    @since("2.1.0")
-    def setFpr(self, value):
-        """
-        Sets the value of :py:attr:`fpr`.
-        Only applicable when selectorType = "fpr".
-        """
-        return self._set(fpr=value)
-
-    @since("2.1.0")
-    def getFpr(self):
-        """
-        Gets the value of fpr or its default value.
-        """
-        return self.getOrDefault(self.fpr)
-
-    @since("2.2.0")
-    def setFdr(self, value):
-        """
-        Sets the value of :py:attr:`fdr`.
-        Only applicable when selectorType = "fdr".
-        """
-        return self._set(fdr=value)
-
-    @since("2.2.0")
-    def getFdr(self):
-        """
-        Gets the value of fdr or its default value.
-        """
-        return self.getOrDefault(self.fdr)
-
-    @since("2.2.0")
-    def setFwe(self, value):
-        """
-        Sets the value of :py:attr:`fwe`.
-        Only applicable when selectorType = "fwe".
-        """
-        return self._set(fwe=value)
-
-    @since("2.2.0")
-    def getFwe(self):
-        """
-        Gets the value of fwe or its default value.
-        """
-        return self.getOrDefault(self.fwe)
-
     def _create_model(self, java_model):
         return ChiSqSelectorModel(java_model)
 
 
-class ChiSqSelectorModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class ChiSqSelectorModel(_SelectorModel, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Model fitted by :py:class:`ChiSqSelector`.
 
     .. versionadded:: 2.0.0
     """
 
-    @property
-    @since("2.0.0")
-    def selectedFeatures(self):
+
+@inherit_doc
+class FValueSelector(_Selector, JavaMLReadable, JavaMLWritable):
+    """
+    F Value Regression feature selector, which selects continuous features to use for predicting a
+    continuous label.
+    The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`,
+    `fdr`, `fwe`.
+
+     * `numTopFeatures` chooses a fixed number of top features according to a F value
+        regression test.
+
+     * `percentile` is similar but chooses a fraction of all features
+       instead of a fixed number.
+
+     * `fpr` chooses all features whose p-values are below a threshold,
+       thus controlling the false positive rate of selection.
+
+     * `fdr` uses the `Benjamini-Hochberg procedure <https://en.wikipedia.org/wiki/
+       False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure>`_
+       to choose all features whose false discovery rate is below a threshold.
+
+     * `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by
+       1/numFeatures, thus controlling the family-wise error rate of selection.
+
+    By default, the selection method is `numTopFeatures`, with the default number of top features
+    set to 50.
+
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame(
+    ...    [(Vectors.dense([6.0, 7.0, 0.0, 7.0, 6.0, 0.0]), 4.6),
+    ...     (Vectors.dense([0.0, 9.0, 6.0, 0.0, 5.0, 9.0]), 6.6),
+    ...     (Vectors.dense([0.0, 9.0, 3.0, 0.0, 5.0, 5.0]), 5.1),
+    ...     (Vectors.dense([0.0, 9.0, 8.0, 5.0, 6.0, 4.0]), 7.6),
+    ...     (Vectors.dense([8.0, 9.0, 6.0, 5.0, 4.0, 4.0]), 9.0),
+    ...     (Vectors.dense([8.0, 9.0, 6.0, 4.0, 0.0, 0.0]), 9.0)],
+    ...    ["features", "label"])
+    >>> selector = FValueSelector(numTopFeatures=1, outputCol="selectedFeatures")
+    >>> model = selector.fit(df)
+    >>> model.getFeaturesCol()
+    'features'
+    >>> model.setFeaturesCol("features")
+    FValueSelectorModel...
+    >>> model.transform(df).head().selectedFeatures
+    DenseVector([0.0])
+    >>> model.selectedFeatures
+    [2]
+    >>> fvalueSelectorPath = temp_path + "/fvalue-selector"
+    >>> selector.save(fvalueSelectorPath)
+    >>> loadedSelector = FValueSelector.load(fvalueSelectorPath)
+    >>> loadedSelector.getNumTopFeatures() == selector.getNumTopFeatures()
+    True
+    >>> modelPath = temp_path + "/fvalue-selector-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = FValueSelectorModel.load(modelPath)
+    >>> loadedModel.selectedFeatures == model.selectedFeatures
+    True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
+
+    .. versionadded:: 3.1.0
+    """
+
+    @keyword_only
+    def __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None,
+                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05,
+                 fdr=0.05, fwe=0.05):
         """
-        List of indices to select (filter).
+        __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
+                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05, \
+                 fdr=0.05, fwe=0.05)
         """
-        return self._call_java("selectedFeatures")
+        super(FValueSelector, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.FValueSelector", self.uid)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("3.1.0")
+    def setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,
+                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05,
+                  fdr=0.05, fwe=0.05):
+        """
+        setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
+                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05, \
+                  fdr=0.05, fwe=0.05)
+        Sets params for this FValueSelector.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return FValueSelectorModel(java_model)
+
+
+class FValueSelectorModel(_SelectorModel, JavaMLReadable, JavaMLWritable):
+    """
+    Model fitted by :py:class:`FValueSelector`.
+
+    .. versionadded:: 3.1.0
+    """
 
 
 @inherit_doc
 class VectorSizeHint(JavaTransformer, HasInputCol, HasHandleInvalid, JavaMLReadable,
                      JavaMLWritable):
     """
-    .. note:: Experimental
-
     A feature transformer that adds size information to the metadata of a vector column.
     VectorAssembler needs size information for its input columns and cannot be used on streaming
     dataframes without this metadata.
@@ -3850,9 +5658,165 @@ class VectorSizeHint(JavaTransformer, HasInputCol, HasHandleInvalid, JavaMLReada
         """ Sets size param, the size of vectors in `inputCol`."""
         return self._set(size=value)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
+
+class _VarianceThresholdSelectorParams(HasFeaturesCol, HasOutputCol):
+    """
+    Params for :py:class:`VarianceThresholdSelector` and
+    :py:class:`VarianceThresholdSelectorrModel`.
+
+    .. versionadded:: 3.1.0
+    """
+
+    varianceThreshold = Param(Params._dummy(), "varianceThreshold",
+                              "Param for variance threshold. Features with a variance not " +
+                              "greater than this threshold will be removed. The default value " +
+                              "is 0.0.", typeConverter=TypeConverters.toFloat)
+
+    @since("3.1.0")
+    def getVarianceThreshold(self):
+        """
+        Gets the value of varianceThreshold or its default value.
+        """
+        return self.getOrDefault(self.varianceThreshold)
+
+
+@inherit_doc
+class VarianceThresholdSelector(JavaEstimator, _VarianceThresholdSelectorParams, JavaMLReadable,
+                                JavaMLWritable):
+    """
+    Feature selector that removes all low-variance features. Features with a
+    variance not greater than the threshold will be removed. The default is to keep
+    all features with non-zero variance, i.e. remove the features that have the
+    same value in all samples.
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame(
+    ...    [(Vectors.dense([6.0, 7.0, 0.0, 7.0, 6.0, 0.0]),),
+    ...     (Vectors.dense([0.0, 9.0, 6.0, 0.0, 5.0, 9.0]),),
+    ...     (Vectors.dense([0.0, 9.0, 3.0, 0.0, 5.0, 5.0]),),
+    ...     (Vectors.dense([0.0, 9.0, 8.0, 5.0, 6.0, 4.0]),),
+    ...     (Vectors.dense([8.0, 9.0, 6.0, 5.0, 4.0, 4.0]),),
+    ...     (Vectors.dense([8.0, 9.0, 6.0, 0.0, 0.0, 0.0]),)],
+    ...    ["features"])
+    >>> selector = VarianceThresholdSelector(varianceThreshold=8.2, outputCol="selectedFeatures")
+    >>> model = selector.fit(df)
+    >>> model.getFeaturesCol()
+    'features'
+    >>> model.setFeaturesCol("features")
+    VarianceThresholdSelectorModel...
+    >>> model.transform(df).head().selectedFeatures
+    DenseVector([6.0, 7.0, 0.0])
+    >>> model.selectedFeatures
+    [0, 3, 5]
+    >>> varianceThresholdSelectorPath = temp_path + "/variance-threshold-selector"
+    >>> selector.save(varianceThresholdSelectorPath)
+    >>> loadedSelector = VarianceThresholdSelector.load(varianceThresholdSelectorPath)
+    >>> loadedSelector.getVarianceThreshold() == selector.getVarianceThreshold()
+    True
+    >>> modelPath = temp_path + "/variance-threshold-selector-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = VarianceThresholdSelectorModel.load(modelPath)
+    >>> loadedModel.selectedFeatures == model.selectedFeatures
+    True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
+
+    .. versionadded:: 3.1.0
+    """
+
+    @keyword_only
+    def __init__(self, featuresCol="features", outputCol=None, varianceThreshold=0.0):
+        """
+        __init__(self, featuresCol="features", outputCol=None, varianceThreshold=0.0)
+        """
+        super(VarianceThresholdSelector, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.feature.VarianceThresholdSelector", self.uid)
+        self._setDefault(varianceThreshold=0.0)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("3.1.0")
+    def setParams(self, featuresCol="features", outputCol=None, varianceThreshold=0.0):
+        """
+        setParams(self, featuresCol="features", outputCol=None, varianceThreshold=0.0)
+        Sets params for this VarianceThresholdSelector.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("3.1.0")
+    def setVarianceThreshold(self, value):
+        """
+        Sets the value of :py:attr:`varianceThreshold`.
+        """
+        return self._set(varianceThreshold=value)
+
+    @since("3.1.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.1.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    def _create_model(self, java_model):
+        return VarianceThresholdSelectorModel(java_model)
+
+
+class VarianceThresholdSelectorModel(JavaModel, _VarianceThresholdSelectorParams, JavaMLReadable,
+                                     JavaMLWritable):
+    """
+    Model fitted by :py:class:`VarianceThresholdSelector`.
+
+    .. versionadded:: 3.1.0
+    """
+
+    @since("3.1.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.1.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @property
+    @since("3.1.0")
+    def selectedFeatures(self):
+        """
+        List of indices to select (filter).
+        """
+        return self._call_java("selectedFeatures")
+
 
 if __name__ == "__main__":
     import doctest
+    import sys
     import tempfile
 
     import pyspark.ml.feature

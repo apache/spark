@@ -396,6 +396,18 @@ public final class OnHeapColumnVector extends WritableColumnVector {
       Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, floatData,
           Platform.DOUBLE_ARRAY_OFFSET + rowId * 4L, count * 4L);
     } else {
+      ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.BIG_ENDIAN);
+      for (int i = 0; i < count; ++i) {
+        floatData[i + rowId] = bb.getFloat(srcIndex + (4 * i));
+      }
+    }
+  }
+
+  @Override
+  public void putFloatsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
+    if (!bigEndianPlatform) {
+      putFloats(rowId, count, src, srcIndex);
+    } else {
       ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
       for (int i = 0; i < count; ++i) {
         floatData[i + rowId] = bb.getFloat(srcIndex + (4 * i));
@@ -444,6 +456,18 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     if (!bigEndianPlatform) {
       Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, doubleData,
           Platform.DOUBLE_ARRAY_OFFSET + rowId * 8L, count * 8L);
+    } else {
+      ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.BIG_ENDIAN);
+      for (int i = 0; i < count; ++i) {
+        doubleData[i + rowId] = bb.getDouble(srcIndex + (8 * i));
+      }
+    }
+  }
+
+  @Override
+  public void putDoublesLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
+    if (!bigEndianPlatform) {
+      putDoubles(rowId, count, src, srcIndex);
     } else {
       ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
       for (int i = 0; i < count; ++i) {

@@ -20,9 +20,11 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.internal.SQLConf.MAX_NESTED_VIEW_DEPTH
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
-class SimpleSQLViewSuite extends SQLViewSuite with SharedSQLContext
+class SimpleSQLViewSuite extends SQLViewSuite with SharedSparkSession
 
 /**
  * A suite for testing view related functionality.
@@ -78,16 +80,17 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           var e = intercept[AnalysisException] {
             sql("CREATE VIEW jtv1 AS SELECT * FROM temp_jtv1 WHERE id < 6")
           }.getMessage
-          assert(e.contains("Not allowed to create a permanent view `jtv1` by " +
-            "referencing a temporary view `temp_jtv1`"))
+          assert(e.contains("Not allowed to create a permanent view `default`.`jtv1` by " +
+            "referencing a temporary view temp_jtv1. " +
+            "Please create a temp view instead by CREATE TEMP VIEW"))
 
           val globalTempDB = spark.sharedState.globalTempViewManager.database
           sql("CREATE GLOBAL TEMP VIEW global_temp_jtv1 AS SELECT * FROM jt WHERE id > 0")
           e = intercept[AnalysisException] {
             sql(s"CREATE VIEW jtv1 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
           }.getMessage
-          assert(e.contains(s"Not allowed to create a permanent view `jtv1` by referencing " +
-            s"a temporary view `global_temp`.`global_temp_jtv1`"))
+          assert(e.contains("Not allowed to create a permanent view `default`.`jtv1` by " +
+            "referencing a temporary view global_temp.global_temp_jtv1"))
         }
       }
     }
@@ -135,12 +138,21 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       assertNoSuchTable(s"ALTER TABLE $viewName SET SERDE 'whatever'")
       assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a=1, b=2) SET SERDE 'whatever'")
       assertNoSuchTable(s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')")
-      assertNoSuchTable(s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'")
-      assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'")
       assertNoSuchTable(s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
       assertNoSuchTable(s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')")
       assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')")
       assertNoSuchTable(s"ALTER TABLE $viewName RECOVER PARTITIONS")
+
+      // For v2 ALTER TABLE statements, we have better error message saying view is not supported.
+      assertAnalysisError(
+        s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'",
+        s"'$viewName' is a view not a table")
+
+      // For the following v2 ALERT TABLE statements, unsupported operations are checked first
+      // before resolving the relations.
+      assertAnalysisError(
+        s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'",
+        "ALTER TABLE SET LOCATION does not support partition for v2 tables")
     }
   }
 
@@ -158,7 +170,10 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         Thread.currentThread().getContextClassLoader.getResource("data/files/employee.dat")
       assertNoSuchTable(s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName""")
       assertNoSuchTable(s"TRUNCATE TABLE $viewName")
-      assertNoSuchTable(s"SHOW CREATE TABLE $viewName")
+      val e2 = intercept[AnalysisException] {
+        sql(s"SHOW CREATE TABLE $viewName")
+      }.getMessage
+      assert(e2.contains("SHOW CREATE TABLE is not supported on a temporary view"))
       assertNoSuchTable(s"SHOW PARTITIONS $viewName")
       assertNoSuchTable(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
       assertNoSuchTable(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
@@ -169,6 +184,11 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     intercept[NoSuchTableException] {
       sql(query)
     }
+  }
+
+  private def assertAnalysisError(query: String, message: String): Unit = {
+    val e = intercept[AnalysisException](sql(query))
+    assert(e.message.contains(message))
   }
 
   test("error handling: insert/load/truncate table commands against a view") {
@@ -247,6 +267,16 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("SPARK-32374: disallow setting properties for CREATE TEMPORARY VIEW") {
+    withTempView("myabcdview") {
+      val e = intercept[ParseException] {
+        sql("CREATE TEMPORARY VIEW myabcdview TBLPROPERTIES ('a' = 'b') AS SELECT * FROM jt")
+      }
+      assert(e.message.contains(
+        "Operation not allowed: TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"))
+    }
+  }
+
   test("correctly parse CREATE VIEW statement") {
     withView("testView") {
       sql(
@@ -282,7 +312,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       sql(
         """CREATE TEMPORARY VIEW
           |testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
-          |TBLPROPERTIES ('a' = 'b')
           |AS SELECT * FROM jt
           |""".stripMargin)
       checkAnswer(sql("SELECT c1, c2 FROM testView ORDER BY c1"), (1 to 9).map(i => Row(i, i)))
@@ -665,17 +694,17 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql(s"CREATE VIEW view${idx + 1} AS SELECT * FROM view$idx")
       }
 
-      withSQLConf("spark.sql.view.maxNestedViewDepth" -> "10") {
+      withSQLConf(MAX_NESTED_VIEW_DEPTH.key -> "10") {
         val e = intercept[AnalysisException] {
           sql("SELECT * FROM view10")
         }.getMessage
         assert(e.contains("The depth of view `default`.`view0` exceeds the maximum view " +
           "resolution depth (10). Analysis is aborted to avoid errors. Increase the value " +
-          "of spark.sql.view.maxNestedViewDepth to work around this."))
+          s"of ${MAX_NESTED_VIEW_DEPTH.key} to work around this."))
       }
 
       val e = intercept[IllegalArgumentException] {
-        withSQLConf("spark.sql.view.maxNestedViewDepth" -> "0") {}
+        withSQLConf(MAX_NESTED_VIEW_DEPTH.key -> "0") {}
       }.getMessage
       assert(e.contains("The maximum depth of a view reference in a nested view must be " +
         "positive."))
@@ -694,7 +723,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("sparkSession API view resolution with different default database") {
     withDatabase("db2") {
-      withView("v1") {
+      withView("default.v1") {
         withTable("t1") {
           sql("USE default")
           sql("CREATE TABLE t1 USING parquet AS SELECT 1 AS c0")
@@ -703,6 +732,16 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           sql("USE db2")
           checkAnswer(spark.table("default.v1"), Row(1))
         }
+      }
+    }
+  }
+
+  test("SPARK-23519 view should be created even when query output contains duplicate col name") {
+    withTable("t23519") {
+      withView("v23519") {
+        sql("CREATE TABLE t23519 USING parquet AS SELECT 1 AS c1")
+        sql("CREATE VIEW v23519 (c1, c2) AS SELECT c1, c1 FROM t23519")
+        checkAnswer(sql("SELECT * FROM v23519"), Row(1, 1))
       }
     }
   }

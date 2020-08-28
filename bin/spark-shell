@@ -32,7 +32,10 @@ if [ -z "${SPARK_HOME}" ]; then
   source "$(dirname "$0")"/find-spark-home
 fi
 
-export _SPARK_CMD_USAGE="Usage: ./bin/spark-shell [options]"
+export _SPARK_CMD_USAGE="Usage: ./bin/spark-shell [options]
+
+Scala REPL options:
+  -I <file>                   preload <file>, enforcing line-by-line interpretation"
 
 # SPARK-4161: scala does not assume use of the java classpath,
 # so we need to add the "-Dscala.usejavacp=true" flag manually. We

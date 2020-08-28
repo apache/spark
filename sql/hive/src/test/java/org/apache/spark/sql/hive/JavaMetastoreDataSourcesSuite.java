@@ -27,7 +27,6 @@ import java.util.Map;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -38,9 +37,6 @@ import org.apache.spark.sql.QueryTest$;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.hive.test.TestHive$;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.catalyst.TableIdentifier;
 import org.apache.spark.util.Utils;
@@ -53,13 +49,6 @@ public class JavaMetastoreDataSourcesSuite {
   Path hiveManagedPath;
   FileSystem fs;
   Dataset<Row> df;
-
-  private static void checkAnswer(Dataset<Row> actual, List<Row> expected) {
-    String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
-    if (errorMessage != null) {
-      Assert.fail(errorMessage);
-    }
-  }
 
   @Before
   public void setUp() throws IOException {
@@ -95,57 +84,6 @@ public class JavaMetastoreDataSourcesSuite {
   }
 
   @Test
-  public void saveExternalTableAndQueryIt() {
-    Map<String, String> options = new HashMap<>();
-    options.put("path", path.toString());
-    df.write()
-      .format("org.apache.spark.sql.json")
-      .mode(SaveMode.Append)
-      .options(options)
-      .saveAsTable("javaSavedTable");
-
-    checkAnswer(
-      sqlContext.sql("SELECT * FROM javaSavedTable"),
-      df.collectAsList());
-
-    Dataset<Row> loadedDF =
-      sqlContext.createExternalTable("externalTable", "org.apache.spark.sql.json", options);
-
-    checkAnswer(loadedDF, df.collectAsList());
-    checkAnswer(
-      sqlContext.sql("SELECT * FROM externalTable"),
-      df.collectAsList());
-  }
-
-  @Test
-  public void saveExternalTableWithSchemaAndQueryIt() {
-    Map<String, String> options = new HashMap<>();
-    options.put("path", path.toString());
-    df.write()
-      .format("org.apache.spark.sql.json")
-      .mode(SaveMode.Append)
-      .options(options)
-      .saveAsTable("javaSavedTable");
-
-    checkAnswer(
-      sqlContext.sql("SELECT * FROM javaSavedTable"),
-      df.collectAsList());
-
-    List<StructField> fields = new ArrayList<>();
-    fields.add(DataTypes.createStructField("b", DataTypes.StringType, true));
-    StructType schema = DataTypes.createStructType(fields);
-    Dataset<Row> loadedDF =
-      sqlContext.createExternalTable("externalTable", "org.apache.spark.sql.json", schema, options);
-
-    checkAnswer(
-      loadedDF,
-      sqlContext.sql("SELECT b FROM javaSavedTable").collectAsList());
-    checkAnswer(
-      sqlContext.sql("SELECT * FROM externalTable"),
-      sqlContext.sql("SELECT b FROM javaSavedTable").collectAsList());
-  }
-
-  @Test
   public void saveTableAndQueryIt() {
     Map<String, String> options = new HashMap<>();
     df.write()
@@ -154,7 +92,7 @@ public class JavaMetastoreDataSourcesSuite {
       .options(options)
       .saveAsTable("javaSavedTable");
 
-    checkAnswer(
+    QueryTest$.MODULE$.checkAnswer(
       sqlContext.sql("SELECT * FROM javaSavedTable"),
       df.collectAsList());
   }

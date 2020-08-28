@@ -91,7 +91,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   }
 
   public void addStreamCallback(String streamId, StreamCallback callback) {
-    timeOfLastRequestNs.set(System.nanoTime());
+    updateTimeOfLastRequest();
     streamCallbacks.offer(ImmutablePair.of(streamId, callback));
   }
 

@@ -85,5 +85,16 @@ object ResourceRequestTestHelper {
     getValueMethod.invoke(resourceInformation)
   }
 
+  def getResources(res: Resource): Array[ResourceInformation] = {
+    val getResourceInformationMethod = res.getClass.getMethod("getResources")
+    val rInfoArray = getResourceInformationMethod.invoke(res).asInstanceOf[Array[AnyRef]]
+    rInfoArray.map { rInfo =>
+      val name = invokeMethod(rInfo, "getName").asInstanceOf[String]
+      val value = invokeMethod(rInfo, "getValue").asInstanceOf[Long]
+      val units = invokeMethod(rInfo, "getUnits").asInstanceOf[String]
+      ResourceInformation(name, value, units)
+    }
+  }
+
   case class ResourceInformation(name: String, value: Long, unit: String)
 }

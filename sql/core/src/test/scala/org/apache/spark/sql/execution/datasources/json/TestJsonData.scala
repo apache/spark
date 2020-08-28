@@ -28,7 +28,7 @@ private[json] trait TestJsonData {
           "integer":10,
           "long":21474836470,
           "bigInteger":92233720368547758070,
-          "double":1.7976931348623157E308,
+          "double":1.7976931348623157,
           "boolean":true,
           "null":null
       }"""  :: Nil))(Encoders.STRING)
@@ -87,7 +87,7 @@ private[json] trait TestJsonData {
           "arrayOfInteger":[1, 2147483647, -2147483648],
           "arrayOfLong":[21474836470, 9223372036854775807, -9223372036854775808],
           "arrayOfBigInteger":[922337203685477580700, -922337203685477580800],
-          "arrayOfDouble":[1.2, 1.7976931348623157E308, 4.9E-324, 2.2250738585072014E-308],
+          "arrayOfDouble":[1.2, 1.7976931348623157, 4.9E-324, 2.2250738585072014E-308],
           "arrayOfBoolean":[true, false, true],
           "arrayOfNull":[null, null, null, null],
           "arrayOfStruct":[{"field1": true, "field2": "str1"}, {"field1": false}, {"field3": null}],
@@ -236,8 +236,7 @@ private[json] trait TestJsonData {
 
   def sampledTestData: Dataset[String] = {
     spark.range(0, 100, 1).map { index =>
-      val predefinedSample = Set[Long](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
-        57, 62, 68, 72)
+      val predefinedSample = Set[Long](3, 18, 20, 24, 50, 60, 87, 99)
       if (predefinedSample.contains(index)) {
         s"""{"f1":${index.toString}}"""
       } else {

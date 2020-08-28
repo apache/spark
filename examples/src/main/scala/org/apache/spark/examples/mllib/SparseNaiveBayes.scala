@@ -40,7 +40,7 @@ object SparseNaiveBayes {
       numFeatures: Int = -1,
       lambda: Double = 1.0) extends AbstractParams[Params]
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("SparseNaiveBayes") {

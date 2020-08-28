@@ -17,34 +17,43 @@
 
 package org.apache.spark.sql
 
+import java.nio.ByteBuffer
+import java.util.Arrays
+
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
  * Tests of [[RandomDataGenerator]].
  */
-class RandomDataGeneratorSuite extends SparkFunSuite {
+class RandomDataGeneratorSuite extends SparkFunSuite with SQLHelper {
 
   /**
    * Tests random data generation for the given type by using it to generate random values then
    * converting those values into their Catalyst equivalents using CatalystTypeConverters.
    */
   def testRandomDataGeneration(dataType: DataType, nullable: Boolean = true): Unit = {
-    val toCatalyst = CatalystTypeConverters.createToCatalystConverter(dataType)
-    val generator = RandomDataGenerator.forType(dataType, nullable, new Random(33)).getOrElse {
-      fail(s"Random data generator was not defined for $dataType")
-    }
-    if (nullable) {
-      assert(Iterator.fill(100)(generator()).contains(null))
-    } else {
-      assert(!Iterator.fill(100)(generator()).contains(null))
-    }
-    for (_ <- 1 to 10) {
-      val generatedValue = generator()
-      toCatalyst(generatedValue)
+    Seq(false, true).foreach { java8Api =>
+      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+        val toCatalyst = CatalystTypeConverters.createToCatalystConverter(dataType)
+        val generator = RandomDataGenerator.forType(dataType, nullable, new Random(33)).getOrElse {
+          fail(s"Random data generator was not defined for $dataType")
+        }
+        if (nullable) {
+          assert(Iterator.fill(100)(generator()).contains(null))
+        } else {
+          assert(!Iterator.fill(100)(generator()).contains(null))
+        }
+        for (_ <- 1 to 10) {
+          val generatedValue = generator()
+          toCatalyst(generatedValue)
+        }
+      }
     }
   }
 
@@ -105,5 +114,33 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
       val deviation = math.abs(maps.map(_.size).sum - expectedTotalElements)
       assert(deviation.toDouble / expectedTotalElements < 2e-1)
     }
+  }
+
+  test("Use Float.NaN for all NaN values") {
+    val bits = -6966608
+    val nan1 = java.lang.Float.intBitsToFloat(bits)
+    val nan2 = RandomDataGenerator.intBitsToFloat(bits)
+    assert(nan1.isNaN)
+    assert(nan2.isNaN)
+
+    val arrayExpected = ByteBuffer.allocate(4).putFloat(Float.NaN).array
+    val array1 = ByteBuffer.allocate(4).putFloat(nan1).array
+    val array2 = ByteBuffer.allocate(4).putFloat(nan2).array
+    assert(!Arrays.equals(array1, arrayExpected))
+    assert(Arrays.equals(array2, arrayExpected))
+  }
+
+  test("Use Double.NaN for all NaN values") {
+    val bits = -6966608
+    val nan1 = java.lang.Double.longBitsToDouble(bits)
+    val nan2 = RandomDataGenerator.longBitsToDouble(bits)
+    assert(nan1.isNaN)
+    assert(nan2.isNaN)
+
+    val arrayExpected = ByteBuffer.allocate(8).putDouble(Double.NaN).array
+    val array1 = ByteBuffer.allocate(8).putDouble(nan1).array
+    val array2 = ByteBuffer.allocate(8).putDouble(nan2).array
+    assert(!Arrays.equals(array1, arrayExpected))
+    assert(Arrays.equals(array2, arrayExpected))
   }
 }

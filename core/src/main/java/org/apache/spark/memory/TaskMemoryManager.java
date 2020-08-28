@@ -85,9 +85,9 @@ public class TaskMemoryManager {
   /**
    * Similar to an operating system's page table, this array maps page numbers into base object
    * pointers, allowing us to translate between the hashtable's internal 64-bit address
-   * representation and the baseObject+offset representation which we use to support both in- and
+   * representation and the baseObject+offset representation which we use to support both on- and
    * off-heap addresses. When using an off-heap allocator, every entry in this map will be `null`.
-   * When using an in-heap allocator, the entries in this map will point to pages' base objects.
+   * When using an on-heap allocator, the entries in this map will point to pages' base objects.
    * Entries are added to this map as new data pages are allocated.
    */
   private final MemoryBlock[] pageTable = new MemoryBlock[PAGE_TABLE_SIZE];
@@ -102,7 +102,7 @@ public class TaskMemoryManager {
   private final long taskAttemptId;
 
   /**
-   * Tracks whether we're in-heap or off-heap. For off-heap, we short-circuit most of these methods
+   * Tracks whether we're on-heap or off-heap. For off-heap, we short-circuit most of these methods
    * without doing any masking or lookups. Since this branching should be well-predicted by the JIT,
    * this extra layer of indirection / abstraction hopefully shouldn't be too expensive.
    */
@@ -194,8 +194,10 @@ public class TaskMemoryManager {
             throw new RuntimeException(e.getMessage());
           } catch (IOException e) {
             logger.error("error while calling spill() on " + c, e);
+            // checkstyle.off: RegexpSinglelineJava
             throw new SparkOutOfMemoryError("error while calling spill() on " + c + " : "
               + e.getMessage());
+            // checkstyle.on: RegexpSinglelineJava
           }
         }
       }
@@ -215,8 +217,10 @@ public class TaskMemoryManager {
           throw new RuntimeException(e.getMessage());
         } catch (IOException e) {
           logger.error("error while calling spill() on " + consumer, e);
+          // checkstyle.off: RegexpSinglelineJava
           throw new SparkOutOfMemoryError("error while calling spill() on " + consumer + " : "
             + e.getMessage());
+          // checkstyle.on: RegexpSinglelineJava
         }
       }
 

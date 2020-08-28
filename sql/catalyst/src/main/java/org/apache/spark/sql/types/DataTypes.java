@@ -19,7 +19,7 @@ package org.apache.spark.sql.types;
 
 import java.util.*;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Stable;
 
 /**
  * To get/create specific data type, users should use singleton objects and factory methods
@@ -27,7 +27,7 @@ import org.apache.spark.annotation.InterfaceStability;
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 public class DataTypes {
   /**
    * Gets the StringType object.

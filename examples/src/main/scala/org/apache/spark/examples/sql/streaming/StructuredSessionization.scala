@@ -70,7 +70,7 @@ object StructuredSessionization {
         line.split(" ").map(word => Event(sessionId = word, timestamp))
       }
 
-    // Sessionize the events. Track number of events, start and end timestamps of session, and
+    // Sessionize the events. Track number of events, start and end timestamps of session,
     // and report session updates.
     val sessionUpdates = events
       .groupByKey(event => event.sessionId)

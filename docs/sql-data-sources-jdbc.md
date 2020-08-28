@@ -2,13 +2,28 @@
 layout: global
 title: JDBC To Other Databases
 displayTitle: JDBC To Other Databases
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
 {:toc}
 
 Spark SQL also includes a data source that can read data from other databases using JDBC. This
-functionality should be preferred over using [JdbcRDD](api/scala/index.html#org.apache.spark.rdd.JdbcRDD).
+functionality should be preferred over using [JdbcRDD](api/scala/org/apache/spark/rdd/JdbcRDD.html).
 This is because the results are returned
 as a DataFrame and they can easily be processed in Spark SQL or joined with other data sources.
 The JDBC data source is also easier to use from Java or Python as it does not require the user to
@@ -21,7 +36,7 @@ spark classpath. For example, to connect to postgres from the Spark Shell you wo
 following command:
 
 {% highlight bash %}
-bin/spark-shell --driver-class-path postgresql-9.4.1207.jar --jars postgresql-9.4.1207.jar
+./bin/spark-shell --driver-class-path postgresql-9.4.1207.jar --jars postgresql-9.4.1207.jar
 {% endhighlight %}
 
 Tables from the remote database can be loaded as a DataFrame or Spark SQL temporary view using
@@ -45,7 +60,7 @@ the following case-insensitive options:
       The JDBC table that should be read from or written into. Note that when using it in the read
       path anything that is valid in a <code>FROM</code> clause of a SQL query can be used.
       For example, instead of a full table you could also use a subquery in parentheses. It is not
-      allowed to specify `dbtable` and `query` options at the same time.
+      allowed to specify <code>dbtable</code> and <code>query</code> options at the same time.
     </td>
   </tr>
   <tr>
@@ -55,18 +70,18 @@ the following case-insensitive options:
       as a subquery in the <code>FROM</code> clause. Spark will also assign an alias to the subquery clause.
       As an example, spark will issue a query of the following form to the JDBC Source.<br><br>
       <code> SELECT &lt;columns&gt; FROM (&lt;user_specified_query&gt;) spark_gen_alias</code><br><br>
-      Below are couple of restrictions while using this option.<br>
+      Below are a couple of restrictions while using this option.<br>
       <ol>
-         <li> It is not allowed to specify `dbtable` and `query` options at the same time. </li>
-         <li> It is not allowed to specify `query` and `partitionColumn` options at the same time. When specifying
-            `partitionColumn` option is required, the subquery can be specified using `dbtable` option instead and
-            partition columns can be qualified using the subquery alias provided as part of `dbtable`. <br>
+         <li> It is not allowed to specify <code>dbtable</code> and <code>query</code> options at the same time. </li>
+         <li> It is not allowed to specify <code>query</code> and <code>partitionColumn</code> options at the same time. When specifying
+            <code>partitionColumn</code> option is required, the subquery can be specified using <code>dbtable</code> option instead and
+            partition columns can be qualified using the subquery alias provided as part of <code>dbtable</code>. <br>
             Example:<br>
             <code>
                spark.read.format("jdbc")<br>
-               &nbsp&nbsp .option("dbtable", "(select c1, c2 from t1) as subq")<br>
-               &nbsp&nbsp .option("partitionColumn", "subq.c1"<br>
-               &nbsp&nbsp .load()
+                 .option("url", jdbcUrl)<br>
+                 .option("query", "select c1, c2 from t1")<br>
+                 .load()
             </code></li>
       </ol>
     </td>
@@ -182,6 +197,20 @@ the following case-insensitive options:
      The option to enable or disable predicate push-down into the JDBC data source. The default value is true, in which case Spark will push down filters to the JDBC data source as much as possible. Otherwise, if set to false, no filter will be pushed down to the JDBC data source and thus all filters will be handled by Spark. Predicate push-down is usually turned off when the predicate filtering is performed faster by Spark than by the JDBC data source.
     </td>
   </tr>
+
+  <tr>
+    <td><code>keytab</code></td>
+    <td>
+     Location of the kerberos keytab file (which must be pre-uploaded to all nodes either by <code>--files</code> option of spark-submit or manually) for the JDBC client. When path information found then Spark considers the keytab distributed manually, otherwise <code>--files</code> assumed. If both <code>keytab</code> and <code>principal</code> are defined then Spark tries to do kerberos authentication.
+    </td>
+  </tr>
+
+  <tr>
+    <td><code>principal</code></td>
+    <td>
+     Specifies kerberos principal name for the JDBC client. If both <code>keytab</code> and <code>principal</code> are defined then Spark tries to do kerberos authentication.
+    </td>
+  </tr>
 </table>
 
 <div class="codetabs">
@@ -202,7 +231,7 @@ the following case-insensitive options:
 {% include_example jdbc_dataset r/RSparkSQLExample.R %}
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 

@@ -1,4 +1,4 @@
--- HIVE-3300 [jira] LOAD DATA INPATH fails if a hdfs file with same name is added to table
+-- HIVE-3300 [jira] LOAD DATA INPATH fails if an hdfs file with same name is added to table
 -- 'loader' table is used only for uploading kv1.txt to HDFS (!hdfs -put is not working on minMRDriver)
 
 create table result (key string, value string);

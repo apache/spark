@@ -27,7 +27,8 @@ import org.apache.spark.sql.types.DataType
 object PythonUDF {
   private[this] val SCALAR_TYPES = Set(
     PythonEvalType.SQL_BATCHED_UDF,
-    PythonEvalType.SQL_SCALAR_PANDAS_UDF
+    PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+    PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
   )
 
   def isScalarPythonUDF(e: Expression): Boolean = {
@@ -45,7 +46,8 @@ object PythonUDF {
 }
 
 /**
- * A serialized version of a Python lambda function.
+ * A serialized version of a Python lambda function. This is a special expression, which needs a
+ * dedicated physical operator to execute it, and thus can't be pushed down to data sources.
  */
 case class PythonUDF(
     name: String,
@@ -65,4 +67,10 @@ case class PythonUDF(
     exprId = resultId)
 
   override def nullable: Boolean = true
+
+  override lazy val canonicalized: Expression = {
+    val canonicalizedChildren = children.map(_.canonicalized)
+    // `resultId` can be seen as cosmetic variation in PythonUDF, as it doesn't affect the result.
+    this.copy(resultId = ExprId(-1)).withNewChildren(canonicalizedChildren)
+  }
 }

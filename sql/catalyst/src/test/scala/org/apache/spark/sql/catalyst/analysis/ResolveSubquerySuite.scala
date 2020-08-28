@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{InSubquery, ListQuery}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, Project}
+import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
  * Unit tests for [[ResolveSubquery]].
@@ -29,8 +30,10 @@ class ResolveSubquerySuite extends AnalysisTest {
 
   val a = 'a.int
   val b = 'b.int
+  val c = 'c.int
   val t1 = LocalRelation(a)
   val t2 = LocalRelation(b)
+  val t3 = LocalRelation(c)
 
   test("SPARK-17251 Improve `OuterReference` to be `NamedExpression`") {
     val expr = Filter(
@@ -40,5 +43,14 @@ class ResolveSubquerySuite extends AnalysisTest {
     }.getMessage
     assert(m.contains(
       "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses"))
+  }
+
+  test("SPARK-29145 Support subquery in join condition") {
+    val expr = Join(t1,
+      t2,
+      Inner,
+      Some(InSubquery(Seq(a), ListQuery(Project(Seq(UnresolvedAttribute("c")), t3)))),
+      JoinHint.NONE)
+    assertAnalysisSuccess(expr)
   }
 }

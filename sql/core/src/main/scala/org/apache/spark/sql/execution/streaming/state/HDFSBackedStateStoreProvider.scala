@@ -43,7 +43,7 @@ import org.apache.spark.util.{SizeEstimator, Utils}
 
 /**
  * An implementation of [[StateStoreProvider]] and [[StateStore]] in which all the data is backed
- * by files in a HDFS-compatible file system. All updates to the store has to be done in sets
+ * by files in an HDFS-compatible file system. All updates to the store has to be done in sets
  * transactionally, and each set of updates increments the store's version. These versions can
  * be used to re-execute the updates (by retries in RDD operations) on the correct version of
  * the store, and regenerate the store version.
@@ -79,7 +79,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   //   java.util.ConcurrentModificationException
   type MapType = java.util.concurrent.ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
-  /** Implementation of [[StateStore]] API which is backed by a HDFS-compatible file system */
+  /** Implementation of [[StateStore]] API which is backed by an HDFS-compatible file system */
   class HDFSBackedStateStore(val version: Long, mapToUpdate: MapType)
     extends StateStore {
 
@@ -259,6 +259,9 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   @volatile private var storeConf: StateStoreConf = _
   @volatile private var hadoopConf: Configuration = _
   @volatile private var numberOfVersionsToRetainInMemory: Int = _
+  // TODO: The validation should be moved to a higher level so that it works for all state store
+  // implementations
+  @volatile private var isValidated = false
 
   private lazy val loadedMaps = new util.TreeMap[Long, MapType](Ordering[Long].reverse)
   private lazy val baseDir = stateStoreId.storeCheckpointLocation()
@@ -457,6 +460,11 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
             // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
             // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
             valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
+            if (!isValidated) {
+              StateStoreProvider.validateStateRowFormat(
+                keyRow, keySchema, valueRow, valueSchema, storeConf)
+              isValidated = true
+            }
             map.put(keyRow, valueRow)
           }
         }
@@ -551,6 +559,11 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
             // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
             // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
             valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
+            if (!isValidated) {
+              StateStoreProvider.validateStateRowFormat(
+                keyRow, keySchema, valueRow, valueSchema, storeConf)
+              isValidated = true
+            }
             map.put(keyRow, valueRow)
           }
         }
@@ -629,7 +642,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     require(allFiles.exists(_.version == version))
 
     val latestSnapshotFileBeforeVersion = allFiles
-      .filter(_.isSnapshot == true)
+      .filter(_.isSnapshot)
       .takeWhile(_.version <= version)
       .lastOption
     val deltaBatchFiles = latestSnapshotFileBeforeVersion match {

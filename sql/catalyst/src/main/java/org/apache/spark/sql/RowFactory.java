@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Stable;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 
 /**
@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericRow;
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 public class RowFactory {
 
   /**

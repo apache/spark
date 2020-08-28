@@ -19,14 +19,12 @@ package org.apache.spark.mllib.random
 
 import org.apache.commons.math3.distribution._
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.util.random.{Pseudorandom, XORShiftRandom}
 
 /**
- * :: DeveloperApi ::
  * Trait for random data generators that generate i.i.d. data.
  */
-@DeveloperApi
 @Since("1.1.0")
 trait RandomDataGenerator[T] extends Pseudorandom with Serializable {
 
@@ -45,10 +43,8 @@ trait RandomDataGenerator[T] extends Pseudorandom with Serializable {
 }
 
 /**
- * :: DeveloperApi ::
  * Generates i.i.d. samples from U[0.0, 1.0]
  */
-@DeveloperApi
 @Since("1.1.0")
 class UniformGenerator extends RandomDataGenerator[Double] {
 
@@ -68,10 +64,8 @@ class UniformGenerator extends RandomDataGenerator[Double] {
 }
 
 /**
- * :: DeveloperApi ::
  * Generates i.i.d. samples from the standard normal distribution.
  */
-@DeveloperApi
 @Since("1.1.0")
 class StandardNormalGenerator extends RandomDataGenerator[Double] {
 
@@ -91,12 +85,10 @@ class StandardNormalGenerator extends RandomDataGenerator[Double] {
 }
 
 /**
- * :: DeveloperApi ::
  * Generates i.i.d. samples from the Poisson distribution with the given mean.
  *
  * @param mean mean for the Poisson distribution.
  */
-@DeveloperApi
 @Since("1.1.0")
 class PoissonGenerator @Since("1.1.0") (
     @Since("1.1.0") val mean: Double) extends RandomDataGenerator[Double] {
@@ -107,7 +99,7 @@ class PoissonGenerator @Since("1.1.0") (
   override def nextValue(): Double = rng.sample()
 
   @Since("1.1.0")
-  override def setSeed(seed: Long) {
+  override def setSeed(seed: Long): Unit = {
     rng.reseedRandomGenerator(seed)
   }
 
@@ -116,12 +108,10 @@ class PoissonGenerator @Since("1.1.0") (
 }
 
 /**
- * :: DeveloperApi ::
  * Generates i.i.d. samples from the exponential distribution with the given mean.
  *
  * @param mean mean for the exponential distribution.
  */
-@DeveloperApi
 @Since("1.3.0")
 class ExponentialGenerator @Since("1.3.0") (
     @Since("1.3.0") val mean: Double) extends RandomDataGenerator[Double] {
@@ -132,7 +122,7 @@ class ExponentialGenerator @Since("1.3.0") (
   override def nextValue(): Double = rng.sample()
 
   @Since("1.3.0")
-  override def setSeed(seed: Long) {
+  override def setSeed(seed: Long): Unit = {
     rng.reseedRandomGenerator(seed)
   }
 
@@ -141,13 +131,11 @@ class ExponentialGenerator @Since("1.3.0") (
 }
 
 /**
- * :: DeveloperApi ::
  * Generates i.i.d. samples from the gamma distribution with the given shape and scale.
  *
  * @param shape shape for the gamma distribution.
  * @param scale scale for the gamma distribution
  */
-@DeveloperApi
 @Since("1.3.0")
 class GammaGenerator @Since("1.3.0") (
     @Since("1.3.0") val shape: Double,
@@ -159,7 +147,7 @@ class GammaGenerator @Since("1.3.0") (
   override def nextValue(): Double = rng.sample()
 
   @Since("1.3.0")
-  override def setSeed(seed: Long) {
+  override def setSeed(seed: Long): Unit = {
     rng.reseedRandomGenerator(seed)
   }
 
@@ -168,14 +156,12 @@ class GammaGenerator @Since("1.3.0") (
 }
 
 /**
- * :: DeveloperApi ::
  * Generates i.i.d. samples from the log normal distribution with the
  * given mean and standard deviation.
  *
  * @param mean mean for the log normal distribution.
  * @param std standard deviation for the log normal distribution
  */
-@DeveloperApi
 @Since("1.3.0")
 class LogNormalGenerator @Since("1.3.0") (
     @Since("1.3.0") val mean: Double,
@@ -187,7 +173,7 @@ class LogNormalGenerator @Since("1.3.0") (
   override def nextValue(): Double = rng.sample()
 
   @Since("1.3.0")
-  override def setSeed(seed: Long) {
+  override def setSeed(seed: Long): Unit = {
     rng.reseedRandomGenerator(seed)
   }
 
@@ -196,14 +182,12 @@ class LogNormalGenerator @Since("1.3.0") (
 }
 
 /**
- * :: DeveloperApi ::
  * Generates i.i.d. samples from the Weibull distribution with the
  * given shape and scale parameter.
  *
  * @param alpha shape parameter for the Weibull distribution.
  * @param beta scale parameter for the Weibull distribution.
  */
-@DeveloperApi
 class WeibullGenerator(
     val alpha: Double,
     val beta: Double) extends RandomDataGenerator[Double] {

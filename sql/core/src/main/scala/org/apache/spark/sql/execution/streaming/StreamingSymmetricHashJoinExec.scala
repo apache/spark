@@ -21,13 +21,14 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Literal, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.execution.streaming.state._
+import org.apache.spark.sql.execution.streaming.state.SymmetricHashJoinStateManager.KeyToValuePair
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
@@ -109,7 +110,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
  *
  * 3. When both window in join key and time range conditions are present, case 1 + 2.
  *    In this case, since window equality is a stricter condition than the time range, we can
- *    use the the State Key Watermark = event time watermark to discard state (similar to case 1).
+ *    use the State Key Watermark = event time watermark to discard state (similar to case 1).
  *
  * @param leftKeys  Expression to generate key rows for joining from left input
  * @param rightKeys Expression to generate key rows for joining from right input
@@ -131,6 +132,7 @@ case class StreamingSymmetricHashJoinExec(
     stateInfo: Option[StatefulOperatorStateInfo],
     eventTimeWatermark: Option[Long],
     stateWatermarkPredicates: JoinStateWatermarkPredicates,
+    stateFormatVersion: Int,
     left: SparkPlan,
     right: SparkPlan) extends SparkPlan with BinaryExecNode with StateStoreWriter {
 
@@ -139,13 +141,20 @@ case class StreamingSymmetricHashJoinExec(
       rightKeys: Seq[Expression],
       joinType: JoinType,
       condition: Option[Expression],
+      stateFormatVersion: Int,
       left: SparkPlan,
       right: SparkPlan) = {
 
     this(
       leftKeys, rightKeys, joinType, JoinConditionSplitPredicates(condition, left, right),
       stateInfo = None, eventTimeWatermark = None,
-      stateWatermarkPredicates = JoinStateWatermarkPredicates(), left, right)
+      stateWatermarkPredicates = JoinStateWatermarkPredicates(), stateFormatVersion, left, right)
+  }
+
+  if (stateFormatVersion < 2 && joinType != Inner) {
+    throw new IllegalArgumentException("The query is using stream-stream outer join with state" +
+      s" format version ${stateFormatVersion} - correctness issue is discovered. Please discard" +
+      " the checkpoint and rerun the query. See SPARK-26154 for more details.")
   }
 
   private def throwBadJoinTypeException(): Nothing = {
@@ -206,6 +215,7 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   private def processPartitions(
+      partitionId: Int,
       leftInputIter: Iterator[InternalRow],
       rightInputIter: Iterator[InternalRow]): Iterator[InternalRow] = {
     if (stateInfo.isEmpty) {
@@ -224,14 +234,15 @@ case class StreamingSymmetricHashJoinExec(
     val joinedRow = new JoinedRow
 
 
+    val inputSchema = left.output ++ right.output
     val postJoinFilter =
-      newPredicate(condition.bothSides.getOrElse(Literal(true)), left.output ++ right.output).eval _
+      Predicate.create(condition.bothSides.getOrElse(Literal(true)), inputSchema).eval _
     val leftSideJoiner = new OneSideHashJoiner(
       LeftSide, left.output, leftKeys, leftInputIter,
-      condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left)
+      condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId)
     val rightSideJoiner = new OneSideHashJoiner(
       RightSide, right.output, rightKeys, rightInputIter,
-      condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right)
+      condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId)
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -270,20 +281,34 @@ case class StreamingSymmetricHashJoinExec(
         // * Getting an iterator over the rows that have aged out on the left side. These rows are
         //   candidates for being null joined. Note that to avoid doing two passes, this iterator
         //   removes the rows from the state manager as they're processed.
-        // * Checking whether the current row matches a key in the right side state, and that key
-        //   has any value which satisfies the filter function when joined. If it doesn't,
-        //   we know we can join with null, since there was never (including this batch) a match
-        //   within the watermark period. If it does, there must have been a match at some point, so
-        //   we know we can't join with null.
+        // * (state format version 1) Checking whether the current row matches a key in the
+        //   right side state, and that key has any value which satisfies the filter function when
+        //   joined. If it doesn't, we know we can join with null, since there was never
+        //   (including this batch) a match within the watermark period. If it does, there must have
+        //   been a match at some point, so we know we can't join with null.
+        // * (state format version 2) We found edge-case of above approach which brings correctness
+        //   issue, and had to take another approach (see SPARK-26154); now Spark stores 'matched'
+        //   flag along with row, which is set to true when there's any matching row on the right.
+
         def matchesWithRightSideState(leftKeyValue: UnsafeRowPair) = {
           rightSideJoiner.get(leftKeyValue.key).exists { rightValue =>
             postJoinFilter(joinedRow.withLeft(leftKeyValue.value).withRight(rightValue))
           }
         }
+
+        // NOTE: we need to make sure `outerOutputIter` is evaluated "after" exhausting all of
+        // elements in `innerOutputIter`, because evaluation of `innerOutputIter` may update
+        // the match flag which the logic for outer join is relying on.
         val removedRowIter = leftSideJoiner.removeOldState()
-        val outerOutputIter = removedRowIter
-          .filterNot(pair => matchesWithRightSideState(pair))
-          .map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
+        val outerOutputIter = removedRowIter.filterNot { kv =>
+          stateFormatVersion match {
+            case 1 => matchesWithRightSideState(new UnsafeRowPair(kv.key, kv.value))
+            case 2 => kv.matched
+            case _ =>
+              throw new IllegalStateException("Unexpected state format version! " +
+                s"version $stateFormatVersion")
+          }
+        }.map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
 
         innerOutputIter ++ outerOutputIter
       case RightOuter =>
@@ -294,9 +319,15 @@ case class StreamingSymmetricHashJoinExec(
           }
         }
         val removedRowIter = rightSideJoiner.removeOldState()
-        val outerOutputIter = removedRowIter
-          .filterNot(pair => matchesWithLeftSideState(pair))
-          .map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
+        val outerOutputIter = removedRowIter.filterNot { kv =>
+          stateFormatVersion match {
+            case 1 => matchesWithLeftSideState(new UnsafeRowPair(kv.key, kv.value))
+            case 2 => kv.matched
+            case _ =>
+              throw new IllegalStateException("Unexpected state format version! " +
+                s"version $stateFormatVersion")
+          }
+        }.map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
 
         innerOutputIter ++ outerOutputIter
       case _ => throwBadJoinTypeException()
@@ -380,6 +411,7 @@ case class StreamingSymmetricHashJoinExec(
    * @param stateWatermarkPredicate The state watermark predicate. See
    *                                [[StreamingSymmetricHashJoinExec]] for further description of
    *                                state watermarks.
+   * @param partitionId A partition ID of source RDD.
    */
   private class OneSideHashJoiner(
       joinSide: JoinSide,
@@ -388,30 +420,32 @@ case class StreamingSymmetricHashJoinExec(
       inputIter: Iterator[InternalRow],
       preJoinFilterExpr: Option[Expression],
       postJoinFilter: (InternalRow) => Boolean,
-      stateWatermarkPredicate: Option[JoinStateWatermarkPredicate]) {
+      stateWatermarkPredicate: Option[JoinStateWatermarkPredicate],
+      partitionId: Int) {
 
     // Filter the joined rows based on the given condition.
     val preJoinFilter =
-      newPredicate(preJoinFilterExpr.getOrElse(Literal(true)), inputAttributes).eval _
+      Predicate.create(preJoinFilterExpr.getOrElse(Literal(true)), inputAttributes).eval _
 
     private val joinStateManager = new SymmetricHashJoinStateManager(
-      joinSide, inputAttributes, joinKeys, stateInfo, storeConf, hadoopConfBcast.value.value)
+      joinSide, inputAttributes, joinKeys, stateInfo, storeConf, hadoopConfBcast.value.value,
+      partitionId, stateFormatVersion)
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
     private[this] val stateKeyWatermarkPredicateFunc = stateWatermarkPredicate match {
       case Some(JoinStateKeyWatermarkPredicate(expr)) =>
         // inputSchema can be empty as expr should only have BoundReferences and does not require
         // the schema to generated predicate. See [[StreamingSymmetricHashJoinHelper]].
-        newPredicate(expr, Seq.empty).eval _
+        Predicate.create(expr, Seq.empty).eval _
       case _ =>
-        newPredicate(Literal(false), Seq.empty).eval _ // false = do not remove if no predicate
+        Predicate.create(Literal(false), Seq.empty).eval _ // false = do not remove if no predicate
     }
 
     private[this] val stateValueWatermarkPredicateFunc = stateWatermarkPredicate match {
       case Some(JoinStateValueWatermarkPredicate(expr)) =>
-        newPredicate(expr, inputAttributes).eval _
+        Predicate.create(expr, inputAttributes).eval _
       case _ =>
-        newPredicate(Literal(false), Seq.empty).eval _  // false = do not remove if no predicate
+        Predicate.create(Literal(false), Seq.empty).eval _  // false = do not remove if no predicate
     }
 
     private[this] var updatedStateRowsCount = 0
@@ -431,8 +465,8 @@ case class StreamingSymmetricHashJoinExec(
       val nonLateRows =
         WatermarkSupport.watermarkExpression(watermarkAttribute, eventTimeWatermark) match {
           case Some(watermarkExpr) =>
-            val predicate = newPredicate(watermarkExpr, inputAttributes)
-            inputIter.filter { row => !predicate.eval(row) }
+            val predicate = Predicate.create(watermarkExpr, inputAttributes)
+            applyRemovingRowsOlderThanWatermark(inputIter, predicate)
           case None =>
             inputIter
         }
@@ -445,16 +479,9 @@ case class StreamingSymmetricHashJoinExec(
         // the case of inner join).
         if (preJoinFilter(thisRow)) {
           val key = keyGenerator(thisRow)
-          val outputIter = otherSideJoiner.joinStateManager.get(key).map { thatRow =>
-            generateJoinedRow(thisRow, thatRow)
-          }.filter(postJoinFilter)
-          val shouldAddToState = // add only if both removal predicates do not match
-            !stateKeyWatermarkPredicateFunc(key) && !stateValueWatermarkPredicateFunc(thisRow)
-          if (shouldAddToState) {
-            joinStateManager.append(key, thisRow)
-            updatedStateRowsCount += 1
-          }
-          outputIter
+          val outputIter: Iterator[JoinedRow] = otherSideJoiner.joinStateManager
+            .getJoinedRows(key, thatRow => generateJoinedRow(thisRow, thatRow), postJoinFilter)
+          new AddingProcessedRowToStateCompletionIterator(key, thisRow, outputIter)
         } else {
           joinSide match {
             case LeftSide if joinType == LeftOuter =>
@@ -463,6 +490,23 @@ case class StreamingSymmetricHashJoinExec(
               Iterator(generateJoinedRow(thisRow, nullLeft))
             case _ => Iterator()
           }
+        }
+      }
+    }
+
+    private class AddingProcessedRowToStateCompletionIterator(
+        key: UnsafeRow,
+        thisRow: UnsafeRow,
+        subIter: Iterator[JoinedRow])
+      extends CompletionIterator[JoinedRow, Iterator[JoinedRow]](subIter) {
+      private val iteratorNotEmpty: Boolean = super.hasNext
+
+      override def completion(): Unit = {
+        val shouldAddToState = // add only if both removal predicates do not match
+          !stateKeyWatermarkPredicateFunc(key) && !stateValueWatermarkPredicateFunc(thisRow)
+        if (shouldAddToState) {
+          joinStateManager.append(key, thisRow, matched = iteratorNotEmpty)
+          updatedStateRowsCount += 1
         }
       }
     }
@@ -486,7 +530,7 @@ case class StreamingSymmetricHashJoinExec(
      * We do this to avoid requiring either two passes or full materialization when
      * processing the rows for outer join.
      */
-    def removeOldState(): Iterator[UnsafeRowPair] = {
+    def removeOldState(): Iterator[KeyToValuePair] = {
       stateWatermarkPredicate match {
         case Some(JoinStateKeyWatermarkPredicate(expr)) =>
           joinStateManager.removeByKeyCondition(stateKeyWatermarkPredicateFunc)

@@ -46,12 +46,12 @@ class HadoopFileLinesReader(
 
   def this(file: PartitionedFile, conf: Configuration) = this(file, None, conf)
 
-  private val iterator = {
+  private val _iterator = {
     val fileSplit = new FileSplit(
       new Path(new URI(file.filePath)),
       file.start,
       file.length,
-      // TODO: Implement Locality
+      // The locality is decided by `getPreferredLocations` in `FileScanRDD`.
       Array.empty)
     val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
     val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
@@ -66,9 +66,9 @@ class HadoopFileLinesReader(
     new RecordReaderIterator(reader)
   }
 
-  override def hasNext: Boolean = iterator.hasNext
+  override def hasNext: Boolean = _iterator.hasNext
 
-  override def next(): Text = iterator.next()
+  override def next(): Text = _iterator.next()
 
-  override def close(): Unit = iterator.close()
+  override def close(): Unit = _iterator.close()
 }

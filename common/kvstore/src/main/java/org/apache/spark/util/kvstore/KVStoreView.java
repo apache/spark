@@ -38,8 +38,6 @@ import org.apache.spark.annotation.Private;
 @Private
 public abstract class KVStoreView<T> implements Iterable<T> {
 
-  final Class<T> type;
-
   boolean ascending = true;
   String index = KVIndex.NATURAL_INDEX_NAME;
   Object first = null;
@@ -47,10 +45,6 @@ public abstract class KVStoreView<T> implements Iterable<T> {
   Object parent = null;
   long skip = 0L;
   long max = Long.MAX_VALUE;
-
-  public KVStoreView(Class<T> type) {
-    this.type = type;
-  }
 
   /**
    * Reverses the order of iteration. By default, iterates in ascending order.

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
- * Simplify redundant [[CreateNamedStructLike]], [[CreateArray]] and [[CreateMap]] expressions.
+ * Simplify redundant [[CreateNamedStruct]], [[CreateArray]] and [[CreateMap]] expressions.
  */
 object SimplifyExtractValueOps extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -37,18 +37,30 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
     case a: Aggregate => a
     case p => p.transformExpressionsUp {
       // Remove redundant field extraction.
-      case GetStructField(createNamedStructLike: CreateNamedStructLike, ordinal, _) =>
-        createNamedStructLike.valExprs(ordinal)
-
+      case GetStructField(createNamedStruct: CreateNamedStruct, ordinal, _) =>
+        createNamedStruct.valExprs(ordinal)
+      case GetStructField(w @ WithFields(struct, names, valExprs), ordinal, maybeName) =>
+        val name = w.dataType(ordinal).name
+        val matches = names.zip(valExprs).filter(_._1 == name)
+        if (matches.nonEmpty) {
+          // return last matching element as that is the final value for the field being extracted.
+          // For example, if a user submits a query like this:
+          // `$"struct_col".withField("b", lit(1)).withField("b", lit(2)).getField("b")`
+          // we want to return `lit(2)` (and not `lit(1)`).
+          val expr = matches.last._2
+          If(IsNull(struct), Literal(null, expr.dataType), expr)
+        } else {
+          GetStructField(struct, ordinal, maybeName)
+        }
       // Remove redundant array indexing.
-      case GetArrayStructFields(CreateArray(elems), field, ordinal, _, _) =>
+      case GetArrayStructFields(CreateArray(elems, useStringTypeWhenEmpty), field, ordinal, _, _) =>
         // Instead of selecting the field on the entire array, select it from each member
         // of the array. Pushing down the operation this way may open other optimizations
         // opportunities (i.e. struct(...,x,...).x)
-        CreateArray(elems.map(GetStructField(_, ordinal, Some(field.name))))
+        CreateArray(elems.map(GetStructField(_, ordinal, Some(field.name))), useStringTypeWhenEmpty)
 
       // Remove redundant map lookup.
-      case ga @ GetArrayItem(CreateArray(elems), IntegerLiteral(idx)) =>
+      case ga @ GetArrayItem(CreateArray(elems, _), IntegerLiteral(idx)) =>
         // Instead of creating the array and then selecting one row, remove array creation
         // altogether.
         if (idx >= 0 && idx < elems.size) {
@@ -58,7 +70,7 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
           // out of bounds, mimic the runtime behavior and return null
           Literal(null, ga.dataType)
         }
-      case GetMapValue(CreateMap(elems), key) => CaseKeyWhen(key, elems)
+      case GetMapValue(CreateMap(elems, _), key) => CaseKeyWhen(key, elems)
     }
   }
 }

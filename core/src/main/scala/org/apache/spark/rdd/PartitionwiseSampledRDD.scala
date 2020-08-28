@@ -67,4 +67,12 @@ private[spark] class PartitionwiseSampledRDD[T: ClassTag, U: ClassTag](
     thisSampler.setSeed(split.seed)
     thisSampler.sample(firstParent[T].iterator(split.prev, context))
   }
+
+  override protected def getOutputDeterministicLevel = {
+    if (prev.outputDeterministicLevel == DeterministicLevel.UNORDERED) {
+      DeterministicLevel.INDETERMINATE
+    } else {
+      super.getOutputDeterministicLevel
+    }
+  }
 }

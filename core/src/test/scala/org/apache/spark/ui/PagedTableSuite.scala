@@ -32,19 +32,12 @@ class PagedDataSourceSuite extends SparkFunSuite {
 
     val dataSource3 = new SeqPagedDataSource[Int](1 to 5, pageSize = 2)
     assert(dataSource3.pageData(3) === PageData(3, Seq(5)))
-
+    // If the page number is more than maximum page, fall back to the last page
     val dataSource4 = new SeqPagedDataSource[Int](1 to 5, pageSize = 2)
-    val e1 = intercept[IndexOutOfBoundsException] {
-      dataSource4.pageData(4)
-    }
-    assert(e1.getMessage === "Page 4 is out of range. Please select a page number between 1 and 3.")
-
+    assert(dataSource4.pageData(4) === PageData(3, Seq(5)))
+    // If the page number is less than or equal to zero, fall back to the first page
     val dataSource5 = new SeqPagedDataSource[Int](1 to 5, pageSize = 2)
-    val e2 = intercept[IndexOutOfBoundsException] {
-      dataSource5.pageData(0)
-    }
-    assert(e2.getMessage === "Page 0 is out of range. Please select a page number between 1 and 3.")
-
+    assert(dataSource5.pageData(0) === PageData(3, 1 to 2))
   }
 }
 
@@ -66,14 +59,12 @@ class PagedTableSuite extends SparkFunSuite {
 
       override def pageSizeFormField: String = "pageSize"
 
-      override def prevPageSizeFormField: String = "prevPageSize"
-
       override def pageNumberFormField: String = "page"
 
       override def goButtonFormPath: String = ""
     }
 
-    assert(pagedTable.pageNavigation(1, 10, 1) === Nil)
+    assert((pagedTable.pageNavigation(1, 10, 1).head \\ "li").map(_.text.trim) === Seq("1"))
     assert(
       (pagedTable.pageNavigation(1, 10, 2).head \\ "li").map(_.text.trim) === Seq("1", "2", ">"))
     assert(
@@ -93,6 +84,35 @@ class PagedTableSuite extends SparkFunSuite {
       Seq("<<", "<") ++ (11 to 20).map(_.toString) ++ Seq(">", ">>"))
     assert((pagedTable.pageNavigation(93, 10, 97).head \\ "li").map(_.text.trim) ===
       Seq("<<", "<") ++ (91 to 97).map(_.toString) ++ Seq(">"))
+  }
+
+  test("pageNavigation with different id") {
+    val pagedTable = new PagedTable[Int] {
+      override def tableId: String = "testTable"
+
+      override def tableCssClass: String = ""
+
+      override def dataSource: PagedDataSource[Int] = null
+
+      override def pageLink(page: Int): String = ""
+
+      override def headers: Seq[Node] = Nil
+
+      override def row(t: Int): Seq[Node] = Nil
+
+      override def pageSizeFormField: String = ""
+
+      override def pageNumberFormField: String = ""
+
+      override def goButtonFormPath: String = ""
+    }
+
+    val defaultIdNavigation = pagedTable.pageNavigation(1, 10, 2).head \\ "form"
+    assert(defaultIdNavigation \@ "id" === "form-testTable-page")
+
+    val customIdNavigation = pagedTable.pageNavigation(1, 10, 2, "customIdTable").head \\ "form"
+    assert(customIdNavigation \@ "id" === "form-customIdTable-page")
+    assert(defaultIdNavigation !== customIdNavigation)
   }
 }
 

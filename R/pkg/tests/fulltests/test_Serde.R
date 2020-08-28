@@ -138,7 +138,7 @@ test_that("createDataFrame large objects", {
                                     enableHiveSupport = FALSE))
 
     sc <- getSparkContext()
-    actual <- callJStatic("org.apache.spark.api.r.RUtils", "getEncryptionEnabled", sc)
+    actual <- callJStatic("org.apache.spark.api.r.RUtils", "isEncryptionEnabled", sc)
     expected <- as.logical(encryptionEnabled)
     expect_equal(actual, expected)
 

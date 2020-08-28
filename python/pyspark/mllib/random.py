@@ -54,8 +54,7 @@ class RandomRDDs(object):
 
         To transform the distribution in the generated RDD from U(0.0, 1.0)
         to U(a, b), use
-        C{RandomRDDs.uniformRDD(sc, n, p, seed)\
-          .map(lambda v: a + (b - a) * v)}
+        ``RandomRDDs.uniformRDD(sc, n, p, seed).map(lambda v: a + (b - a) * v)``
 
         :param sc: SparkContext used to create the RDD.
         :param size: Size of the RDD.
@@ -85,8 +84,7 @@ class RandomRDDs(object):
 
         To transform the distribution in the generated RDD from standard normal
         to some other normal N(mean, sigma^2), use
-        C{RandomRDDs.normal(sc, n, p, seed)\
-          .map(lambda v: mean + sigma * v)}
+        ``RandomRDDs.normal(sc, n, p, seed).map(lambda v: mean + sigma * v)``
 
         :param sc: SparkContext used to create the RDD.
         :param size: Size of the RDD.

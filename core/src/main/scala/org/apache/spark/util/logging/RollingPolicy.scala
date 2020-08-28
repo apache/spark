@@ -67,12 +67,12 @@ private[spark] class TimeBasedRollingPolicy(
   }
 
   /** Rollover has occurred, so find the next time to rollover */
-  def rolledOver() {
+  def rolledOver(): Unit = {
     nextRolloverTime = calculateNextRolloverTime()
     logDebug(s"Current time: ${System.currentTimeMillis}, next rollover time: " + nextRolloverTime)
   }
 
-  def bytesWritten(bytes: Long) { }  // nothing to do
+  def bytesWritten(bytes: Long): Unit = { }  // nothing to do
 
   private def calculateNextRolloverTime(): Long = {
     val now = System.currentTimeMillis()
@@ -118,12 +118,12 @@ private[spark] class SizeBasedRollingPolicy(
   }
 
   /** Rollover has occurred, so reset the counter */
-  def rolledOver() {
+  def rolledOver(): Unit = {
     bytesWrittenSinceRollover = 0
   }
 
   /** Increment the bytes that have been written in the current file */
-  def bytesWritten(bytes: Long) {
+  def bytesWritten(bytes: Long): Unit = {
     bytesWrittenSinceRollover += bytes
   }
 

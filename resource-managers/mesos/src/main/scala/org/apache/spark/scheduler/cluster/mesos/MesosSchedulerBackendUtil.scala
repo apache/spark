@@ -17,28 +17,29 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import org.apache.mesos.Protos.{ContainerInfo, Environment, Image, NetworkInfo, Parameter, Secret, Volume}
+import org.apache.mesos.Protos.{ContainerInfo, Environment, Image, NetworkInfo, Parameter, Secret,
+  TaskState => MesosTaskState, Volume}
 import org.apache.mesos.Protos.ContainerInfo.{DockerInfo, MesosInfo}
 import org.apache.mesos.Protos.Environment.Variable
 import org.apache.mesos.protobuf.ByteString
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, TaskState}
 import org.apache.spark.SparkException
-import org.apache.spark.deploy.mesos.config.{NETWORK_LABELS, NETWORK_NAME}
+import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.deploy.mesos.config.MesosSecretConfig
 import org.apache.spark.internal.Logging
 
 /**
- * A collection of utility functions which can be used by both the
- * MesosSchedulerBackend and the [[MesosFineGrainedSchedulerBackend]].
+ * A collection of utility functions which can be used by the
+ * MesosSchedulerBackend, [[MesosFineGrainedSchedulerBackend]] and the MesosExecutorBackend.
  */
-private[mesos] object MesosSchedulerBackendUtil extends Logging {
+private[spark] object MesosSchedulerBackendUtil extends Logging {
   /**
-   * Parse a comma-delimited list of volume specs, each of which
+   * Parse a list of volume specs, each of which
    * takes the form [host-dir:]container-dir[:rw|:ro].
    */
-  def parseVolumesSpec(volumes: String): List[Volume] = {
-    volumes.split(",").map(_.split(":")).flatMap { spec =>
+  def parseVolumesSpec(volumes: Seq[String]): List[Volume] = {
+    volumes.map(_.split(":")).flatMap { spec =>
         val vol: Volume.Builder = Volume
           .newBuilder()
           .setMode(Volume.Mode.RW)
@@ -71,7 +72,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
   }
 
   /**
-   * Parse a comma-delimited list of port mapping specs, each of which
+   * Parse a list of port mapping specs, each of which
    * takes the form host_port:container_port[:udp|:tcp]
    *
    * Note:
@@ -81,8 +82,8 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
    * anticipates the expansion of the docker form to allow for a protocol
    * and leaves open the chance for mesos to begin to accept an 'ip' field
    */
-  def parsePortMappingsSpec(portmaps: String): List[DockerInfo.PortMapping] = {
-    portmaps.split(",").map(_.split(":")).flatMap { spec: Array[String] =>
+  def parsePortMappingsSpec(portmaps: Seq[String]): List[DockerInfo.PortMapping] = {
+    portmaps.map(_.split(":")).flatMap { spec: Array[String] =>
       val portmap: DockerInfo.PortMapping.Builder = DockerInfo.PortMapping
         .newBuilder()
         .setProtocol("tcp")
@@ -108,10 +109,10 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
    * Parse a list of docker parameters, each of which
    * takes the form key=value
    */
-  private def parseParamsSpec(params: String): List[Parameter] = {
+  private def parseParamsSpec(params: Seq[String]): List[Parameter] = {
     // split with limit of 2 to avoid parsing error when '='
     // exists in the parameter value
-    params.split(",").map(_.split("=", 2)).flatMap { spec: Array[String] =>
+    params.map(_.split("=", 2)).flatMap { spec: Array[String] =>
       val param: Parameter.Builder = Parameter.newBuilder()
       spec match {
         case Array(key, value) =>
@@ -127,8 +128,8 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
   }
 
   def buildContainerInfo(conf: SparkConf): ContainerInfo.Builder = {
-    val containerType = if (conf.contains("spark.mesos.executor.docker.image") &&
-      conf.get("spark.mesos.containerizer", "docker") == "docker") {
+    val containerType = if (conf.contains(EXECUTOR_DOCKER_IMAGE) &&
+      conf.get(CONTAINERIZER) == "docker") {
       ContainerInfo.Type.DOCKER
     } else {
       ContainerInfo.Type.MESOS
@@ -137,29 +138,30 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     val containerInfo = ContainerInfo.newBuilder()
       .setType(containerType)
 
-    conf.getOption("spark.mesos.executor.docker.image").map { image =>
+    conf.get(EXECUTOR_DOCKER_IMAGE).map { image =>
       val forcePullImage = conf
-        .getOption("spark.mesos.executor.docker.forcePullImage")
-        .exists(_.equals("true"))
+        .get(EXECUTOR_DOCKER_FORCE_PULL_IMAGE).contains(true)
 
       val portMaps = conf
-        .getOption("spark.mesos.executor.docker.portmaps")
+        .get(EXECUTOR_DOCKER_PORT_MAPS)
         .map(parsePortMappingsSpec)
         .getOrElse(List.empty)
 
       val params = conf
-        .getOption("spark.mesos.executor.docker.parameters")
+        .get(EXECUTOR_DOCKER_PARAMETERS)
         .map(parseParamsSpec)
         .getOrElse(List.empty)
 
       if (containerType == ContainerInfo.Type.DOCKER) {
-        containerInfo.setDocker(dockerInfo(image, forcePullImage, portMaps, params))
+        containerInfo.setDocker(
+          dockerInfo(image, forcePullImage, portMaps, params, conf.get(NETWORK_NAME))
+        )
       } else {
         containerInfo.setMesos(mesosInfo(image, forcePullImage))
       }
 
       val volumes = conf
-        .getOption("spark.mesos.executor.docker.volumes")
+        .get(EXECUTOR_DOCKER_VOLUMES)
         .map(parseVolumesSpec)
 
       volumes.foreach(_.foreach(containerInfo.addVolumes(_)))
@@ -263,12 +265,23 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
       image: String,
       forcePullImage: Boolean,
       portMaps: List[ContainerInfo.DockerInfo.PortMapping],
-      params: List[Parameter]): DockerInfo = {
+      params: List[Parameter],
+      networkName: Option[String]): DockerInfo = {
     val dockerBuilder = ContainerInfo.DockerInfo.newBuilder()
       .setImage(image)
       .setForcePullImage(forcePullImage)
     portMaps.foreach(dockerBuilder.addPortMappings(_))
     params.foreach(dockerBuilder.addParameters(_))
+
+    networkName.foreach { net =>
+      val network = Parameter.newBuilder()
+        .setKey("net")
+        .setValue(net)
+        .build()
+
+      dockerBuilder.setNetwork(DockerInfo.Network.USER)
+      dockerBuilder.addParameters(network)
+    }
 
     dockerBuilder.build
   }
@@ -281,5 +294,14 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     ContainerInfo.MesosInfo.newBuilder()
       .setImage(imageProto)
       .build
+  }
+
+  def taskStateToMesos(state: TaskState.TaskState): MesosTaskState = state match {
+    case TaskState.LAUNCHING => MesosTaskState.TASK_STARTING
+    case TaskState.RUNNING => MesosTaskState.TASK_RUNNING
+    case TaskState.FINISHED => MesosTaskState.TASK_FINISHED
+    case TaskState.FAILED => MesosTaskState.TASK_FAILED
+    case TaskState.KILLED => MesosTaskState.TASK_KILLED
+    case TaskState.LOST => MesosTaskState.TASK_LOST
   }
 }

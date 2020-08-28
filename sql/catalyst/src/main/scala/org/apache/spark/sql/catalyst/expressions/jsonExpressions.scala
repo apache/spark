@@ -19,16 +19,16 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io._
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
+import com.fasterxml.jackson.core.json.JsonReadFeature
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.json.JsonInferSchema.inferField
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -101,10 +101,11 @@ private[this] object JsonPathParser extends RegexParsers {
 }
 
 private[this] object SharedFactory {
-  val jsonFactory = new JsonFactory()
-
-  // Enabled for Hive compatibility
-  jsonFactory.enable(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS)
+  val jsonFactory = new JsonFactoryBuilder()
+    // The two options below enabled for Hive compatibility
+    .enable(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS)
+    .enable(JsonReadFeature.ALLOW_SINGLE_QUOTES)
+    .build()
 }
 
 /**
@@ -117,7 +118,8 @@ private[this] object SharedFactory {
     Examples:
       > SELECT _FUNC_('{"a":"b"}', '$.a');
        b
-  """)
+  """,
+  group = "json_funcs")
 case class GetJsonObject(json: Expression, path: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
 
@@ -333,15 +335,16 @@ case class GetJsonObject(json: Expression, path: Expression)
   }
 }
 
-// scalastyle:off line.size.limit
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Returns a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
-       1  2
-  """)
-// scalastyle:on line.size.limit
+       1	2
+  """,
+  group = "json_funcs")
+// scalastyle:on line.size.limit line.contains.tab
 case class JsonTuple(children: Seq[Expression])
   extends Generator with CodegenFallback {
 
@@ -504,10 +507,11 @@ case class JsonTuple(children: Seq[Expression])
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":0.8}', 'a INT, b DOUBLE');
-       {"a":1, "b":0.8}
+       {"a":1,"b":0.8}
       > SELECT _FUNC_('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
-       {"time":"2015-08-26 00:00:00.0"}
+       {"time":2015-08-26 00:00:00}
   """,
+  group = "json_funcs",
   since = "2.2.0")
 // scalastyle:on line.size.limit
 case class JsonToStructs(
@@ -515,21 +519,20 @@ case class JsonToStructs(
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
-
-  val forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA)
+  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes
+    with NullIntolerant {
 
   // The JSON input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
   // can generate incorrect files if values are missing in columns declared as non-nullable.
-  val nullableSchema = if (forceNullableSchema) schema.asNullable else schema
+  val nullableSchema = schema.asNullable
 
   override def nullable: Boolean = true
 
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
-      schema = JsonExprUtils.evalSchemaExpr(schema),
+      schema = ExprUtils.evalTypeExpr(schema),
       options = options,
       child = child,
       timeZoneId = None)
@@ -538,7 +541,7 @@ case class JsonToStructs(
 
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
-      schema = JsonExprUtils.evalSchemaExpr(schema),
+      schema = ExprUtils.evalTypeExpr(schema),
       options = ExprUtils.convertToMapData(options),
       child = child,
       timeZoneId = None)
@@ -554,18 +557,38 @@ case class JsonToStructs(
   @transient
   lazy val converter = nullableSchema match {
     case _: StructType =>
-      (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
+      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
     case _: ArrayType =>
-      (rows: Seq[InternalRow]) => rows.head.getArray(0)
+      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getArray(0) else null
     case _: MapType =>
-      (rows: Seq[InternalRow]) => rows.head.getMap(0)
+      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
   }
 
-  @transient
-  lazy val parser =
-    new JacksonParser(
-      nullableSchema,
-      new JSONOptions(options + ("mode" -> FailFastMode.name), timeZoneId.get))
+  val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
+  @transient lazy val parser = {
+    val parsedOptions = new JSONOptions(options, timeZoneId.get, nameOfCorruptRecord)
+    val mode = parsedOptions.parseMode
+    if (mode != PermissiveMode && mode != FailFastMode) {
+      throw new IllegalArgumentException(s"from_json() doesn't support the ${mode.name} mode. " +
+        s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
+    }
+    val (parserSchema, actualSchema) = nullableSchema match {
+      case s: StructType =>
+        ExprUtils.verifyColumnNameOfCorruptRecord(s, parsedOptions.columnNameOfCorruptRecord)
+        (s, StructType(s.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)))
+      case other =>
+        (StructType(StructField("value", other) :: Nil), other)
+    }
+
+    val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = false)
+    val createParser = CreateJacksonParser.utf8String _
+
+    new FailureSafeParser[UTF8String](
+      input => rawParser.parse(input, createParser, identity[UTF8String]),
+      mode,
+      parserSchema,
+      parsedOptions.columnNameOfCorruptRecord)
+  }
 
   override def dataType: DataType = nullableSchema
 
@@ -573,35 +596,7 @@ case class JsonToStructs(
     copy(timeZoneId = Option(timeZoneId))
 
   override def nullSafeEval(json: Any): Any = {
-    // When input is,
-    //   - `null`: `null`.
-    //   - invalid json: `null`.
-    //   - empty string: `null`.
-    //
-    // When the schema is array,
-    //   - json array: `Array(Row(...), ...)`
-    //   - json object: `Array(Row(...))`
-    //   - empty json array: `Array()`.
-    //   - empty json object: `Array(Row(null))`.
-    //
-    // When the schema is a struct,
-    //   - json object/array with single element: `Row(...)`
-    //   - json array with multiple elements: `null`
-    //   - empty json array: `null`.
-    //   - empty json object: `Row(null)`.
-
-    // We need `null` if the input string is an empty string. `JacksonParser` can
-    // deal with this but produces `Nil`.
-    if (json.toString.trim.isEmpty) return null
-
-    try {
-      converter(parser.parse(
-        json.asInstanceOf[UTF8String],
-        CreateJacksonParser.utf8String,
-        identity[UTF8String]))
-    } catch {
-      case _: BadRecordException => null
-    }
+    converter(parser.parse(json.asInstanceOf[UTF8String]))
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
@@ -610,6 +605,8 @@ case class JsonToStructs(
     case _: MapType => "entries"
     case _ => super.sql
   }
+
+  override def prettyName: String = "from_json"
 }
 
 /**
@@ -635,13 +632,15 @@ case class JsonToStructs(
       > SELECT _FUNC_(array((map('a', 1))));
        [{"a":1}]
   """,
+  group = "json_funcs",
   since = "2.2.0")
 // scalastyle:on line.size.limit
 case class StructsToJson(
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
+  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback
+    with ExpectsInputTypes with NullIntolerant {
   override def nullable: Boolean = true
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)
@@ -702,10 +701,8 @@ case class StructsToJson(
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
     case map: MapType =>
-      // TODO: let `JacksonUtils.verifySchema` verify a `MapType`
       try {
-        val st = StructType(StructField("a", map) :: Nil)
-        JacksonUtils.verifySchema(st)
+        JacksonUtils.verifyType(prettyName, map)
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: UnsupportedOperationException =>
@@ -730,6 +727,8 @@ case class StructsToJson(
   override def nullSafeEval(value: Any): Any = converter(value)
 
   override def inputTypes: Seq[AbstractDataType] = TypeCollection(ArrayType, StructType) :: Nil
+
+  override def prettyName: String = "to_json"
 }
 
 /**
@@ -744,11 +743,12 @@ case class StructsToJson(
       > SELECT _FUNC_('[{"col":01}]', map('allowNumericLeadingZeros', 'true'));
        array<struct<col:bigint>>
   """,
+  group = "json_funcs",
   since = "2.4.0")
 case class SchemaOfJson(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with String2StringExpression with CodegenFallback {
+  extends UnaryExpression with CodegenFallback {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -756,34 +756,189 @@ case class SchemaOfJson(
       child = child,
       options = ExprUtils.convertToMapData(options))
 
+  override def dataType: DataType = StringType
+
+  override def nullable: Boolean = false
+
   @transient
   private lazy val jsonOptions = new JSONOptions(options, "UTC")
 
   @transient
-  private lazy val jsonFactory = {
-    val factory = new JsonFactory()
-    jsonOptions.setJacksonOptions(factory)
-    factory
+  private lazy val jsonFactory = jsonOptions.buildJsonFactory()
+
+  @transient
+  private lazy val jsonInferSchema = new JsonInferSchema(jsonOptions)
+
+  @transient
+  private lazy val json = child.eval().asInstanceOf[UTF8String]
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (child.foldable && json != null) {
+      super.checkInputDataTypes()
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        "The input json should be a foldable string expression and not null; " +
+        s"however, got ${child.sql}.")
+    }
   }
 
-  override def convert(v: UTF8String): UTF8String = {
-    val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, v)) { parser =>
+  override def eval(v: InternalRow): Any = {
+    val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
       parser.nextToken()
-      inferField(parser, jsonOptions)
+      // To match with schema inference from JSON datasource.
+      jsonInferSchema.inferField(parser) match {
+        case st: StructType =>
+          jsonInferSchema.canonicalizeType(st, jsonOptions).getOrElse(StructType(Nil))
+        case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
+          jsonInferSchema
+            .canonicalizeType(at.elementType, jsonOptions)
+            .map(ArrayType(_, containsNull = at.containsNull))
+            .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
+        case other: DataType =>
+          jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(StringType)
+      }
     }
 
     UTF8String.fromString(dt.catalogString)
   }
+
+  override def prettyName: String = "schema_of_json"
 }
 
-object JsonExprUtils {
-  def evalSchemaExpr(exp: Expression): DataType = exp match {
-    case Literal(s, StringType) => DataType.fromDDL(s.toString)
-    case e @ SchemaOfJson(_: Literal, _) =>
-      val ddlSchema = e.eval().asInstanceOf[UTF8String]
-      DataType.fromDDL(ddlSchema.toString)
-    case e => throw new AnalysisException(
-      "Schema should be specified in DDL format as a string literal" +
-      s" or output of the schema_of_json function instead of ${e.sql}")
+/**
+ * A function that returns the number of elements in the outmost JSON array.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(jsonArray) - Returns the number of elements in the outmost JSON array.",
+  arguments = """
+    Arguments:
+      * jsonArray - A JSON array. `NULL` is returned in case of any other valid JSON string,
+          `NULL` or an invalid JSON.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('[1,2,3,4]');
+        4
+      > SELECT _FUNC_('[1,2,3,{"f1":1,"f2":[5,6]},4]');
+        5
+      > SELECT _FUNC_('[1,2');
+        NULL
+  """,
+  group = "json_funcs",
+  since = "3.1.0"
+)
+case class LengthOfJsonArray(child: Expression) extends UnaryExpression
+  with CodegenFallback with ExpectsInputTypes {
+
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def dataType: DataType = IntegerType
+  override def nullable: Boolean = true
+  override def prettyName: String = "json_array_length"
+
+  override def eval(input: InternalRow): Any = {
+    val json = child.eval(input).asInstanceOf[UTF8String]
+    // return null for null input
+    if (json == null) {
+      return null
+    }
+
+    try {
+      Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
+        parser => {
+          // return null if null array is encountered.
+          if (parser.nextToken() == null) {
+            return null
+          }
+          // Parse the array to compute its length.
+          parseCounter(parser, input)
+        }
+      }
+    } catch {
+      case _: JsonProcessingException | _: IOException => null
+    }
+  }
+
+  private def parseCounter(parser: JsonParser, input: InternalRow): Any = {
+    var length = 0
+    // Only JSON array are supported for this function.
+    if (parser.currentToken != JsonToken.START_ARRAY) {
+      return null
+    }
+    // Keep traversing until the end of JSON array
+    while(parser.nextToken() != JsonToken.END_ARRAY) {
+      length += 1
+      // skip all the child of inner object or array
+      parser.skipChildren()
+    }
+    length
+  }
+}
+
+/**
+ * A function which returns all the keys of the outmost JSON object.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(json_object) - Returns all the keys of the outmost JSON object as an array.",
+  arguments = """
+    Arguments:
+      * json_object - A JSON object. If a valid JSON object is given, all the keys of the outmost
+          object will be returned as an array. If it is any other valid JSON string, an invalid JSON
+          string or an empty string, the function returns null.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('{}');
+        []
+      > SELECT _FUNC_('{"key": "value"}');
+        ["key"]
+      > SELECT _FUNC_('{"f1":"abc","f2":{"f3":"a", "f4":"b"}}');
+        ["f1","f2"]
+  """,
+  group = "json_funcs",
+  since = "3.1.0"
+)
+case class JsonObjectKeys(child: Expression) extends UnaryExpression with CodegenFallback
+  with ExpectsInputTypes {
+
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def dataType: DataType = ArrayType(StringType)
+  override def nullable: Boolean = true
+  override def prettyName: String = "json_object_keys"
+
+  override def eval(input: InternalRow): Any = {
+    val json = child.eval(input).asInstanceOf[UTF8String]
+    // return null for `NULL` input
+    if(json == null) {
+      return null
+    }
+
+    try {
+      Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
+        parser => {
+          // return null if an empty string or any other valid JSON string is encountered
+          if (parser.nextToken() == null || parser.currentToken() != JsonToken.START_OBJECT) {
+            return null
+          }
+          // Parse the JSON string to get all the keys of outmost JSON object
+          getJsonKeys(parser, input)
+        }
+      }
+    } catch {
+      case _: JsonProcessingException | _: IOException => null
+    }
+  }
+
+  private def getJsonKeys(parser: JsonParser, input: InternalRow): GenericArrayData = {
+    var arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
+
+    // traverse until the end of input and ensure it returns valid key
+    while(parser.nextValue() != null && parser.currentName() != null) {
+      // add current fieldName to the ArrayBuffer
+      arrayBufferOfKeys += UTF8String.fromString(parser.getCurrentName)
+
+      // skip all the children of inner object or array
+      parser.skipChildren()
+    }
+    new GenericArrayData(arrayBufferOfKeys.toArray)
   }
 }

@@ -27,6 +27,7 @@ import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
+import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -101,10 +102,11 @@ public abstract class WritableColumnVector extends ColumnVector {
     String message = "Cannot reserve additional contiguous bytes in the vectorized reader (" +
         (requiredCapacity >= 0 ? "requested " + requiredCapacity + " bytes" : "integer overflow") +
         "). As a workaround, you can reduce the vectorized reader batch size, or disable the " +
-        "vectorized reader. For parquet file format, refer to " +
+        "vectorized reader, or disable " + SQLConf.BUCKETING_ENABLED().key() + " if you read " +
+        "from bucket table. For Parquet file format, refer to " +
         SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE().key() +
         " (default " + SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE().defaultValueString() +
-        ") and " + SQLConf.PARQUET_VECTORIZED_READER_ENABLED().key() + "; for orc file format, " +
+        ") and " + SQLConf.PARQUET_VECTORIZED_READER_ENABLED().key() + "; for ORC file format, " +
         "refer to " + SQLConf.ORC_VECTORIZED_READER_BATCH_SIZE().key() +
         " (default " + SQLConf.ORC_VECTORIZED_READER_BATCH_SIZE().defaultValueString() +
         ") and " + SQLConf.ORC_VECTORIZED_READER_ENABLED().key() + ".";
@@ -311,6 +313,12 @@ public abstract class WritableColumnVector extends ColumnVector {
   public abstract void putFloats(int rowId, int count, byte[] src, int srcIndex);
 
   /**
+   * Sets values from [src[srcIndex], src[srcIndex + count * 4]) to [rowId, rowId + count)
+   * The data in src must be ieee formatted floats in little endian.
+   */
+  public abstract void putFloatsLittleEndian(int rowId, int count, byte[] src, int srcIndex);
+
+  /**
    * Sets `value` to the value at rowId.
    */
   public abstract void putDouble(int rowId, double value);
@@ -330,6 +338,12 @@ public abstract class WritableColumnVector extends ColumnVector {
    * The data in src must be ieee formatted doubles in platform native endian.
    */
   public abstract void putDoubles(int rowId, int count, byte[] src, int srcIndex);
+
+  /**
+   * Sets values from [src[srcIndex], src[srcIndex + count * 8]) to [rowId, rowId + count)
+   * The data in src must be ieee formatted doubles in little endian.
+   */
+  public abstract void putDoublesLittleEndian(int rowId, int count, byte[] src, int srcIndex);
 
   /**
    * Puts a byte array that already exists in this column.
@@ -369,6 +383,12 @@ public abstract class WritableColumnVector extends ColumnVector {
       BigInteger bigInteger = value.toJavaBigDecimal().unscaledValue();
       putByteArray(rowId, bigInteger.toByteArray());
     }
+  }
+
+  public void putInterval(int rowId, CalendarInterval value) {
+    getChild(0).putInt(rowId, value.months);
+    getChild(1).putInt(rowId, value.days);
+    getChild(2).putLong(rowId, value.microseconds);
   }
 
   @Override
@@ -603,7 +623,10 @@ public abstract class WritableColumnVector extends ColumnVector {
    */
   public final int appendStruct(boolean isNull) {
     if (isNull) {
-      appendNull();
+      // This is the same as appendNull but without the assertion for struct types
+      reserve(elementsAppended + 1);
+      putNull(elementsAppended);
+      elementsAppended++;
       for (WritableColumnVector c: childColumns) {
         if (c.type instanceof StructType) {
           c.appendStruct(true);
@@ -732,10 +755,11 @@ public abstract class WritableColumnVector extends ColumnVector {
       this.childColumns[0] = reserveNewColumn(capacity, mapType.keyType());
       this.childColumns[1] = reserveNewColumn(capacity, mapType.valueType());
     } else if (type instanceof CalendarIntervalType) {
-      // Two columns. Months as int. Microseconds as Long.
-      this.childColumns = new WritableColumnVector[2];
+      // Three columns. Months as int. Days as Int. Microseconds as Long.
+      this.childColumns = new WritableColumnVector[3];
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
-      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.LongType);
+      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.IntegerType);
+      this.childColumns[2] = reserveNewColumn(capacity, DataTypes.LongType);
     } else {
       this.childColumns = null;
     }

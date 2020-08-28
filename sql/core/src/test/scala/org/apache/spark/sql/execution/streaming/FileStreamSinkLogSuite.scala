@@ -18,30 +18,29 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.lang.{Long => JLong}
+import java.net.URI
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
+
+import scala.util.Random
+
+import org.apache.hadoop.fs.{FSDataInputStream, Path, RawLocalFileSystem}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
+class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
 
   import CompactibleFileStreamLog._
   import FileStreamSinkLog._
 
-  test("compactLogs") {
+  test("shouldRetain") {
     withFileStreamSinkLog { sinkLog =>
-      val logs = Seq(
-        newFakeSinkFileStatus("/a/b/x", FileStreamSinkLog.ADD_ACTION),
-        newFakeSinkFileStatus("/a/b/y", FileStreamSinkLog.ADD_ACTION),
-        newFakeSinkFileStatus("/a/b/z", FileStreamSinkLog.ADD_ACTION))
-      assert(logs === sinkLog.compactLogs(logs))
-
-      val logs2 = Seq(
-        newFakeSinkFileStatus("/a/b/m", FileStreamSinkLog.ADD_ACTION),
-        newFakeSinkFileStatus("/a/b/n", FileStreamSinkLog.ADD_ACTION),
-        newFakeSinkFileStatus("/a/b/z", FileStreamSinkLog.DELETE_ACTION))
-      assert(logs.dropRight(1) ++ logs2.dropRight(1) === sinkLog.compactLogs(logs ++ logs2))
+      val log = newFakeSinkFileStatus("/a/b/x", FileStreamSinkLog.ADD_ACTION)
+      assert(sinkLog.shouldRetain(log))
     }
   }
 
@@ -57,14 +56,6 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
           blockSize = 10000L,
           action = FileStreamSinkLog.ADD_ACTION),
         SinkFileStatus(
-          path = "/a/b/y",
-          size = 200L,
-          isDir = false,
-          modificationTime = 2000L,
-          blockReplication = 2,
-          blockSize = 20000L,
-          action = FileStreamSinkLog.DELETE_ACTION),
-        SinkFileStatus(
           path = "/a/b/z",
           size = 300L,
           isDir = false,
@@ -76,7 +67,6 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
       // scalastyle:off
       val expected = s"""v$VERSION
           |{"path":"/a/b/x","size":100,"isDir":false,"modificationTime":1000,"blockReplication":1,"blockSize":10000,"action":"add"}
-          |{"path":"/a/b/y","size":200,"isDir":false,"modificationTime":2000,"blockReplication":2,"blockSize":20000,"action":"delete"}
           |{"path":"/a/b/z","size":300,"isDir":false,"modificationTime":3000,"blockReplication":3,"blockSize":30000,"action":"add"}""".stripMargin
       // scalastyle:on
       val baos = new ByteArrayOutputStream()
@@ -93,7 +83,6 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
       // scalastyle:off
       val logs = s"""v$VERSION
           |{"path":"/a/b/x","size":100,"isDir":false,"modificationTime":1000,"blockReplication":1,"blockSize":10000,"action":"add"}
-          |{"path":"/a/b/y","size":200,"isDir":false,"modificationTime":2000,"blockReplication":2,"blockSize":20000,"action":"delete"}
           |{"path":"/a/b/z","size":300,"isDir":false,"modificationTime":3000,"blockReplication":3,"blockSize":30000,"action":"add"}""".stripMargin
       // scalastyle:on
 
@@ -106,14 +95,6 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
           blockReplication = 1,
           blockSize = 10000L,
           action = FileStreamSinkLog.ADD_ACTION),
-        SinkFileStatus(
-          path = "/a/b/y",
-          size = 200L,
-          isDir = false,
-          modificationTime = 2000L,
-          blockReplication = 2,
-          blockSize = 20000L,
-          action = FileStreamSinkLog.DELETE_ACTION),
         SinkFileStatus(
           path = "/a/b/z",
           size = 300L,
@@ -227,7 +208,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
 
   test("read Spark 2.1.0 log format") {
     assert(readFromResource("file-sink-log-version-2.1.0") === Seq(
-      // SinkFileStatus("/a/b/0", 100, false, 100, 1, 100, FileStreamSinkLog.ADD_ACTION), -> deleted
+      SinkFileStatus("/a/b/0", 1, false, 1, 1, 100, FileStreamSinkLog.ADD_ACTION),
       SinkFileStatus("/a/b/1", 100, false, 100, 1, 100, FileStreamSinkLog.ADD_ACTION),
       SinkFileStatus("/a/b/2", 200, false, 200, 1, 100, FileStreamSinkLog.ADD_ACTION),
       SinkFileStatus("/a/b/3", 300, false, 300, 1, 100, FileStreamSinkLog.ADD_ACTION),
@@ -238,6 +219,44 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
       SinkFileStatus("/a/b/8", 800, false, 800, 1, 100, FileStreamSinkLog.ADD_ACTION),
       SinkFileStatus("/a/b/9", 900, false, 900, 3, 200, FileStreamSinkLog.ADD_ACTION)
     ))
+  }
+
+  test("getLatestBatchId") {
+    withCountOpenLocalFileSystemAsLocalFileSystem {
+      val scheme = CountOpenLocalFileSystem.scheme
+      withSQLConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3") {
+        withTempDir { dir =>
+          val sinkLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark,
+            s"$scheme:///${dir.getCanonicalPath}")
+          for (batchId <- 0L to 2L) {
+            sinkLog.add(
+              batchId,
+              Array(newFakeSinkFileStatus("/a/b/" + batchId, FileStreamSinkLog.ADD_ACTION)))
+          }
+
+          def getCountForOpenOnMetadataFile(batchId: Long): Long = {
+            val path = sinkLog.batchIdToPath(batchId).toUri.getPath
+            CountOpenLocalFileSystem.pathToNumOpenCalled.getOrDefault(path, 0L)
+          }
+
+          CountOpenLocalFileSystem.resetCount()
+
+          assert(sinkLog.getLatestBatchId() === Some(2L))
+          // getLatestBatchId doesn't open the latest metadata log file
+          (0L to 2L).foreach { batchId =>
+            assert(getCountForOpenOnMetadataFile(batchId) === 0L)
+          }
+
+          assert(sinkLog.getLatest().map(_._1).getOrElse(-1L) === 2L)
+          (0L to 1L).foreach { batchId =>
+            assert(getCountForOpenOnMetadataFile(batchId) === 0L)
+          }
+          // getLatest opens the latest metadata log file, which explains the needs on
+          // having "getLatestBatchId".
+          assert(getCountForOpenOnMetadataFile(2L) === 1L)
+        }
+      }
+    }
   }
 
   /**
@@ -267,4 +286,41 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
     val log = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark, input.toString)
     log.allFiles()
   }
+
+  private def withCountOpenLocalFileSystemAsLocalFileSystem(body: => Unit): Unit = {
+    val optionKey = s"fs.${CountOpenLocalFileSystem.scheme}.impl"
+    val originClassForLocalFileSystem = spark.conf.getOption(optionKey)
+    try {
+      spark.conf.set(optionKey, classOf[CountOpenLocalFileSystem].getName)
+      body
+    } finally {
+      originClassForLocalFileSystem match {
+        case Some(fsClazz) => spark.conf.set(optionKey, fsClazz)
+        case _ => spark.conf.unset(optionKey)
+      }
+    }
+  }
+}
+
+class CountOpenLocalFileSystem extends RawLocalFileSystem {
+  import CountOpenLocalFileSystem._
+
+  override def getUri: URI = {
+    URI.create(s"$scheme:///")
+  }
+
+  override def open(f: Path, bufferSize: Int): FSDataInputStream = {
+    val path = f.toUri.getPath
+    pathToNumOpenCalled.compute(path, (_, v) => {
+      if (v == null) 1L else v + 1
+    })
+    super.open(f, bufferSize)
+  }
+}
+
+object CountOpenLocalFileSystem {
+  val scheme = s"FileStreamSinkLogSuite${math.abs(Random.nextInt)}fs"
+  val pathToNumOpenCalled = new ConcurrentHashMap[String, JLong]
+
+  def resetCount(): Unit = pathToNumOpenCalled.clear()
 }

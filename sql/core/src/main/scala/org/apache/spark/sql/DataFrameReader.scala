@@ -24,22 +24,25 @@ import scala.collection.JavaConverters._
 import com.fasterxml.jackson.databind.ObjectMapper
 
 import org.apache.spark.Partition
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
+import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
-import org.apache.spark.sql.catalyst.util.FailureSafeParser
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailureSafeParser}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsCatalogOptions, SupportsRead}
+import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.sources.v2.{BatchReadSupportProvider, DataSourceOptions, DataSourceV2}
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -48,7 +51,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *
  * @since 1.4.0
  */
-@InterfaceStability.Stable
+@Stable
 class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
@@ -92,10 +95,24 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Adds an input option for the underlying data source.
    *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
+   *
    * You can set the following option(s):
    * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values. The following
+   * formats of `timeZone` are supported:
+   *   <ul>
+   *     <li> Region-based zone ID: It should have the form 'area/city', such as
+   *         'America/Los_Angeles'.</li>
+   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
+   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
+   *   </ul>
+   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
+   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
+   * used by default.
+   * </li>
    * </ul>
    *
    * @since 1.4.0
@@ -108,12 +125,18 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Adds an input option for the underlying data source.
    *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
+   *
    * @since 2.0.0
    */
   def option(key: String, value: Boolean): DataFrameReader = option(key, value.toString)
 
   /**
    * Adds an input option for the underlying data source.
+   *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
    *
    * @since 2.0.0
    */
@@ -122,6 +145,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Adds an input option for the underlying data source.
    *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
+   *
    * @since 2.0.0
    */
   def option(key: String, value: Double): DataFrameReader = option(key, value.toString)
@@ -129,10 +155,24 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * (Scala-specific) Adds input options for the underlying data source.
    *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
+   *
    * You can set the following option(s):
    * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values. The following
+   * formats of `timeZone` are supported:
+   *   <ul>
+   *     <li> Region-based zone ID: It should have the form 'area/city', such as
+   *         'America/Los_Angeles'.</li>
+   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
+   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
+   *   </ul>
+   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
+   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
+   * used by default.
+   * </li>
    * </ul>
    *
    * @since 1.4.0
@@ -145,10 +185,24 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Adds input options for the underlying data source.
    *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
+   *
    * You can set the following option(s):
    * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values. The following
+   * formats of `timeZone` are supported:
+   *   <ul>
+   *     <li> Region-based zone ID: It should have the form 'area/city', such as
+   *         'America/Los_Angeles'.</li>
+   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
+   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
+   *   </ul>
+   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
+   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
+   * used by default.
+   * </li>
    * </ul>
    *
    * @since 1.4.0
@@ -176,7 +230,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def load(path: String): DataFrame = {
     // force invocation of `load(...varargs...)`
-    option(DataSourceOptions.PATH_KEY, path).load(Seq.empty: _*)
+    if (sparkSession.sessionState.conf.legacyPathOptionBehavior) {
+      option("path", path).load(Seq.empty: _*)
+    } else {
+      load(Seq(path): _*)
+    }
   }
 
   /**
@@ -192,25 +250,61 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
-    val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
-    if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      val ds = cls.newInstance().asInstanceOf[DataSourceV2]
-      if (ds.isInstanceOf[BatchReadSupportProvider]) {
-        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-          ds = ds, conf = sparkSession.sessionState.conf)
-        val pathsOption = {
-          val objectMapper = new ObjectMapper()
-          DataSourceOptions.PATHS_KEY -> objectMapper.writeValueAsString(paths.toArray)
-        }
-        Dataset.ofRows(sparkSession, DataSourceV2Relation.create(
-          ds, sessionOptions ++ extraOptions.toMap + pathsOption,
-          userSpecifiedSchema = userSpecifiedSchema))
-      } else {
-        loadV1Source(paths: _*)
-      }
-    } else {
-      loadV1Source(paths: _*)
+    val legacyPathOptionBehavior = sparkSession.sessionState.conf.legacyPathOptionBehavior
+    if (!legacyPathOptionBehavior &&
+        (extraOptions.contains("path") || extraOptions.contains("paths")) && paths.nonEmpty) {
+      throw new AnalysisException("There is a 'path' or 'paths' option set and load() is called " +
+        "with path parameters. Either remove the path option if it's the same as the path " +
+        "parameter, or add it to the load() parameter if you do want to read multiple paths. " +
+        s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
     }
+
+    val updatedPaths = if (!legacyPathOptionBehavior && paths.length == 1) {
+      option("path", paths.head)
+      Seq.empty
+    } else {
+      paths
+    }
+
+    DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).map { provider =>
+      val catalogManager = sparkSession.sessionState.catalogManager
+      val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+        source = provider, conf = sparkSession.sessionState.conf)
+      val pathsOption = if (updatedPaths.isEmpty) {
+        None
+      } else {
+        val objectMapper = new ObjectMapper()
+        Some("paths" -> objectMapper.writeValueAsString(updatedPaths.toArray))
+      }
+
+      val finalOptions = sessionOptions ++ extraOptions.originalMap ++ pathsOption
+      val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
+      val (table, catalog, ident) = provider match {
+        case _: SupportsCatalogOptions if userSpecifiedSchema.nonEmpty =>
+          throw new IllegalArgumentException(
+            s"$source does not support user specified schema. Please don't specify the schema.")
+        case hasCatalog: SupportsCatalogOptions =>
+          val ident = hasCatalog.extractIdentifier(dsOptions)
+          val catalog = CatalogV2Util.getTableProviderCatalog(
+            hasCatalog,
+            catalogManager,
+            dsOptions)
+          (catalog.loadTable(ident), Some(catalog), Some(ident))
+        case _ =>
+          // TODO: Non-catalog paths for DSV2 are currently not well defined.
+          val tbl = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
+          (tbl, None, None)
+      }
+      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+      table match {
+        case _: SupportsRead if table.supports(BATCH_READ) =>
+          Dataset.ofRows(
+            sparkSession,
+            DataSourceV2Relation.create(table, catalog, ident, dsOptions))
+
+        case _ => loadV1Source(updatedPaths: _*)
+      }
+    }.getOrElse(loadV1Source(updatedPaths: _*))
   }
 
   private def loadV1Source(paths: String*) = {
@@ -221,7 +315,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         paths = paths,
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
-        options = extraOptions.toMap).resolveRelation())
+        options = extraOptions.originalMap).resolveRelation())
   }
 
   /**
@@ -235,7 +329,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     // properties should override settings in extraOptions.
     this.extraOptions ++= properties.asScala
     // explicit url and dbtable should override all
-    this.extraOptions += (JDBCOptions.JDBC_URL -> url, JDBCOptions.JDBC_TABLE_NAME -> table)
+    this.extraOptions ++= Seq(JDBCOptions.JDBC_URL -> url, JDBCOptions.JDBC_TABLE_NAME -> table)
     format("jdbc").load()
   }
 
@@ -249,7 +343,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * @param url JDBC database url of the form `jdbc:subprotocol:subname`.
    * @param table Name of the table in the external database.
-   * @param columnName the name of a column of integral type that will be used for partitioning.
+   * @param columnName the name of a column of numeric, date, or timestamp type
+   *                   that will be used for partitioning.
    * @param lowerBound the minimum value of `columnName` used to decide partition stride.
    * @param upperBound the maximum value of `columnName` used to decide partition stride.
    * @param numPartitions the number of partitions. This, along with `lowerBound` (inclusive),
@@ -305,7 +400,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       connectionProperties: Properties): DataFrame = {
     assertNoSpecifiedSchema("jdbc")
     // connectionProperties should override settings in extraOptions.
-    val params = extraOptions.toMap ++ connectionProperties.asScala.toMap
+    val params = extraOptions ++ connectionProperties.asScala
     val options = new JDBCOptions(url, table, params)
     val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
       JDBCPartition(part, i) : Partition
@@ -355,7 +450,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * during parsing.
    *   <ul>
    *     <li>`PERMISSIVE` : when it meets a corrupted record, puts the malformed string into a
-   *     field configured by `columnNameOfCorruptRecord`, and sets other fields to `null`. To
+   *     field configured by `columnNameOfCorruptRecord`, and sets malformed fields to `null`. To
    *     keep corrupt records, an user can set a string type field named
    *     `columnNameOfCorruptRecord` in an user-defined schema. If a schema does not have the
    *     field, it drops corrupt records during parsing. When inferring a schema, it implicitly
@@ -368,11 +463,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
-   * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * Custom date formats follow the formats at
+   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>.
+   * This applies to date type.</li>
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
-   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>.
+   * This applies to timestamp type.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
    * per file</li>
    * <li>`encoding` (by default it is not set): allows to forcibly set one of standard basic
@@ -384,6 +483,21 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * for schema inferring.</li>
    * <li>`dropFieldIfAllNull` (default `false`): whether to ignore column of all null values or
    * empty array/struct during schema inference.</li>
+   * <li>`locale` (default is `en-US`): sets a locale as language tag in IETF BCP 47 format.
+   * For instance, this is used while parsing dates and timestamps.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
+   * <li>`allowNonNumericNumbers` (default `true`): allows JSON parser to recognize set of
+   * "Not-a-Number" (NaN) tokens as legal floating number values:
+   *   <ul>
+   *     <li>`+INF` for positive infinity, as well as alias of `+Infinity` and `Infinity`.
+   *     <li>`-INF` for negative infinity), alias `-Infinity`.
+   *     <li>`NaN` for other not-a-numbers, like result of division by zero.
+   *   </ul>
+   * </li>
    * </ul>
    *
    * @since 2.0.0
@@ -440,19 +554,18 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       TextInputJsonDataSource.inferFromDataset(jsonDataset, parsedOptions)
     }
 
-    verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
+    ExprUtils.verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
     val actualSchema =
       StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
 
     val createParser = CreateJacksonParser.string _
     val parsed = jsonDataset.rdd.mapPartitions { iter =>
-      val rawParser = new JacksonParser(actualSchema, parsedOptions)
+      val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = true)
       val parser = new FailureSafeParser[String](
         input => rawParser.parse(input, createParser, UTF8String.fromString),
         parsedOptions.parseMode,
         schema,
-        parsedOptions.columnNameOfCorruptRecord,
-        parsedOptions.multiLine)
+        parsedOptions.columnNameOfCorruptRecord)
       iter.flatMap(parser.parse)
     }
     sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = jsonDataset.isStreaming)
@@ -492,7 +605,19 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       sparkSession.sessionState.conf.sessionLocalTimeZone)
     val filteredLines: Dataset[String] =
       CSVUtils.filterCommentAndEmpty(csvDataset, parsedOptions)
-    val maybeFirstLine: Option[String] = filteredLines.take(1).headOption
+
+    // For performance, short-circuit the collection of the first line when it won't be used:
+    //   - TextInputCSVDataSource - Only uses firstLine to infer an unspecified schema
+    //   - CSVHeaderChecker       - Only uses firstLine to check header, when headerFlag is true
+    //   - CSVUtils               - Only uses firstLine to filter headers, when headerFlag is true
+    // (If the downstream logic grows more complicated, consider refactoring to an approach that
+    //  delegates this decision to the constituent consumers themselves.)
+    val maybeFirstLine: Option[String] =
+      if (userSpecifiedSchema.isEmpty || parsedOptions.headerFlag) {
+        filteredLines.take(1).headOption
+      } else {
+        None
+      }
 
     val schema = userSpecifiedSchema.getOrElse {
       TextInputCSVDataSource.inferFromDataset(
@@ -502,7 +627,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         parsedOptions)
     }
 
-    verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
+    ExprUtils.verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
     val actualSchema =
       StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
 
@@ -518,11 +643,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     val parsed = linesWithoutHeader.mapPartitions { iter =>
       val rawParser = new UnivocityParser(actualSchema, parsedOptions)
       val parser = new FailureSafeParser[String](
-        input => Seq(rawParser.parse(input)),
+        input => rawParser.parse(input),
         parsedOptions.parseMode,
         schema,
-        parsedOptions.columnNameOfCorruptRecord,
-        parsedOptions.multiLine)
+        parsedOptions.columnNameOfCorruptRecord)
       iter.flatMap(parser.parse)
     }
     sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = csvDataset.isStreaming)
@@ -537,8 +661,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * You can set the following CSV-specific options to deal with CSV files:
    * <ul>
-   * <li>`sep` (default `,`): sets a single character as a separator for each
-   * field and value.</li>
+   * <li>`sep` (default `,`): sets a separator for each field and value. This separator can be one
+   * or more characters.</li>
    * <li>`encoding` (default `UTF-8`): decodes the CSV files by the given encoding
    * type.</li>
    * <li>`quote` (default `"`): sets a single character used for escaping quoted values where
@@ -576,26 +700,33 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`negativeInf` (default `-Inf`): sets the string representation of a negative infinity
    * value.</li>
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
-   * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * Custom date formats follow the formats at
+   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>.
+   * This applies to date type.</li>
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
-   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>.
+   * This applies to timestamp type.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
    * a record can have.</li>
    * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed
    * for any given value being read. By default, it is -1 meaning unlimited length</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
-   *    during parsing. It supports the following case-insensitive modes.
+   *    during parsing. It supports the following case-insensitive modes. Note that Spark tries
+   *    to parse only required columns in CSV under column pruning. Therefore, corrupt records
+   *    can be different based on required set of fields. This behavior can be controlled by
+   *    `spark.sql.csv.parser.columnPruning.enabled` (enabled by default).
    *   <ul>
    *     <li>`PERMISSIVE` : when it meets a corrupted record, puts the malformed string into a
-   *     field configured by `columnNameOfCorruptRecord`, and sets other fields to `null`. To keep
-   *     corrupt records, an user can set a string type field named `columnNameOfCorruptRecord`
-   *     in an user-defined schema. If a schema does not have the field, it drops corrupt records
-   *     during parsing. A record with less/more tokens than schema is not a corrupted record to
-   *     CSV. When it meets a record having fewer tokens than the length of the schema, sets
-   *     `null` to extra fields. When the record has more tokens than the length of the schema,
-   *     it drops extra tokens.</li>
+   *     field configured by `columnNameOfCorruptRecord`, and sets malformed fields to `null`.
+   *     To keep corrupt records, an user can set a string type field named
+   *     `columnNameOfCorruptRecord` in an user-defined schema. If a schema does not have
+   *     the field, it drops corrupt records during parsing. A record with less/more tokens
+   *     than schema is not a corrupted record to CSV. When it meets a record having fewer
+   *     tokens than the length of the schema, sets `null` to extra fields. When the record
+   *     has more tokens than the length of the schema, it drops extra tokens.</li>
    *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    *   </ul>
@@ -604,6 +735,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines.</li>
+   * <li>`locale` (default is `en-US`): sets a locale as language tag in IETF BCP 47 format.
+   * For instance, this is used while parsing dates and timestamps.</li>
+   * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
+   * that should be used for parsing. Maximum length is 1 character.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
    * </ul>
    *
    * @since 2.0.0
@@ -630,7 +770,13 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`mergeSchema` (default is the value specified in `spark.sql.parquet.mergeSchema`): sets
    * whether we should merge schemas collected from all Parquet part-files. This will override
    * `spark.sql.parquet.mergeSchema`.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
    * </ul>
+   *
    * @since 1.4.0
    */
   @scala.annotation.varargs
@@ -643,7 +789,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * @param path input path
    * @since 1.5.0
-   * @note Currently, this method can only be used after enabling Hive support.
    */
   def orc(path: String): DataFrame = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
@@ -653,9 +798,20 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Loads ORC files and returns the result as a `DataFrame`.
    *
+   * You can set the following ORC-specific option(s) for reading ORC files:
+   * <ul>
+   * <li>`mergeSchema` (default is the value specified in `spark.sql.orc.mergeSchema`): sets whether
+   * we should merge schemas collected from all ORC part-files. This will override
+   * `spark.sql.orc.mergeSchema`.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
+   * </ul>
+   *
    * @param paths input paths
    * @since 2.0.0
-   * @note Currently, this method can only be used after enabling Hive support.
    */
   @scala.annotation.varargs
   def orc(paths: String*): DataFrame = format("orc").load(paths: _*)
@@ -685,6 +841,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any.
+   * The text files must be encoded as UTF-8.
    *
    * By default, each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
@@ -701,6 +858,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * </li>
    * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
    * that should be used for parsing.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
+   * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
+   * disables partition discovery</li>
    * </ul>
    *
    * @param paths input paths
@@ -722,6 +884,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Loads text files and returns a [[Dataset]] of String. The underlying schema of the Dataset
    * contains a single string column named "value".
+   * The text files must be encoded as UTF-8.
    *
    * If the directory structure of the text files contains partitioning information, those are
    * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.
@@ -735,13 +898,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *   spark.read().textFile("/path/to/spark/README.md")
    * }}}
    *
-   * You can set the following textFile-specific option(s) for reading text files:
-   * <ul>
-   * <li>`wholetext` (default `false`): If true, read a file as a single row and not split by "\n".
-   * </li>
-   * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
-   * that should be used for parsing.</li>
-   * </ul>
+   * You can set the text-specific options as specified in `DataFrameReader.text`.
    *
    * @param paths input path
    * @since 2.0.0
@@ -761,22 +918,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
   }
 
-  /**
-   * A convenient function for schema validation in datasources supporting
-   * `columnNameOfCorruptRecord` as an option.
-   */
-  private def verifyColumnNameOfCorruptRecord(
-      schema: StructType,
-      columnNameOfCorruptRecord: String): Unit = {
-    schema.getFieldIndex(columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
-      val f = schema(corruptFieldIndex)
-      if (f.dataType != StringType || !f.nullable) {
-        throw new AnalysisException(
-          "The field for corrupt records must be string type and nullable")
-      }
-    }
-  }
-
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////
@@ -785,6 +926,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   private var userSpecifiedSchema: Option[StructType] = None
 
-  private val extraOptions = new scala.collection.mutable.HashMap[String, String]
+  private var extraOptions = CaseInsensitiveMap[String](Map.empty)
 
 }

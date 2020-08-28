@@ -16,7 +16,10 @@
  */
 package org.apache.spark.executor
 
+import java.util.concurrent.atomic.AtomicLongArray
+
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.memory.MemoryManager
 import org.apache.spark.metrics.ExecutorMetricType
 
 /**
@@ -27,17 +30,15 @@ import org.apache.spark.metrics.ExecutorMetricType
  */
 @DeveloperApi
 class ExecutorMetrics private[spark] extends Serializable {
-
-  // Metrics are indexed by MetricGetter.values
-  private val metrics = new Array[Long](ExecutorMetricType.values.length)
-
+  // Metrics are indexed by ExecutorMetricType.metricToOffset
+  private val metrics = new Array[Long](ExecutorMetricType.numMetrics)
   // the first element is initialized to -1, indicating that the values for the array
   // haven't been set yet.
   metrics(0) = -1
 
-  /** Returns the value for the specified metricType. */
-  def getMetricValue(metricType: ExecutorMetricType): Long = {
-    metrics(ExecutorMetricType.metricIdxMap(metricType))
+  /** Returns the value for the specified metric. */
+  def getMetricValue(metricName: String): Long = {
+    metrics(ExecutorMetricType.metricToOffset(metricName))
   }
 
   /** Returns true if the values for the metrics have been set, false otherwise. */
@@ -48,15 +49,22 @@ class ExecutorMetrics private[spark] extends Serializable {
     Array.copy(metrics, 0, this.metrics, 0, Math.min(metrics.size, this.metrics.size))
   }
 
+  private[spark] def this(metrics: AtomicLongArray) {
+    this()
+    ExecutorMetricType.metricToOffset.foreach { case (_, i) =>
+      this.metrics(i) = metrics.get(i)
+    }
+  }
+
   /**
-   * Constructor: create the ExecutorMetrics with the values specified.
+   * Constructor: create the ExecutorMetrics using a given map.
    *
    * @param executorMetrics map of executor metric name to value
    */
   private[spark] def this(executorMetrics: Map[String, Long]) {
     this()
-    (0 until ExecutorMetricType.values.length).foreach { idx =>
-      metrics(idx) = executorMetrics.getOrElse(ExecutorMetricType.values(idx).name, 0L)
+    ExecutorMetricType.metricToOffset.foreach { case (name, idx) =>
+      metrics(idx) = executorMetrics.getOrElse(name, 0L)
     }
   }
 
@@ -69,13 +77,33 @@ class ExecutorMetrics private[spark] extends Serializable {
    */
   private[spark] def compareAndUpdatePeakValues(executorMetrics: ExecutorMetrics): Boolean = {
     var updated = false
-
-    (0 until ExecutorMetricType.values.length).foreach { idx =>
-       if (executorMetrics.metrics(idx) > metrics(idx)) {
+    (0 until ExecutorMetricType.numMetrics).foreach { idx =>
+      if (executorMetrics.metrics(idx) > metrics(idx)) {
         updated = true
         metrics(idx) = executorMetrics.metrics(idx)
       }
     }
     updated
+  }
+}
+
+private[spark] object ExecutorMetrics {
+
+  /**
+   * Get the current executor metrics. These are returned as an array, with the index
+   * determined by ExecutorMetricType.metricToOffset.
+   *
+   * @param memoryManager the memory manager for execution and storage memory
+   * @return the values of the metrics
+   */
+  def getCurrentMetrics(memoryManager: MemoryManager): Array[Long] = {
+    val currentMetrics = new Array[Long](ExecutorMetricType.numMetrics)
+    var offset = 0
+    ExecutorMetricType.metricGetters.foreach { metricType =>
+      val metricValues = metricType.getMetricValues(memoryManager)
+      Array.copy(metricValues, 0, currentMetrics, offset, metricValues.length)
+      offset += metricValues.length
+    }
+    currentMetrics
   }
 }

@@ -16,18 +16,14 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
-import org.apache.spark.deploy.k8s.integrationtest.TestConfig.{getTestImageRepo, getTestImageTag}
-
 private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
 
   import PythonTestsSuite._
   import KubernetesSuite.k8sTestTag
 
-  private val pySparkDockerImage =
-    s"${getTestImageRepo}/spark-py:${getTestImageTag}"
   test("Run PySpark on simple pi.py example", k8sTestTag) {
     sparkAppConf
-      .set("spark.kubernetes.container.image", pySparkDockerImage)
+      .set("spark.kubernetes.container.image", pyImage)
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_PI,
       mainClass = "",
@@ -39,34 +35,17 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
       isJVM = false)
   }
 
-  test("Run PySpark with Python2 to test a pyfiles example", k8sTestTag) {
-    sparkAppConf
-      .set("spark.kubernetes.container.image", pySparkDockerImage)
-      .set("spark.kubernetes.pyspark.pythonVersion", "2")
-    runSparkApplicationAndVerifyCompletion(
-      appResource = PYSPARK_FILES,
-      mainClass = "",
-      expectedLogOnCompletion = Seq(
-        "Python runtime version check is: True",
-        "Python environment version check is: True"),
-      appArgs = Array("python"),
-      driverPodChecker = doBasicDriverPyPodCheck,
-      executorPodChecker = doBasicExecutorPyPodCheck,
-      appLocator = appLocator,
-      isJVM = false,
-      pyFiles = Some(PYSPARK_CONTAINER_TESTS))
-  }
-
   test("Run PySpark with Python3 to test a pyfiles example", k8sTestTag) {
     sparkAppConf
-      .set("spark.kubernetes.container.image", pySparkDockerImage)
+      .set("spark.kubernetes.container.image", pyImage)
       .set("spark.kubernetes.pyspark.pythonVersion", "3")
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_FILES,
       mainClass = "",
       expectedLogOnCompletion = Seq(
         "Python runtime version check is: True",
-        "Python environment version check is: True"),
+        "Python environment version check is: True",
+        "Python runtime version check for executor is: True"),
       appArgs = Array("python3"),
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
@@ -77,7 +56,7 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
 
   test("Run PySpark with memory customization", k8sTestTag) {
     sparkAppConf
-      .set("spark.kubernetes.container.image", pySparkDockerImage)
+      .set("spark.kubernetes.container.image", pyImage)
       .set("spark.kubernetes.pyspark.pythonVersion", "3")
       .set("spark.kubernetes.memoryOverheadFactor", s"$memOverheadConstant")
       .set("spark.executor.pyspark.memory", s"${additionalMemory}m")

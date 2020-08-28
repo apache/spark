@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.internal.config.UI.UI_ENABLED
+import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 
@@ -36,6 +38,7 @@ trait SqlBasedBenchmark extends BenchmarkBase with SQLHelper {
       .appName(this.getClass.getCanonicalName)
       .config(SQLConf.SHUFFLE_PARTITIONS.key, 1)
       .config(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, 1)
+      .config(UI_ENABLED.key, false)
       .getOrCreate()
   }
 
@@ -56,5 +59,11 @@ trait SqlBasedBenchmark extends BenchmarkBase with SQLHelper {
     }
 
     benchmark.run()
+  }
+
+  implicit class DatasetToBenchmark(ds: Dataset[_]) {
+    def noop(): Unit = {
+      ds.write.format("noop").mode(Overwrite).save()
+    }
   }
 }

@@ -69,7 +69,7 @@ class RecurringTimerSuite extends SparkFunSuite with PrivateMethodTester {
       }
     }
     thread.start()
-    val stopped = PrivateMethod[RecurringTimer]('stopped)
+    val stopped = PrivateMethod[RecurringTimer](Symbol("stopped"))
     // Make sure the `stopped` field has been changed
     eventually(timeout(10.seconds), interval(10.millis)) {
       assert(timer.invokePrivate(stopped()) === true)

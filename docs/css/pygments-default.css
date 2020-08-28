@@ -11,6 +11,10 @@ Also, I was thrown off for a while at first when I was using markdown
 code block inside my {% highlight scala %} ... {% endhighlight %} tags
 (I was using 4 spaces for this), when it turns out that pygments will
 insert the code (or pre?) tags for you.
+
+Note that due to Python 3 compatibility in the project, now we use
+Rouge which claims Pygments compatibility, instead of pygments.rb which
+does not support Python 3. See SPARK-28752.
 */
 
 .hll { background-color: #ffffcc }

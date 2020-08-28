@@ -56,7 +56,7 @@ private[master] class FileSystemPersistenceEngine(
     files.map(deserializeFromFile[T])
   }
 
-  private def serializeIntoFile(file: File, value: AnyRef) {
+  private def serializeIntoFile(file: File, value: AnyRef): Unit = {
     val created = file.createNewFile()
     if (!created) { throw new IllegalStateException("Could not create file: " + file) }
     val fileOut = new FileOutputStream(file)

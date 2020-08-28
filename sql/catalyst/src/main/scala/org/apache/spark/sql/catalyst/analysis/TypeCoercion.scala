@@ -23,6 +23,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -60,9 +61,11 @@ object TypeCoercion {
       IfCoercion ::
       StackCoercion ::
       Division ::
+      IntegralDivision ::
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
+      StringLiteralCoercion ::
       Nil
 
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
@@ -120,23 +123,21 @@ object TypeCoercion {
    */
   private def findCommonTypeForBinaryComparison(
       dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
-    // We should cast all relative timestamp/date/string comparison into string comparisons
-    // This behaves as a user would expect because timestamp strings sort lexicographically.
-    // i.e. TimeStamp(2013-01-01 00:00 ...) < "2014" = true
-    case (StringType, DateType) => Some(StringType)
-    case (DateType, StringType) => Some(StringType)
-    case (StringType, TimestampType) => Some(StringType)
-    case (TimestampType, StringType) => Some(StringType)
+    case (StringType, DateType)
+      => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
+    case (DateType, StringType)
+      => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
+    case (StringType, TimestampType)
+      => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
+    case (TimestampType, StringType)
+      => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
     case (StringType, NullType) => Some(StringType)
     case (NullType, StringType) => Some(StringType)
 
     // Cast to TimestampType when we compare DateType with TimestampType
-    // if conf.compareDateTimestampInTimestamp is true
     // i.e. TimeStamp('2017-03-01 00:00:00') eq Date('2017-03-01') = true
-    case (TimestampType, DateType)
-      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
-    case (DateType, TimestampType)
-      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
+    case (TimestampType, DateType) => Some(TimestampType)
+    case (DateType, TimestampType) => Some(TimestampType)
 
     // There is no proper decimal type we can pick,
     // using double type is the best we can do.
@@ -181,8 +182,9 @@ object TypeCoercion {
   }
 
   /**
-   * The method finds a common type for data types that differ only in nullable, containsNull
-   * and valueContainsNull flags. If the input types are too different, None is returned.
+   * The method finds a common type for data types that differ only in nullable flags, including
+   * `nullable`, `containsNull` of [[ArrayType]] and `valueContainsNull` of [[MapType]].
+   * If the input types are different besides nullable flags, None is returned.
    */
   def findCommonTypeDifferentOnlyInNullFlags(t1: DataType, t2: DataType): Option[DataType] = {
     if (t1 == t2) {
@@ -244,7 +246,7 @@ object TypeCoercion {
    * string. If the wider decimal type exceeds system limitation, this rule will truncate
    * the decimal type before return it.
    */
-  private[analysis] def findWiderTypeWithoutStringPromotionForTwo(
+  private[catalyst] def findWiderTypeWithoutStringPromotionForTwo(
       t1: DataType,
       t2: DataType): Option[DataType] = {
     findTightestCommonType(t1, t2)
@@ -339,10 +341,10 @@ object TypeCoercion {
         assert(newChildren.length == 2)
         Intersect(newChildren.head, newChildren.last, isAll)
 
-      case s: Union if s.childrenResolved &&
+      case s: Union if s.childrenResolved && !s.byName &&
           s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
         val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(s.children)
-        s.makeCopy(Array(newChildren))
+        s.copy(children = newChildren)
     }
 
     /** Build new children with the widest types for each attribute among all the children */
@@ -471,8 +473,7 @@ object TypeCoercion {
         val rhs = sub.output
 
         val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
-          findCommonTypeForBinaryComparison(l.dataType, r.dataType, conf)
-            .orElse(findTightestCommonType(l.dataType, r.dataType))
+          findWiderTypeForTwo(l.dataType, r.dataType)
         }
 
         // The number of columns/expressions must match between LHS and RHS of an
@@ -555,10 +556,10 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a @ CreateArray(children) if !haveSameType(children.map(_.dataType)) =>
+      case a @ CreateArray(children, _) if !haveSameType(children.map(_.dataType)) =>
         val types = children.map(_.dataType)
         findWiderCommonType(types) match {
-          case Some(finalDataType) => CreateArray(children.map(castIfNotSameType(_, finalDataType)))
+          case Some(finalDataType) => a.copy(children.map(castIfNotSameType(_, finalDataType)))
           case None => a
         }
 
@@ -594,7 +595,7 @@ object TypeCoercion {
           case None => m
         }
 
-      case m @ CreateMap(children) if m.keys.length == m.values.length &&
+      case m @ CreateMap(children, _) if m.keys.length == m.values.length &&
           (!haveSameType(m.keys.map(_.dataType)) || !haveSameType(m.values.map(_.dataType))) =>
         val keyTypes = m.keys.map(_.dataType)
         val newKeys = findWiderCommonType(keyTypes) match {
@@ -608,7 +609,7 @@ object TypeCoercion {
           case None => m.values
         }
 
-        CreateMap(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
+        m.copy(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
 
       // Promote SUM, SUM DISTINCT and AVERAGE to largest types to prevent overflows.
       case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
@@ -681,6 +682,23 @@ object TypeCoercion {
     private def isNumericOrNull(ex: Expression): Boolean = {
       // We need to handle null types in case a query contains null literals.
       ex.dataType.isInstanceOf[NumericType] || ex.dataType == NullType
+    }
+  }
+
+  /**
+   * The DIV operator always returns long-type value.
+   * This rule cast the integral inputs to long type, to avoid overflow during calculation.
+   */
+  object IntegralDivision extends TypeCoercionRule {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      case e if !e.childrenResolved => e
+      case d @ IntegralDivide(left, right) =>
+        IntegralDivide(mayCastToLong(left), mayCastToLong(right))
+    }
+
+    private def mayCastToLong(expr: Expression): Expression = expr.dataType match {
+      case _: ByteType | _: ShortType | _: IntegerType => Cast(expr, LongType)
+      case _ => expr
     }
   }
 
@@ -817,24 +835,21 @@ object TypeCoercion {
     }
   }
 
-  /**
-   * Turns Add/Subtract of DateType/TimestampType/StringType and CalendarIntervalType
-   * to TimeAdd/TimeSub
-   */
   object DateTimeOperations extends Rule[LogicalPlan] {
-
-    private val acceptedTypes = Seq(DateType, TimestampType, StringType)
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
+      case d @ DateAdd(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateAdd(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
 
-      case Add(l @ CalendarIntervalType(), r) if acceptedTypes.contains(r.dataType) =>
-        Cast(TimeAdd(r, l), r.dataType)
-      case Add(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
-        Cast(TimeAdd(l, r), l.dataType)
-      case Subtract(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
-        Cast(TimeSub(l, r), l.dataType)
+      case s @ SubtractTimestamps(DateType(), _) =>
+        s.copy(endTimestamp = Cast(s.endTimestamp, TimestampType))
+      case s @ SubtractTimestamps(_, DateType()) =>
+        s.copy(startTimestamp = Cast(s.startTimestamp, TimestampType))
+
+      case t @ TimeAdd(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
     }
   }
 
@@ -842,12 +857,26 @@ object TypeCoercion {
    * Casts types according to the expected input types for [[Expression]]s.
    */
   object ImplicitTypeCasts extends TypeCoercionRule {
+
+    private def canHandleTypeCoercion(leftType: DataType, rightType: DataType): Boolean = {
+      (leftType, rightType) match {
+        case (_: DecimalType, NullType) => true
+        case (NullType, _: DecimalType) => true
+        case _ =>
+          // If DecimalType operands are involved except for the two cases above,
+          // DecimalPrecision will handle it.
+          !leftType.isInstanceOf[DecimalType] && !rightType.isInstanceOf[DecimalType] &&
+            leftType != rightType
+      }
+    }
+
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
+      case b @ BinaryOperator(left, right)
+          if canHandleTypeCoercion(left.dataType, right.dataType) =>
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
           if (b.inputType.acceptsType(commonType)) {
             // If the expression accepts the tightest common type, cast to that.
@@ -878,6 +907,48 @@ object TypeCoercion {
           }
         }
         e.withNewChildren(children)
+
+      case udf: ScalaUDF if udf.inputTypes.nonEmpty =>
+        val children = udf.children.zip(udf.inputTypes).map { case (in, expected) =>
+          // Currently Scala UDF will only expect `AnyDataType` at top level, so this trick works.
+          // In the future we should create types like `AbstractArrayType`, so that Scala UDF can
+          // accept inputs of array type of arbitrary element type.
+          if (expected == AnyDataType) {
+            in
+          } else {
+            implicitCast(
+              in,
+              udfInputToCastType(in.dataType, expected.asInstanceOf[DataType])
+            ).getOrElse(in)
+          }
+
+        }
+        udf.withNewChildren(children)
+    }
+
+    private def udfInputToCastType(input: DataType, expectedType: DataType): DataType = {
+      (input, expectedType) match {
+        // SPARK-26308: avoid casting to an arbitrary precision and scale for decimals. Please note
+        // that precision and scale cannot be inferred properly for a ScalaUDF because, when it is
+        // created, it is not bound to any column. So here the precision and scale of the input
+        // column is used.
+        case (in: DecimalType, _: DecimalType) => in
+        case (ArrayType(dtIn, _), ArrayType(dtExp, nullableExp)) =>
+          ArrayType(udfInputToCastType(dtIn, dtExp), nullableExp)
+        case (MapType(keyDtIn, valueDtIn, _), MapType(keyDtExp, valueDtExp, nullableExp)) =>
+          MapType(udfInputToCastType(keyDtIn, keyDtExp),
+            udfInputToCastType(valueDtIn, valueDtExp),
+            nullableExp)
+        case (StructType(fieldsIn), StructType(fieldsExp)) =>
+          val fieldTypes =
+            fieldsIn.map(_.dataType).zip(fieldsExp.map(_.dataType)).map { case (dtIn, dtExp) =>
+              udfInputToCastType(dtIn, dtExp)
+            }
+          StructType(fieldsExp.zip(fieldTypes).map { case (field, newDt) =>
+            field.copy(dataType = newDt)
+          })
+        case (_, other) => other
+      }
     }
 
     /**
@@ -1000,6 +1071,34 @@ object TypeCoercion {
       }
     }
   }
+
+  /**
+   * A special rule to support string literal as the second argument of date_add/date_sub functions,
+   * to keep backward compatibility as a temporary workaround.
+   * TODO(SPARK-28589): implement ANSI type type coercion and handle string literals.
+   */
+  object StringLiteralCoercion extends TypeCoercionRule {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+      case DateAdd(l, r) if r.dataType == StringType && r.foldable =>
+        val days = try {
+          AnsiCast(r, IntegerType).eval().asInstanceOf[Int]
+        } catch {
+          case e: NumberFormatException => throw new AnalysisException(
+            "The second argument of 'date_add' function needs to be an integer.", cause = Some(e))
+        }
+        DateAdd(l, Literal(days))
+      case DateSub(l, r) if r.dataType == StringType && r.foldable =>
+        val days = try {
+          AnsiCast(r, IntegerType).eval().asInstanceOf[Int]
+        } catch {
+          case e: NumberFormatException => throw new AnalysisException(
+            "The second argument of 'date_sub' function needs to be an integer.", cause = Some(e))
+        }
+        DateSub(l, Literal(days))
+    }
+  }
 }
 
 trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
@@ -1037,8 +1136,8 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
             // Leave the same if the dataTypes match.
             case Some(newType) if a.dataType == newType.dataType => a
             case Some(newType) =>
-              logDebug(
-                s"Promoting $a from ${a.dataType} to ${newType.dataType} in ${q.simpleString}")
+              logDebug(s"Promoting $a from ${a.dataType} to ${newType.dataType} in " +
+                s" ${q.simpleString(SQLConf.get.maxToStringFields)}")
               newType
           }
       }

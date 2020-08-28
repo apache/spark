@@ -70,7 +70,7 @@ public final class JavaStructuredSessionization {
       new FlatMapFunction<LineWithTimestamp, Event>() {
         @Override
         public Iterator<Event> call(LineWithTimestamp lineWithTimestamp) {
-          ArrayList<Event> eventList = new ArrayList<Event>();
+          ArrayList<Event> eventList = new ArrayList<>();
           for (String word : lineWithTimestamp.getLine().split(" ")) {
             eventList.add(new Event(word, lineWithTimestamp.getTimestamp()));
           }

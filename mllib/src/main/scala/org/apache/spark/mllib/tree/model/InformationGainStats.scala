@@ -17,11 +17,10 @@
 
 package org.apache.spark.mllib.tree.model
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 
 /**
- * :: DeveloperApi ::
  * Information gain statistics for each split
  * @param gain information gain value
  * @param impurity current node impurity
@@ -31,7 +30,6 @@ import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
  * @param rightPredict right node predict
  */
 @Since("1.0.0")
-@DeveloperApi
 class InformationGainStats(
     val gain: Double,
     val impurity: Double,

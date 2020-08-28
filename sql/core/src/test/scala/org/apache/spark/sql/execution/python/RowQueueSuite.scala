@@ -33,7 +33,7 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
   test("in-memory queue") {
     val page = MemoryBlock.fromLongArray(new Array[Long](1<<10))
     val queue = new InMemoryRowQueue(page, 1) {
-      override def close() {}
+      override def close(): Unit = {}
     }
     val row = new UnsafeRow(1)
     row.pointTo(new Array[Byte](16), 16)

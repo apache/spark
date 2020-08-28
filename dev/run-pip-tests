@@ -39,21 +39,16 @@ PYTHON_EXECS=()
 # Some systems don't have pip or virtualenv - in those cases our tests won't work.
 if hash virtualenv 2>/dev/null && [ ! -n "$USE_CONDA" ]; then
   echo "virtualenv installed - using. Note if this is a conda virtual env you may wish to set USE_CONDA"
-  # Figure out which Python execs we should test pip installation with
-  if hash python2 2>/dev/null; then
-    # We do this since we are testing with virtualenv and the default virtual env python
-    # is in /usr/bin/python
-    PYTHON_EXECS+=('python2')
-  elif hash python 2>/dev/null; then
-    # If python2 isn't installed fallback to python if available
-    PYTHON_EXECS+=('python')
-  fi
+  # test only against python3
   if hash python3 2>/dev/null; then
-    PYTHON_EXECS+=('python3')
+    PYTHON_EXECS=('python3')
+  else
+    echo "Python3 not installed on system, skipping pip installability tests"
+    exit 0
   fi
 elif hash conda 2>/dev/null; then
   echo "Using conda virtual environments"
-  PYTHON_EXECS=('3.5')
+  PYTHON_EXECS=('3.6')
   USE_CONDA=1
 else
   echo "Missing virtualenv & conda, skipping pip installability tests"
@@ -68,10 +63,14 @@ fi
 PYSPARK_VERSION=$(python3 -c "exec(open('python/pyspark/version.py').read());print(__version__)")
 PYSPARK_DIST="$FWDIR/python/dist/pyspark-$PYSPARK_VERSION.tar.gz"
 # The pip install options we use for all the pip commands
-PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall "
+PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall"
 # Test both regular user and edit/dev install modes.
 PIP_COMMANDS=("pip install $PIP_OPTIONS $PYSPARK_DIST"
 	      "pip install $PIP_OPTIONS -e python/")
+
+# Jenkins has PySpark installed under user sitepackages shared for some reasons.
+# In this test, explicitly exclude user sitepackages to prevent side effects
+export PYTHONNOUSERSITE=1
 
 for python in "${PYTHON_EXECS[@]}"; do
   for install_command in "${PIP_COMMANDS[@]}"; do
@@ -81,8 +80,12 @@ for python in "${PYTHON_EXECS[@]}"; do
     VIRTUALENV_PATH="$VIRTUALENV_BASE"/$python
     rm -rf "$VIRTUALENV_PATH"
     if [ -n "$USE_CONDA" ]; then
+      if [ -f "$CONDA_PREFIX/etc/profile.d/conda.sh" ]; then
+        # See also https://github.com/conda/conda/issues/7980
+        source "$CONDA_PREFIX/etc/profile.d/conda.sh"
+      fi
       conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip setuptools
-      source activate "$VIRTUALENV_PATH"
+      source activate "$VIRTUALENV_PATH" || conda activate "$VIRTUALENV_PATH"
     else
       mkdir -p "$VIRTUALENV_PATH"
       virtualenv --python=$python "$VIRTUALENV_PATH"
@@ -90,14 +93,14 @@ for python in "${PYTHON_EXECS[@]}"; do
     fi
     # Upgrade pip & friends if using virtual env
     if [ ! -n "$USE_CONDA" ]; then
-      pip install --upgrade pip pypandoc wheel numpy
+      pip install --upgrade pip wheel numpy
     fi
 
     echo "Creating pip installable source dist"
     cd "$FWDIR"/python
     # Delete the egg info file if it exists, this can cache the setup file.
     rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
-    python setup.py sdist
+    python3 setup.py sdist
 
 
     echo "Installing dist into virtual env"
@@ -117,15 +120,15 @@ for python in "${PYTHON_EXECS[@]}"; do
     echo "Run basic sanity check on pip installed version with spark-submit"
     spark-submit "$FWDIR"/dev/pip-sanity-check.py
     echo "Run basic sanity check with import based"
-    python "$FWDIR"/dev/pip-sanity-check.py
+    python3 "$FWDIR"/dev/pip-sanity-check.py
     echo "Run the tests for context.py"
-    python "$FWDIR"/python/pyspark/context.py
+    python3 "$FWDIR"/python/pyspark/context.py
 
     cd "$FWDIR"
 
     # conda / virtualenv environments need to be deactivated differently
     if [ -n "$USE_CONDA" ]; then
-      source deactivate
+      source deactivate || conda deactivate
     else
       deactivate
     fi

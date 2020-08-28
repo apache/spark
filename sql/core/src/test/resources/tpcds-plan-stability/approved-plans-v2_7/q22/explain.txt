@@ -1,0 +1,142 @@
+== Physical Plan ==
+TakeOrderedAndProject (25)
++- * HashAggregate (24)
+   +- Exchange (23)
+      +- * HashAggregate (22)
+         +- * Expand (21)
+            +- BroadcastNestedLoopJoin Inner BuildRight (20)
+               :- * Project (16)
+               :  +- * BroadcastHashJoin Inner BuildRight (15)
+               :     :- * Project (10)
+               :     :  +- * BroadcastHashJoin Inner BuildRight (9)
+               :     :     :- * Filter (3)
+               :     :     :  +- * ColumnarToRow (2)
+               :     :     :     +- Scan parquet default.inventory (1)
+               :     :     +- BroadcastExchange (8)
+               :     :        +- * Project (7)
+               :     :           +- * Filter (6)
+               :     :              +- * ColumnarToRow (5)
+               :     :                 +- Scan parquet default.date_dim (4)
+               :     +- BroadcastExchange (14)
+               :        +- * Filter (13)
+               :           +- * ColumnarToRow (12)
+               :              +- Scan parquet default.item (11)
+               +- BroadcastExchange (19)
+                  +- * ColumnarToRow (18)
+                     +- Scan parquet default.warehouse (17)
+
+
+(1) Scan parquet default.inventory
+Output [3]: [inv_date_sk#1, inv_item_sk#2, inv_quantity_on_hand#3]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/inventory]
+PushedFilters: [IsNotNull(inv_date_sk), IsNotNull(inv_item_sk)]
+ReadSchema: struct<inv_date_sk:int,inv_item_sk:int,inv_quantity_on_hand:int>
+
+(2) ColumnarToRow [codegen id : 3]
+Input [3]: [inv_date_sk#1, inv_item_sk#2, inv_quantity_on_hand#3]
+
+(3) Filter [codegen id : 3]
+Input [3]: [inv_date_sk#1, inv_item_sk#2, inv_quantity_on_hand#3]
+Condition : (isnotnull(inv_date_sk#1) AND isnotnull(inv_item_sk#2))
+
+(4) Scan parquet default.date_dim
+Output [2]: [d_date_sk#4, d_month_seq#5]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1200), LessThanOrEqual(d_month_seq,1211), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_month_seq:int>
+
+(5) ColumnarToRow [codegen id : 1]
+Input [2]: [d_date_sk#4, d_month_seq#5]
+
+(6) Filter [codegen id : 1]
+Input [2]: [d_date_sk#4, d_month_seq#5]
+Condition : (((isnotnull(d_month_seq#5) AND (d_month_seq#5 >= 1200)) AND (d_month_seq#5 <= 1211)) AND isnotnull(d_date_sk#4))
+
+(7) Project [codegen id : 1]
+Output [1]: [d_date_sk#4]
+Input [2]: [d_date_sk#4, d_month_seq#5]
+
+(8) BroadcastExchange
+Input [1]: [d_date_sk#4]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#6]
+
+(9) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [inv_date_sk#1]
+Right keys [1]: [d_date_sk#4]
+Join condition: None
+
+(10) Project [codegen id : 3]
+Output [2]: [inv_item_sk#2, inv_quantity_on_hand#3]
+Input [4]: [inv_date_sk#1, inv_item_sk#2, inv_quantity_on_hand#3, d_date_sk#4]
+
+(11) Scan parquet default.item
+Output [5]: [i_item_sk#7, i_brand#8, i_class#9, i_category#10, i_product_name#11]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int,i_brand:string,i_class:string,i_category:string,i_product_name:string>
+
+(12) ColumnarToRow [codegen id : 2]
+Input [5]: [i_item_sk#7, i_brand#8, i_class#9, i_category#10, i_product_name#11]
+
+(13) Filter [codegen id : 2]
+Input [5]: [i_item_sk#7, i_brand#8, i_class#9, i_category#10, i_product_name#11]
+Condition : isnotnull(i_item_sk#7)
+
+(14) BroadcastExchange
+Input [5]: [i_item_sk#7, i_brand#8, i_class#9, i_category#10, i_product_name#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#12]
+
+(15) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [inv_item_sk#2]
+Right keys [1]: [i_item_sk#7]
+Join condition: None
+
+(16) Project [codegen id : 3]
+Output [5]: [inv_quantity_on_hand#3, i_brand#8, i_class#9, i_category#10, i_product_name#11]
+Input [7]: [inv_item_sk#2, inv_quantity_on_hand#3, i_item_sk#7, i_brand#8, i_class#9, i_category#10, i_product_name#11]
+
+(17) Scan parquet default.warehouse
+Output: []
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/warehouse]
+ReadSchema: struct<>
+
+(18) ColumnarToRow [codegen id : 4]
+Input: []
+
+(19) BroadcastExchange
+Input: []
+Arguments: IdentityBroadcastMode, [id=#13]
+
+(20) BroadcastNestedLoopJoin
+Join condition: None
+
+(21) Expand [codegen id : 5]
+Input [5]: [inv_quantity_on_hand#3, i_brand#8, i_class#9, i_category#10, i_product_name#11]
+Arguments: [List(inv_quantity_on_hand#3, i_product_name#11, i_brand#8, i_class#9, i_category#10, 0), List(inv_quantity_on_hand#3, i_product_name#11, i_brand#8, i_class#9, null, 1), List(inv_quantity_on_hand#3, i_product_name#11, i_brand#8, null, null, 3), List(inv_quantity_on_hand#3, i_product_name#11, null, null, null, 7), List(inv_quantity_on_hand#3, null, null, null, null, 15)], [inv_quantity_on_hand#3, i_product_name#14, i_brand#15, i_class#16, i_category#17, spark_grouping_id#18]
+
+(22) HashAggregate [codegen id : 5]
+Input [6]: [inv_quantity_on_hand#3, i_product_name#14, i_brand#15, i_class#16, i_category#17, spark_grouping_id#18]
+Keys [5]: [i_product_name#14, i_brand#15, i_class#16, i_category#17, spark_grouping_id#18]
+Functions [1]: [partial_avg(cast(inv_quantity_on_hand#3 as bigint))]
+Aggregate Attributes [2]: [sum#19, count#20]
+Results [7]: [i_product_name#14, i_brand#15, i_class#16, i_category#17, spark_grouping_id#18, sum#21, count#22]
+
+(23) Exchange
+Input [7]: [i_product_name#14, i_brand#15, i_class#16, i_category#17, spark_grouping_id#18, sum#21, count#22]
+Arguments: hashpartitioning(i_product_name#14, i_brand#15, i_class#16, i_category#17, spark_grouping_id#18, 5), true, [id=#23]
+
+(24) HashAggregate [codegen id : 6]
+Input [7]: [i_product_name#14, i_brand#15, i_class#16, i_category#17, spark_grouping_id#18, sum#21, count#22]
+Keys [5]: [i_product_name#14, i_brand#15, i_class#16, i_category#17, spark_grouping_id#18]
+Functions [1]: [avg(cast(inv_quantity_on_hand#3 as bigint))]
+Aggregate Attributes [1]: [avg(cast(inv_quantity_on_hand#3 as bigint))#24]
+Results [5]: [i_product_name#14, i_brand#15, i_class#16, i_category#17, avg(cast(inv_quantity_on_hand#3 as bigint))#24 AS qoh#25]
+
+(25) TakeOrderedAndProject
+Input [5]: [i_product_name#14, i_brand#15, i_class#16, i_category#17, qoh#25]
+Arguments: 100, [qoh#25 ASC NULLS FIRST, i_product_name#14 ASC NULLS FIRST, i_brand#15 ASC NULLS FIRST, i_class#16 ASC NULLS FIRST, i_category#17 ASC NULLS FIRST], [i_product_name#14, i_brand#15, i_class#16, i_category#17, qoh#25]
+

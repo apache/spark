@@ -196,8 +196,8 @@ class ConstantFoldingSuite extends PlanTest {
       EqualTo(Literal.create(null, IntegerType), 1) as 'c11,
       EqualTo(1, Literal.create(null, IntegerType)) as 'c12,
 
-      Like(Literal.create(null, StringType), "abc") as 'c13,
-      Like("abc", Literal.create(null, StringType)) as 'c14,
+      new Like(Literal.create(null, StringType), "abc") as 'c13,
+      new Like("abc", Literal.create(null, StringType)) as 'c14,
 
       Upper(Literal.create(null, StringType)) as 'c15,
 

@@ -19,7 +19,6 @@ package org.apache.spark.streaming.receiver
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
-import scala.language.{existentials, postfixOps}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -99,7 +98,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
     BlockManagerBasedStoreResult(blockId, numRecords)
   }
 
-  def cleanupOldBlocks(threshTime: Long) {
+  def cleanupOldBlocks(threshTime: Long): Unit = {
     // this is not used as blocks inserted into the BlockManager are cleared by DStream's clearing
     // of BlockRDDs.
   }
@@ -211,11 +210,11 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
     WriteAheadLogBasedStoreResult(blockId, numRecords, walRecordHandle)
   }
 
-  def cleanupOldBlocks(threshTime: Long) {
+  def cleanupOldBlocks(threshTime: Long): Unit = {
     writeAheadLog.clean(threshTime, false)
   }
 
-  def stop() {
+  def stop(): Unit = {
     writeAheadLog.close()
     executionContext.shutdown()
   }

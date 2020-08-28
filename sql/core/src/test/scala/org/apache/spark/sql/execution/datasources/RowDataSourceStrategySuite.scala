@@ -25,11 +25,11 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class RowDataSourceStrategySuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
+class RowDataSourceStrategySuite extends SharedSparkSession with BeforeAndAfter {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"

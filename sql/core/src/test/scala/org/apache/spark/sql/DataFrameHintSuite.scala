@@ -19,9 +19,9 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class DataFrameHintSuite extends AnalysisTest with SharedSQLContext {
+class DataFrameHintSuite extends AnalysisTest with SharedSparkSession {
   import testImplicits._
   lazy val df = spark.range(10)
 
@@ -68,5 +68,17 @@ class DataFrameHintSuite extends AnalysisTest with SharedSQLContext {
     check(
       df.hint("REPARTITION", 100),
       UnresolvedHint("REPARTITION", Seq(100), df.logicalPlan))
+
+    check(
+      df.hint("REPARTITION", 10, $"id".expr),
+      UnresolvedHint("REPARTITION", Seq(10, $"id".expr), df.logicalPlan))
+
+    check(
+      df.hint("REPARTITION_BY_RANGE", $"id".expr),
+      UnresolvedHint("REPARTITION_BY_RANGE", Seq($"id".expr), df.logicalPlan))
+
+    check(
+      df.hint("REPARTITION_BY_RANGE", 10, $"id".expr),
+      UnresolvedHint("REPARTITION_BY_RANGE", Seq(10, $"id".expr), df.logicalPlan))
   }
 }

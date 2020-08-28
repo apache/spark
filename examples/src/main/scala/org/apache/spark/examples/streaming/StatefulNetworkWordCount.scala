@@ -35,7 +35,7 @@ import org.apache.spark.streaming._
  *      org.apache.spark.examples.streaming.StatefulNetworkWordCount localhost 9999`
  */
 object StatefulNetworkWordCount {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 2) {
       System.err.println("Usage: StatefulNetworkWordCount <hostname> <port>")
       System.exit(1)

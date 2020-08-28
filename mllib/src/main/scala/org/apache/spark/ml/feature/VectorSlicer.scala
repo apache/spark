@@ -57,8 +57,6 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
     "An array of indices to select features from a vector column." +
       " There can be no overlap with names.", VectorSlicer.validIndices)
 
-  setDefault(indices -> Array.empty[Int])
-
   /** @group getParam */
   @Since("1.5.0")
   def getIndices: Array[Int] = $(indices)
@@ -79,8 +77,6 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
     "An array of feature names to select features from a vector column." +
       " There can be no overlap with indices.", VectorSlicer.validNames)
 
-  setDefault(names -> Array.empty[String])
-
   /** @group getParam */
   @Since("1.5.0")
   def getNames: Array[String] = $(names)
@@ -96,6 +92,8 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
   /** @group setParam */
   @Since("1.5.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  setDefault(indices -> Array.emptyIntArray, names -> Array.empty[String])
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -153,12 +151,17 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
     }
     val numFeaturesSelected = $(indices).length + $(names).length
     val outputAttr = new AttributeGroup($(outputCol), numFeaturesSelected)
-    val outputFields = schema.fields :+ outputAttr.toStructField()
-    StructType(outputFields)
+    SchemaUtils.appendColumn(schema, outputAttr.toStructField)
   }
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): VectorSlicer = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"VectorSlicer: uid=$uid" +
+      get(indices).map(i => s", numSelectedFeatures=${i.length}").getOrElse("")
+  }
 }
 
 @Since("1.6.0")

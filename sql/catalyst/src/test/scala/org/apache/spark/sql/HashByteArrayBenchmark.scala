@@ -83,7 +83,7 @@ object HashByteArrayBenchmark extends BenchmarkBase {
     benchmark.run()
   }
 
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Benchmark for MurMurHash 3 and xxHash64") {
       test(8, 42L, 1 << 10, 1 << 11)
       test(16, 42L, 1 << 10, 1 << 11)

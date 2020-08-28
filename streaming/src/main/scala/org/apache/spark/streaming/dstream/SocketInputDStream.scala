@@ -54,7 +54,7 @@ class SocketReceiver[T: ClassTag](
 
   private var socket: Socket = _
 
-  def onStart() {
+  def onStart(): Unit = {
 
     logInfo(s"Connecting to $host:$port")
     try {
@@ -69,11 +69,11 @@ class SocketReceiver[T: ClassTag](
     // Start the thread that receives data over a connection
     new Thread("Socket Receiver") {
       setDaemon(true)
-      override def run() { receive() }
+      override def run(): Unit = { receive() }
     }.start()
   }
 
-  def onStop() {
+  def onStop(): Unit = {
     // in case restart thread close it twice
     synchronized {
       if (socket != null) {
@@ -85,7 +85,7 @@ class SocketReceiver[T: ClassTag](
   }
 
   /** Create a socket connection and receive data until receiver is stopped */
-  def receive() {
+  def receive(): Unit = {
     try {
       val iterator = bytesToObjects(socket.getInputStream())
       while(!isStopped && iterator.hasNext) {
@@ -125,7 +125,7 @@ object SocketReceiver  {
         nextValue
       }
 
-      protected override def close() {
+      protected override def close(): Unit = {
         dataInputStream.close()
       }
     }

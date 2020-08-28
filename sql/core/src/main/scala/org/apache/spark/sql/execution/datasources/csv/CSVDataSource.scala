@@ -34,7 +34,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
+import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVInferSchema, CSVOptions, UnivocityParser}
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.types.StructType
@@ -95,7 +96,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       headerChecker: CSVHeaderChecker,
       requiredSchema: StructType): Iterator[InternalRow] = {
     val lines = {
-      val linesReader = new HadoopFileLinesReader(file, conf)
+      val linesReader = new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
       linesReader.map { line =>
         new String(line.getBytes, 0, line.getLength, parser.options.charset)
@@ -135,7 +136,9 @@ object TextInputCSVDataSource extends CSVDataSource {
           val parser = new CsvParser(parsedOptions.asParserSettings)
           linesWithoutHeader.map(parser.parseLine)
         }
-        CSVInferSchema.infer(tokenRDD, header, parsedOptions)
+        SQLExecution.withSQLConfPropagated(csv.sparkSession) {
+          new CSVInferSchema(parsedOptions).infer(tokenRDD, header)
+        }
       case _ =>
         // If the first line could not be read, just return the empty schema.
         StructType(Nil)
@@ -147,21 +150,23 @@ object TextInputCSVDataSource extends CSVDataSource {
       inputPaths: Seq[FileStatus],
       options: CSVOptions): Dataset[String] = {
     val paths = inputPaths.map(_.getPath.toString)
+    val df = sparkSession.baseRelationToDataFrame(
+      DataSource.apply(
+        sparkSession,
+        paths = paths,
+        className = classOf[TextFileFormat].getName,
+        options = options.parameters.originalMap
+      ).resolveRelation(checkFilesExist = false))
+      .select("value").as[String](Encoders.STRING)
+
     if (Charset.forName(options.charset) == StandardCharsets.UTF_8) {
-      sparkSession.baseRelationToDataFrame(
-        DataSource.apply(
-          sparkSession,
-          paths = paths,
-          className = classOf[TextFileFormat].getName,
-          options = options.parameters
-        ).resolveRelation(checkFilesExist = false))
-        .select("value").as[String](Encoders.STRING)
+      df
     } else {
       val charset = options.charset
-      val rdd = sparkSession.sparkContext
-        .hadoopFile[LongWritable, Text, TextInputFormat](paths.mkString(","))
-        .mapPartitions(_.map(pair => new String(pair._2.getBytes, 0, pair._2.getLength, charset)))
-      sparkSession.createDataset(rdd)(Encoders.STRING)
+      sparkSession.createDataset(df.queryExecution.toRdd.map { row =>
+        val bytes = row.getBinary(0)
+        new String(bytes, 0, bytes.length, charset)
+      })(Encoders.STRING)
     }
   }
 }
@@ -192,7 +197,8 @@ object MultiLineCSVDataSource extends CSVDataSource {
       UnivocityParser.tokenizeStream(
         CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, path),
         shouldDropHeader = false,
-        new CsvParser(parsedOptions.asParserSettings))
+        new CsvParser(parsedOptions.asParserSettings),
+        encoding = parsedOptions.charset)
     }.take(1).headOption match {
       case Some(firstRow) =>
         val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
@@ -203,10 +209,13 @@ object MultiLineCSVDataSource extends CSVDataSource {
               lines.getConfiguration,
               new Path(lines.getPath())),
             parsedOptions.headerFlag,
-            new CsvParser(parsedOptions.asParserSettings))
+            new CsvParser(parsedOptions.asParserSettings),
+            encoding = parsedOptions.charset)
         }
         val sampled = CSVUtils.sample(tokenRDD, parsedOptions)
-        CSVInferSchema.infer(sampled, header, parsedOptions)
+        SQLExecution.withSQLConfPropagated(sparkSession) {
+          new CSVInferSchema(parsedOptions).infer(sampled, header)
+        }
       case None =>
         // If the first row could not be read, just return the empty schema.
         StructType(Nil)

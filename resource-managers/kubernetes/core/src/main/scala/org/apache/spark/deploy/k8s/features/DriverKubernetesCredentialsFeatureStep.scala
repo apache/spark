@@ -27,8 +27,9 @@ import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilde
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.KubernetesUtils.buildPodWithServiceAccount
 
-private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: KubernetesConf[_])
+private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
   // TODO clean up this class, and credentials in general. See also SparkKubernetesClientFactory.
   // We should use a struct to hold all creds-related fields. A lot of the code is very repetitive.
@@ -41,7 +42,7 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
     s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CLIENT_CERT_FILE_CONF_SUFFIX")
   private val maybeMountedCaCertFile = kubernetesConf.getOption(
     s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX")
-  private val driverServiceAccount = kubernetesConf.get(KUBERNETES_SERVICE_ACCOUNT_NAME)
+  private val driverServiceAccount = kubernetesConf.get(KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME)
 
   private val oauthTokenBase64 = kubernetesConf
     .getOption(s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$OAUTH_TOKEN_CONF_SUFFIX")
@@ -66,19 +67,11 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
     clientCertDataBase64.isDefined
 
   private val driverCredentialsSecretName =
-    s"${kubernetesConf.appResourceNamePrefix}-kubernetes-credentials"
+    s"${kubernetesConf.resourceNamePrefix}-kubernetes-credentials"
 
   override def configurePod(pod: SparkPod): SparkPod = {
     if (!shouldMountSecret) {
-      pod.copy(
-        pod = driverServiceAccount.map { account =>
-          new PodBuilder(pod.pod)
-            .editOrNewSpec()
-              .withServiceAccount(account)
-              .withServiceAccountName(account)
-              .endSpec()
-            .build()
-        }.getOrElse(pod.pod))
+      pod.copy(pod = buildPodWithServiceAccount(driverServiceAccount, pod).getOrElse(pod.pod))
     } else {
       val driverPodWithMountedKubernetesCredentials =
         new PodBuilder(pod.pod)
@@ -122,7 +115,7 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
     val redactedTokens = kubernetesConf.sparkConf.getAll
       .filter(_._1.endsWith(OAUTH_TOKEN_CONF_SUFFIX))
       .toMap
-      .mapValues( _ => "<present_but_redacted>")
+      .map { case (k, v) => (k, "<present_but_redacted>") }
     redactedTokens ++
       resolvedMountedCaCertFile.map { file =>
         Map(

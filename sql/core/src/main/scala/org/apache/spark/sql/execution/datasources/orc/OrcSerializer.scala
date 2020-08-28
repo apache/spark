@@ -20,8 +20,6 @@ package org.apache.spark.sql.execution.datasources.orc
 import org.apache.hadoop.io._
 import org.apache.orc.TypeDescription
 import org.apache.orc.mapred.{OrcList, OrcMap, OrcStruct, OrcTimestamp}
-import org.apache.orc.storage.common.`type`.HiveDecimal
-import org.apache.orc.storage.serde2.io.{DateWritable, HiveDecimalWritable}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
@@ -139,14 +137,7 @@ class OrcSerializer(dataSchema: StructType) {
       new BytesWritable(getter.getBinary(ordinal))
 
     case DateType =>
-      if (reuseObj) {
-        val result = new DateWritable()
-        (getter, ordinal) =>
-          result.set(getter.getInt(ordinal))
-          result
-      } else {
-        (getter, ordinal) => new DateWritable(getter.getInt(ordinal))
-      }
+      OrcShimUtils.getDateWritable(reuseObj)
 
     // The following cases are already expensive, reusing object or not doesn't matter.
 
@@ -156,9 +147,8 @@ class OrcSerializer(dataSchema: StructType) {
       result.setNanos(ts.getNanos)
       result
 
-    case DecimalType.Fixed(precision, scale) => (getter, ordinal) =>
-      val d = getter.getDecimal(ordinal, precision, scale)
-      new HiveDecimalWritable(HiveDecimal.create(d.toJavaBigDecimal))
+    case DecimalType.Fixed(precision, scale) =>
+      OrcShimUtils.getHiveDecimalWritable(precision, scale)
 
     case st: StructType => (getter, ordinal) =>
       val result = createOrcValue(st).asInstanceOf[OrcStruct]

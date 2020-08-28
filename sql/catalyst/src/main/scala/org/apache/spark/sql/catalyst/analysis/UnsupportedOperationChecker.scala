@@ -17,20 +17,19 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, CurrentDate, CurrentTimestamp, MonotonicallyIncreasingID}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentDate, CurrentTimestamp, MonotonicallyIncreasingID, Now}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
  * Analyzes the presence of unsupported operations in a logical plan.
  */
-object UnsupportedOperationChecker {
+object UnsupportedOperationChecker extends Logging {
 
   def checkForBatch(plan: LogicalPlan): Unit = {
     plan.foreachUp {
@@ -41,8 +40,50 @@ object UnsupportedOperationChecker {
     }
   }
 
-  def checkForStreaming(plan: LogicalPlan, outputMode: OutputMode): Unit = {
+  def checkStreamingQueryGlobalWatermarkLimit(
+      plan: LogicalPlan,
+      outputMode: OutputMode,
+      failWhenDetected: Boolean): Unit = {
+    def isStatefulOperationPossiblyEmitLateRows(p: LogicalPlan): Boolean = p match {
+      case s: Aggregate
+        if s.isStreaming && outputMode == InternalOutputModes.Append => true
+      case Join(left, right, joinType, _, _)
+        if left.isStreaming && right.isStreaming && joinType != Inner => true
+      case f: FlatMapGroupsWithState
+        if f.isStreaming && f.outputMode == OutputMode.Append() => true
+      case _ => false
+    }
 
+    def isStatefulOperation(p: LogicalPlan): Boolean = p match {
+      case s: Aggregate if s.isStreaming => true
+      case _ @ Join(left, right, _, _, _) if left.isStreaming && right.isStreaming => true
+      case f: FlatMapGroupsWithState if f.isStreaming => true
+      case d: Deduplicate if d.isStreaming => true
+      case _ => false
+    }
+
+    try {
+      plan.foreach { subPlan =>
+        if (isStatefulOperation(subPlan)) {
+          subPlan.find { p =>
+            (p ne subPlan) && isStatefulOperationPossiblyEmitLateRows(p)
+          }.foreach { _ =>
+            val errorMsg = "Detected pattern of possible 'correctness' issue " +
+              "due to global watermark. " +
+              "The query contains stateful operation which can emit rows older than " +
+              "the current watermark plus allowed late record delay, which are \"late rows\"" +
+              " in downstream stateful operations and these rows can be discarded. " +
+              "Please refer the programming guide doc for more details."
+            throwError(errorMsg)(plan)
+          }
+        }
+      }
+    } catch {
+      case e: AnalysisException if !failWhenDetected => logWarning(s"${e.message};\n$plan")
+    }
+  }
+
+  def checkForStreaming(plan: LogicalPlan, outputMode: OutputMode): Unit = {
     if (!plan.isStreaming) {
       throwError(
         "Queries without streaming sources cannot be executed with writeStream.start()")(plan)
@@ -50,7 +91,13 @@ object UnsupportedOperationChecker {
 
     /** Collect all the streaming aggregates in a sub plan */
     def collectStreamingAggregates(subplan: LogicalPlan): Seq[Aggregate] = {
-      subplan.collect { case a: Aggregate if a.isStreaming => a }
+      subplan.collect {
+        case a: Aggregate if a.isStreaming => a
+        // Since the Distinct node will be replaced to Aggregate in the optimizer rule
+        // [[ReplaceDistinctWithAggregate]], here we also need to check all Distinct node by
+        // assuming it as Aggregate.
+        case d @ Distinct(c: LogicalPlan) if d.isStreaming => Aggregate(c.output, c.output, c)
+      }
     }
 
     val mapGroupsWithStates = plan.collect {
@@ -229,16 +276,15 @@ object UnsupportedOperationChecker {
           throwError("dropDuplicates is not supported after aggregation on a " +
             "streaming DataFrame/Dataset")
 
-        case Join(left, right, joinType, condition) =>
+        case Join(left, right, joinType, condition, _) =>
+          if (left.isStreaming && right.isStreaming && outputMode != InternalOutputModes.Append) {
+            throwError("Join between two streaming DataFrames/Datasets is not supported" +
+              s" in ${outputMode} output mode, only in Append output mode")
+          }
 
           joinType match {
-
             case _: InnerLike =>
-              if (left.isStreaming && right.isStreaming &&
-                outputMode != InternalOutputModes.Append) {
-                throwError("Inner join between two streaming DataFrames/Datasets is not supported" +
-                  s" in ${outputMode} output mode, only in Append output mode")
-              }
+              // no further validations needed
 
             case FullOuter =>
               if (left.isStreaming || right.isStreaming) {
@@ -340,6 +386,8 @@ object UnsupportedOperationChecker {
       // Check if there are unsupported expressions in streaming query plan.
       checkUnsupportedExpressions(subPlan)
     }
+
+    checkStreamingQueryGlobalWatermarkLimit(plan, outputMode, failWhenDetected = false)
   }
 
   def checkForContinuous(plan: LogicalPlan, outputMode: OutputMode): Unit = {
@@ -351,24 +399,13 @@ object UnsupportedOperationChecker {
               _: DeserializeToObject | _: SerializeFromObject | _: SubqueryAlias |
               _: TypedFilter) =>
         case node if node.nodeName == "StreamingRelationV2" =>
-        case Repartition(1, false, _) =>
-        case node: Aggregate =>
-          val aboveSinglePartitionCoalesce = node.find {
-            case Repartition(1, false, _) => true
-            case _ => false
-          }.isDefined
-
-          if (!aboveSinglePartitionCoalesce) {
-            throwError(s"In continuous processing mode, coalesce(1) must be called before " +
-              s"aggregate operation ${node.nodeName}.")
-          }
         case node =>
           throwError(s"Continuous processing does not support ${node.nodeName} operations.")
       }
 
       subPlan.expressions.foreach { e =>
         if (e.collectLeaves().exists {
-          case (_: CurrentTimestamp | _: CurrentDate) => true
+          case (_: CurrentTimestamp | _: Now | _: CurrentDate) => true
           case _ => false
         }) {
           throwError(s"Continuous processing does not support current time operations.")

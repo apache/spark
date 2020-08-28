@@ -18,13 +18,15 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.Types
+import java.util.Locale
 
 import org.apache.spark.sql.types._
 
 
 private object DerbyDialect extends JdbcDialect {
 
-  override def canHandle(url: String): Boolean = url.startsWith("jdbc:derby")
+  override def canHandle(url: String): Boolean =
+    url.toLowerCase(Locale.ROOT).startsWith("jdbc:derby")
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
@@ -43,4 +45,9 @@ private object DerbyDialect extends JdbcDialect {
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  // See https://db.apache.org/derby/docs/10.5/ref/rrefsqljrenametablestatement.html
+  override def renameTable(oldTable: String, newTable: String): String = {
+    s"RENAME TABLE $oldTable TO $newTable"
+  }
 }

@@ -21,6 +21,8 @@ import scala.collection.JavaConverters._
 
 import com.google.common.util.concurrent.AtomicLongMap
 
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
+
 case class QueryExecutionMetering() {
   private val timeMap = AtomicLongMap.create[String]()
   private val numRunsMap = AtomicLongMap.create[String]()
@@ -35,12 +37,24 @@ case class QueryExecutionMetering() {
     timeEffectiveRunsMap.clear()
   }
 
+  def getMetrics(): QueryExecutionMetrics = {
+    QueryExecutionMetrics(totalTime, totalNumRuns, totalNumEffectiveRuns, totalEffectiveTime)
+  }
+
   def totalTime: Long = {
     timeMap.sum()
   }
 
   def totalNumRuns: Long = {
     numRunsMap.sum()
+  }
+
+  def totalNumEffectiveRuns: Long = {
+    numEffectiveRunsMap.sum()
+  }
+
+  def totalEffectiveTime: Long = {
+    timeEffectiveRunsMap.sum()
   }
 
   def incExecutionTimeBy(ruleName: String, delta: Long): Unit = {
@@ -62,7 +76,11 @@ case class QueryExecutionMetering() {
   /** Dump statistics about time spent running specific rules. */
   def dumpTimeSpent(): String = {
     val map = timeMap.asMap().asScala
-    val maxLengthRuleNames = map.keys.map(_.toString.length).max
+    val maxLengthRuleNames = if (map.isEmpty) {
+      0
+    } else {
+      map.keys.map(_.toString.length).max
+    }
 
     val colRuleName = "Rule".padTo(maxLengthRuleNames, " ").mkString
     val colRunTime = "Effective Time / Total Time".padTo(len = 47, " ").mkString
@@ -82,10 +100,25 @@ case class QueryExecutionMetering() {
     s"""
        |=== Metrics of Analyzer/Optimizer Rules ===
        |Total number of runs: $totalNumRuns
-       |Total time: ${totalTime / 1000000000D} seconds
+       |Total time: ${totalTime / NANOS_PER_SECOND.toDouble} seconds
        |
        |$colRuleName $colRunTime $colNumRuns
        |$ruleMetrics
      """.stripMargin
+  }
+}
+
+case class QueryExecutionMetrics(
+    time: Long,
+    numRuns: Long,
+    numEffectiveRuns: Long,
+    timeEffective: Long) {
+
+  def -(metrics: QueryExecutionMetrics): QueryExecutionMetrics = {
+    QueryExecutionMetrics(
+      this.time - metrics.time,
+      this.numRuns - metrics.numRuns,
+      this.numEffectiveRuns - metrics.numEffectiveRuns,
+      this.timeEffective - metrics.timeEffective)
   }
 }

@@ -20,12 +20,9 @@ package org.apache.spark.sql
 import scala.annotation.implicitNotFound
 import scala.reflect.ClassTag
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.types._
 
-
 /**
- * :: Experimental ::
  * Used to convert a JVM object of type `T` to and from the internal Spark SQL representation.
  *
  * == Scala ==
@@ -61,13 +58,10 @@ import org.apache.spark.sql.types._
  * }}}
  *
  * == Implementation ==
- *  - Encoders are not required to be thread-safe and thus they do not need to use locks to guard
- *    against concurrent access if they reuse internal buffers to improve performance.
+ *  - Encoders should be thread-safe.
  *
  * @since 1.6.0
  */
-@Experimental
-@InterfaceStability.Evolving
 @implicitNotFound("Unable to find encoder for type ${T}. An implicit Encoder[${T}] is needed to " +
   "store ${T} instances in a Dataset. Primitive types (Int, String, etc) and Product types (case " +
   "classes) are supported by importing spark.implicits._  Support for serializing other types " +

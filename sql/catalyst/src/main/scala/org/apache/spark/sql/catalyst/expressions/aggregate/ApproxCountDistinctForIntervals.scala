@@ -39,7 +39,8 @@ import org.apache.spark.unsafe.Platform
  *                            and its elements should be sorted into ascending order.
  *                            Duplicate endpoints are allowed, e.g. (1, 5, 5, 10), and ndv for
  *                            interval (5, 5] would be 1.
- * @param relativeSD The maximum estimation error allowed in the HyperLogLogPlusPlus algorithm.
+ * @param relativeSD The maximum relative standard deviation allowed
+ *                   in the HyperLogLogPlusPlus algorithm.
  */
 case class ApproxCountDistinctForIntervals(
     child: Expression,

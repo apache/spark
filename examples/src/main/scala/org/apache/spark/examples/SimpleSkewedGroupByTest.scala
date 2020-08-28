@@ -26,7 +26,7 @@ import org.apache.spark.sql.SparkSession
  * Usage: SimpleSkewedGroupByTest [numMappers] [numKVPairs] [valSize] [numReducers] [ratio]
  */
 object SimpleSkewedGroupByTest {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder
       .appName("SimpleSkewedGroupByTest")

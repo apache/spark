@@ -19,7 +19,6 @@ package org.apache.spark.status.api.v1
 import java.io.OutputStream
 import java.lang.annotation.Annotation
 import java.lang.reflect.Type
-import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, SimpleTimeZone}
 import javax.ws.rs.Produces

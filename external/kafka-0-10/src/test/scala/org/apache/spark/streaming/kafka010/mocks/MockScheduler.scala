@@ -17,12 +17,13 @@
 
 package org.apache.spark.streaming.kafka010.mocks
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.PriorityQueue
 
 import kafka.utils.Scheduler
 import org.apache.kafka.common.utils.Time
+import org.jmock.lib.concurrent.DeterministicScheduler
 
 /**
  * A mock scheduler that executes tasks synchronously using a mock time instance.
@@ -41,36 +42,18 @@ import org.apache.kafka.common.utils.Time
  */
 private[kafka010] class MockScheduler(val time: Time) extends Scheduler {
 
-  /* a priority queue of tasks ordered by next execution time */
-  var tasks = new PriorityQueue[MockTask]()
+  val scheduler = new DeterministicScheduler()
 
   def isStarted: Boolean = true
 
   def startup(): Unit = {}
 
   def shutdown(): Unit = synchronized {
-    tasks.foreach(_.fun())
-    tasks.clear()
+    scheduler.runUntilIdle()
   }
 
-  /**
-   * Check for any tasks that need to execute. Since this is a mock scheduler this check only occurs
-   * when this method is called and the execution happens synchronously in the calling thread.
-   * If you are using the scheduler associated with a MockTime instance this call
-   * will be triggered automatically.
-   */
-  def tick(): Unit = synchronized {
-    val now = time.milliseconds
-    while(!tasks.isEmpty && tasks.head.nextExecution <= now) {
-      /* pop and execute the task with the lowest next execution time */
-      val curr = tasks.dequeue
-      curr.fun()
-      /* if the task is periodic, reschedule it and re-enqueue */
-      if(curr.periodic) {
-        curr.nextExecution += curr.period
-        this.tasks += curr
-      }
-    }
+  def tick(duration: Long, timeUnit: TimeUnit): Unit = synchronized {
+    scheduler.tick(duration, timeUnit)
   }
 
   def schedule(
@@ -78,20 +61,14 @@ private[kafka010] class MockScheduler(val time: Time) extends Scheduler {
       fun: () => Unit,
       delay: Long = 0,
       period: Long = -1,
-      unit: TimeUnit = TimeUnit.MILLISECONDS): Unit = synchronized {
-    tasks += MockTask(name, fun, time.milliseconds + delay, period = period)
-    tick()
-  }
-
-}
-
-case class MockTask(
-    val name: String,
-    val fun: () => Unit,
-    var nextExecution: Long,
-    val period: Long) extends Ordered[MockTask] {
-  def periodic: Boolean = period >= 0
-  def compare(t: MockTask): Int = {
-    java.lang.Long.compare(t.nextExecution, nextExecution)
+      unit: TimeUnit = TimeUnit.MILLISECONDS): ScheduledFuture[_] = synchronized {
+    val runnable = new Runnable {
+      override def run(): Unit = fun()
+    }
+    if (period >= 0) {
+      scheduler.scheduleAtFixedRate(runnable, delay, period, unit)
+    } else {
+      scheduler.schedule(runnable, delay, unit)
+    }
   }
 }

@@ -2,39 +2,76 @@
 layout: global
 displayTitle: Spark Security
 title: Security
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-# Spark RPC
+# Spark Security: Things You Need To Know
+
+Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Spark supports multiple deployments types and each one supports different levels of security. Not
+all deployment types will be secure in all environments and none are secure by default. Be
+sure to evaluate your environment, what Spark supports, and take the appropriate measure to secure
+your Spark deployment.
+
+There are many different types of security concerns. Spark does not necessarily protect against
+all things. Listed below are some of the things Spark supports. Also check the deployment
+documentation for the type of deployment you are using for deployment specific settings. Anything
+not documented, Spark does not support.
+
+# Spark RPC (Communication protocol between Spark processes)
 
 ## Authentication
 
 Spark currently supports authentication for RPC channels using a shared secret. Authentication can
 be turned on by setting the `spark.authenticate` configuration parameter.
 
-The exact mechanism used to generate and distribute the shared secret is deployment-specific.
+The exact mechanism used to generate and distribute the shared secret is deployment-specific. Unless
+specified below, the secret must be defined by setting the `spark.authenticate.secret` config
+option. The same secret is shared by all Spark applications and daemons in that case, which limits
+the security of these deployments, especially on multi-tenant clusters.
 
-For Spark on [YARN](running-on-yarn.html) and local deployments, Spark will automatically handle
-generating and distributing the shared secret. Each application will use a unique shared secret. In
-the case of YARN, this feature relies on YARN RPC encryption being enabled for the distribution of
-secrets to be secure.
-
-For other resource managers, `spark.authenticate.secret` must be configured on each of the nodes.
-This secret will be shared by all the daemons and applications, so this deployment configuration is
-not as secure as the above, especially when considering multi-tenant clusters.  In this
-configuration, a user with the secret can effectively impersonate any other user.
-
-The Rest Submission Server and the MesosClusterDispatcher do not support authentication.  You should
+The REST Submission Server and the MesosClusterDispatcher do not support authentication.  You should
 ensure that all network access to the REST API & MesosClusterDispatcher (port 6066 and 7077
 respectively by default) are restricted to hosts that are trusted to submit jobs.
 
+### YARN
+
+For Spark on [YARN](running-on-yarn.html), Spark will automatically handle generating and
+distributing the shared secret. Each application will use a unique shared secret. In
+the case of YARN, this feature relies on YARN RPC encryption being enabled for the distribution of
+secrets to be secure.
+
+### Kubernetes
+
+On Kubernetes, Spark will also automatically generate an authentication secret unique to each
+application. The secret is propagated to executor pods using environment variables. This means
+that any user that can list pods in the namespace where the Spark application is running can
+also see their authentication secret. Access control rules should be properly set up by the
+Kubernetes admin to ensure that Spark authentication is secure.
+
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.authenticate</code></td>
   <td>false</td>
   <td>Whether Spark authenticates its internal connections.</td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.authenticate.secret</code></td>
@@ -42,8 +79,56 @@ respectively by default) are restricted to hosts that are trusted to submit jobs
   <td>
     The secret key used authentication. See above for when this configuration should be set.
   </td>
+  <td>1.0.0</td>
 </tr>
 </table>
+
+Alternatively, one can mount authentication secrets using files and Kubernetes secrets that
+the user mounts into their pods.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+<tr>
+  <td><code>spark.authenticate.secret.file</code></td>
+  <td>None</td>
+  <td>
+    Path pointing to the secret key to use for securing connections. Ensure that the
+    contents of the file have been securely generated. This file is loaded on both the driver
+    and the executors unless other settings override this (see below).
+  </td>
+  <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.authenticate.secret.driver.file</code></td>
+  <td>The value of <code>spark.authenticate.secret.file</code></td>
+  <td>
+    When specified, overrides the location that the Spark driver reads to load the secret.
+    Useful when in client mode, when the location of the secret file may differ in the pod versus
+    the node the driver is running in. When this is specified,
+    <code>spark.authenticate.secret.executor.file</code> must be specified so that the driver
+    and the executors can both use files to load the secret key. Ensure that the contents of the file
+    on the driver is identical to the contents of the file on the executors.
+  </td>
+  <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.authenticate.secret.executor.file</code></td>
+  <td>The value of <code>spark.authenticate.secret.file</code></td>
+  <td>
+    When specified, overrides the location that the Spark executors read to load the secret.
+    Useful in client mode, when the location of the secret file may differ in the pod versus
+    the node the driver is running in. When this is specified,
+    <code>spark.authenticate.secret.driver.file</code> must be specified so that the driver
+    and the executors can both use files to load the secret key. Ensure that the contents of the file
+    on the driver is identical to the contents of the file on the executors.
+  </td>
+  <td>3.0.0</td>
+</tr>
+</table>
+
+Note that when using files, Spark will not mount these files into the containers for you. It is up
+you to ensure that the secret files are deployed securely into your containers and that the driver's
+secret file agrees with the executors' secret file.
 
 ## Encryption
 
@@ -58,13 +143,14 @@ is still required when talking to shuffle services from Spark versions older tha
 The following table describes the different options available for configuring this feature.
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.network.crypto.enabled</code></td>
   <td>false</td>
   <td>
     Enable AES-based RPC encryption, including the new authentication protocol added in 2.2.0.
   </td>
+  <td>2.2.0</td>
 </tr>
 <tr>
   <td><code>spark.network.crypto.keyLength</code></td>
@@ -72,6 +158,7 @@ The following table describes the different options available for configuring th
   <td>
     The length in bits of the encryption key to generate. Valid values are 128, 192 and 256.
   </td>
+  <td>2.2.0</td>
 </tr>
 <tr>
   <td><code>spark.network.crypto.keyFactoryAlgorithm</code></td>
@@ -80,6 +167,7 @@ The following table describes the different options available for configuring th
     The key factory algorithm to use when generating encryption keys. Should be one of the
     algorithms supported by the javax.crypto.SecretKeyFactory class in the JRE being used.
   </td>
+  <td>2.2.0</td>
 </tr>
 <tr>
   <td><code>spark.network.crypto.config.*</code></td>
@@ -89,6 +177,7 @@ The following table describes the different options available for configuring th
     use. The config name should be the name of commons-crypto configuration without the
     <code>commons.crypto</code> prefix.
   </td>
+  <td>2.2.0</td>
 </tr>
 <tr>
   <td><code>spark.network.crypto.saslFallback</code></td>
@@ -99,6 +188,7 @@ The following table describes the different options available for configuring th
     do not support the internal Spark authentication protocol. On the shuffle service side,
     disabling this feature will block older clients from authenticating.
   </td>
+  <td>2.2.0</td>
 </tr>
 <tr>
   <td><code>spark.authenticate.enableSaslEncryption</code></td>
@@ -106,6 +196,7 @@ The following table describes the different options available for configuring th
   <td>
     Enable SASL-based encrypted communication.
   </td>
+  <td>2.2.0</td>
 </tr>
 <tr>
   <td><code>spark.network.sasl.serverAlwaysEncrypt</code></td>
@@ -114,6 +205,7 @@ The following table describes the different options available for configuring th
     Disable unencrypted connections for ports using SASL authentication. This will deny connections
     from clients that have authentication enabled, but do not request SASL-based encryption.
   </td>
+  <td>1.4.0</td>
 </tr>
 </table>
 
@@ -123,12 +215,12 @@ The following table describes the different options available for configuring th
 Spark supports encrypting temporary data written to local disks. This covers shuffle files, shuffle
 spills and data blocks stored on disk (for both caching and broadcast variables). It does not cover
 encrypting output data generated by applications with APIs such as `saveAsHadoopFile` or
-`saveAsTable`.
+`saveAsTable`. It also may not cover temporary files created explicitly by the user.
 
 The following settings cover enabling encryption for data written to disk:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.io.encryption.enabled</code></td>
   <td>false</td>
@@ -136,6 +228,7 @@ The following settings cover enabling encryption for data written to disk:
     Enable local disk I/O encryption. Currently supported by all modes except Mesos. It's strongly
     recommended that RPC encryption be enabled when using this feature.
   </td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.io.encryption.keySizeBits</code></td>
@@ -143,6 +236,7 @@ The following settings cover enabling encryption for data written to disk:
   <td>
     IO encryption key size in bits. Supported values are 128, 192 and 256.
   </td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.io.encryption.keygen.algorithm</code></td>
@@ -152,6 +246,7 @@ The following settings cover enabling encryption for data written to disk:
     described in the KeyGenerator section of the Java Cryptography Architecture Standard Algorithm
     Name Documentation.
   </td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.io.encryption.commons.config.*</code></td>
@@ -161,6 +256,7 @@ The following settings cover enabling encryption for data written to disk:
     use. The config name should be the name of commons-crypto configuration without the
     <code>commons.crypto</code> prefix.
   </td>
+  <td>2.1.0</td>
 </tr>
 </table>
 
@@ -192,7 +288,7 @@ below.
 The following options control the authentication of Web UIs:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.ui.filters</code></td>
   <td>None</td>
@@ -200,6 +296,7 @@ The following options control the authentication of Web UIs:
     See the <a href="configuration.html#spark-ui">Spark UI</a> configuration for how to configure
     filters.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.acls.enable</code></td>
@@ -209,6 +306,7 @@ The following options control the authentication of Web UIs:
     permissions to view or modify the application. Note this requires the user to be authenticated,
     so if no authentication filter is installed, this option does not do anything.
   </td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.admin.acls</code></td>
@@ -216,6 +314,7 @@ The following options control the authentication of Web UIs:
   <td>
     Comma-separated list of users that have view and modify access to the Spark application.
   </td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.admin.acls.groups</code></td>
@@ -223,6 +322,7 @@ The following options control the authentication of Web UIs:
   <td>
     Comma-separated list of groups that have view and modify access to the Spark application.
   </td>
+  <td>2.0.0</td>
 </tr>
 <tr>
   <td><code>spark.modify.acls</code></td>
@@ -230,6 +330,7 @@ The following options control the authentication of Web UIs:
   <td>
     Comma-separated list of users that have modify access to the Spark application.
   </td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.modify.acls.groups</code></td>
@@ -237,6 +338,7 @@ The following options control the authentication of Web UIs:
   <td>
     Comma-separated list of groups that have modify access to the Spark application.
   </td>
+  <td>2.0.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.view.acls</code></td>
@@ -244,6 +346,7 @@ The following options control the authentication of Web UIs:
   <td>
     Comma-separated list of users that have view access to the Spark application.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.view.acls.groups</code></td>
@@ -251,6 +354,7 @@ The following options control the authentication of Web UIs:
   <td>
     Comma-separated list of groups that have view access to the Spark application.
   </td>
+  <td>2.0.0</td>
 </tr>
 <tr>
   <td><code>spark.user.groups.mapping</code></td>
@@ -267,6 +371,7 @@ The following options control the authentication of Web UIs:
     Windows environment is currently <b>not</b> supported. However, a new platform/protocol can
     be supported by implementing the trait mentioned above.
   </td>
+  <td>2.0.0</td>
 </tr>
 </table>
 
@@ -281,7 +386,7 @@ servlet filters.
 To enable authorization in the SHS, a few extra options are used:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.history.ui.acls.enable</code></td>
   <td>false</td>
@@ -295,6 +400,7 @@ To enable authorization in the SHS, a few extra options are used:
     If disabled, no access control checks are made for any application UIs available through
     the history server.
   </td>
+  <td>1.0.1</td>
 </tr>
 <tr>
   <td><code>spark.history.ui.admin.acls</code></td>
@@ -303,6 +409,7 @@ To enable authorization in the SHS, a few extra options are used:
     Comma separated list of users that have view access to all the Spark applications in history
     server.
   </td>
+  <td>2.1.1</td>
 </tr>
 <tr>
   <td><code>spark.history.ui.admin.acls.groups</code></td>
@@ -311,6 +418,7 @@ To enable authorization in the SHS, a few extra options are used:
     Comma separated list of groups that have view access to all the Spark applications in history
     server.
   </td>
+  <td>2.1.1</td>
 </tr>
 </table>
 
@@ -324,7 +432,7 @@ Configuration for SSL is organized hierarchically. The user can configure the de
 which will be used for all the supported communication protocols unless they are overwritten by
 protocol-specific settings. This way the user can easily provide the common settings for all the
 protocols without disabling the ability to configure each one individually. The following table
-describes the the SSL configuration namespaces:
+describes the SSL configuration namespaces:
 
 <table class="table">
   <tr>
@@ -526,7 +634,7 @@ Apache Spark can be configured to include HTTP headers to aid in preventing Cros
 Security.
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.ui.xXssProtection</code></td>
   <td><code>1; mode=block</code></td>
@@ -541,6 +649,7 @@ Security.
         of the page if an attack is detected.)</li>
     </ul>
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.xContentTypeOptions.enabled</code></td>
@@ -548,7 +657,8 @@ Security.
   <td>
     When enabled, X-Content-Type-Options HTTP response header will be set to "nosniff".
   </td>
-  </tr>
+  <td>2.3.0</td>
+</tr>
 <tr>
   <td><code>spark.ui.strictTransportSecurity</code></td>
   <td>None</td>
@@ -562,6 +672,7 @@ Security.
       <li><code>max-age=&lt;expire-time&gt;; preload</code></li>
     </ul>
   </td>
+  <td>2.3.0</td>
 </tr>
 </table>
 
@@ -687,22 +798,45 @@ configuration has Kerberos authentication turned (`hbase.security.authentication
 Similarly, a Hive token will be obtained if Hive is in the classpath, and the configuration includes
 URIs for remote metastore services (`hive.metastore.uris` is not empty).
 
+If an application needs to interact with other secure Hadoop filesystems, their URIs need to be
+explicitly provided to Spark at launch time. This is done by listing them in the
+`spark.kerberos.access.hadoopFileSystems` property, described in the configuration section below.
+
+Spark also supports custom delegation token providers using the Java Services
+mechanism (see `java.util.ServiceLoader`). Implementations of
+`org.apache.spark.security.HadoopDelegationTokenProvider` can be made available to Spark
+by listing their names in the corresponding file in the jar's `META-INF/services` directory.
+
 Delegation token support is currently only supported in YARN and Mesos modes. Consult the
 deployment-specific page for more information.
 
 The following options provides finer-grained control for this feature:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.security.credentials.${service}.enabled</code></td>
   <td><code>true</code></td>
   <td>
-  Controls whether to obtain credentials for services when security is enabled.
-  By default, credentials for all supported services are retrieved when those services are
-  configured, but it's possible to disable that behavior if it somehow conflicts with the
-  application being run.
+    Controls whether to obtain credentials for services when security is enabled.
+    By default, credentials for all supported services are retrieved when those services are
+    configured, but it's possible to disable that behavior if it somehow conflicts with the
+    application being run.
   </td>
+  <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kerberos.access.hadoopFileSystems</code></td>
+  <td>(none)</td>
+  <td>
+    A comma-separated list of secure Hadoop filesystems your Spark application is going to access. For
+    example, <code>spark.kerberos.access.hadoopFileSystems=hdfs://nn1.com:8032,hdfs://nn2.com:8032,
+    webhdfs://nn3.com:50070</code>. The Spark application must have access to the filesystems listed
+    and Kerberos must be properly configured to be able to access them (either in the same realm
+    or in a trusted realm). Spark acquires security tokens for each of the filesystems so that
+    the Spark application can access those remote Hadoop filesystems.
+  </td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
@@ -711,24 +845,40 @@ The following options provides finer-grained control for this feature:
 Long-running applications may run into issues if their run time exceeds the maximum delegation
 token lifetime configured in services it needs to access.
 
-Spark supports automatically creating new tokens for these applications when running in YARN mode.
-Kerberos credentials need to be provided to the Spark application via the `spark-submit` command,
-using the `--principal` and `--keytab` parameters.
+This feature is not available everywhere. In particular, it's only implemented
+on YARN and Kubernetes (both client and cluster modes), and on Mesos when using client mode.
 
-The provided keytab will be copied over to the machine running the Application Master via the Hadoop
-Distributed Cache. For this reason, it's strongly recommended that both YARN and HDFS be secured
-with encryption, at least.
+Spark supports automatically creating new tokens for these applications. There are two ways to
+enable this functionality.
 
-The Kerberos login will be periodically renewed using the provided credentials, and new delegation
-tokens for supported will be created.
+### Using a Keytab
+
+By providing Spark with a principal and keytab (e.g. using `spark-submit` with `--principal`
+and `--keytab` parameters), the application will maintain a valid Kerberos login that can be
+used to retrieve delegation tokens indefinitely.
+
+Note that when using a keytab in cluster mode, it will be copied over to the machine running the
+Spark driver. In the case of YARN, this means using HDFS as a staging area for the keytab, so it's
+strongly recommended that both YARN and HDFS be secured with encryption, at least.
+
+### Using a ticket cache
+
+By setting `spark.kerberos.renewal.credentials` to `ccache` in Spark's configuration, the local
+Kerberos ticket cache will be used for authentication. Spark will keep the ticket renewed during its
+renewable life, but after it expires a new ticket needs to be acquired (e.g. by running `kinit`).
+
+It's up to the user to maintain an updated ticket cache that Spark can use.
+
+The location of the ticket cache can be customized by setting the `KRB5CCNAME` environment
+variable.
 
 ## Secure Interaction with Kubernetes
 
 When talking to Hadoop-based services behind Kerberos, it was noted that Spark needs to obtain delegation tokens
-so that non-local processes can authenticate. These delegation tokens in Kubernetes are stored in Secrets that are 
-shared by the Driver and its Executors. As such, there are three ways of submitting a Kerberos job: 
+so that non-local processes can authenticate. These delegation tokens in Kubernetes are stored in Secrets that are
+shared by the Driver and its Executors. As such, there are three ways of submitting a Kerberos job:
 
-In all cases you must define the environment variable: `HADOOP_CONF_DIR` or 
+In all cases you must define the environment variable: `HADOOP_CONF_DIR` or
 `spark.kubernetes.hadoop.configMapName.`
 
 It also important to note that the KDC needs to be visible from inside the containers.
@@ -807,4 +957,15 @@ should correspond to the super user who is running the Spark History Server.
 
 This will allow all users to write to the directory but will prevent unprivileged users from
 reading, removing or renaming a file unless they own it. The event log files will be created by
+Spark with permissions such that only the user and group have read and write access.
+
+# Persisting driver logs in client mode
+
+If your applications persist driver logs in client mode by enabling `spark.driver.log.persistToDfs.enabled`,
+the directory where the driver logs go (`spark.driver.log.dfsDir`) should be manually created with proper
+permissions. To secure the log files, the directory permissions should be set to `drwxrwxrwxt`. The owner
+and group of the directory should correspond to the super user who is running the Spark History Server.
+
+This will allow all users to write to the directory but will prevent unprivileged users from
+reading, removing or renaming a file unless they own it. The driver log files will be created by
 Spark with permissions such that only the user and group have read and write access.

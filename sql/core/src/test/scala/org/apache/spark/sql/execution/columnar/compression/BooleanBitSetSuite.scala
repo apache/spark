@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.BooleanType
 class BooleanBitSetSuite extends SparkFunSuite {
   import BooleanBitSet._
 
-  def skeleton(count: Int) {
+  def skeleton(count: Int): Unit = {
     // -------------
     // Tests encoder
     // -------------
@@ -87,7 +87,7 @@ class BooleanBitSetSuite extends SparkFunSuite {
     assert(!decoder.hasNext)
   }
 
-  def skeletonForDecompress(count: Int) {
+  def skeletonForDecompress(count: Int): Unit = {
     val builder = TestCompressibleColumnBuilder(new NoopColumnStats, BOOLEAN, BooleanBitSet)
     val rows = Seq.fill[InternalRow](count)(makeRandomRow(BOOLEAN))
     val values = rows.map(_.getBoolean(0))
@@ -155,5 +155,31 @@ class BooleanBitSetSuite extends SparkFunSuite {
 
   test(s"$BooleanBitSet: multiple words and 1 more bit for decompression()") {
     skeletonForDecompress(BITS_PER_LONG * 2 + 1)
+  }
+
+  test(s"$BooleanBitSet: Only nulls for decompression()") {
+    val builder = TestCompressibleColumnBuilder(new NoopColumnStats, BOOLEAN, BooleanBitSet)
+    val numRows = 10
+
+    val rows = Seq.fill[InternalRow](numRows)({
+      val row = new GenericInternalRow(1)
+      row.setNullAt(0)
+      row
+    })
+    rows.foreach(builder.appendFrom(_, 0))
+    val buffer = builder.build()
+
+    // Rewinds, skips column header and 4 more bytes for compression scheme ID
+    val headerSize = CompressionScheme.columnHeaderSize(buffer)
+    buffer.position(headerSize)
+    assertResult(BooleanBitSet.typeId, "Wrong compression scheme ID")(buffer.getInt())
+
+    val decoder = BooleanBitSet.decoder(buffer, BOOLEAN)
+    val columnVector = new OnHeapColumnVector(numRows, BooleanType)
+    decoder.decompress(columnVector, numRows)
+
+    (0 until numRows).foreach { rowNum =>
+      assert(columnVector.isNullAt(rowNum))
+    }
   }
 }

@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Job Scheduling
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -80,7 +95,7 @@ varies across cluster managers:
 In standalone mode, simply start your workers with `spark.shuffle.service.enabled` set to `true`.
 
 In Mesos coarse-grained mode, run `$SPARK_HOME/sbin/start-mesos-shuffle-service.sh` on all
-slave nodes with `spark.shuffle.service.enabled` set to `true`. For instance, you may do so
+worker nodes with `spark.shuffle.service.enabled` set to `true`. For instance, you may do so
 through Marathon.
 
 In YARN mode, follow the instructions [here](running-on-yarn.html#configuring-the-external-shuffle-service).
@@ -272,3 +287,19 @@ users can set the `spark.sql.thriftserver.scheduler.pool` variable:
 {% highlight SQL %}
 SET spark.sql.thriftserver.scheduler.pool=accounting;
 {% endhighlight %}
+
+## Concurrent Jobs in PySpark
+
+PySpark, by default, does not support to synchronize PVM threads with JVM threads and 
+launching multiple jobs in multiple PVM threads does not guarantee to launch each job
+in each corresponding JVM thread. Due to this limitation, it is unable to set a different job group
+via `sc.setJobGroup` in a separate PVM thread, which also disallows to cancel the job via `sc.cancelJobGroup`
+later.
+
+In order to synchronize PVM threads with JVM threads, you should set `PYSPARK_PIN_THREAD` environment variable
+to `true`. This pinned thread mode allows one PVM thread has one corresponding JVM thread. With this mode,
+`pyspark.InheritableThread` is recommended to use together for a PVM thread to inherit the inheritable attributes
+ such as local properties in a JVM thread.
+
+Note that `PYSPARK_PIN_THREAD` is currently experimental and not recommended for use in production.
+

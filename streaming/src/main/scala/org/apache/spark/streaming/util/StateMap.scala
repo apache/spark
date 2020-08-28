@@ -26,6 +26,7 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.serializer.{KryoInputObjectInputBridge, KryoOutputObjectOutputBridge}
+import org.apache.spark.streaming.StreamingConf.SESSION_BY_KEY_DELTA_CHAIN_THRESHOLD
 import org.apache.spark.streaming.util.OpenHashMapBasedStateMap._
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -61,8 +62,7 @@ private[streaming] object StateMap {
   def empty[K, S]: StateMap[K, S] = new EmptyStateMap[K, S]
 
   def create[K: ClassTag, S: ClassTag](conf: SparkConf): StateMap[K, S] = {
-    val deltaChainThreshold = conf.getInt("spark.streaming.sessionByKey.deltaChainThreshold",
-      DELTA_CHAIN_LENGTH_THRESHOLD)
+    val deltaChainThreshold = conf.get(SESSION_BY_KEY_DELTA_CHAIN_THRESHOLD)
     new OpenHashMapBasedStateMap[K, S](deltaChainThreshold)
   }
 }
@@ -70,7 +70,7 @@ private[streaming] object StateMap {
 /** Implementation of StateMap interface representing an empty map */
 private[streaming] class EmptyStateMap[K, S] extends StateMap[K, S] {
   override def put(key: K, session: S, updateTime: Long): Unit = {
-    throw new NotImplementedError("put() should not be called on an EmptyStateMap")
+    throw new UnsupportedOperationException("put() should not be called on an EmptyStateMap")
   }
   override def get(key: K): Option[S] = None
   override def getByTime(threshUpdatedTime: Long): Iterator[(K, S, Long)] = Iterator.empty

@@ -61,7 +61,7 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
    * irreversible operation, as the data in the blocks cannot be recovered back
    * once removed. Use it with caution.
    */
-  private[spark] def removeBlocks() {
+  private[spark] def removeBlocks(): Unit = {
     blockIds.foreach { blockId =>
       sparkContext.env.blockManager.master.removeBlock(blockId)
     }
@@ -77,7 +77,7 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
   }
 
   /** Check if this BlockRDD is valid. If not valid, exception is thrown. */
-  private[spark] def assertValid() {
+  private[spark] def assertValid(): Unit = {
     if (!isValid) {
       throw new SparkException(
         "Attempted to use %s after its blocks have been removed!".format(toString))

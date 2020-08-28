@@ -21,6 +21,7 @@ import java.io.{File, FileOutputStream, OutputStream}
 
 /**
  * A base class for generate benchmark results to a file.
+ * For JDK9+, JDK major version number is added to the file names to distingush the results.
  */
 abstract class BenchmarkBase {
   var output: Option[OutputStream] = None
@@ -30,7 +31,7 @@ abstract class BenchmarkBase {
    * Implementations of this method are supposed to use the wrapper method `runBenchmark`
    * for each benchmark scenario.
    */
-  def runBenchmarkSuite(): Unit
+  def runBenchmarkSuite(mainArgs: Array[String]): Unit
 
   final def runBenchmark(benchmarkName: String)(func: => Any): Unit = {
     val separator = "=" * 96
@@ -43,7 +44,10 @@ abstract class BenchmarkBase {
   def main(args: Array[String]): Unit = {
     val regenerateBenchmarkFiles: Boolean = System.getenv("SPARK_GENERATE_BENCHMARK_FILES") == "1"
     if (regenerateBenchmarkFiles) {
-      val resultFileName = s"${this.getClass.getSimpleName.replace("$", "")}-results.txt"
+      val version = System.getProperty("java.version").split("\\D+")(0).toInt
+      val jdkString = if (version > 8) s"-jdk$version" else ""
+      val resultFileName =
+        s"${this.getClass.getSimpleName.replace("$", "")}$jdkString$suffix-results.txt"
       val file = new File(s"benchmarks/$resultFileName")
       if (!file.exists()) {
         file.createNewFile()
@@ -51,12 +55,21 @@ abstract class BenchmarkBase {
       output = Some(new FileOutputStream(file))
     }
 
-    runBenchmarkSuite()
+    runBenchmarkSuite(args)
 
     output.foreach { o =>
       if (o != null) {
         o.close()
       }
     }
+
+    afterAll()
   }
+
+  def suffix: String = ""
+
+  /**
+   * Any shutdown code to ensure a clean shutdown
+   */
+  def afterAll(): Unit = {}
 }

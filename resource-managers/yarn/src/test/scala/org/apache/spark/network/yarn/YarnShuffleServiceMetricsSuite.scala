@@ -19,13 +19,14 @@ package org.apache.spark.network.yarn
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.metrics2.MetricsRecordBuilder
-import org.mockito.Matchers._
+import org.mockito.ArgumentMatchers.{any, anyDouble, anyInt, anyLong}
 import org.mockito.Mockito.{mock, times, verify, when}
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.network.server.OneForOneStreamManager
-import org.apache.spark.network.shuffle.{ExternalShuffleBlockHandler, ExternalShuffleBlockResolver}
+import org.apache.spark.network.shuffle.{ExternalBlockHandler, ExternalShuffleBlockResolver}
 
 class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
 
@@ -33,12 +34,13 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
   val blockResolver = mock(classOf[ExternalShuffleBlockResolver])
   when(blockResolver.getRegisteredExecutorsSize).thenReturn(42)
 
-  val metrics = new ExternalShuffleBlockHandler(streamManager, blockResolver).getAllMetrics
+  val metrics = new ExternalBlockHandler(streamManager, blockResolver).getAllMetrics
 
   test("metrics named as expected") {
     val allMetrics = Set(
       "openBlockRequestLatencyMillis", "registerExecutorRequestLatencyMillis",
-      "blockTransferRateBytes", "registeredExecutorsSize")
+      "blockTransferRateBytes", "registeredExecutorsSize", "numActiveConnections",
+      "numCaughtExceptions")
 
     metrics.getMetrics.keySet().asScala should be (allMetrics)
   }
@@ -55,8 +57,8 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
       YarnShuffleServiceMetrics.collectMetric(builder, testname,
         metrics.getMetrics.get(testname))
 
-      verify(builder).addCounter(anyObject(), anyLong())
-      verify(builder, times(4)).addGauge(anyObject(), anyDouble())
+      verify(builder).addCounter(any(), anyLong())
+      verify(builder, times(4)).addGauge(any(), anyDouble())
     }
   }
 
@@ -68,6 +70,6 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
       metrics.getMetrics.get("registeredExecutorsSize"))
 
     // only one
-    verify(builder).addGauge(anyObject(), anyInt())
+    verify(builder).addGauge(any(), anyInt())
   }
 }

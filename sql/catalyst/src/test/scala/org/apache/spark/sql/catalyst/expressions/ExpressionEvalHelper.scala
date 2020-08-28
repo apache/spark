@@ -22,36 +22,62 @@ import scala.reflect.ClassTag
 import org.scalacheck.Gen
 import org.scalactic.TripleEqualsSupport.Spread
 import org.scalatest.exceptions.TestFailedException
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
+import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.{ResolveTimeZone, SimpleAnalyzer}
+import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
  * A few helper functions for expression evaluation testing. Mixin this trait to use them.
+ *
+ * Note: when you write unit test for an expression and call `checkEvaluation` to check the result,
+ *       please make sure that you explore all the cases that can lead to null result (including
+ *       null in struct fields, array elements and map values). The framework will test the
+ *       nullability flag of the expression automatically.
  */
-trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBase {
+trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestBase {
   self: SparkFunSuite =>
 
   protected def create_row(values: Any*): InternalRow = {
     InternalRow.fromSeq(values.map(CatalystTypeConverters.convertToCatalyst))
   }
 
+  // Currently MapData just stores the key and value arrays. Its equality is not well implemented,
+  // as the order of the map entries should not matter for equality. This method creates MapData
+  // with the entries ordering preserved, so that we can deterministically test expressions with
+  // map input/output.
+  protected def create_map(entries: (_, _)*): ArrayBasedMapData = {
+    create_map(entries.map(_._1), entries.map(_._2))
+  }
+
+  protected def create_map(keys: Seq[_], values: Seq[_]): ArrayBasedMapData = {
+    assert(keys.length == values.length)
+    val keyArray = CatalystTypeConverters
+      .convertToCatalyst(keys)
+      .asInstanceOf[ArrayData]
+    val valueArray = CatalystTypeConverters
+      .convertToCatalyst(values)
+      .asInstanceOf[ArrayData]
+    new ArrayBasedMapData(keyArray, valueArray)
+  }
+
   private def prepareEvaluation(expression: Expression): Expression = {
     val serializer = new JavaSerializer(new SparkConf()).newInstance
     val resolver = ResolveTimeZone(new SQLConf)
-    resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
+    val expr = resolver.resolveTimeZones(expression)
+    assert(expr.resolved)
+    serializer.deserialize(serializer.serialize(expr))
   }
 
   protected def checkEvaluation(
@@ -277,9 +303,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
     val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation())
-    // We should analyze the plan first, otherwise we possibly optimize an unresolved plan.
-    val analyzedPlan = SimpleAnalyzer.execute(plan)
-    val optimizedPlan = SimpleTestOptimizer.execute(analyzedPlan)
+    val optimizedPlan = SimpleTestOptimizer.execute(plan)
     checkEvaluationWithoutCodegen(optimizedPlan.expressions.head, expected, inputRow)
   }
 
@@ -302,8 +326,8 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
       GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
     plan.initialize(0)
-    actual = FromUnsafeProjection(expression.dataType :: Nil)(
-      plan(inputRow)).get(0, expression.dataType)
+    val ref = new BoundReference(0, expression.dataType, nullable = true)
+    actual = GenerateSafeProjection.generate(ref :: Nil)(plan(inputRow)).get(0, expression.dataType)
     assert(checkResult(actual, expected, expression))
   }
 
@@ -337,6 +361,26 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
       LiteralGenerator.randomGen(dataType2)
     ) { (l1: Literal, l2: Literal) =>
       cmpInterpretWithCodegen(EmptyRow, c(l1, l2))
+    }
+  }
+
+  /**
+   * Test evaluation results between Interpreted mode and Codegen mode, making sure we have
+   * consistent result regardless of the evaluation method we use. If an exception is thrown,
+   * it checks that both modes throw the same exception.
+   *
+   * This method test against binary expressions by feeding them arbitrary literals of `dataType1`
+   * and `dataType2`.
+   */
+  def checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+      c: (Expression, Expression) => Expression,
+      dataType1: DataType,
+      dataType2: DataType): Unit = {
+    forAll (
+      LiteralGenerator.randomGen(dataType1),
+      LiteralGenerator.randomGen(dataType2)
+    ) { (l1: Literal, l2: Literal) =>
+      cmpInterpretWithCodegen(EmptyRow, c(l1, l2), true)
     }
   }
 
@@ -379,21 +423,52 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
     }
   }
 
-  private def cmpInterpretWithCodegen(inputRow: InternalRow, expr: Expression): Unit = {
-    val interpret = try {
-      evaluateWithoutCodegen(expr, inputRow)
+  def cmpInterpretWithCodegen(
+      inputRow: InternalRow,
+      expr: Expression,
+      exceptionAllowed: Boolean = false): Unit = {
+    val (interpret, interpretExc) = try {
+      (Some(evaluateWithoutCodegen(expr, inputRow)), None)
     } catch {
-      case e: Exception => fail(s"Exception evaluating $expr", e)
+      case e: Exception => if (exceptionAllowed) {
+        (None, Some(e))
+      } else {
+        fail(s"Exception evaluating $expr", e)
+      }
     }
 
     val plan = generateProject(
       GenerateMutableProjection.generate(Alias(expr, s"Optimized($expr)")() :: Nil),
       expr)
-    val codegen = plan(inputRow).get(0, expr.dataType)
-
-    if (!compareResults(interpret, codegen)) {
-      fail(s"Incorrect evaluation: $expr, interpret: $interpret, codegen: $codegen")
+    val (codegen, codegenExc) = try {
+      (Some(plan(inputRow).get(0, expr.dataType)), None)
+    } catch {
+      case e: Exception => if (exceptionAllowed) {
+        (None, Some(e))
+      } else {
+        fail(s"Exception evaluating $expr", e)
+      }
     }
+
+    if (interpret.isDefined && codegen.isDefined && !compareResults(interpret.get, codegen.get)) {
+      fail(s"Incorrect evaluation: $expr, interpret: ${interpret.get}, codegen: ${codegen.get}")
+    } else if (interpretExc.isDefined && codegenExc.isEmpty) {
+      fail(s"Incorrect evaluation: $expr, interpet threw exception ${interpretExc.get}")
+    } else if (interpretExc.isEmpty && codegenExc.isDefined) {
+      fail(s"Incorrect evaluation: $expr, codegen threw exception ${codegenExc.get}")
+    } else if (interpretExc.isDefined && codegenExc.isDefined
+        && !compareExceptions(interpretExc.get, codegenExc.get)) {
+      fail(s"Different exception evaluating: $expr, " +
+        s"interpret: ${interpretExc.get}, codegen: ${codegenExc.get}")
+    }
+  }
+
+  /**
+   * Checks the equality between two exceptions. Returns true iff the two exceptions are instances
+   * of the same class and they have the same message.
+   */
+  private[this] def compareExceptions(e1: Exception, e2: Exception): Boolean = {
+    e1.getClass == e2.getClass && e1.getMessage == e2.getMessage
   }
 
   /**
@@ -435,6 +510,17 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
         s"$x or $y is extremely close to zero, so the relative tolerance is meaningless.", 0)
     } else {
       diff < eps * math.min(absX, absY)
+    }
+  }
+
+  def testBothCodegenAndInterpreted(name: String)(f: => Unit): Unit = {
+    val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
+    for (fallbackMode <- modes) {
+      test(s"$name with $fallbackMode") {
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
+          f
+        }
+      }
     }
   }
 }

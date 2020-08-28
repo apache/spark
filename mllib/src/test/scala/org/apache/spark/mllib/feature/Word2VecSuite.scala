@@ -18,8 +18,10 @@
 package org.apache.spark.mllib.feature
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.util.Utils
 
 class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -109,12 +111,16 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("big model load / save") {
     // backupping old values
-    val oldBufferConfValue = spark.conf.get("spark.kryoserializer.buffer.max", "64m")
-    val oldBufferMaxConfValue = spark.conf.get("spark.kryoserializer.buffer", "64k")
+    val oldBufferConfValue = spark.conf.get(KRYO_SERIALIZER_BUFFER_SIZE.key, "64m")
+    val oldBufferMaxConfValue = spark.conf.get(KRYO_SERIALIZER_MAX_BUFFER_SIZE.key, "64k")
+    val oldSetCommandRejectsSparkCoreConfs = spark.conf.get(
+      SET_COMMAND_REJECTS_SPARK_CORE_CONFS.key, "true")
 
     // setting test values to trigger partitioning
-    spark.conf.set("spark.kryoserializer.buffer", "50b")
-    spark.conf.set("spark.kryoserializer.buffer.max", "50b")
+
+    // this is needed to set configurations which are also defined to SparkConf
+    spark.conf.set(SET_COMMAND_REJECTS_SPARK_CORE_CONFS.key, "false")
+    spark.conf.set(KRYO_SERIALIZER_BUFFER_SIZE.key, "50b")
 
     // create a model bigger than 50 Bytes
     val word2VecMap = Map((0 to 10).map(i => s"$i" -> Array.fill(10)(0.1f)): _*)
@@ -137,8 +143,9 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
         "that spans over multiple partitions", t)
     } finally {
       Utils.deleteRecursively(tempDir)
-      spark.conf.set("spark.kryoserializer.buffer", oldBufferConfValue)
-      spark.conf.set("spark.kryoserializer.buffer.max", oldBufferMaxConfValue)
+      spark.conf.set(KRYO_SERIALIZER_BUFFER_SIZE.key, oldBufferConfValue)
+      spark.conf.set(KRYO_SERIALIZER_MAX_BUFFER_SIZE.key, oldBufferMaxConfValue)
+      spark.conf.set(SET_COMMAND_REJECTS_SPARK_CORE_CONFS.key, oldSetCommandRejectsSparkCoreConfs)
     }
 
   }

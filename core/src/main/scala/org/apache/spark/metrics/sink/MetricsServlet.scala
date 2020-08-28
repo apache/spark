@@ -51,7 +51,7 @@ private[spark] class MetricsServlet(
   def getHandlers(conf: SparkConf): Array[ServletContextHandler] = {
     Array[ServletContextHandler](
       createServletHandler(servletPath,
-        new ServletParams(request => getMetricsSnapshot(request), "text/json"), securityMgr, conf)
+        new ServletParams(request => getMetricsSnapshot(request), "text/json"), conf)
     )
   }
 
@@ -59,9 +59,9 @@ private[spark] class MetricsServlet(
     mapper.writeValueAsString(registry)
   }
 
-  override def start() { }
+  override def start(): Unit = { }
 
-  override def stop() { }
+  override def stop(): Unit = { }
 
-  override def report() { }
+  override def report(): Unit = { }
 }

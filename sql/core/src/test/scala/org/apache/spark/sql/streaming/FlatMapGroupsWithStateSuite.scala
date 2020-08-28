@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, MemoryStateStore, StateStore, StateStoreId, StateStoreMetrics, UnsafeRowPair}
+import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{DataType, IntegerType}
@@ -125,6 +126,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     var state: GroupStateImpl[Int] = GroupStateImpl.createForStreaming(
       None, 1000, 1000, ProcessingTimeTimeout, hasTimedOut = false, watermarkPresent = false)
     assert(state.getTimeoutTimestamp === NO_TIMESTAMP)
+    state.setTimeoutDuration("-1 month 31 days 1 second")
+    assert(state.getTimeoutTimestamp === 2000)
     state.setTimeoutDuration(500)
     assert(state.getTimeoutTimestamp === 1500) // can be set without initializing state
     testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
@@ -225,8 +228,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     testIllegalTimeout {
       state.setTimeoutDuration("-1 month")
     }
+
     testIllegalTimeout {
-      state.setTimeoutDuration("1 month -1 day")
+      state.setTimeoutDuration("1 month -31 day")
     }
 
     state = GroupStateImpl.createForStreaming(
@@ -241,7 +245,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       state.setTimeoutTimestamp(10000, "-1 month")
     }
     testIllegalTimeout {
-      state.setTimeoutTimestamp(10000, "1 month -1 day")
+      state.setTimeoutTimestamp(10000, "1 month -32 day")
     }
     testIllegalTimeout {
       state.setTimeoutTimestamp(new Date(-10000))
@@ -253,7 +257,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       state.setTimeoutTimestamp(new Date(-10000), "-1 month")
     }
     testIllegalTimeout {
-      state.setTimeoutTimestamp(new Date(-10000), "1 month -1 day")
+      state.setTimeoutTimestamp(new Date(-10000), "1 month -32 day")
     }
   }
 
@@ -267,7 +271,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
         val state2 = GroupStateImpl.createForStreaming(
           initState, 1000, 1000, timeoutConf, hasTimedOut = true, watermarkPresent = false)
-        assert(state2.hasTimedOut === true)
+        assert(state2.hasTimedOut)
       }
 
       // for batch queries
@@ -795,7 +799,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         }
       },
       CheckNewAnswer(("c", "-1")),
-      assertNumStateRows(total = 0, updated = 0)
+      assertNumStateRows(total = 0, updated = 1)
     )
   }
 
@@ -823,7 +827,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     val inputData = MemoryStream[(String, Int)]
     val result =
       inputData.toDS
-        .select($"_1".as("key"), $"_2".cast("timestamp").as("eventTime"))
+        .select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
         .withWatermark("eventTime", "10 seconds")
         .as[(String, Long)]
         .groupByKey(_._1)
@@ -898,7 +902,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     val inputData = MemoryStream[(String, Int)]
     val result =
       inputData.toDS
-        .select($"_1".as("key"), $"_2".cast("timestamp").as("eventTime"))
+        .select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
         .withWatermark("eventTime", "10 seconds")
         .as[(String, Long)]
         .groupByKey(_._1)
@@ -1108,7 +1112,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       val inputData = MemoryStream[(String, Long)]
       val result =
         inputData.toDF().toDF("key", "time")
-          .selectExpr("key", "cast(time as timestamp) as timestamp")
+          .selectExpr("key", "timestamp_seconds(time) as timestamp")
           .withWatermark("timestamp", "10 second")
           .as[(String, Long)]
           .groupByKey(x => x._1)
@@ -1162,7 +1166,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
     test(s"InputProcessor - process timed out state - $testName") {
       val mapGroupsFunc = (key: Int, values: Iterator[Int], state: GroupState[Int]) => {
-        assert(state.hasTimedOut === true, "hasTimedOut not true")
+        assert(state.hasTimedOut, "hasTimedOut not true")
         assert(values.isEmpty, "values not empty")
         stateUpdates(state)
         Iterator.empty

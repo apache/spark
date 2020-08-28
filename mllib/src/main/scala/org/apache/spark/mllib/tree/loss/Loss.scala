@@ -17,17 +17,15 @@
 
 package org.apache.spark.mllib.tree.loss
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.TreeEnsembleModel
 import org.apache.spark.rdd.RDD
 
 /**
- * :: DeveloperApi ::
  * Trait for adding "pluggable" loss functions for the gradient boosting algorithm.
  */
 @Since("1.2.0")
-@DeveloperApi
 trait Loss extends Serializable {
 
   /**

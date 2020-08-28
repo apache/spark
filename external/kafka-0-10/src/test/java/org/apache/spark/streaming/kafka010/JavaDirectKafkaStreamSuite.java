@@ -152,7 +152,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
 
     JavaDStream<String> unifiedStream = stream1.union(stream2);
 
-    final Set<String> result = Collections.synchronizedSet(new HashSet<String>());
+    final Set<String> result = Collections.synchronizedSet(new HashSet<>());
     unifiedStream.foreachRDD(new VoidFunction<JavaRDD<String>>() {
           @Override
           public void call(JavaRDD<String> rdd) {

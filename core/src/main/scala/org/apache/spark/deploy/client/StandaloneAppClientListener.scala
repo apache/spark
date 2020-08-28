@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.client
 
+import org.apache.spark.scheduler.ExecutorDecommissionInfo
+
 /**
  * Callbacks invoked by deploy client when various events happen. There are currently five events:
  * connecting to the cluster, disconnecting, being given an executor, having an executor removed
@@ -38,6 +40,8 @@ private[spark] trait StandaloneAppClientListener {
 
   def executorRemoved(
       fullId: String, message: String, exitStatus: Option[Int], workerLost: Boolean): Unit
+
+  def executorDecommissioned(fullId: String, decommissionInfo: ExecutorDecommissionInfo): Unit
 
   def workerRemoved(workerId: String, host: String, message: String): Unit
 }

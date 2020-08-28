@@ -18,6 +18,7 @@
 package org.apache.spark.graphx.util
 
 import org.apache.hadoop.fs.Path
+import org.scalatest.Assertions
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.graphx.{Edge, Graph, LocalSparkContext}
@@ -88,7 +89,7 @@ class PeriodicGraphCheckpointerSuite extends SparkFunSuite with LocalSparkContex
   }
 }
 
-private object PeriodicGraphCheckpointerSuite {
+private object PeriodicGraphCheckpointerSuite extends Assertions {
   private val defaultStorageLevel = StorageLevel.MEMORY_ONLY_SER
 
   case class GraphToCheck(graph: Graph[Double, Double], gIndex: Int)

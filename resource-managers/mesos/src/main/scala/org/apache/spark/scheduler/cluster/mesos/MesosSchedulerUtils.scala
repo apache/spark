@@ -29,15 +29,16 @@ import scala.util.control.NonFatal
 import com.google.common.base.Splitter
 import com.google.common.io.Files
 import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler, SchedulerDriver}
-import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
+import org.apache.mesos.Protos.{SlaveID => AgentID, TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.FrameworkInfo.Capability
 import org.apache.mesos.Protos.Resource.ReservationInfo
 import org.apache.mesos.protobuf.{ByteString, GeneratedMessageV3}
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.TaskState
+import org.apache.spark.deploy.mesos.{config => mesosConfig}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.{Status => _, _}
 import org.apache.spark.util.Utils
 
 /**
@@ -83,10 +84,10 @@ trait MesosSchedulerUtils extends Logging {
       fwInfoBuilder.setId(FrameworkID.newBuilder().setValue(id).build())
     }
 
-    conf.getOption("spark.mesos.role").foreach { role =>
+    conf.get(mesosConfig.ROLE).foreach { role =>
       fwInfoBuilder.setRole(role)
     }
-    val maxGpus = conf.getInt("spark.mesos.gpus.max", 0)
+    val maxGpus = conf.get(mesosConfig.MAX_GPUS)
     if (maxGpus > 0) {
       fwInfoBuilder.addCapabilities(Capability.newBuilder().setType(Capability.Type.GPU_RESOURCES))
     }
@@ -103,10 +104,10 @@ trait MesosSchedulerUtils extends Logging {
       conf: SparkConf,
       fwInfoBuilder: Protos.FrameworkInfo.Builder): Protos.Credential.Builder = {
     val credBuilder = Credential.newBuilder()
-    conf.getOption("spark.mesos.principal")
+    conf.get(mesosConfig.CREDENTIAL_PRINCIPAL)
       .orElse(Option(conf.getenv("SPARK_MESOS_PRINCIPAL")))
       .orElse(
-        conf.getOption("spark.mesos.principal.file")
+        conf.get(mesosConfig.CREDENTIAL_PRINCIPAL_FILE)
           .orElse(Option(conf.getenv("SPARK_MESOS_PRINCIPAL_FILE")))
           .map { principalFile =>
             Files.toString(new File(principalFile), StandardCharsets.UTF_8)
@@ -115,10 +116,10 @@ trait MesosSchedulerUtils extends Logging {
         fwInfoBuilder.setPrincipal(principal)
         credBuilder.setPrincipal(principal)
       }
-    conf.getOption("spark.mesos.secret")
+    conf.get(mesosConfig.CREDENTIAL_SECRET)
       .orElse(Option(conf.getenv("SPARK_MESOS_SECRET")))
       .orElse(
-        conf.getOption("spark.mesos.secret.file")
+        conf.get(mesosConfig.CREDENTIAL_SECRET_FILE)
          .orElse(Option(conf.getenv("SPARK_MESOS_SECRET_FILE")))
          .map { secretFile =>
            Files.toString(new File(secretFile), StandardCharsets.UTF_8)
@@ -128,7 +129,8 @@ trait MesosSchedulerUtils extends Logging {
       }
     if (credBuilder.hasSecret && !fwInfoBuilder.hasPrincipal) {
       throw new SparkException(
-        "spark.mesos.principal must be configured when spark.mesos.secret is set")
+        s"${mesosConfig.CREDENTIAL_PRINCIPAL} must be configured when " +
+          s"${mesosConfig.CREDENTIAL_SECRET} is set")
     }
     credBuilder
   }
@@ -147,7 +149,7 @@ trait MesosSchedulerUtils extends Logging {
       // until the scheduler exists
       new Thread(Utils.getFormattedClassName(this) + "-mesos-driver") {
         setDaemon(true)
-        override def run() {
+        override def run(): Unit = {
           try {
             val ret = newDriver.run()
             logInfo("driver.run() returned with code " + ret)
@@ -283,7 +285,6 @@ trait MesosSchedulerUtils extends Logging {
    * The attribute values are the mesos attribute types and they are
    *
    * @param offerAttributes the attributes offered
-   * @return
    */
   protected def toAttributeMap(offerAttributes: JList[Attribute])
     : Map[String, GeneratedMessageV3] = {
@@ -303,12 +304,12 @@ trait MesosSchedulerUtils extends Logging {
    * Match the requirements (if any) to the offer attributes.
    * if attribute requirements are not specified - return true
    * else if attribute is defined and no values are given, simple attribute presence is performed
-   * else if attribute name and value is specified, subset match is performed on slave attributes
+   * else if attribute name and value is specified, subset match is performed on agent attributes
    */
   def matchesAttributeRequirements(
-      slaveOfferConstraints: Map[String, Set[String]],
+      agentOfferConstraints: Map[String, Set[String]],
       offerAttributes: Map[String, GeneratedMessageV3]): Boolean = {
-    slaveOfferConstraints.forall {
+    agentOfferConstraints.forall {
       // offer has the required attribute and subsumes the required values for that attribute
       case (name, requiredValues) =>
         offerAttributes.get(name) match {
@@ -378,7 +379,7 @@ trait MesosSchedulerUtils extends Logging {
           } else {
             v.split(',').toSet
           }
-        )
+        ).toMap
       } catch {
         case NonFatal(e) =>
           throw new IllegalArgumentException(s"Bad constraint string: $constraintsVal", e)
@@ -399,37 +400,31 @@ trait MesosSchedulerUtils extends Logging {
    *         (whichever is larger)
    */
   def executorMemory(sc: SparkContext): Int = {
-    sc.conf.getInt("spark.mesos.executor.memoryOverhead",
+    sc.conf.get(mesosConfig.EXECUTOR_MEMORY_OVERHEAD).getOrElse(
       math.max(MEMORY_OVERHEAD_FRACTION * sc.executorMemory, MEMORY_OVERHEAD_MINIMUM).toInt) +
       sc.executorMemory
   }
 
-  def setupUris(uris: String,
+  def setupUris(uris: Seq[String],
                 builder: CommandInfo.Builder,
                 useFetcherCache: Boolean = false): Unit = {
-    uris.split(",").foreach { uri =>
+    uris.foreach { uri =>
       builder.addUris(CommandInfo.URI.newBuilder().setValue(uri.trim()).setCache(useFetcherCache))
     }
   }
 
-  private def getRejectOfferDurationStr(conf: SparkConf): String = {
-    conf.get("spark.mesos.rejectOfferDuration", "120s")
-  }
-
   protected def getRejectOfferDuration(conf: SparkConf): Long = {
-    Utils.timeStringAsSeconds(getRejectOfferDurationStr(conf))
+    conf.get(mesosConfig.REJECT_OFFER_DURATION)
   }
 
   protected def getRejectOfferDurationForUnmetConstraints(conf: SparkConf): Long = {
-    conf.getTimeAsSeconds(
-      "spark.mesos.rejectOfferDurationForUnmetConstraints",
-      getRejectOfferDurationStr(conf))
+    conf.get(mesosConfig.REJECT_OFFER_DURATION_FOR_UNMET_CONSTRAINTS)
+      .getOrElse(getRejectOfferDuration(conf))
   }
 
   protected def getRejectOfferDurationForReachedMaxCores(conf: SparkConf): Long = {
-    conf.getTimeAsSeconds(
-      "spark.mesos.rejectOfferDurationForReachedMaxCores",
-      getRejectOfferDurationStr(conf))
+    conf.get(mesosConfig.REJECT_OFFER_DURATION_FOR_REACHED_MAX_CORES)
+      .getOrElse(getRejectOfferDuration(conf))
   }
 
   /**
@@ -557,9 +552,9 @@ trait MesosSchedulerUtils extends Logging {
    * the same frameworkID.  To enforce that only the first driver registers with the configured
    * framework ID, the driver calls this method after the first registration.
    */
-  def unsetFrameworkID(sc: SparkContext) {
-    sc.conf.remove("spark.mesos.driver.frameworkId")
-    System.clearProperty("spark.mesos.driver.frameworkId")
+  def unsetFrameworkID(sc: SparkContext): Unit = {
+    sc.conf.remove(mesosConfig.DRIVER_FRAMEWORK_ID)
+    System.clearProperty(mesosConfig.DRIVER_FRAMEWORK_ID.key)
   }
 
   def mesosToTaskState(state: MesosTaskState): TaskState.TaskState = state match {
@@ -577,15 +572,6 @@ trait MesosSchedulerUtils extends Logging {
          MesosTaskState.TASK_DROPPED |
          MesosTaskState.TASK_UNKNOWN |
          MesosTaskState.TASK_UNREACHABLE => TaskState.LOST
-  }
-
-  def taskStateToMesos(state: TaskState.TaskState): MesosTaskState = state match {
-    case TaskState.LAUNCHING => MesosTaskState.TASK_STARTING
-    case TaskState.RUNNING => MesosTaskState.TASK_RUNNING
-    case TaskState.FINISHED => MesosTaskState.TASK_FINISHED
-    case TaskState.FAILED => MesosTaskState.TASK_FAILED
-    case TaskState.KILLED => MesosTaskState.TASK_KILLED
-    case TaskState.LOST => MesosTaskState.TASK_LOST
   }
 
   protected def declineOffer(
@@ -617,4 +603,3 @@ trait MesosSchedulerUtils extends Logging {
     }
   }
 }
-

@@ -239,6 +239,11 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
     checkCondition(!'f || 'e, testRelationWithData.where(!'f || 'e).analyze)
   }
 
+  test("simplify NOT(IsNull(x)) and NOT(IsNotNull(x))") {
+    checkCondition(Not(IsNotNull('b)), IsNull('b))
+    checkCondition(Not(IsNull('b)), IsNotNull('b))
+  }
+
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
     val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation()).analyze
     val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation()).analyze)

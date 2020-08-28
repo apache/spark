@@ -38,7 +38,7 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
     checkRefreshView(isTemp = false)
   }
 
-  private def checkRefreshView(isTemp: Boolean) {
+  private def checkRefreshView(isTemp: Boolean): Unit = {
     withView("view_refresh") {
       withTable("view_table") {
         // Create a Parquet directory
@@ -114,7 +114,7 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
             val e2 = intercept[SparkException] {
               sql("select * from test").count()
             }
-            assert(e2.getMessage.contains("FileNotFoundException"))
+            assert(e.getMessage.contains("FileNotFoundException"))
             spark.catalog.refreshByPath(dir.getAbsolutePath)
             assert(sql("select * from test").count() == 3)
           }

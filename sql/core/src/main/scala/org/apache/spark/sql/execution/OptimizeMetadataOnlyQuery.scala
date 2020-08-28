@@ -72,6 +72,11 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
             })
           }
           if (isAllDistinctAgg) {
+            logWarning("Since configuration `spark.sql.optimizer.metadataOnly` is enabled, " +
+              "Spark will scan partition-level metadata without scanning data files. " +
+              "This could result in wrong results when the partition metadata exists but the " +
+              "inclusive data files are empty."
+            )
             a.withNewChildren(Seq(replaceTableScanWithPartitionMetadata(child, rel, filters)))
           } else {
             a
@@ -112,7 +117,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
         case a: AttributeReference =>
           a.withName(relation.output.find(_.semanticEquals(a)).get.name)
       }
-    }
+    }.filterNot(SubqueryExpression.hasSubquery)
 
     child transform {
       case plan if plan eq relation =>
@@ -128,10 +133,14 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
               CaseInsensitiveMap(relation.tableMeta.storage.properties)
             val timeZoneId = caseInsensitiveProperties.get(DateTimeUtils.TIMEZONE_OPTION)
               .getOrElse(SQLConf.get.sessionLocalTimeZone)
-            val partitions = if (partFilters.nonEmpty) {
-              catalog.listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters)
-            } else {
-              catalog.listPartitions(relation.tableMeta.identifier)
+            val partitions = relation.prunedPartitions match {
+              // for the case where partitions have already been pruned by PruneHiveTablePartitions
+              case Some(parts) => parts
+              case None => if (partFilters.nonEmpty) {
+                catalog.listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters)
+              } else {
+                catalog.listPartitions(relation.tableMeta.identifier)
+              }
             }
 
             val partitionData = partitions.map { p =>

@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * End-to-end tests for xpath expressions.
  */
-class XPathFunctionsSuite extends QueryTest with SharedSQLContext {
+class XPathFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("xpath_boolean") {

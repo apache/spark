@@ -37,7 +37,7 @@ test_that("multiple packages don't produce a warning", {
 
 test_that("sparkJars sparkPackages as character vectors", {
   args <- generateSparkSubmitArgs("", "", c("one.jar", "two.jar", "three.jar"), "",
-                                  c("com.databricks:spark-avro_2.11:2.0.1"))
+                                  c("com.databricks:spark-avro_2.12:2.0.1"))
   expect_match(args, "--jars one.jar,two.jar,three.jar")
-  expect_match(args, "--packages com.databricks:spark-avro_2.11:2.0.1")
+  expect_match(args, "--packages com.databricks:spark-avro_2.12:2.0.1")
 })

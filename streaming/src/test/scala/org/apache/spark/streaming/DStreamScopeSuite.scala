@@ -19,38 +19,37 @@ package org.apache.spark.streaming
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
-
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.streaming.dstream.DStream
-import org.apache.spark.streaming.ui.UIUtils
+import org.apache.spark.ui.{UIUtils => SparkUIUtils}
 import org.apache.spark.util.ManualClock
 
 /**
  * Tests whether scope information is passed from DStream operations to RDDs correctly.
  */
-class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterAll {
-  private var ssc: StreamingContext = null
-  private val batchDuration: Duration = Seconds(1)
+class DStreamScopeSuite
+  extends SparkFunSuite
+  with LocalStreamingContext {
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+
     val conf = new SparkConf().setMaster("local").setAppName("test")
     conf.set("spark.streaming.clock", classOf[ManualClock].getName())
+    val batchDuration: Duration = Seconds(1)
     ssc = new StreamingContext(new SparkContext(conf), batchDuration)
+
+    assertPropertiesNotSet()
   }
 
-  override def afterAll(): Unit = {
+  override def afterEach(): Unit = {
     try {
-      ssc.stop(stopSparkContext = true)
+      assertPropertiesNotSet()
     } finally {
-      super.afterAll()
+      super.afterEach()
     }
   }
-
-  before { assertPropertiesNotSet() }
-  after { assertPropertiesNotSet() }
 
   test("dstream without scope") {
     val dummyStream = new DummyDStream(ssc)
@@ -191,7 +190,7 @@ class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAnd
     assertDefined(foreachBaseScope)
     assert(foreachBaseScope.get.name === "foreachRDD")
 
-    val rddScopes = generatedRDDs.map { _.scope }
+    val rddScopes = generatedRDDs.map { _.scope }.toSeq
     assertDefined(rddScopes: _*)
     rddScopes.zipWithIndex.foreach { case (rddScope, idx) =>
       assert(rddScope.get.name === "reduceByKey")
@@ -213,7 +212,7 @@ class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAnd
       rddScope: RDDOperationScope,
       batchTime: Long): Unit = {
     val (baseScopeId, baseScopeName) = (baseScope.id, baseScope.name)
-    val formattedBatchTime = UIUtils.formatBatchTime(
+    val formattedBatchTime = SparkUIUtils.formatBatchTime(
       batchTime, ssc.graph.batchDuration.milliseconds, showYYYYMMSS = false)
     assert(rddScope.id === s"${baseScopeId}_$batchTime")
     assert(rddScope.name.replaceAll("\\n", " ") === s"$baseScopeName @ $formattedBatchTime")

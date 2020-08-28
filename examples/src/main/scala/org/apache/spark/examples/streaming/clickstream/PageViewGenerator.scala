@@ -81,7 +81,7 @@ object PageViewGenerator {
     new PageView(page, status, zipCode, id).toString()
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length != 2) {
       System.err.println("Usage: PageViewGenerator <port> <viewsPerSecond>")
       System.exit(1)
