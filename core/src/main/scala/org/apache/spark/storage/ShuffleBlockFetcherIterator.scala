@@ -361,27 +361,7 @@ final class ShuffleBlockFetcherIterator(
           shuffleBlockId.shuffleId, shuffleBlockId.reduceId)
       } else {
         val shuffleChunkId = blockId.asInstanceOf[ShuffleBlockChunkId]
-        val chunkBitmap: RoaringBitmap =
-          if (address.host == blockManager.blockManagerId.host) {
-            // It can land here when there is a failure while creating an input stream from a local
-            // shuffle chunk. This happens during processing of a SuccessFetchResult with shuffle
-            // chunk id and the address is local. We need to read the merged shuffle meta data
-            // since this wasn't read earlier. This is going to happen rarely for local shuffle
-            // merge chunk, so we parse the meta file when this happens instead of storing the
-            // roaring-bitmaps for local merged block in memory.
-            try {
-              blockManager.getMergedBlockMeta(ShuffleBlockId(shuffleChunkId.shuffleId, -1,
-                shuffleChunkId.reduceId)).readChunkBitmaps()(shuffleChunkId.chunkId)
-            } catch {
-              case e: Exception =>
-                // If reading chunk bitmaps fail for local shuffle chunk then, need to propagate the
-                // failure to DAG Scheduler
-                throwFetchFailedException(blockId, -1, address, e)
-            }
-          } else {
-            chunksMetaMap.remove(shuffleChunkId).orNull
-          }
-        assert(chunkBitmap != null)
+        val chunkBitmap: RoaringBitmap = chunksMetaMap.remove(shuffleChunkId).orNull
         mapOutputTracker.getMapSizesForMergeResult(
           shuffleChunkId.shuffleId, shuffleChunkId.reduceId, chunkBitmap)
       }
@@ -643,6 +623,7 @@ final class ShuffleBlockFetcherIterator(
       try {
         blockId match {
           case shuffleBlockId: ShuffleBlockId if shuffleBlockId.mapId == -1 =>
+            val chunksMeta = blockManager.getMergedBlockMeta(shuffleBlockId).readChunkBitmaps()
             val bufs: Seq[ManagedBuffer] = blockManager.getMergedBlockData(shuffleBlockId)
             // Update total number of blocks to fetch, reflecting the multiple local chunks
             numBlocksToFetch += bufs.size - 1
@@ -651,10 +632,12 @@ final class ShuffleBlockFetcherIterator(
               shuffleMetrics.incLocalBlocksFetched(1)
               shuffleMetrics.incLocalBytesRead(buf.size)
               buf.retain()
+              val shuffleChunkId = ShuffleBlockChunkId(
+                shuffleBlockId.shuffleId, shuffleBlockId.reduceId, chunkId)
               results.put(SuccessFetchResult(
-                ShuffleBlockChunkId(
-                  shuffleBlockId.shuffleId, shuffleBlockId.reduceId, chunkId), -1,
+                shuffleChunkId, -1,
                 blockMgrWithEmptyExecId, buf.size(), buf, isNetworkReqDone = false))
+              chunksMetaMap.put(shuffleChunkId, chunksMeta(chunkId))
             }
           case _ =>
             val buf = blockManager.getLocalBlockData(blockId)
@@ -1101,16 +1084,6 @@ final class ShuffleBlockFetcherIterator(
         throw new FetchFailedException(address, shufId, mapId, mapIndex, reduceId, e)
       case ShuffleBlockBatchId(shuffleId, mapId, startReduceId, _) =>
         throw new FetchFailedException(address, shuffleId, mapId, mapIndex, startReduceId, e)
-      case ShuffleBlockChunkId(shuffleId, reduceId, chunkId) =>
-        throw new FetchFailedException(
-          address,
-          shuffleId,
-          -1,
-          -1,
-          reduceId,
-          s"failed to fetch $chunkId of $blockId",
-          e
-        )
       case _ =>
         throw new SparkException(
           "Failed to get block " + blockId + ", which is not a shuffle block", e)

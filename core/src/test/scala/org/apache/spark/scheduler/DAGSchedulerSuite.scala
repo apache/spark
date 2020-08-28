@@ -3429,42 +3429,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("unregister statuses on a host when shuffle chunk failure occurs") {
-    afterEach()
-    val conf = new SparkConf()
-    conf.set("spark.shuffle.push.based.enabled", "true")
-    conf.set("spark.shuffle.service.enabled", "true")
-    init(conf)
-    val parts = 2
-    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
-
-    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
-    submit(reduceRdd, (0 until parts).toArray)
-    assert(taskSets.length == 1)
-
-    // Complete shuffle map stage successfully on hostA
-    complete(taskSets.head, taskSets.head.tasks.zipWithIndex.map {
-      case (_, _) =>
-        (Success, makeMapStatus("hostA", parts))
-    }.toSeq)
-
-    assert(mapOutputTracker.getNumAvailableOutputs(shuffleDep.shuffleId) == parts)
-
-    // Finish the first task
-    runEvent(makeCompletionEvent(
-      taskSets(1).tasks(0), Success, makeMapStatus("hostA", parts),
-      Seq.empty, Array.emptyLongArray, createFakeTaskInfoWithId(0)))
-
-    // The second task fails with FetchFailed.
-    runEvent(makeCompletionEvent(
-      taskSets(1).tasks(1),
-      FetchFailed(
-        BlockManagerId("", "hostA", 12345), shuffleDep.shuffleId, -1, 0, 0,
-          "shuffle chunk failure"), null))
-    assert(mapOutputTracker.getNumAvailableOutputs(shuffleDep.shuffleId) == 0)
-  }
-
   test("metadata fetch failure should not unregister map status") {
     afterEach()
     val conf = new SparkConf()
