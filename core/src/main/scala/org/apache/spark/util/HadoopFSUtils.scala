@@ -34,8 +34,7 @@ import org.apache.spark.metrics.source.HiveCatalogMetrics
 /**
  * Utility functions to simplify and speed-up file listing.
  */
-@Private
-object HadoopFSUtils extends Logging {
+private[spark] object HadoopFSUtils extends Logging {
   /**
    * Lists a collection of paths recursively. Picks the listing strategy adaptively depending
    * on the number of paths to list.
