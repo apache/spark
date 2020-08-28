@@ -505,6 +505,10 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
         }
+
+      case e @ CaseWhen(branches, elseValue) if branches.length == 1 =>
+        If(branches.head._1, branches.head._2,
+          elseValue.getOrElse(Literal.create(null, e.dataType)));
     }
   }
 }
