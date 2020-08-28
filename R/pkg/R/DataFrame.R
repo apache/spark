@@ -1240,7 +1240,7 @@ setMethod("collect",
                 })
                 return(output)
               } else {
-                stop("'arrow' package should be installed.")
+                stop("'arrow' package should be installed. ")
               }
             } else {
               # listCols is a list of columns
