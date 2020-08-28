@@ -72,6 +72,58 @@ trait ReadSchemaTest extends QueryTest with SharedSparkSession {
   val options: Map[String, String] = Map.empty[String, String]
 }
 
+trait ArrayWithNestedStructTest extends ReadSchemaTest {
+  import testImplicits._
+
+  test("array of structs") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      // Array<Struct<Struct<Int, Int>, Int>>
+      val df1 = Seq(
+        List(((1, 2), 3), ((4, 5), 6)),
+        List(((7, 8), 9), ((10, 11), 12))
+      ).toDF("col1")
+
+      df1.write.format(format).options(options).save(path)
+
+      val df = spark.read
+        .schema(df1.schema)
+        .format(format)
+        .options(options)
+        .load(path)
+
+      checkAnswer(df, df1)
+    }
+  }
+}
+
+trait MapWithNestedStructTest extends ReadSchemaTest {
+  import testImplicits._
+
+  test("map with structs") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      // Map<String -> Struct<Struct<Int, Int>, Int>>
+      val df1 = Seq(
+        Map("A" -> ((1, 2), 3), "B" -> ((4, 5), 6)),
+        Map("C" -> ((7, 8), 9))
+      ).toDF("col1")
+
+      df1.write.format(format).options(options).save(path)
+
+      val df = spark.read
+          .schema(df1.schema)
+          .format(format)
+          .options(options)
+          .load(path)
+
+      checkAnswer(df, df1)
+    }
+  }
+}
+
 /**
  * Add column (Case 1-1).
  * This test suite assumes that the missing column should be `null`.
