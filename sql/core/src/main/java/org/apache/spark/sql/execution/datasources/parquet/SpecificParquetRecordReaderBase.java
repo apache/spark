@@ -29,18 +29,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.hadoop.mapred.FileSplit;
-import org.apache.parquet.HadoopReadOptions;
-import org.apache.parquet.ParquetReadOptions;
-import org.apache.parquet.hadoop.util.HadoopInputFile;
-import org.apache.spark.sql.internal.SQLConf;
 import scala.Option;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.parquet.HadoopReadOptions;
+import org.apache.parquet.ParquetReadOptions;
 import org.apache.parquet.bytes.BytesInput;
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.ColumnDescriptor;
@@ -54,10 +52,12 @@ import org.apache.parquet.hadoop.api.ReadSupport;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.ConfigurationUtil;
+import org.apache.parquet.hadoop.util.HadoopInputFile;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Types;
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
+import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.StructType$;
 import org.apache.spark.util.AccumulatorV2;
@@ -92,9 +92,9 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.file = split.getPath();
 
     ParquetReadOptions options = HadoopReadOptions
-        .builder(configuration)
-        .withRange(split.getStart(), split.getStart() + split.getLength())
-        .build();
+      .builder(configuration)
+      .withRange(split.getStart(), split.getStart() + split.getLength())
+      .build();
     this.reader = new ParquetFileReader(HadoopInputFile.fromPath(file, configuration), options);
     this.fileSchema = reader.getFileMetaData().getSchema();
     Map<String, String> fileMetadata = reader.getFileMetaData().getKeyValueMetaData();
@@ -157,12 +157,15 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.file = new Path(path);
     long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();
     ParquetReadOptions options = HadoopReadOptions
-        .builder(config)
-        .withRange(0, length)
-        .build();
-    this.reader = ParquetFileReader
-        .open(HadoopInputFile.fromPath(file, config), options);
-    ParquetMetadata footer = reader.getFooter();
+      .builder(config)
+      .withRange(0, length)
+      .build();
+
+    ParquetMetadata footer;
+    try (ParquetFileReader reader = ParquetFileReader
+        .open(HadoopInputFile.fromPath(file, config), options)) {
+      footer = reader.getFooter();
+    }
 
     List<BlockMetaData> blocks = footer.getBlocks();
     this.fileSchema = footer.getFileMetaData().getSchema();
