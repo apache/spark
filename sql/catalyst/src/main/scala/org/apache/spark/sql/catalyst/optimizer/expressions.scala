@@ -716,6 +716,17 @@ object SimplifyCasts extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Simplify if clauses of pattern `if(p, null, true|false)`, by replacing them with
+ * AND or OR clauses which are simpler and can better be pushed down
+ */
+object SimplifyIf extends Rule[LogicalPlan] {
+  val nullLiteral = Literal(null, BooleanType)
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case If(p, Literal(null, _), FalseLiteral) => And(p, nullLiteral)
+    case If(p, Literal(null, _), TrueLiteral) => Or(p, nullLiteral)
+  }
+}
 
 /**
  * Removes nodes that are not necessary.
