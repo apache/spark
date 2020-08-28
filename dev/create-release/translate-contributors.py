@@ -31,7 +31,10 @@
 import os
 import sys
 
-from releaseutils import *
+import unidecode
+
+from releaseutils import JIRA, JIRAError, get_jira_name, Github, get_github_name, \
+    contributors_file_name, is_valid_author, raw_input, capitalize_author, yesOrNoPrompt
 
 # You must set the following before use!
 JIRA_API_BASE = os.environ.get("JIRA_API_BASE", "https://issues.apache.org/jira")
@@ -135,7 +138,7 @@ def generate_candidates(author, issues):
     # Note that the candidate name may already be in unicode (JIRA returns this)
     for i, (candidate, source) in enumerate(candidates):
         try:
-            candidate = unicode(candidate, "UTF-8")
+            candidate = unicode(candidate, "UTF-8")  # noqa: F821
         except TypeError:
             # already in unicode
             pass
