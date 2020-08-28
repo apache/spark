@@ -102,7 +102,7 @@ TakeOrderedAndProject (97)
 Output [5]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_item_sk#3, cs_quantity#4, cs_list_price#5]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/catalog_sales]
-PushedFilters: [IsNotNull(cs_bill_customer_sk), IsNotNull(cs_sold_date_sk)]
+PushedFilters: [IsNotNull(cs_bill_customer_sk), IsNotNull(cs_sold_date_sk), IsNotNull(cs_item_sk)]
 ReadSchema: struct<cs_sold_date_sk:int,cs_bill_customer_sk:int,cs_item_sk:int,cs_quantity:int,cs_list_price:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 13]
@@ -110,7 +110,7 @@ Input [5]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_item_sk#3, cs_quantity#
 
 (3) Filter [codegen id : 13]
 Input [5]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_item_sk#3, cs_quantity#4, cs_list_price#5]
-Condition : (isnotnull(cs_bill_customer_sk#2) AND isnotnull(cs_sold_date_sk#1))
+Condition : ((isnotnull(cs_bill_customer_sk#2) AND isnotnull(cs_sold_date_sk#1)) AND isnotnull(cs_item_sk#3))
 
 (4) Scan parquet default.store_sales
 Output [2]: [ss_sold_date_sk#6, ss_item_sk#7]
@@ -406,7 +406,7 @@ Results [3]: [c_last_name#39, c_first_name#38, sum(CheckOverflow((promote_precis
 Output [5]: [ws_sold_date_sk#52, ws_item_sk#53, ws_bill_customer_sk#54, ws_quantity#55, ws_list_price#56]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_sales]
-PushedFilters: [IsNotNull(ws_bill_customer_sk), IsNotNull(ws_sold_date_sk)]
+PushedFilters: [IsNotNull(ws_bill_customer_sk), IsNotNull(ws_sold_date_sk), IsNotNull(ws_item_sk)]
 ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_bill_customer_sk:int,ws_quantity:int,ws_list_price:decimal(7,2)>
 
 (67) ColumnarToRow [codegen id : 27]
@@ -414,7 +414,7 @@ Input [5]: [ws_sold_date_sk#52, ws_item_sk#53, ws_bill_customer_sk#54, ws_quanti
 
 (68) Filter [codegen id : 27]
 Input [5]: [ws_sold_date_sk#52, ws_item_sk#53, ws_bill_customer_sk#54, ws_quantity#55, ws_list_price#56]
-Condition : (isnotnull(ws_bill_customer_sk#54) AND isnotnull(ws_sold_date_sk#52))
+Condition : ((isnotnull(ws_bill_customer_sk#54) AND isnotnull(ws_sold_date_sk#52)) AND isnotnull(ws_item_sk#53))
 
 (69) ReusedExchange [Reuses operator id: 25]
 Output [1]: [item_sk#20]

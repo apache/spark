@@ -125,7 +125,7 @@ Input [5]: [ss_sold_date_sk#1, ss_item_sk#2, ss_ext_sales_price#3, i_item_sk#4, 
 Output [2]: [d_date_sk#7, d_date#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_date_sk), IsNotNull(d_date)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (11) ColumnarToRow [codegen id : 3]
@@ -133,13 +133,13 @@ Input [2]: [d_date_sk#7, d_date#8]
 
 (12) Filter [codegen id : 3]
 Input [2]: [d_date_sk#7, d_date#8]
-Condition : isnotnull(d_date_sk#7)
+Condition : (isnotnull(d_date_sk#7) AND isnotnull(d_date#8))
 
 (13) Scan parquet default.date_dim
 Output [2]: [d_date#8, d_week_seq#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_week_seq)]
+PushedFilters: [IsNotNull(d_week_seq), IsNotNull(d_date)]
 ReadSchema: struct<d_date:date,d_week_seq:int>
 
 (14) ColumnarToRow [codegen id : 2]
@@ -147,7 +147,7 @@ Input [2]: [d_date#8, d_week_seq#9]
 
 (15) Filter [codegen id : 2]
 Input [2]: [d_date#8, d_week_seq#9]
-Condition : (isnotnull(d_week_seq#9) AND (d_week_seq#9 = Subquery scalar-subquery#10, [id=#11]))
+Condition : ((isnotnull(d_week_seq#9) AND (d_week_seq#9 = Subquery scalar-subquery#10, [id=#11])) AND isnotnull(d_date#8))
 
 (16) Project [codegen id : 2]
 Output [1]: [d_date#8 AS d_date#8#12]
@@ -231,7 +231,7 @@ Input [5]: [cs_sold_date_sk#21, cs_item_sk#22, cs_ext_sales_price#23, i_item_sk#
 Output [2]: [d_date_sk#7, d_date#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_date_sk), IsNotNull(d_date)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (34) ColumnarToRow [codegen id : 7]
@@ -239,13 +239,13 @@ Input [2]: [d_date_sk#7, d_date#8]
 
 (35) Filter [codegen id : 7]
 Input [2]: [d_date_sk#7, d_date#8]
-Condition : isnotnull(d_date_sk#7)
+Condition : (isnotnull(d_date_sk#7) AND isnotnull(d_date#8))
 
 (36) Scan parquet default.date_dim
 Output [2]: [d_date#8, d_week_seq#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_week_seq)]
+PushedFilters: [IsNotNull(d_week_seq), IsNotNull(d_date)]
 ReadSchema: struct<d_date:date,d_week_seq:int>
 
 (37) ColumnarToRow [codegen id : 6]
@@ -253,7 +253,7 @@ Input [2]: [d_date#8, d_week_seq#9]
 
 (38) Filter [codegen id : 6]
 Input [2]: [d_date#8, d_week_seq#9]
-Condition : (isnotnull(d_week_seq#9) AND (d_week_seq#9 = ReusedSubquery Subquery scalar-subquery#10, [id=#11]))
+Condition : ((isnotnull(d_week_seq#9) AND (d_week_seq#9 = ReusedSubquery Subquery scalar-subquery#10, [id=#11])) AND isnotnull(d_date#8))
 
 (39) Project [codegen id : 6]
 Output [1]: [d_date#8 AS d_date#8#24]
@@ -350,7 +350,7 @@ Input [5]: [ws_sold_date_sk#34, ws_item_sk#35, ws_ext_sales_price#36, i_item_sk#
 Output [2]: [d_date_sk#7, d_date#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_date_sk), IsNotNull(d_date)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (60) ColumnarToRow [codegen id : 12]
@@ -358,13 +358,13 @@ Input [2]: [d_date_sk#7, d_date#8]
 
 (61) Filter [codegen id : 12]
 Input [2]: [d_date_sk#7, d_date#8]
-Condition : isnotnull(d_date_sk#7)
+Condition : (isnotnull(d_date_sk#7) AND isnotnull(d_date#8))
 
 (62) Scan parquet default.date_dim
 Output [2]: [d_date#8, d_week_seq#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_week_seq)]
+PushedFilters: [IsNotNull(d_week_seq), IsNotNull(d_date)]
 ReadSchema: struct<d_date:date,d_week_seq:int>
 
 (63) ColumnarToRow [codegen id : 11]
@@ -372,7 +372,7 @@ Input [2]: [d_date#8, d_week_seq#9]
 
 (64) Filter [codegen id : 11]
 Input [2]: [d_date#8, d_week_seq#9]
-Condition : (isnotnull(d_week_seq#9) AND (d_week_seq#9 = ReusedSubquery Subquery scalar-subquery#10, [id=#11]))
+Condition : ((isnotnull(d_week_seq#9) AND (d_week_seq#9 = ReusedSubquery Subquery scalar-subquery#10, [id=#11])) AND isnotnull(d_date#8))
 
 (65) Project [codegen id : 11]
 Output [1]: [d_date#8 AS d_date#8#37]

@@ -35,7 +35,7 @@ class RewriteSubquerySuite extends PlanTest {
         RewritePredicateSubquery,
         ColumnPruning,
         InferFiltersFromConstraints,
-        PushDownPredicate,
+        PushDownPredicates,
         CollapseProject,
         CombineFilters,
         RemoveNoopOperators) :: Nil
@@ -80,6 +80,7 @@ class RewriteSubquerySuite extends PlanTest {
       .where(IsNotNull('a)).select('a)
       .join(relInSubquery.where(IsNotNull('x) && IsNotNull('y) && 'y > 1).select('x),
         LeftSemi, Some('a === 'x))
+  }
 
   test("NOT-IN subquery nested inside OR") {
     val relation1 = LocalRelation('a.int, 'b.int)

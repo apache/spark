@@ -30,7 +30,7 @@ TakeOrderedAndProject [average,cs_dev,cs_item_rev,item_id,ss_dev,ss_item_rev,ws_
                                 WholeStageCodegen (3)
                                   Project [d_date_sk]
                                     BroadcastHashJoin [d_date,d_date]
-                                      Filter [d_date_sk]
+                                      Filter [d_date,d_date_sk]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.date_dim [d_date,d_date_sk]
@@ -38,7 +38,7 @@ TakeOrderedAndProject [average,cs_dev,cs_item_rev,item_id,ss_dev,ss_item_rev,ws_
                                         BroadcastExchange #4
                                           WholeStageCodegen (2)
                                             Project [d_date]
-                                              Filter [d_week_seq]
+                                              Filter [d_date,d_week_seq]
                                                 Subquery #1
                                                   WholeStageCodegen (1)
                                                     Project [d_week_seq]
@@ -73,7 +73,7 @@ TakeOrderedAndProject [average,cs_dev,cs_item_rev,item_id,ss_dev,ss_item_rev,ws_
                                       WholeStageCodegen (7)
                                         Project [d_date_sk]
                                           BroadcastHashJoin [d_date,d_date]
-                                            Filter [d_date_sk]
+                                            Filter [d_date,d_date_sk]
                                               ColumnarToRow
                                                 InputAdapter
                                                   Scan parquet default.date_dim [d_date,d_date_sk]
@@ -81,7 +81,7 @@ TakeOrderedAndProject [average,cs_dev,cs_item_rev,item_id,ss_dev,ss_item_rev,ws_
                                               BroadcastExchange #8
                                                 WholeStageCodegen (6)
                                                   Project [d_date]
-                                                    Filter [d_week_seq]
+                                                    Filter [d_date,d_week_seq]
                                                       ReusedSubquery [d_week_seq] #1
                                                       ColumnarToRow
                                                         InputAdapter
@@ -110,7 +110,7 @@ TakeOrderedAndProject [average,cs_dev,cs_item_rev,item_id,ss_dev,ss_item_rev,ws_
                                   WholeStageCodegen (12)
                                     Project [d_date_sk]
                                       BroadcastHashJoin [d_date,d_date]
-                                        Filter [d_date_sk]
+                                        Filter [d_date,d_date_sk]
                                           ColumnarToRow
                                             InputAdapter
                                               Scan parquet default.date_dim [d_date,d_date_sk]
@@ -118,7 +118,7 @@ TakeOrderedAndProject [average,cs_dev,cs_item_rev,item_id,ss_dev,ss_item_rev,ws_
                                           BroadcastExchange #12
                                             WholeStageCodegen (11)
                                               Project [d_date]
-                                                Filter [d_week_seq]
+                                                Filter [d_date,d_week_seq]
                                                   ReusedSubquery [d_week_seq] #1
                                                   ColumnarToRow
                                                     InputAdapter

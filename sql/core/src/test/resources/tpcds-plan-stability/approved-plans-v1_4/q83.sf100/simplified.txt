@@ -22,7 +22,7 @@ TakeOrderedAndProject [average,cr_dev,cr_item_qty,item_id,sr_dev,sr_item_qty,wr_
                                   WholeStageCodegen (3)
                                     Project [d_date_sk]
                                       BroadcastHashJoin [d_date,d_date]
-                                        Filter [d_date_sk]
+                                        Filter [d_date,d_date_sk]
                                           ColumnarToRow
                                             InputAdapter
                                               Scan parquet default.date_dim [d_date,d_date_sk]
@@ -31,14 +31,15 @@ TakeOrderedAndProject [average,cr_dev,cr_item_qty,item_id,sr_dev,sr_item_qty,wr_
                                             WholeStageCodegen (2)
                                               Project [d_date]
                                                 BroadcastHashJoin [d_week_seq,d_week_seq]
-                                                  ColumnarToRow
-                                                    InputAdapter
-                                                      Scan parquet default.date_dim [d_date,d_week_seq]
+                                                  Filter [d_date,d_week_seq]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.date_dim [d_date,d_week_seq]
                                                   InputAdapter
                                                     BroadcastExchange #4
                                                       WholeStageCodegen (1)
                                                         Project [d_week_seq]
-                                                          Filter [d_date]
+                                                          Filter [d_date,d_week_seq]
                                                             ColumnarToRow
                                                               InputAdapter
                                                                 Scan parquet default.date_dim [d_date,d_week_seq]

@@ -97,7 +97,7 @@ CollectLimit (92)
 Output [5]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_item_sk#3, cs_quantity#4, cs_list_price#5]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/catalog_sales]
-PushedFilters: [IsNotNull(cs_sold_date_sk)]
+PushedFilters: [IsNotNull(cs_sold_date_sk), IsNotNull(cs_item_sk), IsNotNull(cs_bill_customer_sk)]
 ReadSchema: struct<cs_sold_date_sk:int,cs_bill_customer_sk:int,cs_item_sk:int,cs_quantity:int,cs_list_price:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 1]
@@ -105,7 +105,7 @@ Input [5]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_item_sk#3, cs_quantity#
 
 (3) Filter [codegen id : 1]
 Input [5]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_item_sk#3, cs_quantity#4, cs_list_price#5]
-Condition : isnotnull(cs_sold_date_sk#1)
+Condition : ((isnotnull(cs_sold_date_sk#1) AND isnotnull(cs_item_sk#3)) AND isnotnull(cs_bill_customer_sk#2))
 
 (4) Exchange
 Input [5]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_item_sk#3, cs_quantity#4, cs_list_price#5]
@@ -369,7 +369,7 @@ Input [4]: [cs_sold_date_sk#1, cs_quantity#4, cs_list_price#5, d_date_sk#9]
 Output [5]: [ws_sold_date_sk#42, ws_item_sk#43, ws_bill_customer_sk#44, ws_quantity#45, ws_list_price#46]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_sales]
-PushedFilters: [IsNotNull(ws_sold_date_sk)]
+PushedFilters: [IsNotNull(ws_sold_date_sk), IsNotNull(ws_item_sk), IsNotNull(ws_bill_customer_sk)]
 ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_bill_customer_sk:int,ws_quantity:int,ws_list_price:decimal(7,2)>
 
 (62) ColumnarToRow [codegen id : 19]
@@ -377,7 +377,7 @@ Input [5]: [ws_sold_date_sk#42, ws_item_sk#43, ws_bill_customer_sk#44, ws_quanti
 
 (63) Filter [codegen id : 19]
 Input [5]: [ws_sold_date_sk#42, ws_item_sk#43, ws_bill_customer_sk#44, ws_quantity#45, ws_list_price#46]
-Condition : isnotnull(ws_sold_date_sk#42)
+Condition : ((isnotnull(ws_sold_date_sk#42) AND isnotnull(ws_item_sk#43)) AND isnotnull(ws_bill_customer_sk#44))
 
 (64) Exchange
 Input [5]: [ws_sold_date_sk#42, ws_item_sk#43, ws_bill_customer_sk#44, ws_quantity#45, ws_list_price#46]

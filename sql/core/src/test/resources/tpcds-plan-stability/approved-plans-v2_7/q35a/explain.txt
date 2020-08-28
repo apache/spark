@@ -52,7 +52,7 @@ TakeOrderedAndProject (47)
 Output [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
-PushedFilters: [IsNotNull(c_current_addr_sk), IsNotNull(c_current_cdemo_sk)]
+PushedFilters: [IsNotNull(c_current_addr_sk), IsNotNull(c_current_cdemo_sk), IsNotNull(c_customer_sk)]
 ReadSchema: struct<c_customer_sk:int,c_current_cdemo_sk:int,c_current_addr_sk:int>
 
 (2) ColumnarToRow [codegen id : 9]
@@ -60,13 +60,13 @@ Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
 
 (3) Filter [codegen id : 9]
 Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
-Condition : (isnotnull(c_current_addr_sk#3) AND isnotnull(c_current_cdemo_sk#2))
+Condition : ((isnotnull(c_current_addr_sk#3) AND isnotnull(c_current_cdemo_sk#2)) AND isnotnull(c_customer_sk#1))
 
 (4) Scan parquet default.store_sales
 Output [2]: [ss_sold_date_sk#4, ss_customer_sk#5]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_sold_date_sk)]
+PushedFilters: [IsNotNull(ss_sold_date_sk), IsNotNull(ss_customer_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_customer_sk:int>
 
 (5) ColumnarToRow [codegen id : 2]
@@ -74,7 +74,7 @@ Input [2]: [ss_sold_date_sk#4, ss_customer_sk#5]
 
 (6) Filter [codegen id : 2]
 Input [2]: [ss_sold_date_sk#4, ss_customer_sk#5]
-Condition : isnotnull(ss_sold_date_sk#4)
+Condition : (isnotnull(ss_sold_date_sk#4) AND isnotnull(ss_customer_sk#5))
 
 (7) Scan parquet default.date_dim
 Output [3]: [d_date_sk#6, d_year#7, d_qoy#8]
@@ -120,7 +120,7 @@ Join condition: None
 Output [2]: [ws_sold_date_sk#11, ws_bill_customer_sk#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_sales]
-PushedFilters: [IsNotNull(ws_sold_date_sk)]
+PushedFilters: [IsNotNull(ws_sold_date_sk), IsNotNull(ws_bill_customer_sk)]
 ReadSchema: struct<ws_sold_date_sk:int,ws_bill_customer_sk:int>
 
 (17) ColumnarToRow [codegen id : 4]
@@ -128,7 +128,7 @@ Input [2]: [ws_sold_date_sk#11, ws_bill_customer_sk#12]
 
 (18) Filter [codegen id : 4]
 Input [2]: [ws_sold_date_sk#11, ws_bill_customer_sk#12]
-Condition : isnotnull(ws_sold_date_sk#11)
+Condition : (isnotnull(ws_sold_date_sk#11) AND isnotnull(ws_bill_customer_sk#12))
 
 (19) ReusedExchange [Reuses operator id: 11]
 Output [1]: [d_date_sk#6]
@@ -146,7 +146,7 @@ Input [3]: [ws_sold_date_sk#11, ws_bill_customer_sk#12, d_date_sk#6]
 Output [2]: [cs_sold_date_sk#14, cs_ship_customer_sk#15]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/catalog_sales]
-PushedFilters: [IsNotNull(cs_sold_date_sk)]
+PushedFilters: [IsNotNull(cs_sold_date_sk), IsNotNull(cs_ship_customer_sk)]
 ReadSchema: struct<cs_sold_date_sk:int,cs_ship_customer_sk:int>
 
 (23) ColumnarToRow [codegen id : 6]
@@ -154,7 +154,7 @@ Input [2]: [cs_sold_date_sk#14, cs_ship_customer_sk#15]
 
 (24) Filter [codegen id : 6]
 Input [2]: [cs_sold_date_sk#14, cs_ship_customer_sk#15]
-Condition : isnotnull(cs_sold_date_sk#14)
+Condition : (isnotnull(cs_sold_date_sk#14) AND isnotnull(cs_ship_customer_sk#15))
 
 (25) ReusedExchange [Reuses operator id: 11]
 Output [1]: [d_date_sk#6]

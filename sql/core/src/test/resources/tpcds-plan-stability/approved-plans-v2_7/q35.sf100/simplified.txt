@@ -32,7 +32,7 @@ TakeOrderedAndProject [avg(cd_dep_college_count),avg(cd_dep_count),avg(cd_dep_em
                                                               InputAdapter
                                                                 Exchange [c_customer_sk] #4
                                                                   WholeStageCodegen (1)
-                                                                    Filter [c_current_addr_sk,c_current_cdemo_sk]
+                                                                    Filter [c_current_addr_sk,c_current_cdemo_sk,c_customer_sk]
                                                                       ColumnarToRow
                                                                         InputAdapter
                                                                           Scan parquet default.customer [c_current_addr_sk,c_current_cdemo_sk,c_customer_sk]
@@ -43,7 +43,7 @@ TakeOrderedAndProject [avg(cd_dep_college_count),avg(cd_dep_count),avg(cd_dep_em
                                                                   WholeStageCodegen (4)
                                                                     Project [ss_customer_sk]
                                                                       BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
-                                                                        Filter [ss_sold_date_sk]
+                                                                        Filter [ss_customer_sk,ss_sold_date_sk]
                                                                           ColumnarToRow
                                                                             InputAdapter
                                                                               Scan parquet default.store_sales [ss_customer_sk,ss_sold_date_sk]
