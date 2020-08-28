@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
-
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
@@ -463,6 +462,8 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case If(Literal(null, _), _, falseValue) => falseValue
       case If(cond, trueValue, falseValue)
         if cond.deterministic && trueValue.semanticEquals(falseValue) => trueValue
+      case If(p, l @ Literal(null, _), FalseLiteral) if !p.nullable => And(p, l)
+      case If(p, l @ Literal(null, _), TrueLiteral) if !p.nullable => Or(Not(p), l)
 
       case e @ CaseWhen(branches, elseValue) if branches.exists(x => falseOrNullLiteral(x._1)) =>
         // If there are branches that are always false, remove them.
@@ -713,18 +714,6 @@ object SimplifyCasts extends Rule[LogicalPlan] {
         if fromKey == toKey && fromValue == toValue => e
       case _ => c
       }
-  }
-}
-
-/**
- * Simplify if clauses of pattern `if(p, null, true|false)`, by replacing them with
- * AND or OR clauses which are simpler and can better be pushed down
- */
-object SimplifyIf extends Rule[LogicalPlan] {
-  val nullLiteral = Literal(null, BooleanType)
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case If(p, Literal(null, _), FalseLiteral) => And(p, nullLiteral)
-    case If(p, Literal(null, _), TrueLiteral) => Or(p, nullLiteral)
   }
 }
 

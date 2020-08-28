@@ -103,7 +103,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         ReplaceNullWithFalseInPredicate,
         PruneFilters,
         SimplifyCasts,
-        SimplifyIf,
         SimplifyCaseConversionExpressions,
         RewriteCorrelatedScalarSubquery,
         EliminateSerialization,

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
 
-class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
+class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("SimplifyConditionals", FixedPoint(50),
@@ -165,4 +165,23 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
         Literal(1))
     )
   }
+
+  test("simplify if when then clause is null and else clause is boolean") {
+    val p = IsNull('a)
+    val nullLiteral = Literal(null, BooleanType)
+    assertEquivalent(If(p, nullLiteral, FalseLiteral), And(p, nullLiteral))
+    assertEquivalent(If(p, nullLiteral, TrueLiteral), Or(IsNotNull('a), nullLiteral))
+
+    // the rule should not apply to nullable predicate
+    Seq(TrueLiteral, FalseLiteral).foreach { b =>
+      assertEquivalent(If(GreaterThan('a, 42), nullLiteral, b),
+        If(GreaterThan('a, 42), nullLiteral, b))
+    }
+
+    // check evaluation also
+    Seq(TrueLiteral, FalseLiteral).foreach { p =>
+        checkEvaluation(If(p, nullLiteral, FalseLiteral), And(p, nullLiteral).eval(EmptyRow))
+        checkEvaluation(If(p, nullLiteral, TrueLiteral), Or(Not(p), nullLiteral).eval(EmptyRow))
+    }
+ }
 }
