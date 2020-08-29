@@ -85,10 +85,6 @@ private[hive] class SparkGetFunctionsOperation(
         catalog.listFunctions(db, functionPattern).foreach {
           case (funcIdentifier, _) =>
             val info = catalog.lookupFunctionInfo(funcIdentifier)
-            val since =
-              if (StringUtils.isEmpty(info.getSince)) "" else s"    Since: ${info.getSince}"
-            val note =
-              if (StringUtils.isEmpty(info.getSince)) "" else s"    Note: ${info.getNote.trim}"
             val rowData = Array[AnyRef](
               DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
               db, // FUNCTION_SCHEM
