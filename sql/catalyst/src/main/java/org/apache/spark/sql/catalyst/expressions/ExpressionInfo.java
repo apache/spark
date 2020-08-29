@@ -77,7 +77,7 @@ public class ExpressionInfo {
     }
 
     public String getNote() {
-        return replaceFunctionName(note);
+        return note;
     }
 
     public String getDeprecated() {
