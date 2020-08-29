@@ -196,10 +196,8 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
         val remarks = rs.getString("REMARKS")
         assert(rs.getString("REMARKS") ===
           s"    Usage:\n      ${exprInfo.getUsage}\n${exprInfo.getExtended}")
-        assert(remarks.contains("Examples:"))
-        assert(remarks.contains("Since:"))
         assert(rs.getInt("FUNCTION_TYPE") === DatabaseMetaData.functionResultUnknown)
-        assert(rs.getString("SPECIFIC_NAME").startsWith("org.apache.spark.sql.catalyst"))
+        assert(rs.getString("SPECIFIC_NAME") === exprInfo.getClassName)
       }
       // Make sure there are no more elements
       assert(!rs.next())
@@ -227,7 +225,7 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       assert(rs.getString("REMARKS") ===
         s"    Usage:\n      ${exprInfo.getUsage}\n${exprInfo.getExtended}")
       assert(rs.getInt("FUNCTION_TYPE") === DatabaseMetaData.functionResultUnknown)
-      assert(rs.getString("SPECIFIC_NAME") === "org.apache.spark.sql.catalyst.expressions.Upper")
+      assert(rs.getString("SPECIFIC_NAME") === exprInfo.getClassName)
       // Make sure there are no more elements
       assert(!rs.next())
     }
