@@ -876,8 +876,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   }
 
   test("bucket coalescing eliminates shuffle") {
-    withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key ->
-      SQLConf.BucketReadStrategyForJoin.COALESCE.toString) {
+    withSQLConf(SQLConf.BUCKET_READ_STRATEGY_IN_JOIN.key ->
+      SQLConf.BucketReadStrategyInJoin.COALESCE.toString) {
       // The side with bucketedTableTestSpec1 will be coalesced to have 4 output partitions.
       // Currently, sort will be introduced for the side that is coalesced.
       val testSpec1 = BucketedTableTestSpec(
@@ -912,8 +912,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       }
     }
 
-    withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key ->
-      SQLConf.BucketReadStrategyForJoin.OFF.toString) {
+    withSQLConf(SQLConf.BUCKET_READ_STRATEGY_IN_JOIN.key ->
+      SQLConf.BucketReadStrategyInJoin.OFF.toString) {
       // Bucket read strategy is off.
       run(
         BucketedTableTestSpec(
@@ -924,11 +924,11 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
           expectedShuffle = true))
     }
 
-    Seq(SQLConf.BucketReadStrategyForJoin.COALESCE.toString,
-      SQLConf.BucketReadStrategyForJoin.REPARTITION.toString).foreach { strategy =>
+    Seq(SQLConf.BucketReadStrategyInJoin.COALESCE.toString,
+      SQLConf.BucketReadStrategyInJoin.REPARTITION.toString).foreach { strategy =>
       withSQLConf(
-        SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key -> strategy,
-        SQLConf.COALESCE_OR_REPARTITION_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.key -> "2") {
+        SQLConf.BUCKET_READ_STRATEGY_IN_JOIN.key -> strategy,
+        SQLConf.BUCKET_READ_STRATEGY_IN_JOIN_MAX_BUCKET_RATIO.key -> "2") {
         // Coalescing/repartitioning buckets is not applied because the ratio of
         // the number of buckets (3) is greater than max allowed (2).
         run(
@@ -941,9 +941,9 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       }
     }
 
-    Seq(SQLConf.BucketReadStrategyForJoin.COALESCE.toString,
-      SQLConf.BucketReadStrategyForJoin.REPARTITION.toString).foreach { strategy =>
-      withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key -> strategy) {
+    Seq(SQLConf.BucketReadStrategyInJoin.COALESCE.toString,
+      SQLConf.BucketReadStrategyInJoin.REPARTITION.toString).foreach { strategy =>
+      withSQLConf(SQLConf.BUCKET_READ_STRATEGY_IN_JOIN.key -> strategy) {
         run(
           // Coalescing/repartitioning buckets is not applied because the bigger number of
           // buckets (8) is not divisible by the smaller number of buckets (7).
@@ -957,50 +957,52 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("bucket coalescing is applied when join expressions match with partitioning expressions") {
+  test("bucket coalesce/repartition is applied when join expressions match with partitioning " +
+    "expressions") {
     withTable("t1", "t2") {
       df1.write.format("parquet").bucketBy(8, "i", "j").saveAsTable("t1")
       df2.write.format("parquet").bucketBy(4, "i", "j").saveAsTable("t2")
 
-      withSQLConf(
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
-        SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key ->
-          SQLConf.BucketReadStrategyForJoin.COALESCE.toString) {
-        def verify(
-            query: String,
-            expectedNumShuffles: Int,
-            expectedCoalescedNumBuckets: Option[Int]): Unit = {
-          val plan = sql(query).queryExecution.executedPlan
-          val shuffles = plan.collect { case s: ShuffleExchangeExec => s }
-          assert(shuffles.length == expectedNumShuffles)
+      Seq((SQLConf.BucketReadStrategyInJoin.COALESCE, 4),
+        (SQLConf.BucketReadStrategyInJoin.REPARTITION, 8)).foreach { case (strategy, numBuckets) =>
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
+          SQLConf.BUCKET_READ_STRATEGY_IN_JOIN.key -> strategy.toString) {
+          def verify(
+              query: String,
+              expectedNumShuffles: Int,
+              expectedNumBuckets: Option[Int]): Unit = {
+            val plan = sql(query).queryExecution.executedPlan
+            val shuffles = plan.collect { case s: ShuffleExchangeExec => s }
+            assert(shuffles.length == expectedNumShuffles)
 
-          val scans = plan.collect {
-            case f: FileSourceScanExec if f.optionalNewNumBuckets.isDefined => f
+            val scans = plan.collect {
+              case f: FileSourceScanExec if f.optionalNewNumBuckets.isDefined => f
+            }
+            if (expectedNumBuckets.isDefined) {
+              assert(scans.length == 1)
+              assert(scans.head.optionalNewNumBuckets == expectedNumBuckets)
+            } else {
+              assert(scans.isEmpty)
+            }
           }
-          if (expectedCoalescedNumBuckets.isDefined) {
-            assert(scans.length == 1)
-            assert(scans.head.optionalNewNumBuckets == expectedCoalescedNumBuckets)
-          } else {
-            assert(scans.isEmpty)
-          }
+
+          // Bucket strategy applied since join expressions match with the bucket columns.
+          verify("SELECT * FROM t1 JOIN t2 ON t1.i = t2.i AND t1.j = t2.j", 0, Some(numBuckets))
+          // Bucket strategy applied when columns are aliased.
+          verify(
+            "SELECT * FROM t1 JOIN (SELECT i AS x, j AS y FROM t2) ON t1.i = x AND t1.j = y",
+            0,
+            Some(numBuckets))
+          // Bucket strategy  is not applied when join expressions do not match with bucket columns.
+          verify("SELECT * FROM t1 JOIN t2 ON t1.i = t2.i", 2, None)
         }
-
-        // Coalescing applied since join expressions match with the bucket columns.
-        verify("SELECT * FROM t1 JOIN t2 ON t1.i = t2.i AND t1.j = t2.j", 0, Some(4))
-        // Coalescing applied when columns are aliased.
-        verify(
-          "SELECT * FROM t1 JOIN (SELECT i AS x, j AS y FROM t2) ON t1.i = x AND t1.j = y",
-          0,
-          Some(4))
-        // Coalescing is not applied when join expressions do not match with bucket columns.
-        verify("SELECT * FROM t1 JOIN t2 ON t1.i = t2.i", 2, None)
       }
     }
   }
 
   test("bucket repartitioning eliminates shuffle") {
-    withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key ->
-      SQLConf.BucketReadStrategyForJoin.REPARTITION.toString) {
+    withSQLConf(SQLConf.BUCKET_READ_STRATEGY_IN_JOIN.key ->
+      SQLConf.BucketReadStrategyInJoin.REPARTITION.toString) {
       // The side with testSpec2 will be repartitioned to have 8 output partitions.
       val testSpec1 = BucketedTableTestSpec(
         Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
@@ -1034,8 +1036,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       val expected = t1.join(t2, t1("i") === t2("i")).collect
 
       withSQLConf(
-        SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key ->
-          SQLConf.BucketReadStrategyForJoin.REPARTITION.toString,
+        SQLConf.BUCKET_READ_STRATEGY_IN_JOIN.key ->
+          SQLConf.BucketReadStrategyInJoin.REPARTITION.toString,
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
         val t1 = spark.table("t1")

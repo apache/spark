@@ -2655,12 +2655,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  object BucketReadStrategyForJoin extends Enumeration {
+  object BucketReadStrategyInJoin extends Enumeration {
     val COALESCE, REPARTITION, OFF = Value
   }
 
-  val BUCKET_READ_STRATEGY_FOR_JOIN =
-    buildConf("spark.sql.bucketing.bucketReadStrategyForJoin")
+  val BUCKET_READ_STRATEGY_IN_JOIN =
+    buildConf("spark.sql.bucketing.bucketReadStrategyInJoin")
       .doc("When set to COALESCE, if two bucketed tables with the different number of buckets " +
         "are joined, the side with a bigger number of buckets will be coalesced to have the same " +
         "number of buckets as the other side. When set to REPARTITION, the side with a bigger " +
@@ -2674,15 +2674,15 @@ object SQLConf {
       .version("3.1.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(BucketReadStrategyForJoin.values.map(_.toString))
-      .createWithDefault(BucketReadStrategyForJoin.OFF.toString)
+      .checkValues(BucketReadStrategyInJoin.values.map(_.toString))
+      .createWithDefault(BucketReadStrategyInJoin.OFF.toString)
 
-  val COALESCE_OR_REPARTITION_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO =
-    buildConf("spark.sql.bucketing.coalesceOrRepartitionBucketsInJoin.maxBucketRatio")
+  val BUCKET_READ_STRATEGY_IN_JOIN_MAX_BUCKET_RATIO =
+    buildConf("spark.sql.bucketing.bucketReadStrategyInJoin.maxBucketRatio")
       .doc("The ratio of the number of two buckets being coalesced/repartitioned should be " +
         "less than or equal to this value for bucket coalescing/repartitioning to be applied. " +
-        s"This configuration only has an effect when '${BUCKET_READ_STRATEGY_FOR_JOIN.key}' " +
-        s"is set to a strategy other than '${BucketReadStrategyForJoin.OFF}'.")
+        s"This configuration only has an effect when '${BUCKET_READ_STRATEGY_IN_JOIN.key}' " +
+        s"is set to a strategy other than '${BucketReadStrategyInJoin.OFF}'.")
       .version("3.1.0")
       .intConf
       .checkValue(_ > 0, "The difference must be positive.")
@@ -3335,16 +3335,16 @@ class SQLConf extends Serializable with Logging {
 
   def metadataCacheTTL: Long = getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
 
-  def coalesceOrRepartitionBucketsInJoinMaxBucketRatio: Int =
-    getConf(SQLConf.COALESCE_OR_REPARTITION_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO)
+  def bucketReadStrategyInJoinMaxBucketRatio: Int =
+    getConf(SQLConf.BUCKET_READ_STRATEGY_IN_JOIN_MAX_BUCKET_RATIO)
 
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
 
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
-  def bucketReadStrategyForJoin: BucketReadStrategyForJoin.Value =
-    BucketReadStrategyForJoin.withName(getConf(BUCKET_READ_STRATEGY_FOR_JOIN))
+  def bucketReadStrategyInJoin: BucketReadStrategyInJoin.Value =
+    BucketReadStrategyInJoin.withName(getConf(BUCKET_READ_STRATEGY_IN_JOIN))
 
   /** ********************** SQLConf functionality methods ************ */
 

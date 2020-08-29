@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.BucketReadStrategyForJoin
+import org.apache.spark.sql.internal.SQLConf.BucketReadStrategyInJoin
 
 /**
  * This rule coalesces or repartitions one side of the `SortMergeJoin` and `ShuffledHashJoin`
@@ -38,10 +38,10 @@ import org.apache.spark.sql.internal.SQLConf.BucketReadStrategyForJoin
  *   - The ratio of the number of buckets is less than the value set in
  *     COALESCE_OR_REPARTITION_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.
  *
- * The bucketed table with a larger number of buckets is coalesced if BUCKET_READ_STRATEGY_FOR_JOIN
- * is set to BucketReadStrategyForJoin.COALESCE, whereas the bucketed table with a smaller number
- * of buckets is repartitioned if BUCKET_READ_STRATEGY_FOR_JOIN is set to
- * BucketReadStrategyForJoin.REPARTITION.
+ * The bucketed table with a larger number of buckets is coalesced if BUCKET_READ_STRATEGY_IN_JOIN
+ * is set to BucketReadStrategyInJoin.COALESCE, whereas the bucketed table with a smaller number of
+ * buckets is repartitioned if BUCKET_READ_STRATEGY_IN_JOIN is set to
+ * BucketReadStrategyInJoin.REPARTITION.
  */
 case class CoalesceOrRepartitionBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
   private def updateNumBucketsInScan(
@@ -86,16 +86,16 @@ case class CoalesceOrRepartitionBucketsInJoin(conf: SQLConf) extends Rule[SparkP
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
-    val bucketReadStrategy = conf.bucketReadStrategyForJoin
-    if (bucketReadStrategy == BucketReadStrategyForJoin.OFF) {
+    val bucketReadStrategy = conf.bucketReadStrategyInJoin
+    if (bucketReadStrategy == BucketReadStrategyInJoin.OFF) {
       return plan
     }
 
     plan transform {
       case ExtractJoinWithBuckets(join, numLeftBuckets, numRightBuckets)
         if math.max(numLeftBuckets, numRightBuckets) / math.min(numLeftBuckets, numRightBuckets) <=
-          conf.coalesceOrRepartitionBucketsInJoinMaxBucketRatio =>
-        val newNumBuckets = if (bucketReadStrategy == BucketReadStrategyForJoin.COALESCE) {
+          conf.bucketReadStrategyInJoinMaxBucketRatio =>
+        val newNumBuckets = if (bucketReadStrategy == BucketReadStrategyInJoin.COALESCE) {
           math.min(numLeftBuckets, numRightBuckets)
         } else {
           math.max(numLeftBuckets, numRightBuckets)
@@ -105,9 +105,9 @@ case class CoalesceOrRepartitionBucketsInJoin(conf: SQLConf) extends Rule[SparkP
             updateNumBuckets(j, numLeftBuckets, numRightBuckets, newNumBuckets)
           case j: ShuffledHashJoinExec =>
             bucketReadStrategy match {
-              case BucketReadStrategyForJoin.REPARTITION =>
+              case BucketReadStrategyInJoin.REPARTITION =>
                 updateNumBuckets(j, numLeftBuckets, numRightBuckets, newNumBuckets)
-              case BucketReadStrategyForJoin.COALESCE
+              case BucketReadStrategyInJoin.COALESCE
                 if isCoalesceSHJStreamSide(j, numLeftBuckets, numRightBuckets, newNumBuckets) =>
                 // Only coalesce the buckets for shuffled hash join stream side,
                 // to avoid OOM for build side.
