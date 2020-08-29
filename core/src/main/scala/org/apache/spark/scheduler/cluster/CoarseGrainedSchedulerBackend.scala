@@ -390,16 +390,23 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         case Some(executorInfo) =>
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
-          val killed = CoarseGrainedSchedulerBackend.this.synchronized {
+          val lossReason = CoarseGrainedSchedulerBackend.this.synchronized {
             addressToExecutorId -= executorInfo.executorAddress
             executorDataMap -= executorId
             executorsPendingLossReason -= executorId
-            executorsPendingDecommission -= executorId
-            executorsPendingToRemove.remove(executorId).getOrElse(false)
+            executorsPendingToRemove
+              .remove(executorId).map(_ => ExecutorKilled)
+              .getOrElse {
+                if (executorsPendingDecommission.remove(executorId)) {
+                  ExecutorDecommission()
+                } else {
+                  reason
+                }
+              }
           }
           totalCoreCount.addAndGet(-executorInfo.totalCores)
           totalRegisteredExecutors.addAndGet(-1)
-          scheduler.executorLost(executorId, if (killed) ExecutorKilled else reason)
+          scheduler.executorLost(executorId, lossReason)
           listenerBus.post(
             SparkListenerExecutorRemoved(System.currentTimeMillis(), executorId, reason.toString))
         case None =>
@@ -489,17 +496,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       decomInfo: ExecutorDecommissionInfo): Boolean = {
 
     logInfo(s"Asking executor $executorId to decommissioning.")
-    try {
-      scheduler.executorDecommission(executorId, decomInfo)
-      if (driverEndpoint != null) {
-        logInfo("Propagating executor decommission to driver.")
-        driverEndpoint.send(DecommissionExecutor(executorId, decomInfo))
-      }
-    } catch {
-      case e: Exception =>
-        logError(s"Unexpected error during decommissioning ${e.toString}", e)
-        return false
-    }
+    scheduler.executorDecommission(executorId, decomInfo)
     // Send decommission message to the executor (it could have originated on the executor
     // but not necessarily.
     CoarseGrainedSchedulerBackend.this.synchronized {
@@ -656,7 +653,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       !executorsPendingToRemove.contains(id) &&
       !executorsPendingLossReason.contains(id) &&
       !executorsPendingDecommission.contains(id)
-
   }
 
   /**

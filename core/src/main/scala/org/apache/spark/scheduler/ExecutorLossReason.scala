@@ -53,14 +53,14 @@ private [spark] object LossReasonPending extends ExecutorLossReason("Pending los
 
 /**
  * @param _message human readable loss reason
- * @param workerLost whether the worker is confirmed lost too (i.e. including shuffle service)
+ * @param hostOpt it's defined when the host is confirmed lost too (i.e. including shuffle service)
  * @param causedByApp whether the loss of the executor is the fault of the running app.
  *                    (assumed true by default unless known explicitly otherwise)
  */
 private[spark]
 case class ExecutorProcessLost(
     _message: String = "Executor Process Lost",
-    workerLost: Boolean = false,
+    hostOpt: Option[String] = None,
     causedByApp: Boolean = true)
   extends ExecutorLossReason(_message)
 
@@ -69,5 +69,8 @@ case class ExecutorProcessLost(
  *
  * This is used by the task scheduler to remove state associated with the executor, but
  * not yet fail any tasks that were running in the executor before the executor is "fully" lost.
+ *
+ * @param hostOpt it will be set by [[TaskSchedulerImpl]] when the host is decommissioned too
  */
-private [spark] object ExecutorDecommission extends ExecutorLossReason("Executor decommission.")
+private [spark] case class ExecutorDecommission(var hostOpt: Option[String] = None)
+ extends ExecutorLossReason("Executor decommission.")

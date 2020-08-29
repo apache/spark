@@ -172,10 +172,7 @@ private[spark] class CoarseGrainedExecutorBackend(
           driver match {
             case Some(endpoint) =>
               logInfo("Sending DecommissionExecutor to driver.")
-              endpoint.send(
-                DecommissionExecutor(
-                  executorId,
-                  ExecutorDecommissionInfo(msg, isHostDecommissioned = false)))
+              endpoint.send(DecommissionExecutor(executorId, ExecutorDecommissionInfo(msg)))
             case _ =>
               logError("No registered driver to send Decommission to.")
           }
@@ -275,7 +272,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       // Tell master we are are decommissioned so it stops trying to schedule us
       if (driver.nonEmpty) {
         driver.get.askSync[Boolean](DecommissionExecutor(
-            executorId, ExecutorDecommissionInfo(msg, false)))
+          executorId, ExecutorDecommissionInfo(msg)))
       } else {
         logError("No driver to message decommissioning.")
       }
