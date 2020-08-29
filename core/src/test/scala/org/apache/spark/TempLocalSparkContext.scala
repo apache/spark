@@ -31,10 +31,11 @@ import org.apache.spark.resource.ResourceProfile
  * Note: this class is a copy of [[LocalSparkContext]]. Why copy it? Reduce conflict. Because
  * many test suites use [[LocalSparkContext]] and overwrite some variable or function (e.g.
  * sc of LocalSparkContext), there occurs conflict when we refactor the `sc` as a new function.
- * After migrating all test suites that use [[LocalSparkContext]] to use [[LocalSC]], we will
- * delete the original [[LocalSparkContext]] and rename [[LocalSC]] to [[LocalSparkContext]].
+ * After migrating all test suites that use [[LocalSparkContext]] to use
+ * [[TempLocalSparkContext]], we will delete the original [[LocalSparkContext]] and rename
+ * [[TempLocalSparkContext]] to [[LocalSparkContext]].
  */
-trait LocalSC extends BeforeAndAfterEach
+trait TempLocalSparkContext extends BeforeAndAfterEach
   with BeforeAndAfterAll with Logging { self: Suite =>
 
   private var _conf: SparkConf = defaultSparkConf
@@ -69,7 +70,7 @@ trait LocalSC extends BeforeAndAfterEach
   }
 
   def resetSparkContext(): Unit = {
-    LocalSC.stop(_sc)
+    TempLocalSparkContext.stop(_sc)
     ResourceProfile.clearDefaultProfile()
     _sc = null
     _conf = defaultSparkConf
@@ -79,7 +80,7 @@ trait LocalSC extends BeforeAndAfterEach
     .setMaster("local[2]").setAppName(s"${this.getClass.getSimpleName}")
 }
 
-object LocalSC {
+object TempLocalSparkContext {
   def stop(sc: SparkContext): Unit = {
     if (sc != null) {
       sc.stop()
