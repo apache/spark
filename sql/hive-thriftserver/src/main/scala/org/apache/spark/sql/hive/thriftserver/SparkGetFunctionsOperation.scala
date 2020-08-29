@@ -93,14 +93,7 @@ private[hive] class SparkGetFunctionsOperation(
               DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
               db, // FUNCTION_SCHEM
               funcIdentifier.funcName, // FUNCTION_NAME
-              s"""
-                 |    Usage:
-                 |      ${info.getUsage.trim}
-                 |${info.getArguments}
-                 |${info.getExamples}
-                 |$since
-                 |$note
-               """.stripMargin, // REMARKS
+              "    Usage:\n      " + info.getUsage.trim + "\n" + info.getExtended, // REMARKS
               DatabaseMetaData.functionResultUnknown.asInstanceOf[AnyRef], // FUNCTION_TYPE
               info.getClassName) // SPECIFIC_NAME
             rowSet.addRow(rowData);
