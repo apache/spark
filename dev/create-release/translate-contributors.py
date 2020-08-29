@@ -31,10 +31,15 @@
 import os
 import sys
 
-import unidecode
-
 from releaseutils import JIRA, JIRAError, get_jira_name, Github, get_github_name, \
     contributors_file_name, is_valid_author, raw_input, capitalize_author, yesOrNoPrompt
+
+try:
+    import unidecode
+except ImportError:
+    print("This tool requires the unidecode library to decode obscure github usernames")
+    print("Install using 'sudo pip install unidecode'")
+    sys.exit(-1)
 
 # You must set the following before use!
 JIRA_API_BASE = os.environ.get("JIRA_API_BASE", "https://issues.apache.org/jira")
