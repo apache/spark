@@ -2411,39 +2411,39 @@
             </execution>
           </executions>
         </plugin>
-        <plugin>
-          <groupId>org.codehaus.mojo</groupId>
-          <artifactId>build-helper-maven-plugin</artifactId>
-          <version>3.2.0</version>
-          <executions>
-            <execution>
-              <id>module-timestamp-property</id>
-              <phase>validate</phase>
-              <goals>
-                <goal>timestamp-property</goal>
-              </goals>
-              <configuration>
-                <name>module.build.timestamp</name>
-                <pattern>${maven.build.timestamp.format}</pattern>
-                <timeSource>current</timeSource>
-                <timeZone>America/Los_Angeles</timeZone>
-              </configuration>
-            </execution>
-            <execution>
-              <id>local-timestamp-property</id>
-              <phase>validate</phase>
-              <goals>
-                <goal>timestamp-property</goal>
-              </goals>
-              <configuration>
-                <name>local.build.timestamp</name>
-                <pattern>${maven.build.timestamp.format}</pattern>
-                <timeSource>build</timeSource>
-                <timeZone>America/Los_Angeles</timeZone>
-              </configuration>
-            </execution>
-          </executions>
-        </plugin>
+	<plugin>
+	  <groupId>org.codehaus.mojo</groupId>
+	  <artifactId>build-helper-maven-plugin</artifactId>
+	  <version>3.2.0</version>
+	  <executions>
+	    <execution>
+	      <id>module-timestamp-property</id>
+	      <phase>validate</phase>
+	      <goals>
+		<goal>timestamp-property</goal>
+	      </goals>
+	      <configuration>
+		<name>module.build.timestamp</name>
+		<pattern>${maven.build.timestamp.format}</pattern>
+		<timeSource>current</timeSource>
+		<timeZone>America/Los_Angeles</timeZone>
+	      </configuration>
+	    </execution>
+	    <execution>
+	      <id>local-timestamp-property</id>
+	      <phase>validate</phase>
+	      <goals>
+		<goal>timestamp-property</goal>
+	      </goals>
+	      <configuration>
+		<name>local.build.timestamp</name>
+		<pattern>${maven.build.timestamp.format}</pattern>
+		<timeSource>build</timeSource>
+		<timeZone>America/Los_Angeles</timeZone>
+	      </configuration>
+	    </execution>
+	  </executions>
+	</plugin>
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
@@ -2763,7 +2763,7 @@
             <execution>
               <id>default-cli</id>
               <goals>
-                <goal>build-classpath</goal>
+                 <goal>build-classpath</goal>
               </goals>
               <configuration>
                 <!-- This includes dependencies with 'runtime' and 'compile' scopes;
@@ -3230,7 +3230,7 @@
         </pluginManagement>
       </build>
     </profile>
-
+    
     <profile>
       <id>scala-2.13</id>
       <properties>
