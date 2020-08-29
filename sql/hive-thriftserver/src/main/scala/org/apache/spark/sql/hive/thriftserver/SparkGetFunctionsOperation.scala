@@ -21,7 +21,6 @@ import java.sql.DatabaseMetaData
 
 import scala.collection.JavaConverters.seqAsJavaListConverter
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetFunctionsOperation
