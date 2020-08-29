@@ -37,7 +37,7 @@ Spark uses pattern letters in the following table for date and timestamp parsing
 |**d**|day-of-month|number(3)|28|
 |**Q/q**|quarter-of-year|number/text|3; 03; Q3; 3rd quarter|
 |**E**|day-of-week|text|Tue; Tuesday|
-|**F**|week-of-month|number(1)|3|
+|**F**|aligned day of week in month|number(1)|3|
 |**a**|am-pm-of-day|am-pm|PM|
 |**h**|clock-hour-of-am-pm (1-12)|number(2)|12|
 |**K**|hour-of-am-pm (0-11)|number(2)|0|

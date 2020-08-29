@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
@@ -284,6 +285,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def save(path: String): Unit = {
+    if (!df.sparkSession.sessionState.conf.legacyPathOptionBehavior &&
+        extraOptions.contains("path") && path.nonEmpty) {
+      throw new AnalysisException("There is a 'path' option set and save() is called with a path " +
+        "parameter. Either remove the path option, or call save() without the parameter. " +
+        s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
+    }
     this.extraOptions += ("path" -> path)
     save()
   }

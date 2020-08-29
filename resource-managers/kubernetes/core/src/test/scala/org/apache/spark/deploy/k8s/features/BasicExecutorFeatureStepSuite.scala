@@ -195,6 +195,16 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     checkOwnerReferences(executor.pod, DRIVER_POD_UID)
   }
 
+  test("SPARK-32655 Support appId/execId placeholder in SPARK_EXECUTOR_DIRS") {
+    val kconf = newExecutorConf(environment = Map(ENV_EXECUTOR_DIRS ->
+      "/p1/SPARK_APPLICATION_ID/SPARK_EXECUTOR_ID,/p2/SPARK_APPLICATION_ID/SPARK_EXECUTOR_ID"))
+    val step = new BasicExecutorFeatureStep(kconf, new SecurityManager(baseConf))
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    checkEnv(executor, baseConf, Map(ENV_EXECUTOR_DIRS ->
+      s"/p1/${KubernetesTestConf.APP_ID}/1,/p2/${KubernetesTestConf.APP_ID}/1"))
+  }
+
   test("test executor pyspark memory") {
     baseConf.set("spark.kubernetes.resource.type", "python")
     baseConf.set(PYSPARK_EXECUTOR_MEMORY, 42L)
