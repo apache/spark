@@ -213,21 +213,7 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       checkResult(metaData.getFunctions(null, "default", "overlay"), Seq("overlay"))
       checkResult(metaData.getFunctions(null, "default", "shift*"),
         Seq("shiftleft", "shiftright", "shiftrightunsigned"))
-    }
-
-    withJdbcStatement() { statement =>
-      val metaData = statement.getConnection.getMetaData
-      val rs = metaData.getFunctions(null, "default", "upPer")
-      assert(rs.next())
-      assert(rs.getString("FUNCTION_SCHEM") === "default")
-      assert(rs.getString("FUNCTION_NAME") === "upper")
-      val exprInfo = FunctionRegistry.expressions("upper")._1
-      assert(rs.getString("REMARKS") ===
-        s"    Usage:\n      ${exprInfo.getUsage}\n${exprInfo.getExtended}")
-      assert(rs.getInt("FUNCTION_TYPE") === DatabaseMetaData.functionResultUnknown)
-      assert(rs.getString("SPECIFIC_NAME") === exprInfo.getClassName)
-      // Make sure there are no more elements
-      assert(!rs.next())
+      checkResult(metaData.getFunctions(null, "default", "upPer"), Seq("upper"))
     }
   }
 
