@@ -876,7 +876,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   }
 
   test("bucket coalescing eliminates shuffle") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key ->
+      SQLConf.BucketReadStrategyForJoin.COALESCE.toString) {
       // The side with bucketedTableTestSpec1 will be coalesced to have 4 output partitions.
       // Currently, sort will be introduced for the side that is coalesced.
       val testSpec1 = BucketedTableTestSpec(
@@ -911,24 +912,22 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       }
     }
 
-    Seq(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "false",
-      SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "false").foreach { enabledConfig =>
-      withSQLConf(enabledConfig) {
-        // Coalescing/repartitioning buckets is disabled by a config.
-        run(
-          BucketedTableTestSpec(
-            Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
-            expectedShuffle = false),
-          BucketedTableTestSpec(
-            Some(BucketSpec(4, Seq("i", "j"), Seq("i", "j"))),
-            expectedShuffle = true))
-      }
+    withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key ->
+      SQLConf.BucketReadStrategyForJoin.OFF.toString) {
+      // Bucket read strategy is off.
+      run(
+        BucketedTableTestSpec(
+          Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
+          expectedShuffle = false),
+        BucketedTableTestSpec(
+          Some(BucketSpec(4, Seq("i", "j"), Seq("i", "j"))),
+          expectedShuffle = true))
     }
 
-    Seq(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
-      SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "true").foreach { enabledConfig =>
+    Seq(SQLConf.BucketReadStrategyForJoin.COALESCE.toString,
+      SQLConf.BucketReadStrategyForJoin.REPARTITION.toString).foreach { strategy =>
       withSQLConf(
-        enabledConfig,
+        SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key -> strategy,
         SQLConf.COALESCE_OR_REPARTITION_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.key -> "2") {
         // Coalescing/repartitioning buckets is not applied because the ratio of
         // the number of buckets (3) is greater than max allowed (2).
@@ -942,9 +941,9 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       }
     }
 
-    Seq(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
-      SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "true").foreach { enabledConfig =>
-      withSQLConf(enabledConfig) {
+    Seq(SQLConf.BucketReadStrategyForJoin.COALESCE.toString,
+      SQLConf.BucketReadStrategyForJoin.REPARTITION.toString).foreach { strategy =>
+      withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key -> strategy) {
         run(
           // Coalescing/repartitioning buckets is not applied because the bigger number of
           // buckets (8) is not divisible by the smaller number of buckets (7).
@@ -965,7 +964,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
       withSQLConf(
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
-        SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+        SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key ->
+          SQLConf.BucketReadStrategyForJoin.COALESCE.toString) {
         def verify(
             query: String,
             expectedNumShuffles: Int,
@@ -999,7 +999,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   }
 
   test("bucket repartitioning eliminates shuffle") {
-    withSQLConf(SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key ->
+      SQLConf.BucketReadStrategyForJoin.REPARTITION.toString) {
       // The side with testSpec2 will be repartitioned to have 8 output partitions.
       val testSpec1 = BucketedTableTestSpec(
         Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
@@ -1032,7 +1033,9 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       val t2 = spark.table("t2")
       val expected = t1.join(t2, t1("i") === t2("i")).collect
 
-      withSQLConf(SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "true",
+      withSQLConf(
+        SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key ->
+          SQLConf.BucketReadStrategyForJoin.REPARTITION.toString,
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
         val t1 = spark.table("t1")

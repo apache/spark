@@ -344,19 +344,24 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     }
   }
 
-  test("Coalesced bucket info should be a part of explain string") {
-    withTable("t1", "t2") {
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
-        SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
-        Seq(1, 2).toDF("i").write.bucketBy(8, "i").saveAsTable("t1")
-        Seq(2, 3).toDF("i").write.bucketBy(4, "i").saveAsTable("t2")
-        val df1 = spark.table("t1")
-        val df2 = spark.table("t2")
-        val joined = df1.join(df2, df1("i") === df2("i"))
-        checkKeywordsExistsInExplain(
-          joined,
-          SimpleMode,
-          "SelectedBucketsCount: 8 out of 8 (Coalesced to 4)" :: Nil: _*)
+  test("Coalesced/repartitioned bucket info should be a part of explain string") {
+    Seq((SQLConf.BucketReadStrategyForJoin.COALESCE.toString,
+        "8 out of 8 (Coalesced to 4)"),
+      (SQLConf.BucketReadStrategyForJoin.REPARTITION.toString,
+        "4 out of 4 (Repartitioned to 8)")).foreach { case (strategy, expected) =>
+      withTable("t1", "t2") {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
+          SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key -> strategy) {
+          Seq(1, 2).toDF("i").write.bucketBy(8, "i").saveAsTable("t1")
+          Seq(2, 3).toDF("i").write.bucketBy(4, "i").saveAsTable("t2")
+          val df1 = spark.table("t1")
+          val df2 = spark.table("t2")
+          val joined = df1.join(df2, df1("i") === df2("i"))
+          checkKeywordsExistsInExplain(
+            joined,
+            SimpleMode,
+            s"SelectedBucketsCount: $expected" :: Nil: _*)
+        }
       }
     }
   }

@@ -120,7 +120,8 @@ class CoalesceOrRepartitionBucketsInJoinSuite extends SQLTestUtils with SharedSp
   }
 
   test("bucket coalescing - basic") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key ->
+      SQLConf.BucketReadStrategyForJoin.COALESCE.toString) {
       run(JoinSetting(
         RelationSetting(4, None), RelationSetting(8, Some(4)), joinOperator = SORT_MERGE_JOIN))
       run(JoinSetting(
@@ -128,7 +129,8 @@ class CoalesceOrRepartitionBucketsInJoinSuite extends SQLTestUtils with SharedSp
         shjBuildSide = Some(BuildLeft)))
     }
 
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key ->
+      SQLConf.BucketReadStrategyForJoin.OFF.toString) {
       run(JoinSetting(
         RelationSetting(4, None), RelationSetting(8, None), joinOperator = SORT_MERGE_JOIN))
       run(JoinSetting(
@@ -138,7 +140,8 @@ class CoalesceOrRepartitionBucketsInJoinSuite extends SQLTestUtils with SharedSp
   }
 
   test("bucket repartitioning - basic") {
-    withSQLConf(SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key ->
+      SQLConf.BucketReadStrategyForJoin.REPARTITION.toString) {
       run(JoinSetting(
         RelationSetting(8, None), RelationSetting(4, Some(8)), joinOperator = SORT_MERGE_JOIN))
       Seq(BuildLeft, BuildRight).foreach { buildSide =>
@@ -148,7 +151,8 @@ class CoalesceOrRepartitionBucketsInJoinSuite extends SQLTestUtils with SharedSp
       }
     }
 
-    withSQLConf(SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key ->
+      SQLConf.BucketReadStrategyForJoin.OFF.toString) {
       run(JoinSetting(
         RelationSetting(8, None), RelationSetting(4, None), joinOperator = SORT_MERGE_JOIN))
       Seq(BuildLeft, BuildRight).foreach { buildSide =>
@@ -160,9 +164,9 @@ class CoalesceOrRepartitionBucketsInJoinSuite extends SQLTestUtils with SharedSp
   }
 
   test("bucket coalesce/repartition should work only for sort merge join and shuffled hash join") {
-    Seq(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
-      SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "true").foreach { enableConfig =>
-      withSQLConf(enableConfig) {
+    Seq(SQLConf.BucketReadStrategyForJoin.COALESCE.toString,
+      SQLConf.BucketReadStrategyForJoin.REPARTITION.toString).foreach { strategy =>
+      withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key -> strategy) {
         run(JoinSetting(
           RelationSetting(4, None), RelationSetting(8, None), joinOperator = BROADCAST_HASH_JOIN))
       }
@@ -170,7 +174,8 @@ class CoalesceOrRepartitionBucketsInJoinSuite extends SQLTestUtils with SharedSp
   }
 
   test("bucket coalescing shouldn't be applied to shuffled hash join build side") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key ->
+      SQLConf.BucketReadStrategyForJoin.COALESCE.toString) {
       run(JoinSetting(
         RelationSetting(4, None), RelationSetting(8, None), joinOperator = SHUFFLED_HASH_JOIN,
         shjBuildSide = Some(BuildRight)))
@@ -178,9 +183,9 @@ class CoalesceOrRepartitionBucketsInJoinSuite extends SQLTestUtils with SharedSp
   }
 
   test("bucket coalesce/repartition shouldn't be applied when the number of buckets are the same") {
-    Seq(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
-      SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "true").foreach { enableConfig =>
-      withSQLConf(enableConfig) {
+    Seq(SQLConf.BucketReadStrategyForJoin.COALESCE.toString,
+      SQLConf.BucketReadStrategyForJoin.REPARTITION.toString).foreach { strategy =>
+      withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key -> strategy) {
         run(JoinSetting(
           RelationSetting(8, None), RelationSetting(8, None), joinOperator = SORT_MERGE_JOIN))
         run(JoinSetting(
@@ -191,9 +196,9 @@ class CoalesceOrRepartitionBucketsInJoinSuite extends SQLTestUtils with SharedSp
   }
 
   test("number of bucket is not divisible by other number of bucket") {
-    Seq(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
-      SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "true").foreach { enableConfig =>
-      withSQLConf(enableConfig) {
+    Seq(SQLConf.BucketReadStrategyForJoin.COALESCE.toString,
+      SQLConf.BucketReadStrategyForJoin.REPARTITION.toString).foreach { strategy =>
+      withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key -> strategy) {
         run(JoinSetting(
           RelationSetting(3, None), RelationSetting(8, None), joinOperator = SORT_MERGE_JOIN))
         run(JoinSetting(
@@ -204,9 +209,9 @@ class CoalesceOrRepartitionBucketsInJoinSuite extends SQLTestUtils with SharedSp
   }
 
   test("the ratio of the number of buckets is greater than max allowed") {
-    Seq(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
-      SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "true").foreach { enableConfig =>
-      withSQLConf(enableConfig,
+    Seq(SQLConf.BucketReadStrategyForJoin.COALESCE.toString,
+      SQLConf.BucketReadStrategyForJoin.REPARTITION.toString).foreach { strategy =>
+      withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key -> strategy,
         SQLConf.COALESCE_OR_REPARTITION_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.key -> "2") {
         run(JoinSetting(
           RelationSetting(4, None), RelationSetting(16, None), joinOperator = SORT_MERGE_JOIN))
@@ -228,9 +233,9 @@ class CoalesceOrRepartitionBucketsInJoinSuite extends SQLTestUtils with SharedSp
     val lRel = RelationSetting(lCols, 4, None)
     val rRel = RelationSetting(rCols, 8, None)
 
-    Seq(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
-      SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "true").foreach { enableConfig =>
-      withSQLConf(enableConfig) {
+    Seq(SQLConf.BucketReadStrategyForJoin.COALESCE.toString,
+      SQLConf.BucketReadStrategyForJoin.REPARTITION.toString).foreach { strategy =>
+      withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key -> strategy) {
         // The following should not be coalesced because join keys do not match with output
         // partitioning (missing one expression).
         run(JoinSetting(
@@ -269,7 +274,8 @@ class CoalesceOrRepartitionBucketsInJoinSuite extends SQLTestUtils with SharedSp
       }
     }
 
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key ->
+      SQLConf.BucketReadStrategyForJoin.COALESCE.toString) {
       // The following will be coalesced since ordering should not matter because it will be
       // adjusted in `EnsureRequirements`.
       val setting = JoinSetting(
@@ -284,7 +290,8 @@ class CoalesceOrRepartitionBucketsInJoinSuite extends SQLTestUtils with SharedSp
       run(setting.copy(joinOperator = SHUFFLED_HASH_JOIN, shjBuildSide = Some(BuildLeft)))
     }
 
-    withSQLConf(SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.BUCKET_READ_STRATEGY_FOR_JOIN.key ->
+      SQLConf.BucketReadStrategyForJoin.REPARTITION.toString) {
       // The following will be repartitioned since ordering should not matter because it will be
       // adjusted in `EnsureRequirements`.
       val setting = JoinSetting(

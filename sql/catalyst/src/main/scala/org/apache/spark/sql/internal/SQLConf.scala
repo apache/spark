@@ -2655,37 +2655,34 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val COALESCE_BUCKETS_IN_JOIN_ENABLED =
-    buildConf("spark.sql.bucketing.coalesceBucketsInJoin.enabled")
-      .doc("When true, if two bucketed tables with the different number of buckets are joined, " +
-        "the side with a bigger number of buckets will be coalesced to have the same number " +
-        "of buckets as the other side. Bigger number of buckets is divisible by the smaller " +
-        "number of buckets. Bucket coalescing is applied to sort-merge joins and " +
-        "shuffled hash join. Note: Coalescing bucketed table can avoid unnecessary shuffling " +
-        "in join, but it also reduces parallelism and could possibly cause OOM for " +
-        "shuffled hash join.")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
+  object BucketReadStrategyForJoin extends Enumeration {
+    val COALESCE, REPARTITION, OFF = Value
+  }
 
-  val REPARTITION_BUCKETS_IN_JOIN_ENABLED =
-    buildConf("spark.sql.bucketing.repartitionBucketsInJoin.enabled")
-      .doc("When true, if two bucketed tables with the different number of buckets are joined, " +
-        "the side with a smaller number of buckets will be repartitioned to have the same number " +
-        "of buckets as the other side. Bigger number of buckets is divisible by the smaller " +
-        "number of buckets. Bucket repartitioning is applied to sort-merge joins and " +
-        "shuffled hash join. Note: Repartitioning bucketed table can avoid unnecessary shuffling " +
-        "in join and increases parallelism, but it also reads more data than necessary.")
+  val BUCKET_READ_STRATEGY_FOR_JOIN =
+    buildConf("spark.sql.bucketing.bucketReadStrategyForJoin")
+      .doc("When set to COALESCE, if two bucketed tables with the different number of buckets " +
+        "are joined, the side with a bigger number of buckets will be coalesced to have the same " +
+        "number of buckets as the other side. When set to REPARTITION, the side with a bigger " +
+        "number of buckets will be repartitioned to have the same number of buckets as the other " +
+        "side. The bigger number of buckets must be divisible by the smaller number of buckets, " +
+        "and the strategy is applied to sort-merge joins and shuffled hash joins. " +
+        "Note: Coalescing bucketed table can avoid unnecessary shuffle in join, but it also " +
+        "reduces parallelism and could possibly cause OOM for shuffled hash join. Repartitioning " +
+        "bucketed table avoids unnecessary shuffle in join while maintaining the parallelism " +
+        "at the cost of reading duplicate data.")
       .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(BucketReadStrategyForJoin.values.map(_.toString))
+      .createWithDefault(BucketReadStrategyForJoin.OFF.toString)
 
   val COALESCE_OR_REPARTITION_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO =
     buildConf("spark.sql.bucketing.coalesceOrRepartitionBucketsInJoin.maxBucketRatio")
       .doc("The ratio of the number of two buckets being coalesced/repartitioned should be " +
         "less than or equal to this value for bucket coalescing/repartitioning to be applied. " +
-        s"This configuration only has an effect when '${COALESCE_BUCKETS_IN_JOIN_ENABLED.key}' " +
-        s"or '${REPARTITION_BUCKETS_IN_JOIN_ENABLED.key}' is set to true.")
+        s"This configuration only has an effect when '${BUCKET_READ_STRATEGY_FOR_JOIN.key}' " +
+        s"is set to a strategy other than '${BucketReadStrategyForJoin.OFF}'.")
       .version("3.1.0")
       .intConf
       .checkValue(_ > 0, "The difference must be positive.")
@@ -3338,18 +3335,16 @@ class SQLConf extends Serializable with Logging {
 
   def metadataCacheTTL: Long = getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
 
-  def repartitionBucketsInJoinEnabled: Boolean =
-    getConf(SQLConf.REPARTITION_BUCKETS_IN_JOIN_ENABLED)
-
-  def coalesceBucketsInJoinEnabled: Boolean = getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED)
-
-  def coalesceBucketsInJoinMaxBucketRatio: Int =
+  def coalesceOrRepartitionBucketsInJoinMaxBucketRatio: Int =
     getConf(SQLConf.COALESCE_OR_REPARTITION_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO)
 
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
 
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
+
+  def bucketReadStrategyForJoin: BucketReadStrategyForJoin.Value =
+    BucketReadStrategyForJoin.withName(getConf(BUCKET_READ_STRATEGY_FOR_JOIN))
 
   /** ********************** SQLConf functionality methods ************ */
 

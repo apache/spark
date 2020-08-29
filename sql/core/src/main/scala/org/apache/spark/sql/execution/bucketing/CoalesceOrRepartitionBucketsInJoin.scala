@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.bucketing
 
 import scala.annotation.tailrec
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
@@ -28,16 +27,21 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.BucketReadStrategyForJoin
 
 /**
- * This rule coalesces one side of the `SortMergeJoin` and `ShuffledHashJoin`
+ * This rule coalesces or repartitions one side of the `SortMergeJoin` and `ShuffledHashJoin`
  * if the following conditions are met:
  *   - Two bucketed tables are joined.
  *   - Join keys match with output partition expressions on their respective sides.
  *   - The larger bucket number is divisible by the smaller bucket number.
- *   - COALESCE_BUCKETS_IN_JOIN_ENABLED is set to true.
  *   - The ratio of the number of buckets is less than the value set in
- *     COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.
+ *     COALESCE_OR_REPARTITION_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.
+ *
+ * The bucketed table with a larger number of buckets is coalesced if BUCKET_READ_STRATEGY_FOR_JOIN
+ * is set to BucketReadStrategyForJoin.COALESCE, whereas the bucketed table with a smaller number
+ * of buckets is repartitioned if BUCKET_READ_STRATEGY_FOR_JOIN is set to
+ * BucketReadStrategyForJoin.REPARTITION.
  */
 case class CoalesceOrRepartitionBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
   private def updateNumBucketsInScan(
@@ -82,21 +86,16 @@ case class CoalesceOrRepartitionBucketsInJoin(conf: SQLConf) extends Rule[SparkP
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.coalesceBucketsInJoinEnabled && !conf.repartitionBucketsInJoinEnabled) {
+    val bucketReadStrategy = conf.bucketReadStrategyForJoin
+    if (bucketReadStrategy == BucketReadStrategyForJoin.OFF) {
       return plan
-    }
-
-    if (conf.coalesceBucketsInJoinEnabled && conf.repartitionBucketsInJoinEnabled) {
-      throw new AnalysisException("Both 'spark.sql.bucketing.coalesceBucketsInJoin.enabled' and " +
-        "'spark.sql.bucketing.repartitionBucketsInJoin.enabled' cannot be set to true at the" +
-        "same time")
     }
 
     plan transform {
       case ExtractJoinWithBuckets(join, numLeftBuckets, numRightBuckets)
         if math.max(numLeftBuckets, numRightBuckets) / math.min(numLeftBuckets, numRightBuckets) <=
-          conf.coalesceBucketsInJoinMaxBucketRatio =>
-        val newNumBuckets = if (conf.coalesceBucketsInJoinEnabled) {
+          conf.coalesceOrRepartitionBucketsInJoinMaxBucketRatio =>
+        val newNumBuckets = if (bucketReadStrategy == BucketReadStrategyForJoin.COALESCE) {
           math.min(numLeftBuckets, numRightBuckets)
         } else {
           math.max(numLeftBuckets, numRightBuckets)
@@ -105,15 +104,15 @@ case class CoalesceOrRepartitionBucketsInJoin(conf: SQLConf) extends Rule[SparkP
           case j: SortMergeJoinExec =>
             updateNumBuckets(j, numLeftBuckets, numRightBuckets, newNumBuckets)
           case j: ShuffledHashJoinExec =>
-            if (conf.repartitionBucketsInJoinEnabled) {
-              updateNumBuckets(j, numLeftBuckets, numRightBuckets, newNumBuckets)
-            } else if (conf.coalesceBucketsInJoinEnabled &&
-              isCoalesceSHJStreamSide(j, numLeftBuckets, numRightBuckets, newNumBuckets)) {
-              // Only coalesce the buckets for shuffled hash join stream side,
-              // to avoid OOM for build side.
-              updateNumBuckets(j, numLeftBuckets, numRightBuckets, newNumBuckets)
-            } else {
-              j
+            bucketReadStrategy match {
+              case BucketReadStrategyForJoin.REPARTITION =>
+                updateNumBuckets(j, numLeftBuckets, numRightBuckets, newNumBuckets)
+              case BucketReadStrategyForJoin.COALESCE
+                if isCoalesceSHJStreamSide(j, numLeftBuckets, numRightBuckets, newNumBuckets) =>
+                // Only coalesce the buckets for shuffled hash join stream side,
+                // to avoid OOM for build side.
+                updateNumBuckets(j, numLeftBuckets, numRightBuckets, newNumBuckets)
+              case _ => j
             }
           case other => other
         }
