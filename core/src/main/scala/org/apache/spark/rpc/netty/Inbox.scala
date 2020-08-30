@@ -219,10 +219,10 @@ private[netty] class Inbox(val endpointName: String, val endpoint: RpcEndpoint)
             } else {
               logError("Ignoring error", ee)
             }
-          case fatal =>
+          case fatal: Throwable =>
             dealWithFatalException(fatal)
         }
-      case fatal =>
+      case fatal: Throwable =>
         dealWithFatalException(fatal)
     }
   }
