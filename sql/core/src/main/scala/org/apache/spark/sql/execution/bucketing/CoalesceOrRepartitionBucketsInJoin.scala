@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf.BucketReadStrategyInJoin
  *   - Join keys match with output partition expressions on their respective sides.
  *   - The larger bucket number is divisible by the smaller bucket number.
  *   - The ratio of the number of buckets is less than the value set in
- *     COALESCE_OR_REPARTITION_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.
+ *     BUCKET_READ_STRATEGY_IN_JOIN_MAX_BUCKET_RATIO.
  *
  * The bucketed table with a larger number of buckets is coalesced if BUCKET_READ_STRATEGY_IN_JOIN
  * is set to BucketReadStrategyInJoin.COALESCE, whereas the bucketed table with a smaller number of
