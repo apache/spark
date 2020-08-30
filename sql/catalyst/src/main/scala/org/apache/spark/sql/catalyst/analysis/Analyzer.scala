@@ -570,6 +570,12 @@ class Analyzer(
           s"Grouping sets size cannot be greater than ${GroupingID.dataType.defaultSize * 8}")
       }
 
+      // For struct field, it will be resolve as Alias(GetStructField, name),
+      // In Aggregate/GroupingSets this behavior will cause the same struct fields
+      // in aggExprs/groupExprs/selectedGroupByExprs be treated as different ones due to different
+      // ExprIds in Alias, and stops us finding the grouping expressions in aggExprs. Here we
+      // will use this method to remove Alias with different ExprId of GetStructField
+      // in groupByAlias/selectedGroupByExprs and aggregateExpressions
       def resolveGetStructField(e: Expression): Expression = {
         var fixed = ArrayBuffer[Alias]()
         e.transformDown {
