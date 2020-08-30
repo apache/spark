@@ -45,9 +45,18 @@ class ForEachDStream[T: ClassTag] (
   override def compute(validTime: Time): Option[RDD[Unit]] = None
 
   override def generateJob(time: Time): Option[Job] = {
+    val inputs = getInputStream(parent)
+    inputs.foreach(x => x.getOrCompute(time))
+
     val jobFunc = () => createRDDWithLocalProperties(time, displayInnerRDDOps) {
       parent.getOrCompute(time).foreach(rdd => foreachFunc(rdd, time))
     }
     Some(new Job(time, jobFunc))
   }
+
+  private def getInputStream(dstream: DStream[_]): List[InputDStream[_]] =
+    dstream match {
+      case input: InputDStream[_] => List(input)
+      case union: DStream[_] => union.dependencies.flatMap(x => getInputStream(x))
+    }
 }

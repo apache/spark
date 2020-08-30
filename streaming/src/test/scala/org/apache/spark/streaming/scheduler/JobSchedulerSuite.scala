@@ -69,5 +69,7 @@ class JobSchedulerSuite extends TestSuiteBase with BeforeAndAfterAll {
         assert(jobStart.properties.containsKey(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY))
       })
     }
+
+    ssc.stop()
   }
 }

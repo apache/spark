@@ -67,4 +67,6 @@ class ForEachDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
       assert(submittedBatch.length == 5)
     }
   }
+
+  ssc.stop()
 }
