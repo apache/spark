@@ -88,7 +88,7 @@ private[hive] class SparkGetFunctionsOperation(
               DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
               db, // FUNCTION_SCHEM
               funcIdentifier.funcName, // FUNCTION_NAME
-              "    Usage:\n      " + info.getUsage.trim + "\n" + info.getExtended, // REMARKS
+              s"Usage: ${info.getUsage}\nExtended Usage:${info.getExtended}", // REMARKS
               DatabaseMetaData.functionResultUnknown.asInstanceOf[AnyRef], // FUNCTION_TYPE
               info.getClassName) // SPECIFIC_NAME
             rowSet.addRow(rowData);

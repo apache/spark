@@ -193,9 +193,8 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
         assert(rs.next())
         assert(rs.getString("FUNCTION_SCHEM") === "default")
         assert(rs.getString("FUNCTION_NAME") === exprInfo.getName)
-        val remarks = rs.getString("REMARKS")
         assert(rs.getString("REMARKS") ===
-          s"    Usage:\n      ${exprInfo.getUsage}\n${exprInfo.getExtended}")
+          s"Usage: ${exprInfo.getUsage}\nExtended Usage:${exprInfo.getExtended}")
         assert(rs.getInt("FUNCTION_TYPE") === DatabaseMetaData.functionResultUnknown)
         assert(rs.getString("SPECIFIC_NAME") === exprInfo.getClassName)
       }
