@@ -128,7 +128,7 @@ class InMemoryFileIndex(
     }
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = InMemoryFileIndex.bulkListLeafFiles(
-      pathsToFetch.toSeq, hadoopConf, filter, sparkSession, areRootPaths = true)
+      pathsToFetch.toSeq, hadoopConf, filter, sparkSession, isRootLevel = true)
     discovered.foreach { case (path, leafFiles) =>
       HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
@@ -147,13 +147,13 @@ object InMemoryFileIndex extends Logging {
       hadoopConf: Configuration,
       filter: PathFilter,
       sparkSession: SparkSession,
-      areRootPaths: Boolean): Seq[(Path, Seq[FileStatus])] = {
+      isRootLevel: Boolean): Seq[(Path, Seq[FileStatus])] = {
     HadoopFSUtils.parallelListLeafFiles(
       sc = sparkSession.sparkContext,
       paths = paths,
       hadoopConf = hadoopConf,
       filter = filter,
-      areSQLRootPaths = areRootPaths,
+      isRootLevel = isRootLevel,
       ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles,
       ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality,
       parallelismThreshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold,

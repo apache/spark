@@ -45,7 +45,8 @@ private[spark] object HadoopFSUtils extends Logging {
    * @param paths Input paths to list
    * @param hadoopConf Hadoop configuration
    * @param filter Path filter used to exclude leaf files from result
-   * @param areSQLRootPaths Whether the input paths are SQL root paths
+   * @param isRootLevel Whether the input paths are at the root level, i.e., they are the root
+   *                    paths as opposed to nested paths encountered during recursive calls of this.
    * @param ignoreMissingFiles Ignore missing files that happen during recursive listing
    *                           (e.g., due to race conditions)
    * @param ignoreLocality Whether to fetch data locality info when listing leaf files. If false,
@@ -54,8 +55,8 @@ private[spark] object HadoopFSUtils extends Logging {
    *                             is smaller than this value, this will fallback to use
    *                             sequential listing.
    * @param parallelismMax The maximum parallelism for listing. If the number of input paths is
-   *                           larger than this value, parallelism will be throttled to this value
-   *                           to avoid generating too many tasks.
+   *                       larger than this value, parallelism will be throttled to this value
+   *                       to avoid generating too many tasks.
    * @param filterFun Optional predicate on the leaf files. Files who failed the check will be
    *                  excluded from the results
    * @return for each input path, the set of discovered files for the path
@@ -65,7 +66,7 @@ private[spark] object HadoopFSUtils extends Logging {
       paths: Seq[Path],
       hadoopConf: Configuration,
       filter: PathFilter,
-      areSQLRootPaths: Boolean,
+      isRootLevel: Boolean,
       ignoreMissingFiles: Boolean,
       ignoreLocality: Boolean,
       parallelismThreshold: Int,
@@ -82,9 +83,9 @@ private[spark] object HadoopFSUtils extends Logging {
           Some(sc),
           ignoreMissingFiles = ignoreMissingFiles,
           ignoreLocality = ignoreLocality,
-          isSQLRootPath = areSQLRootPaths,
+          isRootPath = isRootLevel,
           parallelismThreshold = parallelismThreshold,
-          parallelismDefault = parallelismMax,
+          parallelismMax = parallelismMax,
           filterFun = filterFun)
         (path, leafFiles)
       }
@@ -124,10 +125,10 @@ private[spark] object HadoopFSUtils extends Logging {
               contextOpt = None, // Can't execute parallel scans on workers
               ignoreMissingFiles = ignoreMissingFiles,
               ignoreLocality = ignoreLocality,
-              isSQLRootPath = areSQLRootPaths,
+              isRootPath = isRootLevel,
               filterFun = filterFun,
               parallelismThreshold = Int.MaxValue,
-              parallelismDefault = 0)
+              parallelismMax = 0)
             (path, leafFiles)
           }.iterator
         }.map { case (path, statuses) =>
@@ -181,8 +182,8 @@ private[spark] object HadoopFSUtils extends Logging {
 
   // scalastyle:off argcount
   /**
-   * Lists a single filesystem path recursively. If a `SparkContext`` object is specified, this
-   * function may launch Spark jobs to parallelize listing based on parallelismThreshold.
+   * Lists a single filesystem path recursively. If a `SparkContext` object is specified, this
+   * function may launch Spark jobs to parallelize listing based on `parallelismThreshold`.
    *
    * If sessionOpt is None, this may be called on executors.
    *
@@ -195,10 +196,10 @@ private[spark] object HadoopFSUtils extends Logging {
       contextOpt: Option[SparkContext],
       ignoreMissingFiles: Boolean,
       ignoreLocality: Boolean,
-      isSQLRootPath: Boolean,
+      isRootPath: Boolean,
       filterFun: Option[String => Boolean],
       parallelismThreshold: Int,
-      parallelismDefault: Int): Seq[FileStatus] = {
+      parallelismMax: Int): Seq[FileStatus] = {
 
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
@@ -239,7 +240,7 @@ private[spark] object HadoopFSUtils extends Logging {
       // able to detect race conditions involving root paths being deleted during
       // InMemoryFileIndex construction. However, it's still a net improvement to detect and
       // fail-fast on the non-root cases. For more info see the SPARK-27676 review discussion.
-      case _: FileNotFoundException if isSQLRootPath || ignoreMissingFiles =>
+      case _: FileNotFoundException if isRootPath || ignoreMissingFiles =>
         logWarning(s"The directory $path was not found. Was it deleted very recently?")
         Array.empty[FileStatus]
     }
@@ -261,12 +262,12 @@ private[spark] object HadoopFSUtils extends Logging {
             dirs.map(_.getPath),
             hadoopConf = hadoopConf,
             filter = filter,
-            areSQLRootPaths = false,
+            isRootLevel = false,
             ignoreMissingFiles = ignoreMissingFiles,
             ignoreLocality = ignoreLocality,
             filterFun = filterFun,
             parallelismThreshold = parallelismThreshold,
-            parallelismMax = parallelismDefault
+            parallelismMax = parallelismMax
           ).flatMap(_._2)
         case _ =>
           dirs.flatMap { dir =>
@@ -277,10 +278,10 @@ private[spark] object HadoopFSUtils extends Logging {
               contextOpt = contextOpt,
               ignoreMissingFiles = ignoreMissingFiles,
               ignoreLocality = ignoreLocality,
-              isSQLRootPath = false,
+              isRootPath = false,
               filterFun = filterFun,
               parallelismThreshold = parallelismThreshold,
-              parallelismDefault = parallelismDefault)
+              parallelismMax = parallelismMax)
           }
       }
       val allFiles = topLevelFiles ++ nestedFiles
