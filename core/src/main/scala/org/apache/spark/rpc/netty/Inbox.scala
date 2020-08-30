@@ -200,6 +200,16 @@ private[netty] class Inbox(val endpointName: String, val endpoint: RpcEndpoint)
    * Calls action closure, and calls the endpoint's onError function in the case of exceptions.
    */
   private def safelyCall(endpoint: RpcEndpoint)(action: => Unit): Unit = {
+    def dealWithFatalException(fatal: Throwable): Unit = {
+      inbox.synchronized {
+        // Should reduce the number of active threads before throw exception
+        if (numActiveThreads != 0) {
+          numActiveThreads -= 1
+        }
+      }
+      throw fatal
+    }
+
     try action catch {
       case NonFatal(e) =>
         try endpoint.onError(e) catch {
@@ -209,8 +219,18 @@ private[netty] class Inbox(val endpointName: String, val endpoint: RpcEndpoint)
             } else {
               logError("Ignoring error", ee)
             }
+          case fatal =>
+            dealWithFatalException(fatal)
         }
+      case fatal =>
+        dealWithFatalException(fatal)
     }
   }
 
+  // exposed only for testing
+  def getNumActiveThreads: Int = {
+    inbox.synchronized {
+      inbox.numActiveThreads
+    }
+  }
 }
