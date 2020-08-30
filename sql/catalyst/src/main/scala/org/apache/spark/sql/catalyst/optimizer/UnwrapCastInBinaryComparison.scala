@@ -65,11 +65,12 @@ import org.apache.spark.sql.types._
  * `and(isnull(exp), null)`, to enable further optimization and filter pushdown to data sources.
  * Similarly, `if(isnull(exp), null, true)` is represented with `or(isnotnull(exp), null)`.
  */
-object UnwrapCast extends Rule[LogicalPlan] {
+object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case l: LogicalPlan => l transformExpressionsUp {
-      case e @ BinaryComparison(_, _) => unwrapCast(e)
-    }
+    case l: LogicalPlan =>
+      l transformExpressionsUp {
+        case e @ BinaryComparison(_, _) => unwrapCast(e)
+      }
   }
 
   private def unwrapCast(exp: Expression): Expression = exp match {
@@ -89,12 +90,11 @@ object UnwrapCast extends Rule[LogicalPlan] {
 
       swap(unwrapCast(swap(exp)))
 
-    case BinaryComparison(Cast(fromExp, _, _), Literal(value, toType))
-      if canImplicitlyCast(fromExp, toType) =>
-
+    case BinaryComparison(Cast(fromExp, _, _), Literal(value, toType: IntegralType))
+        if canImplicitlyCast(fromExp, toType) =>
       // In case both sides have integral type, optimize the comparison by removing casts or
       // moving cast to the literal side.
-      simplifyIntegral(exp, fromExp, toType.asInstanceOf[IntegralType], value)
+      simplifyIntegral(exp, fromExp, toType, value)
 
     case _ => exp
   }
@@ -123,9 +123,10 @@ object UnwrapCast extends Rule[LogicalPlan] {
     if (maxCmp > 0) {
       exp match {
         case EqualTo(_, _) | GreaterThan(_, _) | GreaterThanOrEqual(_, _) =>
-          falseIfNotNull(fromExp)
+          fromExp.falseIfNotNull
+          // falseIfNotNull(fromExp)
         case LessThan(_, _) | LessThanOrEqual(_, _) =>
-          trueIfNotNull(fromExp)
+          fromExp.trueIfNotNull
         case EqualNullSafe(_, _) =>
           FalseLiteral
         case _ => exp // impossible but safe guard, same below
@@ -133,9 +134,9 @@ object UnwrapCast extends Rule[LogicalPlan] {
     } else if (maxCmp == 0) {
       exp match {
         case GreaterThan(_, _) =>
-          falseIfNotNull(fromExp)
+          fromExp.falseIfNotNull
         case LessThanOrEqual(_, _) =>
-          trueIfNotNull(fromExp)
+          fromExp.trueIfNotNull
         case LessThan(_, _) =>
           Not(EqualTo(fromExp, Literal(max, fromType)))
         case GreaterThanOrEqual(_, _) | EqualTo(_, _) | EqualNullSafe(_, _) =>
@@ -145,9 +146,9 @@ object UnwrapCast extends Rule[LogicalPlan] {
     } else if (minCmp < 0) {
       exp match {
         case GreaterThan(_, _) | GreaterThanOrEqual(_, _) =>
-          trueIfNotNull(fromExp)
+          fromExp.trueIfNotNull
         case LessThan(_, _) | LessThanOrEqual(_, _) | EqualTo(_, _) =>
-          falseIfNotNull(fromExp)
+          fromExp.falseIfNotNull
         case EqualNullSafe(_, _) =>
           FalseLiteral
         case _ => exp
@@ -155,9 +156,9 @@ object UnwrapCast extends Rule[LogicalPlan] {
     } else if (minCmp == 0) {
       exp match {
         case LessThan(_, _) =>
-          falseIfNotNull(fromExp)
+          fromExp.falseIfNotNull
         case GreaterThanOrEqual(_, _) =>
-          trueIfNotNull(fromExp)
+          fromExp.trueIfNotNull
         case GreaterThan(_, _) =>
           Not(EqualTo(fromExp, Literal(min, fromType)))
         case LessThanOrEqual(_, _) | EqualTo(_, _) | EqualNullSafe(_, _) =>
@@ -175,6 +176,7 @@ object UnwrapCast extends Rule[LogicalPlan] {
         case EqualNullSafe(_, _) => EqualNullSafe(fromExp, lit)
         case LessThan(_, _) => LessThan(fromExp, lit)
         case LessThanOrEqual(_, _) => LessThanOrEqual(fromExp, lit)
+        case _ => exp
       }
     }
   }
@@ -186,29 +188,27 @@ object UnwrapCast extends Rule[LogicalPlan] {
    */
   private def canImplicitlyCast(fromExp: Expression, toType: DataType): Boolean = {
     fromExp.dataType.isInstanceOf[IntegralType] && toType.isInstanceOf[IntegralType] &&
-      Cast.canUpCast(fromExp.dataType, toType)
+    Cast.canUpCast(fromExp.dataType, toType)
   }
 
-  /**
-   * Wraps input expression `e` with `if(isnull(e), null, false)`. The if-clause is represented
-   * using `and(isnull(e), null)` which is semantically equivalent by applying 3-valued logic.
-   */
-  private[sql] def falseIfNotNull(e: Expression): Expression =
-    And(IsNull(e), Literal(null, BooleanType))
-
-  /**
-   * Wraps input expression `e` with `if(isnull(e), null, true)`. The if-clause is represented
-   * using `or(isnotnull(e), null)` which is semantically equivalent by applying 3-valued logic.
-   */
-  private[sql] def trueIfNotNull(e: Expression): Expression =
-    Or(IsNotNull(e), Literal(null, BooleanType))
-
-  private def getRange(ty: DataType): (Any, Any) = ty match {
+  private def getRange(dt: DataType): (Any, Any) = dt match {
     case ByteType => (Byte.MinValue, Byte.MaxValue)
     case ShortType => (Short.MinValue, Short.MaxValue)
     case IntegerType => (Int.MinValue, Int.MaxValue)
     case LongType => (Long.MinValue, Long.MaxValue)
   }
+
+  private[optimizer] implicit class ExpressionWrapper(e: Expression) {
+    /**
+     * Wraps input expression `e` with `if(isnull(e), null, false)`. The if-clause is represented
+     * using `and(isnull(e), null)` which is semantically equivalent by applying 3-valued logic.
+     */
+    def falseIfNotNull: Expression = And(IsNull(e), Literal(null, BooleanType))
+
+    /**
+     * Wraps input expression `e` with `if(isnull(e), null, true)`. The if-clause is represented
+     * using `or(isnotnull(e), null)` which is semantically equivalent by applying 3-valued logic.
+     */
+    def trueIfNotNull: Expression = Or(IsNotNull(e), Literal(null, BooleanType))
+  }
 }
-
-

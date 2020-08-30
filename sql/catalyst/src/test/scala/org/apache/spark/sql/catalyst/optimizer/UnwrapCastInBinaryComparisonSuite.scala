@@ -20,58 +20,61 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils._
+import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType}
 
-class UnwrapCastSuite extends PlanTest {
+class UnwrapCastInBinaryComparisonSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches: List[Batch] =
-      Batch("Unwrap casts", FixedPoint(10), ConstantFolding, UnwrapCast) :: Nil
+      Batch("Unwrap casts in binary comparison", FixedPoint(10),
+        NullPropagation, ConstantFolding, UnwrapCastInBinaryComparison) :: Nil
   }
 
   val testRelation: LocalRelation = LocalRelation('a.short, 'b.float)
 
   test("unwrap casts when literal == max") {
     val v = Short.MaxValue
-    assertEquivalent('a > v.toInt, UnwrapCast.falseIfNotNull('a))
+    assertEquivalent('a > v.toInt, 'a.attr.falseIfNotNull)
     assertEquivalent('a >= v.toInt, 'a === v)
     assertEquivalent('a === v.toInt, 'a === v)
     assertEquivalent('a <=> v.toInt, 'a === v)
-    assertEquivalent('a <= v.toInt, UnwrapCast.trueIfNotNull('a))
+    assertEquivalent('a <= v.toInt, 'a.attr.trueIfNotNull)
     assertEquivalent('a < v.toInt, 'a =!= v)
   }
 
   test("unwrap casts when literal > max") {
-    val v: Int = Short.MaxValue + 100
-    assertEquivalent('a > v, UnwrapCast.falseIfNotNull('a))
-    assertEquivalent('a >= v, UnwrapCast.falseIfNotNull('a))
-    assertEquivalent('a === v, UnwrapCast.falseIfNotNull('a))
+    val v: Int = positiveInt
+    assertEquivalent('a > v, 'a.attr.falseIfNotNull)
+    assertEquivalent('a >= v, 'a.attr.falseIfNotNull)
+    assertEquivalent('a === v, 'a.attr.falseIfNotNull)
     assertEquivalent('a <=> v, false)
-    assertEquivalent('a <= v, UnwrapCast.trueIfNotNull('a))
-    assertEquivalent('a < v, UnwrapCast.trueIfNotNull('a))
+    assertEquivalent('a <= v, 'a.attr.trueIfNotNull)
+    assertEquivalent('a < v, 'a.attr.trueIfNotNull)
   }
 
   test("unwrap casts when literal == min") {
     val v = Short.MinValue
     assertEquivalent('a > v.toInt, 'a =!= v)
-    assertEquivalent('a >= v.toInt, UnwrapCast.trueIfNotNull('a))
+    assertEquivalent('a >= v.toInt, 'a.attr.trueIfNotNull)
     assertEquivalent('a === v.toInt, 'a === v)
     assertEquivalent('a <=> v.toInt, 'a === v)
     assertEquivalent('a <= v.toInt, 'a === v)
-    assertEquivalent('a < v.toInt, UnwrapCast.falseIfNotNull('a))
+    assertEquivalent('a < v.toInt, 'a.attr.falseIfNotNull)
   }
 
   test("unwrap casts when literal < min") {
-    val v: Int = Short.MinValue - 100
-    assertEquivalent('a > v, UnwrapCast.trueIfNotNull('a))
-    assertEquivalent('a >= v, UnwrapCast.trueIfNotNull('a))
-    assertEquivalent('a === v, UnwrapCast.falseIfNotNull('a))
+    val v: Int = negativeInt
+    assertEquivalent('a > v, 'a.attr.trueIfNotNull)
+    assertEquivalent('a >= v, 'a.attr.trueIfNotNull)
+    assertEquivalent('a === v, 'a.attr.falseIfNotNull)
     assertEquivalent('a <=> v, false)
-    assertEquivalent('a <= v, UnwrapCast.falseIfNotNull('a))
-    assertEquivalent('a < v, UnwrapCast.falseIfNotNull('a))
+    assertEquivalent('a <= v, 'a.attr.falseIfNotNull)
+    assertEquivalent('a < v, 'a.attr.falseIfNotNull)
   }
 
   test("unwrap casts when literal is within range (min, max)") {
@@ -85,11 +88,11 @@ class UnwrapCastSuite extends PlanTest {
 
   test("unwrap casts when cast is on rhs") {
     val v = Short.MaxValue
-    assertEquivalent(Literal(v.toInt) < 'a, UnwrapCast.falseIfNotNull('a))
+    assertEquivalent(Literal(v.toInt) < 'a, 'a.attr.falseIfNotNull)
     assertEquivalent(Literal(v.toInt) <= 'a, Literal(v) === 'a)
     assertEquivalent(Literal(v.toInt) === 'a, Literal(v) === 'a)
     assertEquivalent(Literal(v.toInt) <=> 'a, Literal(v) === 'a)
-    assertEquivalent(Literal(v.toInt) >= 'a, UnwrapCast.trueIfNotNull('a))
+    assertEquivalent(Literal(v.toInt) >= 'a, 'a.attr.trueIfNotNull)
     assertEquivalent(Literal(v.toInt) > 'a, 'a =!= v)
 
     assertEquivalent(Literal(30) <= 'a, Literal(30.toShort) <= 'a)
@@ -108,6 +111,17 @@ class UnwrapCastSuite extends PlanTest {
     assertEquivalent(Literal(42.0) <=> 'b, Literal(42.0) <=> Cast('b, DoubleType))
     assertEquivalent(Literal(42.0) <= 'b, Literal(42.0) <= Cast('b, DoubleType))
     assertEquivalent(Literal(42.0) < 'b, Literal(42.0) < Cast('b, DoubleType))
+  }
+
+  test("unwrap casts when literal is null") {
+    val intLit = Literal.create(null, IntegerType)
+    val nullLit = Literal.create(null, BooleanType)
+    assertEquivalent('a > intLit, nullLit)
+    assertEquivalent('a >= intLit, nullLit)
+    assertEquivalent('a === intLit, nullLit)
+    assertEquivalent('a <=> intLit, IsNull(Cast('a, IntegerType)))
+    assertEquivalent('a <= intLit, nullLit)
+    assertEquivalent('a < intLit, nullLit)
   }
 
   private def assertEquivalent(e1: Expression, e2: Expression): Unit = {
