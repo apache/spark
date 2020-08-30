@@ -67,7 +67,7 @@ case class ObjectHashAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends BaseAggregateExec with AliasAwareOutputPartitioning {
+  extends BaseAggregateExec {
 
   override lazy val allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
