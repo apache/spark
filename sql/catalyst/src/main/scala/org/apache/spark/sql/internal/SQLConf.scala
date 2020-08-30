@@ -2726,8 +2726,8 @@ object SQLConf {
     buildConf("spark.sql.truncate.trash.enabled")
       .doc("This configuration decides when truncating table, whether data files will be moved " +
         "to trash directory or deleted permanently. The trash retention time is controlled by " +
-        "fs.trash.interval, and in default, the server side configuration value takes " +
-        "precedence over the client-side one. Note that if fs.trash.interval is non-positive, " +
+        "'fs.trash.interval', and in default, the server side configuration value takes " +
+        "precedence over the client-side one. Note that if 'fs.trash.interval' is non-positive, " +
         "this will be a no-op and log a warning message. If the data fails to be moved to "  +
         "trash, Spark will turn to delete it permanently.")
       .version("3.1.0")

@@ -279,7 +279,7 @@ private[spark] object Utils extends Logging {
       isTrashEnabled: Boolean,
       hadoopConf: Configuration): Boolean = {
     if (isTrashEnabled) {
-      logDebug(s"will move data ${partitionPath.toString} to trash")
+      logDebug(s"Try to move data ${partitionPath.toString} to trash")
       val isSuccess = Trash.moveToAppropriateTrash(fs, partitionPath, hadoopConf)
       if (!isSuccess) {
         logWarning(s"Failed to move data ${partitionPath.toString} to trash. " +
