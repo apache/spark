@@ -64,4 +64,24 @@ private object MsSqlServerDialect extends JdbcDialect {
   override def renameTable(oldTable: String, newTable: String): String = {
     s"EXEC sp_rename $oldTable, $newTable"
   }
+
+  // scalastyle:off line.size.limit
+  // See https://docs.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-rename-transact-sql?view=sql-server-ver15
+  // scalastyle:on line.size.limit
+  override def getRenameColumnQuery(
+      tableName: String,
+      columnName: String,
+      newName: String): String =
+    s"EXEC sp_rename '$tableName.$columnName', '$newName', 'COLUMN'"
+
+  // scalastyle:off line.size.limit
+  // see https://docs.microsoft.com/en-us/sql/t-sql/statements/alter-table-transact-sql?view=sql-server-ver15
+  // scalastyle:on line.size.limit
+  override def getUpdateColumnNullabilityQuery(
+      tableName: String,
+      columnName: String,
+      isNullable: Boolean): String = {
+    val nullable = if (isNullable) "NULL" else "NOT NULL"
+    s"ALTER TABLE $tableName ALTER COLUMN $columnName $nullable"
+  }
 }

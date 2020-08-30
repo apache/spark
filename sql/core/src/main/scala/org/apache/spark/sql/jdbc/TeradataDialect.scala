@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.sql.SQLFeatureNotSupportedException
 import java.util.Locale
 
 import org.apache.spark.sql.types._
@@ -55,4 +56,31 @@ private case object TeradataDialect extends JdbcDialect {
   override def renameTable(oldTable: String, newTable: String): String = {
     s"RENAME TABLE $oldTable TO $newTable"
   }
+
+  // See https://docs.teradata.com/reader/scPHvjfglIlB8F70YliLAw/Fl27dlrgTKo4W~zk~cDJMA
+  override def getAddColumnQuery(tableName: String, columnName: String, dataType: String): String =
+    s"ALTER TABLE $tableName ADD $columnName $dataType"
+
+  // See https://docs.teradata.com/reader/scPHvjfglIlB8F70YliLAw/Fl27dlrgTKo4W~zk~cDJMA
+  override def getRenameColumnQuery(
+      tableName: String,
+      columnName: String,
+      newName: String): String =
+    s"ALTER TABLE $tableName RENAME $columnName TO $newName"
+
+  // See https://docs.teradata.com/reader/scPHvjfglIlB8F70YliLAw/Fl27dlrgTKo4W~zk~cDJMA
+  override def getDeleteColumnQuery(tableName: String, columnName: String): String =
+    s"ALTER TABLE $tableName DROP $columnName"
+
+  override def getUpdateColumnTypeQuery(
+      tableName: String,
+      columnName: String,
+      newDataType: String): String =
+    throw new SQLFeatureNotSupportedException(s"UpdateColumnType is not supported")
+
+  override def getUpdateColumnNullabilityQuery(
+      tableName: String,
+      columnName: String,
+      isNullable: Boolean): String =
+    throw new SQLFeatureNotSupportedException(s"UpdateColumnNullability is not supported")
 }

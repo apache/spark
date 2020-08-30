@@ -50,4 +50,27 @@ private object DerbyDialect extends JdbcDialect {
   override def renameTable(oldTable: String, newTable: String): String = {
     s"RENAME TABLE $oldTable TO $newTable"
   }
+
+  // See https://db.apache.org/derby/docs/10.5/ref/rrefsqljrenamecolumnstatement.html
+  override def getRenameColumnQuery(
+      tableName: String,
+      columnName: String,
+      newName: String): String =
+    s"RENAME COLUMN $tableName.$columnName TO $newName"
+
+  // See https://db.apache.org/derby/docs/10.5/ref/rrefsqlj81859.html#rrefsqlj81859__rrefsqlj37860
+  override def getUpdateColumnTypeQuery(
+      tableName: String,
+      columnName: String,
+      newDataType: String): String =
+    s"ALTER TABLE $tableName ALTER COLUMN $columnName SET DATA TYPE $newDataType"
+
+  // See https://db.apache.org/derby/docs/10.5/ref/rrefsqlj81859.html#rrefsqlj81859__rrefsqlj37860
+  override def getUpdateColumnNullabilityQuery(
+      tableName: String,
+      columnName: String,
+      isNullable: Boolean): String = {
+    val nullable = if (isNullable) "NULL" else "NOT NULL"
+    s"ALTER TABLE $tableName ALTER COLUMN $columnName $nullable"
+  }
 }
