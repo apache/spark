@@ -180,8 +180,7 @@ case class FileSourceScanExec(
   }
 
   @transient private lazy val isRepartitioningBuckets: Boolean = {
-    relation.bucketSpec.isDefined &&
-      optionalNewNumBuckets.isDefined &&
+    bucketedScan && optionalNewNumBuckets.isDefined &&
       optionalNewNumBuckets.get > relation.bucketSpec.get.numBuckets
   }
 
@@ -593,7 +592,11 @@ case class FileSourceScanExec(
         driverMetrics("numFiles") = filesNum
         driverMetrics("filesSize") = filesSize
         new BucketRepartitioningRDD(
-          fsRelation.sparkSession, readFile, filePartitions, bucketSpec, newNumBuckets, output)
+          fsRelation.sparkSession,
+          readFile,
+          filePartitions,
+          outputPartitioning.asInstanceOf[HashPartitioning].partitionIdExpression,
+          output)
       }
     }
   }

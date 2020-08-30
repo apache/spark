@@ -2660,13 +2660,18 @@ object SQLConf {
   }
 
   val BUCKET_READ_STRATEGY_IN_JOIN =
-    buildConf("spark.sql.bucketing.bucketReadStrategyInJoin")
-      .doc("When set to COALESCE, if two bucketed tables with the different number of buckets " +
-        "are joined, the side with a bigger number of buckets will be coalesced to have the same " +
-        "number of buckets as the other side. When set to REPARTITION, the side with a bigger " +
-        "number of buckets will be repartitioned to have the same number of buckets as the other " +
-        "side. The bigger number of buckets must be divisible by the smaller number of buckets, " +
-        "and the strategy is applied to sort-merge joins and shuffled hash joins. " +
+    buildConf("spark.sql.sources.bucketing.readStrategyInJoin")
+      .doc("The bucket read strategy can be set to one of " +
+        BucketReadStrategyInJoin.values.mkString(", ") +
+        s". When set to ${BucketReadStrategyInJoin.COALESCE}, if two bucketed tables with " +
+        "different number of buckets are joined, the side with a bigger number of buckets will " +
+        "be coalesced to have the same number of buckets as the smaller side. When set to " +
+        s"${BucketReadStrategyInJoin.REPARTITION}, the side with a smaller number of buckets " +
+        "will be repartitioned to have the same number of buckets as the bigger side. For either " +
+        "coalescing or repartitioning to be applied, The bigger number of buckets must be " +
+        "divisible by the smaller number of buckets, and the strategy is applied to sort-merge " +
+        s"joins and shuffled hash joins. By default, the read strategy is set to " +
+        s"${BucketReadStrategyInJoin.OFF}, and neither coalescing nor reparitioning is applied. " +
         "Note: Coalescing bucketed table can avoid unnecessary shuffle in join, but it also " +
         "reduces parallelism and could possibly cause OOM for shuffled hash join. Repartitioning " +
         "bucketed table avoids unnecessary shuffle in join while maintaining the parallelism " +
@@ -2678,7 +2683,7 @@ object SQLConf {
       .createWithDefault(BucketReadStrategyInJoin.OFF.toString)
 
   val BUCKET_READ_STRATEGY_IN_JOIN_MAX_BUCKET_RATIO =
-    buildConf("spark.sql.bucketing.bucketReadStrategyInJoin.maxBucketRatio")
+    buildConf("spark.sql.sources.bucketing.readStrategyInJoin.maxBucketRatio")
       .doc("The ratio of the number of two buckets being coalesced/repartitioned should be " +
         "less than or equal to this value for bucket coalescing/repartitioning to be applied. " +
         s"This configuration only has an effect when '${BUCKET_READ_STRATEGY_IN_JOIN.key}' " +

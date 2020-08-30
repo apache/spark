@@ -22,9 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, UnsafeProjection}
 import org.apache.spark.sql.execution.datasources.{FilePartition, FileScanRDD, PartitionedFile}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
@@ -35,12 +33,9 @@ private[spark] class BucketRepartitioningRDD(
     @transient private val sparkSession: SparkSession,
     readFunction: PartitionedFile => Iterator[InternalRow],
     @transient override val filePartitions: Seq[FilePartition],
-    bucketSpec: BucketSpec,
-    numRepartitionedBuckets: Int,
+    bucketIdExpression: Expression,
     output: Seq[Attribute])
   extends FileScanRDD(sparkSession, readFunction, filePartitions) {
-  assert(numRepartitionedBuckets > bucketSpec.numBuckets)
-  assert(numRepartitionedBuckets % bucketSpec.numBuckets == 0)
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val iter: Iterator[_] = super.compute(split, context)
@@ -51,11 +46,6 @@ private[spark] class BucketRepartitioningRDD(
   }
 
   private lazy val getBucketId: InternalRow => Int = {
-    val bucketIdExpression = {
-      val bucketColumns = bucketSpec.bucketColumnNames.map(c => output.find(_.name == c).get)
-      HashPartitioning(bucketColumns, numRepartitionedBuckets).partitionIdExpression
-    }
-
     val projection = UnsafeProjection.create(Seq(bucketIdExpression), output)
     row => projection(row).getInt(0)
   }
