@@ -570,18 +570,38 @@ class Analyzer(
           s"Grouping sets size cannot be greater than ${GroupingID.dataType.defaultSize * 8}")
       }
 
+      def resolveGetStructField(e: Expression): Expression = {
+        var fixed = ArrayBuffer[Alias]()
+        e.transformDown {
+          case a @ Alias(Alias(struct, _), name) if struct.isInstanceOf[GetStructField] =>
+            val alias = new Alias(struct, name)(a.exprId, a.qualifier, a.explicitMetadata)
+            fixed += alias
+            alias
+          case a @ Alias(struct: GetStructField, _) if !fixed.exists(e => e eq a) =>
+            struct
+          case e => e
+        }
+      }
+
       // Expand works by setting grouping expressions to null as determined by the
       // `selectedGroupByExprs`. To prevent these null values from being used in an aggregate
       // instead of the original value we need to create new aliases for all group by expressions
       // that will only be used for the intended purpose.
       val groupByAliases = constructGroupByAlias(finalGroupByExpressions)
+        .map(resolveGetStructField(_).asInstanceOf[Alias])
 
       val gid = AttributeReference(VirtualColumn.groupingIdName, GroupingID.dataType, false)()
-      val expand = constructExpand(selectedGroupByExprs, child, groupByAliases, gid)
+      val expand = constructExpand(selectedGroupByExprs.map(_.map(resolveGetStructField)),
+        child, groupByAliases, gid)
       val groupingAttrs = expand.output.drop(child.output.length)
 
+      val resolvedStructAggExprs = aggregationExprs.map {
+        case alias @ Alias(_: GetStructField, _) => alias
+        case e => resolveGetStructField(e).asInstanceOf[NamedExpression]
+      }
+
       val aggregations = constructAggregateExprs(
-        finalGroupByExpressions, aggregationExprs, groupByAliases, groupingAttrs, gid)
+        finalGroupByExpressions, resolvedStructAggExprs, groupByAliases, groupingAttrs, gid)
 
       Aggregate(groupingAttrs, aggregations, expand)
     }
@@ -1478,33 +1498,6 @@ class Analyzer(
 
       // Skip the having clause here, this will be handled in ResolveAggregateFunctions.
       case h: UnresolvedHaving => h
-
-      case agg @ (_: Aggregate | _: GroupingSets) =>
-        val resolved = agg.mapExpressions(resolveExpressionTopDown(_, agg))
-        val hasStructField = resolved.expressions.exists {
-          _.collectFirst { case gsf: GetStructField => gsf }.isDefined
-        }
-        if (hasStructField) {
-          // For struct field, it will be resolve as Alias(GetStructField, name),
-          // In Aggregate/GroupingSets this behavior will cause same struct field
-          // in aggExprs/groupExprs/selectedGroupByExprs will be resolved divided
-          // with different ExprId of Alias and replace failed when construct
-          // Aggregate in ResolveGroupingAnalytics, so we resolve duplicated struct
-          // field here with same ExprId
-          val structFieldMap = mutable.Map[String, Alias]()
-          resolved.transformExpressionsDown {
-            case a @ Alias(struct: GetStructField, _) =>
-              if (structFieldMap.contains(struct.sql)) {
-                val exprId = structFieldMap.getOrElse(struct.sql, a).exprId
-                Alias(a.child, a.name)(exprId, a.qualifier, a.explicitMetadata)
-              } else {
-                structFieldMap += (struct.sql -> a)
-                a
-              }
-          }
-        } else {
-          resolved
-        }
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
