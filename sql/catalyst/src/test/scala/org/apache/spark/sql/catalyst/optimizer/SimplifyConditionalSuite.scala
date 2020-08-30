@@ -179,9 +179,9 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     }
 
     // check evaluation also
-    Seq(TrueLiteral, FalseLiteral).foreach { p =>
-        checkEvaluation(If(p, nullLiteral, FalseLiteral), And(p, nullLiteral).eval(EmptyRow))
-        checkEvaluation(If(p, nullLiteral, TrueLiteral), Or(Not(p), nullLiteral).eval(EmptyRow))
+    Seq(TrueLiteral, FalseLiteral).foreach { b =>
+      checkEvaluation(If(b, nullLiteral, FalseLiteral), And(b, nullLiteral).eval(EmptyRow))
+      checkEvaluation(If(b, nullLiteral, TrueLiteral), Or(Not(b), nullLiteral).eval(EmptyRow))
     }
  }
 }
