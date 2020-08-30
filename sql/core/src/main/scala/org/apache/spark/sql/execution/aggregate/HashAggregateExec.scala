@@ -54,8 +54,7 @@ case class HashAggregateExec(
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends BaseAggregateExec
-    with BlockingOperatorWithCodegen
-    with AliasAwareOutputPartitioning {
+    with BlockingOperatorWithCodegen {
 
   require(HashAggregateExec.supportsAggregate(aggregateBufferAttributes))
 
@@ -70,18 +69,6 @@ case class HashAggregateExec(
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
     "avgHashProbe" ->
       SQLMetrics.createAverageMetric(sparkContext, "avg hash probe bucket list iters"))
-
-  override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
-
-  override protected def outputExpressions: Seq[NamedExpression] = resultExpressions
-
-  override def requiredChildDistribution: List[Distribution] = {
-    requiredChildDistributionExpressions match {
-      case Some(exprs) if exprs.isEmpty => AllTuples :: Nil
-      case Some(exprs) if exprs.nonEmpty => ClusteredDistribution(exprs) :: Nil
-      case None => UnspecifiedDistribution :: Nil
-    }
-  }
 
   // This is for testing. We force TungstenAggregationIterator to fall back to the unsafe row hash
   // map and/or the sort-based aggregation once it has processed a given number of input rows.
