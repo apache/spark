@@ -26,14 +26,15 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import com.codahale.metrics.MetricSet;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.GetLocalDirsForExecutors;
 import org.apache.spark.network.shuffle.protocol.LocalDirsForExecutors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Provides an interface for reading both shuffle files and RDD blocks, either from an Executor
