@@ -102,6 +102,7 @@ private[deploy] object DeployTestUtils {
       createDriverDesc(),
       null,
       "spark://worker",
+      "http://publicAddress:80",
       new SecurityManager(conf))
   }
 
