@@ -200,13 +200,15 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
 
   test("inability to replace null in non-boolean values of CaseWhen") {
     val nestedCaseWhen = CaseWhen(
-      Seq((UnresolvedAttribute("i") > Literal(20)) -> Literal(2)),
+      Seq((UnresolvedAttribute("i") > Literal(20)) -> Literal(2),
+        (UnresolvedAttribute("i") > Literal(25)) -> Literal(3)),
       Literal(null, IntegerType))
     val branchValue = If(
       Literal(2) === nestedCaseWhen,
       TrueLiteral,
       FalseLiteral)
-    val branches = Seq((UnresolvedAttribute("i") > Literal(10)) -> branchValue)
+    val branches = Seq((UnresolvedAttribute("i") > Literal(10)) -> branchValue,
+      UnresolvedAttribute("b").isNull -> TrueLiteral)
     val condition = CaseWhen(branches)
     testFilter(originalCond = condition, expectedCond = condition)
     testJoin(originalCond = condition, expectedCond = condition)
@@ -304,7 +306,8 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
     val condition = GreaterThan(
       UnresolvedAttribute("i"),
       If(UnresolvedAttribute("b"), Literal(null, IntegerType), Literal(4)))
-    val column = CaseWhen(Seq(condition -> Literal(5)), Literal(2)).as("out")
+    val column = CaseWhen(Seq(condition -> Literal(5),
+      UnresolvedAttribute("b").isNotNull -> Literal(5)), Literal(2)).as("out")
     testProjection(originalExpr = column, expectedExpr = column)
   }
 
