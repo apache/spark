@@ -1417,9 +1417,7 @@ package object config {
     ConfigBuilder("spark.shuffle.readHostLocalDisk")
       .doc(s"If enabled (and `${SHUFFLE_USE_OLD_FETCH_PROTOCOL.key}` is disabled, shuffle " +
         "blocks requested from those block managers which are running on the same host are " +
-        "read from the disk directly instead of being fetched as remote blocks over the " +
-        "network. Note that for k8s workloads, this only works when nodes are using " +
-        "non-isolated container storage.")
+        "read from the disk directly instead of being fetched as remote blocks over the network.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
