@@ -30,8 +30,10 @@ from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import ByteType, ShortType, IntegerType, FloatType, DateType, \
     TimestampType, MapType, StringType, StructType, StructField, ArrayType, DoubleType, LongType, \
     DecimalType, BinaryType, BooleanType, NullType
-from pyspark.sql.types import _array_signed_int_typecode_ctype_mappings, _array_type_mappings, \
+from pyspark.sql.types import (  # type: ignore
+    _array_signed_int_typecode_ctype_mappings, _array_type_mappings,
     _array_unsigned_int_typecode_ctype_mappings, _infer_type, _make_type_verifier, _merge_type
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase, ExamplePointUDT, PythonOnlyUDT, \
     ExamplePoint, PythonOnlyPoint, MyObject
 
