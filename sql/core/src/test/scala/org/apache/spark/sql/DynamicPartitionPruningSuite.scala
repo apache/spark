@@ -1313,7 +1313,7 @@ abstract class DynamicPartitionPruningSuiteBase
   test("SPARK-32659: Fix the data issue when pruning DPP on non-atomic type") {
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "2", // Make sure insert DPP
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
       withTable("df1", "df2") {
         spark.range(1000)
           .select(col("id"), col("id").as("k"))
@@ -1331,6 +1331,10 @@ abstract class DynamicPartitionPruningSuiteBase
           .mode("overwrite")
           .saveAsTable("df2")
 
+        // Correct the table statistics to test the reused broadcast.
+        spark.sql("ANALYZE TABLE df1 COMPUTE STATISTICS NOSCAN")
+        spark.sql("ANALYZE TABLE df2 COMPUTE STATISTICS NOSCAN")
+
         Seq(CodegenObjectFactoryMode.NO_CODEGEN,
           CodegenObjectFactoryMode.CODEGEN_ONLY).foreach { mode =>
           Seq(true, false).foreach { pruning =>
@@ -1346,7 +1350,7 @@ abstract class DynamicPartitionPruningSuiteBase
                   |    AND df2.id < 2
                   |""".stripMargin)
               if (pruning) {
-                checkPartitionPruningPredicate(df, true, false)
+                checkPartitionPruningPredicate(df, false, true)
               } else {
                 checkPartitionPruningPredicate(df, false, false)
               }
