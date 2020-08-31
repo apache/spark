@@ -570,44 +570,18 @@ class Analyzer(
           s"Grouping sets size cannot be greater than ${GroupingID.dataType.defaultSize * 8}")
       }
 
-      // For struct field, it will be resolve as Alias(GetStructField, name),
-      // In Aggregate/GroupingSets this behavior will cause the same struct fields
-      // in aggExprs/groupExprs/selectedGroupByExprs be treated as different ones due to different
-      // ExprIds in Alias, and stops us finding the grouping expressions in aggExprs. Here we
-      // will use this method to remove Alias with different ExprId of GetStructField
-      // in groupByAlias/selectedGroupByExprs and aggregateExpressions
-      def resolveGetStructField(e: Expression): Expression = {
-        var fixed = ArrayBuffer[Alias]()
-        e.transformDown {
-          case a @ Alias(Alias(struct, _), name) if struct.isInstanceOf[GetStructField] =>
-            val alias = new Alias(struct, name)(a.exprId, a.qualifier, a.explicitMetadata)
-            fixed += alias
-            alias
-          case a @ Alias(struct: GetStructField, _) if !fixed.exists(e => e eq a) =>
-            struct
-          case e => e
-        }
-      }
-
       // Expand works by setting grouping expressions to null as determined by the
       // `selectedGroupByExprs`. To prevent these null values from being used in an aggregate
       // instead of the original value we need to create new aliases for all group by expressions
       // that will only be used for the intended purpose.
       val groupByAliases = constructGroupByAlias(finalGroupByExpressions)
-        .map(resolveGetStructField(_).asInstanceOf[Alias])
 
       val gid = AttributeReference(VirtualColumn.groupingIdName, GroupingID.dataType, false)()
-      val expand = constructExpand(selectedGroupByExprs.map(_.map(resolveGetStructField)),
-        child, groupByAliases, gid)
+      val expand = constructExpand(selectedGroupByExprs, child, groupByAliases, gid)
       val groupingAttrs = expand.output.drop(child.output.length)
 
-      val resolvedStructAggExprs = aggregationExprs.map {
-        case alias @ Alias(_: GetStructField, _) => alias
-        case e => resolveGetStructField(e).asInstanceOf[NamedExpression]
-      }
-
       val aggregations = constructAggregateExprs(
-        finalGroupByExpressions, resolvedStructAggExprs, groupByAliases, groupingAttrs, gid)
+        finalGroupByExpressions, aggregationExprs, groupByAliases, groupingAttrs, gid)
 
       Aggregate(groupingAttrs, aggregations, expand)
     }
@@ -1504,6 +1478,42 @@ class Analyzer(
 
       // Skip the having clause here, this will be handled in ResolveAggregateFunctions.
       case h: UnresolvedHaving => h
+
+      case a: Aggregate =>
+        val resolvedGroupingExprs =
+          a.groupingExpressions.map(resolveExpressionTopDown(_, a))
+            .map(CleanupAliases.trimStructFieldAlias)
+
+        val resolvedAggExprs = a.aggregateExpressions
+          .map(resolveExpressionTopDown(_, a))
+          .map {
+            // Here we want to trim StructField Alias in complex expression
+            // Only Alias(GetStructField, name) can't be trimmed since we need NamedExpression.
+            case alias@Alias(_: GetStructField, _) => alias
+            case e => CleanupAliases.trimStructFieldAlias(e).asInstanceOf[NamedExpression]
+          }
+
+        a.copy(resolvedGroupingExprs, resolvedAggExprs, a.child)
+
+      case g: GroupingSets =>
+        val resolvedSelectedExprs = g.selectedGroupByExprs
+          .map(_.map(resolveExpressionTopDown(_, g))
+            .map(CleanupAliases.trimStructFieldAlias))
+
+        val resolvedGroupingExprs = g.groupByExprs
+          .map(resolveExpressionTopDown(_, g))
+          .map(CleanupAliases.trimStructFieldAlias)
+
+        val resolvedAggExprs = g.aggregations
+          .map(resolveExpressionTopDown(_, g))
+          .map {
+            // Here we want to trim StructField Alias in complex expression
+            // Only Alias(GetStructField, name) can't be trimmed since we need NamedExpression.
+            case alias@Alias(_: GetStructField, _) => alias
+            case e => CleanupAliases.trimStructFieldAlias(e).asInstanceOf[NamedExpression]
+          }
+
+        g.copy(resolvedSelectedExprs, resolvedGroupingExprs, g.child, resolvedAggExprs)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
@@ -3406,6 +3416,25 @@ object CleanupAliases extends Rule[LogicalPlan] {
     e.transformDown {
       case Alias(child, _) => child
       case MultiAlias(child, _) => child
+    }
+  }
+
+  // For struct field, it will be resolve as Alias(GetStructField, name),
+  // In Aggregate/GroupingSets this behavior will cause the same struct fields
+  // in aggExprs/groupExprs/selectedGroupByExprs be treated as different ones due to different
+  // ExprIds in Alias, and stops us finding the grouping expressions in aggExprs. Here we
+  // will use this method to remove Alias with different ExprId of GetStructField
+  // in groupByAlias/selectedGroupByExprs and aggregateExpressions
+  def trimStructFieldAlias(e: Expression): Expression = {
+    var fixed = ArrayBuffer[Alias]()
+    e.transformDown {
+      case a @ Alias(Alias(struct, _), name) if struct.isInstanceOf[GetStructField] =>
+        val alias = new Alias(struct, name)(a.exprId, a.qualifier, a.explicitMetadata)
+        fixed += alias
+        alias
+      case a @ Alias(struct: GetStructField, _) if !fixed.exists(e => e eq a) =>
+        struct
+      case e => e
     }
   }
 
