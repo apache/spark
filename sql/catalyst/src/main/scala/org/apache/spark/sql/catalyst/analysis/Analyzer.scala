@@ -1329,31 +1329,28 @@ class Analyzer(
     private def resolveExpressionTopDown(
         e: Expression,
         q: LogicalPlan,
-        trimStructAlias: Boolean = false,
-        trimNonTopLevelStructFieldAlias: Boolean = false): Expression = {
+        trimAlias: Boolean = false,
+        isTopLevel: Boolean = false): Expression = {
       if (e.resolved) return e
       e match {
         case f: LambdaFunction if !f.bound => f
-        case u@UnresolvedAttribute(nameParts) =>
+        case u @ UnresolvedAttribute(nameParts) =>
           // Leave unchanged if resolution fails. Hopefully will be resolved next round.
           val result =
             withPosition(u) {
               q.resolveChildren(nameParts, resolver)
                 .orElse(resolveLiteralFunction(nameParts, u, q))
                 .getOrElse(u)
-            } match {
-                case a @ Alias(Alias(s: GetStructField, _), name) if trimStructAlias =>
-                  new Alias(s, name)(a.exprId, a.qualifier, a.explicitMetadata)
-                case Alias(s: GetStructField, _)
-                  if trimStructAlias && !trimNonTopLevelStructFieldAlias =>
-                  s
-                case r => r
-              }
+            }
           logDebug(s"Resolving $u to $result")
-          result
+          result match {
+            case Alias(s: GetStructField, _) if trimAlias && !isTopLevel =>
+              s
+            case others => others
+          }
         case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
           ExtractValue(child, fieldExpr, resolver)
-        case _ => e.mapChildren(resolveExpressionTopDown(_, q, trimStructAlias))
+        case _ => e.mapChildren(resolveExpressionTopDown(_, q, trimAlias))
       }
     }
 
@@ -1443,7 +1440,12 @@ class Analyzer(
         }
 
         val resolvedGroupingExprs = a.groupingExpressions
-          .map(resolveExpressionTopDown(_, planForResolve, true, false))
+          .map(resolveExpressionTopDown(_, planForResolve, true))
+          .map {
+            // trim Alias over top-level GetStructField
+            case Alias(s: GetStructField, _) => s
+            case other => other
+          }
 
         val resolvedAggExprs = a.aggregateExpressions
           .map(resolveExpressionTopDown(_, planForResolve, true, true))
@@ -1453,10 +1455,20 @@ class Analyzer(
 
       case g: GroupingSets =>
         val resolvedSelectedExprs = g.selectedGroupByExprs
-          .map(_.map(resolveExpressionTopDown(_, g, true, false)))
+          .map(_.map(resolveExpressionTopDown(_, g, true))
+            .map {
+              // trim Alias over top-level GetStructField
+              case Alias(s: GetStructField, _) => s
+              case other => other
+            })
 
         val resolvedGroupingExprs = g.groupByExprs
-          .map(resolveExpressionTopDown(_, g, true, false))
+          .map(resolveExpressionTopDown(_, g, true))
+          .map {
+            // trim Alias over top-level GetStructField
+            case Alias(s: GetStructField, _) => s
+            case other => other
+          }
 
         val resolvedAggExprs = g.aggregations
           .map(resolveExpressionTopDown(_, g, true, true))
