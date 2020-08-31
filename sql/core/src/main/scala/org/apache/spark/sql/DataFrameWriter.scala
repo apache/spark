@@ -129,7 +129,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def option(key: String, value: String): DataFrameWriter[T] = {
-    this.extraOptions = this.extraOptions.updated(key, value)
+    this.extraOptions = this.extraOptions + (key -> value)
     this
   }
 
@@ -291,7 +291,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         "parameter. Either remove the path option, or call save() without the parameter. " +
         s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
     }
-    this.extraOptions = this.extraOptions .updated("path", path)
+    this.extraOptions = this.extraOptions + ("path" -> path)
     save()
   }
 
@@ -409,8 +409,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def saveToV1Source(): Unit = {
     partitioningColumns.foreach { columns =>
-      extraOptions = extraOptions.updated(
-        DataSourceUtils.PARTITIONING_COLUMNS_KEY,
+      extraOptions = extraOptions + (
+        DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
         DataSourceUtils.encodePartitioningColumns(columns))
     }
 

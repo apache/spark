@@ -118,7 +118,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def option(key: String, value: String): DataFrameReader = {
-    this.extraOptions = this.extraOptions.updated(key, value)
+    this.extraOptions = this.extraOptions + (key -> value)
     this
   }
 
