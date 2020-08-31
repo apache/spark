@@ -63,7 +63,10 @@ you can build under `python/docs <https://github.com/apache/spark/tree/master/py
 
 It generates corresponding HTMLs under ``python/docs/build/html``.
 
- 
+Lastly, please make sure that the new APIs are documented by manually adding methods and/or classes at corresponding RST files
+under ``python/docs/source/reference``. Otherwise, they would not be documented in PySpark documentation.
+
+
 Preparing to Contribute Code Changes
 ------------------------------------
 
