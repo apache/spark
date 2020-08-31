@@ -42,7 +42,8 @@ CREATE FUNCTION udaf1 AS 'test.non.existent.udaf'
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.AnalysisException
+Can not load class 'test.non.existent.udaf' when registering the function 'default.udaf1', please make sure it is on the classpath; line 1 pos 7
 
 
 -- !query
@@ -50,8 +51,8 @@ SELECT default.udaf1(udf(int_col1)) as udaf1, udf(default.udaf1(udf(int_col1))) 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Can not load class 'test.non.existent.udaf' when registering the function 'default.udaf1', please make sure it is on the classpath; line 1 pos 94
+org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
+Undefined function: 'udaf1'. This function is neither a registered temporary function nor a permanent function registered in the database 'default'.; line 1 pos 7
 
 
 -- !query
@@ -67,4 +68,6 @@ DROP FUNCTION udaf1
 -- !query schema
 struct<>
 -- !query output
+org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
+Function 'default.udaf1' not found in database 'default';
 
