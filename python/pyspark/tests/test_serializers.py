@@ -114,10 +114,7 @@ class SerializationTestCase(unittest.TestCase):
 
     def test_compressed_serializer(self):
         ser = CompressedSerializer(PickleSerializer())
-        try:
-            from StringIO import StringIO
-        except ImportError:
-            from io import BytesIO as StringIO
+        from io import BytesIO as StringIO
         io = StringIO()
         ser.dump_stream(["abc", u"123", range(5)], io)
         io.seek(0)
