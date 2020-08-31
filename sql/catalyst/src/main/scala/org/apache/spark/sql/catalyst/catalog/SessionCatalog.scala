@@ -1375,8 +1375,11 @@ class SessionCatalog(
   def requireFunctionClassExists(funcDefinition: CatalogFunction): Unit = {
     val className = funcDefinition.className
     if (!Utils.classIsLoadable(className)) {
+      val database =
+        formatDatabaseName(funcDefinition.identifier.database.getOrElse(getCurrentDatabase))
+      val qualifiedName = funcDefinition.identifier.copy(database = Some(database))
       throw new AnalysisException(s"Can not load class '$className' when registering " +
-        s"the function '${funcDefinition.identifier}', please make sure it is on the classpath")
+        s"the function '$qualifiedName', please make sure it is on the classpath")
     }
   }
 
