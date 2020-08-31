@@ -517,7 +517,7 @@ abstract class RowNumberLike extends AggregateWindowFunction {
   """,
   since = "3.1.0",
   group = "window_funcs")
-case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
+case class NthValue(input: Expression, offsetExpr: Expression, ignoreNulls: Boolean)
   extends AggregateWindowFunction with ImplicitCastInputTypes {
 
   def this(child: Expression, offset: Expression) = this(child, offset, false)
@@ -534,22 +534,23 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
     val check = super.checkInputDataTypes()
     if (check.isFailure) {
       check
-    } else if (!offset.foldable) {
-      TypeCheckFailure(s"Offset expression '$offset' must be a literal.")
+    } else if (!offsetExpr.foldable) {
+      TypeCheckFailure(s"Offset expression '$offsetExpr' must be a literal.")
     } else {
-      offset.dataType match {
+      offsetExpr.dataType match {
         case IntegerType | ShortType | ByteType =>
-          offset.eval().asInstanceOf[Int] match {
+          offsetExpr.eval().asInstanceOf[Int] match {
             case i: Int if i <= 0 => TypeCheckFailure(
               s"The 'offset' argument of nth_value must be greater than zero but it is $i.")
             case _ => TypeCheckSuccess
           }
         case _ => TypeCheckFailure(
-          s"The 'offset' parameter must be a int literal but it is ${offset.dataType}.")
+          s"The 'offset' parameter must be a int literal but it is ${offsetExpr.dataType}.")
       }
     }
   }
 
+  private lazy val offset = offsetExpr.eval().asInstanceOf[Int].toLong
   private lazy val result = AttributeReference("result", input.dataType)()
   private lazy val count = AttributeReference("count", LongType)()
   private lazy val valueSet = AttributeReference("valueSet", BooleanType)()
@@ -565,15 +566,15 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
   override lazy val updateExpressions: Seq[Expression] = {
     if (ignoreNulls) {
       Seq(
-        /* result = */ If(valueSet || input.isNull, result, If(count >= offset, input, result)),
+        /* result = */ If(valueSet || input.isNull || count < offset, result, input),
         /* count = */ If(input.isNull, count, count + 1L),
         /* valueSet = */ valueSet || (input.isNotNull && count >= offset)
       )
     } else {
       Seq(
-        /* result = */ If(valueSet, result, If(count >= offset, input, result)),
+        /* result = */ If(valueSet || count < offset, result, input),
         /* count = */ count + 1L,
-        /* valueSet = */ If(count >= offset, Literal.create(true, BooleanType), valueSet)
+        /* valueSet = */ valueSet || count >= offset
       )
     }
   }

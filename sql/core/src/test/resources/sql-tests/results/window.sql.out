@@ -423,29 +423,30 @@ window aggregate function with filter predicate is not supported yet.;
 SELECT
     employee_name,
     salary,
-    nth_value(employee_name, 2) second_highest_salary
+    nth_value(employee_name, 2) OVER (ORDER BY salary DESC) second_highest_salary
 FROM
     basic_pays
+ORDER BY salary DESC
 -- !query schema
 struct<employee_name:string,salary:int,second_highest_salary:string>
 -- !query output
-Anthony Bow	6627	Gerard Bondur
-Barry Jones	10586	Gerard Bondur
-Diane Murphy	8435	Gerard Bondur
-Foon Yue Tseng	6660	Gerard Bondur
-George Vanauf	10563	Gerard Bondur
-Gerard Bondur	11472	Gerard Bondur
-Gerard Hernandez	6949	Gerard Bondur
-Jeff Firrelli	8992	Gerard Bondur
-Julie Firrelli	9181	Gerard Bondur
 Larry Bott	11798	NULL
-Leslie Jennings	8113	Gerard Bondur
-Leslie Thompson	5186	Gerard Bondur
+Gerard Bondur	11472	Gerard Bondur
+Pamela Castillo	11303	Gerard Bondur
+Barry Jones	10586	Gerard Bondur
+George Vanauf	10563	Gerard Bondur
 Loui Bondur	10449	Gerard Bondur
 Mary Patterson	9998	Gerard Bondur
-Pamela Castillo	11303	Gerard Bondur
 Steve Patterson	9441	Gerard Bondur
+Julie Firrelli	9181	Gerard Bondur
+Jeff Firrelli	8992	Gerard Bondur
 William Patterson	8870	Gerard Bondur
+Diane Murphy	8435	Gerard Bondur
+Leslie Jennings	8113	Gerard Bondur
+Gerard Hernandez	6949	Gerard Bondur
+Foon Yue Tseng	6660	Gerard Bondur
+Anthony Bow	6627	Gerard Bondur
+Leslie Thompson	5186	Gerard Bondur
 
 
 -- !query
