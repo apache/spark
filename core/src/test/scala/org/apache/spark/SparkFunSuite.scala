@@ -103,7 +103,7 @@ abstract class SparkFunSuite
     new File(getClass.getClassLoader.getResource(file).getFile)
   }
 
-  protected final def getTestResourcePath(file: String): String = {
+  protected def getTestResourcePath(file: String): String = {
     getTestResourceFile(file).getCanonicalPath
   }
 
