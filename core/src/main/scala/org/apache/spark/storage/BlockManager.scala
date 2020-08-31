@@ -130,7 +130,7 @@ private[spark] class HostLocalDirManager(
 
   private[spark] def getCachedHostLocalDirs: Map[String, Array[String]] =
    executorIdToLocalDirsCache.synchronized {
-      executorIdToLocalDirsCache.asMap().asScala.toMap
+     executorIdToLocalDirsCache.asMap().asScala.toMap
    }
 
   private[spark] def getHostLocalDirs(
@@ -495,7 +495,7 @@ private[spark] class BlockManager(
 
     hostLocalDirManager = {
       if (conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) &&
-        !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
+          !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
         Some(new HostLocalDirManager(
           futureExecutionContext,
           conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),

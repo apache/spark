@@ -519,8 +519,7 @@ final class ShuffleBlockFetcherIterator(
   private def fetchMultipleHostLocalBlocks(
       bmIdToBlocks: Map[BlockManagerId, Seq[(BlockId, Long, Int)]],
       localDirsByExecId: Map[String, Array[String]],
-      cached: Boolean)
-    : Unit = {
+      cached: Boolean): Unit = {
     // We use `forall` because once there's a block fetch is failed, `fetchHostLocalBlock` will put
     // a `FailureFetchResult` immediately to the `results`. So there's no reason to fetch the
     // remaining blocks.

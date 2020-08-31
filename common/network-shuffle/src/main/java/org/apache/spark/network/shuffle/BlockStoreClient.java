@@ -116,7 +116,7 @@ public abstract class BlockStoreClient implements Closeable {
           try {
             BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response);
             hostLocalDirsCompletable.complete(
-                    ((LocalDirsForExecutors) msgObj).getLocalDirsByExec());
+              ((LocalDirsForExecutors) msgObj).getLocalDirsByExec());
           } catch (Throwable t) {
             logger.warn("Error trying to get the host local dirs for " +
               Arrays.toString(getLocalDirsMessage.execIds), t.getCause());
