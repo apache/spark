@@ -42,6 +42,7 @@ from pyspark.taskcontext import (
     BarrierTaskInfo as BarrierTaskInfo,
     TaskContext as TaskContext,
 )
+from pyspark.util import InheritableThread as InheritableThread
 
 # Compatiblity imports
 from pyspark.sql import SQLContext as SQLContext, HiveContext as HiveContext, Row as Row

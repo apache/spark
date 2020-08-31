@@ -764,9 +764,19 @@ class MultilayerPerceptronClassificationModel(
     _MultilayerPerceptronParams,
     JavaMLWritable,
     JavaMLReadable[MultilayerPerceptronClassificationModel],
+    HasTrainingSummary[MultilayerPerceptronClassificationTrainingSummary],
 ):
     @property
     def weights(self) -> Vector: ...
+    def summary(self) -> MultilayerPerceptronClassificationTrainingSummary: ...
+    def evaluate(
+        self, dataset: DataFrame
+    ) -> MultilayerPerceptronClassificationSummary: ...
+
+class MultilayerPerceptronClassificationSummary(_ClassificationSummary): ...
+class MultilayerPerceptronClassificationTrainingSummary(
+    MultilayerPerceptronClassificationSummary, _TrainingSummary
+): ...
 
 class _OneVsRestParams(_ClassifierParams, HasWeightCol):
     classifier: Param[Estimator]
