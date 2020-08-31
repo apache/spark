@@ -190,5 +190,5 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
       checkEvaluation(If(Factorial(5) > 100L, nullLiteral, b),
         If(Factorial(5) > 100L, nullLiteral, b).eval(EmptyRow))
     }
- }
+  }
 }
