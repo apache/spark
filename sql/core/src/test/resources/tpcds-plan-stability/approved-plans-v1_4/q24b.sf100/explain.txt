@@ -155,7 +155,7 @@ Arguments: HashedRelationBroadcastMode(List(input[3, string, true]),false), [id=
 Output [3]: [ca_state#25, ca_zip#26, ca_country#27]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [IsNotNull(ca_zip), IsNotNull(ca_country)]
+PushedFilters: [IsNotNull(ca_country), IsNotNull(ca_zip)]
 ReadSchema: struct<ca_state:string,ca_zip:string,ca_country:string>
 
 (25) ColumnarToRow
@@ -163,7 +163,7 @@ Input [3]: [ca_state#25, ca_zip#26, ca_country#27]
 
 (26) Filter
 Input [3]: [ca_state#25, ca_zip#26, ca_country#27]
-Condition : (isnotnull(ca_zip#26) AND isnotnull(ca_country#27))
+Condition : (isnotnull(ca_country#27) AND isnotnull(ca_zip#26))
 
 (27) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [s_zip#23]
