@@ -63,10 +63,6 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     this.registrationTimeoutMs = registrationTimeoutMs;
   }
 
-  protected void checkInit() {
-    assert appId != null : "Called before init()";
-  }
-
   /**
    * Initializes the BlockStoreClient, specifying this Executor's appId.
    * Must be called before any other method on the BlockStoreClient.

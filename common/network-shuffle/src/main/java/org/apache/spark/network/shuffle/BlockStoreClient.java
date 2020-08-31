@@ -80,6 +80,10 @@ public abstract class BlockStoreClient implements Closeable {
     return () -> Collections.emptyMap();
   }
 
+  protected void checkInit() {
+    assert appId != null : "Called before init()";
+  }
+
   /**
    * Request the local disk directories for executors which are located at the same host with
    * the current BlockStoreClient(it can be ExternalBlockStoreClient or NettyBlockTransferService).
@@ -102,7 +106,7 @@ public abstract class BlockStoreClient implements Closeable {
       int port,
       String[] execIds,
       CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable) {
-    assert appId != null : "Called before init()";
+    checkInit();
     GetLocalDirsForExecutors getLocalDirsMessage = new GetLocalDirsForExecutors(appId, execIds);
     try {
       TransportClient client = clientFactory.createClient(host, port);
