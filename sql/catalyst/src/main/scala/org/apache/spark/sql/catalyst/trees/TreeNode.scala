@@ -546,7 +546,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case Some(null) => Nil
     case Some(any) => any :: Nil
     case map: CaseInsensitiveStringMap => truncatedString(
-        map.asCaseSensitiveMap().entrySet().toArray(), "[", ", ", "]", maxFields):: Nil
+      map.asCaseSensitiveMap().entrySet().toArray(), "[", ", ", "]", maxFields) :: Nil
     case table: CatalogTable =>
       table.storage.serde match {
         case Some(serde) => table.identifier :: serde :: Nil
