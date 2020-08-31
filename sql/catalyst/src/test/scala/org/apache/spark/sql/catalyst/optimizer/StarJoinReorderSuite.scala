@@ -184,7 +184,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(s3, Inner, Some(nameToAttr("d3_fk1") === nameToAttr("s3_pk1")))
         .select(outputsOf(d1, d2, f1, d3, s3): _*)
 
-    assertEqualPlans(query, expected)
+    assertEqualPlansForJoinReorder(Optimize, query, expected)
   }
 
   test("Test 2: Star join on a subset of dimensions due to inequality joins") {
@@ -223,7 +223,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(s3, Inner, Some(nameToAttr("d3_fk1") === nameToAttr("s3_pk1")))
         .select(outputsOf(d1, f1, d2, s3, d3): _*)
 
-    assertEqualPlans(query, expected)
+    assertEqualPlansForJoinReorder(Optimize, query, expected)
   }
 
   test("Test 3: Star join on a subset of dimensions since join column is not unique") {
@@ -259,7 +259,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(s3, Inner, Some(nameToAttr("d3_fk1") === nameToAttr("s3_pk1")))
         .select(outputsOf(d1, f1, d2, s3, d3): _*)
 
-    assertEqualPlans(query, expected)
+    assertEqualPlansForJoinReorder(Optimize, query, expected)
   }
 
   test("Test 4: Star join on a subset of dimensions since join column is nullable") {
@@ -296,7 +296,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(s3, Inner, Some(nameToAttr("d3_fk1") < nameToAttr("s3_pk1")))
         .select(outputsOf(d1, f1, d2, s3, d3): _*)
 
-    assertEqualPlans(query, expected)
+    assertEqualPlansForJoinReorder(Optimize, query, expected)
   }
 
   test("Test 5: Table stats not available for some of the joined tables") {
@@ -334,7 +334,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
           Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk1")))
         .join(s3, Inner, Some(d3_fk1 === nameToAttr("s3_pk1")))
 
-    assertEqualPlans(query, equivQuery)
+    assertEqualPlansForJoinReorder(Optimize, query, equivQuery)
   }
 
   test("Test 6: Join with complex plans") {
@@ -367,7 +367,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(d2.where(nameToAttr("d2_c2") === 2), Inner,
           Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk1")))
 
-    assertEqualPlans(query, expected)
+    assertEqualPlansForJoinReorder(Optimize, query, expected)
   }
 
   test("Test 7: Comparable fact table sizes") {
@@ -403,7 +403,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(s3, Inner, Some(nameToAttr("f11_fk1") === nameToAttr("s3_pk1")))
         .select(outputsOf(d1, f11, f1, d2, s3): _*)
 
-    assertEqualPlans(query, equivQuery)
+    assertEqualPlansForJoinReorder(Optimize, query, equivQuery)
   }
 
   test("Test 8: No RI joins") {
@@ -439,7 +439,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(s3, Inner, Some(nameToAttr("d3_fk1") === nameToAttr("s3_pk1")))
         .select(outputsOf(d1, d3, f1, d2, s3): _*)
 
-    assertEqualPlans(query, expected)
+    assertEqualPlansForJoinReorder(Optimize, query, expected)
   }
 
   test("Test 9: Complex join predicates") {
@@ -475,7 +475,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(s3, Inner, Some(nameToAttr("d3_fk1") === nameToAttr("s3_pk1")))
         .select(outputsOf(d1, d3, f1, d2, s3): _*)
 
-    assertEqualPlans(query, expected)
+    assertEqualPlansForJoinReorder(Optimize, query, expected)
   }
 
   test("Test 10: Less than two dimensions") {
@@ -510,7 +510,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(s3, Inner, Some(nameToAttr("d3_fk1") === nameToAttr("s3_pk1")))
         .select(outputsOf(d1, d3, f1, d2, s3): _*)
 
-    assertEqualPlans(query, expected)
+    assertEqualPlansForJoinReorder(Optimize, query, expected)
   }
 
   test("Test 11: Expanding star join") {
@@ -544,7 +544,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(s3, Inner, Some(nameToAttr("d3_fk1") < nameToAttr("s3_pk1")))
         .select(outputsOf(d1, d3, f1, d2, s3): _*)
 
-    assertEqualPlans(query, expected)
+    assertEqualPlansForJoinReorder(Optimize, query, expected)
   }
 
   test("Test 12: Non selective star join") {
@@ -578,25 +578,10 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(s3, Inner, Some(nameToAttr("d3_fk1") === nameToAttr("s3_pk1")))
         .select(outputsOf(d1, d3, f1, d2, s3): _*)
 
-    assertEqualPlans(query, expected)
-  }
-
-  private def assertEqualPlans(plan1: LogicalPlan, plan2: LogicalPlan): Unit = {
-    val analyzed = plan1.analyze
-    val optimized = Optimize.execute(analyzed)
-    val expected = plan2.analyze
-
-    assert(equivalentOutput(analyzed, expected)) // if this fails, the expected itself is incorrect
-    assert(equivalentOutput(analyzed, optimized))
-
-    compareJoinOrder(optimized, expected)
+    assertEqualPlansForJoinReorder(Optimize, query, expected)
   }
 
   private def outputsOf(plans: LogicalPlan*): Seq[Attribute] = {
     plans.map(_.output).reduce(_ ++ _)
-  }
-
-  private def equivalentOutput(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
-    normalizeExprIds(plan1).output == normalizeExprIds(plan2).output
   }
 }

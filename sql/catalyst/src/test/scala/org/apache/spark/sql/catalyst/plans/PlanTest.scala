@@ -20,13 +20,15 @@ package org.apache.spark.sql.catalyst.plans
 import org.scalactic.source
 import org.scalatest.Suite
 import org.scalatest.Tag
-
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
+import org.apache.spark.sql.catalyst.analysis.{ResolveHints, SimpleAnalyzer}
+import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 
@@ -197,5 +199,24 @@ trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
       case _ =>
         plan1 == plan2
     }
+  }
+
+  def assertEqualPlansForJoinReorder(
+      optimizer: RuleExecutor[LogicalPlan],
+      originalPlan: LogicalPlan,
+      groundTruthBestPlan: LogicalPlan): Unit = {
+    val analyzed = originalPlan.analyze
+    val optimized = optimizer.execute(analyzed)
+    val expected = EliminateResolvedHint.apply(groundTruthBestPlan.analyze)
+
+    // if this fails, the expected plan itself is incorrect
+    assert(equivalentOutput(analyzed, expected))
+    assert(equivalentOutput(analyzed, optimized))
+
+    compareJoinOrder(optimized, expected)
+  }
+
+  private def equivalentOutput(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
+    normalizeExprIds(plan1).output == normalizeExprIds(plan2).output
   }
 }

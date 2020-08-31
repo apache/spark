@@ -44,12 +44,6 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         CostBasedJoinReorder) :: Nil
   }
 
-  object ResolveHints extends RuleExecutor[LogicalPlan] {
-    val batches =
-      Batch("Resolve Hints", Once,
-        EliminateResolvedHint) :: Nil
-  }
-
   var originalConfCBOEnabled = false
   var originalConfJoinReorderEnabled = false
 
@@ -135,7 +129,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
         .select(outputsOf(t1, t2, t3): _*)
 
-    assertEqualPlans(originalPlan, bestPlan)
+    assertEqualPlansForJoinReorder(Optimize, originalPlan, bestPlan)
   }
 
   test("put unjoinable item at the end and reorder 3 joinable tables") {
@@ -152,7 +146,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(t4)
         .select(outputsOf(t1, t2, t4, t3): _*)
 
-    assertEqualPlans(originalPlan, bestPlan)
+    assertEqualPlansForJoinReorder(Optimize, originalPlan, bestPlan)
   }
 
   test("reorder 3 tables with pure-attribute project") {
@@ -167,7 +161,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
         .select(nameToAttr("t1.v-1-10"))
 
-    assertEqualPlans(originalPlan, bestPlan)
+    assertEqualPlansForJoinReorder(Optimize, originalPlan, bestPlan)
   }
 
   test("reorder 3 tables - one of the leaf items is a project") {
@@ -184,7 +178,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
           Some(nameToAttr("t1.k-1-2") === nameToAttr("t5.k-1-5")))
         .select(nameToAttr("t1.v-1-10"))
 
-    assertEqualPlans(originalPlan, bestPlan)
+    assertEqualPlansForJoinReorder(Optimize, originalPlan, bestPlan)
   }
 
   test("don't reorder if project contains non-attribute") {
@@ -194,7 +188,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
         .select("key".attr)
 
-    assertEqualPlans(originalPlan, originalPlan)
+    assertEqualPlansForJoinReorder(Optimize, originalPlan, originalPlan)
   }
 
   test("reorder 4 tables (bushy tree)") {
@@ -215,7 +209,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
           Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")))
         .select(outputsOf(t1, t4, t2, t3): _*)
 
-    assertEqualPlans(originalPlan, bestPlan)
+    assertEqualPlansForJoinReorder(Optimize, originalPlan, bestPlan)
   }
 
   test("keep the order of attributes in the final output") {
@@ -227,7 +221,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
           .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
           .select(expectedOrder: _*)
       // The plan should not change after optimization
-      assertEqualPlans(expectedPlan, expectedPlan)
+      assertEqualPlansForJoinReorder(Optimize, expectedPlan, expectedPlan)
     }
   }
 
@@ -245,7 +239,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
           .join(tab2, Cross, Some('b === 'i))
           .select(outputsOf(tab1, tab2, tab3): _*)
 
-    assertEqualPlans(original, expected)
+    assertEqualPlansForJoinReorder(Optimize, original, expected)
   }
 
   test("reorder recursively") {
@@ -289,7 +283,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
       .union(t4.select(nameToAttr("t4.v-1-10")))
       .join(t5, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t5.v-1-5")))
 
-    assertEqualPlans(originalPlan, bestPlan)
+    assertEqualPlansForJoinReorder(Optimize, originalPlan, bestPlan)
   }
 
   test("don't reorder if hints present") {
@@ -302,7 +296,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
           Inner,
           Some(nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")))
 
-    assertEqualPlans(originalPlan, originalPlan)
+    assertEqualPlansForJoinReorder(Optimize, originalPlan, originalPlan)
 
     val originalPlan2 =
       t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
@@ -311,7 +305,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .hint("broadcast")
         .join(t3, Inner, Some(nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100")))
 
-    assertEqualPlans(originalPlan2, originalPlan2)
+    assertEqualPlansForJoinReorder(Optimize, originalPlan2, originalPlan2)
 
     val originalPlan3 =
       t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
@@ -319,7 +313,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
         .join(t5, Inner, Some(nameToAttr("t5.v-1-5") === nameToAttr("t3.v-1-100")))
 
-    assertEqualPlans(originalPlan3, originalPlan3)
+    assertEqualPlansForJoinReorder(Optimize, originalPlan3, originalPlan3)
   }
 
   test("reorder below and above the hint node") {
@@ -335,7 +329,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
       .select(outputsOf(t1, t2, t3): _*)
       .hint("broadcast").join(t4)
 
-    assertEqualPlans(originalPlan, bestPlan)
+    assertEqualPlansForJoinReorder(Optimize, originalPlan, bestPlan)
 
     val originalPlan2 =
       t1.join(t2).join(t3)
@@ -349,7 +343,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .select(outputsOf(t1, t2, t3): _*)
         .join(t4.hint("broadcast"))
 
-    assertEqualPlans(originalPlan2, bestPlan2)
+    assertEqualPlansForJoinReorder(Optimize, originalPlan2, bestPlan2)
 
     val originalPlan3 =
       t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
@@ -366,20 +360,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(t4, Inner, Some(nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100")))
         .join(t5, Inner, Some(nameToAttr("t5.v-1-5") === nameToAttr("t3.v-1-100")))
 
-    assertEqualPlans(originalPlan3, bestPlan3)
-  }
-
-  private def assertEqualPlans(
-      originalPlan: LogicalPlan,
-      groundTruthBestPlan: LogicalPlan): Unit = {
-    val analyzed = originalPlan.analyze
-    val optimized = Optimize.execute(analyzed)
-    val expected = ResolveHints.execute(groundTruthBestPlan.analyze)
-
-    assert(analyzed.sameOutput(expected)) // if this fails, the expected plan itself is incorrect
-    assert(analyzed.sameOutput(optimized))
-
-    compareJoinOrder(optimized, expected)
+    assertEqualPlansForJoinReorder(Optimize, originalPlan3, bestPlan3)
   }
 
   private def outputsOf(plans: LogicalPlan*): Seq[Attribute] = {

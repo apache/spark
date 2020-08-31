@@ -220,7 +220,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
         .join(t1, Inner, Some(nameToAttr("f1_c1") === nameToAttr("t1_c1")))
         .select(outputsOf(f1, t1, t2, d1, d2): _*)
 
-    assertEqualPlans(query, expected)
+    assertEqualPlansForJoinReorder(Optimize, query, expected)
   }
 
   test("Test 2: Star with a linear branch") {
@@ -259,7 +259,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
         .join(t1, Inner, Some(nameToAttr("t1_c1") === nameToAttr("f1_c1")))
         .select(outputsOf(d1, t1, t2, f1, d2, t3): _*)
 
-    assertEqualPlans(query, expected)
+    assertEqualPlansForJoinReorder(Optimize, query, expected)
   }
 
   test("Test 3: Star with derived branches") {
@@ -301,7 +301,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
           Some(nameToAttr("t1_c2") === nameToAttr("t4_c2")))
         .select(outputsOf(d1, t1, t2, t3, t4, f1, d2): _*)
 
-    assertEqualPlans(query, expected)
+    assertEqualPlansForJoinReorder(Optimize, query, expected)
   }
 
   test("Test 4: Star with several branches") {
@@ -354,7 +354,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
           Some(nameToAttr("d2_c2") === nameToAttr("t5_c1")))
         .select(outputsOf(d1, t3, t4, f1, d3, d2, t5, t6, t1, t2): _*)
 
-    assertEqualPlans(query, expected)
+    assertEqualPlansForJoinReorder(Optimize, query, expected)
   }
 
   test("Test 5: RI star only") {
@@ -383,7 +383,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
         .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk")))
         .select(outputsOf(d1, d2, f1, d3): _*)
 
-    assertEqualPlans(query, expected)
+    assertEqualPlansForJoinReorder(Optimize, query, expected)
   }
 
   test("Test 6: No RI star") {
@@ -409,25 +409,10 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
         .join(t1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("t1_c1")))
         .select(outputsOf(t1, f1, t2, t3): _*)
 
-    assertEqualPlans(query, expected)
-  }
-
-  private def assertEqualPlans( plan1: LogicalPlan, plan2: LogicalPlan): Unit = {
-    val analyzed = plan1.analyze
-    val optimized = Optimize.execute(analyzed)
-    val expected = plan2.analyze
-
-    assert(equivalentOutput(analyzed, expected)) // if this fails, the expected itself is incorrect
-    assert(equivalentOutput(analyzed, optimized))
-
-    compareJoinOrder(optimized, expected)
+    assertEqualPlansForJoinReorder(Optimize, query, expected)
   }
 
   private def outputsOf(plans: LogicalPlan*): Seq[Attribute] = {
     plans.map(_.output).reduce(_ ++ _)
-  }
-
-  private def equivalentOutput(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
-    normalizeExprIds(plan1).output == normalizeExprIds(plan2).output
   }
 }
