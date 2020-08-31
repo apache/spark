@@ -22,9 +22,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.execution.{AliasAwareOutputOrdering, AliasAwareOutputPartitioning, SparkPlan}
+import org.apache.spark.sql.execution.{AliasAwareOutputOrdering, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -39,7 +38,7 @@ case class SortAggregateExec(
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends BaseAggregateExec
-    with AliasAwareOutputOrdering {
+  with AliasAwareOutputOrdering {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
