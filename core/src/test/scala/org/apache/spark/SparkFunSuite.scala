@@ -24,6 +24,7 @@ import java.util.{Locale, TimeZone}
 import org.apache.log4j.spi.LoggingEvent
 
 import scala.annotation.tailrec
+import org.apache.commons.io.FileUtils
 import org.apache.log4j.{Appender, AppenderSkeleton, Level, Logger}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Outcome}
 import org.scalatest.funsuite.AnyFunSuite
@@ -103,8 +104,17 @@ abstract class SparkFunSuite
     new File(getClass.getClassLoader.getResource(file).getFile)
   }
 
-  protected def getTestResourcePath(file: String): String = {
+  protected final def getTestResourcePath(file: String): String = {
     getTestResourceFile(file).getCanonicalPath
+  }
+
+  protected final def copyAndGetResourceFile(fileName: String, suffix: String): File = {
+    val url = Thread.currentThread().getContextClassLoader.getResource(fileName)
+    // Copy to avoid URISyntaxException during accessing the resources in `sql/core`
+    val file = File.createTempFile("test-resource", suffix)
+    file.deleteOnExit()
+    FileUtils.copyURLToFile(url, file)
+    file
   }
 
   /**

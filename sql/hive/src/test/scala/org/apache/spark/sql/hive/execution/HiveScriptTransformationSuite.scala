@@ -38,15 +38,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
   import ScriptTransformationIOSchema._
 
-  protected override def getTestResourcePath(fileName: String): String = {
-    val url = Thread.currentThread().getContextClassLoader.getResource(fileName)
-    // Copy to avoid URISyntaxException during accessing the resources in `sql/core`
-    val file = File.createTempFile("script-transformation-test", ".py")
-    file.deleteOnExit()
-    FileUtils.copyURLToFile(url, file)
-    file.getAbsolutePath
-  }
-
   override def isHive23OrSpark: Boolean = HiveUtils.isHive23
 
   override def createScriptTransformationExec(
@@ -169,7 +160,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
   test("SPARK-25990: TRANSFORM should handle schema less correctly (hive serde)") {
     assume(TestUtils.testCommandAvailable("python"))
-    val scriptFilePath = getTestResourcePath("test_script.py")
+    val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsolutePath
 
     withTempView("v") {
       val df = Seq(
