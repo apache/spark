@@ -109,14 +109,38 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Row("mary"))
   }
 
-  test("scan with partition info") {
-    val df = spark.read
-      .option("partitionColumn", "id")
-      .option("lowerBound", "0")
-      .option("upperBound", "3")
-      .option("numPartitions", "2")
-      .table("h2.test.people")
-    assert(df.rdd.getNumPartitions == 2)
+  test("read/write with partition info") {
+    withTable("h2.test.abc") {
+      sql("CREATE TABLE h2.test.abc USING _ AS SELECT * FROM h2.test.people")
+      val df1 = Seq(("evan", 3), ("cathy", 4), ("alex", 5)).toDF("NAME", "ID")
+      val e = intercept[IllegalArgumentException] {
+        df1.write
+          .option("partitionColumn", "id")
+          .option("lowerBound", "0")
+          .option("upperBound", "3")
+          .option("numPartitions", "0")
+          .insertInto("h2.test.abc")
+      }.getMessage
+      assert(e.contains("Invalid value `0` for parameter `numPartitions` in table writing " +
+        "via JDBC. The minimum value is 1."))
+
+      df1.write
+        .option("partitionColumn", "id")
+        .option("lowerBound", "0")
+        .option("upperBound", "3")
+        .option("numPartitions", "3")
+        .insertInto("h2.test.abc")
+
+      val df2 = spark.read
+        .option("partitionColumn", "id")
+        .option("lowerBound", "0")
+        .option("upperBound", "3")
+        .option("numPartitions", "2")
+        .table("h2.test.abc")
+
+      assert(df2.rdd.getNumPartitions === 2)
+      assert(df2.count() === 5)
+    }
   }
 
   test("show tables") {
