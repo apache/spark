@@ -268,7 +268,7 @@ Input [7]: [c_customer_sk#21, c_current_addr_sk#22, ss_sold_date_sk#25, ss_ext_s
 Output [2]: [s_county#33, s_state#34]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [IsNotNull(s_state), IsNotNull(s_county)]
+PushedFilters: [IsNotNull(s_county), IsNotNull(s_state)]
 ReadSchema: struct<s_county:string,s_state:string>
 
 (46) ColumnarToRow [codegen id : 9]
@@ -276,7 +276,7 @@ Input [2]: [s_county#33, s_state#34]
 
 (47) Filter [codegen id : 9]
 Input [2]: [s_county#33, s_state#34]
-Condition : (isnotnull(s_state#34) AND isnotnull(s_county#33))
+Condition : (isnotnull(s_county#33) AND isnotnull(s_state#34))
 
 (48) BroadcastExchange
 Input [2]: [s_county#33, s_state#34]
