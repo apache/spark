@@ -139,7 +139,11 @@ object ResolveUnion extends Rule[LogicalPlan] {
     val leftChild = if (allowMissingCol) {
       // Add missing (nested) fields to left plan.
       val (leftProjectList, _) = compareAndAddFields(rightChild, left, allowMissingCol)
-      Project(leftProjectList, left)
+      if (leftProjectList.map(_.toAttribute) != left.output) {
+        Project(leftProjectList, left)
+      } else {
+        left
+      }
     } else {
       left
     }
