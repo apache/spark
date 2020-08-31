@@ -118,7 +118,7 @@ public abstract class BlockStoreClient implements Closeable {
             hostLocalDirsCompletable.complete(
               ((LocalDirsForExecutors) msgObj).getLocalDirsByExec());
           } catch (Throwable t) {
-            logger.warn("Error trying to get the host local dirs for " +
+            logger.warn("Error while trying to get the host local dirs for " +
               Arrays.toString(getLocalDirsMessage.execIds), t.getCause());
             hostLocalDirsCompletable.completeExceptionally(t);
           }
@@ -126,7 +126,7 @@ public abstract class BlockStoreClient implements Closeable {
 
         @Override
         public void onFailure(Throwable t) {
-          logger.warn("Error trying to get the host local dirs for " +
+          logger.warn("Error while trying to get the host local dirs for " +
             Arrays.toString(getLocalDirsMessage.execIds), t.getCause());
           hostLocalDirsCompletable.completeExceptionally(t);
         }
