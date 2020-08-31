@@ -150,7 +150,7 @@ FROM testData ORDER BY cate, val;
 SELECT
     employee_name,
     salary,
-    nth_value(employee_name, 2) OVER (ORDER BY salary DESC) second_highest_salary
+    nth_value(employee_name, 2) second_highest_salary
 FROM
     basic_pays;
 
