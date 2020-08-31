@@ -3515,6 +3515,16 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |SELECT a, c.json_string, SUM(b)
             |FROM t
             |GROUP BY a, c.json_string
+            |""".stripMargin),
+        Row("A", "{\"i\": 1}", 3) :: Row("A", "{\"i\": 2}", 2) ::
+          Row("B", "{\"i\": 1}", 1) :: Row("C", "{\"i\": 1}", 3) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, c.json_string, SUM(b)
+            |FROM t
+            |GROUP BY a, c.json_string
             |WITH CUBE
             |""".stripMargin),
         Row("A", "{\"i\": 1}", 3) :: Row("A", "{\"i\": 2}", 2) :: Row("A", null, 5) ::
