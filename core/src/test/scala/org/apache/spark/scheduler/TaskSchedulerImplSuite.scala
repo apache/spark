@@ -1864,18 +1864,14 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   test("scheduler should keep the decommission state where host was decommissioned") {
     val clock = new ManualClock(10000L)
     val scheduler = setupSchedulerForDecommissionTests(clock, 2)
-    val oldTime = clock.getTimeMillis()
+    val decomTime = clock.getTimeMillis()
     scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("0", None))
     scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1", Some("host1")))
 
-    clock.advance(3000L)
-    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("0 new", None))
-    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1 new", None))
-
     assert(scheduler.getExecutorDecommissionState("executor0")
-      === Some(ExecutorDecommissionState(oldTime, None)))
+      === Some(ExecutorDecommissionState(decomTime, None)))
     assert(scheduler.getExecutorDecommissionState("executor1")
-      === Some(ExecutorDecommissionState(oldTime, Some("host1"))))
+      === Some(ExecutorDecommissionState(decomTime, Some("host1"))))
     assert(scheduler.getExecutorDecommissionState("executor2").isEmpty)
   }
 
@@ -1913,17 +1909,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // So now both the tasks are no longer running
     assert(manager.copiesRunning.take(2) === Array(0, 0))
     clock.advance(2000)
-
-    // Decommission state should hang around a bit after removal ...
-    assert(scheduler.getExecutorDecommissionState("executor1").isDefined)
-    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("", None))
-    clock.advance(2000)
-    assert(scheduler.getExecutorDecommissionState("executor1").isDefined)
-
-    // The default timeout for expiry is 300k milliseconds (5 minutes) which completes now,
-    // and the executor1's decommission state should finally be purged.
-    clock.advance(300000)
-    assert(scheduler.getExecutorDecommissionState("executor1").isEmpty)
 
     // Now give it some resources and both tasks should be rerun
     val taskDescriptions = taskScheduler.resourceOffers(IndexedSeq(
