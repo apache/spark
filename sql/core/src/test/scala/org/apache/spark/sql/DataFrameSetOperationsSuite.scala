@@ -536,4 +536,71 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       assert(union2.schema.fieldNames === Array("a", "B", "C", "c"))
     }
   }
+
+  test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - 1") {
+    val df1 = Seq(((1, 2, 3), 0), ((2, 3, 4), 1), ((3, 4, 5), 2)).toDF("a", "idx")
+    val df2 = Seq(((3, 4), 0), ((1, 2), 1), ((2, 3), 2)).toDF("a", "idx")
+    val df3 = Seq(((100, 101, 102, 103), 0), ((110, 111, 112, 113), 1), ((120, 121, 122, 123), 2))
+      .toDF("a", "idx")
+
+    var unionDf = df1.unionByName(df2, true)
+
+    checkAnswer(unionDf,
+      Row(Row(1, 2, 3), 0) :: Row(Row(2, 3, 4), 1) :: Row(Row(3, 4, 5), 2) :: // df1
+        Row(Row(3, 4, null), 0) :: Row(Row(1, 2, null), 1) :: Row(Row(2, 3, null), 2) :: Nil // df2
+    )
+
+    assert(unionDf.schema.toDDL == "`a` STRUCT<`_1`: INT, `_2`: INT, `_3`: INT>,`idx` INT")
+
+    unionDf = df1.unionByName(df2, true).unionByName(df3, true)
+
+    checkAnswer(unionDf,
+      Row(Row(1, 2, 3, null), 0) ::
+        Row(Row(2, 3, 4, null), 1) ::
+        Row(Row(3, 4, 5, null), 2) :: // df1
+        Row(Row(3, 4, null, null), 0) ::
+        Row(Row(1, 2, null, null), 1) ::
+        Row(Row(2, 3, null, null), 2) :: // df2
+        Row(Row(100, 101, 102, 103), 0) ::
+        Row(Row(110, 111, 112, 113), 1) ::
+        Row(Row(120, 121, 122, 123), 2) :: Nil // df3
+    )
+    assert(unionDf.schema.toDDL ==
+      "`a` STRUCT<`_1`: INT, `_2`: INT, `_3`: INT, `_4`: INT>,`idx` INT")
+  }
+
+  test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - 2") {
+    val df1 = Seq((0, UnionClass1a(0, 1L, UnionClass2(1, "2")))).toDF("id", "a")
+    val df2 = Seq((1, UnionClass1b(1, 2L, UnionClass3(2, 3L)))).toDF("id", "a")
+
+    var unionDf = df1.unionByName(df2, true)
+    checkAnswer(unionDf,
+      Row(0, Row(0, 1, Row(1, null, "2"))) ::
+        Row(1, Row(1, 2, Row(2, 3L, null))) :: Nil)
+    assert(unionDf.schema.toDDL ==
+      "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
+        "`nested`: STRUCT<`a`: INT, `b`: BIGINT, `c`: STRING>>")
+
+    unionDf = df2.unionByName(df1, true)
+    checkAnswer(unionDf,
+      Row(1, Row(1, 2, Row(2, 3L, null))) ::
+        Row(0, Row(0, 1, Row(1, null, "2"))) :: Nil)
+    assert(unionDf.schema.toDDL ==
+      "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
+        "`nested`: STRUCT<`a`: INT, `b`: BIGINT, `c`: STRING>>")
+
+    val df3 = Seq((2, UnionClass1b(2, 3L, null))).toDF("id", "a")
+    unionDf = df1.unionByName(df3, true)
+    checkAnswer(unionDf,
+      Row(0, Row(0, 1, Row(1, null, "2"))) ::
+        Row(2, Row(2, 3, null)) :: Nil)
+    assert(unionDf.schema.toDDL ==
+      "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
+        "`nested`: STRUCT<`a`: INT, `b`: BIGINT, `c`: STRING>>")
+  }
 }
+
+case class UnionClass1a(a: Int, b: Long, nested: UnionClass2)
+case class UnionClass1b(a: Int, b: Long, nested: UnionClass3)
+case class UnionClass2(a: Int, c: String)
+case class UnionClass3(a: Int, b: Long)

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType.fromDDL
 
 class StructTypeSuite extends SparkFunSuite {
@@ -102,5 +103,31 @@ class StructTypeSuite extends SparkFunSuite {
   test("interval keyword in schema string") {
     val interval = "`a` INTERVAL"
     assert(fromDDL(interval).toDDL === interval)
+  }
+
+  test("find missing (nested) fields") {
+    val schema = StructType.fromDDL(
+      "c1 INT, c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
+    val resolver = SQLConf.get.resolver
+
+    val source1 = StructType.fromDDL("c1 INT")
+    val missing1 = StructType.fromDDL(
+      "c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
+    assert(StructType.findMissingFields(source1, schema, resolver).sameType(missing1))
+
+    val source2 = StructType.fromDDL("c1 INT, c3 STRING")
+    val missing2 = StructType.fromDDL(
+      "c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
+    assert(StructType.findMissingFields(source2, schema, resolver).sameType(missing2))
+
+    val source3 = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT>")
+    val missing3 = StructType.fromDDL(
+      "c2 STRUCT<c4: STRUCT<c5: INT, c6: INT>>")
+    assert(StructType.findMissingFields(source3, schema, resolver).sameType(missing3))
+
+    val source4 = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT, c4: STRUCT<c6: INT>>")
+    val missing4 = StructType.fromDDL(
+      "c2 STRUCT<c4: STRUCT<c5: INT>>")
+    assert(StructType.findMissingFields(source4, schema, resolver).sameType(missing4))
   }
 }

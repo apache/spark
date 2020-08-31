@@ -18,10 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -546,7 +547,8 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 case class WithFields(
     structExpr: Expression,
     names: Seq[String],
-    valExprs: Seq[Expression]) extends Unevaluable {
+    valExprs: Seq[Expression],
+    sortColumns: Boolean = false) extends Unevaluable {
 
   assert(names.length == valExprs.length)
 
@@ -585,13 +587,71 @@ case class WithFields(
         } else {
           resultExprs :+ newExpr
         }
-    }.flatMap { case (name, expr) => Seq(Literal(name), expr) }
+    }
 
-    val expr = CreateNamedStruct(newExprs)
+    val finalExprs = if (sortColumns) {
+      newExprs.sortBy(_._1).flatMap { case (name, expr) => Seq(Literal(name), expr) }
+    } else {
+      newExprs.flatMap { case (name, expr) => Seq(Literal(name), expr) }
+    }
+
+    val expr = CreateNamedStruct(finalExprs)
     if (structExpr.nullable) {
       If(IsNull(structExpr), Literal(null, expr.dataType), expr)
     } else {
       expr
+    }
+  }
+}
+
+object WithFields {
+  /**
+   * Adds/replaces field in `StructType` into `col` expression by name.
+   */
+  def apply(col: Expression, fieldName: String, expr: Expression): Expression = {
+    WithFields(col, fieldName, expr, false)
+  }
+
+  def apply(
+      col: Expression,
+      fieldName: String,
+      expr: Expression,
+      sortColumns: Boolean): Expression = {
+    val nameParts = if (fieldName.isEmpty) {
+      fieldName :: Nil
+    } else {
+      CatalystSqlParser.parseMultipartIdentifier(fieldName)
+    }
+    withFieldHelper(col, nameParts, Nil, expr, sortColumns)
+  }
+
+  private def withFieldHelper(
+      struct: Expression,
+      namePartsRemaining: Seq[String],
+      namePartsDone: Seq[String],
+      value: Expression,
+      sortColumns: Boolean) : WithFields = {
+    val name = namePartsRemaining.head
+    if (namePartsRemaining.length == 1) {
+      WithFields(struct, name :: Nil, value :: Nil, sortColumns)
+    } else {
+      val newNamesRemaining = namePartsRemaining.tail
+      val newNamesDone = namePartsDone :+ name
+
+      val newStruct = if (struct.resolved) {
+        val resolver = SQLConf.get.resolver
+        ExtractValue(struct, Literal(name), resolver)
+      } else {
+        UnresolvedExtractValue(struct, Literal(name))
+      }
+
+      val newValue = withFieldHelper(
+        struct = newStruct,
+        namePartsRemaining = newNamesRemaining,
+        namePartsDone = newNamesDone,
+        value = value,
+        sortColumns = sortColumns)
+      WithFields(struct, name :: Nil, newValue :: Nil, sortColumns)
     }
   }
 }
