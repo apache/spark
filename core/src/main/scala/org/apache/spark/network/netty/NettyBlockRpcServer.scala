@@ -115,13 +115,19 @@ class NettyBlockRpcServer(
         }
 
       case getLocalDirs: GetLocalDirsForExecutors =>
-        assert(getLocalDirs.appId == appId)
-        assert(getLocalDirs.execIds.length == 1)
-        val execId = getLocalDirs.execIds.head
-        val dirs = blockManager.getLocalDiskDirs
-        responseContext
-          .onSuccess(new LocalDirsForExecutors(Map(execId -> dirs).asJava).toByteBuffer)
-
+        val isIncorrectAppId = getLocalDirs.appId != appId
+        val execNum = getLocalDirs.execIds.length
+        if (isIncorrectAppId || execNum != 1) {
+          val errorMsg = "Invalid GetLocalDirsForExecutors request: " +
+            s"${if (isIncorrectAppId) s"incorrect application id: ${getLocalDirs.appId};"}" +
+            s"${if (execNum != 1) s"incorrect executor number: $execNum (expected 1);"}"
+          responseContext.onFailure(new IllegalStateException(errorMsg))
+        } else {
+          val execId = getLocalDirs.execIds.head
+          val dirs = blockManager.getLocalDiskDirs
+          responseContext
+            .onSuccess(new LocalDirsForExecutors(Map(execId -> dirs).asJava).toByteBuffer)
+        }
     }
   }
 
