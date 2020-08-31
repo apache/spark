@@ -394,15 +394,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             addressToExecutorId -= executorInfo.executorAddress
             executorDataMap -= executorId
             executorsPendingLossReason -= executorId
+            val decommissioned = executorsPendingDecommission.remove(executorId)
             executorsPendingToRemove
-              .remove(executorId).map(_ => ExecutorKilled)
-              .getOrElse {
-                if (executorsPendingDecommission.remove(executorId)) {
-                  ExecutorDecommission()
-                } else {
-                  reason
-                }
-              }
+              .remove(executorId).filter(killedByDriver => killedByDriver).map(_ => ExecutorKilled)
+              .getOrElse(if (decommissioned) ExecutorDecommission() else reason)
           }
           totalCoreCount.addAndGet(-executorInfo.totalCores)
           totalRegisteredExecutors.addAndGet(-1)
