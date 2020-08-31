@@ -91,7 +91,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   private val tags: mutable.Map[TreeNodeTag[_], Any] = mutable.Map.empty
 
   protected def copyTagsFrom(other: BaseType): Unit = {
-    tags ++= other.tags
+    if (tags.isEmpty) {
+      tags ++= other.tags
+    }
   }
 
   def setTagValue[T](tag: TreeNodeTag[T], value: T): Unit = {
