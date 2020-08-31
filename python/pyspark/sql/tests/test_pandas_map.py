@@ -27,7 +27,7 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
 class MapInPandasTests(ReusedSQLTestCase):
 
     @classmethod
