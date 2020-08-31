@@ -183,5 +183,12 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
       checkEvaluation(If(b, nullLiteral, FalseLiteral), And(b, nullLiteral).eval(EmptyRow))
       checkEvaluation(If(b, nullLiteral, TrueLiteral), Or(Not(b), nullLiteral).eval(EmptyRow))
     }
+
+    // should have no effect on expressions with nullable if condition
+    assert((Factorial(5) > 100L).nullable)
+    Seq(TrueLiteral, FalseLiteral).foreach { b =>
+      checkEvaluation(If(Factorial(5) > 100L, nullLiteral, b),
+        If(Factorial(5) > 100L, nullLiteral, b).eval(EmptyRow))
+    }
  }
 }
