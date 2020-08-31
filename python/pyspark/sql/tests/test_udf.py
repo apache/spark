@@ -23,7 +23,8 @@ import unittest
 
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, Column, Row
-from pyspark.sql.functions import UserDefinedFunction, udf
+from pyspark.sql.functions import udf
+from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import StringType, IntegerType, BooleanType, DoubleType, LongType, \
     ArrayType, StructType, StructField
 from pyspark.sql.utils import AnalysisException
