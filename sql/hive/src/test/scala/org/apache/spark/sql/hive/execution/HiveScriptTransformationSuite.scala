@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.File
 import java.sql.Timestamp
 
+import org.apache.commons.io.FileUtils
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
@@ -35,6 +37,15 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
   import testImplicits._
 
   import ScriptTransformationIOSchema._
+
+  protected override def getTestResourcePath(fileName: String): String = {
+    val url = Thread.currentThread().getContextClassLoader.getResource(fileName)
+    // Copy to avoid URISyntaxException during accessing the resources in `sql/core`
+    val file = File.createTempFile("script-transformation-test", ".py")
+    file.deleteOnExit()
+    FileUtils.copyURLToFile(url, file)
+    file.getAbsolutePath
+  }
 
   override def isHive23OrSpark: Boolean = HiveUtils.isHive23
 

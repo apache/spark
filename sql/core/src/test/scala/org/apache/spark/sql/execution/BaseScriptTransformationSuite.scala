@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.File
 import java.sql.{Date, Timestamp}
 
-import org.apache.commons.io.FileUtils
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -48,15 +46,6 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   protected val uncaughtExceptionHandler = new TestUncaughtExceptionHandler
 
   private var defaultUncaughtExceptionHandler: Thread.UncaughtExceptionHandler = _
-
-  protected override def getTestResourcePath(fileName: String): String = {
-    val url = Thread.currentThread().getContextClassLoader.getResource(fileName)
-    // Copy to avoid URISyntaxException during accessing the resources in `sql/core`
-    val file = File.createTempFile("script-transformation-test", ".py")
-    file.deleteOnExit()
-    FileUtils.copyURLToFile(url, file)
-    file.getAbsolutePath
-  }
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
