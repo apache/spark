@@ -51,7 +51,7 @@ SELECT default.udaf1(int_col1) as udaf1 from t1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
+org.apache.spark.sql.AnalysisException
 Undefined function: 'udaf1'. This function is neither a registered temporary function nor a permanent function registered in the database 'default'.; line 1 pos 7
 
 
