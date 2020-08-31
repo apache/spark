@@ -1440,12 +1440,7 @@ class Analyzer(
 
         val resolvedAggExprs = a.aggregateExpressions
           .map(resolveExpressionTopDown(_, planForResolve))
-          .map {
-            // Here we want to trim StructField Alias in complex expression
-            // Only Alias(GetStructField, name) can't be trimmed since we need NamedExpression.
-            case alias@Alias(_: GetStructField, _) => alias
-            case e => trimStructFieldAlias(e).asInstanceOf[NamedExpression]
-          }
+          .map(trimNonTopLevelStructFieldAlias)
 
         a.copy(resolvedGroupingExprs, resolvedAggExprs, a.child)
 
@@ -1460,12 +1455,7 @@ class Analyzer(
 
         val resolvedAggExprs = g.aggregations
           .map(resolveExpressionTopDown(_, g))
-          .map {
-            // Here we want to trim StructField Alias in complex expression
-            // Only Alias(GetStructField, name) can't be trimmed since we need NamedExpression.
-            case alias@Alias(_: GetStructField, _) => alias
-            case e => trimStructFieldAlias(e).asInstanceOf[NamedExpression]
-          }
+          .map(trimNonTopLevelStructFieldAlias)
 
         g.copy(resolvedSelectedExprs, resolvedGroupingExprs, g.child, resolvedAggExprs)
 
@@ -1619,6 +1609,16 @@ class Analyzer(
         // count(*) has been replaced by count(1)
         case o if containsStar(o.children) =>
           failAnalysis(s"Invalid usage of '*' in expression '${o.prettyName}'")
+      }
+    }
+
+    // For aggregateExpression we need NamedExpression, so for top level Struct field
+    // Alias, we won't trim it, for non top level Struct field Alias, we need to trim
+    // it since we have trimmed groupByExpressions.
+    def trimNonTopLevelStructFieldAlias(expr: Expression): NamedExpression = {
+      expr match {
+        case alias @ Alias(_: GetStructField, _) => alias
+        case e => trimStructFieldAlias(e).asInstanceOf[NamedExpression]
       }
     }
 
