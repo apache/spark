@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans
 import org.scalactic.source
 import org.scalatest.Suite
 import org.scalatest.Tag
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.{ResolveHints, SimpleAnalyzer}
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
