@@ -826,27 +826,6 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
-  test("File table location should include both values of option `path` and `paths`") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
-      withTempPaths(3) { paths =>
-        paths.zipWithIndex.foreach { case (path, index) =>
-          Seq(index).toDF("a").write.mode("overwrite").parquet(path.getCanonicalPath)
-        }
-        val df = spark
-          .read
-          .option("path", paths.head.getCanonicalPath)
-          .parquet(paths(1).getCanonicalPath, paths(2).getCanonicalPath)
-        df.queryExecution.optimizedPlan match {
-          case PhysicalOperation(_, _, DataSourceV2ScanRelation(table: ParquetTable, _, _)) =>
-            assert(table.paths.toSet == paths.map(_.getCanonicalPath).toSet)
-          case _ =>
-            throw new AnalysisException("Can not match ParquetTable in the query.")
-        }
-        checkAnswer(df, Seq(0, 1, 2).map(Row(_)))
-      }
-    }
-  }
-
   test("SPARK-31935: Hadoop file system config should be effective in data source options") {
     Seq("parquet", "").foreach { format =>
       withSQLConf(

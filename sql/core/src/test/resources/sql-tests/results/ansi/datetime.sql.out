@@ -199,15 +199,9 @@ struct<weekday(CAST(2007-02-03 AS DATE)):int,weekday(CAST(2009-07-30 AS DATE)):i
 -- !query
 select year('1500-01-01'), month('1500-01-01'), dayOfYear('1500-01-01')
 -- !query schema
-struct<>
+struct<year(CAST(1500-01-01 AS DATE)):int,month(CAST(1500-01-01 AS DATE)):int,dayofyear(CAST(1500-01-01 AS DATE)):int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input 'year'(line 1, pos 7)
-
-== SQL ==
-select year('1500-01-01'), month('1500-01-01'), dayOfYear('1500-01-01')
--------^^^
+1500	1	1
 
 
 -- !query

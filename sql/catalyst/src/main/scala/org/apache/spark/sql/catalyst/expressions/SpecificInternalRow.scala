@@ -206,12 +206,13 @@ final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGen
   }
 
   def this(dataTypes: Seq[DataType]) = {
-    // SPARK-32550: use while loop instead of map
+    // SPARK-32550: use `dataTypes.foreach` instead of `while loop + dataTypes(i)` to ensure
+    // constant-time access of dataTypes `Seq` because it is not necessarily an `IndexSeq` that
+    // support constant-time access.
     this(new Array[MutableValue](dataTypes.length))
-    val length = values.length
     var i = 0
-    while (i < length) {
-      values(i) = dataTypeToMutableValue(dataTypes(i))
+    dataTypes.foreach { dt =>
+      values(i) = dataTypeToMutableValue(dt)
       i += 1
     }
   }

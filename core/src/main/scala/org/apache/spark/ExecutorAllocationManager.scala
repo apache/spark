@@ -279,6 +279,9 @@ private[spark] class ExecutorAllocationManager(
     numExecutorsTargetPerResourceProfileId.keys.foreach { rpId =>
       numExecutorsTargetPerResourceProfileId(rpId) = initialNumExecutors
     }
+    numExecutorsToAddPerResourceProfileId.keys.foreach { rpId =>
+      numExecutorsToAddPerResourceProfileId(rpId) = 1
+    }
     executorMonitor.reset()
   }
 
@@ -595,7 +598,7 @@ private[spark] class ExecutorAllocationManager(
     // reset the newExecutorTotal to the existing number of executors
     if (testing || executorsRemoved.nonEmpty) {
       if (decommissionEnabled) {
-        executorMonitor.executorsDecommissioned(executorsRemoved)
+        executorMonitor.executorsDecommissioned(executorsRemoved.toSeq)
       } else {
         executorMonitor.executorsKilled(executorsRemoved.toSeq)
       }

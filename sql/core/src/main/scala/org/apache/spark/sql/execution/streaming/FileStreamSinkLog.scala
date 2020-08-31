@@ -100,7 +100,5 @@ class FileStreamSinkLog(
 
 object FileStreamSinkLog {
   val VERSION = 1
-  // TODO: SPARK-32648 This action hasn't been used from the introduction, better to remove this.
-  val DELETE_ACTION = "delete"
   val ADD_ACTION = "add"
 }
