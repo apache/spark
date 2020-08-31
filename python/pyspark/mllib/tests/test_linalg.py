@@ -22,8 +22,10 @@ from numpy import array, array_equal, zeros, arange, tile, ones, inf
 
 import pyspark.ml.linalg as newlinalg
 from pyspark.serializers import PickleSerializer
-from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector, \
+from pyspark.mllib.linalg import (  # type: ignore[attr-defined]
+    Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,
     DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT
+)
 from pyspark.mllib.linalg.distributed import RowMatrix, IndexedRowMatrix
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.sql import Row
