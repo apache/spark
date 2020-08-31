@@ -1400,19 +1400,20 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
         ExecutorLostFailure("2", true, Some("Lost executor")), tasks(3), new ExecutorMetrics,
         null))
 
-      val esummary = store.view(classOf[ExecutorStageSummaryWrapper]).asScala.map(_.info)
-      esummary.foreach { execSummary =>
-        assert(execSummary.failedTasks === 1)
-        assert(execSummary.succeededTasks === 1)
-        assert(execSummary.killedTasks === 0)
+      val allExecutorStageSummary = store.view(classOf[ExecutorStageSummaryWrapper]).asScala.map(_
+        .info)
+      allExecutorStageSummary.foreach { executorStageSummary =>
+        assert(executorStageSummary.failedTasks === 1)
+        assert(executorStageSummary.succeededTasks === 1)
+        assert(executorStageSummary.killedTasks === 0)
       }
 
       val allExecutorSummary = store.view(classOf[ExecutorSummaryWrapper]).asScala.map(_.info)
       assert(allExecutorSummary.size === 2)
-      allExecutorSummary.foreach { allExecSummary =>
-        assert(allExecSummary.failedTasks === 1)
-        assert(allExecSummary.activeTasks === 0)
-        assert(allExecSummary.completedTasks === 1)
+      allExecutorSummary.foreach { executorSummary =>
+        assert(executorSummary.failedTasks === 1)
+        assert(executorSummary.activeTasks === 0)
+        assert(executorSummary.completedTasks === 1)
       }
       store.delete(classOf[ExecutorSummaryWrapper], "1")
       store.delete(classOf[ExecutorSummaryWrapper], "2")
