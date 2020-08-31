@@ -20,7 +20,7 @@ import numpy as np
 from pyspark.ml import Estimator, Model, Transformer, UnaryTransformer
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.util import DefaultParamsReadable, DefaultParamsWritable
-from pyspark.ml.wrapper import _java2py
+from pyspark.ml.wrapper import _java2py  # type: ignore[attr-defined]
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import DoubleType
 from pyspark.testing.utils import ReusedPySparkTestCase as PySparkTestCase

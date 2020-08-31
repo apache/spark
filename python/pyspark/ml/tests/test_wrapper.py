@@ -21,7 +21,7 @@ import py4j
 
 from pyspark.ml.linalg import DenseVector, Vectors
 from pyspark.ml.regression import LinearRegression
-from pyspark.ml.wrapper import _java2py, _py2java, JavaParams, JavaWrapper
+from pyspark.ml.wrapper import _java2py, _py2java, JavaParams, JavaWrapper  # type: ignore[attr-defined]
 from pyspark.testing.mllibutils import MLlibTestCase
 from pyspark.testing.mlutils import SparkSessionTestCase
 from pyspark.testing.utils import eventually
