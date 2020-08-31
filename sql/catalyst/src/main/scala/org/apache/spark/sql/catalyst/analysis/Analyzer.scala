@@ -1350,7 +1350,7 @@ class Analyzer(
           }
         case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
           ExtractValue(child, fieldExpr, resolver)
-        case _ => e.mapChildren(resolveExpressionTopDown(_, q, trimAlias))
+        case _ => e.mapChildren(resolveExpressionTopDown(_, q, trimAlias, isTopLevel = false))
       }
     }
 
