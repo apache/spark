@@ -1428,8 +1428,46 @@ class Analyzer(
       // SPARK-25942: Resolves aggregate expressions with `AppendColumns`'s children, instead of
       // `AppendColumns`, because `AppendColumns`'s serializer might produce conflict attribute
       // names leading to ambiguous references exception.
-      case a @ Aggregate(groupingExprs, aggExprs, appendColumns: AppendColumns) =>
-        a.mapExpressions(resolveExpressionTopDown(_, appendColumns))
+      case a: Aggregate =>
+        val planForResolve = a.child match {
+          case appendColumns: AppendColumns => appendColumns
+          case _ => a
+        }
+
+        val resolvedGroupingExprs =
+          a.groupingExpressions.map(resolveExpressionTopDown(_, planForResolve))
+            .map(trimStructFieldAlias)
+
+        val resolvedAggExprs = a.aggregateExpressions
+          .map(resolveExpressionTopDown(_, planForResolve))
+          .map {
+            // Here we want to trim StructField Alias in complex expression
+            // Only Alias(GetStructField, name) can't be trimmed since we need NamedExpression.
+            case alias@Alias(_: GetStructField, _) => alias
+            case e => trimStructFieldAlias(e).asInstanceOf[NamedExpression]
+          }
+
+        a.copy(resolvedGroupingExprs, resolvedAggExprs, a.child)
+
+      case g: GroupingSets =>
+        val resolvedSelectedExprs = g.selectedGroupByExprs
+          .map(_.map(resolveExpressionTopDown(_, g))
+            .map(trimStructFieldAlias))
+
+        val resolvedGroupingExprs = g.groupByExprs
+          .map(resolveExpressionTopDown(_, g))
+          .map(trimStructFieldAlias)
+
+        val resolvedAggExprs = g.aggregations
+          .map(resolveExpressionTopDown(_, g))
+          .map {
+            // Here we want to trim StructField Alias in complex expression
+            // Only Alias(GetStructField, name) can't be trimmed since we need NamedExpression.
+            case alias@Alias(_: GetStructField, _) => alias
+            case e => trimStructFieldAlias(e).asInstanceOf[NamedExpression]
+          }
+
+        g.copy(resolvedSelectedExprs, resolvedGroupingExprs, g.child, resolvedAggExprs)
 
       case o: OverwriteByExpression if !o.outputResolved =>
         // do not resolve expression attributes until the query attributes are resolved against the
@@ -1478,42 +1516,6 @@ class Analyzer(
 
       // Skip the having clause here, this will be handled in ResolveAggregateFunctions.
       case h: UnresolvedHaving => h
-
-      case a: Aggregate =>
-        val resolvedGroupingExprs =
-          a.groupingExpressions.map(resolveExpressionTopDown(_, a))
-            .map(CleanupAliases.trimStructFieldAlias)
-
-        val resolvedAggExprs = a.aggregateExpressions
-          .map(resolveExpressionTopDown(_, a))
-          .map {
-            // Here we want to trim StructField Alias in complex expression
-            // Only Alias(GetStructField, name) can't be trimmed since we need NamedExpression.
-            case alias@Alias(_: GetStructField, _) => alias
-            case e => CleanupAliases.trimStructFieldAlias(e).asInstanceOf[NamedExpression]
-          }
-
-        a.copy(resolvedGroupingExprs, resolvedAggExprs, a.child)
-
-      case g: GroupingSets =>
-        val resolvedSelectedExprs = g.selectedGroupByExprs
-          .map(_.map(resolveExpressionTopDown(_, g))
-            .map(CleanupAliases.trimStructFieldAlias))
-
-        val resolvedGroupingExprs = g.groupByExprs
-          .map(resolveExpressionTopDown(_, g))
-          .map(CleanupAliases.trimStructFieldAlias)
-
-        val resolvedAggExprs = g.aggregations
-          .map(resolveExpressionTopDown(_, g))
-          .map {
-            // Here we want to trim StructField Alias in complex expression
-            // Only Alias(GetStructField, name) can't be trimmed since we need NamedExpression.
-            case alias@Alias(_: GetStructField, _) => alias
-            case e => CleanupAliases.trimStructFieldAlias(e).asInstanceOf[NamedExpression]
-          }
-
-        g.copy(resolvedSelectedExprs, resolvedGroupingExprs, g.child, resolvedAggExprs)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
@@ -1617,6 +1619,25 @@ class Analyzer(
         // count(*) has been replaced by count(1)
         case o if containsStar(o.children) =>
           failAnalysis(s"Invalid usage of '*' in expression '${o.prettyName}'")
+      }
+    }
+
+    // For struct field, it will be resolve as Alias(GetStructField, name),
+    // In Aggregate/GroupingSets this behavior will cause the same struct fields
+    // in aggExprs/groupExprs/selectedGroupByExprs be treated as different ones due to different
+    // ExprIds in Alias, and stops us finding the grouping expressions in aggExprs. Here we
+    // will use this method to remove Alias with different ExprId of GetStructField
+    // in groupByAlias/selectedGroupByExprs and aggregateExpressions
+    def trimStructFieldAlias(e: Expression): Expression = {
+      var fixed = ArrayBuffer[Alias]()
+      e.transformDown {
+        case a @ Alias(Alias(struct, _), name) if struct.isInstanceOf[GetStructField] =>
+          val alias = new Alias(struct, name)(a.exprId, a.qualifier, a.explicitMetadata)
+          fixed += alias
+          alias
+        case a @ Alias(struct: GetStructField, _) if !fixed.exists(e => e eq a) =>
+          struct
+        case e => e
       }
     }
   }
@@ -3416,25 +3437,6 @@ object CleanupAliases extends Rule[LogicalPlan] {
     e.transformDown {
       case Alias(child, _) => child
       case MultiAlias(child, _) => child
-    }
-  }
-
-  // For struct field, it will be resolve as Alias(GetStructField, name),
-  // In Aggregate/GroupingSets this behavior will cause the same struct fields
-  // in aggExprs/groupExprs/selectedGroupByExprs be treated as different ones due to different
-  // ExprIds in Alias, and stops us finding the grouping expressions in aggExprs. Here we
-  // will use this method to remove Alias with different ExprId of GetStructField
-  // in groupByAlias/selectedGroupByExprs and aggregateExpressions
-  def trimStructFieldAlias(e: Expression): Expression = {
-    var fixed = ArrayBuffer[Alias]()
-    e.transformDown {
-      case a @ Alias(Alias(struct, _), name) if struct.isInstanceOf[GetStructField] =>
-        val alias = new Alias(struct, name)(a.exprId, a.qualifier, a.explicitMetadata)
-        fixed += alias
-        alias
-      case a @ Alias(struct: GetStructField, _) if !fixed.exists(e => e eq a) =>
-        struct
-      case e => e
     }
   }
 
