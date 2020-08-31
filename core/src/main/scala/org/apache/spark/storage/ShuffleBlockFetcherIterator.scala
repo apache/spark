@@ -523,12 +523,12 @@ final class ShuffleBlockFetcherIterator(
     // We use `forall` because once there's a failed block fetch, `fetchHostLocalBlock` will put
     // a `FailureFetchResult` immediately to the `results`. So there's no reason to fetch the
     // remaining blocks.
-    val allFetchSucceed = bmIdToBlocks.forall { case (bmId, blockInfos) =>
+    val allFetchSucceeded = bmIdToBlocks.forall { case (bmId, blockInfos) =>
       blockInfos.forall { case (blockId, _, mapIndex) =>
         fetchHostLocalBlock(blockId, mapIndex, localDirsByExecId(bmId.executorId), bmId)
       }
     }
-    if (allFetchSucceed) {
+    if (allFetchSucceeded) {
       logDebug(s"Got host-local blocks from ${bmIdToBlocks.keys.mkString(", ")} " +
         s"(${if (cached) "with" else "without"} cached executors' dir) " +
         s"in ${Utils.getUsedTimeNs(startTimeNs)}")
