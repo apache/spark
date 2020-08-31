@@ -15,19 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.optimizer
+package org.apache.spark.sql.catalyst.optimizer.joinReorder
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
-import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
+import org.apache.spark.sql.catalyst.optimizer._
+import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.statsEstimation.{StatsEstimationTestBase, StatsTestPlan}
 import org.apache.spark.sql.internal.SQLConf._
 
 
-class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBase {
+class StarJoinCostBasedReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestBase {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -220,7 +221,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
         .join(t1, Inner, Some(nameToAttr("f1_c1") === nameToAttr("t1_c1")))
         .select(outputsOf(f1, t1, t2, d1, d2): _*)
 
-    assertEqualPlansForJoinReorder(Optimize, query, expected)
+    assertEqualPlans(Optimize, query, expected)
   }
 
   test("Test 2: Star with a linear branch") {
@@ -259,7 +260,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
         .join(t1, Inner, Some(nameToAttr("t1_c1") === nameToAttr("f1_c1")))
         .select(outputsOf(d1, t1, t2, f1, d2, t3): _*)
 
-    assertEqualPlansForJoinReorder(Optimize, query, expected)
+    assertEqualPlans(Optimize, query, expected)
   }
 
   test("Test 3: Star with derived branches") {
@@ -301,7 +302,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
           Some(nameToAttr("t1_c2") === nameToAttr("t4_c2")))
         .select(outputsOf(d1, t1, t2, t3, t4, f1, d2): _*)
 
-    assertEqualPlansForJoinReorder(Optimize, query, expected)
+    assertEqualPlans(Optimize, query, expected)
   }
 
   test("Test 4: Star with several branches") {
@@ -354,7 +355,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
           Some(nameToAttr("d2_c2") === nameToAttr("t5_c1")))
         .select(outputsOf(d1, t3, t4, f1, d3, d2, t5, t6, t1, t2): _*)
 
-    assertEqualPlansForJoinReorder(Optimize, query, expected)
+    assertEqualPlans(Optimize, query, expected)
   }
 
   test("Test 5: RI star only") {
@@ -383,7 +384,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
         .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk")))
         .select(outputsOf(d1, d2, f1, d3): _*)
 
-    assertEqualPlansForJoinReorder(Optimize, query, expected)
+    assertEqualPlans(Optimize, query, expected)
   }
 
   test("Test 6: No RI star") {
@@ -409,10 +410,6 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
         .join(t1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("t1_c1")))
         .select(outputsOf(t1, f1, t2, t3): _*)
 
-    assertEqualPlansForJoinReorder(Optimize, query, expected)
-  }
-
-  private def outputsOf(plans: LogicalPlan*): Seq[Attribute] = {
-    plans.map(_.output).reduce(_ ++ _)
+    assertEqualPlans(Optimize, query, expected)
   }
 }
