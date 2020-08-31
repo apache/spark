@@ -109,8 +109,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Row("mary"))
   }
 
-  // TODO (SPARK-32592): this doesn't work because `DataFrameReader.table` ignores the options.
-  ignore("scan with partition info") {
+  test("scan with partition info") {
     val df = spark.read
       .option("partitionColumn", "id")
       .option("lowerBound", "0")
