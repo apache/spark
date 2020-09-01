@@ -129,9 +129,9 @@ private[spark] class HostLocalDirManager(
       .build[String, Array[String]]()
 
   private[spark] def getCachedHostLocalDirs: Map[String, Array[String]] =
-   executorIdToLocalDirsCache.synchronized {
-     executorIdToLocalDirsCache.asMap().asScala.toMap
-   }
+    executorIdToLocalDirsCache.synchronized {
+      executorIdToLocalDirsCache.asMap().asScala.toMap
+    }
 
   private[spark] def getHostLocalDirs(
       host: String,
