@@ -350,11 +350,18 @@ package object config {
       .toSequence
       .createOptional
 
+  private[spark] val EXECUTOR_GPUS =
+    ConfigBuilder("spark.mesos.executor.gpus")
+      .doc("Set the hard limit on the number of gpus to request for each executor.")
+      .version("3.0.1")
+      .intConf
+      .createWithDefault(0)
+
   private[spark] val MAX_GPUS =
     ConfigBuilder("spark.mesos.gpus.max")
-      .doc("Set the maximum number GPU resources to acquire for this job. Note that executors " +
-        "will still launch when no GPU resources are found since this configuration is just an " +
-        "upper limit and not a guaranteed amount.")
+      .doc("Set the maximum number GPU resources that can be acquired for this job. " +
+        "If total number of gpus to request exceeds this setting, the new executors will not get launched. " +
+        "The executors that have obtained gpus before exceeding this setting will still be launched.")
       .version("2.1.0")
       .intConf
       .createWithDefault(0)
