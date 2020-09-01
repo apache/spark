@@ -1329,11 +1329,11 @@ class Analyzer(
      * @param e the expression need to be resolved.
      * @param q the LogicalPlan use to resolve expression's attribute from.
      * @param trimAlias whether need to trim alias of Struct field. When true, we will trim
-     *                  Struct field alias. When isTopLevel = true, we won't trim top level
+     *                  Struct field alias. When isTopLevel = true, we won't trim top-level
      *                  Struct field alias.
-     * @param isTopLevel whether need to trim top level alias of Struct field. this param is
-     *                   controlled by this method itself to make sure we won't trim top
-     *                   level Struct field alias. If need to trim top level Struct field alias,
+     * @param isTopLevel whether need to trim top-level alias of Struct field. this param is
+     *                   controlled by this method itself to make sure we won't trim top-level
+     *                   Struct field alias. If need to trim top-level Struct field alias,
      *                   we can do that outside of this method.
      * @return resolved Expression.
      */
