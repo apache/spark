@@ -80,7 +80,7 @@ private[spark] class NettyBlockTransferService(
     clientFactory = transportContext.createClientFactory(clientBootstrap.toSeq.asJava)
     server = createServer(serverBootstrap.toList)
     appId = conf.getAppId
-    logger.info(s"Server created on ${hostName}:${server.getPort}")
+    logger.info(s"Server created on $hostName:${server.getPort}")
   }
 
   /** Creates and binds the TransportServer, possibly trying multiple ports. */
