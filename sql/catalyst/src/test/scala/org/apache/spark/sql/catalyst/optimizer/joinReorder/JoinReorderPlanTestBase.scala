@@ -21,8 +21,9 @@ import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.util.sideBySide
 
 trait JoinReorderPlanTestBase extends PlanTest {
 
@@ -30,7 +31,7 @@ trait JoinReorderPlanTestBase extends PlanTest {
     plans.map(_.output).reduce(_ ++ _)
   }
 
-  def assertEqualPlans(
+  def assertEqualJoinPlans(
       optimizer: RuleExecutor[LogicalPlan],
       originalPlan: LogicalPlan,
       groundTruthBestPlan: LogicalPlan): Unit = {
@@ -47,5 +48,35 @@ trait JoinReorderPlanTestBase extends PlanTest {
 
   private def equivalentOutput(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
     normalizeExprIds(plan1).output == normalizeExprIds(plan2).output
+  }
+
+  /** Fails the test if the join order in the two plans do not match */
+  private def compareJoinOrder(plan1: LogicalPlan, plan2: LogicalPlan): Unit = {
+    val normalized1 = normalizePlan(normalizeExprIds(plan1))
+    val normalized2 = normalizePlan(normalizeExprIds(plan2))
+    if (!sameJoinPlan(normalized1, normalized2)) {
+      fail(
+        s"""
+           |== FAIL: Plans do not match ===
+           |${sideBySide(
+          rewriteNameFromAttrNullability(normalized1).treeString,
+          rewriteNameFromAttrNullability(normalized2).treeString).mkString("\n")}
+         """.stripMargin)
+    }
+  }
+
+  /** Consider symmetry for joins when comparing plans. */
+  private def sameJoinPlan(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
+    (plan1, plan2) match {
+      case (j1: Join, j2: Join) =>
+        (sameJoinPlan(j1.left, j2.left) && sameJoinPlan(j1.right, j2.right)
+          && j1.hint.leftHint == j2.hint.leftHint && j1.hint.rightHint == j2.hint.rightHint) ||
+          (sameJoinPlan(j1.left, j2.right) && sameJoinPlan(j1.right, j2.left)
+            && j1.hint.leftHint == j2.hint.rightHint && j1.hint.rightHint == j2.hint.leftHint)
+      case (p1: Project, p2: Project) =>
+        p1.projectList == p2.projectList && sameJoinPlan(p1.child, p2.child)
+      case _ =>
+        plan1 == plan2
+    }
   }
 }
