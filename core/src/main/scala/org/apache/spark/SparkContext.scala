@@ -426,10 +426,10 @@ class SparkContext(config: SparkConf) extends Logging {
       .toSeq.flatten
 
     if (master == "yarn") {
-     _conf.getOption("spark.yarn.dist.jars")
-       .foreach(jars => _clusterManagedJars = Utils.stringToSeq(jars))
-     _conf.getOption("spark.yarn.dist.files")
-       .foreach(files => _clusterManagedFiles = Utils.stringToSeq(files))
+      _conf.getOption("spark.yarn.dist.jars")
+        .foreach(jars => _clusterManagedJars = Utils.stringToSeq(jars))
+      _conf.getOption("spark.yarn.dist.files")
+        .foreach(files => _clusterManagedFiles = Utils.stringToSeq(files))
     }
 
     _eventLogDir =
