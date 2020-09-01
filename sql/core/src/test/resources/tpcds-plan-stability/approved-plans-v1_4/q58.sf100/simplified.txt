@@ -1,9 +1,9 @@
 TakeOrderedAndProject [item_id,ss_item_rev,ss_dev,cs_item_rev,cs_dev,ws_item_rev,ws_dev,average]
   WholeStageCodegen (15)
     Project [item_id,ss_item_rev,cs_item_rev,ws_item_rev]
-      BroadcastHashJoin [item_id,item_id,ws_item_rev,cs_item_rev,ss_item_rev]
+      BroadcastHashJoin [item_id,item_id,ss_item_rev,ws_item_rev,cs_item_rev]
         Project [item_id,ss_item_rev,cs_item_rev]
-          BroadcastHashJoin [item_id,item_id,ss_item_rev,cs_item_rev]
+          BroadcastHashJoin [item_id,item_id,cs_item_rev,ss_item_rev]
             Filter [ss_item_rev]
               HashAggregate [i_item_id,sum] [sum(UnscaledValue(ss_ext_sales_price)),item_id,ss_item_rev,sum]
                 InputAdapter
