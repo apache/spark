@@ -220,7 +220,9 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _cleaner: Option[ContextCleaner] = None
   private var _listenerBusStarted: Boolean = false
   private var _jars: Seq[String] = _
+  private var _clusterManagedJars: Seq[String] = Seq.empty
   private var _files: Seq[String] = _
+  private var _clusterManagedFiles: Seq[String] = Seq.empty
   private var _shutdownHookRef: AnyRef = _
   private var _statusStore: AppStatusStore = _
   private var _heartbeater: Heartbeater = _
@@ -422,6 +424,13 @@ class SparkContext(config: SparkConf) extends Logging {
     _jars = Utils.getUserJars(_conf)
     _files = _conf.getOption(FILES.key).map(_.split(",")).map(_.filter(_.nonEmpty))
       .toSeq.flatten
+
+    if (master == "yarn") {
+     _conf.getOption("spark.yarn.dist.jars")
+       .foreach(jars => _clusterManagedJars = Utils.stringToSeq(jars))
+     _conf.getOption("spark.yarn.dist.files")
+       .foreach(files => _clusterManagedFiles = Utils.stringToSeq(files))
+    }
 
     _eventLogDir =
       if (isEventLogEnabled) {
@@ -1513,7 +1522,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Returns a list of file paths that are added to resources.
    */
-  def listFiles(): Seq[String] = addedFiles.keySet.toSeq
+  def listFiles(): Seq[String] = addedFiles.keySet.toSeq ++ _clusterManagedFiles
 
   /**
    * Add a file to be downloaded with this Spark job on every node.
@@ -1934,7 +1943,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Returns a list of jar files that are added to resources.
    */
-  def listJars(): Seq[String] = addedJars.keySet.toSeq
+  def listJars(): Seq[String] = addedJars.keySet.toSeq ++ _clusterManagedJars
 
   /**
    * When stopping SparkContext inside Spark components, it's easy to cause dead-lock since Spark
