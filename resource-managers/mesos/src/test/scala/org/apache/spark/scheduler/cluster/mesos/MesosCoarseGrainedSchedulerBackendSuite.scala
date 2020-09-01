@@ -167,18 +167,65 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   }
 
 
-  test("mesos does not acquire more than spark.mesos.gpus.max") {
+  test("mesos acquires spark.mesos.executor.gpus number of gpus per executor") {
     val maxGpus = 5
-    setBackend(Map(mesosConfig.MAX_GPUS.key -> maxGpus.toString))
+    val executorGpus = 2
+    setBackend(Map(mesosConfig.MAX_GPUS.key -> maxGpus.toString,
+      mesosConfig.EXECUTOR_GPUS.key -> executorGpus.toString))
 
     val executorMemory = backend.executorMemory(sc)
-    offerResources(List(Resources(executorMemory, 1, maxGpus + 1)))
+    offerResources(List(Resources(executorMemory, 1, maxGpus)))
 
     val taskInfos = verifyTaskLaunched(driver, "o1")
     assert(taskInfos.length == 1)
 
     val gpus = backend.getResource(taskInfos.head.getResourcesList, "gpus")
-    assert(gpus == maxGpus)
+    assert(gpus == executorGpus)
+  }
+
+
+  test("mesos declines offers that cannot satisfy spark.mesos.executor.gpus") {
+    val maxGpus = 5
+    val executorGpus = 2
+    setBackend(Map(mesosConfig.MAX_GPUS.key -> maxGpus.toString,
+      mesosConfig.EXECUTOR_GPUS.key -> executorGpus.toString))
+
+    val executorMemory = backend.executorMemory(sc)
+    offerResources(List(Resources(executorMemory, 1, 1)))
+    verifyDeclinedOffer(driver, createOfferId("o1"))
+  }
+
+
+  test("mesos declines offers where spark.mesos.gpus.max less than spark.mesos.executor.gpus") {
+    val maxGpus = 2
+    val executorGpus = 5
+    setBackend(Map(mesosConfig.MAX_GPUS.key -> maxGpus.toString,
+      mesosConfig.EXECUTOR_GPUS.key -> executorGpus.toString))
+
+    val executorMemory = backend.executorMemory(sc)
+    offerResources(List(Resources(executorMemory, 1, 5)))
+    verifyDeclinedOffer(driver, createOfferId("o1"))
+  }
+
+
+  test("mesos declines offers that exceed spark.mesos.gpus.max") {
+    val maxGpus = 5
+    val executorGpus = 2
+    setBackend(Map(mesosConfig.MAX_GPUS.key -> maxGpus.toString,
+      mesosConfig.EXECUTOR_GPUS.key -> executorGpus.toString))
+
+    val executorMemory = backend.executorMemory(sc)
+    offerResources(List(Resources(executorMemory, 1, 2),
+      Resources(executorMemory, 1, 2),
+      Resources(executorMemory, 1, 2)))
+
+    val taskInfos1 = verifyTaskLaunched(driver, "o1")
+    assert(backend.getResource(taskInfos1.head.getResourcesList, "gpus") == executorGpus)
+
+    val taskInfos2 = verifyTaskLaunched(driver, "o2")
+    assert(backend.getResource(taskInfos2.head.getResourcesList, "gpus") == executorGpus)
+
+    verifyDeclinedOffer(driver, createOfferId("o3"))
   }
 
 
