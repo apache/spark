@@ -92,7 +92,13 @@ class HostLocalShuffleReadingSuite extends SparkFunSuite with Matchers with Loca
       sc.env.blockManager.blockStoreClient.getClass should equal(blockStoreClientClass)
 
       val rdd = sc.parallelize(0 until 1000, 10)
-        .map(i => (i, 1)).reduceByKey(_ + _)
+        .map { i =>
+          SparkEnv.get.blockManager.hostLocalDirManager.map { localDirManager =>
+            // No shuffle fetch yet. So the cache must be empty
+            assert(localDirManager.getCachedHostLocalDirs.isEmpty)
+          }
+         (i, 1)
+        }.reduceByKey(_ + _)
 
       // raise a job and trigger the shuffle fetching during the job
       assert(rdd.count() === 1000)
@@ -113,14 +119,17 @@ class HostLocalShuffleReadingSuite extends SparkFunSuite with Matchers with Loca
         handler.applicationRemoved(sc.conf.getAppId, false /* cleanupLocalDirs */)
       }
 
-      val (localBytesRead, remoteBytesRead) = rdd.map { case (_, _) =>
+      val (local, remote) = rdd.map { case (_, _) =>
         val shuffleReadMetrics = TaskContext.get().taskMetrics().shuffleReadMetrics
-        (shuffleReadMetrics.localBytesRead, shuffleReadMetrics.remoteBytesRead)
+        ((shuffleReadMetrics.localBytesRead, shuffleReadMetrics.localBlocksFetched),
+        (shuffleReadMetrics.remoteBytesRead, shuffleReadMetrics.remoteBlocksFetched))
       }.collect().unzip
       // Spark should read the shuffle data locally from the cached directories on the same host,
       // so there's no remote fetching at all.
-      assert(localBytesRead.sum > 0)
-      assert(remoteBytesRead.sum === 0)
+      val (localBytesRead, localBlocksFetched) = local.unzip
+      val (remoteBytesRead, remoteBlocksFetched) = remote.unzip
+      assert(localBytesRead.sum > 0 && localBlocksFetched.sum > 0)
+      assert(remoteBytesRead.sum === 0 && remoteBlocksFetched.sum === 0)
     }
   }
 }
