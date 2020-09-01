@@ -172,7 +172,7 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     assertEquivalent(If(p, nullLiteral, FalseLiteral), And(p, nullLiteral))
     assertEquivalent(If(p, nullLiteral, TrueLiteral), Or(IsNotNull('a), nullLiteral))
     assertEquivalent(If(p, FalseLiteral, nullLiteral), And(IsNotNull('a), nullLiteral))
-    assertEquivalent(If(p, TrueLiteral, nullLiteral), Or(IsNull('a), nullLiteral))
+    assertEquivalent(If(p, TrueLiteral, nullLiteral), Or(p, nullLiteral))
 
     // the rule should not apply to nullable predicate
     Seq(TrueLiteral, FalseLiteral).foreach { b =>
