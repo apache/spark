@@ -1325,44 +1325,50 @@ class Analyzer(
      *
      * Note : In this routine, the unresolved attributes are resolved from the input plan's
      * children attributes.
-     *
-     * @param e the expression need to be resolved.
-     * @param q the LogicalPlan whose children are used to resolve expression's attribute.
-     * @param trimAlias whether need to trim alias of Struct field. When true, we will trim
-     *                  Struct field alias. When isTopLevel = true, we won't trim top-level
-     *                  Struct field alias.
-     * @param isTopLevel whether need to trim top-level alias of Struct field. this param is
-     *                   controlled by this method itself to make sure we won't trim top-level
-     *                   Struct field alias. If need to trim top-level Struct field alias,
-     *                   we can do that outside of this method.
-     * @return resolved Expression.
      */
     private def resolveExpressionTopDown(
         e: Expression,
         q: LogicalPlan,
-        trimAlias: Boolean = false,
-        isTopLevel: Boolean = true): Expression = {
-      if (e.resolved) return e
-      e match {
-        case f: LambdaFunction if !f.bound => f
-        case u @ UnresolvedAttribute(nameParts) =>
-          // Leave unchanged if resolution fails. Hopefully will be resolved next round.
-          val resolved =
-            withPosition(u) {
-              q.resolveChildren(nameParts, resolver)
-                .orElse(resolveLiteralFunction(nameParts, u, q))
-                .getOrElse(u)
+        trimAlias: Boolean = false): Expression = {
+
+      // Explain for param trimAlias and isTopLevel:
+      //  1. trimAlias = false:
+      //    We won't trim Struct Field alias.
+      //  2. trimAlias = true && isTopLevel = false:
+      //    We will trim all Struct field alias.
+      //  3. trimAlias = true && isTopLevel = true
+      //    Trim unnecessary alias of `GetStructField`. Note that, we cannot trim the alias of
+      //    top-level `GetStructField`, as we should resolve `UnresolvedAttribute` to a named
+      //    expression. The caller side can trim the alias of top-level `GetStructField` if needed.
+      def innerResolve(
+          e: Expression,
+          q: LogicalPlan,
+          trimAlias: Boolean = false,
+          isTopLevel: Boolean = true): Expression = {
+        if (e.resolved) return e
+        e match {
+          case f: LambdaFunction if !f.bound => f
+          case u @ UnresolvedAttribute(nameParts) =>
+            // Leave unchanged if resolution fails. Hopefully will be resolved next round.
+            val resolved =
+              withPosition(u) {
+                q.resolveChildren(nameParts, resolver)
+                  .orElse(resolveLiteralFunction(nameParts, u, q))
+                  .getOrElse(u)
+              }
+            val result = resolved match {
+              case Alias(s: GetStructField, _) if trimAlias && !isTopLevel => s
+              case others => others
             }
-          val result = resolved match {
-            case Alias(s: GetStructField, _) if trimAlias && !isTopLevel => s
-            case others => others
-          }
-          logDebug(s"Resolving $u to $result")
-          result
-        case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
-          ExtractValue(child, fieldExpr, resolver)
-        case _ => e.mapChildren(resolveExpressionTopDown(_, q, trimAlias, isTopLevel = false))
+            logDebug(s"Resolving $u to $result")
+            result
+          case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
+            ExtractValue(child, fieldExpr, resolver)
+          case _ => e.mapChildren(innerResolve(_, q, trimAlias, isTopLevel = false))
+        }
       }
+
+      innerResolve(e, q, trimAlias, isTopLevel = true)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
@@ -1446,6 +1452,9 @@ class Analyzer(
 
       case a: Aggregate =>
         val planForResolve = a.child match {
+          // SPARK-25942: Resolves aggregate expressions with `AppendColumns`'s children, instead of
+          // `AppendColumns`, because `AppendColumns`'s serializer might produce conflict attribute
+          // names leading to ambiguous references exception.
           case appendColumns: AppendColumns => appendColumns
           case _ => a
         }
