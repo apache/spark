@@ -211,9 +211,15 @@ public class LevelDBSuite {
       CustomType2 t2 = createCustomType2(i, i);
       values.add(t2);
     }
-    assertEquals(4, values.size());
+
+    CustomType1 t = createCustomType1(3);
+    t.id = "id1"; // test count of "id" index
+    values.add(t);
+
+    assertEquals(5, values.size());
     db.writeAll(values);
-    assertEquals(2, db.count(CustomType1.class));
+    assertEquals(3, db.count(CustomType1.class));
+    assertEquals(2, db.count(CustomType1.class, "id", t.id));
     assertEquals(2, db.count(CustomType2.class));
   }
 

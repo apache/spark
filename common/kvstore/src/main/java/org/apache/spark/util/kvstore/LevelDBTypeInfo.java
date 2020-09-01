@@ -18,6 +18,7 @@
 package org.apache.spark.util.kvstore;
 
 import java.lang.reflect.Array;
+import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -314,7 +315,7 @@ class LevelDBTypeInfo {
       return entityKey;
     }
 
-    private void updateCount(WriteBatch batch, byte[] key, long delta) {
+    void updateCount(WriteBatch batch, byte[] key, long delta) {
       long updated = getCount(key) + delta;
       if (updated > 0) {
         batch.put(key, db.serializer.serialize(updated));
@@ -323,13 +324,19 @@ class LevelDBTypeInfo {
       }
     }
 
+    private void updateCount(Map<ByteBuffer, Long> counts, byte[] key, long delta) {
+      ByteBuffer buffer = ByteBuffer.wrap(key);
+      counts.put(buffer, counts.getOrDefault(buffer, 0L) + delta);
+    }
+
     private void addOrRemove(
         WriteBatch batch,
         Object entity,
         Object existing,
         byte[] data,
         byte[] naturalKey,
-        byte[] prefix) throws Exception {
+        byte[] prefix,
+        Map<ByteBuffer, Long> counts) throws Exception {
       Object indexValue = getValue(entity);
       Preconditions.checkNotNull(indexValue, "Null index value for %s in type %s.",
         name, type.getName());
@@ -376,7 +383,11 @@ class LevelDBTypeInfo {
           // end markers for the indexed value.
           if (!isChild()) {
             byte[] oldCountKey = end(null, oldIndexedValue);
-            updateCount(batch, oldCountKey, -1L);
+            if (counts != null) {
+              updateCount(counts, oldCountKey, -1L);
+            } else {
+              updateCount(batch, oldCountKey, -1L);
+            }
             needCountUpdate = true;
           }
         }
@@ -392,7 +403,11 @@ class LevelDBTypeInfo {
       if (needCountUpdate && !isChild()) {
         long delta = data != null ? 1L : -1L;
         byte[] countKey = isNatural ? end(prefix) : end(prefix, indexValue);
-        updateCount(batch, countKey, delta);
+        if (counts != null) {
+          updateCount(counts, countKey, delta);
+        } else {
+          updateCount(batch, countKey, delta);
+        }
       }
     }
 
@@ -405,6 +420,7 @@ class LevelDBTypeInfo {
      * @param data Serialized entity to store (when storing the entity, not a reference).
      * @param naturalKey The value's natural key (to avoid re-computing it for every index).
      * @param prefix The parent index prefix, if this is a child index.
+     * @param counts A hash map to update the delta of each countKey, used when calling writeAll.
      */
     void add(
         WriteBatch batch,
@@ -412,8 +428,9 @@ class LevelDBTypeInfo {
         Object existing,
         byte[] data,
         byte[] naturalKey,
-        byte[] prefix) throws Exception {
-      addOrRemove(batch, entity, existing, data, naturalKey, prefix);
+        byte[] prefix,
+        Map<ByteBuffer, Long> counts) throws Exception {
+      addOrRemove(batch, entity, existing, data, naturalKey, prefix, counts);
     }
 
     /**
@@ -429,7 +446,7 @@ class LevelDBTypeInfo {
         Object entity,
         byte[] naturalKey,
         byte[] prefix) throws Exception {
-      addOrRemove(batch, entity, null, null, naturalKey, prefix);
+      addOrRemove(batch, entity, null, null, naturalKey, prefix, null);
     }
 
     long getCount(byte[] key) {

@@ -20,6 +20,7 @@ package org.apache.spark.util.kvstore;
 import java.io.File;
 import java.io.IOException;
 import java.lang.ref.SoftReference;
+import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -155,7 +156,7 @@ public class LevelDB implements KVStore {
     try (WriteBatch batch = db().createWriteBatch()) {
       byte[] data = serializer.serialize(value);
       synchronized (ti) {
-        updateBatch(batch, value, data, value.getClass(), ti.naturalIndex(), ti.indices());
+        updateBatch(batch, value, data, value.getClass(), ti.naturalIndex(), ti.indices(), null);
         db().write(batch);
       }
     }
@@ -172,9 +173,8 @@ public class LevelDB implements KVStore {
         values.stream().collect(Collectors.groupingBy(Object::getClass)).entrySet()) {
       final Class<?> klass = entry.getKey();
 
-      // Partition the value list to a set of the 128-values batches. It can reduce the
-      // memory pressure caused by serialization and give fairness to other writing threads
-      // when writing a very large list.
+      // Partition the large value list to a set of smaller batches, to reduce the memory
+      // pressure caused by serialization and give fairness to other writing threads.
       for (List<?> batchList : Iterables.partition(entry.getValue(), 128)) {
         final Iterator<?> valueIter = batchList.iterator();
         final Iterator<byte[]> serializedValueIter;
@@ -191,12 +191,18 @@ public class LevelDB implements KVStore {
           final LevelDBTypeInfo.Index naturalIndex = ti.naturalIndex();
           final Collection<LevelDBTypeInfo.Index> indices = ti.indices();
 
-          while (valueIter.hasNext()) {
-            try (WriteBatch batch = db().createWriteBatch()) {
+          try (WriteBatch batch = db().createWriteBatch()) {
+            // A hash map to update the delta of each countKey, wrap countKey with type byte[]
+            // as ByteBuffer because ByteBuffer is comparable.
+            Map<ByteBuffer, Long> counts = new HashMap<>();
+            while (valueIter.hasNext()) {
               updateBatch(batch, valueIter.next(), serializedValueIter.next(), klass,
-                naturalIndex, indices);
-              db().write(batch);
+                naturalIndex, indices, counts);
             }
+            for (Map.Entry<ByteBuffer, Long> countEntry : counts.entrySet()) {
+              naturalIndex.updateCount(batch, countEntry.getKey().array(), countEntry.getValue());
+            }
+            db().write(batch);
           }
         }
       }
@@ -209,7 +215,8 @@ public class LevelDB implements KVStore {
       byte[] data,
       Class<?> klass,
       LevelDBTypeInfo.Index naturalIndex,
-      Collection<LevelDBTypeInfo.Index> indices) throws Exception {
+      Collection<LevelDBTypeInfo.Index> indices,
+      Map<ByteBuffer, Long> counts) throws Exception {
     Object existing;
     try {
       existing = get(naturalIndex.entityKey(null, value), klass);
@@ -221,7 +228,7 @@ public class LevelDB implements KVStore {
     byte[] naturalKey = naturalIndex.toKey(naturalIndex.getValue(value));
     for (LevelDBTypeInfo.Index idx : indices) {
       byte[] prefix = cache.getPrefix(idx);
-      idx.add(batch, value, existing, data, naturalKey, prefix);
+      idx.add(batch, value, existing, data, naturalKey, prefix, counts);
     }
   }
 
