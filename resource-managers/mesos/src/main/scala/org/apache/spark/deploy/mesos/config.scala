@@ -360,8 +360,9 @@ package object config {
   private[spark] val MAX_GPUS =
     ConfigBuilder("spark.mesos.gpus.max")
       .doc("Set the maximum number GPU resources that can be acquired for this job. " +
-        "If total number of gpus to request exceeds this setting, the new executors will not get launched. " +
-        "The executors that have obtained gpus before exceeding this setting will still be launched.")
+        "If total number of gpus to request exceeds this setting, the new executors will " +
+        "not get launched. The executors that have obtained gpus before exceeding this " +
+        "setting will still be launched.")
       .version("2.1.0")
       .intConf
       .createWithDefault(0)

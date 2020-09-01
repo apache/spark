@@ -81,7 +81,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private val useFetcherCache = conf.get(ENABLE_FETCHER_CACHE)
 
-  private val executorGpusOption = conf.getOption(EXECUTOR_GPUS.key)
+  private val executorGpusOption = conf.getOption(EXECUTOR_GPUS.key).map(_.toInt)
 
   private val maxGpus = conf.get(MAX_GPUS)
 
