@@ -42,7 +42,7 @@ class CaseInsensitiveMap[T] private (val originalMap: Map[String, T]) extends Ma
   override def +[B1 >: T](kv: (String, B1)): CaseInsensitiveMap[B1] = {
     new CaseInsensitiveMap(originalMap.filter(!_._1.equalsIgnoreCase(kv._1)) + kv)
   }
-  
+
   def ++(xs: TraversableOnce[(String, T)]): CaseInsensitiveMap[T] = {
     xs.foldLeft(this)(_ + _)
   }
