@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import sys
+
 from pyspark import keyword_only, since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql import DataFrame

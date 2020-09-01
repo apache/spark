@@ -17,6 +17,7 @@
 
 import operator
 import sys
+import uuid
 from multiprocessing.pool import ThreadPool
 
 from pyspark import since, keyword_only
