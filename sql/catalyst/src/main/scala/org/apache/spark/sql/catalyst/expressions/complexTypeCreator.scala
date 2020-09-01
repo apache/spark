@@ -548,7 +548,7 @@ case class WithFields(
     structExpr: Expression,
     names: Seq[String],
     valExprs: Seq[Expression],
-    sortColumns: Boolean = false) extends Unevaluable {
+    sortOutputColumns: Boolean = false) extends Unevaluable {
 
   assert(names.length == valExprs.length)
 
@@ -589,7 +589,7 @@ case class WithFields(
         }
     }
 
-    val finalExprs = if (sortColumns) {
+    val finalExprs = if (sortOutputColumns) {
       newExprs.sortBy(_._1).flatMap { case (name, expr) => Seq(Literal(name), expr) }
     } else {
       newExprs.flatMap { case (name, expr) => Seq(Literal(name), expr) }
@@ -616,13 +616,13 @@ object WithFields {
       col: Expression,
       fieldName: String,
       expr: Expression,
-      sortColumns: Boolean): Expression = {
+      sortOutputColumns: Boolean): Expression = {
     val nameParts = if (fieldName.isEmpty) {
       fieldName :: Nil
     } else {
       CatalystSqlParser.parseMultipartIdentifier(fieldName)
     }
-    withFieldHelper(col, nameParts, Nil, expr, sortColumns)
+    withFieldHelper(col, nameParts, Nil, expr, sortOutputColumns)
   }
 
   private def withFieldHelper(
@@ -630,10 +630,10 @@ object WithFields {
       namePartsRemaining: Seq[String],
       namePartsDone: Seq[String],
       value: Expression,
-      sortColumns: Boolean) : WithFields = {
+      sortOutputColumns: Boolean) : WithFields = {
     val name = namePartsRemaining.head
     if (namePartsRemaining.length == 1) {
-      WithFields(struct, name :: Nil, value :: Nil, sortColumns)
+      WithFields(struct, name :: Nil, value :: Nil, sortOutputColumns)
     } else {
       val newNamesRemaining = namePartsRemaining.tail
       val newNamesDone = namePartsDone :+ name
@@ -650,8 +650,8 @@ object WithFields {
         namePartsRemaining = newNamesRemaining,
         namePartsDone = newNamesDone,
         value = value,
-        sortColumns = sortColumns)
-      WithFields(struct, name :: Nil, newValue :: Nil, sortColumns)
+        sortOutputColumns = sortOutputColumns)
+      WithFields(struct, name :: Nil, newValue :: Nil, sortOutputColumns)
     }
   }
 }

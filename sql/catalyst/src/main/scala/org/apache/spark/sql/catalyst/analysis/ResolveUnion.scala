@@ -39,7 +39,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
    * `col` expression.
    */
   private def addFields(col: NamedExpression, target: StructType): Option[Expression] = {
-    require(col.dataType.isInstanceOf[StructType], "Only support StructType.")
+    assert(col.dataType.isInstanceOf[StructType], "Only support StructType.")
 
     val resolver = SQLConf.get.resolver
     val missingFields =
@@ -52,30 +52,28 @@ object ResolveUnion extends Rule[LogicalPlan] {
   }
 
   private def addFieldsInto(col: Expression, base: String, fields: Seq[StructField]): Expression = {
-    var currCol = col
-    fields.foreach { field =>
+    fields.foldLeft(col) { case (currCol, field) =>
       field.dataType match {
-        case dt: AtomicType =>
-          // We need to sort columns in result, because we might add another column in other side.
-          // E.g., we want to union two structs "a int, b long" and "a int, c string".
-          // If we don't sort, we will have "a int, b long, c string" and "a int, c string, b long",
-          // which are not compatible.
-          currCol = WithFields(currCol, s"$base${field.name}", Literal(null, dt),
-            sortColumns = true)
         case st: StructType =>
           val resolver = SQLConf.get.resolver
           val colField = currCol.dataType.asInstanceOf[StructType]
             .find(f => resolver(f.name, field.name))
           if (colField.isEmpty) {
             // The whole struct is missing. Add a null.
-            currCol = WithFields(currCol, s"$base${field.name}", Literal(null, st),
-              sortColumns = true)
+            WithFields(currCol, s"$base${field.name}", Literal(null, st),
+              sortOutputColumns = true)
           } else {
-            currCol = addFieldsInto(currCol, s"$base${field.name}.", st.fields)
+            addFieldsInto(currCol, s"$base${field.name}.", st.fields)
           }
+        case dt =>
+          // We need to sort columns in result, because we might add another column in other side.
+          // E.g., we want to union two structs "a int, b long" and "a int, c string".
+          // If we don't sort, we will have "a int, b long, c string" and "a int, c string, b long",
+          // which are not compatible.
+          WithFields(currCol, s"$base${field.name}", Literal(null, dt),
+            sortOutputColumns = true)
       }
     }
-    currCol
   }
 
   private def compareAndAddFields(
