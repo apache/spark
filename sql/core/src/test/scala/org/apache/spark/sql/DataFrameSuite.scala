@@ -2467,6 +2467,10 @@ class DataFrameSuite extends QueryTest
     val df = l.join(r, $"col2" === $"col4", "LeftOuter")
     checkAnswer(df, Row("2", "2"))
   }
+
+  test("SPARK-32761: aggregating multiple distinct CONSTANT columns") {
+     checkAnswer(sql("select count(distinct 2), count(distinct 2,3)"), Row(1, 1))
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
