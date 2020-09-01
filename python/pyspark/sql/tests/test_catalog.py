@@ -129,7 +129,8 @@ class CatalogTests(ReusedSQLTestCase):
             with self.function("func1", "some_db.func2"):
                 spark.catalog.registerFunction("temp_func", lambda x: str(x))
                 spark.sql("CREATE FUNCTION func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
-                spark.sql("CREATE FUNCTION some_db.func2 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+                spark.sql(
+                    "CREATE FUNCTION some_db.func2 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
                 newFunctions = dict((f.name, f) for f in spark.catalog.listFunctions())
                 newFunctionsSomeDb = \
                     dict((f.name, f) for f in spark.catalog.listFunctions("some_db"))
