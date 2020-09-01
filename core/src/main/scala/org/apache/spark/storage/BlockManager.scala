@@ -164,7 +164,7 @@ private[spark] class HostLocalDirManager(
  * Note that [[initialize()]] must be called before the BlockManager is usable.
  */
 private[spark] class BlockManager(
-    executorId: String,
+    val executorId: String,
     rpcEnv: RpcEnv,
     val master: BlockManagerMaster,
     val serializerManager: SerializerManager,

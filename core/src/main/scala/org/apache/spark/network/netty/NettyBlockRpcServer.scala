@@ -29,7 +29,7 @@ import org.apache.spark.network.client.{RpcResponseCallback, StreamCallbackWithI
 import org.apache.spark.network.server.{OneForOneStreamManager, RpcHandler, StreamManager}
 import org.apache.spark.network.shuffle.protocol._
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.storage.{BlockId, ShuffleBlockBatchId, ShuffleBlockId, StorageLevel}
+import org.apache.spark.storage.{BlockId, BlockManager, ShuffleBlockBatchId, ShuffleBlockId, StorageLevel}
 
 /**
  * Serves requests to open blocks by simply registering one chunk per block requested.
@@ -123,10 +123,15 @@ class NettyBlockRpcServer(
             s"${if (execNum != 1) s"incorrect executor number: $execNum (expected 1);"}"
           responseContext.onFailure(new IllegalStateException(errorMsg))
         } else {
-          val execId = getLocalDirs.execIds.head
-          val dirs = blockManager.getLocalDiskDirs
-          responseContext
-            .onSuccess(new LocalDirsForExecutors(Map(execId -> dirs).asJava).toByteBuffer)
+          val expectedExecId = blockManager.asInstanceOf[BlockManager].executorId
+          val actualExecId = getLocalDirs.execIds.head
+          if (actualExecId != expectedExecId) {
+            responseContext.onFailure(new IllegalStateException(
+              s"Invalid executor id: $actualExecId, expected $expectedExecId."))
+          } else {
+            responseContext.onSuccess(new LocalDirsForExecutors(
+              Map(actualExecId -> blockManager.getLocalDiskDirs).asJava).toByteBuffer)
+          }
         }
     }
   }
