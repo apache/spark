@@ -116,7 +116,8 @@ class MockTransformer(Transformer, HasFake):
 
 class MockUnaryTransformer(UnaryTransformer, DefaultParamsReadable, DefaultParamsWritable):
 
-    shift = Param(Params._dummy(), "shift", "The amount by which to shift " +  # type: ignore[attr-defined]
+    shift = Param(Params._dummy(),  # type: ignore[attr-defined]
+                  "shift", "The amount by which to shift " +
                   "data in a DataFrame",
                   typeConverter=TypeConverters.toFloat)
 
