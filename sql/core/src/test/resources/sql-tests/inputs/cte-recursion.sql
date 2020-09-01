@@ -6,7 +6,7 @@
 
 CREATE TEMPORARY VIEW t AS SELECT * FROM VALUES 0, 1, 2 AS t(id);
 
--- fails due to recursion isn't allowed with RECURSIVE keyword
+-- fails due to recursion isn't allowed without RECURSIVE keyword
 WITH r(level) AS (
   VALUES (0)
   UNION ALL
