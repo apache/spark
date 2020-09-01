@@ -1,0 +1,198 @@
+== Physical Plan ==
+TakeOrderedAndProject (35)
++- * HashAggregate (34)
+   +- Exchange (33)
+      +- * HashAggregate (32)
+         +- * Project (31)
+            +- * BroadcastHashJoin Inner BuildRight (30)
+               :- * Project (25)
+               :  +- * BroadcastHashJoin Inner BuildRight (24)
+               :     :- * Project (19)
+               :     :  +- * BroadcastHashJoin Inner BuildRight (18)
+               :     :     :- * Project (12)
+               :     :     :  +- SortMergeJoin LeftOuter (11)
+               :     :     :     :- * Sort (5)
+               :     :     :     :  +- Exchange (4)
+               :     :     :     :     +- * Filter (3)
+               :     :     :     :        +- * ColumnarToRow (2)
+               :     :     :     :           +- Scan parquet default.catalog_sales (1)
+               :     :     :     +- * Sort (10)
+               :     :     :        +- Exchange (9)
+               :     :     :           +- * Filter (8)
+               :     :     :              +- * ColumnarToRow (7)
+               :     :     :                 +- Scan parquet default.catalog_returns (6)
+               :     :     +- BroadcastExchange (17)
+               :     :        +- * Project (16)
+               :     :           +- * Filter (15)
+               :     :              +- * ColumnarToRow (14)
+               :     :                 +- Scan parquet default.item (13)
+               :     +- BroadcastExchange (23)
+               :        +- * Filter (22)
+               :           +- * ColumnarToRow (21)
+               :              +- Scan parquet default.date_dim (20)
+               +- BroadcastExchange (29)
+                  +- * Filter (28)
+                     +- * ColumnarToRow (27)
+                        +- Scan parquet default.warehouse (26)
+
+
+(1) Scan parquet default.catalog_sales
+Output [5]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_order_number#4, cs_sales_price#5]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/catalog_sales]
+PushedFilters: [IsNotNull(cs_warehouse_sk), IsNotNull(cs_item_sk), IsNotNull(cs_sold_date_sk)]
+ReadSchema: struct<cs_sold_date_sk:int,cs_warehouse_sk:int,cs_item_sk:int,cs_order_number:int,cs_sales_price:decimal(7,2)>
+
+(2) ColumnarToRow [codegen id : 1]
+Input [5]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_order_number#4, cs_sales_price#5]
+
+(3) Filter [codegen id : 1]
+Input [5]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_order_number#4, cs_sales_price#5]
+Condition : ((isnotnull(cs_warehouse_sk#2) AND isnotnull(cs_item_sk#3)) AND isnotnull(cs_sold_date_sk#1))
+
+(4) Exchange
+Input [5]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_order_number#4, cs_sales_price#5]
+Arguments: hashpartitioning(cs_order_number#4, cs_item_sk#3, 5), true, [id=#6]
+
+(5) Sort [codegen id : 2]
+Input [5]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_order_number#4, cs_sales_price#5]
+Arguments: [cs_order_number#4 ASC NULLS FIRST, cs_item_sk#3 ASC NULLS FIRST], false, 0
+
+(6) Scan parquet default.catalog_returns
+Output [3]: [cr_item_sk#7, cr_order_number#8, cr_refunded_cash#9]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/catalog_returns]
+PushedFilters: [IsNotNull(cr_order_number), IsNotNull(cr_item_sk)]
+ReadSchema: struct<cr_item_sk:int,cr_order_number:int,cr_refunded_cash:decimal(7,2)>
+
+(7) ColumnarToRow [codegen id : 3]
+Input [3]: [cr_item_sk#7, cr_order_number#8, cr_refunded_cash#9]
+
+(8) Filter [codegen id : 3]
+Input [3]: [cr_item_sk#7, cr_order_number#8, cr_refunded_cash#9]
+Condition : (isnotnull(cr_order_number#8) AND isnotnull(cr_item_sk#7))
+
+(9) Exchange
+Input [3]: [cr_item_sk#7, cr_order_number#8, cr_refunded_cash#9]
+Arguments: hashpartitioning(cr_order_number#8, cr_item_sk#7, 5), true, [id=#10]
+
+(10) Sort [codegen id : 4]
+Input [3]: [cr_item_sk#7, cr_order_number#8, cr_refunded_cash#9]
+Arguments: [cr_order_number#8 ASC NULLS FIRST, cr_item_sk#7 ASC NULLS FIRST], false, 0
+
+(11) SortMergeJoin
+Left keys [2]: [cs_order_number#4, cs_item_sk#3]
+Right keys [2]: [cr_order_number#8, cr_item_sk#7]
+Join condition: None
+
+(12) Project [codegen id : 8]
+Output [5]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_sales_price#5, cr_refunded_cash#9]
+Input [8]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_order_number#4, cs_sales_price#5, cr_item_sk#7, cr_order_number#8, cr_refunded_cash#9]
+
+(13) Scan parquet default.item
+Output [3]: [i_item_sk#11, i_item_id#12, i_current_price#13]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_current_price), GreaterThanOrEqual(i_current_price,0.99), LessThanOrEqual(i_current_price,1.49), IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int,i_item_id:string,i_current_price:decimal(7,2)>
+
+(14) ColumnarToRow [codegen id : 5]
+Input [3]: [i_item_sk#11, i_item_id#12, i_current_price#13]
+
+(15) Filter [codegen id : 5]
+Input [3]: [i_item_sk#11, i_item_id#12, i_current_price#13]
+Condition : (((isnotnull(i_current_price#13) AND (i_current_price#13 >= 0.99)) AND (i_current_price#13 <= 1.49)) AND isnotnull(i_item_sk#11))
+
+(16) Project [codegen id : 5]
+Output [2]: [i_item_sk#11, i_item_id#12]
+Input [3]: [i_item_sk#11, i_item_id#12, i_current_price#13]
+
+(17) BroadcastExchange
+Input [2]: [i_item_sk#11, i_item_id#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#14]
+
+(18) BroadcastHashJoin [codegen id : 8]
+Left keys [1]: [cs_item_sk#3]
+Right keys [1]: [i_item_sk#11]
+Join condition: None
+
+(19) Project [codegen id : 8]
+Output [5]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_sales_price#5, cr_refunded_cash#9, i_item_id#12]
+Input [7]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_sales_price#5, cr_refunded_cash#9, i_item_sk#11, i_item_id#12]
+
+(20) Scan parquet default.date_dim
+Output [2]: [d_date_sk#15, d_date#16]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-02-10), LessThanOrEqual(d_date,2000-04-10), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_date:date>
+
+(21) ColumnarToRow [codegen id : 6]
+Input [2]: [d_date_sk#15, d_date#16]
+
+(22) Filter [codegen id : 6]
+Input [2]: [d_date_sk#15, d_date#16]
+Condition : (((isnotnull(d_date#16) AND (d_date#16 >= 10997)) AND (d_date#16 <= 11057)) AND isnotnull(d_date_sk#15))
+
+(23) BroadcastExchange
+Input [2]: [d_date_sk#15, d_date#16]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#17]
+
+(24) BroadcastHashJoin [codegen id : 8]
+Left keys [1]: [cs_sold_date_sk#1]
+Right keys [1]: [d_date_sk#15]
+Join condition: None
+
+(25) Project [codegen id : 8]
+Output [5]: [cs_warehouse_sk#2, cs_sales_price#5, cr_refunded_cash#9, i_item_id#12, d_date#16]
+Input [7]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_sales_price#5, cr_refunded_cash#9, i_item_id#12, d_date_sk#15, d_date#16]
+
+(26) Scan parquet default.warehouse
+Output [2]: [w_warehouse_sk#18, w_state#19]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/warehouse]
+PushedFilters: [IsNotNull(w_warehouse_sk)]
+ReadSchema: struct<w_warehouse_sk:int,w_state:string>
+
+(27) ColumnarToRow [codegen id : 7]
+Input [2]: [w_warehouse_sk#18, w_state#19]
+
+(28) Filter [codegen id : 7]
+Input [2]: [w_warehouse_sk#18, w_state#19]
+Condition : isnotnull(w_warehouse_sk#18)
+
+(29) BroadcastExchange
+Input [2]: [w_warehouse_sk#18, w_state#19]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#20]
+
+(30) BroadcastHashJoin [codegen id : 8]
+Left keys [1]: [cs_warehouse_sk#2]
+Right keys [1]: [w_warehouse_sk#18]
+Join condition: None
+
+(31) Project [codegen id : 8]
+Output [5]: [cs_sales_price#5, cr_refunded_cash#9, w_state#19, i_item_id#12, d_date#16]
+Input [7]: [cs_warehouse_sk#2, cs_sales_price#5, cr_refunded_cash#9, i_item_id#12, d_date#16, w_warehouse_sk#18, w_state#19]
+
+(32) HashAggregate [codegen id : 8]
+Input [5]: [cs_sales_price#5, cr_refunded_cash#9, w_state#19, i_item_id#12, d_date#16]
+Keys [2]: [w_state#19, i_item_id#12]
+Functions [2]: [partial_sum(CASE WHEN (d_date#16 < 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#5 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#9 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END), partial_sum(CASE WHEN (d_date#16 >= 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#5 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#9 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)]
+Aggregate Attributes [4]: [sum#21, isEmpty#22, sum#23, isEmpty#24]
+Results [6]: [w_state#19, i_item_id#12, sum#25, isEmpty#26, sum#27, isEmpty#28]
+
+(33) Exchange
+Input [6]: [w_state#19, i_item_id#12, sum#25, isEmpty#26, sum#27, isEmpty#28]
+Arguments: hashpartitioning(w_state#19, i_item_id#12, 5), true, [id=#29]
+
+(34) HashAggregate [codegen id : 9]
+Input [6]: [w_state#19, i_item_id#12, sum#25, isEmpty#26, sum#27, isEmpty#28]
+Keys [2]: [w_state#19, i_item_id#12]
+Functions [2]: [sum(CASE WHEN (d_date#16 < 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#5 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#9 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END), sum(CASE WHEN (d_date#16 >= 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#5 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#9 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)]
+Aggregate Attributes [2]: [sum(CASE WHEN (d_date#16 < 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#5 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#9 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)#30, sum(CASE WHEN (d_date#16 >= 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#5 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#9 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)#31]
+Results [4]: [w_state#19, i_item_id#12, sum(CASE WHEN (d_date#16 < 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#5 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#9 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)#30 AS sales_before#32, sum(CASE WHEN (d_date#16 >= 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#5 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#9 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)#31 AS sales_after#33]
+
+(35) TakeOrderedAndProject
+Input [4]: [w_state#19, i_item_id#12, sales_before#32, sales_after#33]
+Arguments: 100, [w_state#19 ASC NULLS FIRST, i_item_id#12 ASC NULLS FIRST], [w_state#19, i_item_id#12, sales_before#32, sales_after#33]
+

@@ -18,7 +18,6 @@
 import copy
 import sys
 import os
-import re
 import operator
 import shlex
 import warnings
@@ -26,7 +25,6 @@ import heapq
 import bisect
 import random
 from subprocess import Popen, PIPE
-from tempfile import NamedTemporaryFile
 from threading import Thread
 from collections import defaultdict
 from itertools import chain
@@ -859,12 +857,18 @@ class RDD(object):
 
     def collectWithJobGroup(self, groupId, description, interruptOnCancel=False):
         """
-        .. note:: Experimental
-
         When collect rdd, use this method to specify job group.
+
+        .. note:: Deprecated in 3.1.0. Use :class:`pyspark.InheritableThread` with
+            the pinned thread mode enabled.
 
         .. versionadded:: 3.0.0
         """
+        warnings.warn(
+            "Deprecated in 3.1, Use pyspark.InheritableThread with "
+            "the pinned thread mode enabled.",
+            DeprecationWarning)
+
         with SCCallSiteSync(self.context) as css:
             sock_info = self.ctx._jvm.PythonRDD.collectAndServeWithJobGroup(
                 self._jrdd.rdd(), groupId, description, interruptOnCancel)
@@ -1560,6 +1564,7 @@ class RDD(object):
         used is :class:`pyspark.serializers.PickleSerializer`, default batch size
         is 10.
 
+        >>> from tempfile import NamedTemporaryFile
         >>> tmpFile = NamedTemporaryFile(delete=True)
         >>> tmpFile.close()
         >>> sc.parallelize([1, 2, 'spark', 'rdd']).saveAsPickleFile(tmpFile.name, 3)
@@ -1580,6 +1585,7 @@ class RDD(object):
         :param compressionCodecClass: (None by default) string i.e.
             "org.apache.hadoop.io.compress.GzipCodec"
 
+        >>> from tempfile import NamedTemporaryFile
         >>> tempFile = NamedTemporaryFile(delete=True)
         >>> tempFile.close()
         >>> sc.parallelize(range(10)).saveAsTextFile(tempFile.name)
@@ -1590,6 +1596,7 @@ class RDD(object):
 
         Empty lines are tolerated when saving to text files.
 
+        >>> from tempfile import NamedTemporaryFile
         >>> tempFile2 = NamedTemporaryFile(delete=True)
         >>> tempFile2.close()
         >>> sc.parallelize(['', 'foo', '', 'bar', '']).saveAsTextFile(tempFile2.name)
@@ -1598,6 +1605,7 @@ class RDD(object):
 
         Using compressionCodecClass
 
+        >>> from tempfile import NamedTemporaryFile
         >>> tempFile3 = NamedTemporaryFile(delete=True)
         >>> tempFile3.close()
         >>> codec = "org.apache.hadoop.io.compress.GzipCodec"

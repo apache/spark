@@ -178,7 +178,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       plan: LogicalPlan,
       cteRelations: Seq[(String, LogicalPlan)]): LogicalPlan =
     plan resolveOperatorsUp {
-      case u @ UnresolvedRelation(Seq(table)) =>
+      case u @ UnresolvedRelation(Seq(table), _) =>
         cteRelations.find(r => plan.conf.resolver(r._1, table)).map(_._2).getOrElse(u)
 
       case other =>
@@ -230,13 +230,13 @@ object CTESubstitution extends Rule[LogicalPlan] {
 
     var recursiveReferenceCount = 0
     val newPlan = plan resolveOperators {
-      case UnresolvedRelation(Seq(table)) if (resolver(cteName, table)) =>
+      case UnresolvedRelation(Seq(table), _) if (resolver(cteName, table)) =>
         recursiveReferenceCount += 1
         UnresolvedRecursiveReference(cteName, false)
 
       case other =>
         other.subqueries.foreach(checkAndTraverse(_, {
-          case UnresolvedRelation(Seq(table)) if resolver(cteName, table) =>
+          case UnresolvedRelation(Seq(table), _) if resolver(cteName, table) =>
             throw new AnalysisException(s"Recursive query $cteName should not contain recursive " +
               "references in its subquery.")
           case _ => true

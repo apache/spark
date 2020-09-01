@@ -1,0 +1,307 @@
+== Physical Plan ==
+* Sort (55)
++- Exchange (54)
+   +- * SortMergeJoin Inner (53)
+      :- * Sort (29)
+      :  +- Exchange (28)
+      :     +- * Project (27)
+      :        +- * Filter (26)
+      :           +- * HashAggregate (25)
+      :              +- Exchange (24)
+      :                 +- * HashAggregate (23)
+      :                    +- * Project (22)
+      :                       +- * BroadcastHashJoin Inner BuildRight (21)
+      :                          :- * Project (16)
+      :                          :  +- * BroadcastHashJoin Inner BuildRight (15)
+      :                          :     :- * Project (10)
+      :                          :     :  +- * BroadcastHashJoin Inner BuildRight (9)
+      :                          :     :     :- * Filter (3)
+      :                          :     :     :  +- * ColumnarToRow (2)
+      :                          :     :     :     +- Scan parquet default.inventory (1)
+      :                          :     :     +- BroadcastExchange (8)
+      :                          :     :        +- * Project (7)
+      :                          :     :           +- * Filter (6)
+      :                          :     :              +- * ColumnarToRow (5)
+      :                          :     :                 +- Scan parquet default.date_dim (4)
+      :                          :     +- BroadcastExchange (14)
+      :                          :        +- * Filter (13)
+      :                          :           +- * ColumnarToRow (12)
+      :                          :              +- Scan parquet default.item (11)
+      :                          +- BroadcastExchange (20)
+      :                             +- * Filter (19)
+      :                                +- * ColumnarToRow (18)
+      :                                   +- Scan parquet default.warehouse (17)
+      +- * Sort (52)
+         +- Exchange (51)
+            +- * Project (50)
+               +- * Filter (49)
+                  +- * HashAggregate (48)
+                     +- Exchange (47)
+                        +- * HashAggregate (46)
+                           +- * Project (45)
+                              +- * BroadcastHashJoin Inner BuildRight (44)
+                                 :- * Project (42)
+                                 :  +- * BroadcastHashJoin Inner BuildRight (41)
+                                 :     :- * Project (39)
+                                 :     :  +- * BroadcastHashJoin Inner BuildRight (38)
+                                 :     :     :- * Filter (32)
+                                 :     :     :  +- * ColumnarToRow (31)
+                                 :     :     :     +- Scan parquet default.inventory (30)
+                                 :     :     +- BroadcastExchange (37)
+                                 :     :        +- * Project (36)
+                                 :     :           +- * Filter (35)
+                                 :     :              +- * ColumnarToRow (34)
+                                 :     :                 +- Scan parquet default.date_dim (33)
+                                 :     +- ReusedExchange (40)
+                                 +- ReusedExchange (43)
+
+
+(1) Scan parquet default.inventory
+Output [4]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/inventory]
+PushedFilters: [IsNotNull(inv_item_sk), IsNotNull(inv_warehouse_sk), IsNotNull(inv_date_sk)]
+ReadSchema: struct<inv_date_sk:int,inv_item_sk:int,inv_warehouse_sk:int,inv_quantity_on_hand:int>
+
+(2) ColumnarToRow [codegen id : 4]
+Input [4]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4]
+
+(3) Filter [codegen id : 4]
+Input [4]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4]
+Condition : ((isnotnull(inv_item_sk#2) AND isnotnull(inv_warehouse_sk#3)) AND isnotnull(inv_date_sk#1))
+
+(4) Scan parquet default.date_dim
+Output [3]: [d_date_sk#5, d_year#6, d_moy#7]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,1), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+
+(5) ColumnarToRow [codegen id : 1]
+Input [3]: [d_date_sk#5, d_year#6, d_moy#7]
+
+(6) Filter [codegen id : 1]
+Input [3]: [d_date_sk#5, d_year#6, d_moy#7]
+Condition : ((((isnotnull(d_year#6) AND isnotnull(d_moy#7)) AND (d_year#6 = 2001)) AND (d_moy#7 = 1)) AND isnotnull(d_date_sk#5))
+
+(7) Project [codegen id : 1]
+Output [2]: [d_date_sk#5, d_moy#7]
+Input [3]: [d_date_sk#5, d_year#6, d_moy#7]
+
+(8) BroadcastExchange
+Input [2]: [d_date_sk#5, d_moy#7]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#8]
+
+(9) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [inv_date_sk#1]
+Right keys [1]: [d_date_sk#5]
+Join condition: None
+
+(10) Project [codegen id : 4]
+Output [4]: [inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4, d_moy#7]
+Input [6]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4, d_date_sk#5, d_moy#7]
+
+(11) Scan parquet default.item
+Output [1]: [i_item_sk#9]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int>
+
+(12) ColumnarToRow [codegen id : 2]
+Input [1]: [i_item_sk#9]
+
+(13) Filter [codegen id : 2]
+Input [1]: [i_item_sk#9]
+Condition : isnotnull(i_item_sk#9)
+
+(14) BroadcastExchange
+Input [1]: [i_item_sk#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#10]
+
+(15) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [inv_item_sk#2]
+Right keys [1]: [i_item_sk#9]
+Join condition: None
+
+(16) Project [codegen id : 4]
+Output [4]: [inv_warehouse_sk#3, inv_quantity_on_hand#4, d_moy#7, i_item_sk#9]
+Input [5]: [inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4, d_moy#7, i_item_sk#9]
+
+(17) Scan parquet default.warehouse
+Output [2]: [w_warehouse_sk#11, w_warehouse_name#12]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/warehouse]
+PushedFilters: [IsNotNull(w_warehouse_sk)]
+ReadSchema: struct<w_warehouse_sk:int,w_warehouse_name:string>
+
+(18) ColumnarToRow [codegen id : 3]
+Input [2]: [w_warehouse_sk#11, w_warehouse_name#12]
+
+(19) Filter [codegen id : 3]
+Input [2]: [w_warehouse_sk#11, w_warehouse_name#12]
+Condition : isnotnull(w_warehouse_sk#11)
+
+(20) BroadcastExchange
+Input [2]: [w_warehouse_sk#11, w_warehouse_name#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#13]
+
+(21) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [inv_warehouse_sk#3]
+Right keys [1]: [w_warehouse_sk#11]
+Join condition: None
+
+(22) Project [codegen id : 4]
+Output [5]: [inv_quantity_on_hand#4, i_item_sk#9, w_warehouse_sk#11, w_warehouse_name#12, d_moy#7]
+Input [6]: [inv_warehouse_sk#3, inv_quantity_on_hand#4, d_moy#7, i_item_sk#9, w_warehouse_sk#11, w_warehouse_name#12]
+
+(23) HashAggregate [codegen id : 4]
+Input [5]: [inv_quantity_on_hand#4, i_item_sk#9, w_warehouse_sk#11, w_warehouse_name#12, d_moy#7]
+Keys [4]: [w_warehouse_name#12, w_warehouse_sk#11, i_item_sk#9, d_moy#7]
+Functions [2]: [partial_stddev_samp(cast(inv_quantity_on_hand#4 as double)), partial_avg(cast(inv_quantity_on_hand#4 as bigint))]
+Aggregate Attributes [5]: [n#14, avg#15, m2#16, sum#17, count#18]
+Results [9]: [w_warehouse_name#12, w_warehouse_sk#11, i_item_sk#9, d_moy#7, n#19, avg#20, m2#21, sum#22, count#23]
+
+(24) Exchange
+Input [9]: [w_warehouse_name#12, w_warehouse_sk#11, i_item_sk#9, d_moy#7, n#19, avg#20, m2#21, sum#22, count#23]
+Arguments: hashpartitioning(w_warehouse_name#12, w_warehouse_sk#11, i_item_sk#9, d_moy#7, 5), true, [id=#24]
+
+(25) HashAggregate [codegen id : 5]
+Input [9]: [w_warehouse_name#12, w_warehouse_sk#11, i_item_sk#9, d_moy#7, n#19, avg#20, m2#21, sum#22, count#23]
+Keys [4]: [w_warehouse_name#12, w_warehouse_sk#11, i_item_sk#9, d_moy#7]
+Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double)), avg(cast(inv_quantity_on_hand#4 as bigint))]
+Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double))#25, avg(cast(inv_quantity_on_hand#4 as bigint))#26]
+Results [5]: [w_warehouse_sk#11, i_item_sk#9, d_moy#7, stddev_samp(cast(inv_quantity_on_hand#4 as double))#25 AS stdev#27, avg(cast(inv_quantity_on_hand#4 as bigint))#26 AS mean#28]
+
+(26) Filter [codegen id : 5]
+Input [5]: [w_warehouse_sk#11, i_item_sk#9, d_moy#7, stdev#27, mean#28]
+Condition : ((CASE WHEN (mean#28 = 0.0) THEN 0.0 ELSE (stdev#27 / mean#28) END > 1.0) AND (CASE WHEN (mean#28 = 0.0) THEN null ELSE (stdev#27 / mean#28) END > 1.5))
+
+(27) Project [codegen id : 5]
+Output [5]: [w_warehouse_sk#11, i_item_sk#9, d_moy#7, mean#28, CASE WHEN (mean#28 = 0.0) THEN null ELSE (stdev#27 / mean#28) END AS cov#29]
+Input [5]: [w_warehouse_sk#11, i_item_sk#9, d_moy#7, stdev#27, mean#28]
+
+(28) Exchange
+Input [5]: [w_warehouse_sk#11, i_item_sk#9, d_moy#7, mean#28, cov#29]
+Arguments: hashpartitioning(i_item_sk#9, w_warehouse_sk#11, 5), true, [id=#30]
+
+(29) Sort [codegen id : 6]
+Input [5]: [w_warehouse_sk#11, i_item_sk#9, d_moy#7, mean#28, cov#29]
+Arguments: [i_item_sk#9 ASC NULLS FIRST, w_warehouse_sk#11 ASC NULLS FIRST], false, 0
+
+(30) Scan parquet default.inventory
+Output [4]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/inventory]
+PushedFilters: [IsNotNull(inv_item_sk), IsNotNull(inv_warehouse_sk), IsNotNull(inv_date_sk)]
+ReadSchema: struct<inv_date_sk:int,inv_item_sk:int,inv_warehouse_sk:int,inv_quantity_on_hand:int>
+
+(31) ColumnarToRow [codegen id : 10]
+Input [4]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4]
+
+(32) Filter [codegen id : 10]
+Input [4]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4]
+Condition : ((isnotnull(inv_item_sk#2) AND isnotnull(inv_warehouse_sk#3)) AND isnotnull(inv_date_sk#1))
+
+(33) Scan parquet default.date_dim
+Output [3]: [d_date_sk#31, d_year#32, d_moy#33]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,2), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+
+(34) ColumnarToRow [codegen id : 7]
+Input [3]: [d_date_sk#31, d_year#32, d_moy#33]
+
+(35) Filter [codegen id : 7]
+Input [3]: [d_date_sk#31, d_year#32, d_moy#33]
+Condition : ((((isnotnull(d_year#32) AND isnotnull(d_moy#33)) AND (d_year#32 = 2001)) AND (d_moy#33 = 2)) AND isnotnull(d_date_sk#31))
+
+(36) Project [codegen id : 7]
+Output [2]: [d_date_sk#31, d_moy#33]
+Input [3]: [d_date_sk#31, d_year#32, d_moy#33]
+
+(37) BroadcastExchange
+Input [2]: [d_date_sk#31, d_moy#33]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#34]
+
+(38) BroadcastHashJoin [codegen id : 10]
+Left keys [1]: [inv_date_sk#1]
+Right keys [1]: [d_date_sk#31]
+Join condition: None
+
+(39) Project [codegen id : 10]
+Output [4]: [inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4, d_moy#33]
+Input [6]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4, d_date_sk#31, d_moy#33]
+
+(40) ReusedExchange [Reuses operator id: 14]
+Output [1]: [i_item_sk#35]
+
+(41) BroadcastHashJoin [codegen id : 10]
+Left keys [1]: [inv_item_sk#2]
+Right keys [1]: [i_item_sk#35]
+Join condition: None
+
+(42) Project [codegen id : 10]
+Output [4]: [inv_warehouse_sk#3, inv_quantity_on_hand#4, d_moy#33, i_item_sk#35]
+Input [5]: [inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4, d_moy#33, i_item_sk#35]
+
+(43) ReusedExchange [Reuses operator id: 20]
+Output [2]: [w_warehouse_sk#36, w_warehouse_name#37]
+
+(44) BroadcastHashJoin [codegen id : 10]
+Left keys [1]: [inv_warehouse_sk#3]
+Right keys [1]: [w_warehouse_sk#36]
+Join condition: None
+
+(45) Project [codegen id : 10]
+Output [5]: [inv_quantity_on_hand#4, i_item_sk#35, w_warehouse_sk#36, w_warehouse_name#37, d_moy#33]
+Input [6]: [inv_warehouse_sk#3, inv_quantity_on_hand#4, d_moy#33, i_item_sk#35, w_warehouse_sk#36, w_warehouse_name#37]
+
+(46) HashAggregate [codegen id : 10]
+Input [5]: [inv_quantity_on_hand#4, i_item_sk#35, w_warehouse_sk#36, w_warehouse_name#37, d_moy#33]
+Keys [4]: [w_warehouse_name#37, w_warehouse_sk#36, i_item_sk#35, d_moy#33]
+Functions [2]: [partial_stddev_samp(cast(inv_quantity_on_hand#4 as double)), partial_avg(cast(inv_quantity_on_hand#4 as bigint))]
+Aggregate Attributes [5]: [n#38, avg#39, m2#40, sum#41, count#42]
+Results [9]: [w_warehouse_name#37, w_warehouse_sk#36, i_item_sk#35, d_moy#33, n#43, avg#44, m2#45, sum#46, count#47]
+
+(47) Exchange
+Input [9]: [w_warehouse_name#37, w_warehouse_sk#36, i_item_sk#35, d_moy#33, n#43, avg#44, m2#45, sum#46, count#47]
+Arguments: hashpartitioning(w_warehouse_name#37, w_warehouse_sk#36, i_item_sk#35, d_moy#33, 5), true, [id=#48]
+
+(48) HashAggregate [codegen id : 11]
+Input [9]: [w_warehouse_name#37, w_warehouse_sk#36, i_item_sk#35, d_moy#33, n#43, avg#44, m2#45, sum#46, count#47]
+Keys [4]: [w_warehouse_name#37, w_warehouse_sk#36, i_item_sk#35, d_moy#33]
+Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double)), avg(cast(inv_quantity_on_hand#4 as bigint))]
+Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double))#49, avg(cast(inv_quantity_on_hand#4 as bigint))#50]
+Results [5]: [w_warehouse_sk#36, i_item_sk#35, d_moy#33, stddev_samp(cast(inv_quantity_on_hand#4 as double))#49 AS stdev#51, avg(cast(inv_quantity_on_hand#4 as bigint))#50 AS mean#52]
+
+(49) Filter [codegen id : 11]
+Input [5]: [w_warehouse_sk#36, i_item_sk#35, d_moy#33, stdev#51, mean#52]
+Condition : (CASE WHEN (mean#52 = 0.0) THEN 0.0 ELSE (stdev#51 / mean#52) END > 1.0)
+
+(50) Project [codegen id : 11]
+Output [5]: [w_warehouse_sk#36, i_item_sk#35, d_moy#33, mean#52, CASE WHEN (mean#52 = 0.0) THEN null ELSE (stdev#51 / mean#52) END AS cov#53]
+Input [5]: [w_warehouse_sk#36, i_item_sk#35, d_moy#33, stdev#51, mean#52]
+
+(51) Exchange
+Input [5]: [w_warehouse_sk#36, i_item_sk#35, d_moy#33, mean#52, cov#53]
+Arguments: hashpartitioning(i_item_sk#35, w_warehouse_sk#36, 5), true, [id=#54]
+
+(52) Sort [codegen id : 12]
+Input [5]: [w_warehouse_sk#36, i_item_sk#35, d_moy#33, mean#52, cov#53]
+Arguments: [i_item_sk#35 ASC NULLS FIRST, w_warehouse_sk#36 ASC NULLS FIRST], false, 0
+
+(53) SortMergeJoin [codegen id : 13]
+Left keys [2]: [i_item_sk#9, w_warehouse_sk#11]
+Right keys [2]: [i_item_sk#35, w_warehouse_sk#36]
+Join condition: None
+
+(54) Exchange
+Input [10]: [w_warehouse_sk#11, i_item_sk#9, d_moy#7, mean#28, cov#29, w_warehouse_sk#36, i_item_sk#35, d_moy#33, mean#52, cov#53]
+Arguments: rangepartitioning(w_warehouse_sk#11 ASC NULLS FIRST, i_item_sk#9 ASC NULLS FIRST, d_moy#7 ASC NULLS FIRST, mean#28 ASC NULLS FIRST, cov#29 ASC NULLS FIRST, d_moy#33 ASC NULLS FIRST, mean#52 ASC NULLS FIRST, cov#53 ASC NULLS FIRST, 5), true, [id=#55]
+
+(55) Sort [codegen id : 14]
+Input [10]: [w_warehouse_sk#11, i_item_sk#9, d_moy#7, mean#28, cov#29, w_warehouse_sk#36, i_item_sk#35, d_moy#33, mean#52, cov#53]
+Arguments: [w_warehouse_sk#11 ASC NULLS FIRST, i_item_sk#9 ASC NULLS FIRST, d_moy#7 ASC NULLS FIRST, mean#28 ASC NULLS FIRST, cov#29 ASC NULLS FIRST, d_moy#33 ASC NULLS FIRST, mean#52 ASC NULLS FIRST, cov#53 ASC NULLS FIRST], true, 0
+

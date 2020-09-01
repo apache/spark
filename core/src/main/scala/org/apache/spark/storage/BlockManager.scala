@@ -628,7 +628,7 @@ private[spark] class BlockManager(
    */
   override def getLocalBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
-      logInfo(s"Getting local shuffle block ${blockId}")
+      logDebug(s"Getting local shuffle block ${blockId}")
       shuffleManager.shuffleBlockResolver.getBlockData(blockId)
     } else {
       getLocalBytes(blockId) match {
@@ -1820,6 +1820,14 @@ private[spark] class BlockManager(
       case Some(_) =>
         logDebug("Block manager already in decommissioning state")
     }
+  }
+
+  /**
+   *  Returns the last migration time and a boolean denoting if all the blocks have been migrated.
+   *  If there are any tasks running since that time the boolean may be incorrect.
+   */
+  private[spark] def lastMigrationInfo(): (Long, Boolean) = {
+    decommissioner.map(_.lastMigrationInfo()).getOrElse((0, false))
   }
 
   private[storage] def getMigratableRDDBlocks(): Seq[ReplicateBlock] =

@@ -25,7 +25,7 @@ import py4j
 
 from pyspark import SparkContext, SQLContext
 from pyspark.sql import Row, SparkSession
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StringType, StructField
 from pyspark.sql.window import Window
 from pyspark.testing.utils import ReusedPySparkTestCase
 
@@ -273,7 +273,7 @@ class SQLContextTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_context import *
+    from pyspark.sql.tests.test_context import *  # noqa: F401
 
     try:
         import xmlrunner

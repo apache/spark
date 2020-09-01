@@ -26,6 +26,9 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap, HashSet}
 import scala.util.Random
 
+import com.google.common.base.Ticker
+import com.google.common.cache.CacheBuilder
+
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.ExecutorMetrics
@@ -135,6 +138,22 @@ private[spark] class TaskSchedulerImpl(
 
   // IDs of the tasks running on each executor
   private val executorIdToRunningTaskIds = new HashMap[String, HashSet[Long]]
+
+  // We add executors here when we first get decommission notification for them. Executors can
+  // continue to run even after being asked to decommission, but they will eventually exit.
+  val executorsPendingDecommission = new HashMap[String, ExecutorDecommissionState]
+
+  // When they exit and we know of that via heartbeat failure, we will add them to this cache.
+  // This cache is consulted to know if a fetch failure is because a source executor was
+  // decommissioned.
+  lazy val decommissionedExecutorsRemoved = CacheBuilder.newBuilder()
+    .expireAfterWrite(
+      conf.get(DECOMMISSIONED_EXECUTORS_REMEMBER_AFTER_REMOVAL_TTL), TimeUnit.SECONDS)
+    .ticker(new Ticker{
+      override def read(): Long = TimeUnit.MILLISECONDS.toNanos(clock.getTimeMillis())
+    })
+    .build[String, ExecutorDecommissionState]()
+    .asMap()
 
   def runningTasksByExecutors: Map[String, Int] = synchronized {
     executorIdToRunningTaskIds.toMap.mapValues(_.size).toMap
@@ -274,7 +293,7 @@ private[spark] class TaskSchedulerImpl(
   private[scheduler] def createTaskSetManager(
       taskSet: TaskSet,
       maxTaskFailures: Int): TaskSetManager = {
-    new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt)
+    new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt, clock)
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
@@ -466,51 +485,6 @@ private[spark] class TaskSchedulerImpl(
     Some(localTaskReqAssign.toMap)
   }
 
-  // Use the resource that the resourceProfile has as the limiting resource to calculate the
-  // total number of slots available based on the current offers.
-  private def calculateAvailableSlots(
-      resourceProfileIds: Array[Int],
-      availableCpus: Array[Int],
-      availableResources: Array[Map[String, Buffer[String]]],
-      taskSet: TaskSetManager): Int = {
-    val resourceProfile = sc.resourceProfileManager.resourceProfileFromId(
-      taskSet.taskSet.resourceProfileId)
-    val offersForResourceProfile = resourceProfileIds.zipWithIndex.filter { case (id, _) =>
-      (id == resourceProfile.id)
-    }
-    val coresKnown = resourceProfile.isCoresLimitKnown
-    var limitingResource = resourceProfile.limitingResource(conf)
-    val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(resourceProfile, conf)
-
-    offersForResourceProfile.map { case (o, index) =>
-      val numTasksPerExecCores = availableCpus(index) / taskCpus
-      // if limiting resource is empty then we have no other resources, so it has to be CPU
-      if (limitingResource == ResourceProfile.CPUS || limitingResource.isEmpty) {
-        numTasksPerExecCores
-      } else {
-        val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount)
-          .getOrElse {
-            val errorMsg = "limitingResource returns from ResourceProfile " +
-              s"$resourceProfile doesn't actually contain that task resource!"
-            taskSet.abort(errorMsg)
-            throw new SparkException(errorMsg)
-          }
-        // available addresses already takes into account if there are fractional
-        // task resource requests
-        val availAddrs = availableResources(index).get(limitingResource).map(_.size).getOrElse(0)
-        val resourceLimit = (availAddrs / taskLimit).toInt
-        if (!coresKnown) {
-          // when executor cores config isn't set, we can't calculate the real limiting resource
-          // and number of tasks per executor ahead of time, so calculate it now based on what
-          // is available.
-          if (numTasksPerExecCores <= resourceLimit) numTasksPerExecCores else resourceLimit
-        } else {
-          resourceLimit
-        }
-      }
-    }.sum
-  }
-
   private def minTaskLocality(
       l1: Option[TaskLocality],
       l2: Option[TaskLocality]) : Option[TaskLocality] = {
@@ -589,9 +563,14 @@ private[spark] class TaskSchedulerImpl(
       // we only need to calculate available slots if using barrier scheduling, otherwise the
       // value is -1
       val numBarrierSlotsAvailable = if (taskSet.isBarrier) {
-        val slots = calculateAvailableSlots(resourceProfileIds, availableCpus, availableResources,
-          taskSet)
-        slots
+        val rpId = taskSet.taskSet.resourceProfileId
+        val availableResourcesAmount = availableResources.map { resourceMap =>
+          // available addresses already takes into account if there are fractional
+          // task resource requests
+          resourceMap.map { case (name, addresses) => (name, addresses.length) }
+        }
+        calculateAvailableSlots(this, conf, rpId, resourceProfileIds, availableCpus,
+          availableResourcesAmount)
       } else {
         -1
       }
@@ -662,8 +641,9 @@ private[spark] class TaskSchedulerImpl(
                   // in order to provision more executors to make them schedulable
                   if (Utils.isDynamicAllocationEnabled(conf)) {
                     if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
-                      logInfo(s"Notifying ExecutorAllocationManager to allocate more executors to" +
-                        s" schedule the unschedulable task before aborting $taskSet.")
+                      logInfo("Notifying ExecutorAllocationManager to allocate more executors to" +
+                        " schedule the unschedulable task before aborting" +
+                        " stage ${taskSet.stageId}.")
                       dagScheduler.unschedulableTaskSetAdded(taskSet.taskSet.stageId,
                         taskSet.taskSet.stageAttemptId)
                       updateUnschedulableTaskSetTimeoutAndStartAbortTimer(taskSet, taskIndex)
@@ -671,7 +651,7 @@ private[spark] class TaskSchedulerImpl(
                   } else {
                     // Abort Immediately
                     logInfo("Cannot schedule any task because of complete blacklisting. No idle" +
-                      s" executors can be found to kill. Aborting $taskSet.")
+                      s" executors can be found to kill. Aborting stage ${taskSet.stageId}.")
                     taskSet.abortSinceCompletelyBlacklisted(taskIndex)
                   }
               }
@@ -742,7 +722,7 @@ private[spark] class TaskSchedulerImpl(
     val timeout = conf.get(config.UNSCHEDULABLE_TASKSET_TIMEOUT) * 1000
     unschedulableTaskSetToExpiryTime(taskSet) = clock.getTimeMillis() + timeout
     logInfo(s"Waiting for $timeout ms for completely " +
-      s"blacklisted task to be schedulable again before aborting $taskSet.")
+      s"blacklisted task to be schedulable again before aborting stage ${taskSet.stageId}.")
     abortTimer.schedule(
       createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout)
   }
@@ -755,7 +735,7 @@ private[spark] class TaskSchedulerImpl(
         if (unschedulableTaskSetToExpiryTime.contains(taskSet) &&
             unschedulableTaskSetToExpiryTime(taskSet) <= clock.getTimeMillis()) {
           logInfo("Cannot schedule any task because of complete blacklisting. " +
-            s"Wait time for scheduling expired. Aborting $taskSet.")
+            s"Wait time for scheduling expired. Aborting stage ${taskSet.stageId}.")
           taskSet.abortSinceCompletelyBlacklisted(taskIndex)
         } else {
           this.cancel()
@@ -939,12 +919,59 @@ private[spark] class TaskSchedulerImpl(
 
   override def executorDecommission(
       executorId: String, decommissionInfo: ExecutorDecommissionInfo): Unit = {
+    synchronized {
+      // Don't bother noting decommissioning for executors that we don't know about
+      if (executorIdToHost.contains(executorId)) {
+        val oldDecomStateOpt = executorsPendingDecommission.get(executorId)
+        val newDecomState = if (oldDecomStateOpt.isEmpty) {
+          // This is the first time we are hearing of decommissioning this executor,
+          // so create a brand new state.
+          ExecutorDecommissionState(
+            clock.getTimeMillis(),
+            decommissionInfo.isHostDecommissioned)
+        } else {
+          val oldDecomState = oldDecomStateOpt.get
+          if (!oldDecomState.isHostDecommissioned && decommissionInfo.isHostDecommissioned) {
+            // Only the cluster manager is allowed to send decommission messages with
+            // isHostDecommissioned set. So the new decommissionInfo is from the cluster
+            // manager and is thus authoritative. Flip isHostDecommissioned to true but keep the old
+            // decommission start time.
+            ExecutorDecommissionState(
+              oldDecomState.startTime,
+              isHostDecommissioned = true)
+          } else {
+            oldDecomState
+          }
+        }
+        executorsPendingDecommission(executorId) = newDecomState
+      }
+    }
     rootPool.executorDecommission(executorId)
     backend.reviveOffers()
   }
 
-  override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {
+  override def getExecutorDecommissionState(executorId: String)
+    : Option[ExecutorDecommissionState] = synchronized {
+    executorsPendingDecommission
+      .get(executorId)
+      .orElse(Option(decommissionedExecutorsRemoved.get(executorId)))
+  }
+
+  override def executorLost(executorId: String, givenReason: ExecutorLossReason): Unit = {
     var failedExecutor: Option[String] = None
+    val reason = givenReason match {
+      // Handle executor process loss due to decommissioning
+      case ExecutorProcessLost(message, origWorkerLost, origCausedByApp) =>
+        val executorDecommissionState = getExecutorDecommissionState(executorId)
+        ExecutorProcessLost(
+          message,
+          // Also mark the worker lost if we know that the host was decommissioned
+          origWorkerLost || executorDecommissionState.exists(_.isHostDecommissioned),
+          // Executor loss is certainly not caused by app if we knew that this executor is being
+          // decommissioned
+          causedByApp = executorDecommissionState.isEmpty && origCausedByApp)
+      case e => e
+    }
 
     synchronized {
       if (executorIdToRunningTaskIds.contains(executorId)) {
@@ -1033,6 +1060,10 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
+
+    val decomState = executorsPendingDecommission.remove(executorId)
+    decomState.foreach(decommissionedExecutorsRemoved.put(executorId, _))
+
     if (reason != LossReasonPending) {
       executorIdToHost -= executorId
       rootPool.executorLost(executorId, host, reason)
@@ -1045,23 +1076,36 @@ private[spark] class TaskSchedulerImpl(
   }
 
   def getExecutorsAliveOnHost(host: String): Option[Set[String]] = synchronized {
-    hostToExecutors.get(host).map(_.toSet)
+    hostToExecutors.get(host).map(_.filterNot(isExecutorDecommissioned)).map(_.toSet)
   }
 
   def hasExecutorsAliveOnHost(host: String): Boolean = synchronized {
-    hostToExecutors.contains(host)
+    hostToExecutors.get(host)
+      .exists(executors => executors.exists(e => !isExecutorDecommissioned(e)))
   }
 
   def hasHostAliveOnRack(rack: String): Boolean = synchronized {
-    hostsByRack.contains(rack)
+    hostsByRack.get(rack)
+      .exists(hosts => hosts.exists(h => !isHostDecommissioned(h)))
   }
 
   def isExecutorAlive(execId: String): Boolean = synchronized {
-    executorIdToRunningTaskIds.contains(execId)
+    executorIdToRunningTaskIds.contains(execId) && !isExecutorDecommissioned(execId)
   }
 
   def isExecutorBusy(execId: String): Boolean = synchronized {
     executorIdToRunningTaskIds.get(execId).exists(_.nonEmpty)
+  }
+
+  // exposed for test
+  protected final def isExecutorDecommissioned(execId: String): Boolean =
+    getExecutorDecommissionState(execId).isDefined
+
+  // exposed for test
+  protected final def isHostDecommissioned(host: String): Boolean = {
+    hostToExecutors.get(host).exists { executors =>
+      executors.exists(e => getExecutorDecommissionState(e).exists(_.isHostDecommissioned))
+    }
   }
 
   /**
@@ -1129,6 +1173,63 @@ private[spark] class TaskSchedulerImpl(
 private[spark] object TaskSchedulerImpl {
 
   val SCHEDULER_MODE_PROPERTY = SCHEDULER_MODE.key
+
+  /**
+   * Calculate the max available task slots given the `availableCpus` and `availableResources`
+   * from a collection of ResourceProfiles. And only those ResourceProfiles who has the
+   * same id with the `rpId` can be used to calculate the task slots.
+   *
+   * @param scheduler the TaskSchedulerImpl instance
+   * @param conf SparkConf used to calculate the limiting resource and get the cpu amount per task
+   * @param rpId the target ResourceProfile id. Only those ResourceProfiles who has the same id
+   *             with it can be used to calculate the task slots.
+   * @param availableRPIds an Array of ids of the available ResourceProfiles from the executors.
+   * @param availableCpus an Array of the amount of available cpus from the executors.
+   * @param availableResources an Array of the resources map from the executors. In the resource
+   *                           map, it maps from the resource name to its amount.
+   * @return the number of max task slots
+   */
+  def calculateAvailableSlots(
+      scheduler: TaskSchedulerImpl,
+      conf: SparkConf,
+      rpId: Int,
+      availableRPIds: Array[Int],
+      availableCpus: Array[Int],
+      availableResources: Array[Map[String, Int]]): Int = {
+    val resourceProfile = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
+    val coresKnown = resourceProfile.isCoresLimitKnown
+    val (limitingResource, limitedByCpu) = {
+      val limiting = resourceProfile.limitingResource(conf)
+      // if limiting resource is empty then we have no other resources, so it has to be CPU
+      if (limiting == ResourceProfile.CPUS || limiting.isEmpty) {
+        (ResourceProfile.CPUS, true)
+      } else {
+        (limiting, false)
+      }
+    }
+    val cpusPerTask = ResourceProfile.getTaskCpusOrDefaultForProfile(resourceProfile, conf)
+    val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount).get
+
+    availableCpus.zip(availableResources).zip(availableRPIds)
+      .filter { case (_, id) => id == rpId }
+      .map { case ((cpu, resources), _) =>
+        val numTasksPerExecCores = cpu / cpusPerTask
+        if (limitedByCpu) {
+          numTasksPerExecCores
+        } else {
+          val availAddrs = resources.getOrElse(limitingResource, 0)
+          val resourceLimit = (availAddrs / taskLimit).toInt
+          // when executor cores config isn't set, we can't calculate the real limiting resource
+          // and number of tasks per executor ahead of time, so calculate it now based on what
+          // is available.
+          if (!coresKnown && numTasksPerExecCores <= resourceLimit) {
+            numTasksPerExecCores
+          } else {
+            resourceLimit
+          }
+        }
+      }.sum
+  }
 
   /**
    * Used to balance containers across hosts.

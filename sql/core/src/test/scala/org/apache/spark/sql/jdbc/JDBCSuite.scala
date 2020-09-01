@@ -853,6 +853,8 @@ class JDBCSuite extends QueryTest
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, null) === Some(StringType))
     assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_numeric", 0, md) ==
       Some(ArrayType(DecimalType.SYSTEM_DEFAULT)))
+    assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_bpchar", 64, md) ==
+      Some(ArrayType(StringType)))
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
     assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
     assert(Postgres.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
@@ -1184,7 +1186,10 @@ class JDBCSuite extends QueryTest
 
   test("SPARK-16387: Reserved SQL words are not escaped by JDBC writer") {
     val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
-    val schema = JdbcUtils.schemaString(df, "jdbc:mysql://localhost:3306/temp")
+    val schema = JdbcUtils.schemaString(
+      df.schema,
+      df.sqlContext.conf.caseSensitiveAnalysis,
+      "jdbc:mysql://localhost:3306/temp")
     assert(schema.contains("`order` TEXT"))
   }
 

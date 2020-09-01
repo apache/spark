@@ -92,6 +92,20 @@ object OrcUtils extends Logging {
     }
   }
 
+  def readCatalystSchema(
+      file: Path,
+      conf: Configuration,
+      ignoreCorruptFiles: Boolean): Option[StructType] = {
+    readSchema(file, conf, ignoreCorruptFiles) match {
+      case Some(schema) =>
+        Some(CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType])
+
+      case None =>
+        // Field names is empty or `FileFormatException` was thrown but ignoreCorruptFiles is true.
+        None
+    }
+  }
+
   /**
    * Reads ORC file schemas in multi-threaded manner, using native version of ORC.
    * This is visible for testing.
@@ -207,10 +221,16 @@ object OrcUtils extends Logging {
   }
 
   /**
-   * @return Returns the result schema string based on the canPruneCols flag.
-   *         resultSchemaString will be created using resultsSchema in case of
-   *         canPruneCols is true and for canPruneCols as false value
-   *         resultSchemaString will be created using the actual dataSchema.
+   * Returns the result schema to read from ORC file. In addition, It sets
+   * the schema string to 'orc.mapred.input.schema' so ORC reader can use later.
+   *
+   * @param canPruneCols Flag to decide whether pruned cols schema is send to resultSchema
+   *                     or to send the entire dataSchema to resultSchema.
+   * @param dataSchema   Schema of the orc files.
+   * @param resultSchema Result data schema created after pruning cols.
+   * @param partitionSchema Schema of partitions.
+   * @param conf Hadoop Configuration.
+   * @return Returns the result schema as string.
    */
   def orcResultSchemaString(
       canPruneCols: Boolean,

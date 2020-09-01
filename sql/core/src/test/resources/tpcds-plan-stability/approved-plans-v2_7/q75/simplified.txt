@@ -1,0 +1,180 @@
+TakeOrderedAndProject [curr_yr_cnt,i_brand_id,i_category_id,i_class_id,i_manufact_id,prev_year,prev_yr_cnt,sales_amt_diff,sales_cnt_diff,year]
+  WholeStageCodegen (34)
+    Project [d_year,d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sales_amt,sales_amt,sales_cnt,sales_cnt]
+      BroadcastHashJoin [i_brand_id,i_brand_id,i_category_id,i_category_id,i_class_id,i_class_id,i_manufact_id,i_manufact_id,sales_cnt,sales_cnt]
+        HashAggregate [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sum,sum] [sales_amt,sales_cnt,sum,sum,sum(UnscaledValue(sales_amt)),sum(cast(sales_cnt as bigint))]
+          InputAdapter
+            Exchange [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id] #1
+              WholeStageCodegen (16)
+                HashAggregate [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sales_amt,sales_cnt] [sum,sum,sum,sum]
+                  HashAggregate [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sales_amt,sales_cnt]
+                    InputAdapter
+                      Exchange [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sales_amt,sales_cnt] #2
+                        WholeStageCodegen (15)
+                          HashAggregate [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sales_amt,sales_cnt]
+                            InputAdapter
+                              Union
+                                WholeStageCodegen (10)
+                                  HashAggregate [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sales_amt,sales_cnt]
+                                    InputAdapter
+                                      Exchange [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sales_amt,sales_cnt] #3
+                                        WholeStageCodegen (9)
+                                          HashAggregate [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sales_amt,sales_cnt]
+                                            InputAdapter
+                                              Union
+                                                WholeStageCodegen (4)
+                                                  Project [cr_return_amount,cr_return_quantity,cs_ext_sales_price,cs_quantity,d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id]
+                                                    BroadcastHashJoin [cr_item_sk,cr_order_number,cs_item_sk,cs_order_number]
+                                                      Project [cs_ext_sales_price,cs_item_sk,cs_order_number,cs_quantity,d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id]
+                                                        BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                                                          Project [cs_ext_sales_price,cs_item_sk,cs_order_number,cs_quantity,cs_sold_date_sk,i_brand_id,i_category_id,i_class_id,i_manufact_id]
+                                                            BroadcastHashJoin [cs_item_sk,i_item_sk]
+                                                              Filter [cs_item_sk,cs_sold_date_sk]
+                                                                ColumnarToRow
+                                                                  InputAdapter
+                                                                    Scan parquet default.catalog_sales [cs_ext_sales_price,cs_item_sk,cs_order_number,cs_quantity,cs_sold_date_sk]
+                                                              InputAdapter
+                                                                BroadcastExchange #4
+                                                                  WholeStageCodegen (1)
+                                                                    Project [i_brand_id,i_category_id,i_class_id,i_item_sk,i_manufact_id]
+                                                                      Filter [i_brand_id,i_category,i_category_id,i_class_id,i_item_sk,i_manufact_id]
+                                                                        ColumnarToRow
+                                                                          InputAdapter
+                                                                            Scan parquet default.item [i_brand_id,i_category,i_category_id,i_class_id,i_item_sk,i_manufact_id]
+                                                          InputAdapter
+                                                            BroadcastExchange #5
+                                                              WholeStageCodegen (2)
+                                                                Filter [d_date_sk,d_year]
+                                                                  ColumnarToRow
+                                                                    InputAdapter
+                                                                      Scan parquet default.date_dim [d_date_sk,d_year]
+                                                      InputAdapter
+                                                        BroadcastExchange #6
+                                                          WholeStageCodegen (3)
+                                                            Filter [cr_item_sk,cr_order_number]
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet default.catalog_returns [cr_item_sk,cr_order_number,cr_return_amount,cr_return_quantity]
+                                                WholeStageCodegen (8)
+                                                  Project [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sr_return_amt,sr_return_quantity,ss_ext_sales_price,ss_quantity]
+                                                    BroadcastHashJoin [sr_item_sk,sr_ticket_number,ss_item_sk,ss_ticket_number]
+                                                      Project [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,ss_ext_sales_price,ss_item_sk,ss_quantity,ss_ticket_number]
+                                                        BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
+                                                          Project [i_brand_id,i_category_id,i_class_id,i_manufact_id,ss_ext_sales_price,ss_item_sk,ss_quantity,ss_sold_date_sk,ss_ticket_number]
+                                                            BroadcastHashJoin [i_item_sk,ss_item_sk]
+                                                              Filter [ss_item_sk,ss_sold_date_sk]
+                                                                ColumnarToRow
+                                                                  InputAdapter
+                                                                    Scan parquet default.store_sales [ss_ext_sales_price,ss_item_sk,ss_quantity,ss_sold_date_sk,ss_ticket_number]
+                                                              InputAdapter
+                                                                ReusedExchange [i_brand_id,i_category_id,i_class_id,i_item_sk,i_manufact_id] #4
+                                                          InputAdapter
+                                                            ReusedExchange [d_date_sk,d_year] #5
+                                                      InputAdapter
+                                                        BroadcastExchange #7
+                                                          WholeStageCodegen (7)
+                                                            Filter [sr_item_sk,sr_ticket_number]
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet default.store_returns [sr_item_sk,sr_return_amt,sr_return_quantity,sr_ticket_number]
+                                WholeStageCodegen (14)
+                                  Project [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,wr_return_amt,wr_return_quantity,ws_ext_sales_price,ws_quantity]
+                                    BroadcastHashJoin [wr_item_sk,wr_order_number,ws_item_sk,ws_order_number]
+                                      Project [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,ws_ext_sales_price,ws_item_sk,ws_order_number,ws_quantity]
+                                        BroadcastHashJoin [d_date_sk,ws_sold_date_sk]
+                                          Project [i_brand_id,i_category_id,i_class_id,i_manufact_id,ws_ext_sales_price,ws_item_sk,ws_order_number,ws_quantity,ws_sold_date_sk]
+                                            BroadcastHashJoin [i_item_sk,ws_item_sk]
+                                              Filter [ws_item_sk,ws_sold_date_sk]
+                                                ColumnarToRow
+                                                  InputAdapter
+                                                    Scan parquet default.web_sales [ws_ext_sales_price,ws_item_sk,ws_order_number,ws_quantity,ws_sold_date_sk]
+                                              InputAdapter
+                                                ReusedExchange [i_brand_id,i_category_id,i_class_id,i_item_sk,i_manufact_id] #4
+                                          InputAdapter
+                                            ReusedExchange [d_date_sk,d_year] #5
+                                      InputAdapter
+                                        BroadcastExchange #8
+                                          WholeStageCodegen (13)
+                                            Filter [wr_item_sk,wr_order_number]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.web_returns [wr_item_sk,wr_order_number,wr_return_amt,wr_return_quantity]
+        InputAdapter
+          BroadcastExchange #9
+            WholeStageCodegen (33)
+              HashAggregate [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sum,sum] [sales_amt,sales_cnt,sum,sum,sum(UnscaledValue(sales_amt)),sum(cast(sales_cnt as bigint))]
+                InputAdapter
+                  Exchange [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id] #10
+                    WholeStageCodegen (32)
+                      HashAggregate [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sales_amt,sales_cnt] [sum,sum,sum,sum]
+                        HashAggregate [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sales_amt,sales_cnt]
+                          InputAdapter
+                            Exchange [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sales_amt,sales_cnt] #11
+                              WholeStageCodegen (31)
+                                HashAggregate [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sales_amt,sales_cnt]
+                                  InputAdapter
+                                    Union
+                                      WholeStageCodegen (26)
+                                        HashAggregate [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sales_amt,sales_cnt]
+                                          InputAdapter
+                                            Exchange [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sales_amt,sales_cnt] #12
+                                              WholeStageCodegen (25)
+                                                HashAggregate [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sales_amt,sales_cnt]
+                                                  InputAdapter
+                                                    Union
+                                                      WholeStageCodegen (20)
+                                                        Project [cr_return_amount,cr_return_quantity,cs_ext_sales_price,cs_quantity,d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id]
+                                                          BroadcastHashJoin [cr_item_sk,cr_order_number,cs_item_sk,cs_order_number]
+                                                            Project [cs_ext_sales_price,cs_item_sk,cs_order_number,cs_quantity,d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id]
+                                                              BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                                                                Project [cs_ext_sales_price,cs_item_sk,cs_order_number,cs_quantity,cs_sold_date_sk,i_brand_id,i_category_id,i_class_id,i_manufact_id]
+                                                                  BroadcastHashJoin [cs_item_sk,i_item_sk]
+                                                                    Filter [cs_item_sk,cs_sold_date_sk]
+                                                                      ColumnarToRow
+                                                                        InputAdapter
+                                                                          Scan parquet default.catalog_sales [cs_ext_sales_price,cs_item_sk,cs_order_number,cs_quantity,cs_sold_date_sk]
+                                                                    InputAdapter
+                                                                      ReusedExchange [i_brand_id,i_category_id,i_class_id,i_item_sk,i_manufact_id] #4
+                                                                InputAdapter
+                                                                  BroadcastExchange #13
+                                                                    WholeStageCodegen (18)
+                                                                      Filter [d_date_sk,d_year]
+                                                                        ColumnarToRow
+                                                                          InputAdapter
+                                                                            Scan parquet default.date_dim [d_date_sk,d_year]
+                                                            InputAdapter
+                                                              ReusedExchange [cr_item_sk,cr_order_number,cr_return_amount,cr_return_quantity] #6
+                                                      WholeStageCodegen (24)
+                                                        Project [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,sr_return_amt,sr_return_quantity,ss_ext_sales_price,ss_quantity]
+                                                          BroadcastHashJoin [sr_item_sk,sr_ticket_number,ss_item_sk,ss_ticket_number]
+                                                            Project [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,ss_ext_sales_price,ss_item_sk,ss_quantity,ss_ticket_number]
+                                                              BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
+                                                                Project [i_brand_id,i_category_id,i_class_id,i_manufact_id,ss_ext_sales_price,ss_item_sk,ss_quantity,ss_sold_date_sk,ss_ticket_number]
+                                                                  BroadcastHashJoin [i_item_sk,ss_item_sk]
+                                                                    Filter [ss_item_sk,ss_sold_date_sk]
+                                                                      ColumnarToRow
+                                                                        InputAdapter
+                                                                          Scan parquet default.store_sales [ss_ext_sales_price,ss_item_sk,ss_quantity,ss_sold_date_sk,ss_ticket_number]
+                                                                    InputAdapter
+                                                                      ReusedExchange [i_brand_id,i_category_id,i_class_id,i_item_sk,i_manufact_id] #4
+                                                                InputAdapter
+                                                                  ReusedExchange [d_date_sk,d_year] #13
+                                                            InputAdapter
+                                                              ReusedExchange [sr_item_sk,sr_return_amt,sr_return_quantity,sr_ticket_number] #7
+                                      WholeStageCodegen (30)
+                                        Project [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,wr_return_amt,wr_return_quantity,ws_ext_sales_price,ws_quantity]
+                                          BroadcastHashJoin [wr_item_sk,wr_order_number,ws_item_sk,ws_order_number]
+                                            Project [d_year,i_brand_id,i_category_id,i_class_id,i_manufact_id,ws_ext_sales_price,ws_item_sk,ws_order_number,ws_quantity]
+                                              BroadcastHashJoin [d_date_sk,ws_sold_date_sk]
+                                                Project [i_brand_id,i_category_id,i_class_id,i_manufact_id,ws_ext_sales_price,ws_item_sk,ws_order_number,ws_quantity,ws_sold_date_sk]
+                                                  BroadcastHashJoin [i_item_sk,ws_item_sk]
+                                                    Filter [ws_item_sk,ws_sold_date_sk]
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet default.web_sales [ws_ext_sales_price,ws_item_sk,ws_order_number,ws_quantity,ws_sold_date_sk]
+                                                    InputAdapter
+                                                      ReusedExchange [i_brand_id,i_category_id,i_class_id,i_item_sk,i_manufact_id] #4
+                                                InputAdapter
+                                                  ReusedExchange [d_date_sk,d_year] #13
+                                            InputAdapter
+                                              ReusedExchange [wr_item_sk,wr_order_number,wr_return_amt,wr_return_quantity] #8
