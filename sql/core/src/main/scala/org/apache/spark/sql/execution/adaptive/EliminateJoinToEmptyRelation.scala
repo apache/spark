@@ -36,22 +36,31 @@ import org.apache.spark.sql.execution.joins.{EmptyHashedRelation, HashedRelation
  */
 object EliminateJoinToEmptyRelation extends Rule[LogicalPlan] {
 
-  private def canEliminate(plan: LogicalPlan, relation: HashedRelation): Boolean = plan match {
-    case LogicalQueryStage(_, stage: BroadcastQueryStageExec) if stage.resultOption.get().isDefined
-      && stage.broadcast.relationFuture.get().value == relation => true
-    case _ => false
+  private def canEliminate(streamedPlan: LogicalPlan,
+      buildPlan: LogicalPlan, relation: HashedRelation): Boolean = {
+    // If streamedSide of the Join is ShuffleQueryStageExec(canChangeNumPartitions== false)
+    // it can't be rewritten to EmptyRelation because the conversion will lost user specified
+    // number partition information.
+    (streamedPlan, buildPlan) match {
+      case (LogicalQueryStage(_, stage: ShuffleQueryStageExec), _)
+        if !stage.shuffle.canChangeNumPartitions => false
+      case (_, LogicalQueryStage(_, stage: BroadcastQueryStageExec))
+        if stage.resultOption.get().isDefined
+          && stage.broadcast.relationFuture.get().value == relation => true
+      case (_, _) => false
+    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDown {
     case j @ ExtractSingleColumnNullAwareAntiJoin(_, _)
-        if canEliminate(j.right, HashedRelationWithAllNullKeys) =>
+        if canEliminate(j.left, j.right, HashedRelationWithAllNullKeys) =>
       LocalRelation(j.output, data = Seq.empty, isStreaming = j.isStreaming)
 
-    case j @ Join(_, _, Inner, _, _) if canEliminate(j.left, EmptyHashedRelation) ||
-        canEliminate(j.right, EmptyHashedRelation) =>
+    case j @ Join(_, _, Inner, _, _) if canEliminate(j.right, j.left, EmptyHashedRelation) ||
+        canEliminate(j.left, j.right, EmptyHashedRelation) =>
       LocalRelation(j.output, data = Seq.empty, isStreaming = j.isStreaming)
 
-    case j @ Join(_, _, LeftSemi, _, _) if canEliminate(j.right, EmptyHashedRelation) =>
+    case j @ Join(_, _, LeftSemi, _, _) if canEliminate(j.left, j.right, EmptyHashedRelation) =>
       LocalRelation(j.output, data = Seq.empty, isStreaming = j.isStreaming)
   }
 }

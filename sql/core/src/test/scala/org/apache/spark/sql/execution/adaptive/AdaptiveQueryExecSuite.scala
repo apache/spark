@@ -24,7 +24,7 @@ import org.apache.log4j.Level
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, ConvertToLocalRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
@@ -1222,6 +1222,70 @@ class AdaptiveQueryExecSuite
         assert(join.isEmpty)
         checkNumLocalShuffleReaders(adaptivePlan)
       })
+    }
+  }
+
+  test("SPARK-32765: EliminateJoinToEmptyRelation should respect exchange behavior " +
+    "when canChangeNumPartitions == false") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
+      // exclude ConvertToLocalRelation rule make it easier for Test.
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
+      withTempView("m", "s", "pm", "ps") {
+        sql(
+          """
+            |CREATE TEMPORARY VIEW m AS SELECT * FROM VALUES
+            |  (null, 1.0),
+            |  (2, 3.0),
+            |  (4, 5.0)
+            |  AS m(a, b)
+          """.stripMargin)
+
+        sql(
+          """
+            |CREATE TEMPORARY VIEW s AS SELECT * FROM VALUES
+            |  (null, 1.0),
+            |  (2, 3.0),
+            |  (6, 7.0)
+            |  AS s(c, d)
+          """.stripMargin)
+
+        spark.table("m").repartition(77).createOrReplaceTempView("pm")
+        spark.table("s").repartition(99).createOrReplaceTempView("ps")
+
+        // The follow cases can still be converted from Join to EmptyRelation,
+        // because optimizer put Repartition node after Join node by rule
+        // RewritePredicateSubquery or PushDownLeftSemiAntiJoin, hence converted from
+        // Join to EmptyRelation does not lost user specified number partition information.
+        Seq(
+          // NAAJ streamedSide canChangeNumPartitions == false
+          "SELECT a FROM pm WHERE pm.a not in (SELECT c FROM s)",
+          // NAAJ(hand-written left anti join) streamedSide canChangeNumPartitions == false
+          "SELECT a FROM pm LEFT ANTI JOIN s ON a = c or isnull(a = c)",
+          // LeftSemi streamedSide canChangeNumPartitions == false
+          "SELECT a FROM pm LEFT SEMI JOIN (SELECT * FROM s WHERE s.d > 100) ts ON pm.a = ts.c"
+        ).foreach(query => {
+          val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+          val bhj = findTopLevelBroadcastHashJoin(plan)
+          assert(bhj.size == 1)
+          val join = findTopLevelBaseJoin(adaptivePlan)
+          assert(join.isEmpty)
+        })
+
+        Seq(
+          // Inner streamedSide(Left) canChangeNumPartitions == false
+          "SELECT /*+ broadcast(s) */a FROM pm, s WHERE pm.a = s.c and s.d > 100",
+          // Inner streamedSide(Right) canChangeNumPartitions == false
+          "SELECT /*+ broadcast(m) */ a FROM m, ps WHERE m.a = ps.c and m.b > 100"
+        ).foreach(query => {
+          val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+          val bhj = findTopLevelBroadcastHashJoin(plan)
+          assert(bhj.size == 1)
+          val join = findTopLevelBaseJoin(adaptivePlan)
+          assert(join.nonEmpty)
+        })
+      }
     }
   }
 }
