@@ -74,10 +74,10 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
   }
 
   private def unwrapCast(exp: Expression): Expression = exp match {
+    // Not a canonical form. In this case we first canonicalize the expression by swapping the
+    // literal and cast side, then process the result and swap the literal and cast again to
+    // restore the original order.
     case BinaryComparison(Literal(_, _), Cast(_, _, _)) =>
-      // Not a canonical form. In this case we first canonicalize the expression by swapping the
-      // literal and cast side, then process the result and swap the literal and cast again to
-      // restore the original order.
       def swap(e: Expression): Expression = e match {
         case GreaterThan(left, right) => LessThan(right, left)
         case GreaterThanOrEqual(left, right) => LessThanOrEqual(right, left)
@@ -87,14 +87,14 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case LessThan(left, right) => GreaterThan(right, left)
         case _ => e
       }
-
       swap(unwrapCast(swap(exp)))
 
-    case BinaryComparison(Cast(fromExp, _: IntegralType, _), Literal(value, toType: IntegralType))
+    // In case both sides have integral type, optimize the comparison by removing casts or
+    // moving cast to the literal side.
+    case be @ BinaryComparison(
+      Cast(fromExp, _: IntegralType, _), Literal(value, toType: IntegralType))
         if canImplicitlyCast(fromExp, toType) =>
-      // In case both sides have integral type, optimize the comparison by removing casts or
-      // moving cast to the literal side.
-      simplifyIntegral(exp, fromExp, toType, value)
+      simplifyIntegral(be, fromExp, toType, value)
 
     case _ => exp
   }
@@ -106,7 +106,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
    * true, this replaces the input binary comparison `exp` with simpler expressions.
    */
   private def simplifyIntegral(
-      exp: Expression,
+      exp: BinaryComparison,
       fromExp: Expression,
       toType: IntegralType,
       value: Any): Expression = {
@@ -124,7 +124,6 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       exp match {
         case EqualTo(_, _) | GreaterThan(_, _) | GreaterThanOrEqual(_, _) =>
           fromExp.falseIfNotNull
-          // falseIfNotNull(fromExp)
         case LessThan(_, _) | LessThanOrEqual(_, _) =>
           fromExp.trueIfNotNull
         case EqualNullSafe(_, _) =>
@@ -190,7 +189,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
    */
   private def canImplicitlyCast(fromExp: Expression, toType: DataType): Boolean = {
     fromExp.dataType.isInstanceOf[IntegralType] && toType.isInstanceOf[IntegralType] &&
-    Cast.canUpCast(fromExp.dataType, toType)
+      Cast.canUpCast(fromExp.dataType, toType)
   }
 
   private def getRange(dt: DataType): (Any, Any) = dt match {
