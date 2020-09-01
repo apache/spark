@@ -127,9 +127,9 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
           fromExp.falseIfNotNull
         case LessThan(_, _) | LessThanOrEqual(_, _) =>
           fromExp.trueIfNotNull
-        case EqualNullSafe(_, _) =>
-          // make sure the expression is evaluated if it is non-deterministic
-          if (exp.deterministic) FalseLiteral else exp
+        // make sure the expression is evaluated if it is non-deterministic
+        case EqualNullSafe(_, _) if exp.deterministic =>
+          FalseLiteral
         case _ => exp // impossible but safe guard, same below
       }
     } else if (maxCmp == 0) {
@@ -150,9 +150,9 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
           fromExp.trueIfNotNull
         case LessThan(_, _) | LessThanOrEqual(_, _) | EqualTo(_, _) =>
           fromExp.falseIfNotNull
-        case EqualNullSafe(_, _) =>
-          // make sure the expression is evaluated if it is non-deterministic
-          if (exp.deterministic) FalseLiteral else exp
+        // make sure the expression is evaluated if it is non-deterministic
+        case EqualNullSafe(_, _) if exp.deterministic =>
+          FalseLiteral
         case _ => exp
       }
     } else if (minCmp == 0) {
