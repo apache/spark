@@ -265,11 +265,11 @@ Condition : (((isnotnull(cd_demo_sk#34) AND isnotnull(cd_marital_status#35)) AND
 
 (47) BroadcastExchange
 Input [3]: [cd_demo_sk#34, cd_marital_status#35, cd_education_status#36]
-Arguments: HashedRelationBroadcastMode(List(input[2, string, false], input[1, string, false]),false), [id=#37]
+Arguments: HashedRelationBroadcastMode(List(input[1, string, false], input[2, string, false]),false), [id=#37]
 
 (48) BroadcastHashJoin [codegen id : 12]
-Left keys [2]: [cd_education_status#33, cd_marital_status#32]
-Right keys [2]: [cd_education_status#36, cd_marital_status#35]
+Left keys [2]: [cd_marital_status#32, cd_education_status#33]
+Right keys [2]: [cd_marital_status#35, cd_education_status#36]
 Join condition: None
 
 (49) Project [codegen id : 12]

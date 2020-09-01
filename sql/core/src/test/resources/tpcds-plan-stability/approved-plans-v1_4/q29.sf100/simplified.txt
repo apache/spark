@@ -6,12 +6,12 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_store_id,s_store_name,store_sales
           WholeStageCodegen (17)
             HashAggregate [i_item_id,i_item_desc,s_store_id,s_store_name,ss_quantity,sr_return_quantity,cs_quantity] [sum,sum,sum,sum,sum,sum]
               Project [ss_quantity,sr_return_quantity,cs_quantity,s_store_id,s_store_name,i_item_id,i_item_desc]
-                SortMergeJoin [sr_item_sk,sr_customer_sk,cs_item_sk,cs_bill_customer_sk]
+                SortMergeJoin [sr_customer_sk,sr_item_sk,cs_bill_customer_sk,cs_item_sk]
                   InputAdapter
                     WholeStageCodegen (13)
-                      Sort [sr_item_sk,sr_customer_sk]
+                      Sort [sr_customer_sk,sr_item_sk]
                         InputAdapter
-                          Exchange [sr_item_sk,sr_customer_sk] #2
+                          Exchange [sr_customer_sk,sr_item_sk] #2
                             WholeStageCodegen (12)
                               Project [ss_quantity,s_store_id,s_store_name,i_item_id,i_item_desc,sr_item_sk,sr_customer_sk,sr_return_quantity]
                                 SortMergeJoin [ss_customer_sk,ss_item_sk,ss_ticket_number,sr_customer_sk,sr_item_sk,sr_ticket_number]
@@ -84,9 +84,9 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_store_id,s_store_name,store_sales
                                                         Scan parquet default.store_returns [sr_returned_date_sk,sr_item_sk,sr_customer_sk,sr_ticket_number,sr_return_quantity]
                   InputAdapter
                     WholeStageCodegen (16)
-                      Sort [cs_item_sk,cs_bill_customer_sk]
+                      Sort [cs_bill_customer_sk,cs_item_sk]
                         InputAdapter
-                          Exchange [cs_item_sk,cs_bill_customer_sk] #10
+                          Exchange [cs_bill_customer_sk,cs_item_sk] #10
                             WholeStageCodegen (15)
                               Project [cs_bill_customer_sk,cs_item_sk,cs_quantity]
                                 BroadcastHashJoin [cs_sold_date_sk,d_date_sk]

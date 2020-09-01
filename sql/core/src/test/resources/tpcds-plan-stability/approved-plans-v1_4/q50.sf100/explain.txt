@@ -106,11 +106,11 @@ Input [16]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, s
 
 (16) Exchange
 Input [14]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_ticket_number#5, s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18]
-Arguments: hashpartitioning(cast(ss_customer_sk#3 as bigint), cast(ss_item_sk#2 as bigint), cast(ss_ticket_number#5 as bigint), 5), true, [id=#20]
+Arguments: hashpartitioning(cast(ss_ticket_number#5 as bigint), cast(ss_item_sk#2 as bigint), cast(ss_customer_sk#3 as bigint), 5), true, [id=#20]
 
 (17) Sort [codegen id : 4]
 Input [14]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_ticket_number#5, s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18]
-Arguments: [cast(ss_customer_sk#3 as bigint) ASC NULLS FIRST, cast(ss_item_sk#2 as bigint) ASC NULLS FIRST, cast(ss_ticket_number#5 as bigint) ASC NULLS FIRST], false, 0
+Arguments: [cast(ss_ticket_number#5 as bigint) ASC NULLS FIRST, cast(ss_item_sk#2 as bigint) ASC NULLS FIRST, cast(ss_customer_sk#3 as bigint) ASC NULLS FIRST], false, 0
 
 (18) Scan parquet default.date_dim
 Output [3]: [d_date_sk#21, d_year#22, d_moy#23]
@@ -159,15 +159,15 @@ Input [5]: [d_date_sk#21, sr_returned_date_sk#25, sr_item_sk#26, sr_customer_sk#
 
 (28) Exchange
 Input [4]: [sr_returned_date_sk#25, sr_item_sk#26, sr_customer_sk#27, sr_ticket_number#28]
-Arguments: hashpartitioning(sr_customer_sk#27, sr_item_sk#26, sr_ticket_number#28, 5), true, [id=#29]
+Arguments: hashpartitioning(sr_ticket_number#28, sr_item_sk#26, sr_customer_sk#27, 5), true, [id=#29]
 
 (29) Sort [codegen id : 7]
 Input [4]: [sr_returned_date_sk#25, sr_item_sk#26, sr_customer_sk#27, sr_ticket_number#28]
-Arguments: [sr_customer_sk#27 ASC NULLS FIRST, sr_item_sk#26 ASC NULLS FIRST, sr_ticket_number#28 ASC NULLS FIRST], false, 0
+Arguments: [sr_ticket_number#28 ASC NULLS FIRST, sr_item_sk#26 ASC NULLS FIRST, sr_customer_sk#27 ASC NULLS FIRST], false, 0
 
 (30) SortMergeJoin [codegen id : 8]
-Left keys [3]: [cast(ss_customer_sk#3 as bigint), cast(ss_item_sk#2 as bigint), cast(ss_ticket_number#5 as bigint)]
-Right keys [3]: [sr_customer_sk#27, sr_item_sk#26, sr_ticket_number#28]
+Left keys [3]: [cast(ss_ticket_number#5 as bigint), cast(ss_item_sk#2 as bigint), cast(ss_customer_sk#3 as bigint)]
+Right keys [3]: [sr_ticket_number#28, sr_item_sk#26, sr_customer_sk#27]
 Join condition: None
 
 (31) Project [codegen id : 8]

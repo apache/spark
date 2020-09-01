@@ -176,11 +176,11 @@ Input [7]: [s_store_sk#19, s_store_name#20, s_state#22, s_zip#23, ca_state#25, c
 
 (29) BroadcastExchange
 Input [5]: [s_store_sk#19, s_store_name#20, s_state#22, ca_state#25, ca_country#27]
-Arguments: HashedRelationBroadcastMode(List(upper(input[4, string, true]), input[0, int, true]),false), [id=#28]
+Arguments: HashedRelationBroadcastMode(List(input[0, int, true], upper(input[4, string, true])),false), [id=#28]
 
 (30) BroadcastHashJoin [codegen id : 8]
-Left keys [2]: [c_birth_country#17, ss_store_sk#3]
-Right keys [2]: [upper(ca_country#27), s_store_sk#19]
+Left keys [2]: [ss_store_sk#3, c_birth_country#17]
+Right keys [2]: [s_store_sk#19, upper(ca_country#27)]
 Join condition: None
 
 (31) Project [codegen id : 8]
@@ -189,11 +189,11 @@ Input [17]: [ss_item_sk#1, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5, i_c
 
 (32) Exchange
 Input [13]: [ss_item_sk#1, ss_ticket_number#4, ss_net_paid#5, i_current_price#7, i_size#8, i_color#9, i_units#10, i_manager_id#11, c_first_name#15, c_last_name#16, s_store_name#20, s_state#22, ca_state#25]
-Arguments: hashpartitioning(cast(ss_item_sk#1 as bigint), cast(ss_ticket_number#4 as bigint), 5), true, [id=#29]
+Arguments: hashpartitioning(cast(ss_ticket_number#4 as bigint), cast(ss_item_sk#1 as bigint), 5), true, [id=#29]
 
 (33) Sort [codegen id : 9]
 Input [13]: [ss_item_sk#1, ss_ticket_number#4, ss_net_paid#5, i_current_price#7, i_size#8, i_color#9, i_units#10, i_manager_id#11, c_first_name#15, c_last_name#16, s_store_name#20, s_state#22, ca_state#25]
-Arguments: [cast(ss_item_sk#1 as bigint) ASC NULLS FIRST, cast(ss_ticket_number#4 as bigint) ASC NULLS FIRST], false, 0
+Arguments: [cast(ss_ticket_number#4 as bigint) ASC NULLS FIRST, cast(ss_item_sk#1 as bigint) ASC NULLS FIRST], false, 0
 
 (34) Scan parquet default.store_returns
 Output [2]: [sr_item_sk#30, sr_ticket_number#31]
@@ -211,15 +211,15 @@ Condition : (isnotnull(sr_ticket_number#31) AND isnotnull(sr_item_sk#30))
 
 (37) Exchange
 Input [2]: [sr_item_sk#30, sr_ticket_number#31]
-Arguments: hashpartitioning(sr_item_sk#30, sr_ticket_number#31, 5), true, [id=#32]
+Arguments: hashpartitioning(sr_ticket_number#31, sr_item_sk#30, 5), true, [id=#32]
 
 (38) Sort [codegen id : 11]
 Input [2]: [sr_item_sk#30, sr_ticket_number#31]
-Arguments: [sr_item_sk#30 ASC NULLS FIRST, sr_ticket_number#31 ASC NULLS FIRST], false, 0
+Arguments: [sr_ticket_number#31 ASC NULLS FIRST, sr_item_sk#30 ASC NULLS FIRST], false, 0
 
 (39) SortMergeJoin [codegen id : 12]
-Left keys [2]: [cast(ss_item_sk#1 as bigint), cast(ss_ticket_number#4 as bigint)]
-Right keys [2]: [sr_item_sk#30, sr_ticket_number#31]
+Left keys [2]: [cast(ss_ticket_number#4 as bigint), cast(ss_item_sk#1 as bigint)]
+Right keys [2]: [sr_ticket_number#31, sr_item_sk#30]
 Join condition: None
 
 (40) Project [codegen id : 12]
@@ -491,11 +491,11 @@ Input [17]: [s_store_name#20, s_state#22, s_zip#23, ss_item_sk#1, ss_ticket_numb
 
 (86) Exchange
 Input [13]: [s_store_name#20, s_state#22, ss_item_sk#1, ss_ticket_number#4, ss_net_paid#5, i_current_price#7, i_size#8, i_color#9, i_units#10, i_manager_id#11, c_first_name#15, c_last_name#16, ca_state#25]
-Arguments: hashpartitioning(cast(ss_item_sk#1 as bigint), cast(ss_ticket_number#4 as bigint), 5), true, [id=#55]
+Arguments: hashpartitioning(cast(ss_ticket_number#4 as bigint), cast(ss_item_sk#1 as bigint), 5), true, [id=#55]
 
 (87) Sort [codegen id : 15]
 Input [13]: [s_store_name#20, s_state#22, ss_item_sk#1, ss_ticket_number#4, ss_net_paid#5, i_current_price#7, i_size#8, i_color#9, i_units#10, i_manager_id#11, c_first_name#15, c_last_name#16, ca_state#25]
-Arguments: [cast(ss_item_sk#1 as bigint) ASC NULLS FIRST, cast(ss_ticket_number#4 as bigint) ASC NULLS FIRST], false, 0
+Arguments: [cast(ss_ticket_number#4 as bigint) ASC NULLS FIRST, cast(ss_item_sk#1 as bigint) ASC NULLS FIRST], false, 0
 
 (88) Scan parquet default.store_returns
 Output [2]: [sr_item_sk#30, sr_ticket_number#31]
@@ -513,15 +513,15 @@ Condition : (isnotnull(sr_ticket_number#31) AND isnotnull(sr_item_sk#30))
 
 (91) Exchange
 Input [2]: [sr_item_sk#30, sr_ticket_number#31]
-Arguments: hashpartitioning(sr_item_sk#30, sr_ticket_number#31, 5), true, [id=#56]
+Arguments: hashpartitioning(sr_ticket_number#31, sr_item_sk#30, 5), true, [id=#56]
 
 (92) Sort [codegen id : 17]
 Input [2]: [sr_item_sk#30, sr_ticket_number#31]
-Arguments: [sr_item_sk#30 ASC NULLS FIRST, sr_ticket_number#31 ASC NULLS FIRST], false, 0
+Arguments: [sr_ticket_number#31 ASC NULLS FIRST, sr_item_sk#30 ASC NULLS FIRST], false, 0
 
 (93) SortMergeJoin [codegen id : 18]
-Left keys [2]: [cast(ss_item_sk#1 as bigint), cast(ss_ticket_number#4 as bigint)]
-Right keys [2]: [sr_item_sk#30, sr_ticket_number#31]
+Left keys [2]: [cast(ss_ticket_number#4 as bigint), cast(ss_item_sk#1 as bigint)]
+Right keys [2]: [sr_ticket_number#31, sr_item_sk#30]
 Join condition: None
 
 (94) Project [codegen id : 18]

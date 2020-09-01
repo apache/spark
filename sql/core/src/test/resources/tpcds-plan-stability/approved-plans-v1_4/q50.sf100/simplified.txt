@@ -6,12 +6,12 @@ TakeOrderedAndProject [s_store_name,s_company_id,s_street_number,s_street_name,s
           WholeStageCodegen (8)
             HashAggregate [s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip,sr_returned_date_sk,ss_sold_date_sk] [sum,sum,sum,sum,sum,sum,sum,sum,sum,sum]
               Project [ss_sold_date_sk,sr_returned_date_sk,s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip]
-                SortMergeJoin [ss_customer_sk,ss_item_sk,ss_ticket_number,sr_customer_sk,sr_item_sk,sr_ticket_number]
+                SortMergeJoin [ss_ticket_number,ss_item_sk,ss_customer_sk,sr_ticket_number,sr_item_sk,sr_customer_sk]
                   InputAdapter
                     WholeStageCodegen (4)
-                      Sort [ss_customer_sk,ss_item_sk,ss_ticket_number]
+                      Sort [ss_ticket_number,ss_item_sk,ss_customer_sk]
                         InputAdapter
-                          Exchange [ss_customer_sk,ss_item_sk,ss_ticket_number] #2
+                          Exchange [ss_ticket_number,ss_item_sk,ss_customer_sk] #2
                             WholeStageCodegen (3)
                               Project [ss_sold_date_sk,ss_item_sk,ss_customer_sk,ss_ticket_number,s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip]
                                 BroadcastHashJoin [ss_store_sk,s_store_sk]
@@ -37,9 +37,9 @@ TakeOrderedAndProject [s_store_name,s_company_id,s_street_number,s_street_name,s
                                               Scan parquet default.store [s_store_sk,s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip]
                   InputAdapter
                     WholeStageCodegen (7)
-                      Sort [sr_customer_sk,sr_item_sk,sr_ticket_number]
+                      Sort [sr_ticket_number,sr_item_sk,sr_customer_sk]
                         InputAdapter
-                          Exchange [sr_customer_sk,sr_item_sk,sr_ticket_number] #5
+                          Exchange [sr_ticket_number,sr_item_sk,sr_customer_sk] #5
                             WholeStageCodegen (6)
                               Project [sr_returned_date_sk,sr_item_sk,sr_customer_sk,sr_ticket_number]
                                 BroadcastHashJoin [d_date_sk,sr_returned_date_sk]

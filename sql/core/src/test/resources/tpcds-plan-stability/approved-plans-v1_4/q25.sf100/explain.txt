@@ -241,11 +241,11 @@ Input [12]: [ss_item_sk#2, ss_customer_sk#3, ss_ticket_number#5, ss_net_profit#6
 
 (42) Exchange
 Input [8]: [ss_net_profit#6, s_store_id#12, s_store_name#13, i_item_id#17, i_item_desc#18, sr_item_sk#26, sr_customer_sk#27, sr_net_loss#29]
-Arguments: hashpartitioning(sr_item_sk#26, sr_customer_sk#27, 5), true, [id=#31]
+Arguments: hashpartitioning(sr_customer_sk#27, sr_item_sk#26, 5), true, [id=#31]
 
 (43) Sort [codegen id : 13]
 Input [8]: [ss_net_profit#6, s_store_id#12, s_store_name#13, i_item_id#17, i_item_desc#18, sr_item_sk#26, sr_customer_sk#27, sr_net_loss#29]
-Arguments: [sr_item_sk#26 ASC NULLS FIRST, sr_customer_sk#27 ASC NULLS FIRST], false, 0
+Arguments: [sr_customer_sk#27 ASC NULLS FIRST, sr_item_sk#26 ASC NULLS FIRST], false, 0
 
 (44) Scan parquet default.catalog_sales
 Output [4]: [cs_sold_date_sk#32, cs_bill_customer_sk#33, cs_item_sk#34, cs_net_profit#35]
@@ -275,15 +275,15 @@ Input [5]: [cs_sold_date_sk#32, cs_bill_customer_sk#33, cs_item_sk#34, cs_net_pr
 
 (50) Exchange
 Input [3]: [cs_bill_customer_sk#33, cs_item_sk#34, cs_net_profit#35]
-Arguments: hashpartitioning(cast(cs_item_sk#34 as bigint), cast(cs_bill_customer_sk#33 as bigint), 5), true, [id=#37]
+Arguments: hashpartitioning(cast(cs_bill_customer_sk#33 as bigint), cast(cs_item_sk#34 as bigint), 5), true, [id=#37]
 
 (51) Sort [codegen id : 16]
 Input [3]: [cs_bill_customer_sk#33, cs_item_sk#34, cs_net_profit#35]
-Arguments: [cast(cs_item_sk#34 as bigint) ASC NULLS FIRST, cast(cs_bill_customer_sk#33 as bigint) ASC NULLS FIRST], false, 0
+Arguments: [cast(cs_bill_customer_sk#33 as bigint) ASC NULLS FIRST, cast(cs_item_sk#34 as bigint) ASC NULLS FIRST], false, 0
 
 (52) SortMergeJoin [codegen id : 17]
-Left keys [2]: [sr_item_sk#26, sr_customer_sk#27]
-Right keys [2]: [cast(cs_item_sk#34 as bigint), cast(cs_bill_customer_sk#33 as bigint)]
+Left keys [2]: [sr_customer_sk#27, sr_item_sk#26]
+Right keys [2]: [cast(cs_bill_customer_sk#33 as bigint), cast(cs_item_sk#34 as bigint)]
 Join condition: None
 
 (53) Project [codegen id : 17]

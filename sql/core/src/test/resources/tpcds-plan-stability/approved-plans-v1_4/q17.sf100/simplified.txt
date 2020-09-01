@@ -6,12 +6,12 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_state,store_sales_quantitycount,s
           WholeStageCodegen (17)
             HashAggregate [i_item_id,i_item_desc,s_state,ss_quantity,sr_return_quantity,cs_quantity] [count,sum,count,n,avg,m2,count,sum,count,n,avg,m2,count,sum,count,n,avg,m2,count,sum,count,n,avg,m2,count,sum,count,n,avg,m2,count,sum,count,n,avg,m2]
               Project [ss_quantity,sr_return_quantity,cs_quantity,s_state,i_item_id,i_item_desc]
-                SortMergeJoin [sr_item_sk,sr_customer_sk,cs_item_sk,cs_bill_customer_sk]
+                SortMergeJoin [sr_customer_sk,sr_item_sk,cs_bill_customer_sk,cs_item_sk]
                   InputAdapter
                     WholeStageCodegen (13)
-                      Sort [sr_item_sk,sr_customer_sk]
+                      Sort [sr_customer_sk,sr_item_sk]
                         InputAdapter
-                          Exchange [sr_item_sk,sr_customer_sk] #2
+                          Exchange [sr_customer_sk,sr_item_sk] #2
                             WholeStageCodegen (12)
                               Project [ss_quantity,s_state,i_item_id,i_item_desc,sr_item_sk,sr_customer_sk,sr_return_quantity]
                                 SortMergeJoin [ss_customer_sk,ss_item_sk,ss_ticket_number,sr_customer_sk,sr_item_sk,sr_ticket_number]
@@ -84,9 +84,9 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_state,store_sales_quantitycount,s
                                                         Scan parquet default.store_returns [sr_returned_date_sk,sr_item_sk,sr_customer_sk,sr_ticket_number,sr_return_quantity]
                   InputAdapter
                     WholeStageCodegen (16)
-                      Sort [cs_item_sk,cs_bill_customer_sk]
+                      Sort [cs_bill_customer_sk,cs_item_sk]
                         InputAdapter
-                          Exchange [cs_item_sk,cs_bill_customer_sk] #10
+                          Exchange [cs_bill_customer_sk,cs_item_sk] #10
                             WholeStageCodegen (15)
                               Project [cs_bill_customer_sk,cs_item_sk,cs_quantity]
                                 BroadcastHashJoin [cs_sold_date_sk,d_date_sk]

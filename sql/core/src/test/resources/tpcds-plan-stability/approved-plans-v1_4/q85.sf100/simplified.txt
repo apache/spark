@@ -80,7 +80,7 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),aggOrder,avg(wr_refunded_cas
                           Exchange [cd_demo_sk,cd_demo_sk] #9
                             WholeStageCodegen (12)
                               Project [cd_demo_sk,cd_demo_sk,cd_marital_status,cd_education_status]
-                                BroadcastHashJoin [cd_education_status,cd_marital_status,cd_education_status,cd_marital_status]
+                                BroadcastHashJoin [cd_marital_status,cd_education_status,cd_marital_status,cd_education_status]
                                   Filter [cd_demo_sk,cd_marital_status,cd_education_status]
                                     ColumnarToRow
                                       InputAdapter
