@@ -130,7 +130,8 @@ function mypy_test {
     if ! hash "$MYPY_BUILD" 2> /dev/null; then
         echo "The mypy command was not found."
         echo "mypy checks failed."
-        exit 1
+        # exit 1
+        pip3 install mypy
     fi
 
     echo "starting $MYPY_BUILD test..."
