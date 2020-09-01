@@ -32,9 +32,9 @@ import org.apache.spark.util.Utils
  * This's an end to end test suite used to test the host local shuffle reading.
  */
 class HostLocalShuffleReadingSuite extends SparkFunSuite with Matchers with LocalSparkContext {
-  var rpcHandler: ExternalBlockHandler = null
-  var server: TransportServer = null
-  var transportContext: TransportContext = null
+  var rpcHandler: ExternalBlockHandler = _
+  var server: TransportServer = _
+  var transportContext: TransportContext = _
 
   override def afterEach(): Unit = {
     Option(rpcHandler).foreach { handler =>
