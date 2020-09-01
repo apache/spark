@@ -2546,6 +2546,10 @@ class DataFrameSuite extends QueryTest
     val df = Seq(Double.NaN).toDF("d")
     checkAnswer(df.selectExpr("ln(d)"), Row(Double.NaN))
   }
+
+  test("SPARK-32761: aggregating multiple distinct CONSTANT columns") {
+     checkAnswer(sql("select count(distinct 2), count(distinct 2,3)"), Row(1, 1))
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
