@@ -1325,6 +1325,12 @@ class Analyzer(
      *
      * Note : In this routine, the unresolved attributes are resolved from the input plan's
      * children attributes.
+     *
+     * @param e The expression need to be resolved.
+     * @param q The LogicalPlan whose children are used to resolve expression's attribute.
+     * @param trimAlias When true, we will trim Struct field alias. When isTopLevel = true,
+     *                  we won't trim top-level Struct field alias.
+     * @return resolved Expression.
      */
     private def resolveExpressionTopDown(
         e: Expression,
@@ -1342,9 +1348,7 @@ class Analyzer(
       //    expression. The caller side can trim the alias of top-level `GetStructField` if needed.
       def innerResolve(
           e: Expression,
-          q: LogicalPlan,
-          trimAlias: Boolean = false,
-          isTopLevel: Boolean = true): Expression = {
+          isTopLevel: Boolean): Expression = {
         if (e.resolved) return e
         e match {
           case f: LambdaFunction if !f.bound => f
@@ -1364,11 +1368,11 @@ class Analyzer(
             result
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
             ExtractValue(child, fieldExpr, resolver)
-          case _ => e.mapChildren(innerResolve(_, q, trimAlias, isTopLevel = false))
+          case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
         }
       }
 
-      innerResolve(e, q, trimAlias, isTopLevel = true)
+      innerResolve(e, isTopLevel = true)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {

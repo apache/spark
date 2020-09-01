@@ -3496,7 +3496,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkIfSeedExistsInExplain(df2)
   }
 
-  test("SPARK-31670: Resolve Struct Field in Grouping Aggregate with same ExprId") {
+  test("SPARK-31670: Trim unnecessary Struct field alias in Aggregate/GroupingSets") {
     withTempView("t") {
       sql(
         """
