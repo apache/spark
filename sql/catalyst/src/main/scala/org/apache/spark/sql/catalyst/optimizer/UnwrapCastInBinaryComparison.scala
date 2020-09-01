@@ -77,7 +77,8 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // Not a canonical form. In this case we first canonicalize the expression by swapping the
     // literal and cast side, then process the result and swap the literal and cast again to
     // restore the original order.
-    case BinaryComparison(Literal(_, _), Cast(_, _, _)) =>
+    case BinaryComparison(Literal(_, toType: IntegralType), Cast(fromExp, _: IntegralType, _))
+        if canImplicitlyCast(fromExp, toType) =>
       def swap(e: Expression): Expression = e match {
         case GreaterThan(left, right) => LessThan(right, left)
         case GreaterThanOrEqual(left, right) => LessThanOrEqual(right, left)
