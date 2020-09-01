@@ -510,6 +510,7 @@ object FunctionRegistry {
     expression[Lag]("lag"),
     expression[RowNumber]("row_number"),
     expression[CumeDist]("cume_dist"),
+    expression[NthValue]("nth_value"),
     expression[NTile]("ntile"),
     expression[Rank]("rank"),
     expression[DenseRank]("dense_rank"),

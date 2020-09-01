@@ -234,6 +234,17 @@ class AnalysisErrorSuite extends AnalysisTest {
     "window frame" :: "must match the required frame" :: Nil)
 
   errorTest(
+    "nth_value window function",
+    testRelation2.select(
+      WindowExpression(
+        new NthValue(AttributeReference("b", IntegerType)(), Literal(0)),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          SpecifiedWindowFrame(RowFrame, Literal(0), Literal(0)))).as("window")),
+    "The 'offset' argument of nth_value must be greater than zero but it is 0." :: Nil)
+
+  errorTest(
     "too many generators",
     listRelation.select(Explode($"list").as("a"), Explode($"list").as("b")),
     "only one generator" :: "explode" :: Nil)

@@ -541,6 +541,66 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row("b", 3, null, null, null, null, null, null)))
   }
 
+  test("nth_value with ignoreNulls") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("a", 2, "y"),
+      ("a", 3, "z"),
+      ("a", 4, nullStr),
+      ("b", 1, nullStr),
+      ("b", 2, nullStr)).
+      toDF("key", "order", "value")
+    val window = Window.partitionBy($"key").orderBy($"order")
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        nth_value($"value", 2).over(window),
+        nth_value($"value", 2, ignoreNulls = false).over(window),
+        nth_value($"value", 2, ignoreNulls = true).over(window)),
+      Seq(
+        Row("a", 0, null, null, null),
+        Row("a", 1, "x", "x", null),
+        Row("a", 2, "x", "x", "y"),
+        Row("a", 3, "x", "x", "y"),
+        Row("a", 4, "x", "x", "y"),
+        Row("b", 1, null, null, null),
+        Row("b", 2, null, null, null)))
+  }
+
+  test("nth_value on descending ordered window") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("a", 2, "y"),
+      ("a", 3, "z"),
+      ("a", 4, "v"),
+      ("b", 1, "k"),
+      ("b", 2, "l"),
+      ("b", 3, nullStr)).
+      toDF("key", "order", "value")
+    val window = Window.partitionBy($"key").orderBy($"order".desc)
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        nth_value($"value", 2).over(window),
+        nth_value($"value", 2, ignoreNulls = false).over(window),
+        nth_value($"value", 2, ignoreNulls = true).over(window)),
+      Seq(
+        Row("a", 0, "z", "z", "z"),
+        Row("a", 1, "z", "z", "z"),
+        Row("a", 2, "z", "z", "z"),
+        Row("a", 3, "z", "z", "z"),
+        Row("a", 4, null, null, null),
+        Row("b", 1, "l", "l", "k"),
+        Row("b", 2, "l", "l", null),
+        Row("b", 3, null, null, null)))
+  }
+
   test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {
     val src = Seq((0, 3, 5)).toDF("a", "b", "c")
       .withColumn("Data", struct("a", "b"))

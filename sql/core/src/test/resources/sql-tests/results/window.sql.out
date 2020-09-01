@@ -19,6 +19,30 @@ struct<>
 -- !query output
 
 
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW basic_pays AS SELECT * FROM VALUES
+('Diane Murphy','Accounting',8435),
+('Mary Patterson','Accounting',9998),
+('Jeff Firrelli','Accounting',8992),
+('William Patterson','Accounting',8870),
+('Gerard Bondur','Accounting',11472),
+('Anthony Bow','Accounting',6627),
+('Leslie Jennings','IT',8113),
+('Leslie Thompson','IT',5186),
+('Julie Firrelli','Sales',9181),
+('Steve Patterson','Sales',9441),
+('Foon Yue Tseng','Sales',6660),
+('George Vanauf','Sales',10563),
+('Loui Bondur','SCM',10449),
+('Gerard Hernandez','SCM',6949),
+('Pamela Castillo','SCM',11303),
+('Larry Bott','SCM',11798),
+('Barry Jones','SCM',10586)
+AS basic_pays(employee_name, department, salary)
+-- !query schema
+struct<>
+-- !query output
+
 
 -- !query
 SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY val ROWS CURRENT ROW) FROM testData
@@ -391,3 +415,68 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 window aggregate function with filter predicate is not supported yet.;
+
+
+-- !query
+SELECT
+    employee_name,
+    salary,
+    nth_value(employee_name, 2) OVER (ORDER BY salary DESC) second_highest_salary
+FROM
+    basic_pays
+ORDER BY salary DESC
+-- !query schema
+struct<employee_name:string,salary:int,second_highest_salary:string>
+-- !query output
+Larry Bott	11798	NULL
+Gerard Bondur	11472	Gerard Bondur
+Pamela Castillo	11303	Gerard Bondur
+Barry Jones	10586	Gerard Bondur
+George Vanauf	10563	Gerard Bondur
+Loui Bondur	10449	Gerard Bondur
+Mary Patterson	9998	Gerard Bondur
+Steve Patterson	9441	Gerard Bondur
+Julie Firrelli	9181	Gerard Bondur
+Jeff Firrelli	8992	Gerard Bondur
+William Patterson	8870	Gerard Bondur
+Diane Murphy	8435	Gerard Bondur
+Leslie Jennings	8113	Gerard Bondur
+Gerard Hernandez	6949	Gerard Bondur
+Foon Yue Tseng	6660	Gerard Bondur
+Anthony Bow	6627	Gerard Bondur
+Leslie Thompson	5186	Gerard Bondur
+
+
+-- !query
+SELECT
+	employee_name,
+	department,
+	salary,
+	NTH_VALUE(employee_name, 2) OVER  (
+		PARTITION BY department
+		ORDER BY salary DESC
+		RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+	) second_highest_salary
+FROM
+	basic_pays
+ORDER BY department
+-- !query schema
+struct<employee_name:string,department:string,salary:int,second_highest_salary:string>
+-- !query output
+Gerard Bondur	Accounting	11472	Mary Patterson
+Mary Patterson	Accounting	9998	Mary Patterson
+Jeff Firrelli	Accounting	8992	Mary Patterson
+William Patterson	Accounting	8870	Mary Patterson
+Diane Murphy	Accounting	8435	Mary Patterson
+Anthony Bow	Accounting	6627	Mary Patterson
+Leslie Jennings	IT	8113	Leslie Thompson
+Leslie Thompson	IT	5186	Leslie Thompson
+Larry Bott	SCM	11798	Pamela Castillo
+Pamela Castillo	SCM	11303	Pamela Castillo
+Barry Jones	SCM	10586	Pamela Castillo
+Loui Bondur	SCM	10449	Pamela Castillo
+Gerard Hernandez	SCM	6949	Pamela Castillo
+George Vanauf	Sales	10563	Steve Patterson
+Steve Patterson	Sales	9441	Steve Patterson
+Julie Firrelli	Sales	9181	Steve Patterson
+Foon Yue Tseng	Sales	6660	Steve Patterson
