@@ -44,26 +44,26 @@ import org.apache.spark.sql.types._
  * cases and try to replace each with simpler constructs.
  *
  * if `value > max`, the cases are of following:
- *  - `cast(exp, ty) > value` ==> if(isnull(exp), null, false)
- *  - `cast(exp, ty) >= value` ==> if(isnull(exp), null, false)
- *  - `cast(exp, ty) === value` ==> if(isnull(exp), null, false)
- *  - `cast(exp, ty) <=> value` ==> false
- *  - `cast(exp, ty) <= value` ==> if(isnull(exp), null, true)
- *  - `cast(exp, ty) < value` ==> if(isnull(exp), null, true)
+ *  - `cast(fromExp, toType) > value` ==> if(isnull(fromExp), null, false)
+ *  - `cast(fromExp, toType) >= value` ==> if(isnull(fromExp), null, false)
+ *  - `cast(fromExp, toType) === value` ==> if(isnull(fromExp), null, false)
+ *  - `cast(fromExp, toType) <=> value` ==> false
+ *  - `cast(fromExp, toType) <= value` ==> if(isnull(fromExp), null, true)
+ *  - `cast(fromExp, toType) < value` ==> if(isnull(fromExp), null, true)
  *
  * if `value == max`, the cases are of following:
- *  - `cast(exp, ty) > value` ==> if(isnull(exp), null, false)
- *  - `cast(exp, ty) >= value` ==> exp == max
- *  - `cast(exp, ty) === value` ==> exp == max
- *  - `cast(exp, ty) <=> value` ==> exp == max
- *  - `cast(exp, ty) <= value` ==> if(isnull(exp), null, true)
- *  - `cast(exp, ty) < value` ==> exp =!= max
+ *  - `cast(fromExp, toType) > value` ==> if(isnull(fromExp), null, false)
+ *  - `cast(fromExp, toType) >= value` ==> fromExp == max
+ *  - `cast(fromExp, toType) === value` ==> fromExp == max
+ *  - `cast(fromExp, toType) <=> value` ==> fromExp == max
+ *  - `cast(fromExp, toType) <= value` ==> if(isnull(fromExp), null, true)
+ *  - `cast(fromExp, toType) < value` ==> fromExp =!= max
  *
  * Similarly for the cases when `value == min` and `value < min`.
  *
- * Further, the above `if(isnull(exp), null, false)` is represented using conjunction
- * `and(isnull(exp), null)`, to enable further optimization and filter pushdown to data sources.
- * Similarly, `if(isnull(exp), null, true)` is represented with `or(isnotnull(exp), null)`.
+ * Further, the above `if(isnull(fromExp), null, false)` is represented using conjunction
+ * `and(isnull(fromExp), null)`, to enable further optimization and filter pushdown to data sources.
+ * Similarly, `if(isnull(fromExp), null, true)` is represented with `or(isnotnull(fromExp), null)`.
  */
 object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
