@@ -120,7 +120,7 @@ private[spark] class DiskStore(
     } else {
       false
     }
-    if (deletionSucceeded) {
+    if (!file.exists() || deletionSucceeded) {
       blockSizes.remove(blockId)
     }
     deletionSucceeded
