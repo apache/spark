@@ -90,7 +90,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
 
       swap(unwrapCast(swap(exp)))
 
-    case BinaryComparison(Cast(fromExp, _, _), Literal(value, toType: IntegralType))
+    case BinaryComparison(Cast(fromExp, _: IntegralType, _), Literal(value, toType: IntegralType))
         if canImplicitlyCast(fromExp, toType) =>
       // In case both sides have integral type, optimize the comparison by removing casts or
       // moving cast to the literal side.
@@ -128,7 +128,8 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case LessThan(_, _) | LessThanOrEqual(_, _) =>
           fromExp.trueIfNotNull
         case EqualNullSafe(_, _) =>
-          FalseLiteral
+          // make sure the expression is evaluated if it is non-deterministic
+          if (exp.deterministic) FalseLiteral else exp
         case _ => exp // impossible but safe guard, same below
       }
     } else if (maxCmp == 0) {
@@ -150,7 +151,8 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case LessThan(_, _) | LessThanOrEqual(_, _) | EqualTo(_, _) =>
           fromExp.falseIfNotNull
         case EqualNullSafe(_, _) =>
-          FalseLiteral
+          // make sure the expression is evaluated if it is non-deterministic
+          if (exp.deterministic) FalseLiteral else exp
         case _ => exp
       }
     } else if (minCmp == 0) {

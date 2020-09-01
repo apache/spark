@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils._
+import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -111,6 +112,13 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest {
     assertEquivalent(Literal(42.0) <=> 'b, Literal(42.0) <=> Cast('b, DoubleType))
     assertEquivalent(Literal(42.0) <= 'b, Literal(42.0) <= Cast('b, DoubleType))
     assertEquivalent(Literal(42.0) < 'b, Literal(42.0) < Cast('b, DoubleType))
+  }
+
+  test("unwrap cast should skip when expression is non-deterministic") {
+    assertEquivalent(Cast(First('a, ignoreNulls = true), IntegerType) <=> positiveInt,
+      Cast(First('a, ignoreNulls = true), IntegerType) <=> positiveInt)
+    assertEquivalent(Cast(First('a, ignoreNulls = true), IntegerType) <=> negativeInt,
+      Cast(First('a, ignoreNulls = true), IntegerType) <=> negativeInt)
   }
 
   test("unwrap casts when literal is null") {
