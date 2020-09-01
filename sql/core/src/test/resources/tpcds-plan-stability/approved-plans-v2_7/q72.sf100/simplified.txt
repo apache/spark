@@ -16,12 +16,12 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                               Project [cs_item_sk,cs_order_number,w_warehouse_name,i_item_desc,d_week_seq]
                                 BroadcastHashJoin [cs_promo_sk,p_promo_sk]
                                   Project [cs_item_sk,cs_promo_sk,cs_order_number,w_warehouse_name,i_item_desc,d_week_seq]
-                                    SortMergeJoin [cs_item_sk,d_date_sk,inv_item_sk,inv_date_sk,inv_quantity_on_hand,cs_quantity]
+                                    SortMergeJoin [d_date_sk,cs_item_sk,inv_date_sk,inv_item_sk,inv_quantity_on_hand,cs_quantity]
                                       InputAdapter
                                         WholeStageCodegen (11)
-                                          Sort [cs_item_sk,d_date_sk]
+                                          Sort [d_date_sk,cs_item_sk]
                                             InputAdapter
-                                              Exchange [cs_item_sk,d_date_sk] #3
+                                              Exchange [d_date_sk,cs_item_sk] #3
                                                 WholeStageCodegen (10)
                                                   Project [cs_item_sk,cs_promo_sk,cs_order_number,cs_quantity,i_item_desc,d_date_sk,d_week_seq]
                                                     BroadcastHashJoin [cs_sold_date_sk,d_date_sk,d_date,d_date]
@@ -95,9 +95,9 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                                                                               Scan parquet default.date_dim [d_date_sk,d_date,d_week_seq,d_year]
                                       InputAdapter
                                         WholeStageCodegen (14)
-                                          Sort [inv_item_sk,inv_date_sk]
+                                          Sort [inv_date_sk,inv_item_sk]
                                             InputAdapter
-                                              Exchange [inv_item_sk,inv_date_sk] #11
+                                              Exchange [inv_date_sk,inv_item_sk] #11
                                                 WholeStageCodegen (13)
                                                   Project [w_warehouse_name,inv_date_sk,inv_item_sk,inv_quantity_on_hand]
                                                     BroadcastHashJoin [w_warehouse_sk,inv_warehouse_sk]

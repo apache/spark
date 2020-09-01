@@ -95,7 +95,7 @@ Input [8]: [s_store_sk#1, s_store_name#2, s_state#4, s_zip#5, ca_address_sk#7, c
 
 (11) BroadcastExchange
 Input [6]: [s_store_sk#1, s_store_name#2, s_state#4, ca_address_sk#7, ca_state#8, ca_country#10]
-Arguments: HashedRelationBroadcastMode(List(input[3, int, true], upper(input[5, string, true])),false), [id=#11]
+Arguments: HashedRelationBroadcastMode(List(upper(input[5, string, true]), input[3, int, true]),false), [id=#11]
 
 (12) Scan parquet default.customer
 Output [5]: [c_customer_sk#12, c_current_addr_sk#13, c_first_name#14, c_last_name#15, c_birth_country#16]
@@ -112,8 +112,8 @@ Input [5]: [c_customer_sk#12, c_current_addr_sk#13, c_first_name#14, c_last_name
 Condition : ((isnotnull(c_customer_sk#12) AND isnotnull(c_current_addr_sk#13)) AND isnotnull(c_birth_country#16))
 
 (15) BroadcastHashJoin [codegen id : 3]
-Left keys [2]: [ca_address_sk#7, upper(ca_country#10)]
-Right keys [2]: [c_current_addr_sk#13, c_birth_country#16]
+Left keys [2]: [upper(ca_country#10), ca_address_sk#7]
+Right keys [2]: [c_birth_country#16, c_current_addr_sk#13]
 Join condition: None
 
 (16) Project [codegen id : 3]
@@ -363,7 +363,7 @@ Input [8]: [s_store_sk#1, s_store_name#2, s_state#4, s_zip#5, ca_address_sk#7, c
 
 (58) BroadcastExchange
 Input [6]: [s_store_sk#1, s_store_name#2, s_state#4, ca_address_sk#7, ca_state#8, ca_country#10]
-Arguments: HashedRelationBroadcastMode(List(input[3, int, true], upper(input[5, string, true])),false), [id=#51]
+Arguments: HashedRelationBroadcastMode(List(upper(input[5, string, true]), input[3, int, true]),false), [id=#51]
 
 (59) Scan parquet default.customer
 Output [5]: [c_customer_sk#12, c_current_addr_sk#13, c_first_name#14, c_last_name#15, c_birth_country#16]
@@ -380,8 +380,8 @@ Input [5]: [c_customer_sk#12, c_current_addr_sk#13, c_first_name#14, c_last_name
 Condition : ((isnotnull(c_customer_sk#12) AND isnotnull(c_current_addr_sk#13)) AND isnotnull(c_birth_country#16))
 
 (62) BroadcastHashJoin [codegen id : 3]
-Left keys [2]: [ca_address_sk#7, upper(ca_country#10)]
-Right keys [2]: [c_current_addr_sk#13, c_birth_country#16]
+Left keys [2]: [upper(ca_country#10), ca_address_sk#7]
+Right keys [2]: [c_birth_country#16, c_current_addr_sk#13]
 Join condition: None
 
 (63) Project [codegen id : 3]
