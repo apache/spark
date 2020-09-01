@@ -152,7 +152,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
 
     val outputSize = outputs.size
     val headerSize = header.size
-    val expectedOutputs: Seq[QueryOutput] = {
+    val (expectedMissExamples, expectedOutputs): (Array[String], Seq[QueryOutput]) = {
       val expectedGoldenOutput = fileToString(resultFile)
       val lines = expectedGoldenOutput.split("\n")
       val expectedSize = lines.size
@@ -161,7 +161,10 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
         s"Expected $expectedSize blocks in result file but got " +
           s"${outputSize + headerSize}. Try regenerate the result files.")
 
-      Seq.tabulate(outputSize) { i =>
+      val numberOfQueries = lines(2).split(":")(1).trim.toInt
+      val numberOfMissExample = lines(3).split(":")(1).trim.toInt
+      val missExamples = lines(4).split(":")(1).trim.split(",")
+      val expectedOutputs = Seq.tabulate(outputSize) { i =>
         val segments = lines(i + headerSize).split('|')
         QueryOutput(
           className = segments(1).trim,
@@ -169,6 +172,17 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
           sql = segments(3).trim,
           schema = segments(4).trim)
       }
+
+      // Ensure consistency of the result file.
+      assert(numberOfQueries == expectedOutputs.size,
+        s"outputs size: ${expectedOutputs.size} not same as numberOfQueries: $numberOfQueries " +
+          "record in result file. Try regenerate the result files.")
+      assert(numberOfMissExample == missExamples.size,
+        s"miss examples size: ${missExamples.size} not same as " +
+          s"numberOfMissExample: $numberOfMissExample " +
+          "record in result file. Try regenerate the result files.")
+
+      (missExamples, expectedOutputs)
     }
 
     // Compare results.
@@ -178,6 +192,14 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
     outputs.zip(expectedOutputs).foreach { case (output, expected) =>
       assert(expected.sql == output.sql, "SQL query did not match")
       assert(expected.schema == output.schema, s"Schema did not match for query ${expected.sql}")
+    }
+
+    // Compare expressions missing examples
+    assert(expectedMissExamples.length == missingExamples.size,
+      "The number of missing examples not equals the number of expected missing examples.")
+
+    missingExamples.zip(expectedMissExamples).foreach { case (output, expected) =>
+      assert(expected == output, "Missing example expression not match")
     }
   }
 }
