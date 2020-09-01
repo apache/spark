@@ -54,6 +54,8 @@ import org.apache.spark.util.ShutdownHookManager
  * has dropped its support.
  */
 private[hive] object SparkSQLCLIDriver extends Logging {
+  initializeLogIfNecessary(true)
+
   private val prompt = "spark-sql"
   private val continuedPrompt = "".padTo(prompt.length, ' ')
   private var transport: TSocket = _
