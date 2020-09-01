@@ -3116,16 +3116,17 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
 
         val fs = tablePath.getFileSystem(hadoopConf)
-        val trashRoot = fs.getTrashRoot(tablePath)
-        assert(!fs.exists(trashRoot))
+        val trashCurrent = new Path(fs.getHomeDirectory, ".Trash/Current")
+        val trashPath = Path.mergePaths(trashCurrent, tablePath)
+        assert(!fs.exists(trashPath))
         try {
           hadoopConf.set(trashIntervalKey, "5")
           sql("TRUNCATE TABLE tab1")
         } finally {
           hadoopConf.set(trashIntervalKey, originalValue)
         }
-        assert(fs.exists(trashRoot))
-        fs.delete(trashRoot, true)
+        assert(fs.exists(trashPath))
+        fs.delete(trashPath, true)
       }
     }
   }
@@ -3144,15 +3145,16 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
 
         val fs = tablePath.getFileSystem(hadoopConf)
-        val trashRoot = fs.getTrashRoot(tablePath)
-        assert(!fs.exists(trashRoot))
+        val trashCurrent = new Path(fs.getHomeDirectory, ".Trash/Current")
+        val trashPath = Path.mergePaths(trashCurrent, tablePath)
+        assert(!fs.exists(trashPath))
         try {
           hadoopConf.set(trashIntervalKey, "0")
           sql("TRUNCATE TABLE tab1")
         } finally {
           hadoopConf.set(trashIntervalKey, originalValue)
         }
-        assert(!fs.exists(trashRoot))
+        assert(!fs.exists(trashPath))
       }
     }
   }
@@ -3167,9 +3169,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
 
         val fs = tablePath.getFileSystem(hadoopConf)
-        val trashRoot = fs.getTrashRoot(tablePath)
+        val trashCurrent = new Path(fs.getHomeDirectory, ".Trash/Current")
+        val trashPath = Path.mergePaths(trashCurrent, tablePath)
         sql("TRUNCATE TABLE tab1")
-        assert(!fs.exists(trashRoot))
+        assert(!fs.exists(trashPath))
       }
     }
   }

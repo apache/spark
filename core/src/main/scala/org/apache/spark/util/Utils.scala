@@ -270,18 +270,20 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Move data to trash if 'spark.sql.truncate.trash.enabled' is true
+   * Move data to trash if 'spark.sql.truncate.trash.enabled' is true, else
+   * delete the data permanently. If move data to trash failed fallback to hard deletion.
    */
-  def moveToTrashIfEnabled(
+  def moveToTrashOrDelete(
       fs: FileSystem,
       partitionPath: Path,
       isTrashEnabled: Boolean,
       hadoopConf: Configuration): Boolean = {
     if (isTrashEnabled) {
-      logDebug(s"will move data ${partitionPath.toString} to trash")
+      logDebug(s"Try to move data ${partitionPath.toString} to trash")
       val isSuccess = Trash.moveToAppropriateTrash(fs, partitionPath, hadoopConf)
       if (!isSuccess) {
-        logWarning(s"Failed to move data ${partitionPath.toString} to trash")
+        logWarning(s"Failed to move data ${partitionPath.toString} to trash. " +
+          "Fallback to hard deletion")
         return fs.delete(partitionPath, true)
       }
       isSuccess

@@ -43,7 +43,7 @@ def _monkey_patch_RDD(sparkSession):
         This is a shorthand for ``spark.createDataFrame(rdd, schema, sampleRatio)``
 
         :param schema: a :class:`pyspark.sql.types.StructType` or list of names of columns
-        :param samplingRatio: the sample ratio of rows used for inferring
+        :param sampleRatio: the sample ratio of rows used for inferring
         :return: a DataFrame
 
         >>> rdd.toDF().collect()

@@ -22,7 +22,8 @@ from pyspark import since
 from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.types import IntegralType
-from pyspark.sql.types import *
+from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, \
+    DoubleType, BooleanType, TimestampType, StructType, DataType
 from pyspark.traceback_utils import SCCallSiteSync
 
 

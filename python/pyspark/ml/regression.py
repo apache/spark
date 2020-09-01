@@ -15,15 +15,21 @@
 # limitations under the License.
 #
 
+import sys
+
 from abc import ABCMeta
 
-from pyspark import keyword_only
+from pyspark import keyword_only, since
 from pyspark.ml import Predictor, PredictionModel
 from pyspark.ml.base import _PredictorParams
-from pyspark.ml.param.shared import *
+from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol, HasWeightCol, \
+    Param, Params, TypeConverters, HasMaxIter, HasTol, HasFitIntercept, HasAggregationDepth, \
+    HasBlockSize, HasRegParam, HasSolver, HasStepSize, HasSeed, HasElasticNetParam, \
+    HasStandardization, HasLoss, HasVarianceCol
 from pyspark.ml.tree import _DecisionTreeModel, _DecisionTreeParams, \
     _TreeEnsembleModel, _RandomForestParams, _GBTParams, _TreeRegressorParams
-from pyspark.ml.util import *
+from pyspark.ml.util import JavaMLWritable, JavaMLReadable, HasTrainingSummary, \
+    GeneralJavaMLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, \
     JavaPredictor, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc

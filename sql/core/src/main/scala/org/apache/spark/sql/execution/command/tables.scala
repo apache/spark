@@ -515,7 +515,7 @@ case class TruncateTableCommand(
             }
           }
 
-          Utils.moveToTrashIfEnabled(fs, path, isTrashEnabled, hadoopConf)
+          Utils.moveToTrashOrDelete(fs, path, isTrashEnabled, hadoopConf)
 
           // We should keep original permission/acl of the path.
           // For owner/group, only super-user can set it, for example on HDFS. Because
