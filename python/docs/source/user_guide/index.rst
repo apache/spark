@@ -20,3 +20,8 @@
 User Guide
 ==========
 
+.. toctree::
+    :maxdepth: 2
+
+    arrow_pandas
+

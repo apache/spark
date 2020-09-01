@@ -21,8 +21,9 @@ import copy
 import threading
 
 from pyspark import since
-from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
+from pyspark.ml.param.shared import HasInputCol, HasOutputCol, HasLabelCol, HasFeaturesCol, \
+    HasPredictionCol, Params
 from pyspark.sql.functions import udf
 from pyspark.sql.types import StructField, StructType
 

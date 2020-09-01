@@ -15,11 +15,13 @@
 # limitations under the License.
 #
 
-from pyspark import keyword_only
+import sys
+
+from pyspark import keyword_only, since
 from pyspark.sql import DataFrame
-from pyspark.ml.util import *
+from pyspark.ml.util import JavaMLWritable, JavaMLReadable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
-from pyspark.ml.param.shared import *
+from pyspark.ml.param.shared import HasPredictionCol, Param, TypeConverters, Params
 
 __all__ = ["FPGrowth", "FPGrowthModel", "PrefixSpan"]
 

@@ -17,7 +17,9 @@
 
 from pyspark import since, keyword_only, SparkContext
 from pyspark.ml.linalg import _convert_to_vector
-from pyspark.ml.param.shared import *
+from pyspark.ml.param.shared import HasThreshold, HasThresholds, HasInputCol, HasOutputCol, \
+    HasInputCols, HasOutputCols, HasHandleInvalid, HasRelativeError, HasFeaturesCol, HasLabelCol, \
+    HasSeed, HasNumFeatures, HasStepSize, HasMaxIter, TypeConverters, Param, Params
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, _jvm
 from pyspark.ml.common import inherit_doc

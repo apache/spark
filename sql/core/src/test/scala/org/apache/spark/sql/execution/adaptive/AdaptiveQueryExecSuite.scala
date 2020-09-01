@@ -1184,6 +1184,25 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-32717: AQEOptimizer should respect excludedRules configuration") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
+      // This test is a copy of test(SPARK-32573), in order to test the configuration
+      // `spark.sql.adaptive.optimizer.excludedRules` works as expect.
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> EliminateJoinToEmptyRelation.ruleName) {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData2 t1 WHERE t1.b NOT IN (SELECT b FROM testData3)")
+      val bhj = findTopLevelBroadcastHashJoin(plan)
+      assert(bhj.size == 1)
+      val join = findTopLevelBaseJoin(adaptivePlan)
+      // this is different compares to test(SPARK-32573) due to the rule
+      // `EliminateJoinToEmptyRelation` has been excluded.
+      assert(join.nonEmpty)
+      checkNumLocalShuffleReaders(adaptivePlan)
+    }
+  }
+
   test("SPARK-32649: Eliminate inner and semi join to empty relation") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
