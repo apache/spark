@@ -1456,11 +1456,7 @@ class Analyzer(
 
         val resolvedGroupingExprs = a.groupingExpressions
           .map(resolveExpressionTopDown(_, planForResolve, trimAlias = true))
-          .map {
-            // trim Alias over top-level GetStructField
-            case Alias(s: GetStructField, _) => s
-            case other => other
-          }
+          .map(trimTopLevelGetStructFieldAlias)
 
         val resolvedAggExprs = a.aggregateExpressions
           .map(resolveExpressionTopDown(_, planForResolve, trimAlias = true))
@@ -1471,19 +1467,11 @@ class Analyzer(
       case g: GroupingSets =>
         val resolvedSelectedExprs = g.selectedGroupByExprs
           .map(_.map(resolveExpressionTopDown(_, g, trimAlias = true))
-            .map {
-              // trim Alias over top-level GetStructField
-              case Alias(s: GetStructField, _) => s
-              case other => other
-            })
+            .map(trimTopLevelGetStructFieldAlias))
 
         val resolvedGroupingExprs = g.groupByExprs
           .map(resolveExpressionTopDown(_, g, trimAlias = true))
-          .map {
-            // trim Alias over top-level GetStructField
-            case Alias(s: GetStructField, _) => s
-            case other => other
-          }
+          .map(trimTopLevelGetStructFieldAlias)
 
         val resolvedAggExprs = g.aggregations
           .map(resolveExpressionTopDown(_, g, trimAlias = true))
@@ -1583,6 +1571,17 @@ class Analyzer(
 
     def findAliases(projectList: Seq[NamedExpression]): AttributeSet = {
       AttributeSet(projectList.collect { case a: Alias => a.toAttribute })
+    }
+
+    // This method is used to trim groupByExpressions/selectedGroupByExpressions's top-level
+    // GetStructField Alias. Since these expression are not NamedExpression originally,
+    // we are safely to trim top-level GetStructField Alias.
+    def trimTopLevelGetStructFieldAlias(e: Expression): Expression = {
+      e match {
+        // trim Alias over top-level GetStructField
+        case Alias(s: GetStructField, _) => s
+        case other => other
+      }
     }
 
     /**
