@@ -344,6 +344,7 @@ object QueryExecution {
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects(sparkSession.sessionState.conf),
       EnsureRequirements(sparkSession.sessionState.conf),
+      RemoveShuffledNaaJIfBuildSideNotExchange(sparkSession, sparkSession.sessionState.conf),
       ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
         sparkSession.sessionState.columnarRules),
       CollapseCodegenStages(sparkSession.sessionState.conf),

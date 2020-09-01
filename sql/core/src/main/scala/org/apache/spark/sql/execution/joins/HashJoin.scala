@@ -41,6 +41,15 @@ private[joins] case class HashedRelationInfo(
 
 trait HashJoin extends BaseJoinExec with CodegenSupport {
   def buildSide: BuildSide
+  def isNullAwareAntiJoin: Boolean
+
+  if (isNullAwareAntiJoin) {
+    require(leftKeys.length == 1, "leftKeys length should be 1")
+    require(rightKeys.length == 1, "rightKeys length should be 1")
+    require(joinType == LeftAnti, "joinType must be LeftAnti.")
+    require(buildSide == BuildRight, "buildSide must be BuildRight.")
+    require(condition.isEmpty, "null aware anti join optimize condition should be empty.")
+  }
 
   override def simpleStringWithNodeId(): String = {
     val opId = ExplainUtils.getOpId(this)
@@ -284,6 +293,33 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     }
   }
 
+  protected def nullAwareAntiJoin(
+      streamIter: Iterator[InternalRow],
+      hashedRelation: HashedRelation): Iterator[InternalRow] = {
+    // 1. BHJ + AQE off
+    // HashedRelationWithAllNullKeys cases handled separately by BHJ
+    // 2. BHJ + AQE on
+    // HashedRelationWithAllNullKeys case handled by AQE rewrite
+    // 3. SHJ + AQE on
+    // HashedRelationWithAllNullKeys cases handled by AQE rewrite
+    require(hashedRelation != HashedRelationWithAllNullKeys)
+
+    if (hashedRelation == EmptyHashedRelation) {
+      streamIter
+    } else {
+      val keyGenerator = streamSideKeyGenerator()
+      streamIter.filter(row => {
+        val lookupKey: UnsafeRow = keyGenerator(row)
+        if (lookupKey.anyNull()) {
+          false
+        } else {
+          // Anti Join: Drop the row on the streamed side if it is a match on the build
+          hashedRelation.get(lookupKey) == null
+        }
+      })
+    }
+  }
+
   private def antiJoin(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation): Iterator[InternalRow] = {
@@ -326,7 +362,11 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
       case LeftSemi =>
         semiJoin(streamedIter, hashed)
       case LeftAnti =>
-        antiJoin(streamedIter, hashed)
+        if (isNullAwareAntiJoin) {
+          nullAwareAntiJoin(streamedIter, hashed)
+        } else {
+          antiJoin(streamedIter, hashed)
+        }
       case _: ExistenceJoin =>
         existenceJoin(streamedIter, hashed)
       case x =>
@@ -350,7 +390,12 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
       case _: InnerLike => codegenInner(ctx, input)
       case LeftOuter | RightOuter => codegenOuter(ctx, input)
       case LeftSemi => codegenSemi(ctx, input)
-      case LeftAnti => codegenAnti(ctx, input)
+      case LeftAnti =>
+        if (isNullAwareAntiJoin) {
+          codegenNullAwareAnti(ctx, input)
+        } else {
+          codegenAnti(ctx, input)
+        }
       case _: ExistenceJoin => codegenExistence(ctx, input)
       case x =>
         throw new IllegalArgumentException(
@@ -617,6 +662,13 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
          |}
        """.stripMargin
     }
+  }
+
+  /**
+   * Generates the code for null aware anti join.
+   */
+  protected def codegenNullAwareAnti(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    throw new UnsupportedOperationException
   }
 
   /**

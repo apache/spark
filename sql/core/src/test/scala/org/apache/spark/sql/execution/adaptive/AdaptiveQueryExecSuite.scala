@@ -23,13 +23,13 @@ import java.net.URI
 import org.apache.log4j.Level
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
-import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.exchange._
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -91,6 +91,12 @@ class AdaptiveQueryExecSuite
   private def findTopLevelBroadcastHashJoin(plan: SparkPlan): Seq[BroadcastHashJoinExec] = {
     collect(plan) {
       case j: BroadcastHashJoinExec => j
+    }
+  }
+
+  private def findTopLevelShuffledHashJoin(plan: SparkPlan): Seq[ShuffledHashJoinExec] = {
+    collect(plan) {
+      case j: ShuffledHashJoinExec => j
     }
   }
 
@@ -1170,7 +1176,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-32573: Eliminate NAAJ when BuildSide is HashedRelationWithAllNullKeys") {
+  test("Eliminate NAAJ when BuildSide is HashedRelationWithAllNullKeys") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
@@ -1178,6 +1184,51 @@ class AdaptiveQueryExecSuite
         "SELECT * FROM testData2 t1 WHERE t1.b NOT IN (SELECT b FROM testData3)")
       val bhj = findTopLevelBroadcastHashJoin(plan)
       assert(bhj.size == 1)
+      assert(bhj.head.isNullAwareAntiJoin)
+      val join = findTopLevelBaseJoin(adaptivePlan)
+      assert(join.isEmpty)
+      assert(adaptivePlan.isInstanceOf[LocalTableScanExec])
+      checkNumLocalShuffleReaders(adaptivePlan)
+    }
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData2 t1 WHERE t1.b NOT IN (SELECT b FROM testData3)")
+      val shj = findTopLevelShuffledHashJoin(plan)
+      assert(shj.size == 1)
+      assert(shj.head.isNullAwareAntiJoin)
+      val join = findTopLevelBaseJoin(adaptivePlan)
+      assert(join.isEmpty)
+      assert(adaptivePlan.isInstanceOf[LocalTableScanExec])
+      checkNumLocalShuffleReaders(adaptivePlan)
+    }
+  }
+
+  test("Eliminate NAAJ when BuildSide is EmptyHashedRelation for ShuffledHashJoin") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData2 t1 WHERE t1.b NOT IN (SELECT b FROM testData3 WHERE a > 5)")
+      val bhj = findTopLevelBroadcastHashJoin(plan)
+      assert(bhj.size == 1)
+      assert(bhj.head.isNullAwareAntiJoin)
+      val join = findTopLevelBaseJoin(adaptivePlan)
+      // The rule apply on SHJ only, so the NAAJ(BHJ) will not be eliminated
+      assert(join.size == 1)
+      checkNumLocalShuffleReaders(adaptivePlan)
+    }
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData2 t1 WHERE t1.b NOT IN (SELECT b FROM testData3 WHERE a > 5)")
+      val shj = findTopLevelShuffledHashJoin(plan)
+      assert(shj.size == 1)
+      assert(shj.head.isNullAwareAntiJoin)
       val join = findTopLevelBaseJoin(adaptivePlan)
       assert(join.isEmpty)
       checkNumLocalShuffleReaders(adaptivePlan)
@@ -1224,4 +1275,53 @@ class AdaptiveQueryExecSuite
       })
     }
   }
+
+  test("Remove Shuffled NAAJ When buildSide is not an Exchange") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("m", "s") {
+        Seq((null: Integer, 1.0), (2: Integer, 3.0), (4: Integer, 5.0))
+          .toDF("a", "b").createOrReplaceTempView("m")
+        Seq((null: Integer, 1.0), (2: Integer, 3.0), (6: Integer, 7.0))
+          .toDF("c", "d").createOrReplaceTempView("s")
+        val ensureRequirements = EnsureRequirements(conf)
+
+        // 1. BuildSide is empty and not an Exchange
+        val (plan1, adaptivePlan1) = runAdaptiveAndVerifyResult(
+          "SELECT m.a FROM m WHERE m.a NOT IN " +
+            "(SELECT a FROM m LEFT JOIN s ON m.a = s.c WHERE m.a > 100)")
+        val shj1 = findTopLevelShuffledHashJoin(plan1)
+        assert(shj1.size == 1)
+
+        // Apply rule EnsureRequirements
+        val updatedPlan1 = ensureRequirements.apply(plan1)
+        val updatedShj1 = findTopLevelShuffledHashJoin(updatedPlan1)
+        assert(updatedShj1.size == 1)
+        assert(updatedShj1.head.isNullAwareAntiJoin)
+        assert(!updatedShj1.head.right.isInstanceOf[Exchange])
+
+        val shjInAQE1 = findTopLevelShuffledHashJoin(adaptivePlan1)
+        assert(shjInAQE1.isEmpty)
+
+        // 2. BuildSide contains record with all the partition keys to be null and not an Exchange
+        val (plan2, adaptivePlan2) = runAdaptiveAndVerifyResult(
+          "SELECT m.a FROM m WHERE m.a NOT IN " +
+            "(SELECT a FROM m LEFT JOIN s ON m.a = s.c)")
+        val shj2 = findTopLevelShuffledHashJoin(plan2)
+        assert(shj2.size == 1)
+
+        // Apply rule EnsureRequirements
+        val updatedPlan2 = ensureRequirements.apply(plan2)
+        val updatedShj2 = findTopLevelShuffledHashJoin(updatedPlan2)
+        assert(updatedShj2.size == 1)
+        assert(updatedShj2.head.isNullAwareAntiJoin)
+        assert(!updatedShj2.head.right.isInstanceOf[Exchange])
+
+        val shjInAQE2 = findTopLevelShuffledHashJoin(adaptivePlan2)
+        assert(shjInAQE2.isEmpty)
+      }
+    }
+  }
+
 }

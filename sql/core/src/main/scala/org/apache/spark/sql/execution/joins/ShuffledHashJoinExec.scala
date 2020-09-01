@@ -41,7 +41,8 @@ case class ShuffledHashJoinExec(
     buildSide: BuildSide,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan)
+    right: SparkPlan,
+    isNullAwareAntiJoin: Boolean = false)
   extends HashJoin with ShuffledJoin {
 
   override lazy val metrics = Map(
@@ -88,6 +89,28 @@ case class ShuffledHashJoinExec(
         case _ => join(streamIter, hashed, numOutputRows)
       }
     }
+  }
+
+  /**
+   * Generates the code for null aware anti join.
+   */
+  protected override def codegenNullAwareAnti(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    val HashedRelationInfo(relationTerm, _, _) = prepareRelation(ctx)
+    val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
+    val numOutput = metricTerm(ctx, "numOutputRows")
+    val emptyHashedRelationClassName = EmptyHashedRelation.getClass.getName
+
+    // Skip code generation for EmptyHashedRelationWithAllNullKeys case,
+    // since it is already handled by AQE rewrite.
+    s"""
+       |// generate join key for stream side
+       |${keyEv.code}
+       |if ($relationTerm.getClass().getName().equals("$emptyHashedRelationClassName") ||
+       | (!$anyNull && $relationTerm.getValue(${keyEv.value}) == null)) {
+       |  $numOutput.add(1);
+       |  ${consume(ctx, input)}
+       |}
+       """.stripMargin
   }
 
   private def fullOuterJoin(

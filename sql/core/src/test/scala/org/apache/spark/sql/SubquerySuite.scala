@@ -21,10 +21,10 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
-import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
+import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -1652,102 +1652,89 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     Seq(true, false).foreach { enableNAAJ =>
       Seq(true, false).foreach { enableAQE =>
         Seq(true, false).foreach { enableCodegen =>
-          withSQLConf(
-            SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> enableNAAJ.toString,
-            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
-            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableCodegen.toString) {
+          Seq(-1L, Long.MaxValue).foreach { autoBroadcastJoinThreshold =>
+            withSQLConf(
+              SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> enableNAAJ.toString,
+              SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+              SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableCodegen.toString,
+              SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> autoBroadcastJoinThreshold.toString) {
 
-            def findJoinExec(df: DataFrame): BaseJoinExec = {
-              df.queryExecution.sparkPlan.collectFirst {
-                case j: BaseJoinExec => j
-              }.get
-            }
+              def findJoinExec(df: DataFrame): BaseJoinExec = {
+                df.queryExecution.sparkPlan.collectFirst {
+                  case j: BaseJoinExec => j
+                }.get
+              }
 
-            var df: DataFrame = null
-            var joinExec: BaseJoinExec = null
+              def naajAssertion(df: DataFrame): Unit = {
+                if (enableNAAJ) {
+                  val joinExec = findJoinExec(df)
+                  if (enableAQE && autoBroadcastJoinThreshold == -1) {
+                    assert(joinExec.isInstanceOf[ShuffledHashJoinExec])
+                    assert(joinExec.asInstanceOf[ShuffledHashJoinExec].isNullAwareAntiJoin)
+                  } else {
+                    assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
+                    assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+                  }
+                } else {
+                  assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
+                }
+              }
 
-            // single column not in subquery -- empty sub-query
-            df = sql("select * from l where a not in (select c from r where c > 10)")
-            checkAnswer(df, spark.table("l"))
-            if (enableNAAJ) {
+              var df: DataFrame = null
+              var joinExec: BaseJoinExec = null
+
+              // single column not in subquery -- empty sub-query
+              df = sql("select * from l where a not in (select c from r where c > 10)")
+              checkAnswer(df, spark.table("l"))
+              naajAssertion(df)
+
+              // single column not in subquery -- sub-query include null
+              df = sql("select * from l where a not in (select c from r where d < 6.0)")
+              checkAnswer(df, Seq.empty)
+              naajAssertion(df)
+
+              // single column not in subquery -- streamedSide row is null
+              df = sql("select * from l where b = 5.0 and a not in " +
+                "( select c from r where c is not null )")
+              checkAnswer(df, Seq.empty)
+              naajAssertion(df)
+
+              // single column not in subquery -- streamedSide row is not null, match found
+              df = sql("select * from l where a = 6 and a not in " +
+                "( select c from r where c is not null )")
+              checkAnswer(df, Seq.empty)
+              naajAssertion(df)
+
+              // single column not in subquery -- streamedSide row is not null, match not found
+              df = sql("select * from l where a = 1 and a not in " +
+                "( select c from r where c is not null )")
+              checkAnswer(df, Row(1, 2.0) :: Row(1, 2.0) :: Nil)
+              naajAssertion(df)
+
+              // single column not in subquery -- d = b + 10 joinKey found,
+              // match ExtractEquiJoinKeys
+              df = sql("select * from l where a not in (select c from r where d = b + 10)")
+              checkAnswer(df, spark.table("l"))
               joinExec = findJoinExec(df)
-              assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
-              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
-            } else {
+              if (autoBroadcastJoinThreshold == -1) {
+                assert(joinExec.isInstanceOf[SortMergeJoinExec])
+              } else {
+                assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
+                assert(!joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+              }
+
+              // single column not in subquery -- d = b + 10 and b = 5.0 => d = 15,
+              // joinKey not found match ExtractSingleColumnNullAwareAntiJoin
+              df =
+                sql("select * from l where b = 5.0 and a not in (select c from r where d = b + 10)")
+              checkAnswer(df, Row(null, 5.0) :: Nil)
+              naajAssertion(df)
+
+              // multi column not in subquery
+              df = sql("select * from l where (a, b) not in (select c, d from r where c > 10)")
+              checkAnswer(df, spark.table("l"))
               assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
             }
-
-            // single column not in subquery -- sub-query include null
-            df = sql("select * from l where a not in (select c from r where d < 6.0)")
-            checkAnswer(df, Seq.empty)
-            if (enableNAAJ) {
-              joinExec = findJoinExec(df)
-              assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
-              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
-            } else {
-              assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
-            }
-
-            // single column not in subquery -- streamedSide row is null
-            df =
-              sql("select * from l where b = 5.0 and a not in(select c from r where c is not null)")
-            checkAnswer(df, Seq.empty)
-            if (enableNAAJ) {
-              joinExec = findJoinExec(df)
-              assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
-              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
-            } else {
-              assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
-            }
-
-            // single column not in subquery -- streamedSide row is not null, match found
-            df =
-              sql("select * from l where a = 6 and a not in (select c from r where c is not null)")
-            checkAnswer(df, Seq.empty)
-            if (enableNAAJ) {
-              joinExec = findJoinExec(df)
-              assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
-              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
-            } else {
-              assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
-            }
-
-            // single column not in subquery -- streamedSide row is not null, match not found
-            df =
-              sql("select * from l where a = 1 and a not in (select c from r where c is not null)")
-            checkAnswer(df, Row(1, 2.0) :: Row(1, 2.0) :: Nil)
-            if (enableNAAJ) {
-              joinExec = findJoinExec(df)
-              assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
-              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
-            } else {
-              assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
-            }
-
-            // single column not in subquery -- d = b + 10 joinKey found, match ExtractEquiJoinKeys
-            df = sql("select * from l where a not in (select c from r where d = b + 10)")
-            checkAnswer(df, spark.table("l"))
-            joinExec = findJoinExec(df)
-            assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
-            assert(!joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
-
-            // single column not in subquery -- d = b + 10 and b = 5.0 => d = 15, joinKey not found
-            // match ExtractSingleColumnNullAwareAntiJoin
-            df =
-              sql("select * from l where b = 5.0 and a not in (select c from r where d = b + 10)")
-            checkAnswer(df, Row(null, 5.0) :: Nil)
-            if (enableNAAJ) {
-              joinExec = findJoinExec(df)
-              assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
-              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
-            } else {
-              assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
-            }
-
-            // multi column not in subquery
-            df = sql("select * from l where (a, b) not in (select c, d from r where c > 10)")
-            checkAnswer(df, spark.table("l"))
-            assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
           }
         }
       }

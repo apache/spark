@@ -83,15 +83,28 @@ trait ShuffleExchangeLike extends Exchange {
 case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
-    noUserSpecifiedNumPartition: Boolean = true) extends ShuffleExchangeLike {
+    noUserSpecifiedNumPartition: Boolean = true,
+    statSpecs: Seq[ExchangeStatisticsSpec] = Seq.empty)
+  extends ShuffleExchangeLike with ExchangeStatisticsCollector {
 
   // If users specify the num partitions via APIs like `repartition`, we shouldn't change it.
   // For `SinglePartition`, it requires exactly one partition and we can't change it either.
   override def canChangeNumPartitions: Boolean =
     noUserSpecifiedNumPartition && outputPartitioning != SinglePartition
 
+  private lazy val collectNullPartitionKeyMetrics: Boolean = {
+    statSpecs.contains(NullPartitionKeyStatisticsSpec)
+  }
+
   private lazy val writeMetrics =
-    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
+    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext) ++ {
+      if (collectNullPartitionKeyMetrics) {
+        Map(ShuffleExchangeExec.NULL_PARTITION_KEY_RECORDS_WRITTEN ->
+          SQLMetrics.createMetric(sparkContext, "null partition key records written"))
+      } else {
+        Map.empty
+      }
+    }
   private[sql] lazy val readMetrics =
     SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
   override lazy val metrics = Map(
@@ -128,6 +141,19 @@ case class ShuffleExchangeExec(
     Statistics(dataSize, Some(rowCount))
   }
 
+  override def getNullPartitionKeyNumRows: Option[Long] = {
+    if (collectNullPartitionKeyMetrics &&
+      writeMetrics.contains(ShuffleExchangeExec.NULL_PARTITION_KEY_RECORDS_WRITTEN)) {
+      Some(metrics(ShuffleExchangeExec.NULL_PARTITION_KEY_RECORDS_WRITTEN).value)
+    } else {
+      None
+    }
+  }
+
+  override def getOutputNumRows: Option[Long] = {
+    Some(metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_RECORDS_WRITTEN).value)
+  }
+
   /**
    * A [[ShuffleDependency]] that will partition rows of its child based on
    * the partitioning scheme defined in `newPartitioning`. Those partitions of
@@ -158,6 +184,8 @@ case class ShuffleExchangeExec(
 }
 
 object ShuffleExchangeExec {
+
+  val NULL_PARTITION_KEY_RECORDS_WRITTEN = "nullPartitionKeyRecordsWritten"
 
   /**
    * Determines whether records must be defensively copied before being sent to the shuffle.
@@ -273,6 +301,17 @@ object ShuffleExchangeExec {
           // The HashPartitioner will handle the `mod` by the number of partitions
           position += 1
           position
+        }
+      case h: HashPartitioning if writeMetrics.contains(NULL_PARTITION_KEY_RECORDS_WRITTEN) =>
+        val projection = UnsafeProjection.create(
+          h.partitionIdExpression :: h.expressions.head :: Nil, outputAttributes)
+        row => {
+          val projectedRow = projection(row)
+          // Update NULL_PARTITION_KEY_RECORDS_WRITTEN metrics if nullPartitionKey show up.
+          if (projectedRow.isNullAt(1)) {
+            writeMetrics(NULL_PARTITION_KEY_RECORDS_WRITTEN).add(1L)
+          }
+          projectedRow.getInt(0)
         }
       case h: HashPartitioning =>
         val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)

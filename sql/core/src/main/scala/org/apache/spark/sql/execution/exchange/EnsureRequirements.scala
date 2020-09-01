@@ -109,7 +109,8 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
             val defaultPartitioning = distribution.createPartitioning(targetNumPartitions)
             child match {
               // If child is an exchange, we replace it with a new one having defaultPartitioning.
-              case ShuffleExchangeExec(_, c, _) => ShuffleExchangeExec(defaultPartitioning, c)
+              case ShuffleExchangeExec(_, c, _, statSpecs) =>
+                ShuffleExchangeExec(defaultPartitioning, c, statSpecs = statSpecs)
               case _ => ShuffleExchangeExec(defaultPartitioning, child)
             }
           }
@@ -198,11 +199,12 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
    */
   private def reorderJoinPredicates(plan: SparkPlan): SparkPlan = {
     plan match {
-      case ShuffledHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition, left, right) =>
+      case ShuffledHashJoinExec(leftKeys, rightKeys, joinType,
+          buildSide, condition, left, right, isNullAwareAntiJoin) =>
         val (reorderedLeftKeys, reorderedRightKeys) =
           reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
         ShuffledHashJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, buildSide, condition,
-          left, right)
+          left, right, isNullAwareAntiJoin)
 
       case SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, left, right, isPartial) =>
         val (reorderedLeftKeys, reorderedRightKeys) =
@@ -216,7 +218,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
     // TODO: remove this after we create a physical operator for `RepartitionByExpression`.
-    case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, _) =>
+    case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, _, _) =>
       child.outputPartitioning match {
         case lower: HashPartitioning if upper.semanticEquals(lower) => child
         case _ => operator

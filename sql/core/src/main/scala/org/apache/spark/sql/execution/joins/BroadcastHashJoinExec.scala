@@ -48,14 +48,6 @@ case class BroadcastHashJoinExec(
     isNullAwareAntiJoin: Boolean = false)
   extends HashJoin with CodegenSupport {
 
-  if (isNullAwareAntiJoin) {
-    require(leftKeys.length == 1, "leftKeys length should be 1")
-    require(rightKeys.length == 1, "rightKeys length should be 1")
-    require(joinType == LeftAnti, "joinType must be LeftAnti.")
-    require(buildSide == BuildRight, "buildSide must be BuildRight.")
-    require(condition.isEmpty, "null aware anti join optimize condition should be empty.")
-  }
-
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
@@ -136,41 +128,24 @@ case class BroadcastHashJoinExec(
         .map(HashPartitioning(_, partitioning.numPartitions)))
   }
 
+  protected override def nullAwareAntiJoin(
+      streamIter: Iterator[InternalRow],
+      hashedRelation: HashedRelation): Iterator[InternalRow] = {
+    if (hashedRelation == HashedRelationWithAllNullKeys) {
+      Iterator.empty
+    } else {
+      super.nullAwareAntiJoin(streamIter, hashedRelation)
+    }
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
-    if (isNullAwareAntiJoin) {
-      streamedPlan.execute().mapPartitionsInternal { streamedIter =>
-        val hashed = broadcastRelation.value.asReadOnlyCopy()
-        TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
-        if (hashed == EmptyHashedRelation) {
-          streamedIter
-        } else if (hashed == HashedRelationWithAllNullKeys) {
-          Iterator.empty
-        } else {
-          val keyGenerator = UnsafeProjection.create(
-            BindReferences.bindReferences[Expression](
-              leftKeys,
-              AttributeSeq(left.output))
-          )
-          streamedIter.filter(row => {
-            val lookupKey: UnsafeRow = keyGenerator(row)
-            if (lookupKey.anyNull()) {
-              false
-            } else {
-              // Anti Join: Drop the row on the streamed side if it is a match on the build
-              hashed.get(lookupKey) == null
-            }
-          })
-        }
-      }
-    } else {
-      streamedPlan.execute().mapPartitions { streamedIter =>
-        val hashed = broadcastRelation.value.asReadOnlyCopy()
-        TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
-        join(streamedIter, hashed, numOutputRows)
-      }
+    streamedPlan.execute().mapPartitions { streamedIter =>
+      val hashed = broadcastRelation.value.asReadOnlyCopy()
+      TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
+      join(streamedIter, hashed, numOutputRows)
     }
   }
 
@@ -221,37 +196,32 @@ case class BroadcastHashJoinExec(
   }
 
   /**
-   * Generates the code for anti join.
-   * Handles NULL-aware anti join (NAAJ) separately here.
+   * Generates the code for null aware anti join.
    */
-  protected override def codegenAnti(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    if (isNullAwareAntiJoin) {
-      val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
-      val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-      val numOutput = metricTerm(ctx, "numOutputRows")
+  protected override def codegenNullAwareAnti(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
+    val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
+    val numOutput = metricTerm(ctx, "numOutputRows")
 
-      if (broadcastRelation.value == EmptyHashedRelation) {
-        s"""
-           |// If the right side is empty, NAAJ simply returns the left side.
-           |$numOutput.add(1);
-           |${consume(ctx, input)}
+    if (broadcastRelation.value == EmptyHashedRelation) {
+      s"""
+         |// If the right side is empty, NAAJ simply returns the left side.
+         |$numOutput.add(1);
+         |${consume(ctx, input)}
          """.stripMargin
-      } else if (broadcastRelation.value == HashedRelationWithAllNullKeys) {
-        s"""
-           |// If the right side contains any all-null key, NAAJ simply returns Nothing.
+    } else if (broadcastRelation.value == HashedRelationWithAllNullKeys) {
+      s"""
+         |// If the right side contains any all-null key, NAAJ simply returns Nothing.
          """.stripMargin
-      } else {
-        s"""
-           |// generate join key for stream side
-           |${keyEv.code}
-           |if (!$anyNull && $relationTerm.getValue(${keyEv.value}) == null) {
-           |  $numOutput.add(1);
-           |  ${consume(ctx, input)}
-           |}
-         """.stripMargin
-      }
     } else {
-      super.codegenAnti(ctx, input)
+      s"""
+         |// generate join key for stream side
+         |${keyEv.code}
+         |if (!$anyNull && $relationTerm.getValue(${keyEv.value}) == null) {
+         |  $numOutput.add(1);
+         |  ${consume(ctx, input)}
+         |}
+         """.stripMargin
     }
   }
 }
