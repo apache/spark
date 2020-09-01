@@ -1327,7 +1327,7 @@ class Analyzer(
      * children attributes.
      *
      * @param e the expression need to be resolved.
-     * @param q the LogicalPlan use to resolve expression's attribute from.
+     * @param q the LogicalPlan who's children used to resolve expression's attribute.
      * @param trimAlias whether need to trim alias of Struct field. When true, we will trim
      *                  Struct field alias. When isTopLevel = true, we won't trim top-level
      *                  Struct field alias.
