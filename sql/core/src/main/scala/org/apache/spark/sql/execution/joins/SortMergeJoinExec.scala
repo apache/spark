@@ -146,7 +146,7 @@ case class SortMergeJoinExec(
         case _: InnerLike =>
           new RowIterator {
             private[this] var currentLeftRow: InternalRow = _
-            private[this] var currentRightMatches: AppendOnlyUnsafeRowArray = _
+            private[this] var currentRightMatches: ExternalAppendOnlyUnsafeRowArray = _
             private[this] var rightMatchesIterator: Iterator[UnsafeRow] = null
             private[this] val smjScanner = new SortMergeJoinScanner(
               createLeftKeyGenerator(),
@@ -680,29 +680,9 @@ private[joins] class SortMergeJoinScanner(
    */
   private[this] var matchJoinKey: InternalRow = _
   /** Buffered rows from the buffered side of the join. This is empty if there are no matches. */
-  private[this] val bufferedMatches: AppendOnlyUnsafeRowArray = if (bufferFirstOnly) {
-    new AppendOnlyUnsafeRowArray {
-      var buffer: UnsafeRow = null
-
-      override def clear(): Unit = {
-        buffer = null
-      }
-
-      override def add(row: UnsafeRow): Unit = {
-        assert(buffer == null)
-
-        buffer = row
-      }
-
-      override def isEmpty: Boolean = buffer == null
-
-      override def length: Int = if (buffer == null) 0 else 1
-
-      override def generateIterator(): Iterator[UnsafeRow] = Iterator(buffer)
-    }
-  } else {
-    new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
-  }
+  private[this] val bufferedMatches: ExternalAppendOnlyUnsafeRowArray =
+    new ExternalAppendOnlyUnsafeRowArray(if (bufferFirstOnly) 1 else inMemoryThreshold,
+      spillThreshold)
 
   // Initialization (note: do _not_ want to advance streamed here).
   advancedBufferedToRowWithNullFreeJoinKey()
@@ -711,7 +691,7 @@ private[joins] class SortMergeJoinScanner(
 
   def getStreamedRow: InternalRow = streamedRow
 
-  def getBufferedMatches: AppendOnlyUnsafeRowArray = bufferedMatches
+  def getBufferedMatches: ExternalAppendOnlyUnsafeRowArray = bufferedMatches
 
   /**
    * Advances both input iterators, stopping when we have found rows with matching join keys. If no

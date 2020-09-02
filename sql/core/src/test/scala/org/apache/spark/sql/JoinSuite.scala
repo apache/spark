@@ -749,8 +749,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
         )
       }
 
-      // LEFT SEMI JOIN without bound condition does not use [[ExternalAppendOnlyUnsafeRowArray]]
-      // so should not cause any spill
+      // LEFT SEMI JOIN without bound condition does not spill
       assertNotSpilled(sparkContext, "left semi join") {
         checkAnswer(
           sql("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a WHERE key = 2"),
