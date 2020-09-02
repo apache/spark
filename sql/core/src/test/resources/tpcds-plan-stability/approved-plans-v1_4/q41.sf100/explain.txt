@@ -24,7 +24,7 @@ TakeOrderedAndProject (20)
 (1) Scan parquet default.item
 Output [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_manufact_id), GreaterThanOrEqual(i_manufact_id,738), LessThanOrEqual(i_manufact_id,778), IsNotNull(i_manufact)]
 ReadSchema: struct<i_manufact_id:int,i_manufact:string,i_product_name:string>
 
@@ -42,7 +42,7 @@ Input [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
 (5) Scan parquet default.item
 Output [5]: [i_category#4, i_manufact#2, i_size#5, i_color#6, i_units#7]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [Or(Or(And(EqualTo(i_category,Women),Or(And(And(Or(EqualTo(i_color,powder),EqualTo(i_color,khaki)),Or(EqualTo(i_units,Ounce),EqualTo(i_units,Oz))),Or(EqualTo(i_size,medium),EqualTo(i_size,extra large))),And(And(Or(EqualTo(i_color,brown),EqualTo(i_color,honeydew)),Or(EqualTo(i_units,Bunch),EqualTo(i_units,Ton))),Or(EqualTo(i_size,N/A),EqualTo(i_size,small))))),And(EqualTo(i_category,Men),Or(And(And(Or(EqualTo(i_color,floral),EqualTo(i_color,deep)),Or(EqualTo(i_units,N/A),EqualTo(i_units,Dozen))),Or(EqualTo(i_size,petite),EqualTo(i_size,large))),And(And(Or(EqualTo(i_color,light),EqualTo(i_color,cornflower)),Or(EqualTo(i_units,Box),EqualTo(i_units,Pound))),Or(EqualTo(i_size,medium),EqualTo(i_size,extra large)))))),Or(And(EqualTo(i_category,Women),Or(And(And(Or(EqualTo(i_color,midnight),EqualTo(i_color,snow)),Or(EqualTo(i_units,Pallet),EqualTo(i_units,Gross))),Or(EqualTo(i_size,medium),EqualTo(i_size,extra large))),And(And(Or(EqualTo(i_color,cyan),EqualTo(i_color,papaya)),Or(EqualTo(i_units,Cup),EqualTo(i_units,Dram))),Or(EqualTo(i_size,N/A),EqualTo(i_size,small))))),And(EqualTo(i_category,Men),Or(And(And(Or(EqualTo(i_color,orange),EqualTo(i_color,frosted)),Or(EqualTo(i_units,Each),EqualTo(i_units,Tbl))),Or(EqualTo(i_size,petite),EqualTo(i_size,large))),And(And(Or(EqualTo(i_color,forest),EqualTo(i_color,ghost)),Or(EqualTo(i_units,Lb),EqualTo(i_units,Bundle))),Or(EqualTo(i_size,medium),EqualTo(i_size,extra large))))))), IsNotNull(i_manufact)]
 ReadSchema: struct<i_category:string,i_manufact:string,i_size:string,i_color:string,i_units:string>
 

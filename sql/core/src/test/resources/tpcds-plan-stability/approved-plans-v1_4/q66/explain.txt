@@ -59,7 +59,7 @@ TakeOrderedAndProject (55)
 (1) Scan parquet default.web_sales
 Output [7]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_warehouse_sk#4, ws_quantity#5, ws_ext_sales_price#6, ws_net_paid#7]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/web_sales]
+Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_warehouse_sk), IsNotNull(ws_sold_date_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_ship_mode_sk)]
 ReadSchema: struct<ws_sold_date_sk:int,ws_sold_time_sk:int,ws_ship_mode_sk:int,ws_warehouse_sk:int,ws_quantity:int,ws_ext_sales_price:decimal(7,2),ws_net_paid:decimal(7,2)>
 
@@ -73,7 +73,7 @@ Condition : (((isnotnull(ws_warehouse_sk#4) AND isnotnull(ws_sold_date_sk#1)) AN
 (4) Scan parquet default.warehouse
 Output [7]: [w_warehouse_sk#8, w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12, w_state#13, w_country#14]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/warehouse]
+Location [not included in comparison]/{warehouse_dir}/warehouse]
 PushedFilters: [IsNotNull(w_warehouse_sk)]
 ReadSchema: struct<w_warehouse_sk:int,w_warehouse_name:string,w_warehouse_sq_ft:int,w_city:string,w_county:string,w_state:string,w_country:string>
 
@@ -100,7 +100,7 @@ Input [14]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_warehou
 (10) Scan parquet default.date_dim
 Output [3]: [d_date_sk#16, d_year#17, d_moy#18]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
@@ -127,7 +127,7 @@ Input [15]: [ws_sold_date_sk#1, ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantit
 (16) Scan parquet default.time_dim
 Output [2]: [t_time_sk#20, t_time#21]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/time_dim]
+Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_time), GreaterThanOrEqual(t_time,30838), LessThanOrEqual(t_time,59638), IsNotNull(t_time_sk)]
 ReadSchema: struct<t_time_sk:int,t_time:int>
 
@@ -158,7 +158,7 @@ Input [14]: [ws_sold_time_sk#2, ws_ship_mode_sk#3, ws_quantity#5, ws_ext_sales_p
 (23) Scan parquet default.ship_mode
 Output [2]: [sm_ship_mode_sk#23, sm_carrier#24]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/ship_mode]
+Location [not included in comparison]/{warehouse_dir}/ship_mode]
 PushedFilters: [In(sm_carrier, [DHL,BARIAN]), IsNotNull(sm_ship_mode_sk)]
 ReadSchema: struct<sm_ship_mode_sk:int,sm_carrier:string>
 
@@ -207,7 +207,7 @@ Results [32]: [w_warehouse_name#9, w_warehouse_sq_ft#10, w_city#11, w_county#12,
 (33) Scan parquet default.catalog_sales
 Output [7]: [cs_sold_date_sk#173, cs_sold_time_sk#174, cs_ship_mode_sk#175, cs_warehouse_sk#176, cs_quantity#177, cs_sales_price#178, cs_net_paid_inc_tax#179]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/catalog_sales]
+Location [not included in comparison]/{warehouse_dir}/catalog_sales]
 PushedFilters: [IsNotNull(cs_warehouse_sk), IsNotNull(cs_sold_date_sk), IsNotNull(cs_sold_time_sk), IsNotNull(cs_ship_mode_sk)]
 ReadSchema: struct<cs_sold_date_sk:int,cs_sold_time_sk:int,cs_ship_mode_sk:int,cs_warehouse_sk:int,cs_quantity:int,cs_sales_price:decimal(7,2),cs_net_paid_inc_tax:decimal(7,2)>
 

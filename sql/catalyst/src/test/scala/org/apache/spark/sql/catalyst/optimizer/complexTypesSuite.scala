@@ -453,46 +453,77 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](3, 4))), null)
   }
 
-  private val structAttr = 'struct1.struct('a.int)
+  private val structAttr = 'struct1.struct('a.int).withNullability(false)
   private val testStructRelation = LocalRelation(structAttr)
 
+  private val nullableStructAttr = 'struct1.struct('a.int)
+  private val testNullableStructRelation = LocalRelation(nullableStructAttr)
+
   test("simplify GetStructField on WithFields that is not changing the attribute being extracted") {
-    val query = testStructRelation.select(
-      GetStructField(WithFields('struct1, Seq("b"), Seq(Literal(1))), 0, Some("a")) as "outerAtt")
-    val expected = testStructRelation.select(GetStructField('struct1, 0, Some("a")) as "outerAtt")
-    checkRule(query, expected)
+    def query(relation: LocalRelation): LogicalPlan = relation.select(
+      GetStructField(WithFields('struct1, Seq("b"), Seq(Literal(1))), 0, Some("a")) as "outerAttr")
+
+    checkRule(
+      query(testStructRelation),
+      testStructRelation.select(GetStructField('struct1, 0, Some("a")) as "outerAttr"))
+
+    checkRule(
+      query(testNullableStructRelation),
+      testNullableStructRelation.select(GetStructField('struct1, 0, Some("a")) as "outerAttr"))
   }
 
   test("simplify GetStructField on WithFields that is changing the attribute being extracted") {
-    val query = testStructRelation.select(
-      GetStructField(WithFields('struct1, Seq("b"), Seq(Literal(1))), 1, Some("b")) as "outerAtt")
-    val expected = testStructRelation.select(Literal(1) as "outerAtt")
-    checkRule(query, expected)
+    def query(relation: LocalRelation): LogicalPlan = relation.select(
+      GetStructField(WithFields('struct1, Seq("b"), Seq(Literal(1))), 1, Some("b")) as "res")
+
+    checkRule(
+      query(testStructRelation),
+      testStructRelation.select(Literal(1) as "res"))
+
+    checkRule(
+      query(testNullableStructRelation),
+      testNullableStructRelation.select(
+        If(IsNull('struct1), Literal(null, IntegerType), Literal(1)) as "res"))
   }
 
   test(
     "simplify GetStructField on WithFields that is changing the attribute being extracted twice") {
-    val query = testStructRelation
-      .select(GetStructField(WithFields('struct1, Seq("b", "b"), Seq(Literal(1), Literal(2))), 1,
-        Some("b")) as "outerAtt")
-    val expected = testStructRelation.select(Literal(2) as "outerAtt")
-    checkRule(query, expected)
+    def query(relation: LocalRelation): LogicalPlan = relation.select(
+      GetStructField(WithFields('struct1, Seq("b", "b"), Seq(Literal(1), Literal(2))), 1, Some("b"))
+        as "outerAtt")
+
+    checkRule(
+      query(testStructRelation),
+      testStructRelation.select(Literal(2) as "outerAtt"))
+
+    checkRule(
+      query(testNullableStructRelation),
+      testNullableStructRelation.select(
+        If(IsNull('struct1), Literal(null, IntegerType), Literal(2)) as "outerAtt"))
   }
 
   test("collapse multiple GetStructField on the same WithFields") {
-    val query = testStructRelation
+    def query(relation: LocalRelation): LogicalPlan = relation
       .select(WithFields('struct1, Seq("b"), Seq(Literal(2))) as "struct2")
       .select(
         GetStructField('struct2, 0, Some("a")) as "struct1A",
         GetStructField('struct2, 1, Some("b")) as "struct1B")
-    val expected = testStructRelation.select(
-      GetStructField('struct1, 0, Some("a")) as "struct1A",
-      Literal(2) as "struct1B")
-    checkRule(query, expected)
+
+    checkRule(
+      query(testStructRelation),
+      testStructRelation.select(
+        GetStructField('struct1, 0, Some("a")) as "struct1A",
+        Literal(2) as "struct1B"))
+
+    checkRule(
+      query(testNullableStructRelation),
+      testNullableStructRelation.select(
+        GetStructField('struct1, 0, Some("a")) as "struct1A",
+        If(IsNull('struct1), Literal(null, IntegerType), Literal(2)) as "struct1B"))
   }
 
   test("collapse multiple GetStructField on different WithFields") {
-    val query = testStructRelation
+    def query(relation: LocalRelation): LogicalPlan = relation
       .select(
         WithFields('struct1, Seq("b"), Seq(Literal(2))) as "struct2",
         WithFields('struct1, Seq("b"), Seq(Literal(3))) as "struct3")
@@ -501,12 +532,23 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
         GetStructField('struct2, 1, Some("b")) as "struct2B",
         GetStructField('struct3, 0, Some("a")) as "struct3A",
         GetStructField('struct3, 1, Some("b")) as "struct3B")
-    val expected = testStructRelation
-      .select(
-        GetStructField('struct1, 0, Some("a")) as "struct2A",
-        Literal(2) as "struct2B",
-        GetStructField('struct1, 0, Some("a")) as "struct3A",
-        Literal(3) as "struct3B")
-    checkRule(query, expected)
+
+    checkRule(
+      query(testStructRelation),
+      testStructRelation
+        .select(
+          GetStructField('struct1, 0, Some("a")) as "struct2A",
+          Literal(2) as "struct2B",
+          GetStructField('struct1, 0, Some("a")) as "struct3A",
+          Literal(3) as "struct3B"))
+
+    checkRule(
+      query(testNullableStructRelation),
+      testNullableStructRelation
+        .select(
+          GetStructField('struct1, 0, Some("a")) as "struct2A",
+          If(IsNull('struct1), Literal(null, IntegerType), Literal(2)) as "struct2B",
+          GetStructField('struct1, 0, Some("a")) as "struct3A",
+          If(IsNull('struct1), Literal(null, IntegerType), Literal(3)) as "struct3B"))
   }
 }

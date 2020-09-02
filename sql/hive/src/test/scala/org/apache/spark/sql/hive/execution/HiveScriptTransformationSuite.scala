@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.File
 import java.sql.Timestamp
 
+import org.apache.commons.io.FileUtils
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 

@@ -20,7 +20,9 @@ Type-specific codes between pandas and PyArrow. Also contains some utils to corr
 pandas instances during the type conversion.
 """
 
-from pyspark.sql.types import *
+from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, \
+    DoubleType, DecimalType, StringType, BinaryType, DateType, TimestampType, ArrayType, \
+    StructType, StructField, BooleanType
 
 
 def to_arrow_type(dt):

@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.util.resourceToString
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This test suite ensures all the TPC-DS queries can be successfully analyzed, optimized
@@ -64,4 +66,9 @@ class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSBase {
 
 class TPCDSQueryWithStatsSuite extends TPCDSQuerySuite {
   override def injectStats: Boolean = true
+}
+
+class TPCDSQueryANSISuite extends TPCDSQuerySuite {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
 }

@@ -279,6 +279,9 @@ private[spark] class ExecutorAllocationManager(
     numExecutorsTargetPerResourceProfileId.keys.foreach { rpId =>
       numExecutorsTargetPerResourceProfileId(rpId) = initialNumExecutors
     }
+    numExecutorsToAddPerResourceProfileId.keys.foreach { rpId =>
+      numExecutorsToAddPerResourceProfileId(rpId) = 1
+    }
     executorMonitor.reset()
   }
 
