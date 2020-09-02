@@ -166,22 +166,28 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     )
   }
 
-  test("simplify if when then clause is null and else clause is boolean") {
+  test("simplify if when one clause is null and another is boolean") {
     val p = IsNull('a)
     val nullLiteral = Literal(null, BooleanType)
     assertEquivalent(If(p, nullLiteral, FalseLiteral), And(p, nullLiteral))
     assertEquivalent(If(p, nullLiteral, TrueLiteral), Or(IsNotNull('a), nullLiteral))
+    assertEquivalent(If(p, FalseLiteral, nullLiteral), And(IsNotNull('a), nullLiteral))
+    assertEquivalent(If(p, TrueLiteral, nullLiteral), Or(p, nullLiteral))
 
     // the rule should not apply to nullable predicate
     Seq(TrueLiteral, FalseLiteral).foreach { b =>
       assertEquivalent(If(GreaterThan('a, 42), nullLiteral, b),
         If(GreaterThan('a, 42), nullLiteral, b))
+      assertEquivalent(If(GreaterThan('a, 42), b, nullLiteral),
+        If(GreaterThan('a, 42), b, nullLiteral))
     }
 
     // check evaluation also
     Seq(TrueLiteral, FalseLiteral).foreach { b =>
       checkEvaluation(If(b, nullLiteral, FalseLiteral), And(b, nullLiteral).eval(EmptyRow))
       checkEvaluation(If(b, nullLiteral, TrueLiteral), Or(Not(b), nullLiteral).eval(EmptyRow))
+      checkEvaluation(If(b, FalseLiteral, nullLiteral), And(Not(b), nullLiteral).eval(EmptyRow))
+      checkEvaluation(If(b, TrueLiteral, nullLiteral), Or(b, nullLiteral).eval(EmptyRow))
     }
 
     // should have no effect on expressions with nullable if condition
@@ -189,6 +195,8 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     Seq(TrueLiteral, FalseLiteral).foreach { b =>
       checkEvaluation(If(Factorial(5) > 100L, nullLiteral, b),
         If(Factorial(5) > 100L, nullLiteral, b).eval(EmptyRow))
+      checkEvaluation(If(Factorial(5) > 100L, b, nullLiteral),
+        If(Factorial(5) > 100L, b, nullLiteral).eval(EmptyRow))
     }
   }
 }
