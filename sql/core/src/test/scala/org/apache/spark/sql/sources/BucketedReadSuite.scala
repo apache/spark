@@ -525,50 +525,70 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   test("check sort and shuffle when bucket and sort columns are join keys") {
     // In case of bucketing, its possible to have multiple files belonging to the
     // same bucket in a given relation. Each of these files are locally sorted
-    // but those files combined together are not globally sorted. Given that,
-    // the RDD partition will not be sorted even if the relation has sort columns set
-    // Therefore, we still need to keep the Sort in both sides.
+    // but those files combined together are not globally sorted. With configuration
+    // "spark.sql.sources.bucketing.sortedScan.enabled" being enabled, sort ordering
+    // is preserved by reading those sorted files in sort-merge way.
     val bucketSpec = Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j")))
 
-    val bucketedTableTestSpecLeft1 = BucketedTableTestSpec(
-      bucketSpec, numPartitions = 50, expectedShuffle = false, expectedSort = true)
-    val bucketedTableTestSpecRight1 = BucketedTableTestSpec(
-      bucketSpec, numPartitions = 1, expectedShuffle = false, expectedSort = false)
-    testBucketing(
-      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft1,
-      bucketedTableTestSpecRight = bucketedTableTestSpecRight1,
-      joinCondition = joinCondition(Seq("i", "j"))
-    )
+    Seq(true, false).foreach(sortedScanEnabled => {
+      withSQLConf(SQLConf.BUCKET_SORTED_SCAN_ENABLED.key -> sortedScanEnabled.toString) {
+        val bucketedTableTestSpecLeft1 = BucketedTableTestSpec(
+          bucketSpec, numPartitions = 50, expectedShuffle = false,
+          expectedSort = !sortedScanEnabled)
+        val bucketedTableTestSpecRight1 = BucketedTableTestSpec(
+          bucketSpec, numPartitions = 1, expectedShuffle = false, expectedSort = false)
+        testBucketing(
+          bucketedTableTestSpecLeft = bucketedTableTestSpecLeft1,
+          bucketedTableTestSpecRight = bucketedTableTestSpecRight1,
+          joinCondition = joinCondition(Seq("i", "j"))
+        )
+      }
+    })
 
-    val bucketedTableTestSpecLeft2 = BucketedTableTestSpec(
-      bucketSpec, numPartitions = 1, expectedShuffle = false, expectedSort = false)
-    val bucketedTableTestSpecRight2 = BucketedTableTestSpec(
-      bucketSpec, numPartitions = 50, expectedShuffle = false, expectedSort = true)
-    testBucketing(
-      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft2,
-      bucketedTableTestSpecRight = bucketedTableTestSpecRight2,
-      joinCondition = joinCondition(Seq("i", "j"))
-    )
+    Seq(true, false).foreach(sortedScanEnabled => {
+      withSQLConf(SQLConf.BUCKET_SORTED_SCAN_ENABLED.key -> sortedScanEnabled.toString) {
+        val bucketedTableTestSpecLeft2 = BucketedTableTestSpec(
+          bucketSpec, numPartitions = 1, expectedShuffle = false, expectedSort = false)
+        val bucketedTableTestSpecRight2 = BucketedTableTestSpec(
+          bucketSpec, numPartitions = 50, expectedShuffle = false,
+          expectedSort = !sortedScanEnabled)
+        testBucketing(
+          bucketedTableTestSpecLeft = bucketedTableTestSpecLeft2,
+          bucketedTableTestSpecRight = bucketedTableTestSpecRight2,
+          joinCondition = joinCondition(Seq("i", "j"))
+        )
+      }
+    })
 
-    val bucketedTableTestSpecLeft3 = BucketedTableTestSpec(
-      bucketSpec, numPartitions = 50, expectedShuffle = false, expectedSort = true)
-    val bucketedTableTestSpecRight3 = BucketedTableTestSpec(
-      bucketSpec, numPartitions = 50, expectedShuffle = false, expectedSort = true)
-    testBucketing(
-      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft3,
-      bucketedTableTestSpecRight = bucketedTableTestSpecRight3,
-      joinCondition = joinCondition(Seq("i", "j"))
-    )
+    Seq(true, false).foreach(sortedScanEnabled => {
+      withSQLConf(SQLConf.BUCKET_SORTED_SCAN_ENABLED.key -> sortedScanEnabled.toString) {
+        val bucketedTableTestSpecLeft3 = BucketedTableTestSpec(
+          bucketSpec, numPartitions = 50, expectedShuffle = false,
+          expectedSort = !sortedScanEnabled)
+        val bucketedTableTestSpecRight3 = BucketedTableTestSpec(
+          bucketSpec, numPartitions = 50, expectedShuffle = false,
+          expectedSort = !sortedScanEnabled)
+        testBucketing(
+          bucketedTableTestSpecLeft = bucketedTableTestSpecLeft3,
+          bucketedTableTestSpecRight = bucketedTableTestSpecRight3,
+          joinCondition = joinCondition(Seq("i", "j"))
+        )
+      }
+    })
 
-    val bucketedTableTestSpecLeft4 = BucketedTableTestSpec(
-      bucketSpec, numPartitions = 1, expectedShuffle = false, expectedSort = false)
-    val bucketedTableTestSpecRight4 = BucketedTableTestSpec(
-      bucketSpec, numPartitions = 1, expectedShuffle = false, expectedSort = false)
-    testBucketing(
-      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft4,
-      bucketedTableTestSpecRight = bucketedTableTestSpecRight4,
-      joinCondition = joinCondition(Seq("i", "j"))
-    )
+    Seq(true, false).foreach(sortedScanEnabled => {
+      withSQLConf(SQLConf.BUCKET_SORTED_SCAN_ENABLED.key -> sortedScanEnabled.toString) {
+        val bucketedTableTestSpecLeft4 = BucketedTableTestSpec(
+          bucketSpec, numPartitions = 1, expectedShuffle = false, expectedSort = false)
+        val bucketedTableTestSpecRight4 = BucketedTableTestSpec(
+          bucketSpec, numPartitions = 1, expectedShuffle = false, expectedSort = false)
+        testBucketing(
+          bucketedTableTestSpecLeft = bucketedTableTestSpecLeft4,
+          bucketedTableTestSpecRight = bucketedTableTestSpecRight4,
+          joinCondition = joinCondition(Seq("i", "j"))
+        )
+      }
+    })
   }
 
   test("avoid shuffle and sort when sort columns are a super set of join keys") {

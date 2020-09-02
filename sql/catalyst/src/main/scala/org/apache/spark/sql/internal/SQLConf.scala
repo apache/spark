@@ -2744,6 +2744,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val BUCKET_SORTED_SCAN_ENABLED =
+    buildConf("spark.sql.sources.bucketing.sortedScan.enabled")
+      .doc("When true, the bucketed table scan will respect table sort columns, " +
+        "and read multiple sorted files per bucket in a sort-merge way to preserve ordering. " +
+        "Note: tasks might have more memory footprint and OOM with vectorized reader, " +
+        "because multiple rows or columnar batches from different files will be read at same time.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3363,6 +3373,8 @@ class SQLConf extends Serializable with Logging {
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
   def truncateTrashEnabled: Boolean = getConf(SQLConf.TRUNCATE_TRASH_ENABLED)
+
+  def bucketSortedScanEnabled: Boolean = getConf(SQLConf.BUCKET_SORTED_SCAN_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

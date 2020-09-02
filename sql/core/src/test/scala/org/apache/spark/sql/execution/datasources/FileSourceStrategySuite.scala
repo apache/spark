@@ -290,7 +290,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
     val fakeRDD = new FileScanRDD(
       spark,
       (file: PartitionedFile) => Iterator.empty,
-      Seq(partition)
+      Seq(partition),
+      RowMode
     )
 
     assertResult(Set("host0", "host1", "host2")) {
