@@ -120,9 +120,7 @@ private[spark] class ByteBufferBlockData(
 private[spark] class HostLocalDirManager(
     futureExecutionContext: ExecutionContext,
     cacheSize: Int,
-    externalBlockStoreClient: ExternalBlockStoreClient,
-    host: String,
-    externalShuffleServicePort: Int) extends Logging {
+    blockStoreClient: BlockStoreClient) extends Logging {
 
   private val executorIdToLocalDirsCache =
     CacheBuilder
@@ -130,24 +128,25 @@ private[spark] class HostLocalDirManager(
       .maximumSize(cacheSize)
       .build[String, Array[String]]()
 
-  private[spark] def getCachedHostLocalDirs()
-      : scala.collection.Map[String, Array[String]] = executorIdToLocalDirsCache.synchronized {
-    import scala.collection.JavaConverters._
-    return executorIdToLocalDirsCache.asMap().asScala
-  }
+  private[spark] def getCachedHostLocalDirs: Map[String, Array[String]] =
+    executorIdToLocalDirsCache.synchronized {
+      executorIdToLocalDirsCache.asMap().asScala.toMap
+    }
 
   private[spark] def getHostLocalDirs(
+      host: String,
+      port: Int,
       executorIds: Array[String])(
-      callback: Try[java.util.Map[String, Array[String]]] => Unit): Unit = {
+      callback: Try[Map[String, Array[String]]] => Unit): Unit = {
     val hostLocalDirsCompletable = new CompletableFuture[java.util.Map[String, Array[String]]]
-    externalBlockStoreClient.getHostLocalDirs(
+    blockStoreClient.getHostLocalDirs(
       host,
-      externalShuffleServicePort,
+      port,
       executorIds,
       hostLocalDirsCompletable)
     hostLocalDirsCompletable.whenComplete { (hostLocalDirs, throwable) =>
       if (hostLocalDirs != null) {
-        callback(Success(hostLocalDirs))
+        callback(Success(hostLocalDirs.asScala.toMap))
         executorIdToLocalDirsCache.synchronized {
           executorIdToLocalDirsCache.putAll(hostLocalDirs)
         }
@@ -165,7 +164,7 @@ private[spark] class HostLocalDirManager(
  * Note that [[initialize()]] must be called before the BlockManager is usable.
  */
 private[spark] class BlockManager(
-    executorId: String,
+    val executorId: String,
     rpcEnv: RpcEnv,
     val master: BlockManagerMaster,
     val serializerManager: SerializerManager,
@@ -212,7 +211,7 @@ private[spark] class BlockManager(
   private val maxOnHeapMemory = memoryManager.maxOnHeapStorageMemory
   private val maxOffHeapMemory = memoryManager.maxOffHeapStorageMemory
 
-  private val externalShuffleServicePort = StorageUtils.externalShuffleServicePort(conf)
+  private[spark] val externalShuffleServicePort = StorageUtils.externalShuffleServicePort(conf)
 
   var blockManagerId: BlockManagerId = _
 
@@ -264,6 +263,8 @@ private[spark] class BlockManager(
   private[storage] lazy val migratableResolver: MigratableResolver = {
     shuffleManager.shuffleBlockResolver.asInstanceOf[MigratableResolver]
   }
+
+  override def getLocalDiskDirs: Array[String] = diskBlockManager.localDirsString
 
   /**
    * Abstraction for storing blocks from bytes, whether they start in memory or on disk.
@@ -492,20 +493,17 @@ private[spark] class BlockManager(
       registerWithExternalShuffleServer()
     }
 
-    hostLocalDirManager =
+    hostLocalDirManager = {
       if (conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) &&
           !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
-        externalBlockStoreClient.map { blockStoreClient =>
-          new HostLocalDirManager(
-            futureExecutionContext,
-            conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),
-            blockStoreClient,
-            blockManagerId.host,
-            externalShuffleServicePort)
-        }
+        Some(new HostLocalDirManager(
+          futureExecutionContext,
+          conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),
+          blockStoreClient))
       } else {
         None
       }
+    }
 
     logInfo(s"Initialized BlockManager: $blockManagerId")
   }
