@@ -25,7 +25,9 @@ import warnings
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import udf
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StringType, IntegerType, LongType, \
+    FloatType, DoubleType, DecimalType, DateType, TimestampType, BinaryType, StructField, MapType, \
+    ArrayType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
@@ -495,7 +497,7 @@ class EncryptionArrowTests(ArrowTests):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_arrow import *
+    from pyspark.sql.tests.test_arrow import *  # noqa: F401
 
     try:
         import xmlrunner

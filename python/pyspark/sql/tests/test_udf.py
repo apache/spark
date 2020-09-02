@@ -24,7 +24,8 @@ import unittest
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, Column, Row
 from pyspark.sql.functions import UserDefinedFunction, udf
-from pyspark.sql.types import *
+from pyspark.sql.types import StringType, IntegerType, BooleanType, DoubleType, LongType, \
+    ArrayType, StructType, StructField
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_compiled_message
 from pyspark.testing.utils import QuietTest
@@ -283,7 +284,6 @@ class UDFTests(ReusedSQLTestCase):
     def test_udf_with_filter_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
         from pyspark.sql.functions import col
-        from pyspark.sql.types import BooleanType
 
         my_filter = udf(lambda a: a < 2, BooleanType())
         sel = df.select(col("key"), col("value")).filter((my_filter(col("key"))) & (df.value < "2"))
@@ -292,7 +292,6 @@ class UDFTests(ReusedSQLTestCase):
     def test_udf_with_aggregate_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
         from pyspark.sql.functions import col, sum
-        from pyspark.sql.types import BooleanType
 
         my_filter = udf(lambda a: a == 1, BooleanType())
         sel = df.select(col("key")).distinct().filter(my_filter(col("key")))
@@ -465,7 +464,6 @@ class UDFTests(ReusedSQLTestCase):
 
     def test_udf_with_decorator(self):
         from pyspark.sql.functions import lit
-        from pyspark.sql.types import IntegerType, DoubleType
 
         @udf(IntegerType())
         def add_one(x):
@@ -521,8 +519,6 @@ class UDFTests(ReusedSQLTestCase):
         )
 
     def test_udf_wrapper(self):
-        from pyspark.sql.types import IntegerType
-
         def f(x):
             """Identity"""
             return x
@@ -700,7 +696,7 @@ class UDFInitializationTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_udf import *
+    from pyspark.sql.tests.test_udf import *  # noqa: F401
 
     try:
         import xmlrunner

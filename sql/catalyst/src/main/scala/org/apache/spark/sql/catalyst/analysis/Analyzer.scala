@@ -846,9 +846,9 @@ class Analyzer(
    */
   object ResolveTempViews extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case u @ UnresolvedRelation(ident) =>
+      case u @ UnresolvedRelation(ident, _) =>
         lookupTempView(ident).getOrElse(u)
-      case i @ InsertIntoStatement(UnresolvedRelation(ident), _, _, _, _) =>
+      case i @ InsertIntoStatement(UnresolvedRelation(ident, _), _, _, _, _) =>
         lookupTempView(ident)
           .map(view => i.copy(table = view))
           .getOrElse(i)
@@ -895,7 +895,7 @@ class Analyzer(
   object ResolveTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case u: UnresolvedRelation =>
-        lookupV2Relation(u.multipartIdentifier)
+        lookupV2Relation(u.multipartIdentifier, u.options)
           .map { rel =>
             val ident = rel.identifier.get
             SubqueryAlias(rel.catalog.get.name +: ident.namespace :+ ident.name, rel)
@@ -912,7 +912,7 @@ class Analyzer(
           .getOrElse(u)
 
       case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
-        lookupV2Relation(u.multipartIdentifier)
+        lookupV2Relation(u.multipartIdentifier, u.options)
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
 
@@ -928,12 +928,14 @@ class Analyzer(
     /**
      * Performs the lookup of DataSourceV2 Tables from v2 catalog.
      */
-    private def lookupV2Relation(identifier: Seq[String]): Option[DataSourceV2Relation] =
+    private def lookupV2Relation(
+        identifier: Seq[String],
+        options: CaseInsensitiveStringMap): Option[DataSourceV2Relation] =
       expandRelationName(identifier) match {
         case NonSessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident) match {
             case Some(table) =>
-              Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
+              Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), options))
             case None => None
           }
         case _ => None
@@ -975,7 +977,7 @@ class Analyzer(
       case i @ InsertIntoStatement(table, _, _, _, _) if i.query.resolved =>
         val relation = table match {
           case u: UnresolvedRelation =>
-            lookupRelation(u.multipartIdentifier).getOrElse(u)
+            lookupRelation(u.multipartIdentifier, u.options).getOrElse(u)
           case other => other
         }
 
@@ -986,7 +988,7 @@ class Analyzer(
         }
 
       case u: UnresolvedRelation =>
-        lookupRelation(u.multipartIdentifier).map(resolveViews).getOrElse(u)
+        lookupRelation(u.multipartIdentifier, u.options).map(resolveViews).getOrElse(u)
 
       case u @ UnresolvedTable(identifier) =>
         lookupTableOrView(identifier).map {
@@ -1016,7 +1018,9 @@ class Analyzer(
     // 1) If the resolved catalog is not session catalog, return None.
     // 2) If a relation is not found in the catalog, return None.
     // 3) If a v1 table is found, create a v1 relation. Otherwise, create a v2 relation.
-    private def lookupRelation(identifier: Seq[String]): Option[LogicalPlan] = {
+    private def lookupRelation(
+        identifier: Seq[String],
+        options: CaseInsensitiveStringMap): Option[LogicalPlan] = {
       expandRelationName(identifier) match {
         case SessionCatalogAndIdentifier(catalog, ident) =>
           lazy val loaded = CatalogV2Util.loadTable(catalog, ident).map {
@@ -1025,7 +1029,7 @@ class Analyzer(
             case table =>
               SubqueryAlias(
                 catalog.name +: ident.asMultipartIdentifier,
-                DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
+                DataSourceV2Relation.create(table, Some(catalog), Some(ident), options))
           }
           val key = catalog.name +: ident.namespace :+ ident.name
           AnalysisContext.get.relationCache.get(key).map(_.transform {
@@ -1370,25 +1374,50 @@ class Analyzer(
      *
      * Note : In this routine, the unresolved attributes are resolved from the input plan's
      * children attributes.
+     *
+     * @param e The expression need to be resolved.
+     * @param q The LogicalPlan whose children are used to resolve expression's attribute.
+     * @param trimAlias When true, trim unnecessary alias of `GetStructField`. Note that,
+     *                  we cannot trim the alias of top-level `GetStructField`, as we should
+     *                  resolve `UnresolvedAttribute` to a named expression. The caller side
+     *                  can trim the alias of top-level `GetStructField` if it's safe to do so.
+     * @return resolved Expression.
      */
-    private def resolveExpressionTopDown(e: Expression, q: LogicalPlan): Expression = {
-      if (e.resolved) return e
-      e match {
-        case f: LambdaFunction if !f.bound => f
-        case u @ UnresolvedAttribute(nameParts) =>
-          // Leave unchanged if resolution fails. Hopefully will be resolved next round.
-          val result =
-            withPosition(u) {
-              q.resolveChildren(nameParts, resolver)
-                .orElse(resolveLiteralFunction(nameParts, u, q))
-                .getOrElse(u)
+    private def resolveExpressionTopDown(
+        e: Expression,
+        q: LogicalPlan,
+        trimAlias: Boolean = false): Expression = {
+
+      def innerResolve(e: Expression, isTopLevel: Boolean): Expression = {
+        if (e.resolved) return e
+        e match {
+          case f: LambdaFunction if !f.bound => f
+          case u @ UnresolvedAttribute(nameParts) =>
+            // Leave unchanged if resolution fails. Hopefully will be resolved next round.
+            val resolved =
+              withPosition(u) {
+                q.resolveChildren(nameParts, resolver)
+                  .orElse(resolveLiteralFunction(nameParts, u, q))
+                  .getOrElse(u)
+              }
+            val result = resolved match {
+              // As the comment of method `resolveExpressionTopDown`'s param `trimAlias` said,
+              // when trimAlias = true, we will trim unnecessary alias of `GetStructField` and
+              // we won't trim the alias of top-level `GetStructField`. Since we will call
+              // CleanupAliases later in Analyzer, trim non top-level unnecessary alias of
+              // `GetStructField` here is safe.
+              case Alias(s: GetStructField, _) if trimAlias && !isTopLevel => s
+              case others => others
             }
-          logDebug(s"Resolving $u to $result")
-          result
-        case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
-          ExtractValue(child, fieldExpr, resolver)
-        case _ => e.mapChildren(resolveExpressionTopDown(_, q))
+            logDebug(s"Resolving $u to $result")
+            result
+          case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
+            ExtractValue(child, fieldExpr, resolver)
+          case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
+        }
       }
+
+      innerResolve(e, isTopLevel = true)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
@@ -1471,11 +1500,49 @@ class Analyzer(
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
 
-      // SPARK-25942: Resolves aggregate expressions with `AppendColumns`'s children, instead of
-      // `AppendColumns`, because `AppendColumns`'s serializer might produce conflict attribute
-      // names leading to ambiguous references exception.
-      case a @ Aggregate(groupingExprs, aggExprs, appendColumns: AppendColumns) =>
-        a.mapExpressions(resolveExpressionTopDown(_, appendColumns))
+      // SPARK-31607: Resolve Struct field in groupByExpressions and aggregateExpressions
+      // with CUBE/ROLLUP will be wrapped with alias like Alias(GetStructField, name) with
+      // different ExprId. This cause aggregateExpressions can't be replaced by expanded
+      // groupByExpressions in `ResolveGroupingAnalytics.constructAggregateExprs()`, we trim
+      // unnecessary alias of GetStructField here.
+      case a: Aggregate =>
+        val planForResolve = a.child match {
+          // SPARK-25942: Resolves aggregate expressions with `AppendColumns`'s children, instead of
+          // `AppendColumns`, because `AppendColumns`'s serializer might produce conflict attribute
+          // names leading to ambiguous references exception.
+          case appendColumns: AppendColumns => appendColumns
+          case _ => a
+        }
+
+        val resolvedGroupingExprs = a.groupingExpressions
+          .map(resolveExpressionTopDown(_, planForResolve, trimAlias = true))
+          .map(trimTopLevelGetStructFieldAlias)
+
+        val resolvedAggExprs = a.aggregateExpressions
+          .map(resolveExpressionTopDown(_, planForResolve, trimAlias = true))
+            .map(_.asInstanceOf[NamedExpression])
+
+        a.copy(resolvedGroupingExprs, resolvedAggExprs, a.child)
+
+      // SPARK-31607: Resolve Struct field in selectedGroupByExprs/groupByExprs and aggregations
+      // will be wrapped with alias like Alias(GetStructField, name) with different ExprId.
+      // This cause aggregateExpressions can't be replaced by expanded groupByExpressions in
+      // `ResolveGroupingAnalytics.constructAggregateExprs()`, we trim unnecessary alias
+      // of GetStructField here.
+      case g: GroupingSets =>
+        val resolvedSelectedExprs = g.selectedGroupByExprs
+          .map(_.map(resolveExpressionTopDown(_, g, trimAlias = true))
+            .map(trimTopLevelGetStructFieldAlias))
+
+        val resolvedGroupingExprs = g.groupByExprs
+          .map(resolveExpressionTopDown(_, g, trimAlias = true))
+          .map(trimTopLevelGetStructFieldAlias)
+
+        val resolvedAggExprs = g.aggregations
+          .map(resolveExpressionTopDown(_, g, trimAlias = true))
+            .map(_.asInstanceOf[NamedExpression])
+
+        g.copy(resolvedSelectedExprs, resolvedGroupingExprs, g.child, resolvedAggExprs)
 
       case o: OverwriteByExpression if !o.outputResolved =>
         // do not resolve expression attributes until the query attributes are resolved against the
@@ -1569,6 +1636,16 @@ class Analyzer(
 
     def findAliases(projectList: Seq[NamedExpression]): AttributeSet = {
       AttributeSet(projectList.collect { case a: Alias => a.toAttribute })
+    }
+
+    // This method is used to trim groupByExpressions/selectedGroupByExpressions's top-level
+    // GetStructField Alias. Since these expression are not NamedExpression originally,
+    // we are safe to trim top-level GetStructField Alias.
+    def trimTopLevelGetStructFieldAlias(e: Expression): Expression = {
+      e match {
+        case Alias(s: GetStructField, _) => s
+        case other => other
+      }
     }
 
     /**

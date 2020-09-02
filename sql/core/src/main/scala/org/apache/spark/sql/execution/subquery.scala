@@ -132,7 +132,11 @@ case class InSubqueryExec(
 
   def updateResult(): Unit = {
     val rows = plan.executeCollect()
-    result = rows.map(_.get(0, child.dataType)).toSet
+    result = if (plan.output.length > 1) {
+      rows.toSet
+    } else {
+      rows.map(_.get(0, child.dataType)).toSet
+    }
     resultBroadcast = plan.sqlContext.sparkContext.broadcast(result)
   }
 
