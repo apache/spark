@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJo
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.joins.{EmptyHashedRelation, HashedRelation, HashedRelationWithAllNullKeys}
 
 /**
@@ -43,12 +44,14 @@ object EliminateJoinToEmptyRelation extends Rule[LogicalPlan] {
     // If streamedSide of the Join contains ShuffleQueryStageExec(canChangeNumPartitions== false)
     // it can't be rewritten to EmptyRelation because the conversion might lost user specified
     // number partition information.
-    val immutablePartitionStages = streamedPlan.collect {
-      case lqs @ LogicalQueryStage(_, stage: ShuffleQueryStageExec)
-        if !stage.shuffle.canChangeNumPartitions => lqs
-    }
+    val immutablePartitionStageExists = streamedPlan.collect {
+      case LogicalQueryStage(_, physicalPlan: SparkPlan) =>
+        physicalPlan.collect {
+          case s: ShuffleQueryStageExec if !s.shuffle.canChangeNumPartitions => s
+        }.nonEmpty
+    }.contains(true)
 
-    if (immutablePartitionStages.nonEmpty) {
+    if (immutablePartitionStageExists) {
       false
     } else {
       buildPlan match {
