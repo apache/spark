@@ -16,14 +16,11 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from pyspark.resource.information import ResourceInformation as ResourceInformation
-from pyspark.resource.profile import (
-    ResourceProfile as ResourceProfile,
-    ResourceProfileBuilder as ResourceProfileBuilder,
-)
+from pyspark.resource.information import ResourceInformation
 from pyspark.resource.requests import (
-    ExecutorResourceRequest as ExecutorResourceRequest,
-    ExecutorResourceRequests as ExecutorResourceRequests,
-    TaskResourceRequest as TaskResourceRequest,
-    TaskResourceRequests as TaskResourceRequests,
+    TaskResourceRequest,
+    TaskResourceRequests,
+    ExecutorResourceRequest,
+    ExecutorResourceRequests,
 )
+from pyspark.resource.profile import ResourceProfile, ResourceProfileBuilder

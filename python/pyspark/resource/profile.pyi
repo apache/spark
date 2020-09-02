@@ -17,11 +17,12 @@
 # under the License.
 
 from pyspark.resource.requests import (
-    ExecutorResourceRequest as ExecutorResourceRequest,
-    ExecutorResourceRequests as ExecutorResourceRequests,
-    TaskResourceRequest as TaskResourceRequest,
-    TaskResourceRequests as TaskResourceRequests,
+    TaskResourceRequest,
+    TaskResourceRequests,
+    ExecutorResourceRequests,
+    ExecutorResourceRequest,
 )
+
 from typing import Any, Optional
 
 class ResourceProfile:

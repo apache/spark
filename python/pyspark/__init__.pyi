@@ -21,7 +21,6 @@
 
 from typing import Callable, Optional, TypeVar
 
-from pyspark.status import *
 from pyspark.accumulators import (
     Accumulator as Accumulator,
     AccumulatorParam as AccumulatorParam,
@@ -35,6 +34,11 @@ from pyspark.rdd import RDD as RDD, RDDBarrier as RDDBarrier
 from pyspark.serializers import (
     MarshalSerializer as MarshalSerializer,
     PickleSerializer as PickleSerializer,
+)
+from pyspark.status import (
+    SparkJobInfo as SparkJobInfo,
+    SparkStageInfo as SparkStageInfo,
+    StatusTracker as StatusTracker,
 )
 from pyspark.storagelevel import StorageLevel as StorageLevel
 from pyspark.taskcontext import (
