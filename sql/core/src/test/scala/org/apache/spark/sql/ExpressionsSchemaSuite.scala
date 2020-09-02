@@ -152,18 +152,18 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
 
     val outputSize = outputs.size
     val headerSize = header.size
-    val (expectedMissExamples, expectedOutputs): (Array[String], Seq[QueryOutput]) = {
+    val (expectedMissingExamples, expectedOutputs) = {
       val expectedGoldenOutput = fileToString(resultFile)
       val lines = expectedGoldenOutput.split("\n")
       val expectedSize = lines.size
 
       assert(expectedSize == outputSize + headerSize,
         s"Expected $expectedSize blocks in result file but got " +
-          s"${outputSize + headerSize}. Try regenerate the result files.")
+          s"${outputSize + headerSize}. Try regenerating the result files.")
 
       val numberOfQueries = lines(2).split(":")(1).trim.toInt
-      val numberOfMissExample = lines(3).split(":")(1).trim.toInt
-      val missExamples = lines(4).split(":")(1).trim.split(",")
+      val numberOfMissingExample = lines(3).split(":")(1).trim.toInt
+      val missingExamples = lines(4).split(":")(1).trim.split(",")
       val expectedOutputs = Seq.tabulate(outputSize) { i =>
         val segments = lines(i + headerSize).split('|')
         QueryOutput(
@@ -176,13 +176,13 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
       // Ensure consistency of the result file.
       assert(numberOfQueries == expectedOutputs.size,
         s"outputs size: ${expectedOutputs.size} not same as numberOfQueries: $numberOfQueries " +
-          "record in result file. Try regenerate the result files.")
-      assert(numberOfMissExample == missExamples.size,
-        s"miss examples size: ${missExamples.size} not same as " +
-          s"numberOfMissExample: $numberOfMissExample " +
-          "record in result file. Try regenerate the result files.")
+          "record in result file. Try regenerating the result files.")
+      assert(numberOfMissingExample == missingExamples.size,
+        s"miss examples size: ${missingExamples.size} not same as " +
+          s"numberOfMissExample: $numberOfMissingExample " +
+          "record in result file. Try regenerating the result files.")
 
-      (missExamples, expectedOutputs)
+      (missingExamples, expectedOutputs)
     }
 
     // Compare results.
@@ -195,10 +195,10 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
     }
 
     // Compare expressions missing examples
-    assert(expectedMissExamples.length == missingExamples.size,
+    assert(expectedMissingExamples.length == missingExamples.size,
       "The number of missing examples not equals the number of expected missing examples.")
 
-    missingExamples.zip(expectedMissExamples).foreach { case (output, expected) =>
+    missingExamples.zip(expectedMissingExamples).foreach { case (output, expected) =>
       assert(expected == output, "Missing example expression not match")
     }
   }
