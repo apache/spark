@@ -1229,28 +1229,13 @@ class AdaptiveQueryExecSuite
     "when canChangeNumPartitions == false") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
       // exclude ConvertToLocalRelation rule make it easier for Test.
       SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
       withTempView("m", "s", "pm", "ps") {
-        sql(
-          """
-            |CREATE TEMPORARY VIEW m AS SELECT * FROM VALUES
-            |  (null, 1.0),
-            |  (2, 3.0),
-            |  (4, 5.0)
-            |  AS m(a, b)
-          """.stripMargin)
-
-        sql(
-          """
-            |CREATE TEMPORARY VIEW s AS SELECT * FROM VALUES
-            |  (null, 1.0),
-            |  (2, 3.0),
-            |  (6, 7.0)
-            |  AS s(c, d)
-          """.stripMargin)
-
+        Seq((null: Integer, 1.0), (2: Integer, 3.0), (4: Integer, 5.0))
+          .toDF("a", "b").createOrReplaceTempView("m")
+        Seq((null: Integer, 1.0), (2: Integer, 3.0), (6: Integer, 7.0))
+          .toDF("c", "d").createOrReplaceTempView("s")
         spark.table("m").repartition(77).createOrReplaceTempView("pm")
         spark.table("s").repartition(99).createOrReplaceTempView("ps")
 
@@ -1267,8 +1252,8 @@ class AdaptiveQueryExecSuite
           "SELECT a FROM pm LEFT SEMI JOIN (SELECT * FROM s WHERE s.d > 100) ts ON pm.a = ts.c"
         ).foreach(query => {
           val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
-          val bhj = findTopLevelBroadcastHashJoin(plan)
-          assert(bhj.size == 1)
+          val bhjInAQE = findTopLevelBroadcastHashJoin(plan)
+          assert(bhjInAQE.size == 1)
           val join = findTopLevelBaseJoin(adaptivePlan)
           assert(join.isEmpty)
         })
@@ -1280,8 +1265,8 @@ class AdaptiveQueryExecSuite
           "SELECT /*+ broadcast(m) */ a FROM m, ps WHERE m.a = ps.c and m.b > 100"
         ).foreach(query => {
           val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
-          val bhj = findTopLevelBroadcastHashJoin(plan)
-          assert(bhj.size == 1)
+          val bhjInAQE = findTopLevelBroadcastHashJoin(plan)
+          assert(bhjInAQE.size == 1)
           val join = findTopLevelBaseJoin(adaptivePlan)
           assert(join.nonEmpty)
         })
