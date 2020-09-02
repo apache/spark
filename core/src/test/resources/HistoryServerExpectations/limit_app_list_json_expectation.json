@@ -13,7 +13,7 @@
     "endTimeEpoch" : 1594091824231,
     "startTimeEpoch" : 1594091460235
   } ],
-  "driverHost" : "tomg-test"
+  "driverHost" : "127.0.0.1"
 }, {
   "id" : "application_1578436911597_0052",
   "name" : "Spark shell",
@@ -29,7 +29,7 @@
     "startTimeEpoch" : 1578764662851,
     "lastUpdatedEpoch" : 0
   } ],
-  "driverHost" : "test-3.vpc.company.com"
+  "driverHost" : "host1"
 }, {
   "id" : "application_1555004656427_0144",
   "name" : "Spark shell",
@@ -45,5 +45,5 @@
     "lastUpdatedEpoch" : 0,
     "endTimeEpoch" : 1562101355974
   } ],
-  "driverHost" : "apiros-2.gce.test.com"
+  "driverHost" : "tomg-test"
 } ]
