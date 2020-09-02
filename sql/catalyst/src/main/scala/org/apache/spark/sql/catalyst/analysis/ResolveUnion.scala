@@ -35,7 +35,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
   /**
    * Adds missing fields recursively into given `col` expression, based on the target `StructType`.
    * For example, given `col` as "a struct<a:int, b:int>, b int" and `target` as
-   * "a struct<a:int, b:int, c: long>, b int, c string", this method should add `a.c` and `c` to
+   * "a struct<a:int, b:int, c:long>, b int, c string", this method should add `a.c` and `c` to
    * `col` expression.
    */
   private def addFields(col: NamedExpression, target: StructType): Option[Expression] = {
@@ -51,6 +51,12 @@ object ResolveUnion extends Rule[LogicalPlan] {
     }
   }
 
+  /**
+   *  Adds missing fields recursively into given `col` expression. The missing fields are given
+   *  in `fields`. For example, given `col` as "a struct<a:int, b:int>, b int", and `fields` is
+   *  "a struct<c:long>, c string". This method will add a nested `a.c` field and a top-level
+   *  `c` field to `col` and fill null values for them.
+   */
   private def addFieldsInto(col: Expression, base: String, fields: Seq[StructField]): Expression = {
     fields.foldLeft(col) { case (currCol, field) =>
       field.dataType match {
