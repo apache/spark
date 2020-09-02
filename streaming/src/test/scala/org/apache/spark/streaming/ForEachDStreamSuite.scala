@@ -66,7 +66,7 @@ class ForEachDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
     eventually(Timeout(Span(2, ScalaTestSeconds))) {
       assert(submittedBatch.length == 5)
     }
-  }
 
-  ssc.stop()
+    ssc.stop()
+  }
 }

@@ -195,7 +195,8 @@ class BasicOperationsSuite extends TestSuiteBase {
 
   test("union with input stream return None") {
     val input = Seq(1 to 4, 101 to 104, 201 to 204, null)
-    val output = Seq(1 to 8, 101 to 108, 201 to 208)
+    // 0 to 0 is added to make sure 4 batches will finish
+    val output = Seq(1 to 8, 101 to 108, 201 to 208, 0 to 0)
     intercept[SparkException] {
       testOperation(
         input,
@@ -312,7 +313,7 @@ class BasicOperationsSuite extends TestSuiteBase {
 
   test("StreamingContext.transform with input stream return None") {
     val input = Seq(1 to 4, 101 to 104, 201 to 204, null)
-    val output = Seq(1 to 12, 101 to 112, 201 to 212)
+    val output = Seq(1 to 12, 101 to 112, 201 to 212, 0 to 0)
 
     // transform over 3 DStreams by doing union of the 3 RDDs
     val operation = (s: DStream[Int]) => {
@@ -322,7 +323,6 @@ class BasicOperationsSuite extends TestSuiteBase {
           rdds.head.context.union(rdds.map(_.asInstanceOf[RDD[Int]]))  // union of RDDs
       )
     }
-
     intercept[SparkException] {
       testOperation(input, operation, output, input.length, false)
     }
