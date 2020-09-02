@@ -147,15 +147,19 @@ object JoinReorderDP extends PredicateHelper with Logging {
       output: Seq[Attribute]): LogicalPlan = {
 
     val startTime = System.nanoTime()
+    // SPARK-32687: Sort items in descending order according to `rowCount` and `sizeInBytes`
+    // to ensure the deterministic of input items as much as possible.
+    val sortedItems = items.sortBy(item => (item.stats.rowCount, item.stats.sizeInBytes)).reverse
     // Level i maintains all found plans for i + 1 items.
     // Create the initial plans: each plan is a single item with zero cost.
-    val sortedItems = items.sortBy(item => (item.stats.rowCount, item.stats.sizeInBytes)).reverse
     val itemIndex = sortedItems.zipWithIndex
 
     val foundPlans = mutable.Buffer[JoinPlanMap]({
       val idToJoinPlanSeq = itemIndex.map {
         case (item, id) => Set(id) -> JoinPlan(Set(id), item, Set.empty, Cost(0, 0))
       }
+      // SPARK-32687: Change to use `LinkedHashMap` to make sure that items are inserted
+      // and iterated in the same order.
       val ret = new mutable.LinkedHashMap[Set[Int], JoinPlan]()
       idToJoinPlanSeq.foreach(v => ret.put(v._1, v._2))
       ret
@@ -205,6 +209,8 @@ object JoinReorderDP extends PredicateHelper with Logging {
       topOutput: AttributeSet,
       filters: Option[JoinGraphInfo]): JoinPlanMap = {
 
+    // SPARK-32687: Change to use `LinkedHashMap` to make sure that items are inserted
+    // and iterated in the same order.
     val nextLevel = mutable.LinkedHashMap.empty[Set[Int], JoinPlan]
     var k = 0
     val lev = existingLevels.length - 1

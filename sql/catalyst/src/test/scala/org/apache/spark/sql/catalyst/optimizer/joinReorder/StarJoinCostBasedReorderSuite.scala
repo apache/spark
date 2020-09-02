@@ -452,8 +452,9 @@ class StarJoinCostBasedReorderSuite extends JoinReorderPlanTestBase with StatsEs
           expected.select(candidate.map(_.output).reduce(_ ++ _): _*))
       } catch {
         case _: Exception =>
-          // There is no Project node if order is consistent before and after sorting.
-          // For the current case is `Seq(f1, d3, d2, d1, t4, t3)`.
+          // There is no Project node if order is consistent before and after sorting items
+          // in JoinReorderDP.search method.
+          // For the current test set, the special case is `Seq(f1, d3, d2, d1, t4, t3)`.
           assert(candidate == Seq(f1, d3, d2, d1, t4, t3))
           assertEqualJoinPlans(Optimize, query, expected)
       }
