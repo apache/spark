@@ -463,11 +463,20 @@ class ExpressionParserSuite extends AnalysisTest {
       Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
     intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
 
-    // Interval.
+    // Binary.
+    assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
+    assertEqual("x'A10C'", Literal(Array(0xa1, 0x0c).map(_.toByte)))
+    intercept("x'A1OC'")
+
+    // Unsupported datatype.
+    intercept("GEO '(10,-6)'", "Literals of type 'GEO' are currently not supported.")
+  }
+
+
+  test("typed intervals would be handled with interval alias ahead") {
     val intervalLiteral = Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))
     assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
     assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
-    intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
     assertEqual(
       "-interval '3 month 1 hour'",
       UnaryMinus(Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))))
@@ -477,13 +486,8 @@ class ExpressionParserSuite extends AnalysisTest {
       s"interval '$intervalStrWithAllUnits'",
       Literal(IntervalUtils.stringToInterval(intervalStrWithAllUnits)))
 
-    // Binary.
-    assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
-    assertEqual("x'A10C'", Literal(Array(0xa1, 0x0c).map(_.toByte)))
-    intercept("x'A1OC'")
-
-    // Unsupported datatype.
-    intercept("GEO '(10,-6)'", "Literals of type 'GEO' are currently not supported.")
+    assertEqual("interval 'interval 3 month 1 hour' as", Alias(intervalLiteral, "as")())
+    assertEqual("interval 'interval 3 month 1 hour' as a", Alias(intervalLiteral, "a")())
   }
 
   test("literals") {

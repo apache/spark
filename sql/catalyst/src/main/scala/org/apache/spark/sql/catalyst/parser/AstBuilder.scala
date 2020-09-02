@@ -1889,6 +1889,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    *   [TYPE] '[VALUE]'
    * }}}
    * Currently Date, Timestamp, Interval and Binary typed literals are supported.
+   * Interval values would be caputred by [[MaybeAliasedIntervalLiteralContext]]
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(ctx.STRING)
@@ -1906,16 +1907,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         case "TIMESTAMP" =>
           val zoneId = getZoneId(SQLConf.get.sessionLocalTimeZone)
           toLiteral(stringToTimestamp(_, zoneId), TimestampType)
-        case "INTERVAL" =>
-          val interval = try {
-            IntervalUtils.stringToInterval(UTF8String.fromString(value))
-          } catch {
-            case e: IllegalArgumentException =>
-              val ex = new ParseException("Cannot parse the INTERVAL value: " + value, ctx)
-              ex.setStackTrace(e.getStackTrace)
-              throw ex
-          }
-          Literal(interval, CalendarIntervalType)
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
@@ -2082,6 +2073,37 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       ctx.STRING().asScala.map(stringWithoutUnescape).mkString
     } else {
       ctx.STRING().asScala.map(string).mkString
+    }
+  }
+
+  private def stringToInterval(intervalStr: String): Literal = {
+    val intervalUtf8Str = UTF8String.fromString(intervalStr)
+    val interval = IntervalUtils.stringToInterval(intervalUtf8Str)
+    Literal(interval, CalendarIntervalType)
+  }
+
+  private final val alphabet = "[a-zA-Z]".r.pattern
+
+  override def visitMaybeAliasedIntervalLiteral(
+      ctx: MaybeAliasedIntervalLiteralContext): Expression = withOrigin(ctx) {
+    val intervalStr = string(ctx.STRING())
+    if (ctx.AS() != null) {
+      val aliasName = Option(ctx.identifier()).map(_.getText).getOrElse(ctx.AS().getText)
+      Alias(stringToInterval(intervalStr), aliasName)()
+    } else {
+      if (alphabet.matcher(intervalStr).find()) {
+        // The interval string contains alphabet, assuming it contains unit already,
+        // then the identifier part is alias name if any.
+        Option(ctx.identifier()).map(_.getText) match {
+          case Some(aliasName) => Alias(stringToInterval(intervalStr), aliasName)()
+          case None => stringToInterval(intervalStr)
+        }
+      } else {
+        // The interval has no unit specified yet, so assuming the identifier here to be the unit
+        // part
+        val unit = Option(ctx.identifier()).map(_.getText).getOrElse("")
+        stringToInterval(intervalStr + " " + unit)
+      }
     }
   }
 

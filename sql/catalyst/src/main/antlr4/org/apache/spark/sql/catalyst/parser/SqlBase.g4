@@ -818,6 +818,7 @@ primaryExpression
 
 constant
     : NULL                                                                                     #nullLiteral
+    | INTERVAL STRING AS? identifier?                                                          #maybeAliasedIntervalLiteral
     | interval                                                                                 #intervalLiteral
     | identifier STRING                                                                        #typeConstructor
     | number                                                                                   #numericLiteral
