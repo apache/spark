@@ -1445,6 +1445,11 @@ class Analyzer(
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
 
+      // SPARK-31607: Resolve Struct field in groupByExpressions and aggregateExpressions
+      // with CUBE/ROLLUP will be wrapped with alias like Alias(GetStructField, name) with
+      // different ExprId. This cause aggregateExpressions can't be replaced by expanded
+      // groupByExpressions in `ResolveGroupingAnalytics.constructAggregateExprs()`, we trim
+      // unnecessary alias of GetStructField here.
       case a: Aggregate =>
         val planForResolve = a.child match {
           // SPARK-25942: Resolves aggregate expressions with `AppendColumns`'s children, instead of
@@ -1464,6 +1469,11 @@ class Analyzer(
 
         a.copy(resolvedGroupingExprs, resolvedAggExprs, a.child)
 
+      // SPARK-31607: Resolve Struct field in selectedGroupByExprs/groupByExprs and aggregations
+      // will be wrapped with alias like Alias(GetStructField, name) with different ExprId.
+      // This cause aggregateExpressions can't be replaced by expanded groupByExpressions in
+      // `ResolveGroupingAnalytics.constructAggregateExprs()`, we trim unnecessary alias
+      // of GetStructField here.
       case g: GroupingSets =>
         val resolvedSelectedExprs = g.selectedGroupByExprs
           .map(_.map(resolveExpressionTopDown(_, g, trimAlias = true))
@@ -1575,10 +1585,9 @@ class Analyzer(
 
     // This method is used to trim groupByExpressions/selectedGroupByExpressions's top-level
     // GetStructField Alias. Since these expression are not NamedExpression originally,
-    // we are safely to trim top-level GetStructField Alias.
+    // we are safe to trim top-level GetStructField Alias.
     def trimTopLevelGetStructFieldAlias(e: Expression): Expression = {
       e match {
-        // trim Alias over top-level GetStructField
         case Alias(s: GetStructField, _) => s
         case other => other
       }
