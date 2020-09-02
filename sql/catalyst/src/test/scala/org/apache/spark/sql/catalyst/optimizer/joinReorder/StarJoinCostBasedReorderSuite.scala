@@ -329,8 +329,6 @@ class StarJoinCostBasedReorderSuite extends JoinReorderPlanTestBase with StatsEs
     // level 9: {d1 t5 t3 t6 t2 t4 d3 f1 t1 d2 }
     //
     // Number of generated plans: 46 (vs. 82)
-    // TODO(SPARK-32687): find a way to make optimization result of `CostBasedJoinReorder`
-    //  deterministic even if the input order is different.
     val query =
       d1.join(t3).join(t4).join(f1).join(d3).join(d2).join(t5).join(t6).join(t1).join(t2)
         .where((nameToAttr("d1_c2") === nameToAttr("t3_c1")) &&
@@ -345,8 +343,8 @@ class StarJoinCostBasedReorderSuite extends JoinReorderPlanTestBase with StatsEs
 
     val expected =
       f1.join(d3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("d3_pk")))
-        .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk")))
         .join(d2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
+        .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk")))
         .join(t4.join(t3, Inner, Some(nameToAttr("t3_c2") === nameToAttr("t4_c2"))), Inner,
           Some(nameToAttr("d1_c2") === nameToAttr("t3_c1")))
         .join(t2.join(t1, Inner, Some(nameToAttr("t1_c2") === nameToAttr("t2_c2"))), Inner,
@@ -405,11 +403,60 @@ class StarJoinCostBasedReorderSuite extends JoinReorderPlanTestBase with StatsEs
           (nameToAttr("f1_fk3") === nameToAttr("t3_c1")))
 
     val expected =
-      f1.join(t3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("t3_c1")))
-        .join(t2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("t2_c1")))
+      f1.join(t2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("t2_c1")))
+        .join(t3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("t3_c1")))
         .join(t1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("t1_c1")))
         .select(outputsOf(t1, f1, t2, t3): _*)
 
     assertEqualJoinPlans(Optimize, query, expected)
+  }
+
+  test("Test 7: SPARK-32687 Verify all input permutations have the same optimization result") {
+    //
+    //    d1 - t3 - t4
+    //    |
+    //    f1 - d3
+    //    |
+    //    d2
+    //
+    // star: {d1 f1 d2 d3 }
+    // non-star: {t3 t4}
+    //
+    // level 0: (f1 ), (d1 ), (d2 ), (d3 ), (t4 ), (t3 )
+    // level 1: {f1 d1 }, {f1 d2 }, {f1 d3 }, {t4 t3 }
+    // level 2: {d1 f1 d2 }, {d1 f1 d3 }, {d2 f1 d3 }
+    // level 3: {d1 d2 f1 d3 }
+    // level 4: {f1 t3 d1 d2 d3 }
+    // level 5: {f1 t3 d1 d2 d3 t4}
+    // Number of generated plans: 10 (vs. 16)
+    val candidates = Seq(d1, t3, t4, f1, d3, d2).permutations.toSeq
+
+    val expected =
+      f1.join(d3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("d3_pk")))
+        .join(d2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
+        .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk")))
+        .join(t4.join(t3, Inner, Some(nameToAttr("t3_c2") === nameToAttr("t4_c2"))), Inner,
+          Some(nameToAttr("d1_c2") === nameToAttr("t3_c1")))
+
+    candidates.foreach { candidate =>
+      val (first, second, others) = (candidate.head, candidate(1), candidate.drop(2))
+      val query = others.foldLeft(first.join(second))((left, right) => left.join(right))
+        .where((nameToAttr("d1_c2") === nameToAttr("t3_c1")) &&
+          (nameToAttr("t3_c2") === nameToAttr("t4_c2")) &&
+          (nameToAttr("d1_pk") === nameToAttr("f1_fk1")) &&
+          (nameToAttr("f1_fk2") === nameToAttr("d2_pk")) &&
+          (nameToAttr("f1_fk3") === nameToAttr("d3_pk")))
+
+      try {
+        assertEqualJoinPlans(Optimize, query,
+          expected.select(candidate.map(_.output).reduce(_ ++ _): _*))
+      } catch {
+        case _: Exception =>
+          // There is no Project node if order is consistent before and after sorting.
+          // For the current case is `Seq(f1, d3, d2, d1, t4, t3)`.
+          assert(candidate == Seq(f1, d3, d2, d1, t4, t3))
+          assertEqualJoinPlans(Optimize, query, expected)
+      }
+    }
   }
 }
