@@ -120,7 +120,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   test("SPARK-25990: TRANSFORM should handle different data types correctly") {
     assume(TestUtils.testCommandAvailable("python"))
-    val scriptFilePath = getTestResourcePath("test_script.py")
+    val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
 
     withTempView("v") {
       val df = Seq(
@@ -149,7 +149,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   test("SPARK-25990: TRANSFORM should handle schema less correctly (no serde)") {
     assume(TestUtils.testCommandAvailable("python"))
-    val scriptFilePath = getTestResourcePath("test_script.py")
+    val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
 
     withTempView("v") {
       val df = Seq(
