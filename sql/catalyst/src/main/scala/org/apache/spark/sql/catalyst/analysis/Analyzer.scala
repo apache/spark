@@ -1352,6 +1352,11 @@ class Analyzer(
                   .getOrElse(u)
               }
             val result = resolved match {
+              // As the comment of method `resolveExpressionTopDown`'s param `trimAlias` said,
+              // when trimAlias = true, we will trim unnecessary alias of `GetStructField` and
+              // we won't trim the alias of top-level `GetStructField`. Since we will call
+              // CleanupAliases later in Analyzer, trim non top-level unnecessary alias of
+              // `GetStructField` here is safe.
               case Alias(s: GetStructField, _) if trimAlias && !isTopLevel => s
               case others => others
             }
