@@ -20,6 +20,10 @@ TakeOrderedAndProject [avg_quarterly_sales,i_manufact_id,sum_sales]
                                       BroadcastHashJoin [s_store_sk,ss_store_sk]
                                         Project [i_manufact_id,ss_sales_price,ss_sold_date_sk,ss_store_sk]
                                           BroadcastHashJoin [i_item_sk,ss_item_sk]
+                                            Filter [ss_item_sk,ss_sold_date_sk,ss_store_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.store_sales [ss_item_sk,ss_sales_price,ss_sold_date_sk,ss_store_sk]
                                             InputAdapter
                                               BroadcastExchange #3
                                                 WholeStageCodegen (1)
@@ -28,10 +32,6 @@ TakeOrderedAndProject [avg_quarterly_sales,i_manufact_id,sum_sales]
                                                       ColumnarToRow
                                                         InputAdapter
                                                           Scan parquet default.item [i_brand,i_category,i_class,i_item_sk,i_manufact_id]
-                                            Filter [ss_item_sk,ss_sold_date_sk,ss_store_sk]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet default.store_sales [ss_item_sk,ss_sales_price,ss_sold_date_sk,ss_store_sk]
                                         InputAdapter
                                           BroadcastExchange #4
                                             WholeStageCodegen (2)

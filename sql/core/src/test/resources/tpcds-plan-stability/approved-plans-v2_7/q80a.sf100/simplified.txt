@@ -32,9 +32,9 @@ TakeOrderedAndProject [channel,id,profit,returns,sales]
                                                               Project [s_store_id,sr_net_loss,sr_return_amt,ss_ext_sales_price,ss_net_profit]
                                                                 BroadcastHashJoin [s_store_sk,ss_store_sk]
                                                                   Project [sr_net_loss,sr_return_amt,ss_ext_sales_price,ss_net_profit,ss_store_sk]
-                                                                    BroadcastHashJoin [p_promo_sk,ss_promo_sk]
-                                                                      Project [sr_net_loss,sr_return_amt,ss_ext_sales_price,ss_net_profit,ss_promo_sk,ss_store_sk]
-                                                                        BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
+                                                                    BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
+                                                                      Project [sr_net_loss,sr_return_amt,ss_ext_sales_price,ss_net_profit,ss_sold_date_sk,ss_store_sk]
+                                                                        BroadcastHashJoin [p_promo_sk,ss_promo_sk]
                                                                           Project [sr_net_loss,sr_return_amt,ss_ext_sales_price,ss_net_profit,ss_promo_sk,ss_sold_date_sk,ss_store_sk]
                                                                             BroadcastHashJoin [i_item_sk,ss_item_sk]
                                                                               Project [sr_net_loss,sr_return_amt,ss_ext_sales_price,ss_item_sk,ss_net_profit,ss_promo_sk,ss_sold_date_sk,ss_store_sk]
@@ -69,19 +69,19 @@ TakeOrderedAndProject [channel,id,profit,returns,sales]
                                                                           InputAdapter
                                                                             BroadcastExchange #8
                                                                               WholeStageCodegen (6)
-                                                                                Project [d_date_sk]
-                                                                                  Filter [d_date,d_date_sk]
+                                                                                Project [p_promo_sk]
+                                                                                  Filter [p_channel_tv,p_promo_sk]
                                                                                     ColumnarToRow
                                                                                       InputAdapter
-                                                                                        Scan parquet default.date_dim [d_date,d_date_sk]
+                                                                                        Scan parquet default.promotion [p_channel_tv,p_promo_sk]
                                                                       InputAdapter
                                                                         BroadcastExchange #9
                                                                           WholeStageCodegen (7)
-                                                                            Project [p_promo_sk]
-                                                                              Filter [p_channel_tv,p_promo_sk]
+                                                                            Project [d_date_sk]
+                                                                              Filter [d_date,d_date_sk]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
-                                                                                    Scan parquet default.promotion [p_channel_tv,p_promo_sk]
+                                                                                    Scan parquet default.date_dim [d_date,d_date_sk]
                                                                   InputAdapter
                                                                     BroadcastExchange #10
                                                                       WholeStageCodegen (8)
@@ -98,9 +98,9 @@ TakeOrderedAndProject [channel,id,profit,returns,sales]
                                                               Project [cp_catalog_page_id,cr_net_loss,cr_return_amount,cs_ext_sales_price,cs_net_profit]
                                                                 BroadcastHashJoin [cp_catalog_page_sk,cs_catalog_page_sk]
                                                                   Project [cr_net_loss,cr_return_amount,cs_catalog_page_sk,cs_ext_sales_price,cs_net_profit]
-                                                                    BroadcastHashJoin [cs_promo_sk,p_promo_sk]
-                                                                      Project [cr_net_loss,cr_return_amount,cs_catalog_page_sk,cs_ext_sales_price,cs_net_profit,cs_promo_sk]
-                                                                        BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                                                                    BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                                                                      Project [cr_net_loss,cr_return_amount,cs_catalog_page_sk,cs_ext_sales_price,cs_net_profit,cs_sold_date_sk]
+                                                                        BroadcastHashJoin [cs_promo_sk,p_promo_sk]
                                                                           Project [cr_net_loss,cr_return_amount,cs_catalog_page_sk,cs_ext_sales_price,cs_net_profit,cs_promo_sk,cs_sold_date_sk]
                                                                             BroadcastHashJoin [cs_item_sk,i_item_sk]
                                                                               Project [cr_net_loss,cr_return_amount,cs_catalog_page_sk,cs_ext_sales_price,cs_item_sk,cs_net_profit,cs_promo_sk,cs_sold_date_sk]
@@ -127,9 +127,9 @@ TakeOrderedAndProject [channel,id,profit,returns,sales]
                                                                               InputAdapter
                                                                                 ReusedExchange [i_item_sk] #7
                                                                           InputAdapter
-                                                                            ReusedExchange [d_date_sk] #8
+                                                                            ReusedExchange [p_promo_sk] #8
                                                                       InputAdapter
-                                                                        ReusedExchange [p_promo_sk] #9
+                                                                        ReusedExchange [d_date_sk] #9
                                                                   InputAdapter
                                                                     BroadcastExchange #14
                                                                       WholeStageCodegen (18)
@@ -146,9 +146,9 @@ TakeOrderedAndProject [channel,id,profit,returns,sales]
                                                               Project [web_site_id,wr_net_loss,wr_return_amt,ws_ext_sales_price,ws_net_profit]
                                                                 BroadcastHashJoin [web_site_sk,ws_web_site_sk]
                                                                   Project [wr_net_loss,wr_return_amt,ws_ext_sales_price,ws_net_profit,ws_web_site_sk]
-                                                                    BroadcastHashJoin [p_promo_sk,ws_promo_sk]
-                                                                      Project [wr_net_loss,wr_return_amt,ws_ext_sales_price,ws_net_profit,ws_promo_sk,ws_web_site_sk]
-                                                                        BroadcastHashJoin [d_date_sk,ws_sold_date_sk]
+                                                                    BroadcastHashJoin [d_date_sk,ws_sold_date_sk]
+                                                                      Project [wr_net_loss,wr_return_amt,ws_ext_sales_price,ws_net_profit,ws_sold_date_sk,ws_web_site_sk]
+                                                                        BroadcastHashJoin [p_promo_sk,ws_promo_sk]
                                                                           Project [wr_net_loss,wr_return_amt,ws_ext_sales_price,ws_net_profit,ws_promo_sk,ws_sold_date_sk,ws_web_site_sk]
                                                                             BroadcastHashJoin [i_item_sk,ws_item_sk]
                                                                               Project [wr_net_loss,wr_return_amt,ws_ext_sales_price,ws_item_sk,ws_net_profit,ws_promo_sk,ws_sold_date_sk,ws_web_site_sk]
@@ -175,9 +175,9 @@ TakeOrderedAndProject [channel,id,profit,returns,sales]
                                                                               InputAdapter
                                                                                 ReusedExchange [i_item_sk] #7
                                                                           InputAdapter
-                                                                            ReusedExchange [d_date_sk] #8
+                                                                            ReusedExchange [p_promo_sk] #8
                                                                       InputAdapter
-                                                                        ReusedExchange [p_promo_sk] #9
+                                                                        ReusedExchange [d_date_sk] #9
                                                                   InputAdapter
                                                                     BroadcastExchange #18
                                                                       WholeStageCodegen (28)

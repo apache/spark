@@ -70,6 +70,10 @@ TakeOrderedAndProject [catalog_sales_profit,i_item_desc,i_item_id,s_store_id,s_s
                                             WholeStageCodegen (10)
                                               Project [sr_customer_sk,sr_item_sk,sr_net_loss,sr_ticket_number]
                                                 BroadcastHashJoin [d_date_sk,sr_returned_date_sk]
+                                                  Filter [sr_customer_sk,sr_item_sk,sr_returned_date_sk,sr_ticket_number]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.store_returns [sr_customer_sk,sr_item_sk,sr_net_loss,sr_returned_date_sk,sr_ticket_number]
                                                   InputAdapter
                                                     BroadcastExchange #9
                                                       WholeStageCodegen (9)
@@ -78,10 +82,6 @@ TakeOrderedAndProject [catalog_sales_profit,i_item_desc,i_item_id,s_store_id,s_s
                                                             ColumnarToRow
                                                               InputAdapter
                                                                 Scan parquet default.date_dim [d_date_sk,d_moy,d_year]
-                                                  Filter [sr_customer_sk,sr_item_sk,sr_returned_date_sk,sr_ticket_number]
-                                                    ColumnarToRow
-                                                      InputAdapter
-                                                        Scan parquet default.store_returns [sr_customer_sk,sr_item_sk,sr_net_loss,sr_returned_date_sk,sr_ticket_number]
                   InputAdapter
                     WholeStageCodegen (16)
                       Sort [cs_bill_customer_sk,cs_item_sk]

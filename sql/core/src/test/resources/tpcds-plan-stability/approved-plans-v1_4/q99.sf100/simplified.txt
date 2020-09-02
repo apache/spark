@@ -13,6 +13,10 @@ TakeOrderedAndProject [30 days ,31 - 60 days ,61 - 90 days ,91 - 120 days ,>120 
                         BroadcastHashJoin [cs_ship_mode_sk,sm_ship_mode_sk]
                           Project [cs_call_center_sk,cs_ship_date_sk,cs_ship_mode_sk,cs_sold_date_sk,cs_warehouse_sk]
                             BroadcastHashJoin [cs_ship_date_sk,d_date_sk]
+                              Filter [cs_call_center_sk,cs_ship_date_sk,cs_ship_mode_sk,cs_warehouse_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.catalog_sales [cs_call_center_sk,cs_ship_date_sk,cs_ship_mode_sk,cs_sold_date_sk,cs_warehouse_sk]
                               InputAdapter
                                 BroadcastExchange #2
                                   WholeStageCodegen (1)
@@ -21,10 +25,6 @@ TakeOrderedAndProject [30 days ,31 - 60 days ,61 - 90 days ,91 - 120 days ,>120 
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.date_dim [d_date_sk,d_month_seq]
-                              Filter [cs_call_center_sk,cs_ship_date_sk,cs_ship_mode_sk,cs_warehouse_sk]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet default.catalog_sales [cs_call_center_sk,cs_ship_date_sk,cs_ship_mode_sk,cs_sold_date_sk,cs_warehouse_sk]
                           InputAdapter
                             BroadcastExchange #3
                               WholeStageCodegen (2)
