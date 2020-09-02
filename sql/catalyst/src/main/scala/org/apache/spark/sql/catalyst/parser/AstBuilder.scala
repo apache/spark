@@ -2076,9 +2076,25 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
-  private def stringToInterval(intervalStr: String): Literal = {
+  /**
+   * Handle Exceptions thrown by parsing CalendarInterval
+   */
+  private def onParsingIntervalWithIAE(
+      interval: UTF8String,
+      ctx: ParserRuleContext): PartialFunction[Throwable, CalendarInterval] = {
+    case e: IllegalArgumentException =>
+      val ex = new ParseException(
+        s"Cannot parse the INTERVAL value: $interval, ${e.getMessage}", ctx)
+      ex.setStackTrace(e.getStackTrace)
+      throw ex
+  }
+
+  private def stringToInterval(intervalStr: String, ctx: ParserRuleContext): Literal = {
     val intervalUtf8Str = UTF8String.fromString(intervalStr)
-    val interval = IntervalUtils.stringToInterval(intervalUtf8Str)
+    val interval = try {
+      IntervalUtils.stringToInterval(intervalUtf8Str)
+    } catch onParsingIntervalWithIAE(intervalUtf8Str, ctx)
+
     Literal(interval, CalendarIntervalType)
   }
 
@@ -2089,20 +2105,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val intervalStr = string(ctx.STRING())
     if (ctx.AS() != null) {
       val aliasName = Option(ctx.identifier()).map(_.getText).getOrElse(ctx.AS().getText)
-      Alias(stringToInterval(intervalStr), aliasName)()
+      Alias(stringToInterval(intervalStr, ctx), aliasName)()
     } else {
       if (alphabet.matcher(intervalStr).find()) {
         // The interval string contains alphabet, assuming it contains unit already,
         // then the identifier part is alias name if any.
         Option(ctx.identifier()).map(_.getText) match {
-          case Some(aliasName) => Alias(stringToInterval(intervalStr), aliasName)()
-          case None => stringToInterval(intervalStr)
+          case Some(aliasName) => Alias(stringToInterval(intervalStr, ctx), aliasName)()
+          case None => stringToInterval(intervalStr, ctx)
         }
       } else {
         // The interval has no unit specified yet, so assuming the identifier here to be the unit
         // part
         val unit = Option(ctx.identifier()).map(_.getText).getOrElse("")
-        stringToInterval(intervalStr + " " + unit)
+        stringToInterval(intervalStr + " " + unit, ctx)
       }
     }
   }
@@ -2149,24 +2165,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     withOrigin(ctx) {
       val units = ctx.unit.asScala
       val values = ctx.intervalValue().asScala
-      try {
-        assert(units.length == values.length)
-        val kvs = units.indices.map { i =>
-          val u = units(i).getText
-          val v = if (values(i).STRING() != null) {
-            string(values(i).STRING())
-          } else {
-            values(i).getText
-          }
-          UTF8String.fromString(" " + v + " " + u)
+      assert(units.length == values.length)
+      val kvs = units.indices.map { i =>
+        val u = units(i).getText
+        val v = if (values(i).STRING() != null) {
+          string(values(i).STRING())
+        } else {
+          values(i).getText
         }
-        IntervalUtils.stringToInterval(UTF8String.concat(kvs: _*))
-      } catch {
-        case i: IllegalArgumentException =>
-          val e = new ParseException(i.getMessage, ctx)
-          e.setStackTrace(i.getStackTrace)
-          throw e
+        UTF8String.fromString(" " + v + " " + u)
       }
+      val intervalUtf8Str = UTF8String.concat(kvs: _*)
+      try {
+        IntervalUtils.stringToInterval(intervalUtf8Str)
+      } catch onParsingIntervalWithIAE(intervalUtf8Str, ctx)
     }
   }
 
@@ -2199,13 +2211,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           case _ =>
             throw new ParseException(s"Intervals FROM $from TO $to are not supported.", ctx)
         }
-      } catch {
-        // Handle Exceptions thrown by CalendarInterval
-        case e: IllegalArgumentException =>
-          val pe = new ParseException(e.getMessage, ctx)
-          pe.setStackTrace(e.getStackTrace)
-          throw pe
-      }
+      } catch onParsingIntervalWithIAE(UTF8String.fromString(value), ctx)
     }
   }
 

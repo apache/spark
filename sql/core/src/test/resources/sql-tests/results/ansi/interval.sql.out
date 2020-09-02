@@ -375,7 +375,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<day>\d+) (?<hour>\d{1,2})$': 20 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
+Cannot parse the INTERVAL value: 20 15:40:32.99899999, requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<day>\d+) (?<hour>\d{1,2})$': 20 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
 
 == SQL ==
 select interval '20 15:40:32.99899999' day to hour
@@ -389,7 +389,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<day>\d+) (?<hour>\d{1,2}):(?<minute>\d{1,2})$': 20 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
+Cannot parse the INTERVAL value: 20 15:40:32.99899999, requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<day>\d+) (?<hour>\d{1,2}):(?<minute>\d{1,2})$': 20 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
 
 == SQL ==
 select interval '20 15:40:32.99899999' day to minute
@@ -403,7 +403,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<hour>\d{1,2}):(?<minute>\d{1,2})$': 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
+Cannot parse the INTERVAL value: 15:40:32.99899999, requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<hour>\d{1,2}):(?<minute>\d{1,2})$': 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
 
 == SQL ==
 select interval '15:40:32.99899999' hour to minute
@@ -417,7 +417,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<hour>\d{1,2}):(?<minute>\d{1,2}):(?<second>(\d{1,2})(\.(\d{1,9}))?)$': 15:40.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
+Cannot parse the INTERVAL value: 15:40.99899999, requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<hour>\d{1,2}):(?<minute>\d{1,2}):(?<second>(\d{1,2})(\.(\d{1,9}))?)$': 15:40.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
 
 == SQL ==
 select interval '15:40.99899999' hour to second
@@ -431,7 +431,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<hour>\d{1,2}):(?<minute>\d{1,2}):(?<second>(\d{1,2})(\.(\d{1,9}))?)$': 15:40, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
+Cannot parse the INTERVAL value: 15:40, requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<hour>\d{1,2}):(?<minute>\d{1,2}):(?<second>(\d{1,2})(\.(\d{1,9}))?)$': 15:40, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
 
 == SQL ==
 select interval '15:40' hour to second
@@ -445,7 +445,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<minute>\d{1,2}):(?<second>(\d{1,2})(\.(\d{1,9}))?)$': 20 40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
+Cannot parse the INTERVAL value: 20 40:32.99899999, requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<minute>\d{1,2}):(?<second>(\d{1,2})(\.(\d{1,9}))?)$': 20 40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
 
 == SQL ==
 select interval '20 40:32.99899999' minute to second
@@ -459,7 +459,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Error parsing ' 10 nanoseconds' to interval, invalid unit 'nanoseconds'(line 1, pos 16)
+Cannot parse the INTERVAL value:  10 nanoseconds, Error parsing ' 10 nanoseconds' to interval, invalid unit 'nanoseconds'(line 1, pos 16)
 
 == SQL ==
 select interval 10 nanoseconds
@@ -519,7 +519,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Error parsing ' 1 fake_unit' to interval, invalid unit 'fake_unit'(line 1, pos 16)
+Cannot parse the INTERVAL value:  1 fake_unit, Error parsing ' 1 fake_unit' to interval, invalid unit 'fake_unit'(line 1, pos 16)
 
 == SQL ==
 select interval 1 fake_unit
@@ -885,7 +885,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Interval string does not match year-month format of 'y-m': -	2-2	(line 1, pos 16)
+Cannot parse the INTERVAL value: -	2-2	, Interval string does not match year-month format of 'y-m': -	2-2	(line 1, pos 16)
 
 == SQL ==
 select interval '-\t2-2\t' year to month
@@ -907,7 +907,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<day>\d+) (?<hour>\d{1,2}):(?<minute>\d{1,2}):(?<second>(\d{1,2})(\.(\d{1,9}))?)$': 
+Cannot parse the INTERVAL value: 
+-	10	 12:34:46.789	, requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<day>\d+) (?<hour>\d{1,2}):(?<minute>\d{1,2}):(?<second>(\d{1,2})(\.(\d{1,9}))?)$': 
 -	10	 12:34:46.789	, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
 
 == SQL ==
@@ -920,8 +921,13 @@ select interval '中文 interval 1 day'
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Error parsing '中文 interval 1 day' to interval, unrecognized number '中文'
+org.apache.spark.sql.catalyst.parser.ParseException
+
+Cannot parse the INTERVAL value: 中文 interval 1 day, Error parsing '中文 interval 1 day' to interval, unrecognized number '中文'(line 1, pos 7)
+
+== SQL ==
+select interval '中文 interval 1 day'
+-------^^^
 
 
 -- !query
@@ -929,8 +935,13 @@ select interval 'interval中文 1 day'
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Error parsing 'interval中文 1 day' to interval, invalid interval prefix interval中文
+org.apache.spark.sql.catalyst.parser.ParseException
+
+Cannot parse the INTERVAL value: interval中文 1 day, Error parsing 'interval中文 1 day' to interval, invalid interval prefix interval中文(line 1, pos 7)
+
+== SQL ==
+select interval 'interval中文 1 day'
+-------^^^
 
 
 -- !query
@@ -938,8 +949,13 @@ select interval '中文 interval 1中文day'
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Error parsing '中文 interval 1中文day' to interval, unrecognized number '中文'
+org.apache.spark.sql.catalyst.parser.ParseException
+
+Cannot parse the INTERVAL value: 中文 interval 1中文day, Error parsing '中文 interval 1中文day' to interval, unrecognized number '中文'(line 1, pos 7)
+
+== SQL ==
+select interval '中文 interval 1中文day'
+-------^^^
 
 
 -- !query
@@ -1140,5 +1156,10 @@ select interval '1-2' year as i
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Error parsing '1-2' to interval, invalid value '1-2'
+org.apache.spark.sql.catalyst.parser.ParseException
+
+Cannot parse the INTERVAL value: 1-2 year, Error parsing '1-2 year' to interval, invalid value '1-2'(line 1, pos 7)
+
+== SQL ==
+select interval '1-2' year as i
+-------^^^

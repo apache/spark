@@ -477,6 +477,7 @@ class ExpressionParserSuite extends AnalysisTest {
     val intervalLiteral = Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))
     assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
     assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
+    intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
     assertEqual(
       "-interval '3 month 1 hour'",
       UnaryMinus(Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))))
