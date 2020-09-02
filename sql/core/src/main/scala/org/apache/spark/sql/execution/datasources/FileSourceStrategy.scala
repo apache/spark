@@ -179,6 +179,9 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val dataColumns =
         l.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
 
+      val shufflePruningFilters =
+        normalizedFilters.filter(_.isInstanceOf[DynamicShufflePruningSubquery])
+
       // Partition keys are not available in the statistics of the files.
       // `dataColumns` might have partition columns, we need to filter them out.
       val dataColumnsWithoutPartitionCols = dataColumns.filterNot(partitionColumns.contains)
@@ -188,7 +191,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         } else {
           Some(f)
         }
-      }
+      } ++ shufflePruningFilters
       val supportNestedPredicatePushdown =
         DataSourceUtils.supportNestedPredicatePushdown(fsRelation)
       val pushedFilters = dataFilters

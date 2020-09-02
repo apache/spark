@@ -22,12 +22,14 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{AttributeSeq, CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
+import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSeq, CreateNamedStruct, Expression, ExprId, In, InBloomFilter, InSet, ListQuery, Literal, PlanExpression, Predicate}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.BloomFilterUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
+import org.apache.spark.sql.types.{AtomicType, BooleanType, DataType, StructType}
+import org.apache.spark.util.sketch.BloomFilter
 
 /**
  * The base class for subquery that is used in SparkPlan.
@@ -142,6 +144,19 @@ case class InSubqueryExec(
 
   def values(): Option[Set[Any]] = Option(resultBroadcast).map(_.value)
 
+  lazy val pushedFilter: Option[Predicate] = {
+    prepareResult()
+    child.dataType match {
+      case _: AtomicType if result.size <= SQLConf.get.parquetFilterPushDownInFilterThreshold =>
+        val converter = CatalystTypeConverters.createToScalaConverter(child.dataType)
+        // scalastyle:off
+        println(result.map(v => Literal.create(converter(v), child.dataType)).toSeq)
+        println("set result" + result.toSeq.sortBy(_.toString.toInt))
+        Some(In(child, result.map(v => Literal.create(converter(v), child.dataType)).toSeq))
+      case _ => None
+    }
+  }
+
   private def prepareResult(): Unit = {
     require(resultBroadcast != null, s"$this has not finished")
     if (result == null) {
@@ -160,6 +175,96 @@ case class InSubqueryExec(
   }
 
   override lazy val canonicalized: InSubqueryExec = {
+    copy(
+      child = child.canonicalized,
+      plan = plan.canonicalized.asInstanceOf[BaseSubqueryExec],
+      exprId = ExprId(0),
+      resultBroadcast = null)
+  }
+}
+
+case class BloomFilterWithSmallSet(bloomFilter: BloomFilter, set: Option[Set[Any]])
+
+case class BloomFilterSubqueryExec(
+    child: Expression,
+    plan: BaseSubqueryExec,
+    exprId: ExprId,
+    private var resultBroadcast: Broadcast[BloomFilterWithSmallSet] = null)
+  extends ExecSubqueryExpression {
+
+  @transient private var result: BloomFilterWithSmallSet = _
+  @transient private lazy val inBloomFilter = InBloomFilter(child, result.bloomFilter)
+
+  override def dataType: DataType = BooleanType
+  override def children: Seq[Expression] = child :: Nil
+  override def nullable: Boolean = child.nullable
+  override def toString: String = s"$child IN BLOOM FILTER ${plan.name}"
+  override def withNewPlan(plan: BaseSubqueryExec): BloomFilterSubqueryExec = copy(plan = plan)
+
+  override def semanticEquals(other: Expression): Boolean = other match {
+    case bf: BloomFilterSubqueryExec => child.semanticEquals(bf.child) && plan.sameResult(bf.plan)
+    case _ => false
+  }
+
+  def updateResult(): Unit = {
+    val rows = plan.executeCollect().map(_.get(0, child.dataType))
+    val numElements = plan.conf.getConfString("spark.sql.bloomFilterElements", "10000").toLong
+    println(s"numElements: ${numElements}")
+    val expectedNumItems = math.max(rows.length, numElements)
+    val bf = BloomFilter.create(expectedNumItems)
+    rows.foreach(r => BloomFilterUtils.putValue(bf, r))
+    child.dataType match {
+      case _: AtomicType if rows.nonEmpty &&
+        rows.length <= SQLConf.get.parquetFilterPushDownInFilterThreshold =>
+        result = BloomFilterWithSmallSet(bf, Some(rows.toSet))
+      case _ =>
+        result = BloomFilterWithSmallSet(bf, None)
+    }
+    resultBroadcast = plan.sqlContext.sparkContext.broadcast(result)
+  }
+
+  def values(): Option[BloomFilterWithSmallSet] = Option(resultBroadcast).map(_.value)
+
+  lazy val pushedFilter: Option[Predicate] = {
+    prepareResult()
+    result match {
+      case BloomFilterWithSmallSet(_, Some(set)) =>
+        val converter = CatalystTypeConverters.createToScalaConverter(child.dataType)
+        // val converter = CatalystTypeConverters.createToCatalystConverter(child.dataType)
+        // scalastyle:off
+        println(set.map(v => Literal.create(converter(v), child.dataType)).toSeq)
+        println("set result" + set.toSeq.sortBy(_.toString.toInt))
+        Some(In(child, set.map(v => Literal.create(converter(v), child.dataType)).toSeq))
+      case _ => None
+    }
+  }
+
+  private def prepareResult(): Unit = {
+    require(resultBroadcast != null, s"$this has not finished")
+    if (result == null) {
+      result = resultBroadcast.value
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    prepareResult()
+    if (pushedFilter.nonEmpty) {
+      true
+    } else {
+      inBloomFilter.eval(input)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    prepareResult()
+    if (pushedFilter.nonEmpty) {
+      Literal.create(true, BooleanType).doGenCode(ctx, ev)
+    } else {
+      inBloomFilter.doGenCode(ctx, ev)
+    }
+  }
+
+  override lazy val canonicalized: BloomFilterSubqueryExec = {
     copy(
       child = child.canonicalized,
       plan = plan.canonicalized.asInstanceOf[BaseSubqueryExec],

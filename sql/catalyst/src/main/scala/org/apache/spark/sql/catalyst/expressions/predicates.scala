@@ -29,9 +29,10 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.util.{BloomFilterUtils, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.sketch.BloomFilter
 
 
 /**
@@ -573,6 +574,51 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
       .map(elem => Literal(elem, child.dataType).sql)
       .mkString(", ")
     s"($valueSQL IN ($listSQL))"
+  }
+}
+
+case class InBloomFilter(
+    child: Expression,
+    bloomFilter: BloomFilter,
+    hasNull: Boolean = false) extends UnaryExpression with Predicate {
+
+  require(child.dataType.isInstanceOf[AtomicType],
+    s"Bloom filter only supports atomic types, but got ${child.dataType.catalogString}.")
+  require(bloomFilter != null, "bloomFilter could not be null")
+
+  override def toString: String = s"$child IN BLOOM FILTER"
+
+  override def nullable: Boolean = child.nullable || hasNull
+
+  protected override def nullSafeEval(value: Any): Any = {
+    if (BloomFilterUtils.mightContain(bloomFilter, value)) {
+      true
+    } else if (hasNull) {
+      null
+    } else {
+      false
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val bfu = BloomFilterUtils.getClass.getName.stripSuffix("$")
+    nullSafeCodeGen(ctx, ev, c => {
+      val bloomFilterTerm = ctx.addReferenceObj("bloomFilter", bloomFilter)
+      val setIsNull = if (hasNull) {
+        s"${ev.isNull} = !${ev.value};"
+      } else {
+        ""
+      }
+      s"""
+         |${ev.value} = $bfu.mightContain($bloomFilterTerm, $c);
+         |$setIsNull
+       """.stripMargin
+    })
+  }
+
+  override def sql: String = {
+    val valueSQL = child.sql
+    s"($valueSQL IN BLOOM FILTER)"
   }
 }
 

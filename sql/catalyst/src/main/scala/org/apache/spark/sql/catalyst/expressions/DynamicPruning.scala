@@ -37,13 +37,13 @@ trait DynamicPruning extends Predicate
  *  can reuse the results of the broadcast through ReuseExchange
  * @param broadcastKeyIndex the index of the filtering key collected from the broadcast
  */
-case class DynamicPruningSubquery(
+sealed abstract class DynamicPruningSubquery(
     pruningKey: Expression,
     buildQuery: LogicalPlan,
     buildKeys: Seq[Expression],
     broadcastKeyIndex: Int,
     onlyInBroadcast: Boolean,
-    exprId: ExprId = NamedExpression.newExprId)
+    exprId: ExprId)
   extends SubqueryExpression(buildQuery, Seq(pruningKey), exprId)
   with DynamicPruning
   with Unevaluable {
@@ -53,8 +53,6 @@ case class DynamicPruningSubquery(
   override def plan: LogicalPlan = buildQuery
 
   override def nullable: Boolean = false
-
-  override def withNewPlan(plan: LogicalPlan): DynamicPruningSubquery = copy(buildQuery = plan)
 
   override lazy val resolved: Boolean = {
     pruningKey.resolved &&
@@ -66,8 +64,58 @@ case class DynamicPruningSubquery(
       buildKeys.forall(_.references.subsetOf(buildQuery.outputSet)) &&
       pruningKey.dataType == buildKeys(broadcastKeyIndex).dataType
   }
+}
 
-  override def toString: String = s"dynamicpruning#${exprId.id} $conditionString"
+case class DynamicPartitionPruningSubquery(
+     pruningKey: Expression,
+     buildQuery: LogicalPlan,
+     buildKeys: Seq[Expression],
+     broadcastKeyIndex: Int,
+     onlyInBroadcast: Boolean,
+    override val exprId: ExprId = NamedExpression.newExprId)
+  extends DynamicPruningSubquery(
+    pruningKey, buildQuery, buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId) {
+
+  override def children: Seq[Expression] = Seq(pruningKey)
+
+  override def plan: LogicalPlan = buildQuery
+
+  override def nullable: Boolean = false
+
+  override def withNewPlan(plan: LogicalPlan): DynamicPartitionPruningSubquery =
+    copy(buildQuery = plan)
+
+  override def toString: String = s"dynamicpartitionpruning#${exprId.id} $conditionString"
+
+  override lazy val canonicalized: DynamicPruning = {
+    copy(
+      pruningKey = pruningKey.canonicalized,
+      buildQuery = buildQuery.canonicalized,
+      buildKeys = buildKeys.map(_.canonicalized),
+      exprId = ExprId(0))
+  }
+}
+
+case class DynamicShufflePruningSubquery(
+    pruningKey: Expression,
+    buildQuery: LogicalPlan,
+    buildKeys: Seq[Expression],
+    broadcastKeyIndex: Int,
+    onlyInBroadcast: Boolean,
+    override val exprId: ExprId = NamedExpression.newExprId)
+  extends DynamicPruningSubquery(
+    pruningKey, buildQuery, buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId) {
+
+  override def children: Seq[Expression] = Seq(pruningKey)
+
+  override def plan: LogicalPlan = buildQuery
+
+  override def nullable: Boolean = false
+
+  override def withNewPlan(plan: LogicalPlan): DynamicShufflePruningSubquery =
+    copy(buildQuery = plan)
+
+  override def toString: String = s"dynamicshufflepruning#${exprId.id} $conditionString"
 
   override lazy val canonicalized: DynamicPruning = {
     copy(

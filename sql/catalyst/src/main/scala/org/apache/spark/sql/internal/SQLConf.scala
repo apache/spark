@@ -282,6 +282,31 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DYNAMIC_PARTITION_PRUNING_PREFER_BLOOM_FILTER =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.preferBloomFilter")
+      .internal()
+      .doc("When true, dynamic partition pruning will prefer use bloom filter to do pruning.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val DYNAMIC_SHUFFLE_PRUNING_ENABLED =
+    buildConf("spark.sql.optimizer.dynamicShufflePruning.enabled")
+      .doc("When true, we will generate predicate for column when it's used as join key " +
+        "and has shuffle.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val DYNAMIC_SHUFFLE_PRUNING_SIDE_THRESHOLD =
+    buildConf("spark.sql.optimizer.dynamicShufflePruning.pruningSideThreshold")
+      .internal()
+      .doc("Specifies the lower limit of the threshold for a " +
+        "dynamic shuffle pruning to be considered.")
+      .version("3.1.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("10GB")
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -2874,6 +2899,13 @@ class SQLConf extends Serializable with Logging {
 
   def dynamicPartitionPruningReuseBroadcastOnly: Boolean =
     getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
+
+  def dynamicPartitionPruningPreferBloomFilter: Boolean =
+    getConf(DYNAMIC_PARTITION_PRUNING_PREFER_BLOOM_FILTER)
+
+  def dynamicShufflePruningEnabled: Boolean = getConf(DYNAMIC_SHUFFLE_PRUNING_ENABLED)
+
+  def dynamicShufflePruningSideThreshold: Long = getConf(DYNAMIC_SHUFFLE_PRUNING_SIDE_THRESHOLD)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 

@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.BloomFilterUtils
 import org.apache.spark.sql.execution.stat._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
@@ -580,23 +581,11 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
     val singleCol = df.select(col)
     val colType = singleCol.schema.head.dataType
 
-    require(colType == StringType || colType.isInstanceOf[IntegralType],
-      s"Bloom filter only supports string type and integral types, but got $colType.")
+    require(colType.isInstanceOf[AtomicType],
+      s"Bloom filter only supports atomic types, but got ${colType.catalogString}.")
 
-    val updater: (BloomFilter, InternalRow) => Unit = colType match {
-      // For string type, we can get bytes of our `UTF8String` directly, and call the `putBinary`
-      // instead of `putString` to avoid unnecessary conversion.
-      case StringType => (filter, row) => filter.putBinary(row.getUTF8String(0).getBytes)
-      case ByteType => (filter, row) => filter.putLong(row.getByte(0))
-      case ShortType => (filter, row) => filter.putLong(row.getShort(0))
-      case IntegerType => (filter, row) => filter.putLong(row.getInt(0))
-      case LongType => (filter, row) => filter.putLong(row.getLong(0))
-      case _ =>
-        throw new IllegalArgumentException(
-          s"Bloom filter only supports string type and integral types, " +
-            s"and does not support type $colType."
-        )
-    }
+    val updater: (BloomFilter, InternalRow) => Unit =
+      (filter, row) => BloomFilterUtils.putValue(filter, row.get(0, colType))
 
     singleCol.queryExecution.toRdd.treeAggregate(zero)(
       (filter: BloomFilter, row: InternalRow) => {

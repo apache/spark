@@ -327,9 +327,22 @@ case class FileSourceScanExec(
   }
 
   @transient
-  private lazy val pushedDownFilters = {
-    val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
+  private lazy val supportNestedPredicatePushdown =
+    DataSourceUtils.supportNestedPredicatePushdown(relation)
+
+  @transient
+  private lazy val pushedDownFilters =
     dataFilters.flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
+
+  @transient
+  private lazy val pushedDownDynamicFilters = {
+    dataFilters.flatMap {
+      case DynamicPruningExpression(child: InSubqueryExec)
+        if child.pushedFilter.nonEmpty => child.pushedFilter
+      case DynamicPruningExpression(child: BloomFilterSubqueryExec)
+        if child.pushedFilter.nonEmpty => child.pushedFilter
+      case _ => Nil
+    }.flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
   }
 
   override lazy val metadata: Map[String, String] = {
@@ -396,7 +409,7 @@ case class FileSourceScanExec(
         dataSchema = relation.dataSchema,
         partitionSchema = relation.partitionSchema,
         requiredSchema = requiredSchema,
-        filters = pushedDownFilters,
+        filters = pushedDownFilters ++ pushedDownDynamicFilters,
         options = relation.options,
         hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
 

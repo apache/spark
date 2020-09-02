@@ -135,6 +135,11 @@ case class ReuseExchange(conf: SQLConf) extends Rule[SparkPlan] {
           case exchange: Exchange => reuse(exchange)
         }
         in.copy(plan = newIn.asInstanceOf[BaseSubqueryExec])
+      case bf: BloomFilterSubqueryExec =>
+        val newBf = bf.plan.transformUp {
+          case exchange: Exchange => reuse(exchange)
+        }
+        bf.copy(plan = newBf.asInstanceOf[BaseSubqueryExec])
     }
   }
 }
