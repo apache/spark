@@ -279,6 +279,19 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   <td>1.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.sql.parquet.outputTimestampType</code></td>
+  <td>INT96</td>
+  <td>
+    Sets which Parquet timestamp type to use when Spark writes data to Parquet files.<br/>
+	<code>INT96</code> is a non-standard but commonly used timestamp type in Parquet.<br/>
+	<code>TIMESTAMP_MICROS</code> is a standard timestamp type in Parquet, which stores number of microseconds from the Unix epoch.<br/>
+	<code>TIMESTAMP_MILLIS</code> is also standard, but with millisecond precision, which means Spark has to truncate the microsecond portion of its timestamp value.<br/>
+	Note that Spark is able to read parquet timestamps written in any of the 3 types. This option should be used for compatibility with
+	external systems that need to read the output from Spark.
+  </td>
+  <td>2.3.0</td>
+</tr>
+<tr>
   <td><code>spark.sql.parquet.compression.codec</code></td>
   <td>snappy</td>
   <td>
