@@ -358,6 +358,7 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
         out.flush()
       }
     }
+
     val thread2 = new Thread {
       override def run(): Unit = {
         val threadOut = new ObjectOutputStream(new ByteArrayOutputStream())
@@ -365,6 +366,7 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
         threadOut.flush()
       }
     }
+
     thread1.start()
     thread2.start()
     thread1.join()
