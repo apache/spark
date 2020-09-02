@@ -298,7 +298,11 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
               } else {
                 None
               }
-              distinctAggChildAttrLookup.get(x).map(evalWithinGroup(id, _, condition))
+              if (x.foldable) {
+                Some(evalWithinGroup(id, x, condition))
+              } else {
+                distinctAggChildAttrLookup.get(x).map(evalWithinGroup(id, _, condition))
+              }
             }
             (e, e.copy(aggregateFunction = naf, isDistinct = false, filter = None))
           }
