@@ -90,6 +90,28 @@ that these options will be deprecated in future release as more optimizations ar
       Configures the number of partitions to use when shuffling data for joins or aggregations.
     </td>
   </tr>
+  <tr>
+    <td><code>spark.sql.sources.parallelPartitionDiscovery.threshold</code></td>
+    <td>32</td>
+    <td>
+      Configures the threshold to enable parallel listing for job input paths. If the number of
+      input paths is larger than this threshold, Spark will list the files by using Spark distributed job.
+      Otherwise, it will fallback to sequential listing. This configuration is only effective when
+      using file-based data sources such as Parquet, ORC and JSON.
+    </td>
+    <td>1.5.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.sources.parallelPartitionDiscovery.parallelism</code></td>
+    <td>10000</td>
+    <td>
+      Configures the maximum listing parallelism for job input paths. In case the number of input
+      paths is larger than this value, it will be throttled down to use this value. Same as above,
+      this configuration is only effective when using file-based data sources such as Parquet, ORC
+      and JSON.
+    </td>
+    <td>2.1.1</td>
+  </tr>
 </table>
 
 ## Broadcast Hint for SQL Queries

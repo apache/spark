@@ -89,11 +89,6 @@ object FrequentItems extends Logging {
     // number of max items to keep counts for
     val sizeOfMap = (1 / support).toInt
     val countMaps = Seq.tabulate(numCols)(i => new FreqItemCounter(sizeOfMap))
-    val originalSchema = df.schema
-    val colInfo: Array[(String, DataType)] = cols.map { name =>
-      val index = originalSchema.fieldIndex(name)
-      (name, originalSchema.fields(index).dataType)
-    }.toArray
 
     val freqItems = df.select(cols.map(Column(_)) : _*).rdd.treeAggregate(countMaps)(
       seqOp = (counts, row) => {
@@ -117,10 +112,16 @@ object FrequentItems extends Logging {
     )
     val justItems = freqItems.map(m => m.baseMap.keys.toArray)
     val resultRow = Row(justItems : _*)
-    // append frequent Items to the column name for easy debugging
-    val outputCols = colInfo.map { v =>
-      StructField(v._1 + "_freqItems", ArrayType(v._2, false))
-    }
+
+    val originalSchema = df.schema
+    val outputCols = cols.map { name =>
+      val index = originalSchema.fieldIndex(name)
+      val originalField = originalSchema.fields(index)
+
+      // append frequent Items to the column name for easy debugging
+      StructField(name + "_freqItems", ArrayType(originalField.dataType, originalField.nullable))
+    }.toArray
+
     val schema = StructType(outputCols).toAttributes
     Dataset.ofRows(df.sparkSession, LocalRelation.fromExternalRows(schema, Seq(resultRow)))
   }

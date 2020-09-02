@@ -68,10 +68,14 @@ fi
 PYSPARK_VERSION=$(python3 -c "exec(open('python/pyspark/version.py').read());print(__version__)")
 PYSPARK_DIST="$FWDIR/python/dist/pyspark-$PYSPARK_VERSION.tar.gz"
 # The pip install options we use for all the pip commands
-PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall "
+PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall"
 # Test both regular user and edit/dev install modes.
 PIP_COMMANDS=("pip install $PIP_OPTIONS $PYSPARK_DIST"
 	      "pip install $PIP_OPTIONS -e python/")
+
+# Jenkins has PySpark installed under user sitepackages shared for some reasons.
+# In this test, explicitly exclude user sitepackages to prevent side effects
+export PYTHONNOUSERSITE=1
 
 for python in "${PYTHON_EXECS[@]}"; do
   for install_command in "${PIP_COMMANDS[@]}"; do
@@ -81,8 +85,12 @@ for python in "${PYTHON_EXECS[@]}"; do
     VIRTUALENV_PATH="$VIRTUALENV_BASE"/$python
     rm -rf "$VIRTUALENV_PATH"
     if [ -n "$USE_CONDA" ]; then
+      if [ -f "$CONDA_PREFIX/etc/profile.d/conda.sh" ]; then
+        # See also https://github.com/conda/conda/issues/7980
+        source "$CONDA_PREFIX/etc/profile.d/conda.sh"
+      fi
       conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip setuptools
-      source activate "$VIRTUALENV_PATH"
+      source activate "$VIRTUALENV_PATH" || conda activate "$VIRTUALENV_PATH"
     else
       mkdir -p "$VIRTUALENV_PATH"
       virtualenv --python=$python "$VIRTUALENV_PATH"
@@ -125,7 +133,7 @@ for python in "${PYTHON_EXECS[@]}"; do
 
     # conda / virtualenv environments need to be deactivated differently
     if [ -n "$USE_CONDA" ]; then
-      source deactivate
+      source deactivate || conda deactivate
     else
       deactivate
     fi

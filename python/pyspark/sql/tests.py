@@ -3214,7 +3214,8 @@ class SQLTests(ReusedSQLTestCase):
         if sys.version_info[0] < 3:
             all_types = set(['c', 'b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'f', 'd'])
         else:
-            all_types = set(array.typecodes)
+            # PyPy seems not having array.typecodes.
+            all_types = set(['b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'q', 'Q', 'f', 'd'])
         unsupported_types = all_types - set(supported_types)
         # test unsupported types
         for t in unsupported_types:
@@ -4571,6 +4572,19 @@ class ArrowTests(ReusedSQLTestCase):
 
         self.assertPandasEqual(pdf, df_from_python.toPandas())
         self.assertPandasEqual(pdf, df_from_pandas.toPandas())
+
+    def test_createDataFrame_with_float_index(self):
+        import pandas as pd
+        # SPARK-32098: float index should not produce duplicated or truncated Spark DataFrame
+        self.assertEqual(
+            self.spark.createDataFrame(
+                pd.DataFrame({'a': [1, 2, 3]}, index=[2., 3., 4.])).distinct().count(), 3)
+
+    def test_no_partition_toPandas(self):
+        # SPARK-32300: toPandas should work from a Spark DataFrame with no partitions
+        pdf = self.spark.sparkContext.emptyRDD().toDF("col1 int").toPandas()
+        self.assertEqual(len(pdf), 0)
+        self.assertEqual(list(pdf.columns), ["col1"])
 
 
 @unittest.skipIf(
