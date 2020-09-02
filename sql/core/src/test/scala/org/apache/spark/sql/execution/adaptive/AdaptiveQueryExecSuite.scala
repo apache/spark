@@ -1252,10 +1252,10 @@ class AdaptiveQueryExecSuite
           "SELECT a FROM pm LEFT SEMI JOIN (SELECT * FROM s WHERE s.d > 100) ts ON pm.a = ts.c"
         ).foreach(query => {
           val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
-          val bhjInAQE = findTopLevelBroadcastHashJoin(plan)
-          assert(bhjInAQE.size == 1)
-          val join = findTopLevelBaseJoin(adaptivePlan)
-          assert(join.isEmpty)
+          val bhj = findTopLevelBroadcastHashJoin(plan)
+          assert(bhj.size == 1)
+          val joinInAQE = findTopLevelBaseJoin(adaptivePlan)
+          assert(joinInAQE.isEmpty)
         })
 
         Seq(
@@ -1265,10 +1265,10 @@ class AdaptiveQueryExecSuite
           "SELECT /*+ broadcast(m) */ a FROM m, ps WHERE m.a = ps.c and m.b > 100"
         ).foreach(query => {
           val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
-          val bhjInAQE = findTopLevelBroadcastHashJoin(plan)
-          assert(bhjInAQE.size == 1)
-          val join = findTopLevelBaseJoin(adaptivePlan)
-          assert(join.nonEmpty)
+          val bhj = findTopLevelBroadcastHashJoin(plan)
+          assert(bhj.size == 1)
+          val bhjInAQE = findTopLevelBroadcastHashJoin(adaptivePlan)
+          assert(bhjInAQE.nonEmpty)
         })
       }
     }
