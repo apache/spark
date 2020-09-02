@@ -36,18 +36,27 @@ import org.apache.spark.sql.execution.joins.{EmptyHashedRelation, HashedRelation
  */
 object EliminateJoinToEmptyRelation extends Rule[LogicalPlan] {
 
-  private def canEliminate(streamedPlan: LogicalPlan,
-      buildPlan: LogicalPlan, relation: HashedRelation): Boolean = {
-    // If streamedSide of the Join is ShuffleQueryStageExec(canChangeNumPartitions== false)
-    // it can't be rewritten to EmptyRelation because the conversion will lost user specified
+  private def canEliminate(
+      streamedPlan: LogicalPlan,
+      buildPlan: LogicalPlan,
+      relation: HashedRelation): Boolean = {
+    // If streamedSide of the Join contains ShuffleQueryStageExec(canChangeNumPartitions== false)
+    // it can't be rewritten to EmptyRelation because the conversion might lost user specified
     // number partition information.
-    (streamedPlan, buildPlan) match {
-      case (LogicalQueryStage(_, stage: ShuffleQueryStageExec), _)
-        if !stage.shuffle.canChangeNumPartitions => false
-      case (_, LogicalQueryStage(_, stage: BroadcastQueryStageExec))
-        if stage.resultOption.get().isDefined
-          && stage.broadcast.relationFuture.get().value == relation => true
-      case (_, _) => false
+    val immutablePartitionStages = streamedPlan.collect {
+      case lqs @ LogicalQueryStage(_, stage: ShuffleQueryStageExec)
+        if !stage.shuffle.canChangeNumPartitions => lqs
+    }
+
+    if (immutablePartitionStages.nonEmpty) {
+      false
+    } else {
+      buildPlan match {
+        case LogicalQueryStage(_, stage: BroadcastQueryStageExec)
+          if stage.resultOption.get().isDefined
+            && stage.broadcast.relationFuture.get().value == relation => true
+        case _ => false
+      }
     }
   }
 
