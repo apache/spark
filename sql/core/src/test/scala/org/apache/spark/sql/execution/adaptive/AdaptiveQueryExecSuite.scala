@@ -1245,9 +1245,9 @@ class AdaptiveQueryExecSuite
         // Join to EmptyRelation does not lost user specified number partition information.
         Seq(
           // NAAJ streamedSide canChangeNumPartitions == false
-          "SELECT a FROM pm WHERE pm.a not in (SELECT c FROM s)",
+          "SELECT a FROM pm WHERE pm.a NOT IN (SELECT c FROM s)",
           // NAAJ(hand-written left anti join) streamedSide canChangeNumPartitions == false
-          "SELECT a FROM pm LEFT ANTI JOIN s ON a = c or isnull(a = c)",
+          "SELECT a FROM pm LEFT ANTI JOIN s ON a = c OR ISNULL(a = c)",
           // LeftSemi streamedSide canChangeNumPartitions == false
           "SELECT a FROM pm LEFT SEMI JOIN (SELECT * FROM s WHERE s.d > 100) ts ON pm.a = ts.c"
         ).foreach(query => {
@@ -1260,15 +1260,15 @@ class AdaptiveQueryExecSuite
 
         Seq(
           // Inner streamedSide(Left) canChangeNumPartitions == false
-          "SELECT /*+ broadcast(s) */a FROM pm, s WHERE pm.a = s.c and s.d > 100",
+          "SELECT /*+ BROADCAST(s) */a FROM pm, s WHERE pm.a = s.c AND s.d > 100",
           // Inner streamedSide(Right) canChangeNumPartitions == false
-          "SELECT /*+ broadcast(m) */ a FROM m, ps WHERE m.a = ps.c and m.b > 100"
+          "SELECT /*+ BROADCAST(m) */ a FROM m, ps WHERE m.a = ps.c AND m.b > 100"
         ).foreach(query => {
           val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
           val bhj = findTopLevelBroadcastHashJoin(plan)
           assert(bhj.size == 1)
           val bhjInAQE = findTopLevelBroadcastHashJoin(adaptivePlan)
-          assert(bhjInAQE.nonEmpty)
+          assert(bhjInAQE.size == 1)
         })
       }
     }
