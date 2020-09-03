@@ -15,11 +15,13 @@
 # limitations under the License.
 #
 
-from pyspark import keyword_only
+import sys
+
+from pyspark import keyword_only, since
 from pyspark.sql import DataFrame
-from pyspark.ml.util import *
+from pyspark.ml.util import JavaMLWritable, JavaMLReadable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
-from pyspark.ml.param.shared import *
+from pyspark.ml.param.shared import HasPredictionCol, Param, TypeConverters, Params
 
 __all__ = ["FPGrowth", "FPGrowthModel", "PrefixSpan"]
 
@@ -55,8 +57,8 @@ class _FPGrowthParams(HasPredictionCol):
         "but will affect the association rules generation.",
         typeConverter=TypeConverters.toFloat)
 
-    def __init__(self):
-        super(_FPGrowthParams, self).__init__()
+    def __init__(self, *args):
+        super(_FPGrowthParams, self).__init__(*args)
         self._setDefault(minSupport=0.3, minConfidence=0.8,
                          itemsCol="items", predictionCol="prediction")
 
@@ -197,6 +199,11 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     >>> new_data = spark.createDataFrame([(["t", "s"], )], ["items"])
     >>> sorted(fpm.transform(new_data).first().newPrediction)
     ['x', 'y', 'z']
+    >>> model_path = temp_path + "/fpm_model"
+    >>> fpm.save(model_path)
+    >>> model2 = FPGrowthModel.load(model_path)
+    >>> fpm.transform(data).take(1) == model2.transform(data).take(1)
+    True
 
     .. versionadded:: 2.2.0
     """

@@ -563,8 +563,6 @@ case class WithFields(
 
   override def dataType: StructType = evalExpr.dataType.asInstanceOf[StructType]
 
-  override def foldable: Boolean = structExpr.foldable && valExprs.forall(_.foldable)
-
   override def nullable: Boolean = structExpr.nullable
 
   override def prettyName: String = "with_fields"

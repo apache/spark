@@ -17,7 +17,6 @@
 import os
 import random
 import shutil
-import sys
 import tempfile
 import time
 import unittest
@@ -29,8 +28,9 @@ from pyspark.rdd import PythonEvalType
 from pyspark.sql import Column
 from pyspark.sql.functions import array, col, expr, lit, sum, struct, udf, pandas_udf, \
     PandasUDFType
-from pyspark.sql.types import Row
-from pyspark.sql.types import *
+from pyspark.sql.types import IntegerType, ByteType, StructType, ShortType, BooleanType, \
+    LongType, FloatType, DoubleType, DecimalType, StringType, ArrayType, StructField, \
+    Row, TimestampType, MapType, DateType, BinaryType
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled,\
     test_not_compiled_message, have_pandas, have_pyarrow, pandas_requirement_message, \
@@ -41,7 +41,7 @@ if have_pandas:
     import pandas as pd
 
 if have_pyarrow:
-    import pyarrow as pa
+    import pyarrow as pa  # noqa: F401
 
 
 @unittest.skipIf(
@@ -1139,7 +1139,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_udf_scalar import *
+    from pyspark.sql.tests.test_pandas_udf_scalar import *  # noqa: F401
 
     try:
         import xmlrunner

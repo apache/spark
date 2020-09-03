@@ -55,6 +55,7 @@ select interval '15:40:32.99899999' hour to second;
 select interval '40:32.99899999' minute to second;
 select interval '40:32' minute to second;
 select interval 30 day day;
+select interval 30 days days;
 
 -- invalid day-time string intervals
 select interval '20 15:40:32.99899999' day to hour;
@@ -90,6 +91,9 @@ select interval '12:11:10' hour to second '1' year;
 select interval (-30) day;
 select interval (a + 1) day;
 select interval 30 day day day;
+select interval (-30) days;
+select interval (a + 1) days;
+select interval 30 days days days;
 
 -- Interval year-month arithmetic
 
@@ -171,6 +175,7 @@ select interval '2-2\t' year to month;
 select interval '-\t2-2\t' year to month;
 select interval '\n0 12:34:46.789\t' day to second;
 select interval '\n-\t10\t 12:34:46.789\t' day to second;
+select interval '中文 interval 1 day';
 
 -- interval overflow if (ansi) exception else NULL
 select -(a) from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);

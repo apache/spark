@@ -26,6 +26,7 @@ import org.apache.log4j.Level
 import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -46,6 +47,13 @@ import org.apache.spark.sql.types._
 
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
+
+  test("fail for unresolved plan") {
+    intercept[AnalysisException] {
+      // `testRelation` does not have column `b`.
+      testRelation.select('b).analyze
+    }
+  }
 
   test("union project *") {
     val plan = (1 to 120)

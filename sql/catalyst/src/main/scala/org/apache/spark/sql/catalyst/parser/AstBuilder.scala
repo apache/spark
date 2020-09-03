@@ -1612,13 +1612,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     // Create the function call.
     val name = ctx.functionName.getText
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
-    val arguments = ctx.argument.asScala.map(expression) match {
+    // Call `toSeq`, otherwise `ctx.argument.asScala.map(expression)` is `Buffer` in Scala 2.13
+    val arguments = ctx.argument.asScala.map(expression).toSeq match {
       case Seq(UnresolvedStar(None))
         if name.toLowerCase(Locale.ROOT) == "count" && !isDistinct =>
         // Transform COUNT(*) into COUNT(1).
         Seq(Literal(1))
       case expressions =>
-        expressions.toSeq
+        expressions
     }
     val filter = Option(ctx.where).map(expression(_))
     val function = UnresolvedFunction(
@@ -2124,7 +2125,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitMultiUnitsInterval(ctx: MultiUnitsIntervalContext): CalendarInterval = {
     withOrigin(ctx) {
-      val units = ctx.intervalUnit().asScala
+      val units = ctx.unit.asScala
       val values = ctx.intervalValue().asScala
       try {
         assert(units.length == values.length)

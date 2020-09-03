@@ -262,7 +262,7 @@ object functions {
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
    *
-   * @param rsd maximum estimation error allowed (default = 0.05)
+   * @param rsd maximum relative standard deviation allowed (default = 0.05)
    *
    * @group agg_funcs
    * @since 2.1.0
@@ -274,7 +274,7 @@ object functions {
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
    *
-   * @param rsd maximum estimation error allowed (default = 0.05)
+   * @param rsd maximum relative standard deviation allowed (default = 0.05)
    *
    * @group agg_funcs
    * @since 2.1.0
@@ -2478,12 +2478,27 @@ object functions {
   /**
    * Extract a specific group matched by a Java regex, from the specified string column.
    * If the regex did not match, or the specified group did not match, an empty string is returned.
+   * if the specified group index exceeds the group count of regex, an IllegalArgumentException
+   * will be thrown.
    *
    * @group string_funcs
    * @since 1.5.0
    */
   def regexp_extract(e: Column, exp: String, groupIdx: Int): Column = withExpr {
     RegExpExtract(e.expr, lit(exp).expr, lit(groupIdx).expr)
+  }
+
+  /**
+   * Extract all specific groups matched by a Java regex, from the specified string column.
+   * If the regex did not match, or the specified group did not match, return an empty array.
+   * if the specified group index exceeds the group count of regex, an IllegalArgumentException
+   * will be thrown.
+   *
+   * @group string_funcs
+   * @since 3.1.0
+   */
+  def regexp_extract_all(e: Column, exp: String, groupIdx: Int): Column = withExpr {
+    RegExpExtractAll(e.expr, lit(exp).expr, lit(groupIdx).expr)
   }
 
   /**

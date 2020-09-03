@@ -42,7 +42,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * A deserializer to deserialize data in avro format to data in catalyst format.
  */
-class AvroDeserializer(
+private[sql] class AvroDeserializer(
     rootAvroType: Schema,
     rootCatalystType: DataType,
     datetimeRebaseMode: LegacyBehaviorPolicy.Value,

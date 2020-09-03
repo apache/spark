@@ -1558,6 +1558,15 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
         "mapreduce.input.pathFilter.class" -> classOf[TestFileFilter].getName
       )
       assert(spark.read.options(extraOptions).json(path).count() === 2)
+
+      withClue("SPARK-32621: 'path' option can cause issues while inferring schema") {
+        // During infer, "path" option is used again on top of the paths that have already been
+        // listed. When a partition is removed by TestFileFilter, this will cause a conflict while
+        // inferring partitions because the original path in the "path" option will list the
+        // partition directory that has been removed.
+        assert(
+          spark.read.options(extraOptions).format("json").option("path", path).load.count() === 2)
+      }
     }
   }
 
@@ -2143,9 +2152,18 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
     )(withTempPath { path =>
       val ds = sampledTestData.coalesce(1)
       ds.write.text(path.getAbsolutePath)
-      val readback = spark.read.option("samplingRatio", 0.1).json(path.getCanonicalPath)
+      val readback1 = spark.read.option("samplingRatio", 0.1).json(path.getCanonicalPath)
+      assert(readback1.schema == new StructType().add("f1", LongType))
 
-      assert(readback.schema == new StructType().add("f1", LongType))
+      withClue("SPARK-32621: 'path' option can cause issues while inferring schema") {
+        // During infer, "path" option gets added again to the paths that have already been listed.
+        // This results in reading more data than necessary and causes different schema to be
+        // inferred when sampling ratio is involved.
+        val readback2 = spark.read
+          .option("samplingRatio", 0.1).option("path", path.getCanonicalPath)
+          .format("json").load
+        assert(readback2.schema == new StructType().add("f1", LongType))
+      }
     })
   }
 
