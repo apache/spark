@@ -1029,7 +1029,7 @@ package object config {
       .doc("Path to a file that contains the authentication secret to use. The secret key is " +
         "loaded from this path on both the driver and the executors if overrides are not set for " +
         "either entity (see below). File-based secret keys are only allowed when using " +
-        "Kubernetes.")
+        "Kubernetes or Mesos.")
       .version("3.0.0")
       .stringConf
       .createOptional
@@ -1042,7 +1042,7 @@ package object config {
         "a pod unlike the executors. If this is set, an accompanying secret file must " +
         "be specified for the executors. The fallback configuration allows the same path to be " +
         "used for both the driver and the executors when running in cluster mode. File-based " +
-        "secret keys are only allowed when using Kubernetes.")
+        "secret keys are only allowed when using Kubernetes or Mesos.")
       .version("3.0.0")
       .fallbackConf(AUTH_SECRET_FILE)
 
@@ -1054,7 +1054,7 @@ package object config {
         "in a pod unlike the executors. If this is set, an accompanying secret file must be " +
         "specified for the executors. The fallback configuration allows the same path to be " +
         "used for both the driver and the executors when running in cluster mode. File-based " +
-        "secret keys are only allowed when using Kubernetes.")
+        "secret keys are only allowed when using Kubernetes or Mesos.")
       .version("3.0.0")
       .fallbackConf(AUTH_SECRET_FILE)
 
