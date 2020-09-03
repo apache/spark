@@ -910,7 +910,8 @@ private[deploy] class Master(
           exec.id, ExecutorState.DECOMMISSIONED,
           Some("worker decommissioned"), None,
           // worker host is being set here to let the driver know that the host (aka. worker)
-          // is also being decommissioned.
+          // is also being decommissioned. So the driver can unregister all the shuffle map
+          // statues located at this host when it receives the executor lost event.
           Some(worker.host)))
         exec.state = ExecutorState.DECOMMISSIONED
         exec.application.removeExecutor(exec)
