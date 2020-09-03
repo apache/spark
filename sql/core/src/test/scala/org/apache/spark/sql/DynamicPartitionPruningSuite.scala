@@ -1362,31 +1362,33 @@ abstract class DynamicPartitionPruningSuiteBase
     }
 
     try {
-      SQLConf.get.setConf(StaticSQLConf.SUBQUERY_MAX_THREAD_THRESHOLD, 1)
+      SQLConf.get.setConf(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD, 1)
 
       withSQLConf(
         SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
 
-        spark.udf.register(
-          "compare_property_value",
-          (input: Int, propKey: String, propValue: String) =>
-            TaskContext.get().getLocalProperty(propKey) == propValue
-        )
-        val propKey = "spark.sql.subquery.broadcast.prop.key"
+        try {
+          spark.udf.register(
+            "compare_property_value",
+            (input: Int, propKey: String, propValue: String) =>
+              TaskContext.get().getLocalProperty(propKey) == propValue
+          )
+          val propKey = "spark.sql.subquery.broadcast.prop.key"
 
-        // set local property and assert
-        val propValue1 = UUID.randomUUID().toString()
-        checkPropertyValueByUdfResult(propKey, propValue1)
+          // set local property and assert
+          val propValue1 = UUID.randomUUID().toString()
+          checkPropertyValueByUdfResult(propKey, propValue1)
 
-        // change local property and re-assert
-        val propValue2 = UUID.randomUUID().toString()
-        checkPropertyValueByUdfResult(propKey, propValue2)
-
-        spark.sessionState.catalog.dropTempFunction("compare_property_value", false)
+          // change local property and re-assert
+          val propValue2 = UUID.randomUUID().toString()
+          checkPropertyValueByUdfResult(propKey, propValue2)
+        } finally {
+          spark.sessionState.catalog.dropTempFunction("compare_property_value", true)
+        }
       }
     } finally {
-      SQLConf.get.unsetConf(StaticSQLConf.SUBQUERY_MAX_THREAD_THRESHOLD)
+      SQLConf.get.unsetConf(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD)
     }
   }
 }
