@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.profiler (Python 3.5)
-#
-
 from typing import Any, Callable, List, Optional, Tuple, Type
 
 import pstats

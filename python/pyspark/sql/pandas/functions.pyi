@@ -17,12 +17,10 @@
 # under the License.
 
 from typing import overload
-from typing import Any, Optional, Union, Callable
+from typing import Union, Callable
 
 from pyspark.sql._typing import (
     AtomicDataTypeOrString,
-    ColumnOrName,
-    DataTypeOrString,
     UserDefinedFunctionLike,
 )
 from pyspark.sql.pandas._typing import (
@@ -44,10 +42,9 @@ from pyspark.sql.pandas._typing import (
     PandasScalarUDFType,
 )
 
-from pyspark import since as since
-from pyspark.rdd import PythonEvalType as PythonEvalType
-from pyspark.sql.column import Column
-from pyspark.sql.types import ArrayType, DataType, StructType
+from pyspark import since as since  # noqa: F401
+from pyspark.rdd import PythonEvalType as PythonEvalType  # noqa: F401
+from pyspark.sql.types import ArrayType, StructType
 
 class PandasUDFType:
     SCALAR: PandasScalarUDFType

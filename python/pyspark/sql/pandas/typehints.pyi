@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from pyspark.sql.pandas.utils import (
+from pyspark.sql.pandas.utils import (  # noqa: F401
     require_minimum_pandas_version as require_minimum_pandas_version,
 )
 from typing import Any, Optional

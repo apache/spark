@@ -19,7 +19,7 @@
 # Stubs for pyspark.mllib.stat.KernelDensity (Python 3.5)
 #
 
-from typing import Any, Iterable
+from typing import Iterable
 from pyspark.rdd import RDD
 from numpy import ndarray  # type: ignore[import]
 

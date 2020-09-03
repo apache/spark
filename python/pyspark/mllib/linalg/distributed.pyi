@@ -19,13 +19,13 @@
 # Stubs for pyspark.mllib.linalg.distributed (Python 3.5)
 #
 
-from typing import Any, Generic, Sequence, Optional, Tuple, TypeVar, Union
+from typing import Generic, Sequence, Optional, Tuple, TypeVar, Union
 from pyspark.rdd import RDD
 from pyspark.storagelevel import StorageLevel
 from pyspark.mllib.common import JavaModelWrapper
 from pyspark.mllib.linalg import Vector, Matrix, QRDecomposition
 from pyspark.mllib.stat import MultivariateStatisticalSummary
-from numpy import ndarray  # type: ignore[import]
+from numpy import ndarray  # noqa: F401
 
 VectorLike = Union[Vector, Sequence[Union[float, int]]]
 

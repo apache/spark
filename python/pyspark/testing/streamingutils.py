@@ -17,7 +17,6 @@
 import os
 import tempfile
 import time
-from typing import Optional
 import unittest
 
 from pyspark import SparkConf, SparkContext, RDD

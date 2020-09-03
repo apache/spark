@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from pyspark.ml import (
+from pyspark.ml import (  # noqa: F401
     classification as classification,
     clustering as clustering,
     evaluation as evaluation,
@@ -31,7 +31,7 @@ from pyspark.ml import (
     tuning as tuning,
     util as util,
 )
-from pyspark.ml.base import (
+from pyspark.ml.base import (  # noqa: F401
     Estimator as Estimator,
     Model as Model,
     PredictionModel as PredictionModel,
@@ -39,4 +39,7 @@ from pyspark.ml.base import (
     Transformer as Transformer,
     UnaryTransformer as UnaryTransformer,
 )
-from pyspark.ml.pipeline import Pipeline as Pipeline, PipelineModel as PipelineModel
+from pyspark.ml.pipeline import (  # noqa: F401
+    Pipeline as Pipeline,
+    PipelineModel as PipelineModel,
+)

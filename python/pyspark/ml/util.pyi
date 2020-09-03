@@ -20,10 +20,10 @@
 
 from typing import Any, Dict, Generic, Optional, Type, TypeVar, Union
 
-from pyspark.context import SparkContext
-from pyspark.ml.param import Params
-from pyspark.sql.context import SQLContext
-from pyspark.sql.session import SparkSession
+from pyspark import SparkContext as SparkContext, since as since  # noqa: F401
+from pyspark.ml.common import inherit_doc as inherit_doc  # noqa: F401
+from pyspark.sql import SparkSession as SparkSession
+from pyspark.util import VersionUtils as VersionUtils  # noqa: F401
 
 S = TypeVar("S")
 R = TypeVar("R", bound=MLReadable)

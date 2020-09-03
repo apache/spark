@@ -20,11 +20,27 @@ from typing import overload
 from typing import Any, Dict, Generic, List, Optional, Tuple
 from pyspark.ml._typing import JM, P
 
-from pyspark.ml.param.shared import *
+from pyspark.ml.param.shared import (
+    HasFeaturesCol,
+    HasHandleInvalid,
+    HasInputCol,
+    HasInputCols,
+    HasLabelCol,
+    HasMaxIter,
+    HasNumFeatures,
+    HasOutputCol,
+    HasOutputCols,
+    HasRelativeError,
+    HasSeed,
+    HasStepSize,
+    HasThreshold,
+    HasThresholds,
+)
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer
 from pyspark.ml.linalg import Vector, DenseVector, DenseMatrix
 from pyspark.sql.dataframe import DataFrame
+from pyspark.ml.param import Param
 
 class Binarizer(
     JavaTransformer,
@@ -80,6 +96,7 @@ class Binarizer(
 
 class _LSHParams(HasInputCol, HasOutputCol):
     numHashTables: Param[int]
+    def __init__(self, *args: Any): ...
     def getNumHashTables(self) -> int: ...
 
 class _LSH(Generic[JM], JavaEstimator[JM], _LSHParams, JavaMLReadable, JavaMLWritable):
@@ -386,6 +403,7 @@ class HashingTF(
 
 class _IDFParams(HasInputCol, HasOutputCol):
     minDocFreq: Param[int]
+    def __init__(self, *args: Any): ...
     def getMinDocFreq(self) -> int: ...
 
 class IDF(JavaEstimator[IDFModel], _IDFParams, JavaMLReadable[IDF], JavaMLWritable):
@@ -558,6 +576,7 @@ class MinHashLSHModel(_LSHModel, JavaMLReadable[MinHashLSHModel], JavaMLWritable
 class _MinMaxScalerParams(HasInputCol, HasOutputCol):
     min: Param[float]
     max: Param[float]
+    def __init__(self, *args: Any): ...
     def getMin(self) -> float: ...
     def getMax(self) -> float: ...
 
@@ -653,6 +672,7 @@ class Normalizer(
 class _OneHotEncoderParams(HasInputCols, HasOutputCols, HasHandleInvalid):
     handleInvalid: Param[str]
     dropLast: Param[bool]
+    def __init__(self, *args: Any): ...
     def getDropLast(self) -> bool: ...
 
 class OneHotEncoder(
@@ -813,6 +833,7 @@ class _RobustScalerParams(HasInputCol, HasOutputCol, HasRelativeError):
     upper: Param[float]
     withCentering: Param[bool]
     withScaling: Param[bool]
+    def __init__(self, *args: Any): ...
     def getLower(self) -> float: ...
     def getUpper(self) -> float: ...
     def getWithCentering(self) -> bool: ...
@@ -913,6 +934,7 @@ class SQLTransformer(JavaTransformer, JavaMLReadable[SQLTransformer], JavaMLWrit
 class _StandardScalerParams(HasInputCol, HasOutputCol):
     withMean: Param[bool]
     withStd: Param[bool]
+    def __init__(self, *args: Any): ...
     def getWithMean(self) -> bool: ...
     def getWithStd(self) -> bool: ...
 
@@ -1178,6 +1200,7 @@ class VectorAssembler(
 class _VectorIndexerParams(HasInputCol, HasOutputCol, HasHandleInvalid):
     maxCategories: Param[int]
     handleInvalid: Param[str]
+    def __init__(self, *args: Any): ...
     def getMaxCategories(self) -> int: ...
 
 class VectorIndexer(
@@ -1256,6 +1279,7 @@ class _Word2VecParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCo
     minCount: Param[int]
     windowSize: Param[int]
     maxSentenceLength: Param[int]
+    def __init__(self, *args: Any): ...
     def getVectorSize(self) -> int: ...
     def getNumPartitions(self) -> int: ...
     def getMinCount(self) -> int: ...
@@ -1358,6 +1382,7 @@ class _RFormulaParams(HasFeaturesCol, HasLabelCol, HasHandleInvalid):
     forceIndexLabel: Param[bool]
     stringIndexerOrderType: Param[str]
     handleInvalid: Param[str]
+    def __init__(self, *args: Any): ...
     def getFormula(self) -> str: ...
     def getForceIndexLabel(self) -> bool: ...
     def getStringIndexerOrderType(self) -> str: ...
@@ -1406,6 +1431,7 @@ class _SelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol):
     fpr: Param[float]
     fdr: Param[float]
     fwe: Param[float]
+    def __init__(self, *args: Any): ...
     def getSelectorType(self) -> str: ...
     def getNumTopFeatures(self) -> int: ...
     def getPercentile(self) -> float: ...

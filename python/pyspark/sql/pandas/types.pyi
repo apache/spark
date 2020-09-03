@@ -16,7 +16,23 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from pyspark.sql.types import *
+from pyspark.sql.types import (  # noqa: F401
+    ArrayType as ArrayType,
+    BinaryType as BinaryType,
+    BooleanType as BooleanType,
+    ByteType as ByteType,
+    DateType as DateType,
+    DecimalType as DecimalType,
+    DoubleType as DoubleType,
+    FloatType as FloatType,
+    IntegerType as IntegerType,
+    LongType as LongType,
+    ShortType as ShortType,
+    StringType as StringType,
+    StructField as StructField,
+    StructType as StructType,
+    TimestampType as TimestampType,
+)
 from typing import Any
 
 def to_arrow_type(dt: Any): ...

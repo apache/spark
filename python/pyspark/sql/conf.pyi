@@ -19,7 +19,7 @@
 # Stubs for pyspark.sql.conf (Python 3.5)
 #
 
-from typing import Any, Optional
+from typing import Optional
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 class RuntimeConfig:

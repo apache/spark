@@ -19,13 +19,12 @@
 # Stubs for pyspark.ml.wrapper (Python 3)
 
 import abc
-from typing import Any, Generic, Optional, Type, TypeVar
+from typing import Any, Optional, Type
 from pyspark.ml._typing import P, T, JM, ParamMap
 
 from pyspark.ml import Estimator, Predictor, PredictionModel, Transformer, Model
 from pyspark.ml.base import _PredictorParams
 from pyspark.ml.param import Param, Params
-from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol
 
 class JavaWrapper:
     def __init__(self, java_obj: Optional[Any] = ...) -> None: ...
@@ -46,10 +45,8 @@ class JavaModel(JavaTransformer, Model):
     __metaclass__: Type[abc.ABCMeta]
     def __init__(self, java_model: Optional[Any] = ...) -> None: ...
 
-class _JavaPredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol): ...
-
 class JavaPredictor(
-    Predictor[JM], JavaEstimator, _JavaPredictorParams, metaclass=abc.ABCMeta
+    Predictor[JM], JavaEstimator, _PredictorParams, metaclass=abc.ABCMeta
 ):
     __metaclass__: Type[abc.ABCMeta]
 

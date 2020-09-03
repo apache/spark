@@ -19,7 +19,7 @@
 # Stubs for pyspark.mllib.fpm (Python 3.5)
 #
 
-from typing import Any, Optional, Generic, List, TypeVar
+from typing import Generic, List, TypeVar
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD
 from pyspark.mllib.common import JavaModelWrapper

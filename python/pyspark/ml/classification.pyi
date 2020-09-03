@@ -16,37 +16,48 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Any, Dict, List, Optional, Type, TypeVar
+from typing import Any, List, Optional, Type
 from pyspark.ml._typing import JM, M, P, T, ParamMap
 
 import abc
 from abc import abstractmethod
-from pyspark.ml.base import Estimator, Model, Transformer, PredictionModel, Predictor
+from pyspark.ml import Estimator, Model, PredictionModel, Predictor, Transformer
 from pyspark.ml.base import _PredictorParams
-from pyspark.ml.linalg import Matrix, Vector
-from pyspark.ml.param.shared import *
+from pyspark.ml.param.shared import (
+    HasAggregationDepth,
+    HasBlockSize,
+    HasElasticNetParam,
+    HasFitIntercept,
+    HasMaxIter,
+    HasParallelism,
+    HasProbabilityCol,
+    HasRawPredictionCol,
+    HasRegParam,
+    HasSeed,
+    HasSolver,
+    HasStandardization,
+    HasStepSize,
+    HasThreshold,
+    HasThresholds,
+    HasTol,
+    HasWeightCol,
+)
+from pyspark.ml.regression import _FactorizationMachinesParams
 from pyspark.ml.tree import (
     _DecisionTreeModel,
     _DecisionTreeParams,
-    _TreeEnsembleModel,
-    _RandomForestParams,
     _GBTParams,
     _HasVarianceImpurity,
+    _RandomForestParams,
     _TreeClassifierParams,
-    _TreeEnsembleParams,
+    _TreeEnsembleModel,
 )
-from pyspark.ml.regression import (
-    _FactorizationMachinesParams,
-    DecisionTreeRegressionModel,
-)
-from pyspark.ml.util import *
-from pyspark.ml.wrapper import (
-    JavaPredictionModel,
-    JavaPredictor,
-    _JavaPredictorParams,
-    JavaWrapper,
-    JavaTransformer,
-)
+from pyspark.ml.util import HasTrainingSummary, JavaMLReadable, JavaMLWritable
+from pyspark.ml.wrapper import JavaPredictionModel, JavaPredictor, JavaWrapper
+
+from pyspark.ml.linalg import Matrix, Vector
+from pyspark.ml.param import Param
+from pyspark.ml.regression import DecisionTreeRegressionModel
 from pyspark.sql.dataframe import DataFrame
 
 class _ClassifierParams(HasRawPredictionCol, _PredictorParams): ...
@@ -90,10 +101,6 @@ class _JavaClassificationModel(ClassificationModel, JavaPredictionModel[T]):
     @property
     def numClasses(self) -> int: ...
     def predictRaw(self, value: Vector) -> Vector: ...
-
-class _JavaProbabilisticClassifierParams(
-    HasProbabilityCol, HasThresholds, _ClassifierParams
-): ...
 
 class _JavaProbabilisticClassifier(ProbabilisticClassifier, _JavaClassifier[JM]):
     __metaclass__: Type[abc.ABCMeta]
@@ -259,6 +266,7 @@ class _LogisticRegressionParams(
     upperBoundsOnCoefficients: Param[Matrix]
     lowerBoundsOnIntercepts: Param[Vector]
     upperBoundsOnIntercepts: Param[Vector]
+    def __init__(self, *args: Any): ...
     def setThreshold(self: P, value: float) -> P: ...
     def getThreshold(self) -> float: ...
     def setThresholds(self: P, value: List[float]) -> P: ...
@@ -376,7 +384,9 @@ class BinaryLogisticRegressionSummary(
 class BinaryLogisticRegressionTrainingSummary(
     BinaryLogisticRegressionSummary, LogisticRegressionTrainingSummary
 ): ...
-class _DecisionTreeClassifierParams(_DecisionTreeParams, _TreeClassifierParams): ...
+
+class _DecisionTreeClassifierParams(_DecisionTreeParams, _TreeClassifierParams):
+    def __init__(self, *args: Any): ...
 
 class DecisionTreeClassifier(
     _JavaProbabilisticClassifier[DecisionTreeClassificationModel],
@@ -448,7 +458,8 @@ class DecisionTreeClassificationModel(
     @property
     def featureImportances(self) -> Vector: ...
 
-class _RandomForestClassifierParams(_RandomForestParams, _TreeClassifierParams): ...
+class _RandomForestClassifierParams(_RandomForestParams, _TreeClassifierParams):
+    def __init__(self, *args: Any): ...
 
 class RandomForestClassifier(
     _JavaProbabilisticClassifier[RandomForestClassificationModel],
@@ -549,6 +560,7 @@ class BinaryRandomForestClassificationTrainingSummary(
 class _GBTClassifierParams(_GBTParams, _HasVarianceImpurity):
     supportedLossTypes: List[str]
     lossType: Param[str]
+    def __init__(self, *args: Any): ...
     def getLossType(self) -> str: ...
 
 class GBTClassifier(
@@ -638,9 +650,10 @@ class GBTClassificationModel(
     def trees(self) -> List[DecisionTreeRegressionModel]: ...
     def evaluateEachIteration(self, dataset: DataFrame) -> List[float]: ...
 
-class _NaiveBayesParams(_JavaPredictorParams, HasWeightCol):
+class _NaiveBayesParams(_PredictorParams, HasWeightCol):
     smoothing: Param[float]
     modelType: Param[str]
+    def __init__(self, *args: Any): ...
     def getSmoothing(self) -> float: ...
     def getModelType(self) -> str: ...
 
@@ -696,7 +709,7 @@ class NaiveBayesModel(
     def sigma(self) -> Matrix: ...
 
 class _MultilayerPerceptronParams(
-    _JavaProbabilisticClassifierParams,
+    _ProbabilisticClassifierParams,
     HasSeed,
     HasMaxIter,
     HasTol,
@@ -707,6 +720,7 @@ class _MultilayerPerceptronParams(
     layers: Param[List[int]]
     solver: Param[str]
     initialWeights: Param[Vector]
+    def __init__(self, *args: Any): ...
     def getLayers(self) -> List[int]: ...
     def getInitialWeights(self) -> Vector: ...
 

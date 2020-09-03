@@ -48,7 +48,10 @@ import pyspark.context
 from pyspark.resultiterable import ResultIterable
 from pyspark.serializers import Serializer
 from pyspark.storagelevel import StorageLevel
-from pyspark.resource.requests import ExecutorResourceRequests, TaskResourceRequests
+from pyspark.resource.requests import (  # noqa: F401
+    ExecutorResourceRequests,
+    TaskResourceRequests,
+)
 from pyspark.resource.profile import ResourceProfile
 from pyspark.statcounter import StatCounter
 from pyspark.sql.dataframe import DataFrame

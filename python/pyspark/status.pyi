@@ -16,10 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.status (Python 3.5)
-#
-
-from typing import Any, List, NamedTuple, Optional
+from typing import List, NamedTuple, Optional
 from py4j.java_gateway import JavaArray, JavaObject  # type: ignore[import]
 
 class SparkJobInfo(NamedTuple):

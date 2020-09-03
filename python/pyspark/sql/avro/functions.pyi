@@ -18,7 +18,7 @@
 
 # Stubs for pyspark.sql.avro.functions (Python 3)
 
-from typing import Any, Dict
+from typing import Dict
 
 from pyspark.sql._typing import ColumnOrName
 from pyspark.sql.column import Column

@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from pyspark.serializers import (
+from pyspark.serializers import (  # noqa: F401
     Serializer as Serializer,
     UTF8Deserializer as UTF8Deserializer,
     read_int as read_int,

@@ -23,7 +23,13 @@ from typing import overload
 from typing import Any, Union
 
 from pyspark.sql._typing import LiteralType, DecimalLiteral, DateTimeLiteral
-from pyspark.sql.types import *
+from pyspark.sql.types import (  # noqa: F401
+    DataType,
+    StructField,
+    StructType,
+    IntegerType,
+    StringType,
+)
 from pyspark.sql.window import WindowSpec
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]

@@ -20,7 +20,7 @@
 #
 
 from typing import overload
-from typing import Any, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
 from pyspark.mllib._typing import VectorLike
 from pyspark.rdd import RDD
 from pyspark.mllib.common import JavaModelWrapper

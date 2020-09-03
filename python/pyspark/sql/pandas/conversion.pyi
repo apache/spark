@@ -17,17 +17,29 @@
 # under the License.
 
 from typing import overload
-from typing import Any, Iterable, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from pyspark.sql.pandas._typing import DataFrameLike
-from pyspark import since as since
-from pyspark.rdd import RDD
+from pyspark import since as since  # noqa: F401
+from pyspark.rdd import RDD  # noqa: F401
 import pyspark.sql.dataframe
-from pyspark.sql.pandas.serializers import (
+from pyspark.sql.pandas.serializers import (  # noqa: F401
     ArrowCollectSerializer as ArrowCollectSerializer,
 )
-from pyspark.sql.types import *
-from pyspark.traceback_utils import SCCallSiteSync as SCCallSiteSync
+from pyspark.sql.types import (  # noqa: F401
+    BooleanType as BooleanType,
+    ByteType as ByteType,
+    DataType as DataType,
+    DoubleType as DoubleType,
+    FloatType as FloatType,
+    IntegerType as IntegerType,
+    IntegralType as IntegralType,
+    LongType as LongType,
+    ShortType as ShortType,
+    StructType as StructType,
+    TimestampType as TimestampType,
+)
+from pyspark.traceback_utils import SCCallSiteSync as SCCallSiteSync  # noqa: F401
 
 class PandasConversionMixin:
     def toPandas(self) -> DataFrameLike: ...

@@ -20,7 +20,7 @@
 #
 
 from pyspark._typing import SizedIterable
-from typing import Generic, Iterable, Iterator, TypeVar
+from typing import Iterator, TypeVar
 
 T = TypeVar("T")
 

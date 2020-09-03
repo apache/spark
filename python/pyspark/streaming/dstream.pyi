@@ -21,7 +21,6 @@
 
 from typing import overload
 from typing import (
-    Any,
     Callable,
     Generic,
     Hashable,

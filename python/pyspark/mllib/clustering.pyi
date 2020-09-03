@@ -20,7 +20,7 @@
 #
 
 from typing import overload
-from typing import Any, List, NamedTuple, Optional, Tuple, TypeVar
+from typing import List, NamedTuple, Optional, Tuple, TypeVar
 
 import array
 

@@ -28,7 +28,6 @@ from pyspark.sql._typing import (
     DateTimeLiteral,
     LiteralType,
     DecimalLiteral,
-    DataTypeOrString,
     RowLike,
 )
 from pyspark.sql.pandas._typing import DataFrameLike

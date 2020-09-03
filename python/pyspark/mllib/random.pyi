@@ -19,7 +19,7 @@
 # Stubs for pyspark.mllib.random (Python 3.5)
 #
 
-from typing import Any, Optional
+from typing import Optional
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD
 from pyspark.mllib.linalg import Vector

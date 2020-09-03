@@ -19,7 +19,7 @@
 # Stubs for pyspark.mllib.util (Python 3)
 #
 
-from typing import Generic, List, Optional, Type, TypeVar
+from typing import Generic, List, Optional, TypeVar
 
 from pyspark.mllib._typing import VectorLike
 from pyspark.context import SparkContext

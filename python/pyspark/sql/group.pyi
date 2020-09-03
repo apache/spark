@@ -20,15 +20,13 @@
 #
 
 from typing import overload
-from typing import Any, Callable, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from pyspark.sql._typing import LiteralType
-from pyspark.sql.pandas._typing import GroupedMapPandasUserDefinedFunction
 from pyspark.sql.context import SQLContext
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.group_ops import PandasGroupedOpsMixin
-from pyspark.sql.types import *
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 class GroupedData(PandasGroupedOpsMixin):

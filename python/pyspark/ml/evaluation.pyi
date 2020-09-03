@@ -20,7 +20,7 @@
 #
 
 import abc
-from typing import Any, Dict, Optional, Type
+from typing import Optional, Type
 from pyspark.ml._typing import (
     ParamMap,
     BinaryClassificationEvaluatorMetricType,

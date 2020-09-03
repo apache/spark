@@ -20,14 +20,13 @@ from typing import Union
 
 from pyspark.sql.pandas._typing import (
     GroupedMapPandasUserDefinedFunction,
-    CogroupedMapPandasUserDefinedFunction,
     PandasGroupedMapFunction,
     PandasCogroupedMapFunction,
 )
 
-from pyspark import since as since
-from pyspark.rdd import PythonEvalType as PythonEvalType
-from pyspark.sql.column import Column as Column
+from pyspark import since as since  # noqa: F401
+from pyspark.rdd import PythonEvalType as PythonEvalType  # noqa: F401
+from pyspark.sql.column import Column as Column  # noqa: F401
 from pyspark.sql.context import SQLContext
 import pyspark.sql.group
 from pyspark.sql.dataframe import DataFrame as DataFrame

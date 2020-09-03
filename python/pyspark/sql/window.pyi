@@ -16,10 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.sql.window (Python 3.5)
-#
-
-from typing import Any, Union
 from pyspark.sql._typing import ColumnOrName
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 

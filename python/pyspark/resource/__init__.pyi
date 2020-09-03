@@ -16,11 +16,16 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from pyspark.resource.information import ResourceInformation
-from pyspark.resource.requests import (
-    TaskResourceRequest,
-    TaskResourceRequests,
-    ExecutorResourceRequest,
-    ExecutorResourceRequests,
+from pyspark.resource.information import (  # noqa: F401
+    ResourceInformation as ResourceInformation,
 )
-from pyspark.resource.profile import ResourceProfile, ResourceProfileBuilder
+from pyspark.resource.profile import (  # noqa: F401
+    ResourceProfile as ResourceProfile,
+    ResourceProfileBuilder as ResourceProfileBuilder,
+)
+from pyspark.resource.requests import (  # noqa: F401
+    ExecutorResourceRequest as ExecutorResourceRequest,
+    ExecutorResourceRequests as ExecutorResourceRequests,
+    TaskResourceRequest as TaskResourceRequest,
+    TaskResourceRequests as TaskResourceRequests,
+)

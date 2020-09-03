@@ -20,14 +20,14 @@
 #
 
 from typing import overload
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from pyspark.sql._typing import OptionalPrimitiveType
 from pyspark.sql.dataframe import DataFrame
 from pyspark.rdd import RDD
 from pyspark.sql.column import Column
 from pyspark.sql.context import SQLContext
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType
 
 PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]

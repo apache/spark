@@ -16,10 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.taskcontext (Python 3)
-#
-
-from typing import Any, Dict, List
+from typing import Dict, List
 from typing_extensions import Literal
 from pyspark.resource.information import ResourceInformation
 

@@ -18,17 +18,13 @@
 
 from typing import (
     Any,
-    Callable,
-    Iterable,
     List,
-    NewType,
     Optional,
     Tuple,
     TypeVar,
     Union,
 )
-from typing_extensions import Protocol, Literal
-from types import FunctionType
+from typing_extensions import Protocol
 
 import datetime
 import decimal
@@ -37,10 +33,6 @@ from pyspark._typing import PrimitiveType
 import pyspark.sql.column
 import pyspark.sql.types
 from pyspark.sql.column import Column
-
-from pyspark.sql.pandas._typing import DataFrameLike, SeriesLike
-import pandas.core.frame  # type: ignore[import]
-import pandas.core.series  # type: ignore[import]
 
 ColumnOrName = Union[pyspark.sql.column.Column, str]
 DecimalLiteral = decimal.Decimal

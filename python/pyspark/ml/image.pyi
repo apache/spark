@@ -19,7 +19,7 @@
 # Stubs for pyspark.ml.image (Python 3)
 #
 
-from typing import Any, Dict, List
+from typing import Dict, List
 
 from pyspark.sql.types import Row, StructType
 

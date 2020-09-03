@@ -16,25 +16,26 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.sql.functions (Python 3.5)
-
 from typing import overload
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from pyspark.sql._typing import (
-    AtomicDataTypeOrString,
     ColumnOrName,
     DataTypeOrString,
-    UserDefinedFunctionLike,
 )
-from pyspark.sql.pandas.functions import (
+from pyspark.sql.pandas.functions import (  # noqa: F401
     pandas_udf as pandas_udf,
     PandasUDFType as PandasUDFType,
 )
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.types import ArrayType, DataType, StructType
-from pyspark.sql.utils import to_str
+from pyspark.sql.types import (  # noqa: F401
+    ArrayType,
+    StringType,
+    StructType,
+    DataType,
+)
+from pyspark.sql.utils import to_str  # noqa: F401
 
 def approxCountDistinct(col: ColumnOrName, rsd: Optional[float] = ...) -> Column: ...
 def approx_count_distinct(col: ColumnOrName, rsd: Optional[float] = ...) -> Column: ...

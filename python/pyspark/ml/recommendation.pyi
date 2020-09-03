@@ -16,30 +16,27 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.ml.recommendation (Python 3)
-#
-
 from typing import Any, Optional
 
-import sys
+import sys  # noqa: F401
 
-from pyspark import since, keyword_only
+from pyspark import since, keyword_only  # noqa: F401
 from pyspark.ml.param.shared import (
-    HasPredictionCol,
     HasBlockSize,
-    HasMaxIter,
-    HasRegParam,
     HasCheckpointInterval,
+    HasMaxIter,
+    HasPredictionCol,
+    HasRegParam,
     HasSeed,
 )
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
-from pyspark.ml.common import inherit_doc
-from pyspark.ml.param import Params, TypeConverters, Param
+from pyspark.ml.common import inherit_doc  # noqa: F401
+from pyspark.ml.param import Param
 from pyspark.ml.util import JavaMLWritable, JavaMLReadable
 
 from pyspark.sql.dataframe import DataFrame
 
-class _ALSModelParams(HasPredictionCol):
+class _ALSModelParams(HasPredictionCol, HasBlockSize):
     userCol: Param[str]
     itemCol: Param[str]
     coldStartStrategy: Param[str]
@@ -59,6 +56,7 @@ class _ALSParams(
     nonnegative: Param[bool]
     intermediateStorageLevel: Param[str]
     finalStorageLevel: Param[str]
+    def __init__(self, *args: Any): ...
     def getRank(self) -> int: ...
     def getNumUserBlocks(self) -> int: ...
     def getNumItemBlocks(self) -> int: ...
@@ -88,7 +86,8 @@ class ALS(JavaEstimator[ALSModel], _ALSParams, JavaMLWritable, JavaMLReadable[AL
         checkpointInterval: int = ...,
         intermediateStorageLevel: str = ...,
         finalStorageLevel: str = ...,
-        coldStartStrategy: str = ...
+        coldStartStrategy: str = ...,
+        blockSize: int = ...
     ) -> None: ...
     def setParams(
         self,
@@ -108,7 +107,8 @@ class ALS(JavaEstimator[ALSModel], _ALSParams, JavaMLWritable, JavaMLReadable[AL
         checkpointInterval: int = ...,
         intermediateStorageLevel: str = ...,
         finalStorageLevel: str = ...,
-        coldStartStrategy: str = ...
+        coldStartStrategy: str = ...,
+        blockSize: int = ...
     ) -> ALS: ...
     def setRank(self, value: int) -> ALS: ...
     def setNumUserBlocks(self, value: int) -> ALS: ...
@@ -128,12 +128,14 @@ class ALS(JavaEstimator[ALSModel], _ALSParams, JavaMLWritable, JavaMLReadable[AL
     def setPredictionCol(self, value: str) -> ALS: ...
     def setCheckpointInterval(self, value: int) -> ALS: ...
     def setSeed(self, value: int) -> ALS: ...
+    def setBlockSize(self, value: int) -> ALS: ...
 
 class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable[ALSModel]):
     def setUserCol(self, value: str) -> ALSModel: ...
     def setItemCol(self, value: str) -> ALSModel: ...
     def setColdStartStrategy(self, value: str) -> ALSModel: ...
     def setPredictionCol(self, value: str) -> ALSModel: ...
+    def setBlockSize(self, value: int) -> ALSModel: ...
     @property
     def rank(self) -> int: ...
     @property

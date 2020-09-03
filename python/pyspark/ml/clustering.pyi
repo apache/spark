@@ -16,15 +16,31 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.ml.clustering (Python 3)
-#
-
 from typing import Any, List, Optional
 
 from pyspark.ml.linalg import Matrix, Vector
-from pyspark.ml.util import *
+from pyspark.ml.util import (
+    GeneralJavaMLWritable,
+    HasTrainingSummary,
+    JavaMLReadable,
+    JavaMLWritable,
+)
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaWrapper
-from pyspark.ml.param.shared import *
+from pyspark.ml.param.shared import (
+    HasAggregationDepth,
+    HasBlockSize,
+    HasCheckpointInterval,
+    HasDistanceMeasure,
+    HasFeaturesCol,
+    HasMaxIter,
+    HasPredictionCol,
+    HasProbabilityCol,
+    HasSeed,
+    HasTol,
+    HasWeightCol,
+)
+
+from pyspark.ml.param import Param
 from pyspark.ml.stat import MultivariateGaussian
 from pyspark.sql.dataframe import DataFrame
 
@@ -58,6 +74,7 @@ class _GaussianMixtureParams(
     HasBlockSize,
 ):
     k: Param[int]
+    def __init__(self, *args: Any): ...
     def getK(self) -> int: ...
 
 class GaussianMixtureModel(
@@ -149,6 +166,7 @@ class _KMeansParams(
     k: Param[int]
     initMode: Param[str]
     initSteps: Param[int]
+    def __init__(self, *args: Any): ...
     def getK(self) -> int: ...
     def getInitMode(self) -> str: ...
     def getInitSteps(self) -> int: ...
@@ -219,6 +237,7 @@ class _BisectingKMeansParams(
 ):
     k: Param[int]
     minDivisibleClusterSize: Param[float]
+    def __init__(self, *args: Any): ...
     def getK(self) -> int: ...
     def getMinDivisibleClusterSize(self) -> float: ...
 
@@ -291,6 +310,7 @@ class _LDAParams(HasMaxIter, HasFeaturesCol, HasSeed, HasCheckpointInterval):
     topicConcentration: Param[float]
     topicDistributionCol: Param[str]
     keepLastCheckpoint: Param[bool]
+    def __init__(self, *args: Any): ...
     def setK(self, value: int) -> LDA: ...
     def getOptimizer(self) -> str: ...
     def getLearningOffset(self) -> float: ...
@@ -381,6 +401,7 @@ class _PowerIterationClusteringParams(HasMaxIter, HasWeightCol):
     initMode: Param[str]
     srcCol: Param[str]
     dstCol: Param[str]
+    def __init__(self, *args: Any): ...
     def getK(self) -> int: ...
     def getInitMode(self) -> str: ...
     def getSrcCol(self) -> str: ...

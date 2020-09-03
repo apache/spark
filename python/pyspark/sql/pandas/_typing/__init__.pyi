@@ -20,12 +20,9 @@ from typing import (
     Any,
     Callable,
     Iterable,
-    List,
     NewType,
-    Optional,
     Tuple,
     Type,
-    TypeVar,
     Union,
 )
 from typing_extensions import Protocol, Literal

@@ -16,14 +16,14 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from pyspark.serializers import (
+from pyspark.serializers import (  # noqa: F401
     AutoBatchedSerializer as AutoBatchedSerializer,
     BatchedSerializer as BatchedSerializer,
     CompressedSerializer as CompressedSerializer,
     FlattenedValuesSerializer as FlattenedValuesSerializer,
     PickleSerializer as PickleSerializer,
 )
-from pyspark.util import fail_on_stopiteration as fail_on_stopiteration
+from pyspark.util import fail_on_stopiteration as fail_on_stopiteration  # noqa: F401
 from typing import Any, Optional
 
 process: Any

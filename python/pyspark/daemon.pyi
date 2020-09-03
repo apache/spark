@@ -16,7 +16,12 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from pyspark.serializers import UTF8Deserializer as UTF8Deserializer, read_int as read_int, write_int as write_int, write_with_length as write_with_length  # type: ignore[attr-defined]
+from pyspark.serializers import (  # noqa: F401
+    UTF8Deserializer as UTF8Deserializer,
+    read_int as read_int,
+    write_int as write_int,
+    write_with_length as write_with_length,
+)
 from typing import Any
 
 def compute_real_exit_code(exit_code: Any): ...

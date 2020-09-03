@@ -19,7 +19,7 @@
 # Stubs for pyspark.mllib.recommendation (Python 3.5)
 #
 
-from typing import Any, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import array
 from collections import namedtuple

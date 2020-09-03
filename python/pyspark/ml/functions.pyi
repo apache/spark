@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from pyspark import SparkContext as SparkContext, since as since
+from pyspark import SparkContext as SparkContext, since as since  # noqa: F401
 from pyspark.sql.column import Column as Column
 
 def vector_to_array(col: Column) -> Column: ...

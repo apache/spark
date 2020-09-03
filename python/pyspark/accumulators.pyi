@@ -29,7 +29,6 @@ T = TypeVar("T")
 U = TypeVar("U", bound=SupportsIAdd)
 
 import socketserver as SocketServer
-from typing import Any
 
 class Accumulator(Generic[T]):
     aid: int

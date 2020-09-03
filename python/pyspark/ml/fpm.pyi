@@ -19,19 +19,21 @@
 # Stubs for pyspark.ml.base (Python 3)
 #
 
-from typing import Optional
+from typing import Any, Optional
 
-from pyspark.ml._typing import P
-from pyspark.ml.util import *
+from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaParams, JavaModel
-from pyspark.ml.param.shared import *
+from pyspark.ml.param.shared import HasPredictionCol
 from pyspark.sql.dataframe import DataFrame
+
+from pyspark.ml.param import Param
 
 class _FPGrowthParams(HasPredictionCol):
     itemsCol: Param[str]
     minSupport: Param[float]
     numPartitions: Param[int]
     minConfidence: Param[float]
+    def __init__(self, *args: Any): ...
     def getItemsCol(self) -> str: ...
     def getMinSupport(self) -> float: ...
     def getNumPartitions(self) -> int: ...

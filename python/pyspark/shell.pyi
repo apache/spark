@@ -16,14 +16,16 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from pyspark import SparkConf as SparkConf
+from pyspark import SparkConf as SparkConf  # noqa: F401
 from pyspark.context import SparkContext as SparkContext
 from pyspark.sql import SQLContext as SQLContext, SparkSession as SparkSession
-from typing import Any
+from typing import Any, Callable
 
-spark: Any
-sc: Any
-sql: Any
-sqlContext: Any
-sqlCtx = sqlContext
+from pyspark.sql.dataframe import DataFrame
+
+spark: SparkSession
+sc: SparkContext
+sql: Callable[[str], DataFrame]
+sqlContext: SQLContext
+sqlCtx: SQLContext
 code: Any

@@ -18,16 +18,13 @@
 
 from typing import overload
 from typing import (
-    Any,
     Callable,
-    Dict,
     Generic,
     Iterable,
     List,
     Optional,
     Tuple,
     Type,
-    TypeVar,
 )
 from pyspark.ml._typing import M, P, T, ParamMap
 
@@ -35,17 +32,24 @@ import _thread
 
 import abc
 from abc import abstractmethod
-from pyspark.ml.common import inherit_doc as inherit_doc
-from pyspark.ml.param import Params, Param
-from pyspark.ml.param.shared import *
-from pyspark.sql.column import Column
-from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.functions import udf as udf
-from pyspark.sql.types import (
+from pyspark import since as since  # noqa: F401
+from pyspark.ml.common import inherit_doc as inherit_doc  # noqa: F401
+from pyspark.ml.param.shared import (
+    HasFeaturesCol as HasFeaturesCol,
+    HasInputCol as HasInputCol,
+    HasLabelCol as HasLabelCol,
+    HasOutputCol as HasOutputCol,
+    HasPredictionCol as HasPredictionCol,
+    Params as Params,
+)
+from pyspark.sql.functions import udf as udf  # noqa: F401
+from pyspark.sql.types import (  # noqa: F401
     DataType,
     StructField as StructField,
     StructType as StructType,
 )
+
+from pyspark.sql.dataframe import DataFrame
 
 class _FitMultipleIterator:
     fitSingleModel: Callable[[int], Transformer]

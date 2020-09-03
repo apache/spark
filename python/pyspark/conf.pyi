@@ -20,7 +20,7 @@
 #
 
 from typing import overload
-from typing import Any, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from py4j.java_gateway import JVMView, JavaObject  # type: ignore[import]
 

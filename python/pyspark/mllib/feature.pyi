@@ -20,7 +20,7 @@
 #
 
 from typing import overload
-from typing import Any, Iterable, Hashable, List, Tuple
+from typing import Iterable, Hashable, List, Tuple
 
 from pyspark.mllib._typing import VectorLike
 from pyspark.context import SparkContext

@@ -33,7 +33,7 @@ from pyspark.sql.catalog import Catalog
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.conversion import SparkConversionMixin
-from pyspark.sql.types import AtomicType, DataType, StructType
+from pyspark.sql.types import AtomicType, StructType
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader, StreamingQueryManager
 from pyspark.sql.udf import UDFRegistration

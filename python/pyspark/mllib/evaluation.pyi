@@ -19,7 +19,7 @@
 # Stubs for pyspark.mllib.evaluation (Python 3.5)
 #
 
-from typing import Any, List, Optional, Tuple, TypeVar
+from typing import List, Optional, Tuple, TypeVar
 from pyspark.rdd import RDD
 from pyspark.mllib.common import JavaModelWrapper
 from pyspark.mllib.linalg import Matrix

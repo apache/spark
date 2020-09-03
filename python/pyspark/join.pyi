@@ -16,10 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.join (Python 3)
-#
-
-from typing import Hashable, Iterable, List, Optional, Tuple, TypeVar
+from typing import Hashable, Iterable, Optional, Tuple, TypeVar
 
 from pyspark.resultiterable import ResultIterable
 import pyspark.rdd

@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Any, Generic, Iterable, List, Optional, Sized, TypeVar, Union
+from typing import Iterable, Sized, TypeVar, Union
 from typing_extensions import Protocol
 
 T = TypeVar("T", covariant=True)

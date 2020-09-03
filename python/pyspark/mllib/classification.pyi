@@ -17,7 +17,7 @@
 # under the License.
 
 from typing import overload
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD

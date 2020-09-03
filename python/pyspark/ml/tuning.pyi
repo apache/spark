@@ -19,14 +19,14 @@
 # Stubs for pyspark.ml.tuning (Python 3)
 
 from typing import overload
-from typing import Any, Dict, List, Optional, Tuple, Type
-from pyspark.ml._typing import P, ParamMap
+from typing import Any, List, Optional, Tuple, Type
+from pyspark.ml._typing import ParamMap
 
 from pyspark.ml import Estimator, Model
 from pyspark.ml.evaluation import Evaluator
 from pyspark.ml.param import Param
-from pyspark.ml.param.shared import *
-from pyspark.ml.util import *
+from pyspark.ml.param.shared import HasCollectSubModels, HasParallelism, HasSeed
+from pyspark.ml.util import MLReader, MLReadable, MLWriter, MLWritable
 
 class ParamGridBuilder:
     def __init__(self) -> None: ...
@@ -48,6 +48,7 @@ class _ValidatorParams(HasSeed):
 class _CrossValidatorParams(_ValidatorParams):
     numFolds: Param[int]
     foldCol: Param[str]
+    def __init__(self, *args: Any): ...
     def getNumFolds(self) -> int: ...
     def getFoldCol(self) -> str: ...
 
@@ -115,6 +116,7 @@ class CrossValidatorModel(
 
 class _TrainValidationSplitParams(_ValidatorParams):
     trainRatio: Param[float]
+    def __init__(self, *args: Any): ...
     def getTrainRatio(self) -> float: ...
 
 class TrainValidationSplit(

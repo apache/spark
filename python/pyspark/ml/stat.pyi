@@ -16,9 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.ml.stat (Python 3)
-
-from typing import Any, Optional
+from typing import Optional
 
 from pyspark.ml.linalg import Matrix, Vector
 from pyspark.ml.wrapper import JavaWrapper

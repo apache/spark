@@ -16,8 +16,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Any, Iterable, List, Optional, Tuple, TypeVar, Union
+from typing import List, Tuple, Union
 from pyspark.mllib.linalg import Vector
-from numpy import ndarray  # type: ignore[import]
+from numpy import ndarray  # noqa: F401
 
 VectorLike = Union[Vector, List[float], Tuple[float, ...]]
