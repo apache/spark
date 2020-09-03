@@ -24,3 +24,4 @@ Development
 
     contributing
     testing
+    debugging
