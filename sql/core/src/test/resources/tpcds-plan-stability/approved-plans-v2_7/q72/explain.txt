@@ -290,7 +290,7 @@ Input [11]: [cs_ship_date_sk#2, cs_item_sk#5, cs_promo_sk#6, cs_order_number#7, 
 Output [2]: [d_date_sk#34, d_date#35]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_date_sk), IsNotNull(d_date)]
+PushedFilters: [IsNotNull(d_date), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (50) ColumnarToRow [codegen id : 8]
@@ -298,7 +298,7 @@ Input [2]: [d_date_sk#34, d_date#35]
 
 (51) Filter [codegen id : 8]
 Input [2]: [d_date_sk#34, d_date#35]
-Condition : (isnotnull(d_date_sk#34) AND isnotnull(d_date#35))
+Condition : (isnotnull(d_date#35) AND isnotnull(d_date_sk#34))
 
 (52) BroadcastExchange
 Input [2]: [d_date_sk#34, d_date#35]
@@ -344,7 +344,7 @@ Input [7]: [cs_item_sk#5, cs_promo_sk#6, cs_order_number#7, w_warehouse_name#15,
 Output [2]: [cr_item_sk#39, cr_order_number#40]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/catalog_returns]
-PushedFilters: [IsNotNull(cr_order_number), IsNotNull(cr_item_sk)]
+PushedFilters: [IsNotNull(cr_item_sk), IsNotNull(cr_order_number)]
 ReadSchema: struct<cr_item_sk:int,cr_order_number:int>
 
 (62) ColumnarToRow [codegen id : 10]
@@ -352,7 +352,7 @@ Input [2]: [cr_item_sk#39, cr_order_number#40]
 
 (63) Filter [codegen id : 10]
 Input [2]: [cr_item_sk#39, cr_order_number#40]
-Condition : (isnotnull(cr_order_number#40) AND isnotnull(cr_item_sk#39))
+Condition : (isnotnull(cr_item_sk#39) AND isnotnull(cr_order_number#40))
 
 (64) BroadcastExchange
 Input [2]: [cr_item_sk#39, cr_order_number#40]

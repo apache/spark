@@ -386,7 +386,7 @@ Input [13]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_cdemo_sk#4, s
 Output [3]: [s_store_sk#42, s_store_name#43, s_zip#44]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [IsNotNull(s_store_sk), IsNotNull(s_zip), IsNotNull(s_store_name)]
+PushedFilters: [IsNotNull(s_store_sk), IsNotNull(s_store_name), IsNotNull(s_zip)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string,s_zip:string>
 
 (40) ColumnarToRow [codegen id : 12]
@@ -394,7 +394,7 @@ Input [3]: [s_store_sk#42, s_store_name#43, s_zip#44]
 
 (41) Filter [codegen id : 12]
 Input [3]: [s_store_sk#42, s_store_name#43, s_zip#44]
-Condition : ((isnotnull(s_store_sk#42) AND isnotnull(s_zip#44)) AND isnotnull(s_store_name#43))
+Condition : ((isnotnull(s_store_sk#42) AND isnotnull(s_store_name#43)) AND isnotnull(s_zip#44))
 
 (42) BroadcastExchange
 Input [3]: [s_store_sk#42, s_store_name#43, s_zip#44]
