@@ -361,23 +361,6 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     }
   }
 
-  test("Sorted bucket scan info should be a part of explain string") {
-    withTable("t1", "t2") {
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
-        SQLConf.BUCKET_SORTED_SCAN_ENABLED.key -> "true") {
-        Seq(1, 2).toDF("i").write.bucketBy(8, "i").sortBy("i").saveAsTable("t1")
-        Seq(2, 3).toDF("i").write.bucketBy(4, "i").sortBy("i").saveAsTable("t2")
-        val df1 = spark.table("t1")
-        val df2 = spark.table("t2")
-        val joined = df1.join(df2, df1("i") === df2("i"))
-        checkKeywordsExistsInExplain(
-          joined,
-          SimpleMode,
-          "ScanMode: SortedBucketMode" :: Nil: _*)
-      }
-    }
-  }
-
   test("Explain formatted output for scan operator for datasource V2") {
     withTempDir { dir =>
       Seq("parquet", "orc", "csv", "json").foreach { fmt =>
