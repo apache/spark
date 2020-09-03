@@ -35,7 +35,7 @@ After that, the PySpark test cases can be run via using ``python/run-tests``. Fo
 Note that:
 
 * If you are running tests on Mac OS, you may set ``OBJC_DISABLE_INITIALIZE_FORK_SAFETY`` environment variable to ``YES``.
-* If you're using JDK 11, you should set ``-Dio.netty.tryReflectionSetAccessible=true`` for Arrow related features. See also `Downloading <https://spark.apache.org/docs/latest/#downloading>`_.
+* If you are using JDK 11, you should set ``-Dio.netty.tryReflectionSetAccessible=true`` for Arrow related features. See also `Downloading <https://spark.apache.org/docs/latest/#downloading>`_.
 
 Please see the guidance on how to `build Spark <https://github.com/apache/spark#building-spark>`_,
 `run tests for a module, or individual tests <https://spark.apache.org/developer-tools.html>`_.
