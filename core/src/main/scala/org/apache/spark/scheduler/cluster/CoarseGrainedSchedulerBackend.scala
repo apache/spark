@@ -493,7 +493,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     logInfo(s"Asking executor $executorId to decommissioning.")
     scheduler.executorDecommission(executorId, decomInfo)
     // Send decommission message to the executor (it could have originated on the executor
-    // but not necessarily.
+    // but not necessarily).
     CoarseGrainedSchedulerBackend.this.synchronized {
       executorDataMap.get(executorId) match {
         case Some(executorInfo) =>
