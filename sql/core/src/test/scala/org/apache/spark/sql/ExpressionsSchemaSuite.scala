@@ -163,7 +163,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
 
       val numberOfQueries = lines(2).split(":")(1).trim.toInt
       val numberOfMissingExamples = lines(3).split(":")(1).trim.toInt
-      val missingExamples = lines(4).split(":")(1).trim.split(",")
+      val expectedMissingExamples = lines(4).split(":")(1).trim.split(",")
       val expectedOutputs = Seq.tabulate(outputSize) { i =>
         val segments = lines(i + headerSize).split('|')
         QueryOutput(
@@ -177,12 +177,12 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
       assert(numberOfQueries == expectedOutputs.size,
         s"outputs size: ${expectedOutputs.size} not same as numberOfQueries: $numberOfQueries " +
           "record in result file. Try regenerating the result files.")
-      assert(numberOfMissingExamples == missingExamples.size,
-        s"missing examples size: ${missingExamples.size} not same as " +
+      assert(numberOfMissingExamples == expectedMissingExamples.size,
+        s"expected missing examples size: ${expectedMissingExamples.size} not same as " +
           s"numberOfMissingExamples: $numberOfMissingExamples " +
           "record in result file. Try regenerating the result files.")
 
-      (missingExamples, expectedOutputs)
+      (expectedMissingExamples, expectedOutputs)
     }
 
     // Compare results.
