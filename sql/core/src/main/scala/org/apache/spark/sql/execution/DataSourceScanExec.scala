@@ -363,11 +363,12 @@ case class FileSourceScanExec(
       Map(
         "Format" -> relation.fileFormat.toString,
         "ReadSchema" -> requiredSchema.catalogString,
-        "ScanMode" -> scanMode.toString,
+        "Batched" -> supportsColumnar.toString,
         "PartitionFilters" -> seqToString(partitionFilters),
         "PushedFilters" -> seqToString(pushedDownFilters),
         "DataFilters" -> seqToString(dataFilters),
-        "Location" -> locationDesc)
+        "Location" -> locationDesc,
+        "ScanMode" -> scanMode.toString)
 
     val withSelectedBucketsCount = relation.bucketSpec.map { spec =>
       val numSelectedBuckets = optionalBucketSet.map { b =>

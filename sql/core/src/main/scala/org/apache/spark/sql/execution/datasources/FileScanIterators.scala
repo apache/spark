@@ -38,7 +38,7 @@ import org.apache.spark.util.NextIterator
  * Holds common logic for iterators to scan files
  */
 abstract class BaseFileScanIterator(
-    protected val split: RDDPartition,
+    split: RDDPartition,
     context: TaskContext,
     ignoreCorruptFiles: Boolean,
     ignoreMissingFiles: Boolean,
@@ -137,7 +137,8 @@ abstract class BaseFileScanIterator(
       }
 
       try {
-        currentIterator.hasNext
+        context.killTaskIfInterrupted()
+        (currentIterator != null && currentIterator.hasNext) || nextIterator()
       } catch {
         case e: SchemaColumnConvertNotSupportedException =>
           val message = "Parquet column cannot be converted in " +
