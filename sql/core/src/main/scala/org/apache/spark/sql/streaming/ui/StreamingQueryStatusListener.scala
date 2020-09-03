@@ -106,6 +106,7 @@ private[sql] class StreamingQueryStatusListener(
       false,
       querySummary.exception
     ))
+    queryToProgress.remove(event.runId)
   }
 }
 
