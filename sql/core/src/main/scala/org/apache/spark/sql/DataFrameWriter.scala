@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
@@ -128,7 +129,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def option(key: String, value: String): DataFrameWriter[T] = {
-    this.extraOptions += (key -> value)
+    this.extraOptions = this.extraOptions + (key -> value)
     this
   }
 
@@ -284,7 +285,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def save(path: String): Unit = {
-    this.extraOptions += ("path" -> path)
+    if (!df.sparkSession.sessionState.conf.legacyPathOptionBehavior &&
+        extraOptions.contains("path") && path.nonEmpty) {
+      throw new AnalysisException("There is a 'path' option set and save() is called with a path " +
+        "parameter. Either remove the path option, or call save() without the parameter. " +
+        s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
+    }
+    this.extraOptions = this.extraOptions + ("path" -> path)
     save()
   }
 
@@ -307,7 +314,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         provider, df.sparkSession.sessionState.conf)
       val options = sessionOptions.filterKeys(!extraOptions.contains(_)) ++ extraOptions.toMap
-      val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+      val dsOptions = new CaseInsensitiveStringMap(options.toMap.asJava)
 
       def getTable: Table = {
         // For file source, it's expensive to infer schema/partition at each write. Here we pass
@@ -402,7 +409,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def saveToV1Source(): Unit = {
     partitioningColumns.foreach { columns =>
-      extraOptions += (DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
+      extraOptions = extraOptions + (
+        DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
         DataSourceUtils.encodePartitioningColumns(columns))
     }
 

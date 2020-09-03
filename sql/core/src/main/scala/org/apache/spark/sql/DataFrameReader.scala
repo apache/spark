@@ -28,6 +28,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
@@ -118,7 +119,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def option(key: String, value: String): DataFrameReader = {
-    this.extraOptions += (key -> value)
+    this.extraOptions = this.extraOptions + (key -> value)
     this
   }
 
@@ -255,7 +256,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         (extraOptions.contains("path") || extraOptions.contains("paths")) && paths.nonEmpty) {
       throw new AnalysisException("There is a 'path' or 'paths' option set and load() is called " +
         "with path parameters. Either remove the path option if it's the same as the path " +
-        "parameter, or add it to the load() parameter if you do want to read multiple paths.")
+        "parameter, or add it to the load() parameter if you do want to read multiple paths. " +
+        s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
     }
 
     val updatedPaths = if (!legacyPathOptionBehavior && paths.length == 1) {
@@ -822,7 +824,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def table(tableName: String): DataFrame = {
     assertNoSpecifiedSchema("table")
-    sparkSession.table(tableName)
+    val multipartIdentifier =
+      sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    Dataset.ofRows(sparkSession, UnresolvedRelation(multipartIdentifier,
+      new CaseInsensitiveStringMap(extraOptions.toMap.asJava)))
   }
 
   /**

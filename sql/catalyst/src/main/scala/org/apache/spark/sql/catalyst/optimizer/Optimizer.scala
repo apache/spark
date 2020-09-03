@@ -921,13 +921,13 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
   private def getAllConstraints(
       left: LogicalPlan,
       right: LogicalPlan,
-      conditionOpt: Option[Expression]): Set[Expression] = {
+      conditionOpt: Option[Expression]): ExpressionSet = {
     val baseConstraints = left.constraints.union(right.constraints)
-      .union(conditionOpt.map(splitConjunctivePredicates).getOrElse(Nil).toSet)
+      .union(ExpressionSet(conditionOpt.map(splitConjunctivePredicates).getOrElse(Nil)))
     baseConstraints.union(inferAdditionalConstraints(baseConstraints))
   }
 
-  private def inferNewFilter(plan: LogicalPlan, constraints: Set[Expression]): LogicalPlan = {
+  private def inferNewFilter(plan: LogicalPlan, constraints: ExpressionSet): LogicalPlan = {
     val newPredicates = constraints
       .union(constructIsNotNullConstraints(constraints, plan.output))
       .filter { c =>

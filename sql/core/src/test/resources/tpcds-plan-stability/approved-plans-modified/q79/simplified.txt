@@ -1,43 +1,43 @@
-TakeOrderedAndProject [amt,c_first_name,c_last_name,profit,s_city,ss_ticket_number,substr(s_city, 1, 30)]
+TakeOrderedAndProject [c_last_name,c_first_name,s_city,profit,substr(s_city, 1, 30),ss_ticket_number,amt]
   WholeStageCodegen (6)
-    Project [amt,c_first_name,c_last_name,profit,s_city,ss_ticket_number]
-      BroadcastHashJoin [c_customer_sk,ss_customer_sk]
-        HashAggregate [s_city,ss_addr_sk,ss_customer_sk,ss_ticket_number,sum,sum] [amt,profit,sum,sum,sum(UnscaledValue(ss_coupon_amt)),sum(UnscaledValue(ss_net_profit))]
+    Project [c_last_name,c_first_name,s_city,ss_ticket_number,amt,profit]
+      BroadcastHashJoin [ss_customer_sk,c_customer_sk]
+        HashAggregate [ss_ticket_number,ss_customer_sk,ss_addr_sk,s_city,sum,sum] [sum(UnscaledValue(ss_coupon_amt)),sum(UnscaledValue(ss_net_profit)),amt,profit,sum,sum]
           InputAdapter
-            Exchange [s_city,ss_addr_sk,ss_customer_sk,ss_ticket_number] #1
+            Exchange [ss_ticket_number,ss_customer_sk,ss_addr_sk,s_city] #1
               WholeStageCodegen (4)
-                HashAggregate [s_city,ss_addr_sk,ss_coupon_amt,ss_customer_sk,ss_net_profit,ss_ticket_number] [sum,sum,sum,sum]
-                  Project [s_city,ss_addr_sk,ss_coupon_amt,ss_customer_sk,ss_net_profit,ss_ticket_number]
-                    BroadcastHashJoin [hd_demo_sk,ss_hdemo_sk]
-                      Project [s_city,ss_addr_sk,ss_coupon_amt,ss_customer_sk,ss_hdemo_sk,ss_net_profit,ss_ticket_number]
-                        BroadcastHashJoin [s_store_sk,ss_store_sk]
-                          Project [ss_addr_sk,ss_coupon_amt,ss_customer_sk,ss_hdemo_sk,ss_net_profit,ss_store_sk,ss_ticket_number]
-                            BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
-                              Filter [ss_customer_sk,ss_hdemo_sk,ss_sold_date_sk,ss_store_sk]
+                HashAggregate [ss_ticket_number,ss_customer_sk,ss_addr_sk,s_city,ss_coupon_amt,ss_net_profit] [sum,sum,sum,sum]
+                  Project [ss_customer_sk,ss_addr_sk,ss_ticket_number,ss_coupon_amt,ss_net_profit,s_city]
+                    BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
+                      Project [ss_customer_sk,ss_hdemo_sk,ss_addr_sk,ss_ticket_number,ss_coupon_amt,ss_net_profit,s_city]
+                        BroadcastHashJoin [ss_store_sk,s_store_sk]
+                          Project [ss_customer_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_ticket_number,ss_coupon_amt,ss_net_profit]
+                            BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                              Filter [ss_sold_date_sk,ss_store_sk,ss_hdemo_sk,ss_customer_sk]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.store_sales [ss_addr_sk,ss_coupon_amt,ss_customer_sk,ss_hdemo_sk,ss_net_profit,ss_sold_date_sk,ss_store_sk,ss_ticket_number]
+                                    Scan parquet default.store_sales [ss_sold_date_sk,ss_customer_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_ticket_number,ss_coupon_amt,ss_net_profit]
                               InputAdapter
                                 BroadcastExchange #2
                                   WholeStageCodegen (1)
                                     Project [d_date_sk]
-                                      Filter [d_date_sk,d_dow,d_year]
+                                      Filter [d_dow,d_year,d_date_sk]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.date_dim [d_date_sk,d_dow,d_year]
+                                            Scan parquet default.date_dim [d_date_sk,d_year,d_dow]
                           InputAdapter
                             BroadcastExchange #3
                               WholeStageCodegen (2)
-                                Project [s_city,s_store_sk]
+                                Project [s_store_sk,s_city]
                                   Filter [s_number_employees,s_store_sk]
                                     ColumnarToRow
                                       InputAdapter
-                                        Scan parquet default.store [s_city,s_number_employees,s_store_sk]
+                                        Scan parquet default.store [s_store_sk,s_number_employees,s_city]
                       InputAdapter
                         BroadcastExchange #4
                           WholeStageCodegen (3)
                             Project [hd_demo_sk]
-                              Filter [hd_demo_sk,hd_dep_count,hd_vehicle_count]
+                              Filter [hd_dep_count,hd_vehicle_count,hd_demo_sk]
                                 ColumnarToRow
                                   InputAdapter
                                     Scan parquet default.household_demographics [hd_demo_sk,hd_dep_count,hd_vehicle_count]

@@ -239,7 +239,7 @@ Arguments: [wr_refunded_cdemo_sk#15 ASC NULLS FIRST, wr_returning_cdemo_sk#17 AS
 Output [3]: [cd_demo_sk#31, cd_marital_status#32, cd_education_status#33]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
-PushedFilters: [IsNotNull(cd_education_status), IsNotNull(cd_marital_status), IsNotNull(cd_demo_sk)]
+PushedFilters: [IsNotNull(cd_demo_sk), IsNotNull(cd_marital_status), IsNotNull(cd_education_status)]
 ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string,cd_education_status:string>
 
 (42) ColumnarToRow [codegen id : 12]
@@ -247,13 +247,13 @@ Input [3]: [cd_demo_sk#31, cd_marital_status#32, cd_education_status#33]
 
 (43) Filter [codegen id : 12]
 Input [3]: [cd_demo_sk#31, cd_marital_status#32, cd_education_status#33]
-Condition : ((isnotnull(cd_education_status#33) AND isnotnull(cd_marital_status#32)) AND isnotnull(cd_demo_sk#31))
+Condition : ((isnotnull(cd_demo_sk#31) AND isnotnull(cd_marital_status#32)) AND isnotnull(cd_education_status#33))
 
 (44) Scan parquet default.customer_demographics
 Output [3]: [cd_demo_sk#34, cd_marital_status#35, cd_education_status#36]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
-PushedFilters: [IsNotNull(cd_demo_sk), IsNotNull(cd_education_status), IsNotNull(cd_marital_status), Or(Or(And(EqualTo(cd_marital_status,M),EqualTo(cd_education_status,Advanced Degree)),And(EqualTo(cd_marital_status,S),EqualTo(cd_education_status,College))),And(EqualTo(cd_marital_status,W),EqualTo(cd_education_status,2 yr Degree)))]
+PushedFilters: [IsNotNull(cd_demo_sk), IsNotNull(cd_marital_status), IsNotNull(cd_education_status), Or(Or(And(EqualTo(cd_marital_status,M),EqualTo(cd_education_status,Advanced Degree)),And(EqualTo(cd_marital_status,S),EqualTo(cd_education_status,College))),And(EqualTo(cd_marital_status,W),EqualTo(cd_education_status,2 yr Degree)))]
 ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string,cd_education_status:string>
 
 (45) ColumnarToRow [codegen id : 11]
@@ -261,15 +261,15 @@ Input [3]: [cd_demo_sk#34, cd_marital_status#35, cd_education_status#36]
 
 (46) Filter [codegen id : 11]
 Input [3]: [cd_demo_sk#34, cd_marital_status#35, cd_education_status#36]
-Condition : (((isnotnull(cd_demo_sk#34) AND isnotnull(cd_education_status#36)) AND isnotnull(cd_marital_status#35)) AND ((((cd_marital_status#35 = M) AND (cd_education_status#36 = Advanced Degree)) OR ((cd_marital_status#35 = S) AND (cd_education_status#36 = College))) OR ((cd_marital_status#35 = W) AND (cd_education_status#36 = 2 yr Degree))))
+Condition : (((isnotnull(cd_demo_sk#34) AND isnotnull(cd_marital_status#35)) AND isnotnull(cd_education_status#36)) AND ((((cd_marital_status#35 = M) AND (cd_education_status#36 = Advanced Degree)) OR ((cd_marital_status#35 = S) AND (cd_education_status#36 = College))) OR ((cd_marital_status#35 = W) AND (cd_education_status#36 = 2 yr Degree))))
 
 (47) BroadcastExchange
 Input [3]: [cd_demo_sk#34, cd_marital_status#35, cd_education_status#36]
-Arguments: HashedRelationBroadcastMode(List(input[2, string, false], input[1, string, false]),false), [id=#37]
+Arguments: HashedRelationBroadcastMode(List(input[1, string, false], input[2, string, false]),false), [id=#37]
 
 (48) BroadcastHashJoin [codegen id : 12]
-Left keys [2]: [cd_education_status#33, cd_marital_status#32]
-Right keys [2]: [cd_education_status#36, cd_marital_status#35]
+Left keys [2]: [cd_marital_status#32, cd_education_status#33]
+Right keys [2]: [cd_marital_status#35, cd_education_status#36]
 Join condition: None
 
 (49) Project [codegen id : 12]

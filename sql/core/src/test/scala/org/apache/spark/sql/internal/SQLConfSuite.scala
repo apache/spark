@@ -212,9 +212,9 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     sql(s"RESET ${SQLConf.OPTIMIZER_EXCLUDED_RULES.key}")
     assert(spark.conf.get(SQLConf.OPTIMIZER_EXCLUDED_RULES) ===
       Some("org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation"))
-    sql(s"SET ${SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_RULES.key}=abc")
-    sql(s"RESET ${SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_RULES.key}")
-    assert(spark.conf.get(SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_RULES).isEmpty)
+    sql(s"SET ${SQLConf.PLAN_CHANGE_LOG_RULES.key}=abc")
+    sql(s"RESET ${SQLConf.PLAN_CHANGE_LOG_RULES.key}")
+    assert(spark.conf.get(SQLConf.PLAN_CHANGE_LOG_RULES).isEmpty)
 
     // static sql configs
     val e2 = intercept[AnalysisException](sql(s"RESET ${StaticSQLConf.WAREHOUSE_PATH.key}"))
