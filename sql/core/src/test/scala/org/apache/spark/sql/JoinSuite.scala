@@ -749,6 +749,14 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
         )
       }
 
+      // LEFT SEMI JOIN without bound condition does not spill
+      assertNotSpilled(sparkContext, "left semi join") {
+        checkAnswer(
+          sql("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a WHERE key = 2"),
+          Row(2, "2") :: Nil
+        )
+      }
+
       val expected = new ListBuffer[Row]()
       expected.append(
         Row(1, "1", 1, 1), Row(1, "1", 1, 2),
