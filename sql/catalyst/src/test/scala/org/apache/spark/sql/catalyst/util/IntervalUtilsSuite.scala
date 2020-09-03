@@ -77,6 +77,19 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("string to interval: interval with dangling parts should not results null") {
+    checkFromInvalidString("+", "dangling interval value sign '+'")
+    checkFromInvalidString("-", "dangling interval value sign '-'")
+    checkFromInvalidString("+ 2", "dangling interval value '2'")
+    checkFromInvalidString("- 1", "dangling interval value '1'")
+    checkFromInvalidString("1", "dangling interval value '1'")
+    checkFromInvalidString("1.2", "dangling interval value '1.2'")
+    checkFromInvalidString("1 day 2", "dangling interval value '2'")
+    checkFromInvalidString("1 day 2.2", "dangling interval value '2.2'")
+    checkFromInvalidString("1 day -", "dangling interval value sign '-'")
+    checkFromInvalidString("-.", "dangling interval value '-.''")
+  }
+
   test("string to interval: multiple units") {
     Seq(
       "-1 MONTH 1 day -1 microseconds" -> new CalendarInterval(-1, 1, -1),
