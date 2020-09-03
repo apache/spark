@@ -1372,7 +1372,8 @@ class SessionCatalog(
     val className = funcDefinition.className
     if (!Utils.classIsLoadable(className)) {
       throw new AnalysisException(s"Can not load class '$className' when registering " +
-        s"the function '${funcDefinition.identifier}', please make sure it is on the classpath")
+        s"the function '${funcDefinition.identifier.unquotedString}', please make sure " +
+        s"it is on the classpath")
     }
   }
 
