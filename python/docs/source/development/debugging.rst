@@ -43,8 +43,6 @@ Enter the name of this run/debug configuration, for example, ``MyRemoteDebugger`
 .. image:: ../../../../docs/img/pyspark-remote-debug1.png
     :alt: PyCharm remote debugger setting
 
-|
-
 After that, you should install the corresponding version of ``pydevd-pycahrm`` package. In the previous dialog, it shows the command
 to install.
 
@@ -78,8 +76,6 @@ Now you're ready to remote debug. Start debug with your ``MyRemoteDebugger``.
 
 .. image:: ../../../../docs/img/pyspark-remote-debug2.png
     :alt: PyCharm run remote debugger
-
-|
 
 After that, run a job that creates a Python workers, for example, as below:
 
