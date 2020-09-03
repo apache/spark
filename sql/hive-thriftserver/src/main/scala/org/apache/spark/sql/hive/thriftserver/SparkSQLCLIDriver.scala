@@ -59,6 +59,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
   private var transport: TSocket = _
   private final val SPARK_HADOOP_PROP_PREFIX = "spark.hadoop."
 
+  initializeLogIfNecessary(true)
   installSignalHandler()
 
   /**
