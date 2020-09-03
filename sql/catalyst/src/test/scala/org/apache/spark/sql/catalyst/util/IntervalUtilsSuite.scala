@@ -78,16 +78,16 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("string to interval: interval with dangling parts should not results null") {
-    checkFromInvalidString("+", "dangling interval value sign '+'")
-    checkFromInvalidString("-", "dangling interval value sign '-'")
-    checkFromInvalidString("+ 2", "dangling interval value '2'")
-    checkFromInvalidString("- 1", "dangling interval value '1'")
-    checkFromInvalidString("1", "dangling interval value '1'")
-    checkFromInvalidString("1.2", "dangling interval value '1.2'")
-    checkFromInvalidString("1 day 2", "dangling interval value '2'")
-    checkFromInvalidString("1 day 2.2", "dangling interval value '2.2'")
-    checkFromInvalidString("1 day -", "dangling interval value sign '-'")
-    checkFromInvalidString("-.", "dangling interval value '-.'")
+    checkFromInvalidString("+", "expect a number after '+' but hit EOL")
+    checkFromInvalidString("-", "expect a number after '-' but hit EOL")
+    checkFromInvalidString("+ 2", "expect a unit name after '2' but hit EOL")
+    checkFromInvalidString("- 1", "expect a unit name after '1' but hit EOL")
+    checkFromInvalidString("1", "expect a unit name after '1' but hit EOL")
+    checkFromInvalidString("1.2", "expect a unit name after '1.2' but hit EOL")
+    checkFromInvalidString("1 day 2", "expect a unit name after '2' but hit EOL")
+    checkFromInvalidString("1 day 2.2", "expect a unit name after '2.2' but hit EOL")
+    checkFromInvalidString("1 day -", "expect a number after '-' but hit EOL")
+    checkFromInvalidString("-.", "expect a unit name after '-.' but hit EOL")
   }
 
   test("string to interval: multiple units") {
