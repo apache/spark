@@ -1395,8 +1395,11 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       parquetFilters.createFilter(sources.In("a", Array(10)))
     }
 
-    // Remove duplicates
-    assertResult(Some(FilterApi.eq(intColumn("a"), 10: Integer))) {
+    // Duplicate values should be handle by OptimizeIn
+    assertResult(Some(or(
+      FilterApi.eq(intColumn("a"), 10: Integer),
+      FilterApi.eq(intColumn("a"), 10: Integer)))
+    ) {
       parquetFilters.createFilter(sources.In("a", Array(10, 10)))
     }
 
@@ -1412,6 +1415,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       Range(0, conf.parquetFilterPushDownInFilterThreshold).toArray)).isDefined)
     assert(parquetFilters.createFilter(sources.In("a",
       Range(0, conf.parquetFilterPushDownInFilterThreshold + 1).toArray)).isEmpty)
+    assert(parquetFilters.createFilter(sources.In("a", Array.empty)).isEmpty)
 
     import testImplicits._
     withTempPath { path =>
