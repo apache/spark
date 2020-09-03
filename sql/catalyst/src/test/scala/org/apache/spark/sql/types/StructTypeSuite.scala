@@ -113,22 +113,26 @@ class StructTypeSuite extends SparkFunSuite {
     val source1 = StructType.fromDDL("c1 INT")
     val missing1 = StructType.fromDDL(
       "c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
-    assert(StructType.findMissingFields(source1, schema, resolver).sameType(missing1))
+    assert(StructType.findMissingFields(source1, schema, resolver)
+      .map(_.sameType(missing1)).getOrElse(false))
 
     val source2 = StructType.fromDDL("c1 INT, c3 STRING")
     val missing2 = StructType.fromDDL(
       "c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
-    assert(StructType.findMissingFields(source2, schema, resolver).sameType(missing2))
+    assert(StructType.findMissingFields(source2, schema, resolver)
+      .map(_.sameType(missing2)).getOrElse(false))
 
     val source3 = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT>")
     val missing3 = StructType.fromDDL(
       "c2 STRUCT<c4: STRUCT<c5: INT, c6: INT>>")
-    assert(StructType.findMissingFields(source3, schema, resolver).sameType(missing3))
+    assert(StructType.findMissingFields(source3, schema, resolver)
+      .map(_.sameType(missing3)).getOrElse(false))
 
     val source4 = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT, c4: STRUCT<c6: INT>>")
     val missing4 = StructType.fromDDL(
       "c2 STRUCT<c4: STRUCT<c5: INT>>")
-    assert(StructType.findMissingFields(source4, schema, resolver).sameType(missing4))
+    assert(StructType.findMissingFields(source4, schema, resolver)
+      .map(_.sameType(missing4)).getOrElse(false))
 
     val schemaWithArray = StructType.fromDDL(
       "c1 INT, c2 ARRAY<STRUCT<c3: INT, c4: LONG>>")
@@ -136,7 +140,9 @@ class StructTypeSuite extends SparkFunSuite {
       "c1 INT")
     val missing5 = StructType.fromDDL(
       "c2 ARRAY<STRUCT<c3: INT, c4: LONG>>")
-    assert(StructType.findMissingFields(source5, schemaWithArray, resolver).sameType(missing5))
+    assert(
+      StructType.findMissingFields(source5, schemaWithArray, resolver)
+        .map(_.sameType(missing5)).getOrElse(false))
 
     val schemaWithMap1 = StructType.fromDDL(
       "c1 INT, c2 MAP<STRUCT<c3: INT, c4: LONG>, STRING>, c3 LONG")
@@ -144,7 +150,9 @@ class StructTypeSuite extends SparkFunSuite {
       "c1 INT, c3 LONG")
     val missing6 = StructType.fromDDL(
       "c2 MAP<STRUCT<c3: INT, c4: LONG>, STRING>")
-    assert(StructType.findMissingFields(source6, schemaWithMap1, resolver).sameType(missing6))
+    assert(
+      StructType.findMissingFields(source6, schemaWithMap1, resolver)
+        .map(_.sameType(missing6)).getOrElse(false))
 
     val schemaWithMap2 = StructType.fromDDL(
       "c1 INT, c2 MAP<STRING, STRUCT<c3: INT, c4: LONG>>, c3 STRING")
@@ -152,22 +160,24 @@ class StructTypeSuite extends SparkFunSuite {
       "c1 INT, c3 STRING")
     val missing7 = StructType.fromDDL(
       "c2 MAP<STRING, STRUCT<c3: INT, c4: LONG>>")
-    assert(StructType.findMissingFields(source7, schemaWithMap2, resolver).sameType(missing7))
+    assert(
+      StructType.findMissingFields(source7, schemaWithMap2, resolver)
+        .map(_.sameType(missing7)).getOrElse(false))
 
     // Unsupported: nested struct in array, map
     val source8 = StructType.fromDDL(
       "c1 INT, c2 ARRAY<STRUCT<c3: INT>>")
     // `findMissingFields` doesn't support looking into nested struct in array type.
-    assert(StructType.findMissingFields(source8, schemaWithArray, resolver).length == 0)
+    assert(StructType.findMissingFields(source8, schemaWithArray, resolver).isEmpty)
 
     val source9 = StructType.fromDDL(
       "c1 INT, c2 MAP<STRUCT<c3: INT>, STRING>, c3 LONG")
     // `findMissingFields` doesn't support looking into nested struct in map type.
-    assert(StructType.findMissingFields(source9, schemaWithMap1, resolver).length == 0)
+    assert(StructType.findMissingFields(source9, schemaWithMap1, resolver).isEmpty)
 
     val source10 = StructType.fromDDL(
       "c1 INT, c2 MAP<STRING, STRUCT<c3: INT>>, c3 STRING")
     // `findMissingFields` doesn't support looking into nested struct in map type.
-    assert(StructType.findMissingFields(source10, schemaWithMap2, resolver).length == 0)
+    assert(StructType.findMissingFields(source10, schemaWithMap2, resolver).isEmpty)
   }
 }

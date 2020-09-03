@@ -646,7 +646,10 @@ object StructType extends AbstractDataType {
    * Returns a `StructType` that contains missing fields recursively from `source` to `target`.
    * Note that this doesn't support looking into array type and map type recursively.
    */
-  def findMissingFields(source: StructType, target: StructType, resolver: Resolver): StructType = {
+  def findMissingFields(
+      source: StructType,
+      target: StructType,
+      resolver: Resolver): Option[StructType] = {
     def bothStructType(dt1: DataType, dt2: DataType): Boolean =
       dt1.isInstanceOf[StructType] && dt2.isInstanceOf[StructType]
 
@@ -660,11 +663,17 @@ object StructType extends AbstractDataType {
       } else if (bothStructType(found.get.dataType, field.dataType) &&
           !found.get.dataType.sameType(field.dataType)) {
         // Found a field with same name, but different data type.
-        newFields += found.get.copy(dataType =
-          findMissingFields(found.get.dataType.asInstanceOf[StructType],
-            field.dataType.asInstanceOf[StructType], resolver))
+        findMissingFields(found.get.dataType.asInstanceOf[StructType],
+          field.dataType.asInstanceOf[StructType], resolver).map { missingType =>
+          newFields += found.get.copy(dataType = missingType)
+        }
       }
     }
-    StructType(newFields)
+
+    if (newFields.isEmpty) {
+      None
+    } else {
+      Some(StructType(newFields))
+    }
   }
 }

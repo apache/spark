@@ -44,18 +44,18 @@ object ResolveUnion extends Rule[LogicalPlan] {
     val resolver = SQLConf.get.resolver
     val missingFields =
       StructType.findMissingFields(col.dataType.asInstanceOf[StructType], target, resolver)
-    if (missingFields.length == 0) {
+    if (missingFields.isEmpty) {
       None
     } else {
-      Some(addFieldsInto(col, "", missingFields.fields))
+      missingFields.map(s => addFieldsInto(col, "", s.fields))
     }
   }
 
   /**
-   *  Adds missing fields recursively into given `col` expression. The missing fields are given
-   *  in `fields`. For example, given `col` as "a struct<a:int, b:int>, b int", and `fields` is
-   *  "a struct<c:long>, c string". This method will add a nested `a.c` field and a top-level
-   *  `c` field to `col` and fill null values for them.
+   * Adds missing fields recursively into given `col` expression. The missing fields are given
+   * in `fields`. For example, given `col` as "a struct<a:int, b:int>, b int", and `fields` is
+   * "a struct<c:long>, c string". This method will add a nested `a.c` field and a top-level
+   * `c` field to `col` and fill null values for them.
    */
   private def addFieldsInto(col: Expression, base: String, fields: Seq[StructField]): Expression = {
     fields.foldLeft(col) { case (currCol, field) =>
@@ -133,6 +133,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
 
     // Builds a project list for `right` based on `left` output names
     val (rightProjectList, aliased) = compareAndAddFields(left, right, allowMissingCol)
+
 
     // Delegates failure checks to `CheckAnalysis`
     val notFoundAttrs = rightOutputAttrs.diff(rightProjectList ++ aliased)
