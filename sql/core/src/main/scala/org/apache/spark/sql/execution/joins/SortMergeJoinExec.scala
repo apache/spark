@@ -156,7 +156,8 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
-              cleanupResources)
+              cleanupResources
+            )
             private[this] val joinRow = new JoinedRow
 
             if (smjScanner.findNextInnerJoinRows()) {
@@ -200,7 +201,8 @@ case class SortMergeJoinExec(
             bufferedIter = RowIterator.fromScala(rightIter),
             inMemoryThreshold,
             spillThreshold,
-            cleanupResources)
+            cleanupResources
+          )
           val rightNullRow = new GenericInternalRow(right.output.length)
           new LeftOuterIterator(
             smjScanner, rightNullRow, boundCondition, resultProj, numOutputRows).toScala
@@ -214,7 +216,8 @@ case class SortMergeJoinExec(
             bufferedIter = RowIterator.fromScala(leftIter),
             inMemoryThreshold,
             spillThreshold,
-            cleanupResources)
+            cleanupResources
+          )
           val leftNullRow = new GenericInternalRow(left.output.length)
           new RightOuterIterator(
             smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows).toScala
@@ -285,7 +288,8 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
-              cleanupResources)
+              cleanupResources
+            )
             private[this] val joinRow = new JoinedRow
 
             override def advanceNext(): Boolean = {
