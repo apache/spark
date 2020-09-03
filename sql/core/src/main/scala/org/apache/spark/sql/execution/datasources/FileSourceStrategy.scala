@@ -154,9 +154,12 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         l.resolve(
           fsRelation.partitionSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
       val partitionSet = AttributeSet(partitionColumns)
-      val partitionKeyFilters =
+      val partitionKeyFilters = if (partitionColumns.isEmpty) {
+        ExpressionSet(Nil)
+      } else {
         ExpressionSet(normalizedFilters
           .filter(_.references.subsetOf(partitionSet)))
+      }
 
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
 

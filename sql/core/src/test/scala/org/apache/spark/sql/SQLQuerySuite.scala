@@ -3684,6 +3684,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(sql("SELECT 0 FROM ( SELECT * FROM B JOIN C USING (id)) " +
       "JOIN ( SELECT * FROM B JOIN C USING (id)) USING (id)"), Row(0))
   }
+
+  test("SPARK-32788: non-partitioned table scan should not have partition filter") {
+    withTable("t") {
+      spark.range(1).write.saveAsTable("t")
+      checkAnswer(sql("SELECT id FROM t WHERE (SELECT true)"), Row(0L))
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
