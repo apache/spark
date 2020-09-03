@@ -77,11 +77,11 @@ case class CreateFunctionCommand(
     val catalog = sparkSession.sessionState.catalog
     val func = CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources)
     catalog.loadFunctionResources(resources)
-    // We fail fast if function class is not exists.
-    catalog.requireFunctionClassExists(func)
     if (isTemp) {
       catalog.registerFunction(func, overrideIfExists = replace)
     } else {
+      // We fail fast if function class is not exists.
+      catalog.requireFunctionClassExists(func)
       // Handles `CREATE OR REPLACE FUNCTION AS ... USING ...`
       if (replace && catalog.functionExists(func.identifier)) {
         // Alter the function in the metastore
