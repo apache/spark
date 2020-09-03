@@ -927,12 +927,6 @@ private[spark] class TaskSchedulerImpl(
     var failedExecutor: Option[String] = None
 
     synchronized {
-      reason match {
-        case e @ ExecutorDecommission(_) =>
-          e.workerHost = getExecutorDecommissionState(executorId).map(_.workerHost).get
-        case _ =>
-      }
-
       if (executorIdToRunningTaskIds.contains(executorId)) {
         val hostPort = executorIdToHost(executorId)
         logExecutorLoss(executorId, hostPort, reason)

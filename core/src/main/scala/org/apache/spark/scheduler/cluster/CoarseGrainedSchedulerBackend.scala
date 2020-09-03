@@ -92,8 +92,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Executors that have been lost, but for which we don't yet know the real exit reason.
   private val executorsPendingLossReason = new HashSet[String]
 
-  // Executors which are being decommissioned
-  protected val executorsPendingDecommission = new HashSet[String]
+  // Executors which are being decommissioned. Maps from executorId to
+  // workerHost(it's defined when the worker is also decommissioned)
+  protected val executorsPendingDecommission = new HashMap[String, Option[String]]
 
   // A map of ResourceProfile id to map of hostname with its possible task number running on it
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
@@ -397,8 +398,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             val decommissioned = executorsPendingDecommission.remove(executorId)
             if (executorsPendingToRemove.remove(executorId).getOrElse(false)) {
               ExecutorKilled
-            } else if (decommissioned) {
-              ExecutorDecommission()
+            } else if (decommissioned.isDefined) {
+              ExecutorDecommission(decommissioned.get)
             } else {
               reason
             }
@@ -468,11 +469,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
       adjustTargetNumExecutors: Boolean): Seq[String] = {
 
-    val executorsToDecommission = executorsAndDecomInfo.filter { case (executorId, _) =>
+    val executorsToDecommission = executorsAndDecomInfo.filter { case (executorId, decomInfo) =>
       CoarseGrainedSchedulerBackend.this.synchronized {
         // Only bother decommissioning executors which are alive.
         if (isExecutorActive(executorId)) {
-          executorsPendingDecommission += executorId
+          executorsPendingDecommission(executorId) = decomInfo.workerHost
           true
         } else {
           false
