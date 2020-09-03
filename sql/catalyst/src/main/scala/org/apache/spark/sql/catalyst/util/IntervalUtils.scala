@@ -724,7 +724,7 @@ object IntervalUtils {
           }
           i += 1
         case UNIT_END =>
-          if (Character.isWhitespace(b)) {
+          if (Character.isWhitespace(b) ) {
             i += 1
             state = TRIM_BEFORE_SIGN
           } else {
