@@ -50,9 +50,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
 import org.apache.spark.util.Utils
 
-abstract class AvroSuite extends QueryTest with SharedSparkSession {
+abstract class AvroSuite extends QueryTest with SharedSparkSession with NestedDataSourceSuiteBase {
   import testImplicits._
 
+  override val nestedDataSources = Seq("avro")
   val episodesAvro = testFile("episodes.avro")
   val testAvro = testFile("test.avro")
 

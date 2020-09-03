@@ -541,7 +541,8 @@ object Overlay {
        Spark ANSI SQL
       > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('tructured', 'utf-8') FROM 2 FOR 4);
        Structured SQL
-  """)
+  """,
+  since = "3.0.0")
 // scalastyle:on line.size.limit
 case class Overlay(input: Expression, replace: Expression, pos: Expression, len: Expression)
   extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
@@ -2370,8 +2371,8 @@ case class Sentences(
         widx = wi.current
         if (Character.isLetterOrDigit(word.charAt(0))) words += UTF8String.fromString(word)
       }
-      result += new GenericArrayData(words)
+      result += new GenericArrayData(words.toSeq)
     }
-    new GenericArrayData(result)
+    new GenericArrayData(result.toSeq)
   }
 }

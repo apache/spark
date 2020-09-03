@@ -36,7 +36,7 @@ ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
 #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
 #   We should use the latest Sphinx version once this is fixed.
-ARG PIP_PKGS="sphinx==3.0.4 mkdocs==1.0.4 numpy==1.18.1 pydata_sphinx_theme==0.3.1"
+ARG PIP_PKGS="sphinx==3.0.4 mkdocs==1.0.4 numpy==1.18.1 pydata_sphinx_theme==0.3.1 ipython==7.16.1 nbsphinx==0.7.1"
 ARG GEM_PKGS="jekyll:4.0.0 jekyll-redirect-from:0.16.0 rouge:3.15.0"
 
 # Install extra needed repos and refresh.
@@ -66,6 +66,8 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   $APT_INSTALL nodejs && \
   # Install needed python packages. Use pip for installing packages (for consistency).
   $APT_INSTALL libpython3-dev python3-pip python3-setuptools && \
+  # qpdf is required for CRAN checks to pass.
+  $APT_INSTALL qpdf jq && \
   # Change default python version to python3.
   update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 && \
   update-alternatives --install /usr/bin/python python /usr/bin/python3.6 2 && \
@@ -73,6 +75,7 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   pip3 install $PIP_PKGS && \
   # Install R packages and dependencies used when building.
   # R depends on pandoc*, libssl (which are installed above).
+  # Note that PySpark doc generation also needs pandoc due to nbsphinx
   $APT_INSTALL r-base r-base-dev && \
   $APT_INSTALL texlive-latex-base texlive texlive-fonts-extra texinfo qpdf && \
   Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2', 'e1071', 'survival'), repos='https://cloud.r-project.org/')" && \

@@ -17,7 +17,7 @@
 #
 
 from pyspark.sql import Column, Row
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StructField, LongType
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -142,7 +142,7 @@ class ColumnTests(ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_column import *
+    from pyspark.sql.tests.test_column import *  # noqa: F401
 
     try:
         import xmlrunner

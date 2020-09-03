@@ -33,8 +33,9 @@ private class HistoryServerMemoryManager(
     conf: SparkConf) extends Logging {
 
   private val maxUsage = conf.get(MAX_IN_MEMORY_STORE_USAGE)
-  private val currentUsage = new AtomicLong(0L)
-  private val active = new HashMap[(String, Option[String]), Long]()
+  // Visible for testing.
+  private[history] val currentUsage = new AtomicLong(0L)
+  private[history] val active = new HashMap[(String, Option[String]), Long]()
 
   def initialize(): Unit = {
     logInfo("Initialized memory manager: " +

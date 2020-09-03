@@ -1268,7 +1268,7 @@ class DataFrameSuite extends QueryTest
       s"""+----------------+
          ||               a|
          |+----------------+
-         ||[1 -> a, 2 -> b]|
+         ||{1 -> a, 2 -> b}|
          |+----------------+
          |""".stripMargin)
     val df3 = Seq(((1, "a"), 0), ((2, "b"), 0)).toDF("a", "b")
@@ -1276,8 +1276,8 @@ class DataFrameSuite extends QueryTest
       s"""+------+---+
          ||     a|  b|
          |+------+---+
-         ||[1, a]|  0|
-         ||[2, b]|  0|
+         ||{1, a}|  0|
+         ||{2, b}|  0|
          |+------+---+
          |""".stripMargin)
   }
@@ -2540,6 +2540,15 @@ class DataFrameSuite extends QueryTest
       val df = spark.read.parquet(f.getAbsolutePath).as[BigDecimal]
       assert(df.schema === new StructType().add(StructField("d", DecimalType(38, 0))))
     }
+  }
+
+  test("SPARK-32640: ln(NaN) should return NaN") {
+    val df = Seq(Double.NaN).toDF("d")
+    checkAnswer(df.selectExpr("ln(d)"), Row(Double.NaN))
+  }
+
+  test("SPARK-32761: aggregating multiple distinct CONSTANT columns") {
+     checkAnswer(sql("select count(distinct 2), count(distinct 2,3)"), Row(1, 1))
   }
 }
 
