@@ -146,10 +146,19 @@ object JoinReorderDP extends PredicateHelper with Logging {
       conditions: Set[Expression],
       output: Seq[Attribute]): LogicalPlan = {
 
+    def itemSortByFields(item: LogicalPlan): (BigInt, BigInt) = if (conf.cboEnabled) {
+      item.stats.rowCount match {
+        case Some(rowCount) => (rowCount, item.stats.sizeInBytes)
+        case _ => (0, item.stats.sizeInBytes)
+      }
+    } else {
+      (0, 0)
+    }
+
     val startTime = System.nanoTime()
     // SPARK-32687: Sort items in descending order according to `rowCount` and `sizeInBytes`
     // to ensure the deterministic of input items as much as possible.
-    val sortedItems = items.sortBy(item => (item.stats.rowCount, item.stats.sizeInBytes)).reverse
+    val sortedItems = items.sortBy(itemSortByFields).reverse
     // Level i maintains all found plans for i + 1 items.
     // Create the initial plans: each plan is a single item with zero cost.
     val itemIndex = sortedItems.zipWithIndex
