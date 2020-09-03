@@ -282,11 +282,11 @@ Input [11]: [cs_sold_date_sk#1, cs_item_sk#5, cs_promo_sk#6, cs_order_number#7, 
 
 (46) Exchange
 Input [7]: [cs_item_sk#5, cs_promo_sk#6, cs_order_number#7, cs_quantity#8, i_item_desc#20, d_date_sk#22, d_week_seq#26]
-Arguments: hashpartitioning(d_date_sk#22, cs_item_sk#5, 5), true, [id=#30]
+Arguments: hashpartitioning(cs_item_sk#5, d_date_sk#22, 5), true, [id=#30]
 
 (47) Sort [codegen id : 11]
 Input [7]: [cs_item_sk#5, cs_promo_sk#6, cs_order_number#7, cs_quantity#8, i_item_desc#20, d_date_sk#22, d_week_seq#26]
-Arguments: [d_date_sk#22 ASC NULLS FIRST, cs_item_sk#5 ASC NULLS FIRST], false, 0
+Arguments: [cs_item_sk#5 ASC NULLS FIRST, d_date_sk#22 ASC NULLS FIRST], false, 0
 
 (48) Scan parquet default.inventory
 Output [4]: [inv_date_sk#31, inv_item_sk#32, inv_warehouse_sk#33, inv_quantity_on_hand#34]
@@ -331,15 +331,15 @@ Input [6]: [inv_date_sk#31, inv_item_sk#32, inv_warehouse_sk#33, inv_quantity_on
 
 (57) Exchange
 Input [4]: [inv_date_sk#31, inv_item_sk#32, inv_quantity_on_hand#34, w_warehouse_name#36]
-Arguments: hashpartitioning(inv_date_sk#31, inv_item_sk#32, 5), true, [id=#38]
+Arguments: hashpartitioning(inv_item_sk#32, inv_date_sk#31, 5), true, [id=#38]
 
 (58) Sort [codegen id : 14]
 Input [4]: [inv_date_sk#31, inv_item_sk#32, inv_quantity_on_hand#34, w_warehouse_name#36]
-Arguments: [inv_date_sk#31 ASC NULLS FIRST, inv_item_sk#32 ASC NULLS FIRST], false, 0
+Arguments: [inv_item_sk#32 ASC NULLS FIRST, inv_date_sk#31 ASC NULLS FIRST], false, 0
 
 (59) SortMergeJoin [codegen id : 16]
-Left keys [2]: [d_date_sk#22, cs_item_sk#5]
-Right keys [2]: [inv_date_sk#31, inv_item_sk#32]
+Left keys [2]: [cs_item_sk#5, d_date_sk#22]
+Right keys [2]: [inv_item_sk#32, inv_date_sk#31]
 Join condition: (inv_quantity_on_hand#34 < cs_quantity#8)
 
 (60) Project [codegen id : 16]

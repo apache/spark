@@ -7,8 +7,12 @@ TakeOrderedAndProject [sum(ss_ext_sales_price),d_year,i_category_id,i_category]
             HashAggregate [d_year,i_category_id,i_category,ss_ext_sales_price] [sum,sum]
               Project [d_year,ss_ext_sales_price,i_category_id,i_category]
                 BroadcastHashJoin [ss_item_sk,i_item_sk]
-                  Project [d_year,ss_item_sk,ss_ext_sales_price]
-                    BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
+                  Project [ss_item_sk,ss_ext_sales_price,d_year]
+                    BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                      Filter [ss_sold_date_sk,ss_item_sk]
+                        ColumnarToRow
+                          InputAdapter
+                            Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_ext_sales_price]
                       InputAdapter
                         BroadcastExchange #2
                           WholeStageCodegen (1)
@@ -17,10 +21,6 @@ TakeOrderedAndProject [sum(ss_ext_sales_price),d_year,i_category_id,i_category]
                                 ColumnarToRow
                                   InputAdapter
                                     Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
-                      Filter [ss_sold_date_sk,ss_item_sk]
-                        ColumnarToRow
-                          InputAdapter
-                            Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_ext_sales_price]
                   InputAdapter
                     BroadcastExchange #3
                       WholeStageCodegen (2)

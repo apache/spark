@@ -12,7 +12,11 @@ TakeOrderedAndProject [substr(w_warehouse_name, 1, 20),sm_type,cc_name,30 days ,
                       Project [cs_sold_date_sk,cs_ship_date_sk,cs_call_center_sk,cs_warehouse_sk,sm_type]
                         BroadcastHashJoin [cs_ship_mode_sk,sm_ship_mode_sk]
                           Project [cs_sold_date_sk,cs_ship_date_sk,cs_call_center_sk,cs_ship_mode_sk,cs_warehouse_sk]
-                            BroadcastHashJoin [d_date_sk,cs_ship_date_sk]
+                            BroadcastHashJoin [cs_ship_date_sk,d_date_sk]
+                              Filter [cs_warehouse_sk,cs_ship_mode_sk,cs_call_center_sk,cs_ship_date_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.catalog_sales [cs_sold_date_sk,cs_ship_date_sk,cs_call_center_sk,cs_ship_mode_sk,cs_warehouse_sk]
                               InputAdapter
                                 BroadcastExchange #2
                                   WholeStageCodegen (1)
@@ -21,10 +25,6 @@ TakeOrderedAndProject [substr(w_warehouse_name, 1, 20),sm_type,cc_name,30 days ,
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.date_dim [d_date_sk,d_month_seq]
-                              Filter [cs_warehouse_sk,cs_ship_mode_sk,cs_call_center_sk,cs_ship_date_sk]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet default.catalog_sales [cs_sold_date_sk,cs_ship_date_sk,cs_call_center_sk,cs_ship_mode_sk,cs_warehouse_sk]
                           InputAdapter
                             BroadcastExchange #3
                               WholeStageCodegen (2)
