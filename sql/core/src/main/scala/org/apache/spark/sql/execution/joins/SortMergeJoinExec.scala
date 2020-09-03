@@ -651,7 +651,7 @@ case class SortMergeJoinExec(
  *                          internal buffer
  * @param spillThreshold Threshold for number of rows to be spilled by internal buffer
  * @param eagerCleanupResources the eager cleanup function to be invoked when no join row found
- * @param matchedBufferFirstOnly [[bufferMatchingRows]] should buffer only the first matching row
+ * @param onlyBufferFirstMatch [[bufferMatchingRows]] should buffer only the first matching row
  */
 private[joins] class SortMergeJoinScanner(
     streamedKeyGenerator: Projection,
@@ -662,7 +662,7 @@ private[joins] class SortMergeJoinScanner(
     inMemoryThreshold: Int,
     spillThreshold: Int,
     eagerCleanupResources: () => Unit,
-    matchedBufferFirstOnly: Boolean = false) {
+    onlyBufferFirstMatch: Boolean = false) {
   private[this] var streamedRow: InternalRow = _
   private[this] var streamedRowKey: InternalRow = _
   private[this] var bufferedRow: InternalRow = _
@@ -674,7 +674,7 @@ private[joins] class SortMergeJoinScanner(
   private[this] var matchJoinKey: InternalRow = _
   /** Buffered rows from the buffered side of the join. This is empty if there are no matches. */
   private[this] val bufferedMatches: ExternalAppendOnlyUnsafeRowArray =
-    new ExternalAppendOnlyUnsafeRowArray(if (matchedBufferFirstOnly) 1 else inMemoryThreshold,
+    new ExternalAppendOnlyUnsafeRowArray(if (onlyBufferFirstMatch) 1 else inMemoryThreshold,
       spillThreshold)
 
   // Initialization (note: do _not_ want to advance streamed here).
@@ -835,7 +835,7 @@ private[joins] class SortMergeJoinScanner(
     matchJoinKey = streamedRowKey.copy()
     bufferedMatches.clear()
     do {
-      if (!matchedBufferFirstOnly || bufferedMatches.isEmpty) {
+      if (!onlyBufferFirstMatch || bufferedMatches.isEmpty) {
         bufferedMatches.add(bufferedRow.asInstanceOf[UnsafeRow])
       }
       advancedBufferedToRowWithNullFreeJoinKey()
