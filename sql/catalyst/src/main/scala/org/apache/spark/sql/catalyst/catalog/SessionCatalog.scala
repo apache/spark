@@ -1359,12 +1359,8 @@ class SessionCatalog(
     val info = new ExpressionInfo(funcDefinition.className, func.database.orNull, func.funcName)
     val builder =
       functionBuilder.getOrElse {
-        val className = funcDefinition.className
-        if (!Utils.classIsLoadable(className)) {
-          throw new AnalysisException(s"Can not load class '$className' when registering " +
-            s"the function '$func', please make sure it is on the classpath")
-        }
-        makeFunctionBuilder(func.unquotedString, className)
+        requireFunctionClassExists(funcDefinition)
+        makeFunctionBuilder(func.unquotedString, funcDefinition.className)
       }
     functionRegistry.registerFunction(func, info, builder)
   }
@@ -1375,11 +1371,8 @@ class SessionCatalog(
   def requireFunctionClassExists(funcDefinition: CatalogFunction): Unit = {
     val className = funcDefinition.className
     if (!Utils.classIsLoadable(className)) {
-      val database =
-        formatDatabaseName(funcDefinition.identifier.database.getOrElse(getCurrentDatabase))
-      val qualifiedName = funcDefinition.identifier.copy(database = Some(database))
       throw new AnalysisException(s"Can not load class '$className' when registering " +
-        s"the function '$qualifiedName', please make sure it is on the classpath")
+        s"the function '${funcDefinition.identifier}', please make sure it is on the classpath")
     }
   }
 

@@ -43,7 +43,7 @@ CREATE FUNCTION udaf1 AS 'test.non.existent.udaf'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Can not load class 'test.non.existent.udaf' when registering the function 'default.udaf1', please make sure it is on the classpath;
+Can not load class 'test.non.existent.udaf' when registering the function 'udaf1', please make sure it is on the classpath;
 
 
 -- !query
