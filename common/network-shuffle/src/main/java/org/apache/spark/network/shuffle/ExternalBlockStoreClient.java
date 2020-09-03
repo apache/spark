@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
@@ -30,10 +29,7 @@ import com.google.common.collect.Lists;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
-import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.shuffle.protocol.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.crypto.AuthClientBootstrap;
@@ -47,15 +43,10 @@ import org.apache.spark.network.util.TransportConf;
  * (via BlockTransferService), which has the downside of losing the data if we lose the executors.
  */
 public class ExternalBlockStoreClient extends BlockStoreClient {
-  private static final Logger logger = LoggerFactory.getLogger(ExternalBlockStoreClient.class);
-
   private final TransportConf conf;
   private final boolean authEnabled;
   private final SecretKeyHolder secretKeyHolder;
   private final long registrationTimeoutMs;
-
-  protected volatile TransportClientFactory clientFactory;
-  protected String appId;
 
   /**
    * Creates an external shuffle client, with SASL optionally enabled. If SASL is not enabled,
@@ -70,10 +61,6 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     this.secretKeyHolder = secretKeyHolder;
     this.authEnabled = authEnabled;
     this.registrationTimeoutMs = registrationTimeoutMs;
-  }
-
-  protected void checkInit() {
-    assert appId != null : "Called before init()";
   }
 
   /**
@@ -186,43 +173,6 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       }
     });
     return numRemovedBlocksFuture;
-  }
-
-  public void getHostLocalDirs(
-      String host,
-      int port,
-      String[] execIds,
-      CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable) {
-    checkInit();
-    GetLocalDirsForExecutors getLocalDirsMessage = new GetLocalDirsForExecutors(appId, execIds);
-    try {
-      TransportClient client = clientFactory.createClient(host, port);
-      client.sendRpc(getLocalDirsMessage.toByteBuffer(), new RpcResponseCallback() {
-        @Override
-        public void onSuccess(ByteBuffer response) {
-          try {
-            BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response);
-            hostLocalDirsCompletable.complete(
-              ((LocalDirsForExecutors) msgObj).getLocalDirsByExec());
-          } catch (Throwable t) {
-            logger.warn("Error trying to get the host local dirs for " +
-              Arrays.toString(getLocalDirsMessage.execIds) + " via external shuffle service",
-              t.getCause());
-            hostLocalDirsCompletable.completeExceptionally(t);
-          }
-        }
-
-        @Override
-        public void onFailure(Throwable t) {
-          logger.warn("Error trying to get the host local dirs for " +
-            Arrays.toString(getLocalDirsMessage.execIds) + " via external shuffle service",
-            t.getCause());
-          hostLocalDirsCompletable.completeExceptionally(t);
-        }
-      });
-    } catch (IOException | InterruptedException e) {
-      hostLocalDirsCompletable.completeExceptionally(e);
-    }
   }
 
   @Override

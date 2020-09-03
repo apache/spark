@@ -22,7 +22,8 @@ import java.util.UUID
 import org.apache.hive.service.cli.OperationHandle
 import org.apache.hive.service.cli.operation.GetCatalogsOperation
 import org.apache.hive.service.cli.session.HiveSession
-import org.apache.hive.service.rpc.thrift.{THandleIdentifier, TOperationHandle, TOperationType}
+
+import org.apache.spark.sql.hive.thriftserver.ThriftserverShimUtils.{THandleIdentifier, TOperationHandle, TOperationType}
 
 class GetCatalogsOperationMock(parentSession: HiveSession)
   extends GetCatalogsOperation(parentSession) {

@@ -257,4 +257,10 @@ class PropagateEmptyRelationSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
     assert(optimized.resolved)
   }
+
+  test("should not optimize away limit if streaming") {
+    val query = LocalRelation(Nil, Nil, isStreaming = true).limit(1).analyze
+    val optimized = Optimize.execute(query)
+    comparePlans(optimized, query)
+  }
 }

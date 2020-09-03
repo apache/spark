@@ -58,12 +58,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
   override def mode: ServerMode.Value = ServerMode.binary
 
   override protected def testFile(fileName: String): String = {
-    val url = Thread.currentThread().getContextClassLoader.getResource(fileName)
-    // Copy to avoid URISyntaxException during accessing the resources in `sql/core`
-    val file = File.createTempFile("thriftserver-test", ".data")
-    file.deleteOnExit()
-    FileUtils.copyURLToFile(url, file)
-    file.getAbsolutePath
+    copyAndGetResourceFile(fileName, ".data").getAbsolutePath
   }
 
   /** List of test cases to ignore, in lower cases. */

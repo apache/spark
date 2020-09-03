@@ -945,16 +945,16 @@ select interval 'interval中文 1 day'
 
 
 -- !query
-select interval '中文 interval 1中文day'
+select interval 'interval 1中文day'
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Cannot parse the INTERVAL value: 中文 interval 1中文day, Error parsing '中文 interval 1中文day' to interval, unrecognized number '中文'(line 1, pos 7)
+Cannot parse the INTERVAL value: interval 1中文day, Error parsing 'interval 1中文day' to interval, invalid value '1中文day'(line 1, pos 7)
 
 == SQL ==
-select interval '中文 interval 1中文day'
+select interval 'interval 1中文day'
 -------^^^
 
 
