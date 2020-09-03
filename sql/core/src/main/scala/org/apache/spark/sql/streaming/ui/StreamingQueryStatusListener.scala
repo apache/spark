@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming.ui
 
 import java.util.UUID
 
-import scala.collection.immutable.Queue
+import scala.collection.mutable
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 
@@ -48,6 +48,8 @@ private[sql] class StreamingQueryStatusListener(
     cleanupInactiveQueries(count)
   }
 
+  private val queryToProgress = new mutable.HashMap[UUID, mutable.Queue[String]]()
+
   private def cleanupInactiveQueries(count: Long): Unit = {
     val countToDelete = count - inactiveQueryStatusRetention
     if (countToDelete <= 0) {
@@ -65,38 +67,31 @@ private[sql] class StreamingQueryStatusListener(
 
   override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
     val startTimestamp = parseProgressTimestamp(event.timestamp)
-    val querySummary = new StreamingQuerySummary(
+    store.write(new StreamingQuerySummary(
       event.name,
       event.id,
       event.runId,
-      Queue.empty[String],
+      Array.empty[String],
       startTimestamp,
       true,
-      None)
-    store.write(querySummary)
+      None
+    ))
   }
 
   override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
     val runId = event.progress.runId
     val batchId = event.progress.batchId
     val timestamp = event.progress.timestamp
-    val querySummary = store.read(classOf[StreamingQuerySummary], runId)
-    val progressIds =
-      querySummary.progressIds ++ Seq(getUniqueId(runId, batchId, timestamp))
+    if (!queryToProgress.contains(event.progress.runId)) {
+      queryToProgress.put(event.progress.runId, mutable.Queue.empty[String])
+    }
+    val progressIds = queryToProgress(event.progress.runId)
+    progressIds.enqueue(getUniqueId(runId, batchId, timestamp))
     store.write(new StreamingQueryProgressWrapper(event.progress))
     while(progressIds.length >= streamingProgressRetention) {
       val uniqueId = progressIds.dequeue
       store.delete(classOf[StreamingQueryProgressWrapper], uniqueId)
     }
-    store.write(new StreamingQuerySummary(
-      querySummary.name,
-      querySummary.id,
-      querySummary.runId,
-      progressIds,
-      querySummary.startTimestamp,
-      querySummary.isActive,
-      querySummary.exception
-    ))
   }
 
   override def onQueryTerminated(
@@ -118,7 +113,7 @@ private[sql] class StreamingQuerySummary(
     val name: String,
     val id: UUID,
     @KVIndexParam val runId: UUID,
-    val progressIds: Queue[String],
+    val progressIds: Array[String],
     val startTimestamp: Long,
     val isActive: Boolean,
     val exception: Option[String]) {
@@ -140,6 +135,8 @@ private[sql] case class StreamingQueryUIData(
 private[sql] class StreamingQueryProgressWrapper(val progress: StreamingQueryProgress) {
   @KVIndexParam("batchId") val batchId: Long = progress.batchId
   @KVIndexParam("runId") val runId: String = progress.runId.toString
+  @JsonIgnore @KVIndex("timestamp")
+  private def timestampIndex: Long = parseProgressTimestamp(progress.timestamp)
   @JsonIgnore @KVIndex
   def uniqueId: String = getUniqueId(progress.runId, progress.batchId, progress.timestamp)
 }
