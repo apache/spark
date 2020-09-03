@@ -26,3 +26,4 @@ This page lists an overview of the basic steps required to setup & get started w
    :maxdepth: 2
 
    installation
+   quickstart
