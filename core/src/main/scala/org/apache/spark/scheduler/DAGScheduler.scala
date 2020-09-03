@@ -1826,7 +1826,7 @@ private[spark] class DAGScheduler(
             val externalShuffleServiceEnabled = env.blockManager.externalShuffleServiceEnabled
             val isHostDecommissioned = taskScheduler
               .getExecutorDecommissionState(bmAddress.executorId)
-              .exists(_.hostOpt.isDefined)
+              .exists(_.workerHost.isDefined)
 
             // Shuffle output of all executors on host `bmAddress.host` may be lost if:
             // - External shuffle service is enabled, so we assume that all shuffle data on node is
@@ -1989,15 +1989,15 @@ private[spark] class DAGScheduler(
    */
   private[scheduler] def handleExecutorLost(
       execId: String,
-      hostOpt: Option[String]): Unit = {
+      workerHost: Option[String]): Unit = {
     // if the cluster manager explicitly tells us that the entire worker was lost, then
     // we know to unregister shuffle output.  (Note that "worker" specifically refers to the process
     // from a Standalone cluster, where the shuffle service lives in the Worker.)
-    val fileLost = hostOpt.isDefined || !env.blockManager.externalShuffleServiceEnabled
+    val fileLost = workerHost.isDefined || !env.blockManager.externalShuffleServiceEnabled
     removeExecutorAndUnregisterOutputs(
       execId = execId,
       fileLost = fileLost,
-      hostToUnregisterOutputs = hostOpt,
+      hostToUnregisterOutputs = workerHost,
       maybeEpoch = None)
   }
 
@@ -2366,12 +2366,12 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
       dagScheduler.handleExecutorAdded(execId, host)
 
     case ExecutorLost(execId, reason) =>
-      val hostOpt = reason match {
-        case ExecutorProcessLost(_, host, _) => host
-        case ExecutorDecommission(host) => host
+      val workerHost = reason match {
+        case ExecutorProcessLost(_, workerHost, _) => workerHost
+        case ExecutorDecommission(workerHost) => workerHost
         case _ => None
       }
-      dagScheduler.handleExecutorLost(execId, hostOpt)
+      dagScheduler.handleExecutorLost(execId, workerHost)
 
     case WorkerRemoved(workerId, host, message) =>
       dagScheduler.handleWorkerRemoved(workerId, host, message)

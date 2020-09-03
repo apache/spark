@@ -875,7 +875,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       submit(reduceRdd, Array(0))
       completeShuffleMapStageSuccessfully(0, 0, 1)
       val expectHostFileLoss = event match {
-        case ExecutorProcessLost(_, hostOpt, _) => hostOpt.isDefined
+        case ExecutorProcessLost(_, workerHost, _) => workerHost.isDefined
         case _ => false
       }
       runEvent(ExecutorLost("hostA-exec", event))

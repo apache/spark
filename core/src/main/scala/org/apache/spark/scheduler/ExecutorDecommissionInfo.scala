@@ -20,12 +20,12 @@ package org.apache.spark.scheduler
 /**
  * Message providing more detail when an executor is being decommissioned.
  * @param message Human readable reason for why the decommissioning is happening.
- * @param hostOpt When hostOpt is defined. It means the host (aka the `node` or `worker`
+ * @param workerHost When workerHost is defined. It means the host (aka the `node` or `worker`
  *                in other places) has been decommissioned too. Used to infer if the
  *                shuffle data might be lost even if the external shuffle service is enabled.
  */
 private[spark]
-case class ExecutorDecommissionInfo(message: String, hostOpt: Option[String] = None)
+case class ExecutorDecommissionInfo(message: String, workerHost: Option[String] = None)
 
 /**
  * State related to decommissioning that is kept by the TaskSchedulerImpl. This state is derived
@@ -37,4 +37,4 @@ case class ExecutorDecommissionState(
     // to estimate when the executor might eventually be lost if EXECUTOR_DECOMMISSION_KILL_INTERVAL
     // is configured.
     startTime: Long,
-    hostOpt: Option[String] = None)
+    workerHost: Option[String] = None)

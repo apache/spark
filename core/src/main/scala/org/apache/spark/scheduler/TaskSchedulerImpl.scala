@@ -911,7 +911,7 @@ private[spark] class TaskSchedulerImpl(
       // Don't bother noting decommissioning for executors that we don't know about
       if (executorIdToHost.contains(executorId)) {
         executorsPendingDecommission(executorId) =
-          ExecutorDecommissionState(clock.getTimeMillis(), decommissionInfo.hostOpt)
+          ExecutorDecommissionState(clock.getTimeMillis(), decommissionInfo.workerHost)
       }
     }
     rootPool.executorDecommission(executorId)
@@ -929,7 +929,7 @@ private[spark] class TaskSchedulerImpl(
     synchronized {
       reason match {
         case e @ ExecutorDecommission(_) =>
-          e.hostOpt = getExecutorDecommissionState(executorId).map(_.hostOpt).get
+          e.workerHost = getExecutorDecommissionState(executorId).map(_.workerHost).get
         case _ =>
       }
 
@@ -1061,7 +1061,7 @@ private[spark] class TaskSchedulerImpl(
   // exposed for test
   protected final def isHostDecommissioned(host: String): Boolean = {
     hostToExecutors.get(host).exists { executors =>
-      executors.exists(e => getExecutorDecommissionState(e).exists(_.hostOpt.isDefined))
+      executors.exists(e => getExecutorDecommissionState(e).exists(_.workerHost.isDefined))
     }
   }
 

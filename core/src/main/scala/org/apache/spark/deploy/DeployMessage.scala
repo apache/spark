@@ -188,7 +188,7 @@ private[deploy] object DeployMessages {
   }
 
   case class ExecutorUpdated(id: Int, state: ExecutorState, message: Option[String],
-    exitStatus: Option[Int], hostOpt: Option[String])
+    exitStatus: Option[Int], workerHost: Option[String])
 
   case class ApplicationRemoved(message: String)
 
