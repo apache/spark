@@ -201,7 +201,7 @@ struct<count(DISTINCT id):bigint,count(DISTINCT 3, 2) FILTER (WHERE (dept_id = 4
 -- !query
 SELECT COUNT(DISTINCT id), COUNT(DISTINCT 2,3) FILTER (WHERE dept_id > 0) FROM emp
 -- !query schema
-struct<count(DISTINCT id):bigint,count(DISTINCT 2, 3) FILTER (WHERE (dept_id = 30)):bigint>
+struct<count(DISTINCT id):bigint,count(DISTINCT 2, 3) FILTER (WHERE (dept_id > 0)):bigint>
 -- !query output
 8	1
 
@@ -209,7 +209,7 @@ struct<count(DISTINCT id):bigint,count(DISTINCT 2, 3) FILTER (WHERE (dept_id = 3
 -- !query
 SELECT COUNT(DISTINCT id), COUNT(DISTINCT 3,2) FILTER (WHERE dept_id > 0) FROM emp
 -- !query schema
-struct<count(DISTINCT id):bigint,count(DISTINCT 3, 2) FILTER (WHERE (dept_id = 30)):bigint>
+struct<count(DISTINCT id):bigint,count(DISTINCT 3, 2) FILTER (WHERE (dept_id > 0)):bigint>
 -- !query output
 8	1
 
