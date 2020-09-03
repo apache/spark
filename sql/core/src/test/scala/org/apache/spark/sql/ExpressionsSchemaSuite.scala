@@ -179,7 +179,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
           "record in result file. Try regenerating the result files.")
       assert(numberOfMissingExamples == missingExamples.size,
         s"missing examples size: ${missingExamples.size} not same as " +
-          s"numberOfMissingExample: $numberOfMissingExamples " +
+          s"numberOfMissingExamples: $numberOfMissingExamples " +
           "record in result file. Try regenerating the result files.")
 
       (missingExamples, expectedOutputs)
