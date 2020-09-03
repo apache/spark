@@ -87,7 +87,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     checkFromInvalidString("1 day 2", "dangling interval value '2'")
     checkFromInvalidString("1 day 2.2", "dangling interval value '2.2'")
     checkFromInvalidString("1 day -", "dangling interval value sign '-'")
-    checkFromInvalidString("-.", "dangling interval value '-.''")
+    checkFromInvalidString("-.", "dangling interval value '-.'")
   }
 
   test("string to interval: multiple units") {
