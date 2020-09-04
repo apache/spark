@@ -229,12 +229,8 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
         try {
           spark.udf.register(
             "compare_property_value",
-            (input: Int, propKey: String, propValue: String) => {
-              // scalastyle:off println
-              System.out.println(Thread.currentThread().getName)
-              // scalastyle:on println
+            (input: Int, propKey: String, propValue: String) =>
               TaskContext.get().getLocalProperty(propKey) == propValue
-            }
           )
           val propKey = "spark.sql.subquery.broadcast.prop.key"
 
