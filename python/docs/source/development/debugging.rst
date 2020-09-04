@@ -19,7 +19,7 @@
 Debugging PySpark
 =================
 
-PySpark uses Spark as an engine. In case that PySpark applications do not require the interaction
+PySpark uses Spark as an engine. If a PySpark application does not require interaction
 between Python workers and JVMs, Python workers are not launched. They are lazily launched only when
 Python native functions or data have to be handled, for example, when you execute pandas UDFs or
 PySpark RDD APIs.
@@ -32,18 +32,18 @@ Remote Debugging (PyCharm)
 --------------------------
 
 In order to debug the Python workers remotely, you should connect from the Python worker to the debug server in PyCharm.
-In this section, it describes the remote debug within single machine to demonstrate easily.
-In order to debug PySpark applications in other machines, please refer to the full instructions that are specific
-to PyCharm is documented at `here <https://www.jetbrains.com/help/pycharm/remote-debugging-with-product.html#remote-debug-config>`_. 
+This section describes remote debugging within a single machine to demonstrate easily.
+In order to debug PySpark applications on other machines, please refer to the full instructions that are specific
+to PyCharm, documented `here <https://www.jetbrains.com/help/pycharm/remote-debugging-with-product.html#remote-debug-config>`_. 
 
-Firstly, choose **Run | Edit Configuration...** in the main manu, and it opens the Run/debug configurations dialog.
+Firstly, choose **Edit Configuration...** from the **Run** menu. It opens the Run/debug configurations dialog.
 You have to click ``+`` configuration on the toolbar, and from the list of available configurations, select **Python Debug Server**.
 Enter the name of this run/debug configuration, for example, ``MyRemoteDebugger`` and also specify the port number, for example ``12345``.
 
 .. image:: ../../../../docs/img/pyspark-remote-debug1.png
     :alt: PyCharm remote debugger setting
 
-After that, you should install the corresponding version of ``pydevd-pycahrm`` package. In the previous dialog, it shows the command
+After that, you should install the corresponding version of the ``pydevd-pycahrm`` package. In the previous dialog, it shows the command
 to install.
 
 .. code-block:: text
@@ -65,19 +65,19 @@ In your current working directly, prepare a Python file as below:
     if __name__ == '__main__':
         daemon.manager()" > remote_debug.py
 
-You will use this file as the Python workers in your PySpark applications by using ``spark.python.daemon.module`` configuration.
-Run ``pyspark`` shell with the configuration below:
+You will use this file as the Python worker in your PySpark applications by using the ``spark.python.daemon.module`` configuration.
+Run the ``pyspark`` shell with the configuration below:
 
 .. code-block:: bash
 
     pyspark --conf spark.python.daemon.module=remote_debug
 
-Now you're ready to remote debug. Start debug with your ``MyRemoteDebugger``.
+Now you're ready to remote debug. Start debugging with your ``MyRemoteDebugger``.
 
 .. image:: ../../../../docs/img/pyspark-remote-debug2.png
     :alt: PyCharm run remote debugger
 
-After that, run a job that creates a Python workers, for example, as below:
+After that, run a job that creates Python workers, for example, as below:
 
 .. code-block:: python
 
@@ -87,7 +87,7 @@ After that, run a job that creates a Python workers, for example, as below:
 Checking Memory and CPU Usage
 -----------------------------
 
-Python workers are typically monitored via ``top`` and ``ps`` commands because Python workers launch multiple Python
+Python workers are typically monitored via ``top`` and ``ps`` commands because Python workers create multiple Python processes
 workers are created as processes. As an example, you can ``ps`` as below:
 
 .. code-block:: bash
