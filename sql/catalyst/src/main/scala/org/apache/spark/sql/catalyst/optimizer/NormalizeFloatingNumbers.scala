@@ -116,6 +116,9 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
     case CreateMap(children, useStringTypeWhenEmpty) =>
       CreateMap(children.map(normalize), useStringTypeWhenEmpty)
 
+    case _ if expr.dataType == FloatType || expr.dataType == DoubleType =>
+      KnownFloatingPointNormalized(NormalizeNaNAndZero(expr))
+
     case If(cond, trueValue, falseValue) =>
       If(cond, normalize(trueValue), normalize(falseValue))
 
@@ -124,9 +127,6 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
     case Coalesce(children) =>
       Coalesce(children.map(normalize))
-
-    case _ if expr.dataType == FloatType || expr.dataType == DoubleType =>
-      KnownFloatingPointNormalized(NormalizeNaNAndZero(expr))
 
     case _ if expr.dataType.isInstanceOf[StructType] =>
       val fields = expr.dataType.asInstanceOf[StructType].fields.indices.map { i =>

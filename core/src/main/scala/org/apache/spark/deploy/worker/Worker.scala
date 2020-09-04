@@ -67,7 +67,7 @@ private[deploy] class Worker(
   assert (port > 0)
 
   // If worker decommissioning is enabled register a handler on PWR to shutdown.
-  if (conf.get(WORKER_DECOMMISSION_ENABLED)) {
+  if (conf.get(config.DECOMMISSION_ENABLED)) {
     logInfo("Registering SIGPWR handler to trigger decommissioning.")
     SignalUtils.register("PWR", "Failed to register SIGPWR handler - " +
       "disabling worker decommission feature.")(decommissionSelf)
@@ -668,7 +668,7 @@ private[deploy] class Worker(
       finishedApps += id
       maybeCleanupApplication(id)
 
-    case DecommissionSelf =>
+    case WorkerDecommission(_, _) =>
       decommissionSelf()
   }
 
@@ -769,7 +769,7 @@ private[deploy] class Worker(
   }
 
   private[deploy] def decommissionSelf(): Boolean = {
-    if (conf.get(WORKER_DECOMMISSION_ENABLED)) {
+    if (conf.get(config.DECOMMISSION_ENABLED)) {
       logDebug("Decommissioning self")
       decommissioned = true
       sendToMaster(WorkerDecommission(workerId, self))

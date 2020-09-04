@@ -633,13 +633,15 @@ class FileBasedDataSourceSuite extends QueryTest
 
       assert(fileList.toSet === expectedFileList.toSet)
 
-      val fileList2 = spark.read.format("binaryFile")
-        .option("recursiveFileLookup", true)
-        .option("pathGlobFilter", "*.bin")
-        .load(dataPath)
-        .select("path").collect().map(_.getString(0))
+      withClue("SPARK-32368: 'recursiveFileLookup' and 'pathGlobFilter' can be case insensitive") {
+        val fileList2 = spark.read.format("binaryFile")
+          .option("RecuRsivefileLookup", true)
+          .option("PaThglobFilter", "*.bin")
+          .load(dataPath)
+          .select("path").collect().map(_.getString(0))
 
-      assert(fileList2.toSet === expectedFileList.filter(_.endsWith(".bin")).toSet)
+        assert(fileList2.toSet === expectedFileList.filter(_.endsWith(".bin")).toSet)
+      }
     }
   }
 
@@ -820,27 +822,6 @@ class FileBasedDataSourceSuite extends QueryTest
           assert(fileScan.get.dataFilters.nonEmpty)
           checkAnswer(df, Row("a", 1, 2))
         }
-      }
-    }
-  }
-
-  test("File table location should include both values of option `path` and `paths`") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
-      withTempPaths(3) { paths =>
-        paths.zipWithIndex.foreach { case (path, index) =>
-          Seq(index).toDF("a").write.mode("overwrite").parquet(path.getCanonicalPath)
-        }
-        val df = spark
-          .read
-          .option("path", paths.head.getCanonicalPath)
-          .parquet(paths(1).getCanonicalPath, paths(2).getCanonicalPath)
-        df.queryExecution.optimizedPlan match {
-          case PhysicalOperation(_, _, DataSourceV2ScanRelation(table: ParquetTable, _, _)) =>
-            assert(table.paths.toSet == paths.map(_.getCanonicalPath).toSet)
-          case _ =>
-            throw new AnalysisException("Can not match ParquetTable in the query.")
-        }
-        checkAnswer(df, Seq(0, 1, 2).map(Row(_)))
       }
     }
   }

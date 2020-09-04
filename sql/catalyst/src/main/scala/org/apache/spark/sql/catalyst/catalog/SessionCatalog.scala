@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.catalog
 import java.net.URI
 import java.util.Locale
 import java.util.concurrent.Callable
+import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -135,7 +136,16 @@ class SessionCatalog(
 
   private val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
     val cacheSize = conf.tableRelationCacheSize
-    CacheBuilder.newBuilder().maximumSize(cacheSize).build[QualifiedTableName, LogicalPlan]()
+    val cacheTTL = conf.metadataCacheTTL
+
+    var builder = CacheBuilder.newBuilder()
+      .maximumSize(cacheSize)
+
+    if (cacheTTL > 0) {
+      builder = builder.expireAfterWrite(cacheTTL, TimeUnit.SECONDS)
+    }
+
+    builder.build[QualifiedTableName, LogicalPlan]()
   }
 
   /** This method provides a way to get a cached plan. */
@@ -209,10 +219,18 @@ class SessionCatalog(
           "you cannot create a database with this name.")
     }
     validateName(dbName)
-    val qualifiedPath = makeQualifiedPath(dbDefinition.locationUri)
     externalCatalog.createDatabase(
-      dbDefinition.copy(name = dbName, locationUri = qualifiedPath),
+      dbDefinition.copy(name = dbName, locationUri = makeQualifiedDBPath(dbDefinition.locationUri)),
       ignoreIfExists)
+  }
+
+  private def makeQualifiedDBPath(locationUri: URI): URI = {
+    if (locationUri.isAbsolute) {
+      locationUri
+    } else {
+      val fullPath = new Path(conf.warehousePath, CatalogUtils.URIToString(locationUri))
+      makeQualifiedPath(fullPath.toUri)
+    }
   }
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
@@ -231,7 +249,8 @@ class SessionCatalog(
   def alterDatabase(dbDefinition: CatalogDatabase): Unit = {
     val dbName = formatDatabaseName(dbDefinition.name)
     requireDbExists(dbName)
-    externalCatalog.alterDatabase(dbDefinition.copy(name = dbName))
+    externalCatalog.alterDatabase(dbDefinition.copy(
+      name = dbName, locationUri = makeQualifiedDBPath(dbDefinition.locationUri)))
   }
 
   def getDatabaseMetadata(db: String): CatalogDatabase = {
@@ -273,8 +292,7 @@ class SessionCatalog(
    * by users.
    */
   def getDefaultDBPath(db: String): URI = {
-    val database = formatDatabaseName(db)
-    new Path(new Path(conf.warehousePath), database + ".db").toUri
+    CatalogUtils.stringToURI(formatDatabaseName(db) + ".db")
   }
 
   // ----------------------------------------------------------------------------
@@ -307,7 +325,7 @@ class SessionCatalog(
       && !tableDefinition.storage.locationUri.get.isAbsolute) {
       // make the location of the table qualified.
       val qualifiedTableLocation =
-        makeQualifiedPath(tableDefinition.storage.locationUri.get)
+        makeQualifiedTablePath(tableDefinition.storage.locationUri.get, db)
       tableDefinition.copy(
         storage = tableDefinition.storage.copy(locationUri = Some(qualifiedTableLocation)),
         identifier = tableIdentifier)
@@ -340,6 +358,16 @@ class SessionCatalog(
     }
   }
 
+  private def makeQualifiedTablePath(locationUri: URI, database: String): URI = {
+    if (locationUri.isAbsolute) {
+      locationUri
+    } else {
+      val dbName = formatDatabaseName(database)
+      val dbLocation = makeQualifiedDBPath(getDatabaseMetadata(dbName).locationUri)
+      new Path(new Path(dbLocation), CatalogUtils.URIToString(locationUri)).toUri
+    }
+  }
+
   /**
    * Alter the metadata of an existing metastore table identified by `tableDefinition`.
    *
@@ -359,7 +387,7 @@ class SessionCatalog(
       && !tableDefinition.storage.locationUri.get.isAbsolute) {
       // make the location of the table qualified.
       val qualifiedTableLocation =
-        makeQualifiedPath(tableDefinition.storage.locationUri.get)
+        makeQualifiedTablePath(tableDefinition.storage.locationUri.get, db)
       tableDefinition.copy(
         storage = tableDefinition.storage.copy(locationUri = Some(qualifiedTableLocation)),
         identifier = tableIdentifier)
@@ -1339,6 +1367,14 @@ class SessionCatalog(
         makeFunctionBuilder(func.unquotedString, className)
       }
     functionRegistry.registerFunction(func, info, builder)
+  }
+
+  /**
+   * Unregister a temporary or permanent function from a session-specific [[FunctionRegistry]]
+   * Return true if function exists.
+   */
+  def unregisterFunction(name: FunctionIdentifier): Boolean = {
+    functionRegistry.dropFunction(name)
   }
 
   /**

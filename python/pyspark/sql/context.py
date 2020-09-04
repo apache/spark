@@ -15,21 +15,15 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
 import sys
 import warnings
 
-if sys.version >= '3':
-    basestring = unicode = str
-
 from pyspark import since, _NoValue
-from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.types import IntegerType, Row, StringType
-from pyspark.sql.udf import UDFRegistration
+from pyspark.sql.udf import UDFRegistration  # noqa: F401
 from pyspark.sql.utils import install_exception_handler
 
 __all__ = ["SQLContext", "HiveContext"]
@@ -52,13 +46,13 @@ class SQLContext(object):
 
     _instantiatedContext = None
 
-    @ignore_unicode_prefix
     def __init__(self, sparkContext, sparkSession=None, jsqlContext=None):
         """Creates a new SQLContext.
 
         .. note:: Deprecated in 3.0.0. Use :func:`SparkSession.builder.getOrCreate()` instead.
 
         >>> from datetime import datetime
+        >>> from pyspark.sql import Row
         >>> sqlContext = SQLContext(sc)
         >>> allTypes = sc.parallelize([Row(i=1, s="string", d=1.0, l=1,
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
@@ -70,7 +64,7 @@ class SQLContext(object):
         [Row((i + CAST(1 AS BIGINT))=2, (d + CAST(1 AS DOUBLE))=2.0, (NOT b)=False, list[1]=2, \
             dict[s]=0, time=datetime.datetime(2014, 8, 1, 14, 1, 5), a=1)]
         >>> df.rdd.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time, x.row.a, x.list)).collect()
-        [(1, u'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
+        [(1, 'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
         """
         warnings.warn(
             "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
@@ -142,7 +136,6 @@ class SQLContext(object):
         """
         self.sparkSession.conf.set(key, value)
 
-    @ignore_unicode_prefix
     @since(1.3)
     def getConf(self, key, defaultValue=_NoValue):
         """Returns the value of Spark SQL configuration property for the given key.
@@ -152,12 +145,12 @@ class SQLContext(object):
         the system default value.
 
         >>> sqlContext.getConf("spark.sql.shuffle.partitions")
-        u'200'
-        >>> sqlContext.getConf("spark.sql.shuffle.partitions", u"10")
-        u'10'
-        >>> sqlContext.setConf("spark.sql.shuffle.partitions", u"50")
-        >>> sqlContext.getConf("spark.sql.shuffle.partitions", u"10")
-        u'50'
+        '200'
+        >>> sqlContext.getConf("spark.sql.shuffle.partitions", "10")
+        '10'
+        >>> sqlContext.setConf("spark.sql.shuffle.partitions", "50")
+        >>> sqlContext.getConf("spark.sql.shuffle.partitions", "10")
+        '50'
         """
         return self.sparkSession.conf.get(key, defaultValue)
 
@@ -229,7 +222,6 @@ class SQLContext(object):
         return self.sparkSession._inferSchema(rdd, samplingRatio)
 
     @since(1.3)
-    @ignore_unicode_prefix
     def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True):
         """
         Creates a :class:`DataFrame` from an :class:`RDD`, a list or a :class:`pandas.DataFrame`.
@@ -274,27 +266,27 @@ class SQLContext(object):
 
         >>> l = [('Alice', 1)]
         >>> sqlContext.createDataFrame(l).collect()
-        [Row(_1=u'Alice', _2=1)]
+        [Row(_1='Alice', _2=1)]
         >>> sqlContext.createDataFrame(l, ['name', 'age']).collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
 
         >>> d = [{'name': 'Alice', 'age': 1}]
         >>> sqlContext.createDataFrame(d).collect()
-        [Row(age=1, name=u'Alice')]
+        [Row(age=1, name='Alice')]
 
         >>> rdd = sc.parallelize(l)
         >>> sqlContext.createDataFrame(rdd).collect()
-        [Row(_1=u'Alice', _2=1)]
+        [Row(_1='Alice', _2=1)]
         >>> df = sqlContext.createDataFrame(rdd, ['name', 'age'])
         >>> df.collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
 
         >>> from pyspark.sql import Row
         >>> Person = Row('name', 'age')
         >>> person = rdd.map(lambda r: Person(*r))
         >>> df2 = sqlContext.createDataFrame(person)
         >>> df2.collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
 
         >>> from pyspark.sql.types import *
         >>> schema = StructType([
@@ -302,15 +294,15 @@ class SQLContext(object):
         ...    StructField("age", IntegerType(), True)])
         >>> df3 = sqlContext.createDataFrame(rdd, schema)
         >>> df3.collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
 
         >>> sqlContext.createDataFrame(df.toPandas()).collect()  # doctest: +SKIP
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
         >>> sqlContext.createDataFrame(pandas.DataFrame([[1, 2]])).collect()  # doctest: +SKIP
         [Row(0=1, 1=2)]
 
         >>> sqlContext.createDataFrame(rdd, "a: string, b: int").collect()
-        [Row(a=u'Alice', b=1)]
+        [Row(a='Alice', b=1)]
         >>> rdd = rdd.map(lambda row: row[1])
         >>> sqlContext.createDataFrame(rdd, "int").collect()
         [Row(value=1)]
@@ -358,7 +350,6 @@ class SQLContext(object):
         return self.sparkSession.catalog.createExternalTable(
             tableName, path, source, schema, **options)
 
-    @ignore_unicode_prefix
     @since(1.0)
     def sql(self, sqlQuery):
         """Returns a :class:`DataFrame` representing the result of the given query.
@@ -368,7 +359,7 @@ class SQLContext(object):
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> df2 = sqlContext.sql("SELECT field1 AS f1, field2 as f2 from table1")
         >>> df2.collect()
-        [Row(f1=1, f2=u'row1'), Row(f1=2, f2=u'row2'), Row(f1=3, f2=u'row3')]
+        [Row(f1=1, f2='row1'), Row(f1=2, f2='row2'), Row(f1=3, f2='row3')]
         """
         return self.sparkSession.sql(sqlQuery)
 
@@ -385,7 +376,6 @@ class SQLContext(object):
         """
         return self.sparkSession.table(tableName)
 
-    @ignore_unicode_prefix
     @since(1.3)
     def tables(self, dbName=None):
         """Returns a :class:`DataFrame` containing names of tables in the given database.
@@ -401,7 +391,7 @@ class SQLContext(object):
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> df2 = sqlContext.tables()
         >>> df2.filter("tableName = 'table1'").first()
-        Row(database=u'', tableName=u'table1', isTemporary=True)
+        Row(database='', tableName='table1', isTemporary=True)
         """
         if dbName is None:
             return DataFrame(self._ssql_ctx.tables(), self)

@@ -875,8 +875,38 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("SPARK-32767 Bucket join should work if SHUFFLE_PARTITIONS larger than bucket number") {
+    withSQLConf(
+      SQLConf.SHUFFLE_PARTITIONS.key -> "9",
+      SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "10")  {
+
+      val testSpec1 = BucketedTableTestSpec(
+        Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
+        numPartitions = 1,
+        expectedShuffle = false,
+        expectedSort = false,
+        expectedNumOutputPartitions = Some(8))
+      val testSpec2 = BucketedTableTestSpec(
+        Some(BucketSpec(6, Seq("i", "j"), Seq("i", "j"))),
+        numPartitions = 1,
+        expectedShuffle = true,
+        expectedSort = true,
+        expectedNumOutputPartitions = Some(8))
+      Seq(false, true).foreach { enableAdaptive =>
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> s"$enableAdaptive") {
+          Seq((testSpec1, testSpec2), (testSpec2, testSpec1)).foreach { specs =>
+            testBucketing(
+              bucketedTableTestSpecLeft = specs._1,
+              bucketedTableTestSpecRight = specs._2,
+              joinCondition = joinCondition(Seq("i", "j")))
+          }
+        }
+      }
+    }
+  }
+
   test("bucket coalescing eliminates shuffle") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
       // The side with bucketedTableTestSpec1 will be coalesced to have 4 output partitions.
       // Currently, sort will be introduced for the side that is coalesced.
       val testSpec1 = BucketedTableTestSpec(
@@ -911,7 +941,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       }
     }
 
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "false") {
       // Coalescing buckets is disabled by a config.
       run(
         BucketedTableTestSpec(
@@ -921,8 +951,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
 
     withSQLConf(
-      SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true",
-      SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_BUCKET_RATIO.key -> "2") {
+      SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
+      SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.key -> "2") {
       // Coalescing buckets is not applied because the ratio of the number of buckets (3)
       // is greater than max allowed (2).
       run(
@@ -932,7 +962,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
           Some(BucketSpec(4, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = true))
     }
 
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
       run(
         // Coalescing buckets is not applied because the bigger number of buckets (8) is not
         // divisible by the smaller number of buckets (7).
@@ -950,7 +980,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
       withSQLConf(
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
-        SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true") {
+        SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
         def verify(
             query: String,
             expectedNumShuffles: Int,
@@ -964,7 +994,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
           }
           if (expectedCoalescedNumBuckets.isDefined) {
             assert(scans.length == 1)
-            assert(scans(0).optionalNumCoalescedBuckets == expectedCoalescedNumBuckets)
+            assert(scans.head.optionalNumCoalescedBuckets == expectedCoalescedNumBuckets)
           } else {
             assert(scans.isEmpty)
           }

@@ -18,8 +18,8 @@
 package org.apache.spark
 
 import org.scalatest.Assertions._
-import org.scalatest.Matchers
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
+import org.scalatest.matchers.must.Matchers
 import org.scalatest.time.{Millis, Span}
 
 import org.apache.spark.internal.config
@@ -38,18 +38,18 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
   implicit val defaultSignaler: Signaler = ThreadSignaler
 
-  val clusterUrl = "local-cluster[2,1,1024]"
+  val clusterUrl = "local-cluster[3,1,1024]"
 
   test("task throws not serializable exception") {
     // Ensures that executors do not crash when an exn is not serializable. If executors crash,
     // this test will hang. Correct behavior is that executors don't crash but fail tasks
     // and the scheduler throws a SparkException.
 
-    // numSlaves must be less than numPartitions
-    val numSlaves = 3
+    // numWorkers must be less than numPartitions
+    val numWorkers = 3
     val numPartitions = 10
 
-    sc = new SparkContext("local-cluster[%s,1,1024]".format(numSlaves), "test")
+    sc = new SparkContext("local-cluster[%s,1,1024]".format(numWorkers), "test")
     val data = sc.parallelize(1 to 100, numPartitions).
       map(x => throw new NotSerializableExn(new NotSerializableClass))
     intercept[SparkException] {
@@ -69,10 +69,10 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     )
 
     masterStrings.foreach {
-      case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
-        assert(numSlaves.toInt == 2)
-        assert(coresPerSlave.toInt == 1)
-        assert(memoryPerSlave.toInt == 1024)
+      case LOCAL_CLUSTER_REGEX(numWorkers, coresPerWorker, memoryPerWorker) =>
+        assert(numWorkers.toInt == 2)
+        assert(coresPerWorker.toInt == 1)
+        assert(memoryPerWorker.toInt == 1024)
     }
   }
 
@@ -174,7 +174,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   private def testCaching(conf: SparkConf, storageLevel: StorageLevel): Unit = {
     sc = new SparkContext(conf.setMaster(clusterUrl).setAppName("test"))
-    TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
+    TestUtils.waitUntilExecutorsUp(sc, 3, 60000)
     val data = sc.parallelize(1 to 1000, 10)
     val cachedData = data.persist(storageLevel)
     assert(cachedData.count === 1000)
@@ -206,7 +206,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     "caching on disk" -> StorageLevel.DISK_ONLY,
     "caching in memory, replicated" -> StorageLevel.MEMORY_ONLY_2,
     "caching in memory, serialized, replicated" -> StorageLevel.MEMORY_ONLY_SER_2,
-    "caching on disk, replicated" -> StorageLevel.DISK_ONLY_2,
+    "caching on disk, replicated 2" -> StorageLevel.DISK_ONLY_2,
+    "caching on disk, replicated 3" -> StorageLevel.DISK_ONLY_3,
     "caching in memory and disk, replicated" -> StorageLevel.MEMORY_AND_DISK_2,
     "caching in memory and disk, serialized, replicated" -> StorageLevel.MEMORY_AND_DISK_SER_2
   ).foreach { case (testName, storageLevel) =>
@@ -227,7 +228,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(data.count() === size)
     assert(data.count() === size)
     // ensure only a subset of partitions were cached
-    val rddBlocks = sc.env.blockManager.master.getMatchingBlockIds(_.isRDD, askSlaves = true)
+    val rddBlocks = sc.env.blockManager.master.getMatchingBlockIds(_.isRDD,
+      askStorageEndpoints = true)
     assert(rddBlocks.size === 0, s"expected no RDD blocks, found ${rddBlocks.size}")
   }
 
@@ -244,7 +246,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(data.count() === size)
     assert(data.count() === size)
     // ensure only a subset of partitions were cached
-    val rddBlocks = sc.env.blockManager.master.getMatchingBlockIds(_.isRDD, askSlaves = true)
+    val rddBlocks = sc.env.blockManager.master.getMatchingBlockIds(_.isRDD,
+      askStorageEndpoints = true)
     assert(rddBlocks.size > 0, "no RDD blocks found")
     assert(rddBlocks.size < numPartitions, s"too many RDD blocks found, expected <$numPartitions")
   }

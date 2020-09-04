@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.Matchers.the
+import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow

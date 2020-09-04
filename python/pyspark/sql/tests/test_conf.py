@@ -46,7 +46,7 @@ class ConfTests(ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_conf import *
+    from pyspark.sql.tests.test_conf import *  # noqa: F401
 
     try:
         import xmlrunner

@@ -26,8 +26,9 @@ import scala.language.implicitConversions
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doAnswer, mock, spy, when}
-import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
@@ -103,7 +104,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf), None, blockManagerInfo)),
+        new LiveListenerBus(conf), None, blockManagerInfo, mapOutputTracker)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true)
     allStores.clear()

@@ -408,7 +408,7 @@ private[spark] object HiveUtils extends Logging {
               logWarning(s"Hive jar path '$path' does not exist.")
               Nil
             } else {
-              files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar"))
+              files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).toSeq
             }
           case path =>
             new File(path) :: Nil
@@ -505,7 +505,7 @@ private[spark] object HiveUtils extends Logging {
       // partition columns are part of the schema
       val partCols = hiveTable.getPartCols.asScala.map(HiveClientImpl.fromHiveColumn)
       val dataCols = hiveTable.getCols.asScala.map(HiveClientImpl.fromHiveColumn)
-      table.copy(schema = StructType(dataCols ++ partCols))
+      table.copy(schema = StructType((dataCols ++ partCols).toSeq))
     }
   }
 }
