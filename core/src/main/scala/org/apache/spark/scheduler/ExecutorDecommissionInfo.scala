@@ -20,7 +20,7 @@ package org.apache.spark.scheduler
 /**
  * Message providing more detail when an executor is being decommissioned.
  * @param message Human readable reason for why the decommissioning is happening.
- * @param workerHost When workerHost is defined. It means the host (aka the `node` or `worker`
+ * @param workerHost When workerHost is defined, it means the host (aka the `node` or `worker`
  *                in other places) has been decommissioned too. Used to infer if the
  *                shuffle data might be lost even if the external shuffle service is enabled.
  */
