@@ -71,7 +71,7 @@ Run the ``pyspark`` shell with the configuration below:
 
     pyspark --conf spark.python.daemon.module=remote_debug
 
-Now you're ready to remote debug. Start debugging with your ``MyRemoteDebugger``.
+Now you're ready to remotely debug. Start debugging with your ``MyRemoteDebugger``.
 
 .. image:: ../../../../docs/img/pyspark-remote-debug2.png
     :alt: PyCharm run remote debugger
@@ -87,7 +87,7 @@ Checking Memory and CPU Usage
 -----------------------------
 
 Python workers are typically monitored via ``top`` and ``ps`` commands because Python workers create multiple Python processes
-workers are created as processes. As an example, you can ``ps`` as below:
+workers. As an example, you can ``ps`` as below:
 
 .. code-block:: bash
 
