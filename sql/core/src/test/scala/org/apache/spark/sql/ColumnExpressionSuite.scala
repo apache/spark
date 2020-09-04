@@ -1802,4 +1802,77 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           StructField("b", IntegerType, nullable = false))),
           containsNull = false), nullable = false))))
   }
+
+  private lazy val arrayStructArrayLevel1: DataFrame = spark.createDataFrame(
+    sparkContext.parallelize(Row(Array(Row(Array(Row(1, null, 3)), null, 3))) :: Nil),
+    StructType(
+      Seq(StructField("a", ArrayType(
+        StructType(Seq(
+          StructField("a", arrayType, nullable = false),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = false))),
+        containsNull = false)))))
+
+  test("withField should add and replace field to struct of array of array") {
+    checkAnswerAndSchema(
+      arrayStructArrayLevel1.withColumn("a", $"a".withField("a.d", lit(2))),
+      Row(Seq(Row(Seq(Row(1, null, 3, 2)), null, 3))) :: Nil,
+      StructType(
+        Seq(StructField("a", ArrayType(
+          StructType(Seq(
+            StructField("a", ArrayType(
+              StructType(Seq(
+                StructField("a", IntegerType, nullable = false),
+                StructField("b", IntegerType, nullable = true),
+                StructField("c", IntegerType, nullable = false),
+                StructField("d", IntegerType, nullable = false))),
+              containsNull = true), nullable = false),
+            StructField("b", IntegerType, nullable = true),
+            StructField("c", IntegerType, nullable = false))),
+          containsNull = false)))))
+
+    checkAnswerAndSchema(
+      arrayStructArrayLevel1.withColumn("a", $"a.a".withField("d", lit(2))),
+      Row(Seq(Seq(Row(1, null, 3, 2)))) :: Nil,
+      StructType(
+        Seq(StructField("a", ArrayType(
+          ArrayType(
+            StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = true),
+              StructField("c", IntegerType, nullable = false),
+              StructField("d", IntegerType, nullable = false))),
+            containsNull = true),
+          containsNull = false)))))
+
+    checkAnswerAndSchema(
+      arrayStructArrayLevel1.withColumn("a", $"a".withField("a.b", lit(2))),
+      Row(Seq(Row(Seq(Row(1, 2, 3)), null, 3))) :: Nil,
+      StructType(
+        Seq(StructField("a", ArrayType(
+          StructType(Seq(
+            StructField("a", ArrayType(
+              StructType(Seq(
+                StructField("a", IntegerType, nullable = false),
+                StructField("b", IntegerType, nullable = false),
+                StructField("c", IntegerType, nullable = false))),
+              containsNull = true), nullable = false),
+            StructField("b", IntegerType, nullable = true),
+            StructField("c", IntegerType, nullable = false))),
+          containsNull = false)))))
+
+    checkAnswerAndSchema(
+      arrayStructArrayLevel1.withColumn("a", $"a.a".withField("b", lit(2))),
+      Row(Seq(Seq(Row(1, 2, 3)))) :: Nil,
+      StructType(
+        Seq(StructField("a", ArrayType(
+          ArrayType(
+            StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = false),
+              StructField("c", IntegerType, nullable = false))),
+            containsNull = true),
+          containsNull = false)))))
+
+  }
 }
