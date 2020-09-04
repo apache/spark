@@ -554,3 +554,14 @@ case class UnresolvedHaving(
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = child.output
 }
+
+case class UnresolvedWithFields(
+    col: Expression,
+    fieldName: String,
+    expr: Expression) extends Unevaluable with NonSQLExpression {
+  override def children: Seq[Expression] = Seq(col, expr)
+  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
+  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
+  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
+  override lazy val resolved = false
+}

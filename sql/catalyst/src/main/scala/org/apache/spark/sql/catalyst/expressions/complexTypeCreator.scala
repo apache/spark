@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -592,6 +594,71 @@ case class WithFields(
       If(IsNull(structExpr), Literal(null, expr.dataType), expr)
     } else {
       expr
+    }
+  }
+}
+
+object WithFields {
+  /**
+   * Adds/replaces field in `StructType` into `col` expression by name.
+   */
+  def apply(
+      col: Expression,
+      fieldName: String,
+      expr: Expression): Expression = {
+    val nameParts = if (fieldName.isEmpty) {
+      fieldName :: Nil
+    } else {
+      CatalystSqlParser.parseMultipartIdentifier(fieldName)
+    }
+    withFieldHelper(col, nameParts, expr)
+  }
+
+  /**
+   * Recursively builds expressions for adding/replacing (nested) field in `StructType` into
+   * `col` expression by name. Supports nested struct in array and struct.
+   */
+  private def withFieldHelper(
+      col: Expression,
+      namePartsRemaining: Seq[String],
+      value: Expression) : Expression = {
+    val name = namePartsRemaining.head
+    if (namePartsRemaining.length == 1) {
+      col.dataType match {
+        case ArrayType(et: StructType, containsNull) =>
+          val lv = NamedLambdaVariable("arg", et, containsNull)
+          val function = WithFields(lv, name :: Nil, value :: Nil)
+          ArrayTransform(col, LambdaFunction(function, Seq(lv)))
+
+        case _: StructType =>
+          WithFields(col, name :: Nil, value :: Nil)
+
+        case dt =>
+          throw new AnalysisException(s"WithFields's argument does not support ${dt.catalogString}")
+      }
+    } else {
+      val newNamesRemaining = namePartsRemaining.tail
+      val resolver = SQLConf.get.resolver
+
+      val newCol = ExtractValue(col, Literal(name), resolver)
+      val newValue = withFieldHelper(
+        col = newCol,
+        namePartsRemaining = newNamesRemaining,
+        value = value)
+
+      col.dataType match {
+        case ArrayType(et, containsNull) =>
+          val lv = NamedLambdaVariable("arg", et, containsNull)
+          val function = withFieldHelper(lv, namePartsRemaining, newValue)
+          ArrayTransform(col, LambdaFunction(function, Seq(lv)))
+
+        case _: StructType =>
+          WithFields(col, name :: Nil, newValue :: Nil)
+
+        case dt =>
+          throw new AnalysisException(s"WithFields's argument does not support ${dt.catalogString}")
+      }
+
     }
   }
 }

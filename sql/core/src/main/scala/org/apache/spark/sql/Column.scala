@@ -909,31 +909,10 @@ class Column(val expr: Expression) extends Logging {
     require(fieldName != null, "fieldName cannot be null")
     require(col != null, "col cannot be null")
 
-    val nameParts = if (fieldName.isEmpty) {
-      fieldName :: Nil
+    if (expr.resolved) {
+      WithFields(expr, fieldName, col.expr)
     } else {
-      CatalystSqlParser.parseMultipartIdentifier(fieldName)
-    }
-    withFieldHelper(expr, nameParts, Nil, col.expr)
-  }
-
-  private def withFieldHelper(
-      struct: Expression,
-      namePartsRemaining: Seq[String],
-      namePartsDone: Seq[String],
-      value: Expression) : WithFields = {
-    val name = namePartsRemaining.head
-    if (namePartsRemaining.length == 1) {
-      WithFields(struct, name :: Nil, value :: Nil)
-    } else {
-      val newNamesRemaining = namePartsRemaining.tail
-      val newNamesDone = namePartsDone :+ name
-      val newValue = withFieldHelper(
-        struct = UnresolvedExtractValue(struct, Literal(name)),
-        namePartsRemaining = newNamesRemaining,
-        namePartsDone = newNamesDone,
-        value = value)
-      WithFields(struct, name :: Nil, newValue :: Nil)
+      UnresolvedWithFields(expr, fieldName, col.expr)
     }
   }
 

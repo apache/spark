@@ -371,6 +371,7 @@ class Analyzer(
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
       ResolveUnion ::
+      ResolveWithFields ::
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),

@@ -967,10 +967,49 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))),
         nullable = false))))
 
+
+  private lazy val arrayType = ArrayType(
+    StructType(Seq(
+      StructField("a", IntegerType, nullable = false),
+      StructField("b", IntegerType, nullable = true),
+      StructField("c", IntegerType, nullable = false))),
+    containsNull = true)
+
+  private lazy val arrayLevel1: DataFrame = spark.createDataFrame(
+    sparkContext.parallelize(Row(Array(Row(1, null, 3))) :: Nil),
+    StructType(Seq(StructField("a", arrayType, nullable = false))))
+
+  private lazy val nullArrayLevel1: DataFrame = spark.createDataFrame(
+    sparkContext.parallelize(Row(Array(null)) :: Nil),
+    StructType(Seq(StructField("a", arrayType, nullable = true))))
+
+  private lazy val arrayLevel2: DataFrame = spark.createDataFrame(
+    sparkContext.parallelize(Row(Row(Array(Row(1, null, 3)))) :: Nil),
+    StructType(Seq(
+      StructField("a", StructType(Seq(
+        StructField("a", arrayType, nullable = false))),
+        nullable = false))))
+
+  private lazy val nullArrayLevel2: DataFrame = spark.createDataFrame(
+    sparkContext.parallelize(Row(Row(Array(null))) :: Nil),
+    StructType(Seq(
+      StructField("a", StructType(Seq(
+        StructField("a", arrayType, nullable = false))),
+        nullable = false))))
+
+  private lazy val arrayLevel3: DataFrame = spark.createDataFrame(
+    sparkContext.parallelize(Row(Row(Row(Array(Row(1, null, 3))))) :: Nil),
+    StructType(Seq(
+      StructField("a", StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", arrayType, nullable = false))),
+          nullable = false))),
+        nullable = false))))
+
   test("withField should throw an exception if called on a non-StructType column") {
     intercept[AnalysisException] {
       testData.withColumn("key", $"key".withField("a", lit(2)))
-    }.getMessage should include("struct argument should be struct type, got: int")
+    }.getMessage should include("WithFields's argument does not support int")
   }
 
   test("withField should throw an exception if either fieldName or col argument are null") {
@@ -1000,7 +1039,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   test("withField should throw an exception if intermediate field is not a struct") {
     intercept[AnalysisException] {
       structLevel1.withColumn("a", 'a.withField("b.a", lit(2)))
-    }.getMessage should include("struct argument should be struct type, got: int")
+    }.getMessage should include("WithFields's argument does not support int")
   }
 
   test("withField should throw an exception if intermediate field reference is ambiguous") {
@@ -1536,5 +1575,231 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       df.withColumn("a", $"a".withField("a", lit(4)).getField("c")),
       Row(3) :: Row(null):: Nil,
       StructType(Seq(StructField("a", IntegerType, nullable = true))))
+  }
+
+  test("withField should add field to struct of array") {
+    checkAnswerAndSchema(
+      arrayLevel1.withColumn("a", 'a.withField("d", lit(4))),
+      Row(Array(Row(1, null, 3, 4))) :: Nil,
+      StructType(Seq(
+        StructField("a", ArrayType(
+          StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("b", IntegerType, nullable = true),
+            StructField("c", IntegerType, nullable = false),
+            StructField("d", IntegerType, nullable = false))),
+          containsNull = true), nullable = false))))
+  }
+
+  test("withField should add multiple fields to struct of array") {
+    checkAnswerAndSchema(
+      arrayLevel1.withColumn("a", 'a.withField("d", lit(4)).withField("e", lit(5))),
+      Row(Array(Row(1, null, 3, 4, 5))) :: Nil,
+      StructType(Seq(
+        StructField("a", ArrayType(
+          StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("b", IntegerType, nullable = true),
+            StructField("c", IntegerType, nullable = false),
+            StructField("d", IntegerType, nullable = false),
+            StructField("e", IntegerType, nullable = false))),
+          containsNull = true), nullable = false))))
+  }
+
+  test("withField should add field to nested struct of array") {
+    Seq(
+      arrayLevel2.withColumn("a", 'a.withField("a.d", lit(4))),
+      arrayLevel2.withColumn("a", 'a.withField("a", $"a.a".withField("d", lit(4))))
+    ).foreach { df =>
+      checkAnswerAndSchema(
+        df,
+        Row(Row(Array(Row(1, null, 3, 4)))) :: Nil,
+        StructType(
+          Seq(StructField("a", StructType(Seq(
+            StructField("a", ArrayType(
+              StructType(Seq(
+                StructField("a", IntegerType, nullable = false),
+                StructField("b", IntegerType, nullable = true),
+                StructField("c", IntegerType, nullable = false),
+                StructField("d", IntegerType, nullable = false))),
+              containsNull = true),
+              nullable = false))),
+            nullable = false))))
+    }
+  }
+
+  test("withField should add field to deeply nested struct of array") {
+    checkAnswerAndSchema(
+      arrayLevel3.withColumn("a", 'a.withField("a.a.d", lit(4))),
+      Row(Row(Row(Array(Row(1, null, 3, 4))))) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", ArrayType(
+              StructType(Seq(
+                StructField("a", IntegerType, nullable = false),
+                StructField("b", IntegerType, nullable = true),
+                StructField("c", IntegerType, nullable = false),
+                StructField("d", IntegerType, nullable = false))),
+              containsNull = true), nullable = false))),
+            nullable = false))),
+          nullable = false))))
+  }
+
+  test("withField should add field to null struct of array") {
+    checkAnswerAndSchema(
+      nullArrayLevel1.withColumn("a", $"a".withField("d", lit(4))),
+      Row(Array(null)) :: Nil,
+      StructType(Seq(
+        StructField("a", ArrayType(
+          StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("b", IntegerType, nullable = true),
+            StructField("c", IntegerType, nullable = false),
+            StructField("d", IntegerType, nullable = false))),
+          containsNull = true)))))
+  }
+
+  test("withField should add field to nested null struct of array") {
+    checkAnswerAndSchema(
+      nullArrayLevel2.withColumn("a", $"a".withField("a.d", lit(4))),
+      Row(Row(Array(null))) :: Nil,
+      StructType(
+        Seq(StructField("a", StructType(Seq(
+          StructField("a", ArrayType(
+            StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = true),
+              StructField("c", IntegerType, nullable = false),
+              StructField("d", IntegerType, nullable = false))),
+            containsNull = true),
+          nullable = false))),
+          nullable = false))))
+  }
+
+
+  test("withField should replace field in struct of array") {
+    checkAnswerAndSchema(
+      arrayLevel1.withColumn("a", 'a.withField("b", lit(2))),
+      Row(Array(Row(1, 2, 3))) :: Nil,
+      StructType(Seq(
+        StructField("a", ArrayType(
+          StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("b", IntegerType, nullable = false),
+            StructField("c", IntegerType, nullable = false))),
+          containsNull = true), nullable = false))))
+  }
+
+  test("withField should replace field in null struct of array") {
+    checkAnswerAndSchema(
+      nullArrayLevel1.withColumn("a", 'a.withField("b", lit("foo"))),
+      Row(Array(null)) :: Nil,
+      StructType(Seq(
+        StructField("a", ArrayType(
+          StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("b", StringType, nullable = false),
+            StructField("c", IntegerType, nullable = false))),
+          containsNull = true), nullable = true))))
+  }
+
+  test("withField should replace field in nested null struct of array") {
+    checkAnswerAndSchema(
+      nullArrayLevel2.withColumn("a", $"a".withField("a.b", lit("foo"))),
+      Row(Row(Array(null))) :: Nil,
+      StructType(
+        Seq(StructField("a", StructType(Seq(
+          StructField("a", ArrayType(
+            StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", StringType, nullable = false),
+              StructField("c", IntegerType, nullable = false))),
+            containsNull = true), nullable = false))),
+          nullable = false))))
+  }
+
+  test("withField should replace field with null value in struct of array") {
+    checkAnswerAndSchema(
+      arrayLevel1.withColumn("a", 'a.withField("c", lit(null).cast(IntegerType))),
+      Row(Array(Row(1, null, null))) :: Nil,
+      StructType(Seq(
+        StructField("a", ArrayType(
+          StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("b", IntegerType, nullable = true),
+            StructField("c", IntegerType, nullable = true))),
+          containsNull = true), nullable = false))))
+  }
+
+  test("withField should replace multiple fields in struct of array") {
+    checkAnswerAndSchema(
+      arrayLevel1.withColumn("a", 'a.withField("a", lit(10)).withField("b", lit(20))),
+      Row(Array(Row(10, 20, 3))) :: Nil,
+      StructType(Seq(
+        StructField("a", ArrayType(
+          StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("b", IntegerType, nullable = false),
+            StructField("c", IntegerType, nullable = false))),
+          containsNull = true), nullable = false))))
+  }
+
+  test("withField should replace field in nested struct of array") {
+    Seq(
+      arrayLevel2.withColumn("a", $"a".withField("a.b", lit(2))),
+      arrayLevel2.withColumn("a", 'a.withField("a", $"a.a".withField("b", lit(2))))
+    ).foreach { df =>
+      checkAnswerAndSchema(
+        df,
+        Row(Row(Array(Row(1, 2, 3)))) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", ArrayType(
+              StructType(Seq(
+                StructField("a", IntegerType, nullable = false),
+                StructField("b", IntegerType, nullable = false),
+                StructField("c", IntegerType, nullable = false))),
+              containsNull = true), nullable = false))),
+            nullable = false))))
+    }
+  }
+
+  test("withField should replace field in deeply nested struct of array") {
+    checkAnswerAndSchema(
+      arrayLevel3.withColumn("a", $"a".withField("a.a.b", lit(2))),
+      Row(Row(Row(Array(Row(1, 2, 3))))) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", ArrayType(StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = false),
+              StructField("c", IntegerType, nullable = false))),
+              containsNull = true), nullable = false))),
+            nullable = false))),
+          nullable = false))))
+  }
+
+
+  test("withField should replace all fields with given name in struct of array") {
+    val arrayLevel1 = spark.createDataFrame(
+      sparkContext.parallelize(Row(Array(Row(1, 2, 3))) :: Nil),
+      StructType(Seq(
+        StructField("a", ArrayType(StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = false))),
+          containsNull = false), nullable = false))))
+
+    checkAnswerAndSchema(
+      arrayLevel1.withColumn("a", 'a.withField("b", lit(100))),
+      Row(Array(Row(1, 100, 100))) :: Nil,
+      StructType(Seq(
+        StructField("a", ArrayType(StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = false))),
+          containsNull = false), nullable = false))))
   }
 }
