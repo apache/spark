@@ -22,9 +22,9 @@ import scala.collection.JavaConverters._
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedHaving, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, Expression, GreaterThan, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, RefreshResource}
@@ -371,6 +371,61 @@ class SparkSqlParserSuite extends AnalysisTest {
           ("TOK_TABLEROWFORMATNULL", "NULL"),
           ("TOK_TABLEROWFORMATLINES", "\n")), None, None,
         List.empty, List.empty, None, None, false)))
+  }
+
+  test("SPARK-28227: script transform with row format delimit with aggregation") {
+    assertEqual(
+      """
+        |SELECT TRANSFORM(a, sum(b), max(c))
+        |  ROW FORMAT DELIMITED
+        |  FIELDS TERMINATED BY ','
+        |  COLLECTION ITEMS TERMINATED BY '#'
+        |  MAP KEYS TERMINATED BY '@'
+        |  LINES TERMINATED BY '\n'
+        |  NULL DEFINED AS 'null'
+        |  USING 'cat' AS (a, b, c)
+        |  ROW FORMAT DELIMITED
+        |  FIELDS TERMINATED BY ','
+        |  COLLECTION ITEMS TERMINATED BY '#'
+        |  MAP KEYS TERMINATED BY '@'
+        |  LINES TERMINATED BY '\n'
+        |  NULL DEFINED AS 'NULL'
+        |FROM testData
+        |GROUP BY a
+        |HAVING sum(b) > 10
+      """.stripMargin,
+      ScriptTransformation(
+        Seq(UnresolvedStar(None)),
+        "cat",
+        Seq(AttributeReference("a", StringType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", StringType)()),
+        UnresolvedHaving(
+          GreaterThan(
+            UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false),
+            Literal(10)),
+          Aggregate(
+            Seq('a),
+            Seq(
+              'a,
+              UnresolvedAlias(
+                UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false), None),
+              UnresolvedAlias(
+                UnresolvedFunction("max", Seq(UnresolvedAttribute("c")), isDistinct = false), None)
+            ),
+            UnresolvedRelation(TableIdentifier("testData")))),
+        ScriptInputOutputSchema(
+          Seq(("TOK_TABLEROWFORMATFIELD", ","),
+            ("TOK_TABLEROWFORMATCOLLITEMS", "#"),
+            ("TOK_TABLEROWFORMATMAPKEYS", "@"),
+            ("TOK_TABLEROWFORMATNULL", "null"),
+            ("TOK_TABLEROWFORMATLINES", "\n")),
+          Seq(("TOK_TABLEROWFORMATFIELD", ","),
+            ("TOK_TABLEROWFORMATCOLLITEMS", "#"),
+            ("TOK_TABLEROWFORMATMAPKEYS", "@"),
+            ("TOK_TABLEROWFORMATNULL", "NULL"),
+            ("TOK_TABLEROWFORMATLINES", "\n")), None, None,
+          List.empty, List.empty, None, None, false)))
   }
 
   test("SPARK-32607: Script Transformation ROW FORMAT DELIMITED" +
