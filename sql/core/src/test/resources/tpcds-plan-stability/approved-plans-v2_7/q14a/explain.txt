@@ -225,7 +225,7 @@ Condition : (isnotnull(ss_item_sk#2) AND isnotnull(ss_sold_date_sk#1))
 Output [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_class_id), IsNotNull(i_category_id), IsNotNull(i_brand_id)]
+PushedFilters: [IsNotNull(i_brand_id), IsNotNull(i_class_id), IsNotNull(i_category_id)]
 ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_class_id:int,i_category_id:int>
 
 (5) ColumnarToRow [codegen id : 11]
@@ -233,7 +233,7 @@ Input [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
 
 (6) Filter [codegen id : 11]
 Input [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
-Condition : ((isnotnull(i_class_id#7) AND isnotnull(i_category_id#8)) AND isnotnull(i_brand_id#6))
+Condition : ((isnotnull(i_brand_id#6) AND isnotnull(i_class_id#7)) AND isnotnull(i_category_id#8))
 
 (7) Scan parquet default.store_sales
 Output [2]: [ss_sold_date_sk#1, ss_item_sk#2]

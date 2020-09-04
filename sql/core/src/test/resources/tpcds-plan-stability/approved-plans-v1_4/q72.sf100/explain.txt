@@ -160,7 +160,7 @@ Input [8]: [cs_sold_date_sk#4, cs_ship_date_sk#5, cs_bill_cdemo_sk#6, cs_item_sk
 Output [2]: [d_date_sk#15, d_date#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_date_sk), IsNotNull(d_date)]
+PushedFilters: [IsNotNull(d_date), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (19) ColumnarToRow [codegen id : 3]
@@ -168,7 +168,7 @@ Input [2]: [d_date_sk#15, d_date#16]
 
 (20) Filter [codegen id : 3]
 Input [2]: [d_date_sk#15, d_date#16]
-Condition : (isnotnull(d_date_sk#15) AND isnotnull(d_date#16))
+Condition : (isnotnull(d_date#16) AND isnotnull(d_date_sk#15))
 
 (21) BroadcastExchange
 Input [2]: [d_date_sk#15, d_date#16]
@@ -226,7 +226,7 @@ Input [8]: [cs_sold_date_sk#4, cs_item_sk#8, cs_promo_sk#9, cs_order_number#10, 
 Output [2]: [d_date_sk#22, d_week_seq#23]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_date_sk), IsNotNull(d_week_seq)]
+PushedFilters: [IsNotNull(d_week_seq), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_week_seq:int>
 
 (34) ColumnarToRow [codegen id : 9]
@@ -234,7 +234,7 @@ Input [2]: [d_date_sk#22, d_week_seq#23]
 
 (35) Filter [codegen id : 9]
 Input [2]: [d_date_sk#22, d_week_seq#23]
-Condition : (isnotnull(d_date_sk#22) AND isnotnull(d_week_seq#23))
+Condition : (isnotnull(d_week_seq#23) AND isnotnull(d_date_sk#22))
 
 (36) Scan parquet default.date_dim
 Output [4]: [d_date_sk#24, d_date#25, d_week_seq#26, d_year#27]
@@ -385,7 +385,7 @@ Arguments: [cs_item_sk#8 ASC NULLS FIRST, cs_order_number#10 ASC NULLS FIRST], f
 Output [2]: [cr_item_sk#42, cr_order_number#43]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/catalog_returns]
-PushedFilters: [IsNotNull(cr_order_number), IsNotNull(cr_item_sk)]
+PushedFilters: [IsNotNull(cr_item_sk), IsNotNull(cr_order_number)]
 ReadSchema: struct<cr_item_sk:int,cr_order_number:int>
 
 (70) ColumnarToRow [codegen id : 18]
@@ -393,7 +393,7 @@ Input [2]: [cr_item_sk#42, cr_order_number#43]
 
 (71) Filter [codegen id : 18]
 Input [2]: [cr_item_sk#42, cr_order_number#43]
-Condition : (isnotnull(cr_order_number#43) AND isnotnull(cr_item_sk#42))
+Condition : (isnotnull(cr_item_sk#42) AND isnotnull(cr_order_number#43))
 
 (72) Exchange
 Input [2]: [cr_item_sk#42, cr_order_number#43]
