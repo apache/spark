@@ -28,13 +28,13 @@ This page describes how to debug such Python applications and workers instead of
 Profiling and debugging JVM is described at `Useful Developer Tools <https://spark.apache.org/developer-tools.html>`_.
 
 
-Remote Debugging (PyCharm)
---------------------------
+Remote Debugging (PyCharm Professional)
+---------------------------------------
 
 In order to debug the Python workers remotely, you should connect from the Python worker to the debug server in PyCharm.
 This section describes remote debugging within a single machine to demonstrate easily.
 In order to debug PySpark applications on other machines, please refer to the full instructions that are specific
-to PyCharm, documented `here <https://www.jetbrains.com/help/pycharm/remote-debugging-with-product.html#remote-debug-config>`_. 
+to PyCharm, documented `here <https://www.jetbrains.com/help/pycharm/remote-debugging-with-product.html>`_.
 
 Firstly, choose **Edit Configuration...** from the **Run** menu. It opens the Run/debug Configurations dialog.
 You have to click ``+`` configuration on the toolbar, and from the list of available configurations, select **Python Debug Server**.
