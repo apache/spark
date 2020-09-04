@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 import scala.collection.immutable.HashSet
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{RandomDataGenerator, Row}
+import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
