@@ -211,9 +211,6 @@ case class FileSourceScanExec(
     val ret =
       relation.location.listFiles(
         partitionFilters.filterNot(isDynamicPruningFilter), dataFilters)
-    if (relation.partitionSchemaOption.isDefined) {
-      driverMetrics("numPartitions") = ret.length
-    }
     setFilesNumAndSizeMetric(ret, true)
     val timeTakenMs = NANOSECONDS.toMillis(
       (System.nanoTime() - startTime) + optimizerMetadataTimeNs)
@@ -241,7 +238,6 @@ case class FileSourceScanExec(
       setFilesNumAndSizeMetric(ret, false)
       val timeTakenMs = (System.nanoTime() - startTime) / 1000 / 1000
       driverMetrics("pruningTime") = timeTakenMs
-      driverMetrics("numPartitions") = ret.length
       ret
     } else {
       selectedPartitions
@@ -438,6 +434,9 @@ case class FileSourceScanExec(
     } else {
       driverMetrics("staticFilesNum") = filesNum
       driverMetrics("staticFilesSize") = filesSize
+    }
+    if (relation.partitionSchemaOption.isDefined) {
+      driverMetrics("numPartitions") = partitions.length
     }
   }
 

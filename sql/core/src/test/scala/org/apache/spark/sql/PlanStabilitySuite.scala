@@ -199,7 +199,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
      * "sum(sr_return_amt#14)", so we remove all of these using regex
      */
     def cleanUpReferences(references: AttributeSet): String = {
-      referenceRegex.replaceAllIn(references.toSeq.map(_.name).sorted.mkString(","), "")
+      referenceRegex.replaceAllIn(references.map(_.name).mkString(","), "")
     }
 
     /**
