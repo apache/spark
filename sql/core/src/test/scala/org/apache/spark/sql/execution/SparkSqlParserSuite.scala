@@ -352,12 +352,13 @@ class SparkSqlParserSuite extends AnalysisTest {
         |FROM testData
       """.stripMargin,
     ScriptTransformation(
-      Seq('a, 'b, 'c),
+      Seq(UnresolvedStar(None)),
       "cat",
       Seq(AttributeReference("a", StringType)(),
         AttributeReference("b", StringType)(),
         AttributeReference("c", StringType)()),
-      UnresolvedRelation(TableIdentifier("testData")),
+      Project(Seq('a, 'b, 'c),
+        UnresolvedRelation(TableIdentifier("testData"))),
       ScriptInputOutputSchema(
         Seq(("TOK_TABLEROWFORMATFIELD", ","),
           ("TOK_TABLEROWFORMATCOLLITEMS", "#"),
