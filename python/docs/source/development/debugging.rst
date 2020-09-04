@@ -24,7 +24,7 @@ between Python workers and JVMs, Python workers are not launched. They are lazil
 Python native functions or data have to be handled, for example, when you execute pandas UDFs or
 PySpark RDD APIs.
 
-This page describes how to debug such Python workers instead of focusing on debugging with JVM.
+This page describes how to debug such Python applications and workers instead of focusing on debugging with JVM.
 Profiling and debugging JVM is described at `Useful Developer Tools <https://spark.apache.org/developer-tools.html>`_.
 
 
@@ -36,21 +36,20 @@ This section describes remote debugging within a single machine to demonstrate e
 In order to debug PySpark applications on other machines, please refer to the full instructions that are specific
 to PyCharm, documented `here <https://www.jetbrains.com/help/pycharm/remote-debugging-with-product.html#remote-debug-config>`_. 
 
-Firstly, choose **Edit Configuration...** from the **Run** menu. It opens the Run/debug configurations dialog.
+Firstly, choose **Edit Configuration...** from the **Run** menu. It opens the Run/debug Configurations dialog.
 You have to click ``+`` configuration on the toolbar, and from the list of available configurations, select **Python Debug Server**.
 Enter the name of this run/debug configuration, for example, ``MyRemoteDebugger`` and also specify the port number, for example ``12345``.
 
 .. image:: ../../../../docs/img/pyspark-remote-debug1.png
     :alt: PyCharm remote debugger setting
 
-After that, you should install the corresponding version of the ``pydevd-pycahrm`` package. In the previous dialog, it shows the command
-to install.
+| After that, you should install the corresponding version of the ``pydevd-pycahrm`` package. In the previous dialog, it shows the command to install.
 
 .. code-block:: text
 
     pip install pydevd-pycharm~=<version of PyCharm on the local machine>
 
-In your current working directly, prepare a Python file as below:
+In your current working directory, prepare a Python file as below:
 
 .. code-block:: bash
 
@@ -77,7 +76,7 @@ Now you're ready to remote debug. Start debugging with your ``MyRemoteDebugger``
 .. image:: ../../../../docs/img/pyspark-remote-debug2.png
     :alt: PyCharm run remote debugger
 
-After that, run a job that creates Python workers, for example, as below:
+| After that, run a job that creates Python workers, for example, as below:
 
 .. code-block:: python
 
