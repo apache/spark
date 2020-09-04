@@ -882,7 +882,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
     }
   }
 
-  private def inferFilters(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  private def inferFilters(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, child) =>
       val newFilters = filter.constraints --
         (child.constraints ++ splitConjunctivePredicates(condition))

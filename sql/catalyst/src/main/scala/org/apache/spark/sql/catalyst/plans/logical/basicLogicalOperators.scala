@@ -354,6 +354,7 @@ case class Join(
           .union(ExpressionSet(splitConjunctivePredicates(condition.get)))
       case LeftSemi if condition.isDefined =>
         left.constraints
+          .union(right.constraints)
           .union(ExpressionSet(splitConjunctivePredicates(condition.get)))
       case j: ExistenceJoin =>
         left.constraints
