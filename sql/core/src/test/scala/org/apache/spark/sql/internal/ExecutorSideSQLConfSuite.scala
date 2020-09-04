@@ -25,9 +25,9 @@ import org.apache.spark.{SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, DynamicPruningExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlan}
+import org.apache.spark.sql.execution.{FileSourceScanExec, InSubqueryExec, LeafExecNode, QueryExecution, SparkPlan, SubqueryBroadcastExec}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.debug.codegenStringSeq
 import org.apache.spark.sql.functions.col
@@ -186,6 +186,69 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
       spark.sparkContext.setLocalProperty(confKey, confValue2)
       val checks2 = df1.join(df3).collect()
       assert(checks2.forall(_.toSeq == Seq(true, true)))
+    }
+  }
+
+  test("SPARK-32748: propagate local properties to dynamic pruning thread") {
+    val factTable = "fact_local_prop_dpp"
+    val dimTable = "dim_local_prop_dpp"
+
+    def checkPropertyValueByUdfResult(propKey: String, propValue: String): Unit = {
+      spark.sparkContext.setLocalProperty(propKey, propValue)
+      val df = sql(
+        s"""
+           |SELECT compare_property_value(f.id, '$propKey', '$propValue') as col
+           |FROM $factTable f
+           |INNER JOIN $dimTable s
+           |ON f.id = s.id AND s.value < 3
+          """.stripMargin)
+
+      val subqueryBroadcastSeq = df.queryExecution.executedPlan.flatMap {
+        case s: FileSourceScanExec => s.partitionFilters.collect {
+          case DynamicPruningExpression(InSubqueryExec(_, b: SubqueryBroadcastExec, _, _)) => b
+        }
+        case _ => Nil
+      }
+      assert(subqueryBroadcastSeq.nonEmpty,
+        s"Should trigger DPP with a reused broadcast exchange:\n${df.queryExecution}")
+
+      assert(df.collect().forall(_.toSeq == Seq(true)))
+    }
+
+    withTable(factTable, dimTable) {
+      spark.range(10).select($"id", $"id".as("value"))
+        .write.partitionBy("id").mode("overwrite").saveAsTable(factTable)
+      spark.range(5).select($"id", $"id".as("value"))
+        .write.mode("overwrite").saveAsTable(dimTable)
+
+      withSQLConf(
+        StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD.key -> "1",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+
+        try {
+          spark.udf.register(
+            "compare_property_value",
+            (input: Int, propKey: String, propValue: String) => {
+              // scalastyle:off println
+              System.out.println(Thread.currentThread().getName)
+              // scalastyle:on println
+              TaskContext.get().getLocalProperty(propKey) == propValue
+            }
+          )
+          val propKey = "spark.sql.subquery.broadcast.prop.key"
+
+          // set local property and assert
+          val propValue1 = UUID.randomUUID().toString()
+          checkPropertyValueByUdfResult(propKey, propValue1)
+
+          // change local property and re-assert
+          val propValue2 = UUID.randomUUID().toString()
+          checkPropertyValueByUdfResult(propKey, propValue2)
+        } finally {
+          spark.sessionState.catalog.dropTempFunction("compare_property_value", true)
+        }
+      }
     }
   }
 }

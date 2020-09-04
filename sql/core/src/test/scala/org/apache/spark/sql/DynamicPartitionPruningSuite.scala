@@ -17,11 +17,8 @@
 
 package org.apache.spark.sql
 
-import java.util.UUID
-
 import org.scalatest.GivenWhenThen
 
-import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
@@ -31,7 +28,7 @@ import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExc
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -1343,52 +1340,6 @@ abstract class DynamicPartitionPruningSuiteBase
           }
         }
       }
-    }
-  }
-
-  test("SPARK-32748: propagate local properties to dynamic pruning thread") {
-    def checkPropertyValueByUdfResult(propKey: String, propValue: String): Unit = {
-      spark.sparkContext.setLocalProperty(propKey, propValue)
-      val df = sql(
-        s"""
-           |SELECT compare_property_value(f.date_id, '$propKey', '$propValue') as col
-           |FROM fact_sk f
-           |INNER JOIN dim_store s
-           |ON f.store_id = s.store_id AND s.country = 'NL'
-          """.stripMargin)
-
-      checkPartitionPruningPredicate(df, false, true)
-      assert(df.collect().forall(_.toSeq == Seq(true)))
-    }
-
-    try {
-      SQLConf.get.setConf(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD, 1)
-
-      withSQLConf(
-        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
-
-        try {
-          spark.udf.register(
-            "compare_property_value",
-            (input: Int, propKey: String, propValue: String) =>
-              TaskContext.get().getLocalProperty(propKey) == propValue
-          )
-          val propKey = "spark.sql.subquery.broadcast.prop.key"
-
-          // set local property and assert
-          val propValue1 = UUID.randomUUID().toString()
-          checkPropertyValueByUdfResult(propKey, propValue1)
-
-          // change local property and re-assert
-          val propValue2 = UUID.randomUUID().toString()
-          checkPropertyValueByUdfResult(propKey, propValue2)
-        } finally {
-          spark.sessionState.catalog.dropTempFunction("compare_property_value", true)
-        }
-      }
-    } finally {
-      SQLConf.get.unsetConf(StaticSQLConf.BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD)
     }
   }
 }
