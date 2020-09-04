@@ -29,15 +29,21 @@ import org.apache.spark.sql.types.{IntegerType, LongType}
 class InferFiltersFromConstraintsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches =
-      Batch("InferAndPushDownFilters", FixedPoint(100),
-        PushPredicateThroughJoin,
-        PushPredicateThroughNonJoin,
-        InferFiltersFromConstraints,
-        CombineFilters,
-        SimplifyBinaryComparison,
-        BooleanSimplification,
-        PruneFilters) :: Nil
+    val operatorOptimizationRuleSet = Seq(
+      PushPredicateThroughJoin,
+      PushPredicateThroughNonJoin,
+      CombineFilters,
+      SimplifyBinaryComparison,
+      BooleanSimplification,
+      PruneFilters
+    )
+
+    val batches = Batch("Operator Optimization before Inferring Filters", FixedPoint(100),
+        operatorOptimizationRuleSet: _*) ::
+      Batch("Infer Filters", Once,
+        InferFiltersFromConstraints) ::
+      Batch("Operator Optimization after Inferring Filters", FixedPoint(100),
+        operatorOptimizationRuleSet: _*) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -315,5 +321,19 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         Inner,
         condition)
     }
+  }
+
+  test("SPARK-xxxxx: single inner join with EqualNullSafe condition: " +
+    "filter out values on either side on equi-join keys") {
+      val x = testRelation.subquery('x)
+      val y = testRelation.subquery('y)
+      val originalQuery = x.join(y,
+        condition = Some(("x.a".attr <=> "y.a".attr) && ("x.a".attr > 5)))
+        .analyze
+      val left = x.where(IsNotNull('a) && "x.a".attr > 5)
+      val right = y.where(IsNotNull('a) && "y.a".attr > 5)
+      val correctAnswer = left.join(right, condition = Some("x.a".attr <=> "y.a".attr)).analyze
+      val optimized = Optimize.execute(originalQuery)
+      comparePlans(optimized, correctAnswer)
   }
 }
