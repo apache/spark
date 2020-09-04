@@ -2534,9 +2534,9 @@ class Dataset[T] private[sql](
    * the state. In addition, too late data older than watermark will be dropped to avoid any
    * possibility of duplicates.
    *
-   * Note that for a streaming [[Dataset]], this method only returns distinct rows only once,
-   * regardless of the output mode. Spark may convert the `distinct` operation to aggregation`,
-   * and then the behavior will depend on the output mode, not exactly same as `dropDuplicates`.
+   * Note that for a streaming [[Dataset]], this method only returns distinct rows only once
+   * regardless of the output mode, which the behavior may not be same with using distinct in
+   * SQL statement against streaming [[Dataset]].
    *
    * @group typedrel
    * @since 2.0.0
@@ -2553,9 +2553,9 @@ class Dataset[T] private[sql](
    * the state. In addition, too late data older than watermark will be dropped to avoid any
    * possibility of duplicates.
    *
-   * Note that for a streaming [[Dataset]], this method only returns distinct rows only once,
-   * regardless of the output mode. Spark may convert the `distinct` operation to aggregation`,
-   * and then the behavior will depend on the output mode, not exactly same as `dropDuplicates`.
+   * Note that for a streaming [[Dataset]], this method only returns distinct rows only once
+   * regardless of the output mode, which the behavior may not be same with using distinct in
+   * SQL statement against streaming [[Dataset]].
    *
    * @group typedrel
    * @since 2.0.0
@@ -2588,9 +2588,9 @@ class Dataset[T] private[sql](
    * the state. In addition, too late data older than watermark will be dropped to avoid any
    * possibility of duplicates.
    *
-   * Note that for a streaming [[Dataset]], this method only returns distinct rows only once,
-   * regardless of the output mode. Spark may convert the `distinct` operation to aggregation`,
-   * and then the behavior will depend on the output mode, not exactly same as `dropDuplicates`.
+   * Note that for a streaming [[Dataset]], this method only returns distinct rows only once
+   * regardless of the output mode, which the behavior may not be same with using distinct in
+   * SQL statement against streaming [[Dataset]].
    *
    * @group typedrel
    * @since 2.0.0
@@ -2607,9 +2607,9 @@ class Dataset[T] private[sql](
    * the state. In addition, too late data older than watermark will be dropped to avoid any
    * possibility of duplicates.
    *
-   * Note that for a streaming [[Dataset]], this method only returns distinct rows only once,
-   * regardless of the output mode. Spark may convert the `distinct` operation to aggregation`,
-   * and then the behavior will depend on the output mode, not exactly same as `dropDuplicates`.
+   * Note that for a streaming [[Dataset]], this method only returns distinct rows only once
+   * regardless of the output mode, which the behavior may not be same with using distinct in
+   * SQL statement against streaming [[Dataset]].
    *
    * @group typedrel
    * @since 2.0.0
