@@ -216,20 +216,24 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     val distinctAggs = aggExpressions.filter(_.isDistinct)
 
     // Extract distinct aggregate expressions.
-    val distinctAggGroups = aggExpressions.filter(_.isDistinct).groupBy { e =>
-        val unfoldableChildren = e.aggregateFunction.children.filter(!_.foldable).toSet
-        if (unfoldableChildren.nonEmpty) {
-          // Only expand the unfoldable children
-          unfoldableChildren
-        } else {
-          // If aggregateFunction's children are all foldable
-          // we must expand at least one of the children (here we take the first child),
-          // or If we don't, we will get the wrong result, for example:
-          // count(distinct 1) will be explained to count(1) after the rewrite function.
-          // Generally, the distinct aggregateFunction should not run
-          // foldable TypeCheck for the first child.
-          e.aggregateFunction.children.take(1).toSet
-        }
+    val distinctAggGroupMap = aggExpressions.filter(_.isDistinct).map { e =>
+      val unfoldableChildren = e.aggregateFunction.children.filter(!_.foldable).toSet
+      if (unfoldableChildren.nonEmpty) {
+        // Only expand the unfoldable children
+        e -> unfoldableChildren
+      } else {
+        // If aggregateFunction's children are all foldable
+        // we must expand at least one of the children (here we take the first child),
+        // or If we don't, we will get the wrong result, for example:
+        // count(distinct 1) will be explained to count(1) after the rewrite function.
+        // Generally, the distinct aggregateFunction should not run
+        // foldable TypeCheck for the first child.
+        e -> e.aggregateFunction.children.take(1).toSet
+      }
+    }
+    val distinctAggGroupLookup = distinctAggGroupMap.toMap
+    val distinctAggGroups = distinctAggGroupMap.groupBy(_._2).map{ kv =>
+      kv._1 -> kv._2.map(_._1)
     }
 
     // Aggregation strategy can handle queries with a single distinct group without filter clause.
@@ -298,10 +302,14 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
               } else {
                 None
               }
-              if (distinctAggChildAttrLookup.contains(x) && x.foldable) {
-                Some(evalWithinGroup(id, x, condition))
+              if (distinctAggGroupLookup(e).contains(x)) {
+                if (x.foldable) {
+                  Some(evalWithinGroup(id, x, condition))
+                } else {
+                  distinctAggChildAttrLookup.get(x).map(evalWithinGroup(id, _, condition))
+                }
               } else {
-                distinctAggChildAttrLookup.get(x).map(evalWithinGroup(id, _, condition))
+                None
               }
             }
             (e, e.copy(aggregateFunction = naf, isDistinct = false, filter = None))
