@@ -168,7 +168,7 @@ private[spark] class StandaloneSchedulerBackend(
       fullId: String,
       message: String,
       exitStatus: Option[Int],
-       workerHost: Option[String]): Unit = {
+      workerHost: Option[String]): Unit = {
     val reason: ExecutorLossReason = exitStatus match {
       case Some(code) => ExecutorExited(code, exitCausedByApp = true, message)
       case None => ExecutorProcessLost(message, workerHost)
