@@ -336,4 +336,19 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-32801: Infer all constraints from a chain of filters") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val originalQuery = x.where("x.a".attr === "x.b".attr).join(y,
+      condition = Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+      .analyze
+    val left = x.where(IsNotNull('a) && IsNotNull('b) && "x.a".attr === "x.b".attr)
+    val right = y.where(IsNotNull('a) && IsNotNull('b) && "y.a".attr === "y.b".attr)
+    val correctAnswer = left.join(right,
+      condition = Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
 }

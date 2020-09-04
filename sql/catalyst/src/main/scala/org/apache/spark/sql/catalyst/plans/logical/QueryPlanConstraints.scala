@@ -62,18 +62,22 @@ trait ConstraintHelper {
    */
   def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
     var inferredConstraints = Set.empty[Expression]
-    // IsNotNull should be constructed by `constructIsNotNullConstraints`.
-    val predicates = constraints.filterNot(_.isInstanceOf[IsNotNull])
-    predicates.foreach {
-      case eq @ Equality(l: Attribute, r: Attribute) =>
-        val candidateConstraints = predicates - eq
-        inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
-        inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
-      case eq @ Equality(l @ Cast(_: Attribute, _, _), r: Attribute) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
-      case eq @ Equality(l: Attribute, r @ Cast(_: Attribute, _, _)) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
-      case _ => // No inference
+    var prevSize = -1
+    while (inferredConstraints.size > prevSize) {
+      prevSize = inferredConstraints.size
+      // IsNotNull should be constructed by `constructIsNotNullConstraints`.
+      val predicates = (constraints ++ inferredConstraints).filterNot(_.isInstanceOf[IsNotNull])
+      predicates.foreach {
+        case eq @ Equality(l: Attribute, r: Attribute) =>
+          val candidateConstraints = predicates - eq
+          inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
+          inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
+        case eq @ Equality(l @ Cast(_: Attribute, _, _), r: Attribute) =>
+          inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
+        case eq @ Equality(l: Attribute, r @ Cast(_: Attribute, _, _)) =>
+          inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
+        case _ => // No inference
+      }
     }
     inferredConstraints -- constraints
   }
