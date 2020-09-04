@@ -191,4 +191,85 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       }
     }
   }
+
+  test("Check if since fields are set correctly in ExpressionInfo") {
+    // SPARK-32780: Fill since fields for all the expressions
+    val ignoreSet = Set(
+      "org.apache.spark.sql.catalyst.expressions.Abs",
+      "org.apache.spark.sql.catalyst.expressions.Add",
+      "org.apache.spark.sql.catalyst.expressions.And",
+      "org.apache.spark.sql.catalyst.expressions.ArrayContains",
+      "org.apache.spark.sql.catalyst.expressions.AssertTrue",
+      "org.apache.spark.sql.catalyst.expressions.BitwiseAnd",
+      "org.apache.spark.sql.catalyst.expressions.BitwiseNot",
+      "org.apache.spark.sql.catalyst.expressions.BitwiseOr",
+      "org.apache.spark.sql.catalyst.expressions.BitwiseXor",
+      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection",
+      "org.apache.spark.sql.catalyst.expressions.CaseWhen",
+      "org.apache.spark.sql.catalyst.expressions.Cast",
+      "org.apache.spark.sql.catalyst.expressions.Concat",
+      "org.apache.spark.sql.catalyst.expressions.Crc32",
+      "org.apache.spark.sql.catalyst.expressions.CreateArray",
+      "org.apache.spark.sql.catalyst.expressions.CreateMap",
+      "org.apache.spark.sql.catalyst.expressions.CreateNamedStruct",
+      "org.apache.spark.sql.catalyst.expressions.CurrentDatabase",
+      "org.apache.spark.sql.catalyst.expressions.Divide",
+      "org.apache.spark.sql.catalyst.expressions.EqualNullSafe",
+      "org.apache.spark.sql.catalyst.expressions.EqualTo",
+      "org.apache.spark.sql.catalyst.expressions.Explode",
+      "org.apache.spark.sql.catalyst.expressions.GetJsonObject",
+      "org.apache.spark.sql.catalyst.expressions.GreaterThan",
+      "org.apache.spark.sql.catalyst.expressions.GreaterThanOrEqual",
+      "org.apache.spark.sql.catalyst.expressions.Greatest",
+      "org.apache.spark.sql.catalyst.expressions.If",
+      "org.apache.spark.sql.catalyst.expressions.In",
+      "org.apache.spark.sql.catalyst.expressions.Inline",
+      "org.apache.spark.sql.catalyst.expressions.InputFileBlockLength",
+      "org.apache.spark.sql.catalyst.expressions.InputFileBlockStart",
+      "org.apache.spark.sql.catalyst.expressions.InputFileName",
+      "org.apache.spark.sql.catalyst.expressions.JsonTuple",
+      "org.apache.spark.sql.catalyst.expressions.Least",
+      "org.apache.spark.sql.catalyst.expressions.LessThan",
+      "org.apache.spark.sql.catalyst.expressions.LessThanOrEqual",
+      "org.apache.spark.sql.catalyst.expressions.MapKeys",
+      "org.apache.spark.sql.catalyst.expressions.MapValues",
+      "org.apache.spark.sql.catalyst.expressions.Md5",
+      "org.apache.spark.sql.catalyst.expressions.MonotonicallyIncreasingID",
+      "org.apache.spark.sql.catalyst.expressions.Multiply",
+      "org.apache.spark.sql.catalyst.expressions.Murmur3Hash",
+      "org.apache.spark.sql.catalyst.expressions.Not",
+      "org.apache.spark.sql.catalyst.expressions.Or",
+      "org.apache.spark.sql.catalyst.expressions.Overlay",
+      "org.apache.spark.sql.catalyst.expressions.Pmod",
+      "org.apache.spark.sql.catalyst.expressions.PosExplode",
+      "org.apache.spark.sql.catalyst.expressions.Remainder",
+      "org.apache.spark.sql.catalyst.expressions.Sha1",
+      "org.apache.spark.sql.catalyst.expressions.Sha2",
+      "org.apache.spark.sql.catalyst.expressions.Size",
+      "org.apache.spark.sql.catalyst.expressions.SortArray",
+      "org.apache.spark.sql.catalyst.expressions.SparkPartitionID",
+      "org.apache.spark.sql.catalyst.expressions.Stack",
+      "org.apache.spark.sql.catalyst.expressions.Subtract",
+      "org.apache.spark.sql.catalyst.expressions.TimeWindow",
+      "org.apache.spark.sql.catalyst.expressions.UnaryMinus",
+      "org.apache.spark.sql.catalyst.expressions.UnaryPositive",
+      "org.apache.spark.sql.catalyst.expressions.Uuid",
+      "org.apache.spark.sql.catalyst.expressions.xml.XPathBoolean",
+      "org.apache.spark.sql.catalyst.expressions.xml.XPathDouble",
+      "org.apache.spark.sql.catalyst.expressions.xml.XPathFloat",
+      "org.apache.spark.sql.catalyst.expressions.xml.XPathInt",
+      "org.apache.spark.sql.catalyst.expressions.xml.XPathList",
+      "org.apache.spark.sql.catalyst.expressions.xml.XPathLong",
+      "org.apache.spark.sql.catalyst.expressions.xml.XPathShort",
+      "org.apache.spark.sql.catalyst.expressions.xml.XPathString"
+    )
+    val sinceMissingExprs = spark.sessionState.functionRegistry.listFunction()
+      .map(spark.sessionState.catalog.lookupFunctionInfo)
+      .filterNot(e => ignoreSet.contains(e.getClassName))
+      .filter(funcInfo => !funcInfo.getSince.matches("[0-9]+\\.[0-9]+\\.[0-9]+"))
+      .map(_.getClassName)
+      .distinct
+      .sorted
+    assert(sinceMissingExprs.isEmpty)
+  }
 }
