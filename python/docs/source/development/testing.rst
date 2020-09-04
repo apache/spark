@@ -19,8 +19,7 @@
 Testing PySpark
 ===============
 
-In order to run PySpark tests, you should build Spark itself first via Maven
-or SBT. For example,
+In order to run PySpark tests, you should build Spark itself first via Maven or SBT. For example,
 
 .. code-block:: bash
 
@@ -50,12 +49,12 @@ You can run a specific test via using ``python/run-tests``, for example, as belo
 
     python/run-tests --testnames pyspark.sql.tests.test_arrow
 
-Please refer `Testing PySpark <https://spark.apache.org/developer-tools.html>`_ for more details.
+Please refer to `Testing PySpark <https://spark.apache.org/developer-tools.html>`_ for more details.
 
 
 Running tests using GitHub Actions
 ----------------------------------
 
 You can run the full PySpark tests by using GitHub Actions in your own forked GitHub
-repositry by few clicks. Please refer
+repositry with a few clicks. Please refer to
 `Running tests in your forked repository using GitHub Actions <https://spark.apache.org/developer-tools.html>`_ for more details.
