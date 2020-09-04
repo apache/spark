@@ -21,7 +21,7 @@ import tempfile
 import time
 
 from pyspark.sql.functions import lit
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StructField, IntegerType, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

@@ -21,13 +21,12 @@ import java.sql.Timestamp
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 class TypeCoercionSuite extends AnalysisTest {
   import TypeCoercionSuite._
@@ -1415,6 +1414,20 @@ class TypeCoercionSuite extends AnalysisTest {
       checkOutput(r5.left, Seq(expectedType))
       checkOutput(r6.left, Seq(expectedType))
     }
+  }
+
+  test("SPARK-32638: corrects references when adding aliases in WidenSetOperationTypes") {
+    val t1 = LocalRelation(AttributeReference("v", DecimalType(10, 0))())
+    val t2 = LocalRelation(AttributeReference("v", DecimalType(11, 0))())
+    val p1 = t1.select(t1.output.head)
+    val p2 = t2.select(t2.output.head)
+    val union = p1.union(p2)
+    val wp1 = widenSetOperationTypes(union.select(p1.output.head))
+    assert(wp1.isInstanceOf[Project])
+    assert(wp1.missingInput.isEmpty)
+    val wp2 = widenSetOperationTypes(Aggregate(Nil, sum(p1.output.head).as("v") :: Nil, union))
+    assert(wp2.isInstanceOf[Aggregate])
+    assert(wp2.missingInput.isEmpty)
   }
 
   /**

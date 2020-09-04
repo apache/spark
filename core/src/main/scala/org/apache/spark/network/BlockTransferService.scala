@@ -34,7 +34,7 @@ import org.apache.spark.util.ThreadUtils
  * BlockTransferService contains both client and server inside.
  */
 private[spark]
-abstract class BlockTransferService extends BlockStoreClient with Logging {
+abstract class BlockTransferService extends BlockStoreClient {
 
   /**
    * Initialize the transfer service by giving it the BlockDataManager that can be used to fetch
