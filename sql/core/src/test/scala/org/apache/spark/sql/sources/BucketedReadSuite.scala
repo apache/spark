@@ -1012,4 +1012,37 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("terry") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      withTable("t1", "t2") {
+        val df1 = (0 until 100).map(i => (i % 5, i % 13, i.toString)).toDF("i1", "j1", "k1")
+        val df2 = (0 until 100).map(i => (i % 5, i % 13, i.toString)).toDF("i2", "j2", "k2")
+        df1.write.format("parquet").bucketBy(8, "i1").saveAsTable("t1")
+        df2.write.format("parquet").bucketBy(8, "i2").saveAsTable("t2")
+        val t1 = spark.table("t1")
+        val t2 = spark.table("t2")
+        val joined = t1.join(t2, t1("i1") === t2("i2") && t1("j1") === t2("j2"))
+        joined.explain(true)
+      }
+    }
+  }
+
+  test("terry + 1") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      withTable("t1", "t2") {
+        val df1 = (0 until 5).map(i => (i % 5, i % 13, i.toString)).toDF("i1", "j1", "k1")
+        val df2 = (0 until 5).map(i => (i % 3, i % 13, i.toString)).toDF("i2", "j2", "k2")
+        df1.write.format("parquet").bucketBy(8, "i1").saveAsTable("t1")
+        df2.write.format("parquet").bucketBy(8, "i2").saveAsTable("t2")
+        val t1 = spark.table("t1")
+        val t2 = spark.table("t2")
+        val joined = t1.join(t2, t1("i1") === t2("i2") && t1("j1") + 1 === t2("j2"))
+        joined.explain(true)
+        df1.show
+        df2.show
+        joined.show
+      }
+    }
+  }
 }
