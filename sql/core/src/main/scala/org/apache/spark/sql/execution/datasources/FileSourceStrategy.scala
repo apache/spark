@@ -154,11 +154,15 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         l.resolve(
           fsRelation.partitionSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
       val partitionSet = AttributeSet(partitionColumns)
-      val partitionKeyFilters =
-        ExpressionSet(normalizedFilters
+      val partitionKeyFilters = if (partitionColumns.isEmpty) {
+        ExpressionSet(Nil)
+      } else {
+        val predicates = ExpressionSet(normalizedFilters
           .filter(_.references.subsetOf(partitionSet)))
+        logInfo(s"Pruning directories with: ${predicates.mkString(",")}")
+        predicates
+      }
 
-      logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
 
       // subquery expressions are filtered out because they can't be used to prune buckets or pushed
       // down as data filters, yet they would be executed

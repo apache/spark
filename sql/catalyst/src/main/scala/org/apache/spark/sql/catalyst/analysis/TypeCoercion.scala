@@ -326,29 +326,53 @@ object TypeCoercion {
    *
    * This rule is only applied to Union/Except/Intersect
    */
-  object WidenSetOperationTypes extends Rule[LogicalPlan] {
+  object WidenSetOperationTypes extends TypeCoercionRule {
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
-      case s @ Except(left, right, isAll) if s.childrenResolved &&
-        left.output.length == right.output.length && !s.resolved =>
-        val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
-        assert(newChildren.length == 2)
-        Except(newChildren.head, newChildren.last, isAll)
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = {
+      val rewritePlanMap = mutable.ArrayBuffer[(LogicalPlan, LogicalPlan)]()
+      val newPlan = plan resolveOperatorsUp {
+        case s @ Except(left, right, isAll) if s.childrenResolved &&
+          left.output.length == right.output.length && !s.resolved =>
+          val newChildren = buildNewChildrenWithWiderTypes(left :: right :: Nil)
+          if (newChildren.nonEmpty) {
+            rewritePlanMap ++= newChildren
+            Except(newChildren.head._1, newChildren.last._1, isAll)
+          } else {
+            s
+          }
 
-      case s @ Intersect(left, right, isAll) if s.childrenResolved &&
-        left.output.length == right.output.length && !s.resolved =>
-        val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
-        assert(newChildren.length == 2)
-        Intersect(newChildren.head, newChildren.last, isAll)
+        case s @ Intersect(left, right, isAll) if s.childrenResolved &&
+          left.output.length == right.output.length && !s.resolved =>
+          val newChildren = buildNewChildrenWithWiderTypes(left :: right :: Nil)
+          if (newChildren.nonEmpty) {
+            rewritePlanMap ++= newChildren
+            Intersect(newChildren.head._1, newChildren.last._1, isAll)
+          } else {
+            s
+          }
 
-      case s: Union if s.childrenResolved && !s.byName &&
+        case s: Union if s.childrenResolved && !s.byName &&
           s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
-        val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(s.children)
-        s.copy(children = newChildren)
+          val newChildren = buildNewChildrenWithWiderTypes(s.children)
+          if (newChildren.nonEmpty) {
+            rewritePlanMap ++= newChildren
+            s.copy(children = newChildren.map(_._1))
+          } else {
+            s
+          }
+      }
+
+      if (rewritePlanMap.nonEmpty) {
+        assert(!plan.fastEquals(newPlan))
+        Analyzer.rewritePlan(newPlan, rewritePlanMap.toMap)._1
+      } else {
+        plan
+      }
     }
 
     /** Build new children with the widest types for each attribute among all the children */
-    private def buildNewChildrenWithWiderTypes(children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
+    private def buildNewChildrenWithWiderTypes(children: Seq[LogicalPlan])
+      : Seq[(LogicalPlan, LogicalPlan)] = {
       require(children.forall(_.output.length == children.head.output.length))
 
       // Get a sequence of data types, each of which is the widest type of this specific attribute
@@ -360,8 +384,7 @@ object TypeCoercion {
         // Add an extra Project if the targetTypes are different from the original types.
         children.map(widenTypes(_, targetTypes))
       } else {
-        // Unable to find a target type to widen, then just return the original set.
-        children
+        Nil
       }
     }
 
@@ -385,12 +408,16 @@ object TypeCoercion {
     }
 
     /** Given a plan, add an extra project on top to widen some columns' data types. */
-    private def widenTypes(plan: LogicalPlan, targetTypes: Seq[DataType]): LogicalPlan = {
+    private def widenTypes(plan: LogicalPlan, targetTypes: Seq[DataType])
+      : (LogicalPlan, LogicalPlan) = {
       val casted = plan.output.zip(targetTypes).map {
-        case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
-        case (e, _) => e
-      }
-      Project(casted, plan)
+        case (e, dt) if e.dataType != dt =>
+          val alias = Alias(Cast(e, dt), e.name)(exprId = e.exprId)
+          alias -> alias.newInstance()
+        case (e, _) =>
+          e -> e
+      }.unzip
+      Project(casted._1, plan) -> Project(casted._2, plan)
     }
   }
 
