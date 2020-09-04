@@ -323,7 +323,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     }
   }
 
-  test("SPARK-xxxxx: single inner join with EqualNullSafe condition: " +
+  test("SPARK-32801: single inner join with EqualNullSafe condition: " +
     "filter out values on either side on equi-join keys") {
       val x = testRelation.subquery('x)
       val y = testRelation.subquery('y)
