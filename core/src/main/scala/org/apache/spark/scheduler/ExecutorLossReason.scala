@@ -71,7 +71,7 @@ case class ExecutorProcessLost(
  * This is used by the task scheduler to remove state associated with the executor, but
  * not yet fail any tasks that were running in the executor before the executor is "fully" lost.
  *
- * @param workerHost it's defined when the worker is decommissioned too
+ * @param workerHost it is defined when the worker is decommissioned too
  */
 private [spark] case class ExecutorDecommission(workerHost: Option[String] = None)
  extends ExecutorLossReason("Executor decommission.")
