@@ -35,14 +35,16 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       CombineFilters,
       SimplifyBinaryComparison,
       BooleanSimplification,
-      PruneFilters
-    )
+      PruneFilters)
 
-    val batches = Batch("Operator Optimization before Inferring Filters", FixedPoint(100),
-        operatorOptimizationRuleSet: _*) ::
-      Batch("Infer Filters", Once,
-        InferFiltersFromConstraints) ::
-      Batch("Operator Optimization after Inferring Filters", FixedPoint(100),
+    val batches = Batch(
+      "Operator Optimization before Inferring Filters",
+      FixedPoint(100),
+      operatorOptimizationRuleSet: _*) ::
+      Batch("Infer Filters", Once, InferFiltersFromConstraints) ::
+      Batch(
+        "Operator Optimization after Inferring Filters",
+        FixedPoint(100),
         operatorOptimizationRuleSet: _*) :: Nil
   }
 
@@ -323,30 +325,31 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     }
   }
 
-  test("SPARK-32801: single inner join with EqualNullSafe condition: " +
-    "filter out values on either side on equi-join keys") {
-      val x = testRelation.subquery('x)
-      val y = testRelation.subquery('y)
-      val originalQuery = x.join(y,
-        condition = Some(("x.a".attr <=> "y.a".attr) && ("x.a".attr > 5)))
-        .analyze
-      val left = x.where(IsNotNull('a) && "x.a".attr > 5)
-      val right = y.where(IsNotNull('a) && "y.a".attr > 5)
-      val correctAnswer = left.join(right, condition = Some("x.a".attr <=> "y.a".attr)).analyze
-      val optimized = Optimize.execute(originalQuery)
-      comparePlans(optimized, correctAnswer)
+  test(
+    "SPARK-32801: single inner join with EqualNullSafe condition: " +
+      "filter out values on either side on equi-join keys") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val originalQuery =
+      x.join(y, condition = Some(("x.a".attr <=> "y.a".attr) && ("x.a".attr > 5))).analyze
+    val left = x.where(IsNotNull('a) && "x.a".attr > 5)
+    val right = y.where(IsNotNull('a) && "y.a".attr > 5)
+    val correctAnswer = left.join(right, condition = Some("x.a".attr <=> "y.a".attr)).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
   }
 
   test("SPARK-32801: Infer all constraints from a chain of filters") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
-    val originalQuery = x.where("x.a".attr === "x.b".attr).join(y,
-      condition = Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+    val originalQuery = x
+      .where("x.a".attr === "x.b".attr)
+      .join(y, condition = Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
       .analyze
     val left = x.where(IsNotNull('a) && IsNotNull('b) && "x.a".attr === "x.b".attr)
     val right = y.where(IsNotNull('a) && IsNotNull('b) && "y.a".attr === "y.b".attr)
-    val correctAnswer = left.join(right,
-      condition = Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+    val correctAnswer = left
+      .join(right, condition = Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
@@ -356,16 +359,21 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
     val z = testRelation.subquery('z)
-    val originalQuery = x.join(y.join(z.where("z.a".attr > 1),
-      condition = Some("y.a".attr === "z.a".attr), joinType = LeftSemi),
-      condition = Some("x.a".attr === "y.a".attr))
+    val originalQuery = x
+      .join(
+        y.join(
+          z.where("z.a".attr > 1),
+          condition = Some("y.a".attr === "z.a".attr),
+          joinType = LeftSemi),
+        condition = Some("x.a".attr === "y.a".attr))
       .analyze
     val correctX = x.where(IsNotNull('a) && "x.a".attr > 1)
     val correctY = y.where(IsNotNull('a) && "y.a".attr > 1)
     val correctZ = z.where(IsNotNull('a) && "z.a".attr > 1)
-    val correctAnswer = correctX.join(correctY.join(correctZ,
-      condition = Some("y.a".attr === "z.a".attr), joinType = LeftSemi),
-      condition = Some("x.a".attr === "y.a".attr))
+    val correctAnswer = correctX
+      .join(
+        correctY.join(correctZ, condition = Some("y.a".attr === "z.a".attr), joinType = LeftSemi),
+        condition = Some("x.a".attr === "y.a".attr))
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
