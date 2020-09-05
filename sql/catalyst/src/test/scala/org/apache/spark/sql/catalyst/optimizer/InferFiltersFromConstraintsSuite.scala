@@ -351,4 +351,23 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-32801: Infer from right side of left semi join") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val z = testRelation.subquery('z)
+    val originalQuery = x.join(y.join(z.where("z.a".attr > 1),
+      condition = Some("y.a".attr === "z.a".attr), joinType = LeftSemi),
+      condition = Some("x.a".attr === "y.a".attr))
+      .analyze
+    val correctX = x.where(IsNotNull('a) && "x.a".attr > 1)
+    val correctY = y.where(IsNotNull('a) && "y.a".attr > 1)
+    val correctZ = z.where(IsNotNull('a) && "z.a".attr > 1)
+    val correctAnswer = correctX.join(correctY.join(correctZ,
+      condition = Some("y.a".attr === "z.a".attr), joinType = LeftSemi),
+      condition = Some("x.a".attr === "y.a".attr))
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
 }
