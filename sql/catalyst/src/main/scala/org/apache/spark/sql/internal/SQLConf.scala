@@ -2698,6 +2698,16 @@ object SQLConf {
       .checkValue(_ >= 0, "The value must be non-negative.")
       .createWithDefault(8)
 
+  val OPTIMIZE_SORT_MERGE_JOIN_WITH_PARTIAL_HASH_DISTRIBUTION =
+    buildConf("spark.sql.execution.sortMergeJoin.optimizePartialHashDistribution.enabled")
+      .internal()
+      .doc("Optimizes sort merge join if both side of join have partial hash distributions - " +
+        "the output partitioning is HashPartitioning and its expressions are a subset of join " +
+        "keys on the respective side - by eliminating the shuffle.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val OPTIMIZE_NULL_AWARE_ANTI_JOIN =
     buildConf("spark.sql.optimizeNullAwareAntiJoin")
       .internal()
@@ -3356,6 +3366,9 @@ class SQLConf extends Serializable with Logging {
 
   def coalesceBucketsInJoinMaxBucketRatio: Int =
     getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO)
+
+  def optimizeSortMergeJoinWithPartialHashDistribution: Boolean =
+    getConf(SQLConf.OPTIMIZE_SORT_MERGE_JOIN_WITH_PARTIAL_HASH_DISTRIBUTION)
 
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)

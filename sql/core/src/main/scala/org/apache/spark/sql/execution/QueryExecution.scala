@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.CoalesceBucketsInJoin
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, RemoveShuffleExchangeForSortMergeJoin, ReuseExchange}
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, OptimizeSortMergeJoinWithPartialHashDistribution, ReuseExchange}
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
@@ -344,7 +344,7 @@ object QueryExecution {
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects(sparkSession.sessionState.conf),
       EnsureRequirements(sparkSession.sessionState.conf),
-      RemoveShuffleExchangeForSortMergeJoin(sparkSession.sessionState.conf),
+      OptimizeSortMergeJoinWithPartialHashDistribution(sparkSession.sessionState.conf),
       ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
         sparkSession.sessionState.columnarRules),
       CollapseCodegenStages(sparkSession.sessionState.conf),

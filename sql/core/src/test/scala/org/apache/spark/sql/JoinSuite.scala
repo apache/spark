@@ -1314,4 +1314,59 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       }
     }
   }
+
+  test("SPARK-XXXXX: Optimize sort merge join with partial hash distribution") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      withTable("t1", "t2") {
+        val df1 = (0 until 100).map(i => (i % 5, i % 13, i.toString)).toDF("i1", "j1", "k1")
+        val df2 = (0 until 100).map(i => (i % 3, i % 17, i.toString)).toDF("i2", "j2", "k2")
+        df1.write.format("parquet").bucketBy(8, "i1").saveAsTable("t1")
+        df2.write.format("parquet").bucketBy(8, "i2").saveAsTable("t2")
+        val t1 = spark.table("t1")
+        val t2 = spark.table("t2")
+
+        def verify(
+            f: => DataFrame,
+            numShufflesWithoutOptimization: Int,
+            numShufflesWithOptimization: Int): Unit = {
+          withSQLConf(
+            SQLConf.OPTIMIZE_SORT_MERGE_JOIN_WITH_PARTIAL_HASH_DISTRIBUTION.key -> "false") {
+            val dfWithoutOptimization = f
+            assert(dfWithoutOptimization.queryExecution.executedPlan.collect {
+              case s: ShuffleExchangeExec => s }.length == numShufflesWithoutOptimization)
+
+            withSQLConf(
+              SQLConf.OPTIMIZE_SORT_MERGE_JOIN_WITH_PARTIAL_HASH_DISTRIBUTION.key -> "true") {
+              val dfWithOptimization = f
+              assert(dfWithOptimization.queryExecution.executedPlan.collect {
+                case s: ShuffleExchangeExec => s }.length == numShufflesWithOptimization)
+              checkAnswer(dfWithOptimization, dfWithoutOptimization)
+            }
+          }
+        }
+
+        def verifyShuffleRemoved(f: => DataFrame): Unit = verify(f, 2, 0)
+        def verifyShuffleNotRemoved(f: => DataFrame): Unit = verify(f, 2, 2)
+
+        // Partial hash distribution by i1 and i2.
+        verifyShuffleRemoved(t1.join(t2, t1("i1") === t2("i2") && t1("j1") === t2("j2")))
+        verifyShuffleRemoved(t1.join(t2, t1("i1") === t2("i2") && t1("j1") + 1 === t2("j2")))
+        verifyShuffleRemoved(
+          t1.join(t2, t1("i1") === t2("i2") && t1("j1") === t2("j2") && t1("k1") === t2("k2")))
+        // Partial hash distribution by i1 and i2, but different join key orders.
+        verifyShuffleRemoved(t1.join(t2, t1("j1") === t2("j2") && t1("i1") === t2("i2")))
+        verifyShuffleRemoved(
+          t1.join(t2, t1("j1") === t2("j2") && t1("i1") === t2("i2") && t1("k1") === t2("k2")))
+        // Many-to-one mapping for join keys (right to left)
+        verifyShuffleRemoved(t1.join(t2, t1("i1") === t2("i2") && t1("j1") === t2("i2")))
+        // One-to-many mapping for join keys (left to right)
+        verifyShuffleRemoved(t1.join(t2, t1("i1") === t2("i2") && t1("i1") === t2("j2")))
+
+        // Join keys are not a subset of distribution.
+        verifyShuffleNotRemoved(t1.join(t2, t1("j1") === t2("j2")))
+        // The join key (i1 + 1) doesn't match with distribution expression.
+        verifyShuffleNotRemoved(t1.join(t2, t1("i1") + 1 === t2("i2") && t1("j1") === t2("j2")))
+      }
+    }
+  }
 }
