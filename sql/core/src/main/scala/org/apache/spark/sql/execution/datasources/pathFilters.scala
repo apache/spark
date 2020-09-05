@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
 
-
 trait PathFilterStrategy extends Serializable {
   def accept(fileStatus: FileStatus): Boolean
 }
@@ -40,7 +39,8 @@ class PathGlobFilter(filePatten: String) extends PathFilterStrategy {
 
   private val globFilter = new GlobFilter(filePatten)
 
-  override def accept(fileStatus: FileStatus): Boolean = globFilter.accept(fileStatus.getPath)
+  override def accept(fileStatus: FileStatus): Boolean =
+    globFilter.accept(fileStatus.getPath)
 }
 
 object PathGlobFilter extends StrategyBuilder {
@@ -77,7 +77,8 @@ abstract class ModifiedDateFilter extends PathFilterStrategy {
 
   def timeZoneId: String
 
-  protected def localTime(micros: Long): Long = DateTimeUtils.fromUTCTime(micros, timeZoneId)
+  protected def localTime(micros: Long): Long =
+    DateTimeUtils.fromUTCTime(micros, timeZoneId)
 }
 
 object ModifiedDateFilter {
@@ -94,7 +95,7 @@ object ModifiedDateFilter {
     DateTimeUtils.stringToTimestamp(ts, timeZone.toZoneId).getOrElse {
       throw new AnalysisException(
         s"The timestamp provided for the '$strategy' option is invalid. The expected format " +
-            s"is 'YYYY-MM-DDTHH:mm:ss', but the provided timestamp: $timeString")
+          s"is 'YYYY-MM-DDTHH:mm:ss', but the provided timestamp: $timeString")
     }
   }
 }
@@ -102,7 +103,8 @@ object ModifiedDateFilter {
 /**
  * Filter used to determine whether file was modified before the provided timestamp.
  */
-class ModifiedBeforeFilter(thresholdTime: Long, val timeZoneId: String) extends ModifiedDateFilter {
+class ModifiedBeforeFilter(thresholdTime: Long, val timeZoneId: String)
+    extends ModifiedDateFilter {
 
   override def accept(fileStatus: FileStatus): Boolean =
     // We standardize on microseconds wherever possible
@@ -125,7 +127,8 @@ object ModifiedBeforeFilter extends StrategyBuilder {
 /**
  * Filter used to determine whether file was modified after the provided timestamp.
  */
-class ModifiedAfterFilter(thresholdTime: Long, val timeZoneId: String) extends ModifiedDateFilter {
+class ModifiedAfterFilter(thresholdTime: Long, val timeZoneId: String)
+    extends ModifiedDateFilter {
 
   override def accept(fileStatus: FileStatus): Boolean =
     // getModificationTime returns in milliseconds
@@ -147,9 +150,14 @@ object ModifiedAfterFilter extends StrategyBuilder {
 
 object PathFilterFactory {
 
-  private val strategies = Seq(PathGlobFilter, ModifiedBeforeFilter, ModifiedAfterFilter)
+  private val strategies =
+    Seq(PathGlobFilter, ModifiedBeforeFilter, ModifiedAfterFilter)
 
   def create(parameters: CaseInsensitiveMap[String]): Seq[PathFilterStrategy] = {
-    strategies.flatMap { s => parameters.get(s.strategy).map { _ => s.create(parameters) }}
+    strategies.flatMap { s =>
+      parameters.get(s.strategy).map { _ =>
+        s.create(parameters)
+      }
+    }
   }
 }
