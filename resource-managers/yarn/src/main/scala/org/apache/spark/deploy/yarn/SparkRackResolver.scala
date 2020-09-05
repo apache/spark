@@ -29,6 +29,7 @@ import org.apache.hadoop.yarn.util.RackResolver
 import org.apache.log4j.{Level, Logger}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.SparkException
 
 /**
  * Re-implement YARN's [[RackResolver]] for hadoop releases without YARN-9332.
@@ -72,7 +73,12 @@ private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
     }
     val nodes = new ArrayBuffer[Node]
     // dnsToSwitchMapping is thread-safe
-    val rNameList = dnsToSwitchMapping.resolve(hostNames.toList.asJava).asScala
+    val rNameList = try {
+      dnsToSwitchMapping.resolve(hostNames.toList.asJava).asScala
+    } catch {
+      case _: InterruptedException =>
+        throw new SparkException("Interrupted when resolving hostNames, Spark may have exited.")
+    }
     if (rNameList == null || rNameList.isEmpty) {
       hostNames.foreach(nodes += new NodeBase(_, NetworkTopology.DEFAULT_RACK))
       logInfo(s"Got an error when resolving hostNames. " +
