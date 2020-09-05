@@ -75,11 +75,15 @@ case class CreateFunctionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val func = CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources)
     catalog.loadFunctionResources(resources)
     if (isTemp) {
+      val func = CatalogFunction(FunctionIdentifier(functionName, databaseName),
+        className, resources)
       catalog.registerFunction(func, overrideIfExists = replace)
     } else {
+      // For a permanent, we fill database name first.
+      val func = CatalogFunction(FunctionIdentifier(functionName,
+        Some(databaseName.getOrElse(catalog.getCurrentDatabase))), className, resources)
       // We fail fast if function class is not exists.
       catalog.requireFunctionClassExists(func)
       // Handles `CREATE OR REPLACE FUNCTION AS ... USING ...`
