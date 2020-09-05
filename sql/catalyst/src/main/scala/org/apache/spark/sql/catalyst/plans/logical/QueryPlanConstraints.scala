@@ -63,8 +63,11 @@ trait ConstraintHelper {
     var prevSize = -1
     while (inferredConstraints.size > prevSize) {
       prevSize = inferredConstraints.size
-      // IsNotNull should be constructed by `constructIsNotNullConstraints`.
-      val predicates = (constraints ++ inferredConstraints).filterNot(_.isInstanceOf[IsNotNull])
+      val predicates = (constraints ++ inferredConstraints)
+        // IsNotNull should be constructed by `constructIsNotNullConstraints`.
+        .filterNot(_.isInstanceOf[IsNotNull])
+        // Non deterministic expressions are all not equal and would cause OOM
+        .filter(_.deterministic)
       predicates.foreach {
         case eq @ Equality(l: Attribute, r: Attribute) =>
           val candidateConstraints = predicates - eq
