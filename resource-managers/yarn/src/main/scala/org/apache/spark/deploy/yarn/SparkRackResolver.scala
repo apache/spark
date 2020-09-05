@@ -28,8 +28,8 @@ import org.apache.hadoop.util.ReflectionUtils
 import org.apache.hadoop.yarn.util.RackResolver
 import org.apache.log4j.{Level, Logger}
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 
 /**
  * Re-implement YARN's [[RackResolver]] for hadoop releases without YARN-9332.
