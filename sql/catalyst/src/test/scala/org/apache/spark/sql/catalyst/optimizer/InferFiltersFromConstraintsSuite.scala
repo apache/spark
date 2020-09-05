@@ -30,11 +30,9 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val operatorOptimizationRuleSet = Seq(
-      PushPredicateThroughJoin,
-      PushPredicateThroughNonJoin,
-      CombineFilters,
-      SimplifyBinaryComparison,
+      PushDownPredicates,
       BooleanSimplification,
+      SimplifyBinaryComparison,
       PruneFilters)
 
     val batches = Batch(
