@@ -191,7 +191,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         } else {
           Some(f)
         }
-      } ++ shufflePruningFilters
+      }
       val supportNestedPredicatePushdown =
         DataSourceUtils.supportNestedPredicatePushdown(fsRelation)
       val pushedFilters = dataFilters
@@ -223,7 +223,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           partitionKeyFilters.toSeq,
           bucketSet,
           None,
-          dataFilters,
+          dataFilters ++ shufflePruningFilters,
           table.map(_.identifier))
 
       val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)

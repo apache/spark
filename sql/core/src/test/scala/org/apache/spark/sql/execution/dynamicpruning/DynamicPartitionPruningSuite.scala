@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.dynamicpruning
 import org.scalatest.GivenWhenThen
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.DynamicPruningExpression
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
+import org.apache.spark.sql.catalyst.expressions.DynamicPruningExpression
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
