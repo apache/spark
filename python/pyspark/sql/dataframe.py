@@ -699,7 +699,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.storageLevel
         StorageLevel(False, False, False, False, 1)
         >>> df.cache().storageLevel
-        StorageLevel(True, True, False, False, 1)
+        StorageLevel(True, True, False, True, 1)
         >>> df2.persist(StorageLevel.DISK_ONLY_2).storageLevel
         StorageLevel(True, False, False, False, 2)
         """
