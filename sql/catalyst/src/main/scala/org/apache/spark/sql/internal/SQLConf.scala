@@ -282,13 +282,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val DYNAMIC_PARTITION_PRUNING_PREFER_BLOOM_FILTER =
-    buildConf("spark.sql.optimizer.dynamicPartitionPruning.preferBloomFilter")
+  val DYNAMIC_PARTITION_PRUNING_BLOOM_FILTER_THRESHOLD =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.bloomFilterThreshold")
       .internal()
-      .doc("When true, dynamic partition pruning will prefer use bloom filter to do pruning.")
+      .doc("The threshold to use bloom filter to pruning data.")
       .version("3.1.0")
-      .booleanConf
-      .createWithDefault(true)
+      .longConf
+      .createWithDefault(2000000L)
 
   val DYNAMIC_SHUFFLE_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicShufflePruning.enabled")
@@ -2900,8 +2900,8 @@ class SQLConf extends Serializable with Logging {
   def dynamicPartitionPruningReuseBroadcastOnly: Boolean =
     getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
 
-  def dynamicPartitionPruningPreferBloomFilter: Boolean =
-    getConf(DYNAMIC_PARTITION_PRUNING_PREFER_BLOOM_FILTER)
+  def dynamicPartitionPruningBloomFilterThreshold: Long =
+    getConf(DYNAMIC_PARTITION_PRUNING_BLOOM_FILTER_THRESHOLD)
 
   def dynamicShufflePruningEnabled: Boolean = getConf(DYNAMIC_SHUFFLE_PRUNING_ENABLED)
 

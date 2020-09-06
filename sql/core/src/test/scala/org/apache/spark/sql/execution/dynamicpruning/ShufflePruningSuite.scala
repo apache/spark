@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.execution.dynamicpruning
 
 import java.sql.{Date, Timestamp}
 
+import org.scalatest.GivenWhenThen
+
+import org.apache.spark.sql.{QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, DynamicPruningExpression, Expression, Literal}
-import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec}
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, Literal}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -32,7 +32,8 @@ import org.apache.spark.sql.types.{Decimal, StringType}
 abstract class ShufflePruningSuiteBase
   extends QueryTest
     with SharedSparkSession
-    with AdaptiveSparkPlanHelper {
+    with GivenWhenThen
+    with DynamicPruningHelp {
 
   val tableFormat: String = "parquet"
 
@@ -83,6 +84,12 @@ abstract class ShufflePruningSuiteBase
       .format(tableFormat)
       .mode(SaveMode.Overwrite)
       .saveAsTable("t_bucket1")
+
+    sql("ANALYZE TABLE t1 COMPUTE STATISTICS FOR ALL COLUMNS")
+    sql("ANALYZE TABLE t2 COMPUTE STATISTICS FOR ALL COLUMNS")
+    sql("ANALYZE TABLE t3 COMPUTE STATISTICS FOR ALL COLUMNS")
+    sql("ANALYZE TABLE t_part1 COMPUTE STATISTICS FOR ALL COLUMNS")
+    sql("ANALYZE TABLE t_bucket1 COMPUTE STATISTICS FOR ALL COLUMNS")
   }
 
   override def afterAll(): Unit = {
@@ -99,75 +106,6 @@ abstract class ShufflePruningSuiteBase
       spark.sessionState.conf.unsetConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD)
       spark.sessionState.conf.unsetConf(SQLConf.PARQUET_COMPRESSION)
       super.afterAll()
-    }
-  }
-
-  /**
-   * Check if the query plan has a shuffle pruning filter inserted as
-   * a subquery duplicate or as a custom broadcast exchange.
-   */
-  def checkPartitionPruningPredicate(
-      df: DataFrame,
-      withSubquery: Boolean,
-      withBroadcast: Boolean): Unit = {
-    val plan = df.queryExecution.executedPlan
-    val dpExprs = collectDynamicPruningExpressions(plan)
-    val hasSubquery = dpExprs.exists {
-      case BloomFilterSubqueryExec(_, _: SubqueryExec, _, _) => true
-      case _ => false
-    }
-    val subqueryBroadcast = dpExprs.collect {
-      case BloomFilterSubqueryExec(_, b: SubqueryBroadcastExec, _, _) => b
-    }
-
-    val name = "trigger shuffle pruning"
-    val hasFilter = if (withSubquery) "Should" else "Shouldn't"
-    assert(hasSubquery == withSubquery,
-      s"$hasFilter $name with a subquery duplicate:\n${df.queryExecution}")
-    val hasBroadcast = if (withBroadcast) "Should" else "Shouldn't"
-    assert(subqueryBroadcast.nonEmpty == withBroadcast,
-      s"$hasBroadcast $name with a reused broadcast exchange:\n${df.queryExecution}")
-
-    subqueryBroadcast.foreach { s =>
-      s.child match {
-        case _: ReusedExchangeExec => // reuse check ok.
-        case b: BroadcastExchangeExec =>
-          val hasReuse = plan.find {
-            case ReusedExchangeExec(_, e) => e eq b
-            case _ => false
-          }.isDefined
-          assert(hasReuse, s"$s\nshould have been reused in\n$plan")
-        case _ =>
-          fail(s"Invalid child node found in\n$s")
-      }
-    }
-
-    val isMainQueryAdaptive = plan.isInstanceOf[AdaptiveSparkPlanExec]
-    subqueriesAll(plan).filterNot(subqueryBroadcast.contains).foreach { s =>
-      assert(s.find(_.isInstanceOf[AdaptiveSparkPlanExec]).isDefined == isMainQueryAdaptive)
-    }
-  }
-
-  /**
-   * Check if the plan has the given number of distinct broadcast exchange subqueries.
-   */
-  def checkDistinctSubqueries(df: DataFrame, n: Int): Unit = {
-    val buf = collectDynamicPruningExpressions(df.queryExecution.executedPlan).collect {
-      case BloomFilterSubqueryExec(_, b: SubqueryBroadcastExec, _, _) =>
-        b.index
-    }
-    assert(buf.distinct.size == n)
-  }
-
-  /**
-   * Collect the children of all correctly pushed down dynamic pruning expressions in a spark plan.
-   */
-  private def collectDynamicPruningExpressions(plan: SparkPlan): Seq[Expression] = {
-    plan.flatMap {
-      case s: FilterExec => s.condition.collect {
-        case d: DynamicPruningExpression => d.child
-      }
-      case _ => Nil
     }
   }
 
@@ -195,8 +133,84 @@ abstract class ShufflePruningSuiteBase
           |         ON t11.a = t3.a AND t3.b < 2
           |""".stripMargin)
 
-      checkPartitionPruningPredicate(df, false, true)
+      checkInSubqueryPredicate(df, false, true)
       checkAnswer(df, Row(0, 1) :: Row(1, 1) :: Nil)
+    }
+  }
+
+  test("CBO can evaluate row count more accurately") {
+    withSQLConf(SQLConf.DYNAMIC_SHUFFLE_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_SHUFFLE_PRUNING_SIDE_THRESHOLD.key -> "10K",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_BLOOM_FILTER_THRESHOLD.key -> "5") {
+      Given("default bloom filter")
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "false", SQLConf.PLAN_STATS_ENABLED.key -> "false") {
+        val df = sql(
+          """
+            |SELECT t11.a,
+            |       t11.cnt
+            |FROM   (SELECT a,
+            |               Count(b) AS cnt
+            |        FROM   t1
+            |        GROUP  BY a) t11
+            |       JOIN t3
+            |         ON t11.a = t3.a AND t3.b < 2
+            |""".stripMargin)
+
+        checkBloomFilterSubqueryPredicate(df, false, true)
+        checkAnswer(df, Row(0, 1) :: Row(1, 1) :: Nil)
+      }
+
+      Given("default in")
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "true", SQLConf.PLAN_STATS_ENABLED.key -> "true") {
+        val df = sql(
+          """
+            |SELECT t11.a,
+            |       t11.cnt
+            |FROM   (SELECT a,
+            |               Count(b) AS cnt
+            |        FROM   t1
+            |        GROUP  BY a) t11
+            |       JOIN t3
+            |         ON t11.a = t3.a AND t3.b < 2
+            |""".stripMargin)
+
+        checkInSubqueryPredicate(df, false, true)
+        checkAnswer(df, Row(0, 1) :: Row(1, 1) :: Nil)
+      }
+    }
+  }
+
+  test("dynamic filter push down to datasource") {
+    withSQLConf(
+      SQLConf.DYNAMIC_SHUFFLE_PRUNING_SIDE_THRESHOLD.key -> "10K",
+      SQLConf.CBO_ENABLED.key -> "true",
+      SQLConf.PLAN_STATS_ENABLED.key -> "true") {
+      Seq(true, false).foreach { pushdown =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> s"$pushdown") {
+          val df = sql(
+            """
+              |SELECT t11.a,
+              |       t11.cnt
+              |FROM   (SELECT a,
+              |               Count(b) AS cnt
+              |        FROM   t1
+              |        GROUP  BY a) t11
+              |       JOIN t3
+              |         ON t11.a = t3.a AND t3.b < 2
+              |""".stripMargin)
+
+          df.collect()
+          val scan = getTableScan(df.queryExecution.executedPlan, "t1")
+          assert(scan.metrics("numFiles").value === 2)
+          if (pushdown) {
+            assert(scan.metrics("numOutputRows").value === 1000)
+          } else {
+            assert(scan.metrics("numOutputRows").value === 2000)
+          }
+          checkInSubqueryPredicate(df, false, true)
+          checkAnswer(df, Row(0, 1) :: Row(1, 1) :: Nil)
+        }
+      }
     }
   }
 
@@ -220,7 +234,7 @@ abstract class ShufflePruningSuiteBase
           |         ON t11.a = t3.a AND t3.b < 2
           |""".stripMargin)
 
-      checkPartitionPruningPredicate(df, false, true)
+      checkInSubqueryPredicate(df, false, true)
 
       checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
     }
@@ -247,7 +261,7 @@ abstract class ShufflePruningSuiteBase
           |            AND t3.b < 2
           |""".stripMargin)
 
-      checkPartitionPruningPredicate(df, false, false)
+      checkInSubqueryPredicate(df, false, false)
 
       checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
     }
@@ -270,7 +284,7 @@ abstract class ShufflePruningSuiteBase
           |         ON t11.a = t3.a AND t3.b < 2
           |""".stripMargin)
 
-      checkPartitionPruningPredicate(df, false, true)
+      checkInSubqueryPredicate(df, false, true)
       checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
     }
   }
@@ -293,7 +307,7 @@ abstract class ShufflePruningSuiteBase
           |         ON t11.a = t3.a AND t3.b < 2
           |""".stripMargin)
 
-      checkPartitionPruningPredicate(df, false, false)
+      checkInSubqueryPredicate(df, false, false)
       checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
     }
   }
@@ -323,7 +337,7 @@ abstract class ShufflePruningSuiteBase
             |         ON t11.a = t_string1.a AND t_string1.b < 2
             |""".stripMargin)
 
-        checkPartitionPruningPredicate(df, false, true)
+        checkInSubqueryPredicate(df, false, true)
         checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
       }
     }
@@ -354,7 +368,7 @@ abstract class ShufflePruningSuiteBase
             |         ON t11.a = t_string1.a AND t_string1.b < 2
             |""".stripMargin)
 
-        checkPartitionPruningPredicate(df, false, true)
+        checkInSubqueryPredicate(df, false, true)
         checkAnswer(df, Nil)
       }
     }
@@ -393,7 +407,7 @@ abstract class ShufflePruningSuiteBase
                   |         ON t1.a = t2.a AND t2.b < 2
                   |""".stripMargin)
 
-              checkPartitionPruningPredicate(df, false, true)
+              checkInSubqueryPredicate(df, false, true)
               checkAnswer(df, Row(value, 2000) :: Row(value, 2000) :: Nil)
             }
           }
@@ -446,7 +460,7 @@ abstract class ShufflePruningSuiteBase
             |         ON t1.a = t2.a AND t1.b = t2.b AND t2.c < 2
             |""".stripMargin)
 
-        checkPartitionPruningPredicate(df, false, true)
+        checkInSubqueryPredicate(df, false, true)
         checkDistinctSubqueries(df, 2)
         checkAnswer(df, Row(0, 1) :: Row(1, 1) :: Nil)
       }
@@ -470,7 +484,7 @@ abstract class ShufflePruningSuiteBase
           |         ON t11.a = t3.a AND t3.b < 2
           |""".stripMargin)
 
-      checkPartitionPruningPredicate(df, false, false)
+      checkInSubqueryPredicate(df, false, false)
       checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
     }
   }
@@ -491,7 +505,7 @@ abstract class ShufflePruningSuiteBase
           |         ON t11.a = t3.a AND t3.b < 2
           |""".stripMargin)
 
-      checkPartitionPruningPredicate(df, false, false)
+      checkInSubqueryPredicate(df, false, false)
 
       checkAnswer(df, Row(0, 200) :: Row(1, 200) :: Nil)
     }
@@ -513,13 +527,13 @@ abstract class ShufflePruningSuiteBase
           |         ON t11.a = t3.a AND t3.b < 2
           |""".stripMargin)
 
-      checkPartitionPruningPredicate(df, false, false)
+      checkInSubqueryPredicate(df, false, false)
 
       checkAnswer(df, Row(0, 1) :: Row(1, 1) :: Nil)
     }
   }
 
-  test("Unsupported data type should not triggers shuffle pruning") {
+  test("array type triggers shuffle pruning") {
     withSQLConf(SQLConf.DYNAMIC_SHUFFLE_PRUNING_ENABLED.key -> "true",
       SQLConf.DYNAMIC_SHUFFLE_PRUNING_SIDE_THRESHOLD.key -> "10K") {
       withTable("t_array1", "t_array2") {
@@ -549,7 +563,7 @@ abstract class ShufflePruningSuiteBase
             |         ON t1.a = t2.a AND t2.b < 2
             |""".stripMargin)
 
-        checkPartitionPruningPredicate(df, false, false)
+        checkInSubqueryPredicate(df, false, true)
 
         checkAnswer(df, Row(Array(0), 1) :: Row(Array(1), 1) :: Nil)
       }

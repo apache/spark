@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.execution.dynamicpruning
 
 import org.scalatest.GivenWhenThen
 
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.DynamicPruningExpression
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec}
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions._
@@ -38,7 +38,7 @@ abstract class DynamicPartitionPruningSuiteBase
     extends QueryTest
     with SharedSparkSession
     with GivenWhenThen
-    with AdaptiveSparkPlanHelper {
+    with DynamicPruningHelp {
 
   val tableFormat: String = "parquet"
 
@@ -166,77 +166,9 @@ abstract class DynamicPartitionPruningSuiteBase
   }
 
   /**
-   * Check if the query plan has a partition pruning filter inserted as
-   * a subquery duplicate or as a custom broadcast exchange.
-   */
-  def checkPartitionPruningPredicate(
-      df: DataFrame,
-      withSubquery: Boolean,
-      withBroadcast: Boolean): Unit = {
-    val plan = df.queryExecution.executedPlan
-    val dpExprs = collectDynamicPruningExpressions(plan)
-    val hasSubquery = dpExprs.exists {
-      case InSubqueryExec(_, _: SubqueryExec, _, _) => true
-      case _ => false
-    }
-    val subqueryBroadcast = dpExprs.collect {
-      case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _) => b
-    }
-
-    val hasFilter = if (withSubquery) "Should" else "Shouldn't"
-    assert(hasSubquery == withSubquery,
-      s"$hasFilter trigger DPP with a subquery duplicate:\n${df.queryExecution}")
-    val hasBroadcast = if (withBroadcast) "Should" else "Shouldn't"
-    assert(subqueryBroadcast.nonEmpty == withBroadcast,
-      s"$hasBroadcast trigger DPP with a reused broadcast exchange:\n${df.queryExecution}")
-
-    subqueryBroadcast.foreach { s =>
-      s.child match {
-        case _: ReusedExchangeExec => // reuse check ok.
-        case b: BroadcastExchangeExec =>
-          val hasReuse = plan.find {
-            case ReusedExchangeExec(_, e) => e eq b
-            case _ => false
-          }.isDefined
-          assert(hasReuse, s"$s\nshould have been reused in\n$plan")
-        case _ =>
-          fail(s"Invalid child node found in\n$s")
-      }
-    }
-
-    val isMainQueryAdaptive = plan.isInstanceOf[AdaptiveSparkPlanExec]
-    subqueriesAll(plan).filterNot(subqueryBroadcast.contains).foreach { s =>
-      assert(s.find(_.isInstanceOf[AdaptiveSparkPlanExec]).isDefined == isMainQueryAdaptive)
-    }
-  }
-
-  /**
-   * Check if the plan has the given number of distinct broadcast exchange subqueries.
-   */
-  def checkDistinctSubqueries(df: DataFrame, n: Int): Unit = {
-    val buf = collectDynamicPruningExpressions(df.queryExecution.executedPlan).collect {
-      case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _) =>
-        b.index
-    }
-    assert(buf.distinct.size == n)
-  }
-
-  /**
-   * Collect the children of all correctly pushed down dynamic pruning expressions in a spark plan.
-   */
-  private def collectDynamicPruningExpressions(plan: SparkPlan): Seq[Expression] = {
-    plan.flatMap {
-      case s: FileSourceScanExec => s.partitionFilters.collect {
-        case d: DynamicPruningExpression => d.child
-      }
-      case _ => Nil
-    }
-  }
-
-  /**
    * Check if the plan contains unpushed dynamic pruning filters.
    */
-  def checkUnpushedFilters(df: DataFrame): Boolean = {
+  private def checkUnpushedFilters(df: DataFrame): Boolean = {
     df.queryExecution.executedPlan.find {
       case FilterExec(condition, _) =>
         splitConjunctivePredicates(condition).exists {
@@ -260,7 +192,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |JOIN dim_store s ON f.store_id = s.store_id AND s.country = 'NL'
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, true, false)
+      checkInSubqueryPredicate(df, true, false)
 
       checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
     }
@@ -293,7 +225,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON a.partCol1 = b.partCol1
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, false, false)
+        checkInSubqueryPredicate(df, false, false)
       }
     }
   }
@@ -324,22 +256,11 @@ abstract class DynamicPartitionPruningSuiteBase
           .mode("overwrite")
           .saveAsTable("fact")
 
-        def getFactScan(plan: SparkPlan): SparkPlan = {
-          val scanOption =
-            find(plan) {
-              case s: FileSourceScanExec =>
-                s.output.exists(_.find(_.argString(maxFields = 100).contains("fid")).isDefined)
-              case _ => false
-            }
-          assert(scanOption.isDefined)
-          scanOption.get
-        }
-
         // No dynamic partition pruning, so no static metrics
         // All files in fact table are scanned
         val df1 = sql("SELECT sum(f1) FROM fact")
         df1.collect()
-        val scan1 = getFactScan(df1.queryExecution.executedPlan)
+        val scan1 = getTableScan(df1.queryExecution.executedPlan, "fact")
         assert(!scan1.metrics.contains("staticFilesNum"))
         assert(!scan1.metrics.contains("staticFilesSize"))
         val allFilesNum = scan1.metrics("numFiles").value
@@ -351,7 +272,7 @@ abstract class DynamicPartitionPruningSuiteBase
         // Only files from fid = 5 partition are scanned
         val df2 = sql("SELECT sum(f1) FROM fact WHERE fid = 5")
         df2.collect()
-        val scan2 = getFactScan(df2.queryExecution.executedPlan)
+        val scan2 = getTableScan(df2.queryExecution.executedPlan, "fact")
         assert(!scan2.metrics.contains("staticFilesNum"))
         assert(!scan2.metrics.contains("staticFilesSize"))
         val partFilesNum = scan2.metrics("numFiles").value
@@ -366,7 +287,7 @@ abstract class DynamicPartitionPruningSuiteBase
         // "Regular" metrics are as-if reading only the "fid = 5" partition
         val df3 = sql("SELECT sum(f1) FROM fact, dim WHERE fid = did AND d1 = 6")
         df3.collect()
-        val scan3 = getFactScan(df3.queryExecution.executedPlan)
+        val scan3 = getTableScan(df3.queryExecution.executedPlan, "fact")
         assert(scan3.metrics("staticFilesNum").value == allFilesNum)
         assert(scan3.metrics("staticFilesSize").value == allFilesSize)
         assert(scan3.metrics("numFiles").value == partFilesNum)
@@ -416,7 +337,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON f.store_id = s.store_id AND s.country = 'NL'
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, false, false)
+        checkInSubqueryPredicate(df, false, false)
       }
 
       Given("not a partition column")
@@ -428,7 +349,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON f.date_id = s.store_id WHERE s.country = 'NL'
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, false, false)
+        checkInSubqueryPredicate(df, false, false)
       }
 
       Given("no predicate on the dimension table")
@@ -440,7 +361,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON f.store_id = s.store_id
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, false, false)
+        checkInSubqueryPredicate(df, false, false)
       }
 
       Given("left-semi join with partition column on the left side")
@@ -453,7 +374,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON f.store_id = s.store_id AND s.country = 'NL'
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, true, false)
+        checkInSubqueryPredicate(df, true, false)
       }
 
       Given("left-semi join with partition column on the right side")
@@ -466,7 +387,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON f.store_id = s.store_id AND s.country = 'NL'
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, true, false)
+        checkInSubqueryPredicate(df, true, false)
       }
 
       Given("left outer with partition column on the left side")
@@ -478,7 +399,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON f.store_id = s.store_id WHERE f.units_sold = 10
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, false, false)
+        checkInSubqueryPredicate(df, false, false)
       }
 
       Given("right outer join with partition column on the left side")
@@ -490,7 +411,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON f.store_id = s.store_id WHERE s.country = 'NL'
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, true, false)
+        checkInSubqueryPredicate(df, true, false)
       }
     }
   }
@@ -512,7 +433,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON f.store_id = s.store_id WHERE s.country LIKE '%C_%'
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, true, false)
+        checkInSubqueryPredicate(df, true, false)
       }
 
       Given("no stats and selective predicate with the size of dim too large")
@@ -534,7 +455,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON f.store_id = s.store_id WHERE s.country = 'US'
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, false, false)
+        checkInSubqueryPredicate(df, false, false)
 
         checkAnswer(df,
           Row(1070, 2, 10, 4) ::
@@ -554,7 +475,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON f.store_id = s.store_id WHERE s.country = 'NL'
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, true, false)
+        checkInSubqueryPredicate(df, true, false)
 
         checkAnswer(df,
           Row(1010, 1, 10, 2) ::
@@ -582,7 +503,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON f.store_id = s.store_id WHERE s.country = 'DE'
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, true, false)
+        checkInSubqueryPredicate(df, true, false)
       }
 
       Given("filtering ratio with stats disables pruning")
@@ -596,7 +517,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |(SELECT p.store_id FROM product p)
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, false, false)
+        checkInSubqueryPredicate(df, false, false)
       }
 
       Given("filtering ratio with stats enables pruning")
@@ -609,7 +530,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON f.store_id = s.store_id WHERE s.country = 'DE'
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, true, false)
+        checkInSubqueryPredicate(df, true, false)
 
         checkAnswer(df,
           Row(1030, 2, 10, 3) ::
@@ -629,7 +550,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON f.store_id + 1 = s.store_id WHERE s.country = 'DE'
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, true, false)
+        checkInSubqueryPredicate(df, true, false)
 
         checkAnswer(df,
           Row(1010, 1, 10, 2) ::
@@ -651,7 +572,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |ON f.sid = s.store_id WHERE s.country = 'DE'
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, false, false)
+      checkInSubqueryPredicate(df, false, false)
     }
 
     Given("alias over multiple sub-queries with simple join condition")
@@ -667,7 +588,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |ON f.sid  = s.store_id  WHERE s.country = 'DE'
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, false, false)
+      checkInSubqueryPredicate(df, false, false)
     }
   }
 
@@ -682,7 +603,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |ON f.sid = s.store_id WHERE s.country = 'DE'
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, false, true)
+      checkInSubqueryPredicate(df, false, true)
 
       checkAnswer(df,
         Row(1030, 2, 3) ::
@@ -702,7 +623,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |ON f.sid + 1 = s.store_id + 1 WHERE s.country = 'DE'
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, false, true)
+      checkInSubqueryPredicate(df, false, true)
 
       checkAnswer(df,
         Row(1030, 2, 3) ::
@@ -724,7 +645,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |ON f.sid  = s.store_id  WHERE s.country = 'DE'
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, false, true)
+      checkInSubqueryPredicate(df, false, true)
 
       checkAnswer(df,
         Row(1030, 2, 3) ::
@@ -750,7 +671,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |ON f.sid_d  = s.store_id  WHERE s.country = 'DE'
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, false, true)
+      checkInSubqueryPredicate(df, false, true)
 
       checkAnswer(df,
         Row(1030, 2, 3) ::
@@ -773,7 +694,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |ON f.store_id = s.store_id WHERE s.country = 'DE'
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, false, false)
+      checkInSubqueryPredicate(df, false, false)
 
       checkAnswer(df,
         Row(1030, 2, 10, 3) ::
@@ -796,7 +717,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |ON f.store_id = s.store_id WHERE s.country = 'DE'
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, true, false)
+      checkInSubqueryPredicate(df, true, false)
 
       checkAnswer(df,
         Row(1030, 2, 10, 3) ::
@@ -815,7 +736,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |ON f.store_id = s.store_id WHERE s.country = 'DE'
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, false, true)
+      checkInSubqueryPredicate(df, false, true)
 
       checkAnswer(df,
         Row(1030, 2, 10, 3) ::
@@ -836,7 +757,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |ON f.store_id = s.store_id WHERE s.country = 'DE'
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, false, false)
+      checkInSubqueryPredicate(df, false, false)
 
       checkAnswer(df,
         Row(1030, 2, 10, 3) ::
@@ -857,7 +778,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |ON f.store_id = s.store_id WHERE s.country = 'DE'
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, true, false)
+      checkInSubqueryPredicate(df, true, false)
 
       checkAnswer(df,
         Row(1030, 2, 10, 3) ::
@@ -1106,7 +1027,7 @@ abstract class DynamicPartitionPruningSuiteBase
             fact.col("B") === prod.col("F") && fact.col("A") === prod.col("E"))
           .where(prod.col("G") > 5)
 
-        checkPartitionPruningPredicate(df, false, true)
+        checkInSubqueryPredicate(df, false, true)
       }
     }
   }
@@ -1220,7 +1141,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |WHERE d.x = (SELECT avg(p.w) FROM dim p)
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, false, true)
+        checkInSubqueryPredicate(df, false, true)
       }
     }
   }
@@ -1260,7 +1181,7 @@ abstract class DynamicPartitionPruningSuiteBase
             | SELECT * FROM view1 v1 join view1 v2 WHERE v1.store_id = v2.store_id
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, false, false)
+        checkInSubqueryPredicate(df, false, false)
         val reuseExchangeNodes = df.queryExecution.executedPlan.collect {
           case se: ReusedExchangeExec => se
         }
@@ -1282,7 +1203,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |ON f.store_id = s.store_id WHERE f.date_id <= 1030
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, false, false)
+      checkInSubqueryPredicate(df, false, false)
 
       checkAnswer(df,
         Row(1000, 1, 1, 10) ::
@@ -1302,7 +1223,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |ON f.store_id = s.store_id WHERE f.date_id <= 1030
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, false, true)
+      checkInSubqueryPredicate(df, false, true)
 
       checkAnswer(df,
         Row(1000, 1, 1, 10) ::
@@ -1328,9 +1249,9 @@ abstract class DynamicPartitionPruningSuiteBase
               """.stripMargin)
 
             if (pruning) {
-              checkPartitionPruningPredicate(df, false, true)
+              checkInSubqueryPredicate(df, false, true)
             } else {
-              checkPartitionPruningPredicate(df, false, false)
+              checkInSubqueryPredicate(df, false, false)
             }
 
             checkAnswer(df,
