@@ -324,7 +324,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test(
-    "SPARK-32801: single inner join with EqualNullSafe condition: " +
+    "SPARK-32801: Single inner join with EqualNullSafe condition: " +
       "filter out values on either side on equi-join keys") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
@@ -372,6 +372,23 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       .join(
         correctY.join(correctZ, condition = Some("y.a".attr === "z.a".attr), joinType = LeftSemi),
         condition = Some("x.a".attr === "y.a".attr))
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-32801: Non-deterministic filters do not introduce an infinite loop") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val originalQuery = x
+      .join(y, condition = Some("x.a".attr === "y.a".attr))
+      .where(rand(0) === "x.a".attr)
+      .analyze
+    val left = x.where(IsNotNull('a))
+    val right = y.where(IsNotNull('a))
+    val correctAnswer = left
+      .join(right, condition = Some("x.a".attr === "y.a".attr))
+      .where(rand(0) === "x.a".attr)
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
