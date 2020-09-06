@@ -684,7 +684,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         a new storage level if the :class:`DataFrame` does not have a storage level set yet.
         If no storage level is specified defaults to (`MEMORY_AND_DISK_DESER`)
 
-        .. note:: The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala in 2.0.
+        .. note:: The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala
+            in 2.0.
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
