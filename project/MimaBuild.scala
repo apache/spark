@@ -88,7 +88,7 @@ object MimaBuild {
 
   def mimaSettings(sparkHome: File, projectRef: ProjectRef) = {
     val organization = "org.apache.spark"
-    val previousSparkVersion = "2.4.0"
+    val previousSparkVersion = "3.0.0"
     val project = projectRef.project
     val fullId = "spark-" + project + "_2.12"
     mimaDefaultSettings ++
