@@ -20,7 +20,7 @@ FMRegressor Example.
 """
 # $example on$
 from pyspark.ml import Pipeline
-from pyspark.ml.regression import FMRegressor, FMRegressionModel
+from pyspark.ml.regression import FMRegressor
 from pyspark.ml.feature import MinMaxScaler
 from pyspark.ml.evaluation import RegressionEvaluator
 # $example off$
@@ -63,10 +63,10 @@ if __name__ == "__main__":
     rmse = evaluator.evaluate(predictions)
     print("Root Mean Squared Error (RMSE) on test data = %g" % rmse)
 
-    fmModel: FMRegressionModel = model.stages[1]  # type: ignore
-    print("Factors: " + str(fmModel.factors))
-    print("Linear: " + str(fmModel.linear))
-    print("Intercept: " + str(fmModel.intercept))
+    fmModel = model.stages[1]
+    print("Factors: " + str(fmModel.factors))  # type: ignore
+    print("Linear: " + str(fmModel.linear))  # type: ignore
+    print("Intercept: " + str(fmModel.intercept))  # type: ignore
     # $example off$
 
     spark.stop()

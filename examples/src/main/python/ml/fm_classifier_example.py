@@ -20,7 +20,7 @@ FMClassifier Example.
 """
 # $example on$
 from pyspark.ml import Pipeline
-from pyspark.ml.classification import FMClassifier, FMClassificationModel
+from pyspark.ml.classification import FMClassifier
 from pyspark.ml.feature import MinMaxScaler, StringIndexer
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 # $example off$
@@ -66,10 +66,10 @@ if __name__ == "__main__":
     accuracy = evaluator.evaluate(predictions)
     print("Test set accuracy = %g" % accuracy)
 
-    fmModel: FMClassificationModel = model.stages[2]  # type: ignore
-    print("Factors: " + str(fmModel.factors))
-    print("Linear: " + str(fmModel.linear))
-    print("Intercept: " + str(fmModel.intercept))
+    fmModel = model.stages[2]
+    print("Factors: " + str(fmModel.factors))  # type: ignore
+    print("Linear: " + str(fmModel.linear))  # type: ignore
+    print("Intercept: " + str(fmModel.intercept))  # type: ignore
     # $example off$
 
     spark.stop()

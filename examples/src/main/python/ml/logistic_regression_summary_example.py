@@ -21,7 +21,7 @@ Run with:
   bin/spark-submit examples/src/main/python/ml/logistic_regression_summary_example.py
 """
 # $example on$
-from pyspark.ml.classification import LogisticRegression, BinaryLogisticRegressionTrainingSummary
+from pyspark.ml.classification import LogisticRegression
 # $example off$
 from pyspark.sql import SparkSession
 
@@ -42,9 +42,7 @@ if __name__ == "__main__":
     # $example on$
     # Extract the summary from the returned LogisticRegressionModel instance trained
     # in the earlier example
-    trainingSummary: BinaryLogisticRegressionTrainingSummary = (
-        lrModel.summary
-    )  # type: ignore
+    trainingSummary = lrModel.summary
 
     # Obtain the objective per iteration
     objectiveHistory = trainingSummary.objectiveHistory
