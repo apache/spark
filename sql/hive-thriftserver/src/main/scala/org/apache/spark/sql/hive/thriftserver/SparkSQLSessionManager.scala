@@ -69,7 +69,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     setConfMap(ctx, hiveSessionState.getOverriddenConfigurations)
     setConfMap(ctx, hiveSessionState.getHiveVariables)
     if (sessionConf != null && sessionConf.containsKey("use:database")) {
-      ctx.sql(s"use ${sessionConf.get("use:database")}")
+      ctx.sparkSession.sessionState.catalog.setCurrentDatabase(sessionConf.get("use:database"))
     }
     sparkSqlOperationManager.sessionToContexts.put(sessionHandle, ctx)
     sessionHandle
