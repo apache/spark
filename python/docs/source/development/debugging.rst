@@ -91,7 +91,7 @@ Start debugging with your ``MyRemoteDebugger``.
 Executor Side
 ~~~~~~~~~~~~~
 
-To debug on the executor side, prepare a Python file as below In your current working directory.
+To debug on the executor side, prepare a Python file as below in your current working directory.
 
 .. code-block:: bash
 
