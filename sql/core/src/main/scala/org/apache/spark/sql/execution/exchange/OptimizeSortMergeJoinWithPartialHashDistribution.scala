@@ -82,8 +82,7 @@ case class OptimizeSortMergeJoinWithPartialHashDistribution(conf: SQLConf) exten
   }
 
   /*
-   * Returns a mapping from left key to right key if there is a one-to-one mapping.
-   * Otherwise, returns None.
+   * Builds a mapping from a left key to right key(s).
    */
   private def leftKeyToRightKeyMapping(
       leftKeys: Seq[Expression],
