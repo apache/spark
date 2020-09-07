@@ -110,8 +110,7 @@ object MLUtils extends Logging {
       DataSource.apply(
         sparkSession,
         paths = paths,
-        className = classOf[TextFileFormat].getName,
-        options = Map(DataSource.GLOB_PATHS_KEY -> "false")
+        className = classOf[TextFileFormat].getName
       ).resolveRelation(checkFilesExist = false))
       .select("value")
 
