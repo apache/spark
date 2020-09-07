@@ -128,12 +128,12 @@ Now you're ready to remotely debug. Start debugging with your ``MyRemoteDebugger
 Checking Memory (``top`` and ``ps``)
 ------------------------------------
 
-The Python processes on the driver and executor can be monitored via typical ways such as ``top`` and ``ps`` commands.
+The Python processes on the driver and executor can be checked via typical ways such as ``top`` and ``ps`` commands.
 
 Driver Side
 ~~~~~~~~~~~
 
-To check on the driver side, you can get the pid from your PySpark shell as below to know the process id and resources.
+On the driver side, you can get the process id from your PySpark shell easily as below to know the process id and resources.
 
 .. code-block:: python
 
