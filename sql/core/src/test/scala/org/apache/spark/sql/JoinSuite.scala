@@ -1315,7 +1315,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
-  test("SPARK-XXXXX: Optimize sort merge join with partial hash distribution") {
+  test("SPARK-32806: Optimize sort merge join with partial hash distribution") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       withTable("t1", "t2") {
         val df1 = (0 until 100).map(i => (i % 5, i % 13, i.toString)).toDF("i1", "j1", "k1")
