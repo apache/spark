@@ -232,9 +232,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       }
     }
     val distinctAggGroupLookup = distinctAggGroupMap.toMap
-    val distinctAggGroups = distinctAggGroupMap.groupBy(_._2).map{ kv =>
-      kv._1 -> kv._2.map(_._1)
-    }
+    val distinctAggGroups = distinctAggGroupMap.groupBy(_._2).mapValues(_.map(_._1))
 
     // Aggregation strategy can handle queries with a single distinct group without filter clause.
     if (distinctAggGroups.size > 1 || distinctAggs.exists(_.filter.isDefined)) {
@@ -297,7 +295,11 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           val operators = expressions.map { e =>
             val af = e.aggregateFunction
             val naf = patchAggregateFunctionChildren(af) { x =>
-              val condition = e.filter.map(distinctAggFilterAttrLookup.get(_)).getOrElse(None)
+              val condition = if (e.filter.isDefined) {
+                e.filter.map(distinctAggFilterAttrLookup.get(_)).get
+              } else {
+                None
+              }
               if (distinctAggGroupLookup(e).contains(x)) {
                 if (x.foldable) {
                   Some(evalWithinGroup(id, x, condition))
