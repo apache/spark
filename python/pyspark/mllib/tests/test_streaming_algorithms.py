@@ -457,8 +457,8 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
 
         def condition():
             if len(errors) == len(predict_batches):
-                self.assertGreater(errors[1] - errors[-1], 2)
-            if len(errors) >= 3 and errors[1] - errors[-1] > 2:
+                self.assertGreater(errors[0] - errors[-1], 2)
+            if len(errors) >= 3 and errors[0] - errors[-1] > 2:
                 return True
             return "Latest errors: " + ", ".join(map(lambda x: str(x), errors))
 
