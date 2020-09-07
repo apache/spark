@@ -295,11 +295,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           val operators = expressions.map { e =>
             val af = e.aggregateFunction
             val naf = patchAggregateFunctionChildren(af) { x =>
-              val condition = if (e.filter.isDefined) {
-                e.filter.map(distinctAggFilterAttrLookup.get(_)).get
-              } else {
-                None
-              }
+              val condition = e.filter.map(distinctAggFilterAttrLookup.get(_)).flatten
               if (distinctAggGroupLookup(e).contains(x)) {
                 if (x.foldable) {
                   Some(evalWithinGroup(id, x, condition))
