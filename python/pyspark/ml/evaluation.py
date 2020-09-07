@@ -32,14 +32,13 @@ __all__ = ['Evaluator', 'BinaryClassificationEvaluator', 'RegressionEvaluator',
 
 
 @inherit_doc
-class Evaluator(Params):
+class Evaluator(Params, metaclass=ABCMeta):
     """
     Base class for evaluators that compute metrics from predictions.
 
     .. versionadded:: 1.4.0
     """
-
-    __metaclass__ = ABCMeta
+    pass
 
     @abstractmethod
     def _evaluate(self, dataset):
@@ -84,13 +83,11 @@ class Evaluator(Params):
 
 
 @inherit_doc
-class JavaEvaluator(JavaParams, Evaluator):
+class JavaEvaluator(JavaParams, Evaluator, metaclass=ABCMeta):
     """
     Base class for :py:class:`Evaluator`s that wrap Java/Scala
     implementations.
     """
-
-    __metaclass__ = ABCMeta
 
     def _evaluate(self, dataset):
         """

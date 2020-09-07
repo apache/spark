@@ -48,45 +48,41 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'FMRegressor', 'FMRegressionModel']
 
 
-class Regressor(Predictor, _PredictorParams):
+class Regressor(Predictor, _PredictorParams, metaclass=ABCMeta):
     """
     Regressor for regression tasks.
 
     .. versionadded:: 3.0.0
     """
+    pass
 
-    __metaclass__ = ABCMeta
 
-
-class RegressionModel(PredictionModel, _PredictorParams):
+class RegressionModel(PredictionModel, _PredictorParams, metaclass=ABCMeta):
     """
     Model produced by a ``Regressor``.
 
     .. versionadded:: 3.0.0
     """
+    pass
 
-    __metaclass__ = ABCMeta
 
-
-class _JavaRegressor(Regressor, JavaPredictor):
+class _JavaRegressor(Regressor, JavaPredictor, metaclass=ABCMeta):
     """
     Java Regressor for regression tasks.
 
     .. versionadded:: 3.0.0
     """
+    pass
 
-    __metaclass__ = ABCMeta
 
-
-class _JavaRegressionModel(RegressionModel, JavaPredictionModel):
+class _JavaRegressionModel(RegressionModel, JavaPredictionModel, metaclass=ABCMeta):
     """
     Java Model produced by a ``_JavaRegressor``.
     To be mixed in with :class:`pyspark.ml.JavaModel`
 
     .. versionadded:: 3.0.0
     """
-
-    __metaclass__ = ABCMeta
+    pass
 
 
 class _LinearRegressionParams(_PredictorParams, HasRegParam, HasElasticNetParam, HasMaxIter,
