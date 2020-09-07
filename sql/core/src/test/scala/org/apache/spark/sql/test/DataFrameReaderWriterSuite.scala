@@ -1105,4 +1105,27 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       }
     }
   }
+
+  test("SPARK-32810: CSV and JSON data sources should be able to read files with " +
+    "escaped glob metacharacter in the paths") {
+    def escape(str: String): String = {
+      """(\[|\]|\{|\})""".r.replaceAllIn(str, """\\$1""")
+    }
+
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+
+      // test CSV writer / reader without specifying schema
+      val csvTableName = "[abc]"
+      spark.range(3).coalesce(1).write.csv(s"$basePath/$csvTableName")
+      val csvDf = spark.read.csv(s"$basePath/${escape(csvTableName)}")
+      assert(csvDf.collect sameElements Array(Row("0"), Row("1"), Row("2")))
+
+      // test JSON writer / reader without specifying schema
+      val jsonTableName = "{def}"
+      spark.range(3).coalesce(1).write.json(s"$basePath/$jsonTableName")
+      val jsonDf = spark.read.json(s"$basePath/${escape(jsonTableName)}")
+      assert(jsonDf.collect sameElements Array(Row(0), Row(1), Row(2)))
+    }
+  }
 }
