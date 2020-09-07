@@ -46,7 +46,7 @@ class OptimizeInSuite extends PlanTest {
     val originalQuery =
       testRelation
         .where(In(UnresolvedAttribute("a"),
-          Seq(Literal(1), Literal(1), Literal(2), Literal(2), Literal(1), Literal(2))))
+          Seq(Literal(1), Literal(1), Literal(3), Literal(3), Literal(1), Literal(3))))
         .where(In(UnresolvedAttribute("b"),
           Seq(UnresolvedAttribute("a"), UnresolvedAttribute("a"),
             Round(UnresolvedAttribute("a"), 0), Round(UnresolvedAttribute("a"), 0),
@@ -56,7 +56,7 @@ class OptimizeInSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2))))
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(3))))
         .where(In(UnresolvedAttribute("b"),
           Seq(UnresolvedAttribute("a"), UnresolvedAttribute("a"),
             Round(UnresolvedAttribute("a"), 0), Round(UnresolvedAttribute("a"), 0),
@@ -69,7 +69,7 @@ class OptimizeInSuite extends PlanTest {
   test("OptimizedIn test: In clause not optimized to InSet when less than 10 items") {
     val originalQuery =
       testRelation
-        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2))))
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(3))))
         .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -79,13 +79,13 @@ class OptimizeInSuite extends PlanTest {
   test("OptimizedIn test: In clause optimized to InSet when more than 10 items") {
     val originalQuery =
       testRelation
-        .where(In(UnresolvedAttribute("a"), (1 to 11).map(Literal(_))))
+        .where(In(UnresolvedAttribute("a"), (1 to(22, 2)).map(Literal(_))))
         .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .where(InSet(UnresolvedAttribute("a"), (1 to 11).toSet))
+        .where(InSet(UnresolvedAttribute("a"), (1 to(22, 2)).toSet))
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -171,7 +171,7 @@ class OptimizeInSuite extends PlanTest {
   test("OptimizedIn test: Setting the threshold for turning Set into InSet.") {
     val plan =
       testRelation
-        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), Literal(3))))
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(4), Literal(3))))
         .analyze
 
     withSQLConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "10") {
@@ -237,5 +237,35 @@ class OptimizeInSuite extends PlanTest {
         .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("OptimizedIn test: optimize range compare") {
+    val originalQuery = testRelation
+      .select('a)
+      .where('a in(4, 1, 2, 3, 3, 5))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val expected = testRelation
+      .select('a)
+      .where('a >= 1 && 'a <= 5)
+      .analyze
+
+    comparePlans(optimized, expected)
+  }
+
+  test("OptimizedIn test: do not optimize range compare if non-continuous") {
+    val originalQuery = testRelation
+      .select('a)
+      .where('a in(1, 2, 3, 3, 5))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val expected = testRelation
+      .select('a)
+      .where('a in(1, 2, 3, 5))
+      .analyze
+
+    comparePlans(optimized, expected)
   }
 }
