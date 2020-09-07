@@ -35,69 +35,63 @@ with JVM. Profiling and debugging JVM is described at `Useful Developer Tools <h
 
 Note that,
 
-* PySpark in driver side is just like a regular Python program if you are running locally. You can directly debug via using
-    your IDE without the remote debug feature.
-
-* There are many other ways of debugging PySpark applications. For example, you can remotely debug by
-    using the open source `Remote Debugger <https://www.pydev.org/manual_adv_remote_debugger.html>`_ instead of using
-    PyCharm Professional documented here. 
+- If you are running locally, you can directly debug the driver side via using your IDE without the remote debug feature.
+- *There are many other ways of debugging PySpark applications*. For example, you can remotely debug by using the open source `Remote Debugger <https://www.pydev.org/manual_adv_remote_debugger.html>`_ instead of using PyCharm Professional documented here.
 
 
 Remote Debugging (PyCharm Professional)
 ---------------------------------------
 
-This section describes remote debugging within a single machine to demonstrate easily.
-The ways of debugging PySpark on the executor side is different from doing in the driver. They will be demonstrated respectively.
+This section describes remote debugging on both driver and executor sides within a single machine to demonstrate easily.
+The ways of debugging PySpark on the executor side is different from doing in the driver. Therefore, they will be demonstrated respectively.
 In order to debug PySpark applications on other machines, please refer to the full instructions that are specific
 to PyCharm, documented `here <https://www.jetbrains.com/help/pycharm/remote-debugging-with-product.html>`_.
 
-Firstly, choose **Edit Configuration...** from the **Run** menu. It opens the **Run/Debug Configurations dialog**.
+Firstly, choose **Edit Configuration...** from the *Run* menu. It opens the **Run/Debug Configurations dialog**.
 You have to click ``+`` configuration on the toolbar, and from the list of available configurations, select **Python Debug Server**.
 Enter the name of this new configuration, for example, ``MyRemoteDebugger`` and also specify the port number, for example ``12345``.
 
 .. image:: ../../../../docs/img/pyspark-remote-debug1.png
     :alt: PyCharm remote debugger setting
 
-| After that, you should install the corresponding version of the ``pydevd-pycahrm`` package. In the previous dialog, it shows the command to install.
+| After that, you should install the corresponding version of the ``pydevd-pycahrm`` package in all the machines which will connect to your PyCharm debugger. In the previous dialog, it shows the command to install.
 
 .. code-block:: text
 
     pip install pydevd-pycharm~=<version of PyCharm on the local machine>
 
+Driver Side
+~~~~~~~~~~~
 
-Debugging Driver Side
-~~~~~~~~~~~~~~~~~~~~~
+To debug on the driver side, your application should connect to the debugging server. Copy and paste the codes
+with ``pydevd_pycharm.settrace`` to the top of your PySpark script. Suppose the file name is ``app.py``:
 
-Add, on the top of your PySpark application script, the codes with ``pydevd_pycharm.settrace`` to connect to the
-debugging server in PyCharm. Suppose the file name is ``app.py``:
+.. code-block:: bash
 
-.. code-block:: python
-
-    #======================Copy and paste from the previous dialog===========================
+    echo "#======================Copy and paste from the previous dialog===========================
     import pydevd_pycharm
     pydevd_pycharm.settrace('localhost', port=12345, stdoutToServer=True, stderrToServer=True)
     #========================================================================================
     # Your PySpark application codes:
     from pyspark.sql import SparkSession
     spark = SparkSession.builder.getOrCreate()
-    spark.range(10).show()
+    spark.range(10).show()" > app.py
 
-Now you're ready to remotely debug. Start debugging with your ``MyRemoteDebugger``.
+Start debugging with your ``MyRemoteDebugger``.
 
 .. image:: ../../../../docs/img/pyspark-remote-debug2.png
     :alt: PyCharm run remote debugger
 
-| After that, run your application.
+| After that, submit your application. This will connect to your PyCharm debugging server and enable you to debug on driver side remotely.
 
 .. code-block:: bash
 
     spark-submit app.py
 
+Executor Side
+~~~~~~~~~~~~~
 
-Debugging Executor Side
-~~~~~~~~~~~~~~~~~~~~~~~
-
-In your current working directory, prepare a Python file as below:
+To debug on the executor side, prepare a Python file as below In your current working directory.
 
 .. code-block:: bash
 
@@ -131,21 +125,66 @@ Now you're ready to remotely debug. Start debugging with your ``MyRemoteDebugger
     spark.range(10).repartition(1).rdd.map(lambda x: x).collect()
 
 
+Checking Memory (``top`` and ``ps``)
+------------------------------------
 
-Checking Memory and CPU Usage
------------------------------
-
+The Python processes on the driver and executor can be monitored via typical ways such as ``top`` and ``ps`` commands.
 
 Driver Side
 ~~~~~~~~~~~
 
-To monitor the driver side in PySpark, there are many tools you can casually use to monitor regular Python processes such as `memory_profiler <https://github.com/pythonprofilers/memory_profiler>`_ which provides an easy way of profiling, for example:
+To check on the driver side, you can get the pid from your PySpark shell as below to know the process id and resources.
+
+.. code-block:: python
+
+    >>> import os; os.getpid()
+    18482
 
 .. code-block:: bash
 
-    echo "from memory_profiler import profile
-    from pyspark.sql import SparkSession
+    ps -fe 18482
+
+.. code-block:: text
+
+    UID   PID  PPID   C STIME  TTY           TIME CMD
+    000 18482 12345   0 0:00PM ttys001    0:00.00 /.../python
+
+Executor Side
+~~~~~~~~~~~~~
+
+To check on the executor side, you can simply ``grep`` them to figure out the process
+ids and relevant resources because Python workers are forked from ``pyspark.daemon``.
+
+.. code-block:: bash
+
+    ps -fe | grep pyspark.daemon
+
+.. code-block:: text
+
+    000 12345     1   0  0:00PM ttys000    0:00.00 /.../python -m pyspark.daemon
+    000 12345     1   0  0:00PM ttys000    0:00.00 /.../python -m pyspark.daemon
+    000 12345     1   0  0:00PM ttys000    0:00.00 /.../python -m pyspark.daemon
+    000 12345     1   0  0:00PM ttys000    0:00.00 /.../python -m pyspark.daemon
+    ...
+
+
+Checking Memory (Memory Profiler)
+---------------------------------
+
+`memory_profiler <https://github.com/pythonprofilers/memory_profiler>`_ is one of the profilers that allow you to
+check the memory usage line by line. This method is *only for driver side*.
+
+Unless you are running your application in another machine (e.g., YARN cluster mode), this useful tool can be used
+to debug the memory usage on driver side easily. Suppose your PySpark script name is ``profile_memory.py``.
+You can profile it as below.
+
+.. code-block:: bash
+
+    echo "from pyspark.sql import SparkSession
+    #===Your function should be decorated with @profile===
+    from memory_profiler import profile
     @profile
+    #=====================================================
     def my_func():
         session = SparkSession.builder.getOrCreate()
         df = session.range(10000)
@@ -163,40 +202,25 @@ To monitor the driver side in PySpark, there are many tools you can casually use
 
     Line #    Mem usage    Increment   Line Contents
     ================================================
-         3     50.5 MiB     50.5 MiB   @profile
-         4                             def my_func():
-         5     51.2 MiB      0.7 MiB       session = SparkSession.builder.getOrCreate()
-         6     51.2 MiB      0.0 MiB       df = session.range(10000)
-         7     54.1 MiB      2.9 MiB       return df.collect()
-
-
-Executor Side
-~~~~~~~~~~~~~
-
-Python workers are typically monitored via ``top`` and ``ps`` commands because Python workers create multiple Python processes
-workers. As an example, you can ``ps`` as below:
-
-.. code-block:: bash
-
-    ps -fe | grep pyspark.daemon
-
-.. code-block:: text
-
-    000 12345     1   0  0:00PM ttys000    0:00.00 /.../python -m pyspark.daemon
-    000 12345     1   0  0:00PM ttys000    0:00.00 /.../python -m pyspark.daemon
-    000 12345     1   0  0:00PM ttys000    0:00.00 /.../python -m pyspark.daemon
-    000 12345     1   0  0:00PM ttys000    0:00.00 /.../python -m pyspark.daemon
     ...
+         6                             def my_func():
+         7     51.5 MiB      0.6 MiB       session = SparkSession.builder.getOrCreate()
+         8     51.5 MiB      0.0 MiB       df = session.range(10000)
+         9     54.4 MiB      2.8 MiB       return df.collect()
 
 
-Python Profilers
-----------------
+Checking Function Call and Time (Python Profilers)
+--------------------------------------------------
+
+`Python Profilers <https://docs.python.org/3/library/profile.html>`_ are useful built-in features in Python itself. These
+provide deterministic profiling of Python programs with many useful statistics. This section describes how to use it on
+both driver and executor sides.
 
 Driver Side
-~~~~~~~~~~~~~
+~~~~~~~~~~~
 
-`Python Profilers <https://docs.python.org/3/library/profile.html>`_ is a useful built-in feature in Python itself.
-PySpark on driver side is just a regular Python process so you can use it as you do for regular Python programs.
+To use this on driver side, you can use it as you would do for regular Python programs because PySpark on driver side is a
+regular Python process unless you are running your application in another machine (e.g., YARN cluster mode).
 
 .. code-block:: bash
 
@@ -222,13 +246,11 @@ PySpark on driver side is just a regular Python process so you can use it as you
           276    0.000    0.000    0.002    0.000 <frozen importlib._bootstrap>:147(__enter__)
     ...
 
-
-
 Executor Side
 ~~~~~~~~~~~~~
 
-PySpark provides remote `Python Profilers <https://docs.python.org/3/library/profile.html>`_ for executor side, which can be
-enabled by setting ``spark.python.profile`` configuration to ``true``.
+To use this on executor side, PySpark provides remote `Python Profilers <https://docs.python.org/3/library/profile.html>`_ for
+executor side, which can be enabled by setting ``spark.python.profile`` configuration to ``true``.
 
 .. code-block:: bash
 
