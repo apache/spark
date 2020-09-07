@@ -102,13 +102,12 @@ class DataTypeSingleton(type):
         return cls._instances[cls]
 
 
-class NullType(DataType):
+class NullType(DataType, metaclass=DataTypeSingleton):
     """Null type.
 
     The data type representing None, used for the types that cannot be inferred.
     """
-
-    __metaclass__ = DataTypeSingleton
+    pass
 
 
 class AtomicType(DataType):
@@ -121,11 +120,10 @@ class NumericType(AtomicType):
     """
 
 
-class IntegralType(NumericType):
+class IntegralType(NumericType, metaclass=DataTypeSingleton):
     """Integral data types.
     """
-
-    __metaclass__ = DataTypeSingleton
+    pass
 
 
 class FractionalType(NumericType):
@@ -133,32 +131,27 @@ class FractionalType(NumericType):
     """
 
 
-class StringType(AtomicType):
+class StringType(AtomicType, metaclass=DataTypeSingleton):
     """String data type.
     """
+    pass
 
-    __metaclass__ = DataTypeSingleton
 
-
-class BinaryType(AtomicType):
+class BinaryType(AtomicType, metaclass=DataTypeSingleton):
     """Binary (byte array) data type.
     """
+    pass
 
-    __metaclass__ = DataTypeSingleton
 
-
-class BooleanType(AtomicType):
+class BooleanType(AtomicType, metaclass=DataTypeSingleton):
     """Boolean data type.
     """
+    pass
 
-    __metaclass__ = DataTypeSingleton
 
-
-class DateType(AtomicType):
+class DateType(AtomicType, metaclass=DataTypeSingleton):
     """Date (datetime.date) data type.
     """
-
-    __metaclass__ = DataTypeSingleton
 
     EPOCH_ORDINAL = datetime.datetime(1970, 1, 1).toordinal()
 
@@ -174,11 +167,9 @@ class DateType(AtomicType):
             return datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
 
 
-class TimestampType(AtomicType):
+class TimestampType(AtomicType, metaclass=DataTypeSingleton):
     """Timestamp (datetime.datetime) data type.
     """
-
-    __metaclass__ = DataTypeSingleton
 
     def needConversion(self):
         return True
@@ -226,18 +217,16 @@ class DecimalType(FractionalType):
         return "DecimalType(%d,%d)" % (self.precision, self.scale)
 
 
-class DoubleType(FractionalType):
+class DoubleType(FractionalType, metaclass=DataTypeSingleton):
     """Double data type, representing double precision floats.
     """
+    pass
 
-    __metaclass__ = DataTypeSingleton
 
-
-class FloatType(FractionalType):
+class FloatType(FractionalType, metaclass=DataTypeSingleton):
     """Float data type, representing single precision floats.
     """
-
-    __metaclass__ = DataTypeSingleton
+    pass
 
 
 class ByteType(IntegralType):
