@@ -163,7 +163,7 @@ object Analyzer {
         .exists(_._2.map(_._2.exprId).distinct.length > 1),
         "Found duplicate rewrite attributes")
 
-      val attributeRewrites = AttributeMap(attrMapping)
+      val attributeRewrites = AttributeMap(attrMapping.toSeq)
       // Using attrMapping from the children plans to rewrite their parent node.
       // Note that we shouldn't rewrite a node using attrMapping from its sibling nodes.
       val p = newPlan.transformExpressions {
@@ -174,7 +174,7 @@ object Analyzer {
       }
       attrMapping ++= plan.output.zip(p.output)
         .filter { case (a1, a2) => a1.exprId != a2.exprId }
-      p -> attrMapping
+      p -> attrMapping.toSeq
     } else {
       // Just passes through unresolved nodes
       plan.mapChildren {
