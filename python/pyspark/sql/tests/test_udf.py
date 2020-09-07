@@ -357,7 +357,7 @@ class UDFTests(ReusedSQLTestCase):
             df.select(add_four("id").alias("plus_four")).collect()
         )
 
-    @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore[arg-type]
+    @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
     def test_register_java_function(self):
         self.spark.udf.registerJavaFunction(
             "javaStringLength", "test.org.apache.spark.sql.JavaStringLength", IntegerType())
@@ -374,7 +374,7 @@ class UDFTests(ReusedSQLTestCase):
         [value] = self.spark.sql("SELECT javaStringLength3('test')").first()
         self.assertEqual(value, 4)
 
-    @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore[arg-type]
+    @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
     def test_register_java_udaf(self):
         self.spark.udf.registerJavaUDAF("javaUDAF", "test.org.apache.spark.sql.MyDoubleAvg")
         df = self.spark.createDataFrame([(1, "a"), (2, "b"), (3, "a")], ["id", "name"])
@@ -561,7 +561,7 @@ class UDFTests(ReusedSQLTestCase):
         self.assertEqual(rows, [Row(_1=1, _2=2, a=u'const_str')])
 
     # SPARK-24721
-    @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore[arg-type]
+    @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
     def test_datasource_with_udf(self):
         from pyspark.sql.functions import lit, col
 
@@ -700,7 +700,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.test_udf import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner  # type: ignore
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

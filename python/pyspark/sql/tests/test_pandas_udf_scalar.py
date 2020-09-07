@@ -46,7 +46,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore
 class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     @classmethod
@@ -1095,7 +1095,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             self.assertEquals(expected, df1.collect())
 
     # SPARK-24721
-    @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore[arg-type]
+    @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
     def test_datasource_with_udf(self):
         # Same as SQLTests.test_datasource_with_udf, but with Pandas UDF
         # This needs to a separate test because Arrow dependency is optional
