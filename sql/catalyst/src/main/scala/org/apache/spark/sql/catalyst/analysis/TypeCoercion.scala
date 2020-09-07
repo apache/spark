@@ -403,7 +403,8 @@ object TypeCoercion {
     /** Given a plan, add an extra project on top to widen some columns' data types. */
     private def widenTypes(plan: LogicalPlan, targetTypes: Seq[DataType]): LogicalPlan = {
       val casted = plan.output.zip(targetTypes).map {
-        case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
+        case (e, dt) if e.dataType != dt =>
+          Alias(Cast(e, dt, Some(SQLConf.get.sessionLocalTimeZone)), e.name)()
         case (e, _) => e
       }
       Project(casted, plan)
