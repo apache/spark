@@ -236,14 +236,12 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
  *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
 object OptimizeIn extends Rule[LogicalPlan] {
-  private def isContinousIntegers(list: Seq[Expression]): Boolean = {
-    if (list.nonEmpty && isInteger(list.head)) {
-      val (min, max) = getBound(list)
+  private def isContinousIntegers(nums: Set[Expression]): Boolean = {
+    if (nums.nonEmpty && isInteger(nums.head)) {
+      val (min, max) = getBound(nums)
       val minL = min.eval(EmptyRow).asInstanceOf[Number].longValue()
       val maxL = max.eval(EmptyRow).asInstanceOf[Number].longValue()
-      // we just be extra careful here and check for single item set
-      // first to make sure min + len - 1 always within valid range
-      minL == maxL || minL + list.length - 1 == maxL
+       minL + (nums.size - 1) == maxL
     } else {
       false
     }
@@ -254,16 +252,16 @@ object OptimizeIn extends Rule[LogicalPlan] {
       v.dataType.isInstanceOf[IntegerType] ||
       v.dataType.isInstanceOf[LongType]
 
-  def getBound(list: Seq[Expression]): (Expression, Expression) = {
-    list.head.dataType match {
+  def getBound(nums: Set[Expression]): (Expression, Expression) = {
+    nums.head.dataType match {
       case ShortType =>
-        val values = list.map(e => e.eval(EmptyRow).asInstanceOf[Short])
+        val values = nums.map(e => e.eval(EmptyRow).asInstanceOf[Short])
         (Literal(values.min, ShortType), Literal(values.max, ShortType))
       case IntegerType =>
-        val values = list.map(e => e.eval(EmptyRow).asInstanceOf[Integer])
+        val values = nums.map(e => e.eval(EmptyRow).asInstanceOf[Integer])
         (Literal(values.min, IntegerType), Literal(values.max, IntegerType))
       case LongType =>
-        val values = list.map(e => e.eval(EmptyRow).asInstanceOf[Long])
+        val values = nums.map(e => e.eval(EmptyRow).asInstanceOf[Long])
         (Literal(values.min, LongType), Literal(values.max, LongType))
     }
   }
@@ -282,8 +280,8 @@ object OptimizeIn extends Rule[LogicalPlan] {
           && !v.isInstanceOf[CreateNamedStruct]
           && !newList.head.isInstanceOf[CreateNamedStruct]) {
           EqualTo(v, newList.head)
-        } else if (isInteger(v) && isContinousIntegers(newList)) {
-          val (min, max) = getBound(newList)
+        } else if (isInteger(v) && isContinousIntegers(newList.toSet)) {
+          val (min, max) = getBound(newList.toSet)
           And(GreaterThanOrEqual(v, min),
             LessThanOrEqual(v, max))
         } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
