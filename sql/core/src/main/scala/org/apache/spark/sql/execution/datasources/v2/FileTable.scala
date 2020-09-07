@@ -145,7 +145,7 @@ abstract class FileTable(
    */
   private def globPaths: Boolean = {
     val entry = options.get(DataSource.GLOB_PATHS_KEY)
-    Option(entry).getOrElse("true") == "true"
+    Option(entry).map(_ == "true").getOrElse(true)
   }
 }
 
