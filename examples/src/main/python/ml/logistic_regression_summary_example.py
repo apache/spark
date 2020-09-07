@@ -44,7 +44,7 @@ if __name__ == "__main__":
     # in the earlier example
     trainingSummary: BinaryLogisticRegressionTrainingSummary = (
         lrModel.summary
-    )  # type: ignore[assignment]
+    )  # type: ignore
 
     # Obtain the objective per iteration
     objectiveHistory = trainingSummary.objectiveHistory

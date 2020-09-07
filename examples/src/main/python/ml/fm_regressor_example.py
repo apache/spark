@@ -63,7 +63,7 @@ if __name__ == "__main__":
     rmse = evaluator.evaluate(predictions)
     print("Root Mean Squared Error (RMSE) on test data = %g" % rmse)
 
-    fmModel: FMRegressionModel = model.stages[1]  # type: ignore[assignment]
+    fmModel: FMRegressionModel = model.stages[1]  # type: ignore
     print("Factors: " + str(fmModel.factors))
     print("Linear: " + str(fmModel.linear))
     print("Intercept: " + str(fmModel.intercept))

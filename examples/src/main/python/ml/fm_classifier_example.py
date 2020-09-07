@@ -66,7 +66,7 @@ if __name__ == "__main__":
     accuracy = evaluator.evaluate(predictions)
     print("Test set accuracy = %g" % accuracy)
 
-    fmModel: FMClassificationModel = model.stages[2]  # type: ignore[assignment]
+    fmModel: FMClassificationModel = model.stages[2]  # type: ignore
     print("Factors: " + str(fmModel.factors))
     print("Linear: " + str(fmModel.linear))
     print("Intercept: " + str(fmModel.intercept))
