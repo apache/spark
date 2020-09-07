@@ -288,7 +288,7 @@ object SQLConf {
       .doc("The threshold to use bloom filter to pruning data.")
       .version("3.1.0")
       .longConf
-      .createWithDefault(2000000L)
+      .createWithDefault(100000L)
 
   val DYNAMIC_SHUFFLE_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicShufflePruning.enabled")
