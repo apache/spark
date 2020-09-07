@@ -187,6 +187,8 @@ private[deploy] object DeployMessages {
     Utils.checkHostPort(hostPort)
   }
 
+  // When the host of Worker is lost or decommissioned, the `workerHost` is the host address
+  // of that Worker. Otherwise, it's None.
   case class ExecutorUpdated(id: Int, state: ExecutorState, message: Option[String],
     exitStatus: Option[Int], workerHost: Option[String])
 
