@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.OptimizeLocalShuffleReader.LOCAL_SHUFFLE_READER_DESCRIPTION
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
@@ -886,6 +886,20 @@ class AdaptiveQueryExecSuite
         } else {
           assert(partitionsNum === 6)
         }
+      }
+    }
+  }
+
+  test("SPARK-32753: Only copy tags to node with no tags") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withTempView("v1") {
+        spark.range(10).union(spark.range(10)).createOrReplaceTempView("v1")
+
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT id FROM v1 GROUP BY id DISTRIBUTE BY id")
+        assert(collect(adaptivePlan) {
+          case s: ShuffleExchangeExec => s
+        }.length == 1)
       }
     }
   }
