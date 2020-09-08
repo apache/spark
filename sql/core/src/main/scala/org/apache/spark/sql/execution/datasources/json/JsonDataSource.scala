@@ -119,7 +119,7 @@ object TextInputJsonDataSource extends JsonDataSource {
         sparkSession,
         paths = inputPaths.map(_.getPath.toString),
         className = classOf[TextFileFormat].getName,
-        options = parsedOptions.parameters
+        options = parsedOptions.parameters.originalMap ++ Map(DataSource.GLOB_PATHS_KEY -> "false")
       ).resolveRelation(checkFilesExist = false))
       .select("value").as(Encoders.STRING)
   }
