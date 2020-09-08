@@ -43,6 +43,33 @@ spark.sql.codegen.wholeStage	true
 
 
 -- !query
+== Parsed Logical Plan ==
+'Project [unresolvedalias('sum(distinct 'val), None)]
++- 'UnresolvedRelation [explain_temp1]
+
+== Analyzed Logical Plan ==
+sum(DISTINCT val): bigint
+Aggregate [sum(distinct cast(val#x as bigint)) AS sum(DISTINCT val)#x]
++- SubqueryAlias spark_catalog.default.explain_temp1
+   +- Relation[key#x,val#x] parquet
+
+== Optimized Logical Plan ==
+Aggregate [sum(distinct cast(val#x as bigint)) AS sum(DISTINCT val)#x]
++- Project [val#x]
+   +- Relation[key#x,val#x] parquet
+
+== Physical Plan ==
+*(3) HashAggregate(keys=[], functions=[sum(distinct cast(val#x as bigint)#x)], output=[sum(DISTINCT val)#x])
++- Exchange SinglePartition, true, [id=#x]
+   +- *(2) HashAggregate(keys=[], functions=[partial_sum(distinct cast(val#x as bigint)#x)], output=[sum#x])
+      +- *(2) HashAggregate(keys=[cast(val#x as bigint)#x], functions=[], output=[cast(val#x as bigint)#x])
+         +- Exchange hashpartitioning(cast(val#x as bigint)#x, 200), true, [id=#x]
+            +- *(1) HashAggregate(keys=[cast(val#x as bigint) AS cast(val#x as bigint)#x], functions=[], output=[cast(val#x as bigint)#x])
+               +- *(1) ColumnarToRow
+                  +- FileScan parquet default.explain_temp1[val#x] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex[[not included in comparison]/{warehouse_dir}/explain_temp1], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<val:int>
+
+
+-- !query
 EXPLAIN FORMATTED
   SELECT key, max(val) 
   FROM   explain_temp1 

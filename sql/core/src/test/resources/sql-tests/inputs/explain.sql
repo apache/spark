@@ -9,6 +9,11 @@ CREATE table  explain_temp4 (key int, val string) USING PARQUET;
 
 SET spark.sql.codegen.wholeStage = true;
 
+-- distinct func
+EXPLAIN EXTENDED
+  SELECT sum(distinct val)
+  FROM explain_temp1
+
 -- single table
 EXPLAIN FORMATTED
   SELECT key, max(val) 
