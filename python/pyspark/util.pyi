@@ -17,7 +17,7 @@
 # under the License.
 #
 
-from typing import Any, Callable, Tuple
+from typing import Any, Tuple
 from pyspark._typing import F
 
 import threading
