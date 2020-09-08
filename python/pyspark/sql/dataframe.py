@@ -1548,7 +1548,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return self.union(other)
 
     @since(2.3)
-    def unionByName(self, other):
+    def unionByName(self, other, allowMissingColumns=False):
         """ Returns a new :class:`DataFrame` containing union of rows in this and another
         :class:`DataFrame`.
 
@@ -1567,8 +1567,28 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |   1|   2|   3|
         |   6|   4|   5|
         +----+----+----+
+
+        When the parameter `allowMissingColumns` is ``True``,
+        this function allows different set of column names between two :class:`DataFrame`\\s.
+        Missing columns at each side, will be filled with null values.
+        The missing columns at left :class:`DataFrame` will be added at the end in the schema
+        of the union result:
+
+        >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
+        >>> df2 = spark.createDataFrame([[4, 5, 6]], ["col1", "col2", "col3"])
+        >>> df1.unionByName(df2, allowMissingColumns=True).show()
+        +----+----+----+----+
+        |col0|col1|col2|col3|
+        +----+----+----+----+
+        |   1|   2|   3|null|
+        |null|   4|   5|   6|
+        +----+----+----+----+
+
+        .. versionchanged:: 3.1.0
+           Added optional argument `allowMissingColumns` to specify whether to allow
+           missing columns.
         """
-        return DataFrame(self._jdf.unionByName(other._jdf), self.sql_ctx)
+        return DataFrame(self._jdf.unionByName(other._jdf, allowMissingColumns), self.sql_ctx)
 
     @since(1.3)
     def intersect(self, other):
