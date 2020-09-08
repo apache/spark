@@ -52,6 +52,8 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       case (child, distribution) =>
         val numPartitions = distribution.requiredNumPartitions
           .getOrElse(conf.numShufflePartitions)
+        // Like optimizer.CollapseRepartition removes adjacent repartition operations,
+        // adjacent repartitions performed by shuffle can be also removed.
         val newChild = if (child.isInstanceOf[ShuffleExchangeExec]) child.children.head else child
         ShuffleExchangeExec(distribution.createPartitioning(numPartitions), newChild)
     }
