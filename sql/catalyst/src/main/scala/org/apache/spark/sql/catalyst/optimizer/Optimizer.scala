@@ -142,7 +142,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteNonCorrelatedExists,
       ComputeCurrentTime,
       GetCurrentDatabaseAndCatalog(catalogManager),
-      RewriteDistinctAggregates,
       ReplaceDeduplicateWithAggregate) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
@@ -196,6 +195,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateSorts) :+
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) :+
+    Batch("Distinct Aggregate Rewrite", Once,
+      RewriteDistinctAggregates) :+
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
       CombineTypedFilters,

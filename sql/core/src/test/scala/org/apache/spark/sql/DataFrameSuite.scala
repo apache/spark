@@ -2555,6 +2555,19 @@ class DataFrameSuite extends QueryTest
     val df = Seq(0.0 -> -0.0).toDF("pos", "neg")
     checkAnswer(df.select($"pos" > $"neg"), Row(false))
   }
+
+  test("SPARK-32816: aggregating multiple distinct DECIMAL columns") {
+    withTempPath { path =>
+      spark.range(0, 100, 1, 1)
+        .selectExpr("id", "cast(id as decimal(9, 0)) as decimal_col")
+        .write.mode("overwrite")
+        .parquet(path.getAbsolutePath)
+      spark.read.parquet(path.getAbsolutePath).createOrReplaceTempView("test_table")
+      checkAnswer(
+        sql("select avg(distinct decimal_col), sum(distinct decimal_col) from test_table"),
+        Row(49.5, 4950))
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
