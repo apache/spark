@@ -37,8 +37,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
       ),
       hadoopConf,
       checkEmptyGlobPath = true,
-      checkFilesExist = true,
-      enableGlobbing = true
+      checkFilesExist = true
     )
 
     assert(resultPaths.toSet === allPathsInFs.toSet)
@@ -52,8 +51,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
       ),
       hadoopConf,
       checkEmptyGlobPath = true,
-      checkFilesExist = true,
-      enableGlobbing = true
+      checkFilesExist = true
     )
 
     assert(
@@ -74,8 +72,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
       ),
       hadoopConf,
       checkEmptyGlobPath = true,
-      checkFilesExist = true,
-      enableGlobbing = true
+      checkFilesExist = true
     )
 
     assert(
@@ -95,8 +92,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
       ),
       hadoopConf,
       checkEmptyGlobPath = true,
-      checkFilesExist = false,
-      enableGlobbing = true
+      checkFilesExist = false
     )
 
     assert(
@@ -118,8 +114,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
         ),
         hadoopConf,
         checkEmptyGlobPath = true,
-        checkFilesExist = true,
-        enableGlobbing = true
+        checkFilesExist = true
       )
     )
   }
@@ -134,8 +129,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
         ),
         hadoopConf,
         checkEmptyGlobPath = true,
-        checkFilesExist = true,
-        enableGlobbing = true
+        checkFilesExist = true
       )
     )
   }
