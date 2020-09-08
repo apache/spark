@@ -193,10 +193,9 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
       val escapedSvmFileName = "\\[abc\\]"
       val rawData = new java.util.ArrayList[Row]()
       rawData.add(Row(1.0, Vectors.sparse(2, Seq((0, 2.0), (1, 3.0)))))
-      val struct = StructType(
-        StructField("labelFoo", DoubleType, false) ::
-          StructField("featuresBar", VectorType, false) :: Nil
-      )
+      val struct = new StructType()
+        .add("labelFoo", DoubleType, false)
+        .add("featuresBar", VectorType, false)
       val df = spark.createDataFrame(rawData, struct)
       df.write.format("libsvm").save(s"$basePath/$svmFileName")
       val df2 = spark.read.format("libsvm").load(s"$basePath/$escapedSvmFileName")
