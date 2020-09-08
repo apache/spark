@@ -129,13 +129,14 @@ class SQLExecutionSuite extends SparkFunSuite {
   test("SPARK-32813: Table scan should work in different thread") {
     val executor1 = Executors.newSingleThreadExecutor()
     val executor2 = Executors.newSingleThreadExecutor()
+    var session: SparkSession = null
     SparkSession.cleanupAnyExistingSession()
 
     withTempDir { tempDir =>
       try {
         val tablePath = tempDir.toString + "/table"
         val df = ThreadUtils.awaitResult(Future {
-          val session = SparkSession.builder().appName("test").master("local[*]").getOrCreate()
+          session = SparkSession.builder().appName("test").master("local[*]").getOrCreate()
 
           session.createDataFrame(
             session.sparkContext.parallelize(Row(Array(1, 2, 3)) :: Nil),
@@ -153,6 +154,7 @@ class SQLExecutionSuite extends SparkFunSuite {
       } finally {
         executor1.shutdown()
         executor2.shutdown()
+        session.stop()
       }
     }
   }
