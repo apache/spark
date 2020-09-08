@@ -223,6 +223,9 @@ object LogicalPlanIntegrity {
    */
   def hasUniqueExprIdsForOutput(plan: LogicalPlan): Boolean = {
     val allOutputAttrs = plan.collect { case p if canGetOutputAttrs(p) =>
+      // NOTE: we still need to filter resolved expressions here because the output of
+      // some resolved logical plans can have unresolved references,
+      // e.g., outer references in `ExistenceJoin`.
       p.output.filter(_.resolved).map(_.canonicalized.asInstanceOf[Attribute])
     }
     val groupedAttrsByExprId = allOutputAttrs
