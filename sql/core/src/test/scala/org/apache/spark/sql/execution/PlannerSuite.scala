@@ -1014,7 +1014,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         val joinedPlan = joined.queryExecution.executedPlan
         val exchangesInJoined =
           joinedPlan.collect { case s: ShuffleExchangeExec => s}
-
         assert(exchangesInJoined.size == 2)
 
         val leftPartitioning = exchangesInJoined(0).outputPartitioning
