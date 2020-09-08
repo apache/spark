@@ -396,8 +396,6 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     RangeExec(range.canonicalized.asInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Range])
   }
 
-
-
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     val rdd = if (isEmptyRange) {
       new EmptyRDD[InternalRow](sqlContext.sparkContext)
