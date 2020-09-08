@@ -52,7 +52,8 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       case (child, distribution) =>
         val numPartitions = distribution.requiredNumPartitions
           .getOrElse(conf.numShufflePartitions)
-        ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child)
+        val newChild = if (child.isInstanceOf[ShuffleExchangeExec]) child.children.head else child
+        ShuffleExchangeExec(distribution.createPartitioning(numPartitions), newChild)
     }
 
     // Get the indexes of children which have specified distribution requirements and need to have

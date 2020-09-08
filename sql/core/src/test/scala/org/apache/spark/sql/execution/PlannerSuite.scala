@@ -994,6 +994,39 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       }
     }
   }
+
+  test("Remove redundant shuffle exchange") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "200") {
+        val ordered = spark.range(1, 100).repartitionByRange(10, $"id".desc).orderBy($"id")
+        val orderedPlan = ordered.queryExecution.executedPlan
+        val exchangesInOrdered =
+          orderedPlan.collect { case s: ShuffleExchangeExec => s}
+        assert(exchangesInOrdered.size == 1)
+
+        val partitioning = exchangesInOrdered.head.outputPartitioning
+        assert(partitioning.numPartitions == 200)
+        assert(partitioning.isInstanceOf[RangePartitioning])
+
+        val left = Seq(1, 2, 3).toDF.repartition(10, $"value")
+        val right = Seq(1, 2, 3).toDF
+        val joined = left.join(right, left("value") + 1 === right("value"))
+        val joinedPlan = joined.queryExecution.executedPlan
+        val exchangesInJoined =
+          joinedPlan.collect { case s: ShuffleExchangeExec => s}
+
+        assert(exchangesInJoined.size == 2)
+
+        val leftPartitioning = exchangesInJoined(0).outputPartitioning
+        assert(leftPartitioning.numPartitions == 200)
+        assert(leftPartitioning.isInstanceOf[HashPartitioning])
+
+        val rightPartitioning = exchangesInJoined(1).outputPartitioning
+        assert(rightPartitioning.numPartitions == 200)
+        assert(rightPartitioning.isInstanceOf[HashPartitioning])
+      }
+    }
+  }
 }
 
 // Used for unit-testing EnsureRequirements
