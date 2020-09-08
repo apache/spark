@@ -329,50 +329,43 @@ object TypeCoercion {
   object WidenSetOperationTypes extends TypeCoercionRule {
 
     override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = {
-      val rewritePlanMap = mutable.ArrayBuffer[(LogicalPlan, LogicalPlan)]()
-      val newPlan = plan resolveOperatorsUp {
+      plan resolveOperatorsUpWithNewOutput {
         case s @ Except(left, right, isAll) if s.childrenResolved &&
           left.output.length == right.output.length && !s.resolved =>
-          val newChildren = buildNewChildrenWithWiderTypes(left :: right :: Nil)
-          if (newChildren.nonEmpty) {
-            rewritePlanMap ++= newChildren
-            Except(newChildren.head._1, newChildren.last._1, isAll)
+          val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
+          if (newChildren.isEmpty) {
+            s -> Nil
           } else {
-            s
+            assert(newChildren.length == 2)
+            val attrMapping = left.output.zip(newChildren.head.output)
+            Except(newChildren.head, newChildren.last, isAll) -> attrMapping
           }
 
         case s @ Intersect(left, right, isAll) if s.childrenResolved &&
           left.output.length == right.output.length && !s.resolved =>
-          val newChildren = buildNewChildrenWithWiderTypes(left :: right :: Nil)
-          if (newChildren.nonEmpty) {
-            rewritePlanMap ++= newChildren
-            Intersect(newChildren.head._1, newChildren.last._1, isAll)
+          val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
+          if (newChildren.isEmpty) {
+            s -> Nil
           } else {
-            s
+            assert(newChildren.length == 2)
+            val attrMapping = left.output.zip(newChildren.head.output)
+            Intersect(newChildren.head, newChildren.last, isAll) -> attrMapping
           }
 
         case s: Union if s.childrenResolved && !s.byName &&
           s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
-          val newChildren = buildNewChildrenWithWiderTypes(s.children)
-          if (newChildren.nonEmpty) {
-            rewritePlanMap ++= newChildren
-            s.copy(children = newChildren.map(_._1))
+          val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(s.children)
+          if (newChildren.isEmpty) {
+            s -> Nil
           } else {
-            s
+            val attrMapping = s.children.head.output.zip(newChildren.head.output)
+            s.copy(children = newChildren) -> attrMapping
           }
-      }
-
-      if (rewritePlanMap.nonEmpty) {
-        assert(!plan.fastEquals(newPlan))
-        Analyzer.rewritePlan(newPlan, rewritePlanMap.toMap)._1
-      } else {
-        plan
       }
     }
 
     /** Build new children with the widest types for each attribute among all the children */
-    private def buildNewChildrenWithWiderTypes(children: Seq[LogicalPlan])
-      : Seq[(LogicalPlan, LogicalPlan)] = {
+    private def buildNewChildrenWithWiderTypes(children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
       require(children.forall(_.output.length == children.head.output.length))
 
       // Get a sequence of data types, each of which is the widest type of this specific attribute
@@ -408,16 +401,13 @@ object TypeCoercion {
     }
 
     /** Given a plan, add an extra project on top to widen some columns' data types. */
-    private def widenTypes(plan: LogicalPlan, targetTypes: Seq[DataType])
-      : (LogicalPlan, LogicalPlan) = {
+    private def widenTypes(plan: LogicalPlan, targetTypes: Seq[DataType]): LogicalPlan = {
       val casted = plan.output.zip(targetTypes).map {
         case (e, dt) if e.dataType != dt =>
-          val alias = Alias(Cast(e, dt), e.name)(exprId = e.exprId)
-          alias -> alias.newInstance()
-        case (e, _) =>
-          e -> e
-      }.unzip
-      Project(casted._1, plan) -> Project(casted._2, plan)
+          Alias(Cast(e, dt, Some(SQLConf.get.sessionLocalTimeZone)), e.name)()
+        case (e, _) => e
+      }
+      Project(casted, plan)
     }
   }
 
