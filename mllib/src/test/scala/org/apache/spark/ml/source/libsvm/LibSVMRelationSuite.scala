@@ -185,7 +185,7 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
-  test("SPARK-XXXXX: Test LibSVM data source on file paths with glob metacharacters") {
+  test("SPARK-32815: Test LibSVM data source on file paths with glob metacharacters") {
     withTempDir { dir =>
       val basePath = dir.getCanonicalPath
 
