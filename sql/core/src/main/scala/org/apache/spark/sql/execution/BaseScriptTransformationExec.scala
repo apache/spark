@@ -114,7 +114,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         // In schema less mode, hive will choose first two output column as output.
         // If output column size less then 2, it will return NULL for columns with missing values.
         // Here we split row string and choose first 2 values, if values's size less then 2,
-        // we pad NULL value util 2 to make behavior same with hive.
+        // we pad NULL value until 2 to make behavior same with hive.
         val kvWriter = CatalystTypeConverters.createToCatalystConverter(StringType)
         prevLine: String =>
           new GenericInternalRow(
