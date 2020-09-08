@@ -155,6 +155,21 @@ SELECT * FROM tab2;
 -- Restore the property
 SET spark.sql.legacy.setopsPrecedence.enabled = false;
 
+-- SPARK-32638: corrects references when adding aliases in WidenSetOperationTypes
+CREATE OR REPLACE TEMPORARY VIEW tab3 AS VALUES (decimal(1)), (decimal(2)) tbl3(v);
+SELECT t.v FROM (
+  SELECT v FROM tab3
+  INTERSECT
+  SELECT v + v AS v FROM tab3
+) t;
+
+SELECT SUM(t.v) FROM (
+  SELECT v FROM tab3
+  INTERSECT
+  SELECT v + v AS v FROM tab3
+) t;
+
 -- Clean-up 
 DROP VIEW IF EXISTS tab1;
 DROP VIEW IF EXISTS tab2;
+DROP VIEW IF EXISTS tab3;

@@ -1239,108 +1239,13 @@ class Analyzer(
       if (conflictPlans.isEmpty) {
         right
       } else {
-        rewritePlan(right, conflictPlans.toMap)._1
-      }
-    }
-
-    private def rewritePlan(plan: LogicalPlan, conflictPlanMap: Map[LogicalPlan, LogicalPlan])
-      : (LogicalPlan, Seq[(Attribute, Attribute)]) = {
-      if (conflictPlanMap.contains(plan)) {
-        // If the plan is the one that conflict the with left one, we'd
-        // just replace it with the new plan and collect the rewrite
-        // attributes for the parent node.
-        val newRelation = conflictPlanMap(plan)
-        newRelation -> plan.output.zip(newRelation.output)
-      } else {
-        val attrMapping = new mutable.ArrayBuffer[(Attribute, Attribute)]()
-        val newPlan = plan.mapChildren { child =>
-          // If not, we'd rewrite child plan recursively until we find the
-          // conflict node or reach the leaf node.
-          val (newChild, childAttrMapping) = rewritePlan(child, conflictPlanMap)
-          attrMapping ++= childAttrMapping.filter { case (oldAttr, _) =>
-            // `attrMapping` is not only used to replace the attributes of the current `plan`,
-            // but also to be propagated to the parent plans of the current `plan`. Therefore,
-            // the `oldAttr` must be part of either `plan.references` (so that it can be used to
-            // replace attributes of the current `plan`) or `plan.outputSet` (so that it can be
-            // used by those parent plans).
-            (plan.outputSet ++ plan.references).contains(oldAttr)
-          }
-          newChild
-        }
-
-        if (attrMapping.isEmpty) {
-          newPlan -> attrMapping
-        } else {
-          assert(!attrMapping.groupBy(_._1.exprId)
-            .exists(_._2.map(_._2.exprId).distinct.length > 1),
-            "Found duplicate rewrite attributes")
-          val attributeRewrites = AttributeMap(attrMapping)
-          // Using attrMapping from the children plans to rewrite their parent node.
-          // Note that we shouldn't rewrite a node using attrMapping from its sibling nodes.
-          newPlan.transformExpressions {
-            case a: Attribute =>
-              dedupAttr(a, attributeRewrites)
-            case s: SubqueryExpression =>
-              s.withNewPlan(dedupOuterReferencesInSubquery(s.plan, attributeRewrites))
-          } -> attrMapping
-        }
-      }
-    }
-
-    private def dedupAttr(attr: Attribute, attrMap: AttributeMap[Attribute]): Attribute = {
-      val exprId = attrMap.getOrElse(attr, attr).exprId
-      attr.withExprId(exprId)
-    }
-
-    /**
-     * The outer plan may have been de-duplicated and the function below updates the
-     * outer references to refer to the de-duplicated attributes.
-     *
-     * For example (SQL):
-     * {{{
-     *   SELECT * FROM t1
-     *   INTERSECT
-     *   SELECT * FROM t1
-     *   WHERE EXISTS (SELECT 1
-     *                 FROM t2
-     *                 WHERE t1.c1 = t2.c1)
-     * }}}
-     * Plan before resolveReference rule.
-     *    'Intersect
-     *    :- Project [c1#245, c2#246]
-     *    :  +- SubqueryAlias t1
-     *    :     +- Relation[c1#245,c2#246] parquet
-     *    +- 'Project [*]
-     *       +- Filter exists#257 [c1#245]
-     *       :  +- Project [1 AS 1#258]
-     *       :     +- Filter (outer(c1#245) = c1#251)
-     *       :        +- SubqueryAlias t2
-     *       :           +- Relation[c1#251,c2#252] parquet
-     *       +- SubqueryAlias t1
-     *          +- Relation[c1#245,c2#246] parquet
-     * Plan after the resolveReference rule.
-     *    Intersect
-     *    :- Project [c1#245, c2#246]
-     *    :  +- SubqueryAlias t1
-     *    :     +- Relation[c1#245,c2#246] parquet
-     *    +- Project [c1#259, c2#260]
-     *       +- Filter exists#257 [c1#259]
-     *       :  +- Project [1 AS 1#258]
-     *       :     +- Filter (outer(c1#259) = c1#251) => Updated
-     *       :        +- SubqueryAlias t2
-     *       :           +- Relation[c1#251,c2#252] parquet
-     *       +- SubqueryAlias t1
-     *          +- Relation[c1#259,c2#260] parquet  => Outer plan's attributes are de-duplicated.
-     */
-    private def dedupOuterReferencesInSubquery(
-        plan: LogicalPlan,
-        attrMap: AttributeMap[Attribute]): LogicalPlan = {
-      plan transformDown { case currentFragment =>
-        currentFragment transformExpressions {
-          case OuterReference(a: Attribute) =>
-            OuterReference(dedupAttr(a, attrMap))
-          case s: SubqueryExpression =>
-            s.withNewPlan(dedupOuterReferencesInSubquery(s.plan, attrMap))
+        val planMapping = conflictPlans.toMap
+        right.transformUpWithNewOutput {
+          case oldPlan =>
+            val newPlanOpt = planMapping.get(oldPlan)
+            newPlanOpt.map { newPlan =>
+              newPlan -> oldPlan.output.zip(newPlan.output)
+            }.getOrElse(oldPlan -> Nil)
         }
       }
     }

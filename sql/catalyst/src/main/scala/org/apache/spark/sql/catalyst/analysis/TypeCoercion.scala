@@ -326,25 +326,42 @@ object TypeCoercion {
    *
    * This rule is only applied to Union/Except/Intersect
    */
-  object WidenSetOperationTypes extends Rule[LogicalPlan] {
+  object WidenSetOperationTypes extends TypeCoercionRule {
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
-      case s @ Except(left, right, isAll) if s.childrenResolved &&
-        left.output.length == right.output.length && !s.resolved =>
-        val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
-        assert(newChildren.length == 2)
-        Except(newChildren.head, newChildren.last, isAll)
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = {
+      plan resolveOperatorsUpWithNewOutput {
+        case s @ Except(left, right, isAll) if s.childrenResolved &&
+          left.output.length == right.output.length && !s.resolved =>
+          val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
+          if (newChildren.isEmpty) {
+            s -> Nil
+          } else {
+            assert(newChildren.length == 2)
+            val attrMapping = left.output.zip(newChildren.head.output)
+            Except(newChildren.head, newChildren.last, isAll) -> attrMapping
+          }
 
-      case s @ Intersect(left, right, isAll) if s.childrenResolved &&
-        left.output.length == right.output.length && !s.resolved =>
-        val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
-        assert(newChildren.length == 2)
-        Intersect(newChildren.head, newChildren.last, isAll)
+        case s @ Intersect(left, right, isAll) if s.childrenResolved &&
+          left.output.length == right.output.length && !s.resolved =>
+          val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
+          if (newChildren.isEmpty) {
+            s -> Nil
+          } else {
+            assert(newChildren.length == 2)
+            val attrMapping = left.output.zip(newChildren.head.output)
+            Intersect(newChildren.head, newChildren.last, isAll) -> attrMapping
+          }
 
-      case s: Union if s.childrenResolved &&
+        case s: Union if s.childrenResolved &&
           s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
-        val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(s.children)
-        s.makeCopy(Array(newChildren))
+          val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(s.children)
+          if (newChildren.isEmpty) {
+            s -> Nil
+          } else {
+            val attrMapping = s.children.head.output.zip(newChildren.head.output)
+            s.copy(children = newChildren) -> attrMapping
+          }
+      }
     }
 
     /** Build new children with the widest types for each attribute among all the children */
@@ -360,8 +377,7 @@ object TypeCoercion {
         // Add an extra Project if the targetTypes are different from the original types.
         children.map(widenTypes(_, targetTypes))
       } else {
-        // Unable to find a target type to widen, then just return the original set.
-        children
+        Nil
       }
     }
 
@@ -387,7 +403,8 @@ object TypeCoercion {
     /** Given a plan, add an extra project on top to widen some columns' data types. */
     private def widenTypes(plan: LogicalPlan, targetTypes: Seq[DataType]): LogicalPlan = {
       val casted = plan.output.zip(targetTypes).map {
-        case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
+        case (e, dt) if e.dataType != dt =>
+          Alias(Cast(e, dt, Some(SQLConf.get.sessionLocalTimeZone)), e.name)()
         case (e, _) => e
       }
       Project(casted, plan)
