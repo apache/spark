@@ -2560,6 +2560,48 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  ignore("Make Metastore convert session level control") {
+    Seq(true, false).foreach { key =>
+      withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> key.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (i INT) PARTITIONED BY (p STRING) STORED AS ORC")
+          sql("ALTER TABLE t ADD PARTITION(p=20200901)")
+          sql("INSERT INTO t PARTITION(p='20200901') SELECT 1")
+          sql(
+            """
+              |ALTER TABLE t PARTITION(p='20200901')
+              |SET SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+              |
+            """.stripMargin)
+          sql("ALTER TABLE t SET FILEFORMAT TEXTFILE")
+          sql("ALTER TABLE t ADD PARTITION(p='20200902')")
+          sql("INSERT INTO t PARTITION(p='20200902') SELECT 2")
+
+          sql("desc formatted t").show(false)
+          sql("desc formatted t partition(p='20200901')").show(false)
+          sql("desc formatted t partition(p='20200902')").show(false)
+          if (key) {
+            checkAnswer(
+              sql(
+                """
+                  |SELECT * FROM t
+                  |WHERE p='20200902'
+                """.stripMargin),
+              Row(2, "20200902"))
+          } else {
+            checkAnswer(
+              sql(
+                """
+                  |SELECT * FROM t
+                  |WHERE p='20200902'
+                """.stripMargin),
+              Row(2, "20200902"))
+          }
+        }
+      }
+    }
+  }
 }
 
 @SlowHiveTest

@@ -85,7 +85,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
       new DetectAmbiguousSelfJoin(conf) +:
         new DetermineTableStats(session) +:
-        RelationConversions(conf, catalog) +:
+        RelationConversions(session, catalog) +:
         PreprocessTableCreation(session) +:
         PreprocessTableInsertion(conf) +:
         DataSourceAnalysis(conf) +:

@@ -191,7 +191,7 @@ object HiveAnalysis extends Rule[LogicalPlan] {
  * `PreprocessTableCreation`, `PreprocessTableInsertion`, `DataSourceAnalysis` and `HiveAnalysis`.
  */
 case class RelationConversions(
-    conf: SQLConf,
+    session: SparkSession,
     sessionCatalog: HiveSessionCatalog) extends Rule[LogicalPlan] {
   private def isConvertible(relation: HiveTableRelation): Boolean = {
     isConvertible(relation.tableMeta)
@@ -199,8 +199,8 @@ case class RelationConversions(
 
   private def isConvertible(tableMeta: CatalogTable): Boolean = {
     val serde = tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
-    serde.contains("parquet") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
-      serde.contains("orc") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_ORC)
+    serde.contains("parquet") && session.conf.get[Boolean](HiveUtils.CONVERT_METASTORE_PARQUET) ||
+      serde.contains("orc") && session.conf.get[Boolean](HiveUtils.CONVERT_METASTORE_ORC)
   }
 
   private val metastoreCatalog = sessionCatalog.metastoreCatalog
