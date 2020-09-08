@@ -1584,36 +1584,25 @@ object ReplaceDistinctWithAggregate extends Rule[LogicalPlan] {
  * Replaces logical [[Deduplicate]] operator with an [[Aggregate]] operator.
  */
 object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    val rewritePlanMap = mutable.ArrayBuffer[(LogicalPlan, LogicalPlan)]()
-    val newPlan = plan transform {
-      case Deduplicate(keys, child) if !child.isStreaming =>
-        val keyExprIds = keys.map(_.exprId)
-        val aggCols = child.output.map { attr =>
-          if (keyExprIds.contains(attr.exprId)) {
-            attr -> attr
-          } else {
-            val alias = Alias(new First(attr).toAggregateExpression(), attr.name)(attr.exprId)
-            alias -> alias.newInstance()
-          }
-        }.unzip
-        // SPARK-22951: Physical aggregate operators distinguishes global aggregation and grouping
-        // aggregations by checking the number of grouping keys. The key difference here is that a
-        // global aggregation always returns at least one row even if there are no input rows. Here
-        // we append a literal when the grouping key list is empty so that the result aggregate
-        // operator is properly treated as a grouping aggregation.
-        val nonemptyKeys = if (keys.isEmpty) Literal(1) :: Nil else keys
-        val newAgg = Aggregate(nonemptyKeys, aggCols._1, child)
-        rewritePlanMap += newAgg -> Aggregate(nonemptyKeys, aggCols._2, child)
-        newAgg
-    }
-
-    if (rewritePlanMap.nonEmpty) {
-      assert(!plan.fastEquals(newPlan))
-      Analyzer.rewritePlan(newPlan, rewritePlanMap.toMap)._1
-    } else {
-      plan
-    }
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
+    case d @ Deduplicate(keys, child) if !child.isStreaming =>
+      val keyExprIds = keys.map(_.exprId)
+      val aggCols = child.output.map { attr =>
+        if (keyExprIds.contains(attr.exprId)) {
+          attr
+        } else {
+          Alias(new First(attr).toAggregateExpression(), attr.name)()
+        }
+      }
+      // SPARK-22951: Physical aggregate operators distinguishes global aggregation and grouping
+      // aggregations by checking the number of grouping keys. The key difference here is that a
+      // global aggregation always returns at least one row even if there are no input rows. Here
+      // we append a literal when the grouping key list is empty so that the result aggregate
+      // operator is properly treated as a grouping aggregation.
+      val nonemptyKeys = if (keys.isEmpty) Literal(1) :: Nil else keys
+      val newAgg = Aggregate(nonemptyKeys, aggCols, child)
+      val attrMapping = d.output.zip(newAgg.output)
+      newAgg -> attrMapping
   }
 }
 
