@@ -63,8 +63,8 @@ Enter the name of this new configuration, for example, ``MyRemoteDebugger`` and 
 Driver Side
 ~~~~~~~~~~~
 
-To debug on the driver side, your application should connect to the debugging server. Copy and paste the codes
-with ``pydevd_pycharm.settrace`` to the top of your PySpark script. Suppose the file name is ``app.py``:
+To debug on the driver side, your application should be able to connect to the debugging server. Copy and paste the codes
+with ``pydevd_pycharm.settrace`` to the top of your PySpark script. Suppose the script name is ``app.py``:
 
 .. code-block:: bash
 
@@ -77,12 +77,12 @@ with ``pydevd_pycharm.settrace`` to the top of your PySpark script. Suppose the 
     spark = SparkSession.builder.getOrCreate()
     spark.range(10).show()" > app.py
 
-Start debugging with your ``MyRemoteDebugger``.
+Start to debug with your ``MyRemoteDebugger``.
 
 .. image:: ../../../../docs/img/pyspark-remote-debug2.png
     :alt: PyCharm run remote debugger
 
-| After that, submit your application. This will connect to your PyCharm debugging server and enable you to debug on driver side remotely.
+| After that, submit your application. This will connect to your PyCharm debugging server and enable you to debug on the driver side remotely.
 
 .. code-block:: bash
 
@@ -113,7 +113,7 @@ Run the ``pyspark`` shell with the configuration below:
 
     pyspark --conf spark.python.daemon.module=remote_debug
 
-Now you're ready to remotely debug. Start debugging with your ``MyRemoteDebugger``.
+Now you're ready to remotely debug. Start to debug with your ``MyRemoteDebugger``.
 
 .. image:: ../../../../docs/img/pyspark-remote-debug2.png
     :alt: PyCharm run remote debugger
@@ -125,8 +125,8 @@ Now you're ready to remotely debug. Start debugging with your ``MyRemoteDebugger
     spark.range(10).repartition(1).rdd.map(lambda x: x).collect()
 
 
-Checking Memory (``top`` and ``ps``)
-------------------------------------
+Checking Resource Usage (``top`` and ``ps``)
+--------------------------------------------
 
 The Python processes on the driver and executor can be checked via typical ways such as ``top`` and ``ps`` commands.
 
@@ -168,13 +168,13 @@ ids and relevant resources because Python workers are forked from ``pyspark.daem
     ...
 
 
-Checking Memory (Memory Profiler)
----------------------------------
+Profiling Memory Usage (Memory Profiler)
+----------------------------------------
 
 `memory_profiler <https://github.com/pythonprofilers/memory_profiler>`_ is one of the profilers that allow you to
-check the memory usage line by line. This method is *only for driver side*.
+check the memory usage line by line. This method documented here *only works for the driver side*.
 
-Unless you are running your application in another machine (e.g., YARN cluster mode), this useful tool can be used
+Unless you are running your driver program in another machine (e.g., YARN cluster mode), this useful tool can be used
 to debug the memory usage on driver side easily. Suppose your PySpark script name is ``profile_memory.py``.
 You can profile it as below.
 
@@ -209,18 +209,18 @@ You can profile it as below.
          9     54.4 MiB      2.8 MiB       return df.collect()
 
 
-Checking Function Call and Time (Python Profilers)
---------------------------------------------------
+Identifying Hot Loops (Python Profilers)
+----------------------------------------
 
 `Python Profilers <https://docs.python.org/3/library/profile.html>`_ are useful built-in features in Python itself. These
-provide deterministic profiling of Python programs with many useful statistics. This section describes how to use it on
-both driver and executor sides.
+provide deterministic profiling of Python programs with a lot of useful statistics. This section describes how to use it on
+both driver and executor sides in order to identify expensive or hot code paths.
 
 Driver Side
 ~~~~~~~~~~~
 
 To use this on driver side, you can use it as you would do for regular Python programs because PySpark on driver side is a
-regular Python process unless you are running your application in another machine (e.g., YARN cluster mode).
+regular Python process unless you are running your driver program in another machine (e.g., YARN cluster mode).
 
 .. code-block:: bash
 
