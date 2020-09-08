@@ -150,7 +150,6 @@ class SQLExecutionSuite extends SparkFunSuite {
         ThreadUtils.awaitResult(Future {
           assert(df.rdd.collect()(0) === Row(Seq(1, 2, 3)))
         }(ExecutionContext.fromExecutorService(executor2)), 1.minute)
-
       } finally {
         executor1.shutdown()
         executor2.shutdown()
