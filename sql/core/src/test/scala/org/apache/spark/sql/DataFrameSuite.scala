@@ -2550,6 +2550,11 @@ class DataFrameSuite extends QueryTest
   test("SPARK-32761: aggregating multiple distinct CONSTANT columns") {
      checkAnswer(sql("select count(distinct 2), count(distinct 2,3)"), Row(1, 1))
   }
+
+  test("SPARK-32764: -0.0 and 0.0 should be equal") {
+    val df = Seq(0.0 -> -0.0).toDF("pos", "neg")
+    checkAnswer(df.select($"pos" > $"neg"), Row(false))
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)

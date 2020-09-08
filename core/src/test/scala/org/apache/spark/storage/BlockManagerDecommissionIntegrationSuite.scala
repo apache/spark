@@ -192,7 +192,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     // Decommission executor and ensure it is not relaunched by setting adjustTargetNumExecutors
     sched.decommissionExecutor(
       execToDecommission,
-      ExecutorDecommissionInfo("", isHostDecommissioned = false),
+      ExecutorDecommissionInfo("", None),
       adjustTargetNumExecutors = true)
     val decomTime = new SystemClock().getTimeMillis()
 

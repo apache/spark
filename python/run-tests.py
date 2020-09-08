@@ -48,7 +48,7 @@ def print_red(text):
     print('\033[31m' + text + '\033[0m')
 
 
-SKIPPED_TESTS = Manager().dict()
+SKIPPED_TESTS = None
 LOG_FILE = os.path.join(SPARK_HOME, "python/unit-tests.log")
 FAILURE_REPORTING_LOCK = Lock()
 LOGGER = logging.getLogger()
@@ -138,6 +138,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
             skipped_counts = len(skipped_tests)
             if skipped_counts > 0:
                 key = (pyspark_python, test_name)
+                assert SKIPPED_TESTS is not None
                 SKIPPED_TESTS[key] = skipped_tests
             per_test_output.close()
         except:
@@ -318,4 +319,5 @@ def main():
 
 
 if __name__ == "__main__":
+    SKIPPED_TESTS = Manager().dict()
     main()

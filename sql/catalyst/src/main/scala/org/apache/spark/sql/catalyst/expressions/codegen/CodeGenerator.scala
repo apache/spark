@@ -38,7 +38,7 @@ import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
@@ -624,8 +624,12 @@ class CodegenContext extends Logging {
   def genComp(dataType: DataType, c1: String, c2: String): String = dataType match {
     // java boolean doesn't support > or < operator
     case BooleanType => s"($c1 == $c2 ? 0 : ($c1 ? 1 : -1))"
-    case DoubleType => s"java.lang.Double.compare($c1, $c2)"
-    case FloatType => s"java.lang.Float.compare($c1, $c2)"
+    case DoubleType =>
+      val clsName = SQLOrderingUtil.getClass.getName.stripSuffix("$")
+      s"$clsName.compareDoubles($c1, $c2)"
+    case FloatType =>
+      val clsName = SQLOrderingUtil.getClass.getName.stripSuffix("$")
+      s"$clsName.compareFloats($c1, $c2)"
     // use c1 - c2 may overflow
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
