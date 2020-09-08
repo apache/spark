@@ -16,9 +16,10 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Iterable, Sized, TypeVar, Union
+from typing import Callable, Iterable, Sized, TypeVar, Union
 from typing_extensions import Protocol
 
+F = TypeVar("F", bound=Callable)
 T = TypeVar("T", covariant=True)
 
 PrimitiveType = Union[bool, float, int, str]

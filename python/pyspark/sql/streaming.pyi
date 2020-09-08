@@ -77,7 +77,7 @@ class DataStreamReader(OptionUtils):
     def json(
         self,
         path: str,
-        schema: Optional[str] = ...,
+        schema: Optional[Union[StructType, str]] = ...,
         primitivesAsString: Optional[Union[bool, str]] = ...,
         prefersDecimal: Optional[Union[bool, str]] = ...,
         allowComments: Optional[Union[bool, str]] = ...,
@@ -119,7 +119,7 @@ class DataStreamReader(OptionUtils):
     def csv(
         self,
         path: str,
-        schema: Optional[StructType] = ...,
+        schema: Optional[Union[StructType, str]] = ...,
         sep: Optional[str] = ...,
         encoding: Optional[str] = ...,
         quote: Optional[str] = ...,
