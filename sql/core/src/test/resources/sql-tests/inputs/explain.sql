@@ -12,7 +12,7 @@ SET spark.sql.codegen.wholeStage = true;
 -- distinct func
 EXPLAIN EXTENDED
   SELECT sum(distinct val)
-  FROM explain_temp1
+  FROM explain_temp1;
 
 -- single table
 EXPLAIN FORMATTED
