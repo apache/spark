@@ -77,6 +77,19 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("string to interval: interval with dangling parts should not results null") {
+    checkFromInvalidString("+", "expect a number after '+' but hit EOL")
+    checkFromInvalidString("-", "expect a number after '-' but hit EOL")
+    checkFromInvalidString("+ 2", "expect a unit name after '2' but hit EOL")
+    checkFromInvalidString("- 1", "expect a unit name after '1' but hit EOL")
+    checkFromInvalidString("1", "expect a unit name after '1' but hit EOL")
+    checkFromInvalidString("1.2", "expect a unit name after '1.2' but hit EOL")
+    checkFromInvalidString("1 day 2", "expect a unit name after '2' but hit EOL")
+    checkFromInvalidString("1 day 2.2", "expect a unit name after '2.2' but hit EOL")
+    checkFromInvalidString("1 day -", "expect a number after '-' but hit EOL")
+    checkFromInvalidString("-.", "expect a unit name after '-.' but hit EOL")
+  }
+
   test("string to interval: multiple units") {
     Seq(
       "-1 MONTH 1 day -1 microseconds" -> new CalendarInterval(-1, 1, -1),
