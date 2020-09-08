@@ -1419,12 +1419,13 @@ class TypeCoercionSuite extends AnalysisTest {
   test("SPARK-32638: corrects references when adding aliases in WidenSetOperationTypes") {
     val t1 = LocalRelation(AttributeReference("v", DecimalType(10, 0))())
     val t2 = LocalRelation(AttributeReference("v", DecimalType(11, 0))())
-    val p1 = t1.select(t1.output.head)
-    val p2 = t2.select(t2.output.head)
+    val p1 = t1.select(t1.output.head).as("p1")
+    val p2 = t2.select(t2.output.head).as("p2")
     val union = p1.union(p2)
-    val wp1 = widenSetOperationTypes(union.select(p1.output.head))
+    val wp1 = widenSetOperationTypes(union.select(p1.output.head, $"p2.v"))
     assert(wp1.isInstanceOf[Project])
-    assert(wp1.missingInput.isEmpty)
+    // The attribute `p1.output.head` should be replaced in the root `Project`.
+    assert(wp1.expressions.forall(_.find(_ == p1.output.head).isEmpty))
     val wp2 = widenSetOperationTypes(Aggregate(Nil, sum(p1.output.head).as("v") :: Nil, union))
     assert(wp2.isInstanceOf[Aggregate])
     assert(wp2.missingInput.isEmpty)
