@@ -77,7 +77,7 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
     val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
     val execs = sched.getExecutorIds()
     // Make the executors decommission, finish, exit, and not be replaced.
-    val execsAndDecomInfo = execs.map((_, ExecutorDecommissionInfo("", false))).toArray
+    val execsAndDecomInfo = execs.map((_, ExecutorDecommissionInfo("", None))).toArray
     sched.decommissionExecutors(execsAndDecomInfo, adjustTargetNumExecutors = true)
     val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 20.seconds)
     assert(asyncCountResult === 10)
