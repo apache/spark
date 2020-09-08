@@ -1344,6 +1344,23 @@ abstract class DynamicPartitionPruningSuiteBase
       }
     }
   }
+
+  test("SPARK-32817: DPP throws error when the broadcast side is empty") {
+    withSQLConf(
+      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      val df = sql(
+        """
+          |SELECT * FROM fact_sk f
+          |JOIN dim_store s
+          |ON f.store_id = s.store_id WHERE s.country = 'XYZ'
+        """.stripMargin)
+
+      checkPartitionPruningPredicate(df, false, true)
+
+      checkAnswer(df, Nil)
+    }
+  }
 }
 
 class DynamicPartitionPruningSuiteAEOff extends DynamicPartitionPruningSuiteBase {
