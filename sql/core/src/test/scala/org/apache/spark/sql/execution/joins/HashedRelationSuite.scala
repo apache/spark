@@ -582,7 +582,7 @@ class HashedRelationSuite extends SharedSparkSession {
     }
   }
 
-  test("EmptyHashedRelation return null in get / getValue") {
+  test("EmptyHashedRelation override methods behavior test") {
     val buildKey = Seq(BoundReference(0, LongType, false))
     val hashed = HashedRelation(Seq.empty[InternalRow].toIterator, buildKey, 1, mm)
     assert(hashed == EmptyHashedRelation)
@@ -592,6 +592,10 @@ class HashedRelationSuite extends SharedSparkSession {
     assert(hashed.get(key) == null)
     assert(hashed.getValue(0L) == null)
     assert(hashed.getValue(key) == null)
+
+    assert(hashed.keys().isEmpty)
+    assert(hashed.keyIsUnique)
+    assert(hashed.estimatedSize == 0)
   }
 
   test("SPARK-32399: test methods related to key index") {

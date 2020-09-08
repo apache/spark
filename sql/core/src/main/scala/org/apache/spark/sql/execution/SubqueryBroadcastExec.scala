@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.execution.joins.{EmptyHashedRelation, HashedRelation, HashJoin, LongHashedRelation}
+import org.apache.spark.sql.execution.joins.{HashedRelation, HashJoin, LongHashedRelation}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.util.ThreadUtils
@@ -75,21 +75,17 @@ case class SubqueryBroadcastExec(
         val beforeCollect = System.nanoTime()
 
         val broadcastRelation = child.executeBroadcast[HashedRelation]().value
-        val rows = broadcastRelation match {
-          case EmptyHashedRelation =>
-            Array.empty[InternalRow]
-          case _ =>
-            val (iter, expr) = if (broadcastRelation.isInstanceOf[LongHashedRelation]) {
-              (broadcastRelation.keys(), HashJoin.extractKeyExprAt(buildKeys, index))
-            } else {
-              (broadcastRelation.keys(),
-                BoundReference(index, buildKeys(index).dataType, buildKeys(index).nullable))
-            }
-            val proj = UnsafeProjection.create(expr)
-            val keyIter = iter.map(proj).map(_.copy())
-            keyIter.toArray[InternalRow].distinct
+        val (iter, expr) = if (broadcastRelation.isInstanceOf[LongHashedRelation]) {
+          (broadcastRelation.keys(), HashJoin.extractKeyExprAt(buildKeys, index))
+        } else {
+          (broadcastRelation.keys(),
+            BoundReference(index, buildKeys(index).dataType, buildKeys(index).nullable))
         }
 
+        val proj = UnsafeProjection.create(expr)
+        val keyIter = iter.map(proj).map(_.copy())
+
+        val rows = keyIter.toArray[InternalRow].distinct
         val beforeBuild = System.nanoTime()
         longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
         val dataSize = rows.map(_.asInstanceOf[UnsafeRow].getSizeInBytes).sum
