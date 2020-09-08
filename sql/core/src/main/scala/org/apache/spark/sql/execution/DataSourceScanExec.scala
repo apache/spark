@@ -177,7 +177,11 @@ case class FileSourceScanExec(
 
   private lazy val needsUnsafeRowConversion: Boolean = {
     if (relation.fileFormat.isInstanceOf[ParquetSource]) {
-      SparkSession.getActiveSession.get.sessionState.conf.parquetVectorizedReaderEnabled
+      SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession).map { session =>
+        session.sessionState.conf.parquetVectorizedReaderEnabled
+      }.getOrElse {
+        SQLConf.get.parquetVectorizedReaderEnabled
+      }
     } else {
       false
     }
