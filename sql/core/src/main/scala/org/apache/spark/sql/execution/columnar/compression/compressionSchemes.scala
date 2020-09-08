@@ -181,7 +181,6 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
     private var _uncompressedSize = 0
     private var _compressedSize = 0
 
-    // Using `MutableRow` to store the last value to avoid boxing/unboxing cost.
     private var lastValue: T#InternalType = _
     private var lastRun = 0
 
@@ -189,13 +188,14 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
 
     override def compressedSize: Int = _compressedSize
 
+
     override def gatherCompressibilityStats(row: InternalRow, ordinal: Int): Unit = {
       val value = columnType.getField(row, ordinal)
       val actualSize = columnType.actualSize(row, ordinal)
       _uncompressedSize += actualSize
 
-      if (lastRun == 0) {
-        lastValue = columnType.getField(row, ordinal)
+      if (lastValue == null) {
+        lastValue = columnType.clone(columnType.getField(row, ordinal))
         lastRun = 1
         _compressedSize += actualSize + 4
       } else {
@@ -203,7 +203,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
           lastRun += 1
         } else {
           _compressedSize += actualSize + 4
-          lastValue = columnType.getField(row, ordinal)
+          lastValue = columnType.clone(columnType.getField(row, ordinal))
           lastRun = 1
         }
       }
