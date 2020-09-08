@@ -402,6 +402,16 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
           s"including ${staticPartCols.size} partition column(s) having constant value(s).")
     }
 
+    // check static partition
+    if (normalizedPartSpec.nonEmpty && staticPartCols.size == partColNames.size) {
+      // empty partition column value
+      if (normalizedPartSpec.filter(_._2.isDefined).exists(_._2.get.isEmpty)) {
+        val spec = normalizedPartSpec.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+        throw new AnalysisException(
+          s"Partition spec is invalid. The spec ($spec) contains an empty partition column value")
+      }
+    }
+
     val newQuery = TableOutputResolver.resolveOutputColumns(
       tblName, expectedColumns, insert.query, byName = false, conf)
     if (normalizedPartSpec.nonEmpty) {

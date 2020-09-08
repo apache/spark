@@ -137,9 +137,6 @@ case class InsertIntoHiveTable(
       case (key, Some(value)) => key -> value
       case (key, None) => key -> ""
     }
-    if (partition.nonEmpty && numDynamicPartitions == 0) {
-      requireNonEmptyValueInPartitionSpec(Seq(partitionSpec))
-    }
 
     // All partition column names in the format of "<column name 1>/<column name 2>/..."
     val partitionColumns = fileSinkConf.getTableInfo.getProperties.getProperty("partition_columns")
@@ -343,19 +340,6 @@ case class InsertIntoHiveTable(
         tmpLocation.toString, // TODO: URI
         overwrite,
         isSrcLocal = false)
-    }
-  }
-
-  /**
-   * Verify if the input partition spec has any empty value.
-   */
-  protected def requireNonEmptyValueInPartitionSpec(specs: Seq[TablePartitionSpec]): Unit = {
-    specs.foreach { s =>
-      if (s.values.exists(_.isEmpty)) {
-        val spec = s.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
-        throw new AnalysisException(
-          s"Partition spec is invalid. The spec ($spec) contains an empty partition column value")
-      }
     }
   }
 }
