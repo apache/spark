@@ -3691,32 +3691,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(sql("SELECT id FROM t WHERE (SELECT true)"), Row(0L))
     }
   }
-
-  test("test casts pushdown on orc/parquet for integral types") {
-    def checkPushedFilters(
-      format: String,
-      df: DataFrame,
-      filters: Array[sources.Filter],
-      noScan: Boolean = false): Unit = {
-      val scanExec = df.queryExecution.sparkPlan
-        .find(_.isInstanceOf[BatchScanExec])
-      if (noScan) {
-        assert(scanExec.isEmpty)
-        return
-      }
-      val scan = scanExec.get.asInstanceOf[BatchScanExec].scan
-      format match {
-        case "orc" =>
-          assert(scan.isInstanceOf[OrcScan])
-          assert(scan.asInstanceOf[OrcScan].pushedFilters === filters)
-        case "parquet" =>
-          assert(scan.isInstanceOf[ParquetScan])
-          assert(scan.asInstanceOf[ParquetScan].pushedFilters === filters)
-        case _ =>
-          fail(s"unknown format $format")
-      }
-    }
-  }
 }
 
 case class Foo(bar: Option[String])
