@@ -19,7 +19,7 @@
 Installation
 ============
 
-Official releases are available from `the Apache Spark website <https://spark.apache.org/downloads.html>`_.
+Official releases are available from the `Apache Spark website <https://spark.apache.org/downloads.html>`_.
 Alternatively, you can install it via ``pip`` from PyPI.  PyPI installation is usually for standalone
 locally or as a client to connect to a cluster instead of setting a cluster up.  
  
@@ -42,7 +42,7 @@ PySpark installation using `PyPI <https://pypi.org/project/pyspark/>`_
 Using Conda  
 -----------
 
-Conda is an open-source package management and environment management system which is a part of `Anaconda <https://docs.continuum.io/anaconda/>`_ distribution. It is both cross-platform and language agnostic.
+Conda is an open-source package management and environment management system which is a part of the `Anaconda <https://docs.continuum.io/anaconda/>`_ distribution. It is both cross-platform and language agnostic.
   
 Conda can be used to create a virtual environment from terminal as shown below:
 
@@ -62,21 +62,15 @@ The newly created environment can be accessed using the following command:
 
     conda activate pyspark_env
 
-In Conda version earlier than 4.4, the following command might be used:
+In Conda version earlier than 4.4, the following command should be used:
 
 .. code-block:: bash
 
     source activate pyspark_env
 
-PySpark installation using ``pip`` under Conda environment is official. 
+Refer to `Using PyPI <#using-pypi>`_ to install PySpark in the newly created environment.
 
-PySpark can be installed in this newly created environment using PyPI as shown before:
-
-.. code-block:: bash
-
-    pip install pyspark
-
-`PySpark at Conda <https://anaconda.org/conda-forge/pyspark>`_ is not the official release.
+Note that `PySpark at Conda <https://anaconda.org/conda-forge/pyspark>`_ is available but not necessarily synced with PySpark release cycle because it is maintained by the community separately.
 
 Official Release Channel
 ------------------------
@@ -88,9 +82,9 @@ Any suitable version can be downloaded and extracted as below:
 
     tar xzvf spark-3.0.0-bin-hadoop2.7.tgz
 
-Ensure the ``SPARK_HOME`` environment variable points to the directory where the code has been extracted. 
-Define ``PYTHONPATH`` such that it can find the PySpark and 
-Py4J under ``$SPARK_HOME/python/lib``, one example of doing this is shown below:
+Ensure the `SPARK_HOME` environment variable points to the directory where the code has been extracted. 
+Define `PYTHONPATH` such that it can find the PySpark and Py4J under `SPARK_HOME/python/lib`. 
+One example of doing this is shown below:
 
 .. code-block:: bash
 
@@ -107,14 +101,14 @@ Refer to `Official Release Channel <#official-release-channel>`_ for steps to de
 
 Dependencies
 ------------
-============= ========================= ==========================================================================
+============= ========================= ================
 Package       Minimum supported version Note
-============= ========================= ==========================================================================
-`pandas`      0.23.2                    Optional for SQL component
-`NumPy`       1.7                       Required for ML component(Optional in PySpark if ML component is not used)
-`pyarrow`     0.15.1                    Optional
+============= ========================= ================
+`pandas`      0.23.2                    Optional for SQL
+`NumPy`       1.7                       Required for ML 
+`pyarrow`     0.15.1                    Optional for SQL
 `Py4J`        0.10.9                    Required
-============= ========================= ==========================================================================
+============= ========================= ================
 
-**Note**: A prerequisite for PySpark installation is the availability of JAVA 8 or later and ``JAVA_HOME`` properly set. 
-For using JDK 11, set ``-Dio.netty.tryReflectionSetAccessible=true`` for Arrow related features and refer to `Downloading <https://spark.apache.org/docs/latest/#downloading>`_
+**Note**: PySpark requires Java 8 or later with ``JAVA_HOME`` properly set.  
+If using JDK 11, set ``-Dio.netty.tryReflectionSetAccessible=true`` for Arrow related features and refer to `Downloading <https://spark.apache.org/docs/latest/#downloading>`_
