@@ -106,7 +106,7 @@ class AttributeSet private (private val baseSet: mutable.LinkedHashSet[Attribute
   def --(other: Iterable[NamedExpression]): AttributeSet = {
     other match {
       // SPARK-32755: `--` method behave differently under scala 2.12 and 2.13,
-      // use a Scala 2.12 based compatibility solution
+      // use a Scala 2.12 based code to maintains the insertion order in Scala 2.13
       case otherSet: AttributeSet =>
         new AttributeSet(baseSet.clone() --= otherSet.baseSet)
       case _ =>
