@@ -120,66 +120,54 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     val ordering = toType.ordering.asInstanceOf[Ordering[Any]]
     val minCmp = ordering.compare(value, minInToType)
     val maxCmp = ordering.compare(value, maxInToType)
+    val lit = Cast(Literal(value), fromType)
 
-    if (maxCmp > 0) {
-      exp match {
-        case EqualTo(_, _) | GreaterThan(_, _) | GreaterThanOrEqual(_, _) =>
-          fromExp.falseIfNotNull
-        case LessThan(_, _) | LessThanOrEqual(_, _) =>
-          fromExp.trueIfNotNull
-        // make sure the expression is evaluated if it is non-deterministic
-        case EqualNullSafe(_, _) if exp.deterministic =>
-          FalseLiteral
-        case _ => exp // impossible but safe guard, same below
-      }
-    } else if (maxCmp == 0) {
-      exp match {
-        case GreaterThan(_, _) =>
-          fromExp.falseIfNotNull
-        case LessThanOrEqual(_, _) =>
-          fromExp.trueIfNotNull
-        case LessThan(_, _) =>
-          Not(EqualTo(fromExp, Literal(max, fromType)))
-        case GreaterThanOrEqual(_, _) | EqualTo(_, _) | EqualNullSafe(_, _) =>
-          EqualTo(fromExp, Literal(max, fromType))
-        case _ => exp
-      }
-    } else if (minCmp < 0) {
-      exp match {
-        case GreaterThan(_, _) | GreaterThanOrEqual(_, _) =>
-          fromExp.trueIfNotNull
-        case LessThan(_, _) | LessThanOrEqual(_, _) | EqualTo(_, _) =>
-          fromExp.falseIfNotNull
-        // make sure the expression is evaluated if it is non-deterministic
-        case EqualNullSafe(_, _) if exp.deterministic =>
-          FalseLiteral
-        case _ => exp
-      }
-    } else if (minCmp == 0) {
-      exp match {
-        case LessThan(_, _) =>
-          fromExp.falseIfNotNull
-        case GreaterThanOrEqual(_, _) =>
-          fromExp.trueIfNotNull
-        case GreaterThan(_, _) =>
-          Not(EqualTo(fromExp, Literal(min, fromType)))
-        case LessThanOrEqual(_, _) | EqualTo(_, _) | EqualNullSafe(_, _) =>
-          EqualTo(fromExp, Literal(min, fromType))
-        case _ => exp
-      }
-    } else {
-      // This means `value` is within range `(min, max)`. Optimize this by moving the cast to the
-      // literal side.
-      val lit = Cast(Literal(value), fromType)
-      exp match {
-        case GreaterThan(_, _) => GreaterThan(fromExp, lit)
-        case GreaterThanOrEqual(_, _) => GreaterThanOrEqual(fromExp, lit)
-        case EqualTo(_, _) => EqualTo(fromExp, lit)
-        case EqualNullSafe(_, _) => EqualNullSafe(fromExp, lit)
-        case LessThan(_, _) => LessThan(fromExp, lit)
-        case LessThanOrEqual(_, _) => LessThanOrEqual(fromExp, lit)
-        case _ => exp
-      }
+    (minCmp.signum, maxCmp.signum, exp) match {
+      case (_, 1, EqualTo(_, _) | GreaterThan(_, _) | GreaterThanOrEqual(_, _)) =>
+        fromExp.falseIfNotNull
+      case (_, 1, LessThan(_, _) | LessThanOrEqual(_, _)) =>
+        fromExp.trueIfNotNull
+      // make sure the expression is evaluated if it is non-deterministic
+      case (_, 1, EqualNullSafe(_, _)) if exp.deterministic =>
+        FalseLiteral
+      case (_, 1, _) => exp // impossible but safe guard, same below
+
+      case (_, 0, GreaterThan(_, _)) =>
+        fromExp.falseIfNotNull
+      case (_, 0, LessThanOrEqual(_, _)) =>
+        fromExp.trueIfNotNull
+      case (_, 0, LessThan(_, _)) =>
+        Not(EqualTo(fromExp, Literal(max, fromType)))
+      case (_, 0, GreaterThanOrEqual(_, _) | EqualTo(_, _) | EqualNullSafe(_, _)) =>
+        EqualTo(fromExp, Literal(max, fromType))
+      case (_, 0, _) => exp
+
+      case (-1, _, GreaterThan(_, _) | GreaterThanOrEqual(_, _)) =>
+        fromExp.trueIfNotNull
+      case (-1, _, LessThan(_, _) | LessThanOrEqual(_, _) | EqualTo(_, _)) =>
+        fromExp.falseIfNotNull
+      // make sure the expression is evaluated if it is non-deterministic
+      case (-1, _, EqualNullSafe(_, _)) if exp.deterministic =>
+        FalseLiteral
+      case (-1, _, _) => exp
+
+      case (0, _, LessThan(_, _)) =>
+        fromExp.falseIfNotNull
+      case (0, _, GreaterThanOrEqual(_, _)) =>
+        fromExp.trueIfNotNull
+      case (0, _, GreaterThan(_, _)) =>
+        Not(EqualTo(fromExp, Literal(min, fromType)))
+      case (0, _, LessThanOrEqual(_, _) | EqualTo(_, _) | EqualNullSafe(_, _)) =>
+        EqualTo(fromExp, Literal(min, fromType))
+      case (0, _, _) => exp
+
+      case (_, _, GreaterThan(_, _)) => GreaterThan(fromExp, lit)
+      case (_, _, GreaterThanOrEqual(_, _)) => GreaterThanOrEqual(fromExp, lit)
+      case (_, _, EqualTo(_, _)) => EqualTo(fromExp, lit)
+      case (_, _, EqualNullSafe(_, _)) => EqualNullSafe(fromExp, lit)
+      case (_, _, LessThan(_, _)) => LessThan(fromExp, lit)
+      case (_, _, LessThanOrEqual(_, _)) => LessThanOrEqual(fromExp, lit)
+      case (_, _, _) => exp
     }
   }
 
