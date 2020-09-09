@@ -216,23 +216,21 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     val distinctAggs = aggExpressions.filter(_.isDistinct)
 
     // Extract distinct aggregate expressions.
-    val distinctAggGroupMap = aggExpressions.filter(_.isDistinct).map { e =>
-      val unfoldableChildren = e.aggregateFunction.children.filter(!_.foldable).toSet
-      if (unfoldableChildren.nonEmpty) {
-        // Only expand the unfoldable children
-        e -> unfoldableChildren
-      } else {
-        // If aggregateFunction's children are all foldable
-        // we must expand at least one of the children (here we take the first child),
-        // or If we don't, we will get the wrong result, for example:
-        // count(distinct 1) will be explained to count(1) after the rewrite function.
-        // Generally, the distinct aggregateFunction should not run
-        // foldable TypeCheck for the first child.
-        e -> e.aggregateFunction.children.take(1).toSet
-      }
+    val distinctAggGroups = aggExpressions.filter(_.isDistinct).groupBy { e =>
+        val unfoldableChildren = e.aggregateFunction.children.filter(!_.foldable).toSet
+        if (unfoldableChildren.nonEmpty) {
+          // Only expand the unfoldable children
+          unfoldableChildren
+        } else {
+          // If aggregateFunction's children are all foldable
+          // we must expand at least one of the children (here we take the first child),
+          // or If we don't, we will get the wrong result, for example:
+          // count(distinct 1) will be explained to count(1) after the rewrite function.
+          // Generally, the distinct aggregateFunction should not run
+          // foldable TypeCheck for the first child.
+          e.aggregateFunction.children.take(1).toSet
+        }
     }
-    val distinctAggGroupLookup = distinctAggGroupMap.toMap
-    val distinctAggGroups = distinctAggGroupMap.groupBy(_._2).mapValues(_.map(_._1))
 
     // Aggregation strategy can handle queries with a single distinct group without filter clause.
     if (distinctAggGroups.size > 1 || distinctAggs.exists(_.filter.isDefined)) {
@@ -294,18 +292,16 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           // Final aggregate
           val operators = expressions.map { e =>
             val af = e.aggregateFunction
-            val naf = patchAggregateFunctionChildren(af) { x =>
-              val condition = e.filter.map(distinctAggFilterAttrLookup.get(_)).flatten
-              if (distinctAggGroupLookup(e).contains(x)) {
-                if (x.foldable) {
-                  Some(evalWithinGroup(id, x, condition))
-                } else {
-                  distinctAggChildAttrLookup.get(x).map(evalWithinGroup(id, _, condition))
-                }
-              } else {
-                None
+            val condition = e.filter.map(distinctAggFilterAttrLookup.get(_)).flatten
+            val naf = if (af.children.forall(_.foldable)) {
+              val firstChild = evalWithinGroup(id, af.children.head, condition)
+              af.withNewChildren(firstChild +: af.children.drop(1)).asInstanceOf[AggregateFunction]
+            } else {
+              patchAggregateFunctionChildren(af) { x =>
+                distinctAggChildAttrLookup.get(x).map(evalWithinGroup(id, _, condition))
               }
             }
+
             (e, e.copy(aggregateFunction = naf, isDistinct = false, filter = None))
           }
 
