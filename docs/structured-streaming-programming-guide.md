@@ -861,9 +861,7 @@ isStreaming(df)
 </div>
 </div>
 
-You may want to check the logical plan of the query, as Spark converts the operation into another operation, which includes adding streaming aggregation. (e.g. count, distinct, union, etc.)
-
-If aggregation is injected, you may need to check your query for all the points you need to be aware of on streaming aggregation. (e.g. output mode, watermark, state store size maintenance, etc.)
+You may want to check the query plan of the query, as Spark could inject stateful operations during interpret of SQL statement against streaming dataset. Once stateful operations are injected in the query plan, you may need to check your query with considerations in stateful operations. (e.g. output mode, watermark, state store size maintenance, etc.)
 
 ### Window Operations on Event Time
 Aggregations over a sliding event-time window are straightforward with Structured Streaming and are very similar to grouped aggregations. In a grouped aggregation, aggregate values (e.g. counts) are maintained for each unique value in the user-specified grouping column. In case of window-based aggregations, aggregate values are maintained for each window the event-time of a row falls into. Let's understand this with an illustration. 

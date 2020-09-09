@@ -2525,18 +2525,13 @@ class Dataset[T] private[sql](
 
   /**
    * Returns a new Dataset that contains only the unique rows from this Dataset.
-   * This is an alias for `distinct` on batch [[Dataset]]. For streaming [[Dataset]], it would show
-   * slightly different behavior. (see below)
+   * This is an alias for `distinct`.
    *
    * For a static batch [[Dataset]], it just drops duplicate rows. For a streaming [[Dataset]], it
    * will keep all data across triggers as intermediate state to drop duplicates rows. You can use
    * [[withWatermark]] to limit how late the duplicate data can be and system will accordingly limit
    * the state. In addition, too late data older than watermark will be dropped to avoid any
    * possibility of duplicates.
-   *
-   * Note that for a streaming [[Dataset]], this method only returns distinct rows only once
-   * regardless of the output mode, which the behavior may not be same with using distinct in
-   * SQL statement against streaming [[Dataset]].
    *
    * @group typedrel
    * @since 2.0.0
@@ -2552,10 +2547,6 @@ class Dataset[T] private[sql](
    * [[withWatermark]] to limit how late the duplicate data can be and system will accordingly limit
    * the state. In addition, too late data older than watermark will be dropped to avoid any
    * possibility of duplicates.
-   *
-   * Note that for a streaming [[Dataset]], this method only returns distinct rows only once
-   * regardless of the output mode, which the behavior may not be same with using distinct in
-   * SQL statement against streaming [[Dataset]].
    *
    * @group typedrel
    * @since 2.0.0
@@ -2588,10 +2579,6 @@ class Dataset[T] private[sql](
    * the state. In addition, too late data older than watermark will be dropped to avoid any
    * possibility of duplicates.
    *
-   * Note that for a streaming [[Dataset]], this method only returns distinct rows only once
-   * regardless of the output mode, which the behavior may not be same with using distinct in
-   * SQL statement against streaming [[Dataset]].
-   *
    * @group typedrel
    * @since 2.0.0
    */
@@ -2606,10 +2593,6 @@ class Dataset[T] private[sql](
    * [[withWatermark]] to limit how late the duplicate data can be and system will accordingly limit
    * the state. In addition, too late data older than watermark will be dropped to avoid any
    * possibility of duplicates.
-   *
-   * Note that for a streaming [[Dataset]], this method only returns distinct rows only once
-   * regardless of the output mode, which the behavior may not be same with using distinct in
-   * SQL statement against streaming [[Dataset]].
    *
    * @group typedrel
    * @since 2.0.0
@@ -3148,8 +3131,12 @@ class Dataset[T] private[sql](
    * Returns a new Dataset that contains only the unique rows from this Dataset.
    * This is an alias for `dropDuplicates`.
    *
+   * Note that for a streaming [[Dataset]], this method only returns distinct rows only once
+   * regardless of the output mode, which the behavior may not be same with `DISTINCT` in SQL
+   * against streaming [[Dataset]].
+   *
    * @note Equality checking is performed directly on the encoded representation of the data
-   * and thus is not affected by a custom `equals` function defined on `T`.
+   * and thus is not affected by a custom equals function defined on `T`.
    *
    * @group typedrel
    * @since 2.0.0
