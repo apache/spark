@@ -2375,7 +2375,7 @@ object SQLConf {
       "file location in `DataSourceScanExec`, every value will be abbreviated if exceed length.")
     .version("3.1.0")
     .intConf
-    .checkValue(_ > 4, "This value must be bigger than 4.")
+    .checkValue(_ > 3, "This value must be bigger than 3.")
     .createWithDefault(100)
 
   val SET_COMMAND_REJECTS_SPARK_CORE_CONFS =
