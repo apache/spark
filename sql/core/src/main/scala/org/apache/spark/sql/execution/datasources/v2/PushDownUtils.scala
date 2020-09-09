@@ -20,8 +20,9 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
@@ -69,6 +70,37 @@ object PushDownUtils extends PredicateHelper {
       case _ => (Nil, filters)
     }
   }
+
+    /**
+     * Pushes down aggregates to the data source reader
+     *
+     * @return pushed aggregates and post-scan aggregates.
+     */
+    def pushAggregates(scanBuilder: ScanBuilder, aggregates: Seq[AggregateExpression])
+      : (Seq[sources.Aggregate], Seq[AggregateExpression]) = {
+      scanBuilder match {
+        case r: SupportsPushDownAggregates =>
+          val translatedAggregates = mutable.ArrayBuffer.empty[sources.Aggregate]
+          // Catalyst aggregate expression that can't be translated to data source aggregates.
+          val untranslatableExprs = mutable.ArrayBuffer.empty[AggregateExpression]
+
+          for (aggregateExpr <- aggregates) {
+            val translated = DataSourceStrategy.translateAggregate(aggregateExpr)
+            if (translated.isEmpty) {
+              untranslatableExprs += aggregateExpr
+            } else {
+              translatedAggregates += translated.get
+            }
+          }
+
+          if (untranslatableExprs.isEmpty) r.pushAggregates(translatedAggregates.toArray)
+
+          // push down only if all the aggregates can be pushed down
+          if (!r.pushedAggregates.isEmpty) (r.pushedAggregates, Nil) else (Nil, aggregates)
+
+        case _ => (Nil, aggregates)
+      }
+    }
 
   /**
    * Applies column pruning to the data source, w.r.t. the references of the given expressions.

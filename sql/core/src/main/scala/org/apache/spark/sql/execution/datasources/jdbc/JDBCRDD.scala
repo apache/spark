@@ -133,6 +133,22 @@ object JDBCRDD extends Logging {
     })
   }
 
+  def compileAggregates(aggregates: Seq[Aggregate], dialect: JdbcDialect): Map[String, String] = {
+    def quote(colName: String): String = dialect.quoteIdentifier(colName)
+    val compiledAggregates = aggregates.map {
+      case Min(column) => Some(quote(column) -> s"MIN(${quote(column)})")
+      case Max(column) => Some(quote(column) -> s"MAX(${quote(column)})")
+      case Sum(column) => Some(quote(column) -> s"Sum(${quote(column)})")
+      case Avg(column) => Some(quote(column) -> s"Avg(${quote(column)})")
+      case _ => None
+    }
+    if (!compiledAggregates.contains(None)) {
+      compiledAggregates.flatMap(x => x).toMap
+    } else {
+      Map.empty[String, String]
+    }
+  }
+
   /**
    * Build and return JDBCRDD from the given information.
    *
@@ -152,7 +168,8 @@ object JDBCRDD extends Logging {
       requiredColumns: Array[String],
       filters: Array[Filter],
       parts: Array[Partition],
-      options: JDBCOptions): RDD[InternalRow] = {
+      options: JDBCOptions,
+      aggregates: Array[Aggregate] = Array.empty[Aggregate]): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
@@ -164,7 +181,8 @@ object JDBCRDD extends Logging {
       filters,
       parts,
       url,
-      options)
+      options,
+      aggregates)
   }
 }
 
@@ -181,7 +199,8 @@ private[jdbc] class JDBCRDD(
     filters: Array[Filter],
     partitions: Array[Partition],
     url: String,
-    options: JDBCOptions)
+    options: JDBCOptions,
+    aggregates: Array[Aggregate] = Array.empty[Aggregate])
   extends RDD[InternalRow](sc, Nil) {
 
   /**
@@ -193,9 +212,12 @@ private[jdbc] class JDBCRDD(
    * `columns`, but as a String suitable for injection into a SQL query.
    */
   private val columnList: String = {
+    val compiledAggregates = JDBCRDD.compileAggregates(aggregates, JdbcDialects.get(url))
     val sb = new StringBuilder()
-    columns.foreach(x => sb.append(",").append(x))
-    if (sb.isEmpty) "1" else sb.substring(1)
+
+    columns.map(c => compiledAggregates.getOrElse(c, c))
+      .foreach(x => sb.append(", ").append(x))
+    if (sb.length == 0) "1" else sb.substring(1)
   }
 
   /**

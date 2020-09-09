@@ -249,6 +249,7 @@ private[sql] case class JDBCRelation(
     jdbcOptions: JDBCOptions)(@transient val sparkSession: SparkSession)
   extends BaseRelation
   with PrunedFilteredScan
+  with PrunedFilteredAggregateScan
   with InsertableRelation {
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
@@ -264,6 +265,18 @@ private[sql] case class JDBCRelation(
     }
   }
 
+  override def unhandledAggregates(aggregates: Array[Aggregate]): Array[Aggregate] = {
+    if (jdbcOptions.pushDownAggregate) {
+      if (JDBCRDD.compileAggregates(aggregates, JdbcDialects.get(jdbcOptions.url)).isEmpty) {
+        aggregates
+      } else {
+        Array.empty[Aggregate]
+      }
+    } else {
+      aggregates
+    }
+  }
+
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
@@ -273,6 +286,21 @@ private[sql] case class JDBCRelation(
       filters,
       parts,
       jdbcOptions).asInstanceOf[RDD[Row]]
+  }
+
+  override def buildScan(
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      aggregates: Array[Aggregate]): RDD[Row] = {
+    // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
+    JDBCRDD.scanTable(
+      sparkSession.sparkContext,
+      schema,
+      requiredColumns,
+      filters,
+      parts,
+      jdbcOptions,
+      aggregates).asInstanceOf[RDD[Row]]
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {

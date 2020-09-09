@@ -17,22 +17,25 @@
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.jdbc.JdbcDialects
-import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.sources.{Aggregate, Filter}
 import org.apache.spark.sql.types.StructType
 
 case class JDBCScanBuilder(
     session: SparkSession,
     schema: StructType,
     jdbcOptions: JDBCOptions)
-  extends ScanBuilder with SupportsPushDownFilters with SupportsPushDownRequiredColumns {
+  extends ScanBuilder with SupportsPushDownFilters with SupportsPushDownRequiredColumns
+  with SupportsPushDownAggregates {
 
   private val isCaseSensitive = session.sessionState.conf.caseSensitiveAnalysis
 
   private var pushedFilter = Array.empty[Filter]
+
+  private var pushedAggregate = Array.empty[Aggregate]
 
   private var prunedSchema = schema
 
@@ -48,6 +51,22 @@ case class JDBCScanBuilder(
   }
 
   override def pushedFilters(): Array[Filter] = pushedFilter
+
+  override def pushAggregates(aggregate: Array[Aggregate]): Array[Aggregate] = {
+    if (jdbcOptions.pushDownAggregate) {
+      val dialect = JdbcDialects.get(jdbcOptions.url)
+      if (!JDBCRDD.compileAggregates(aggregate, dialect).isEmpty) {
+        pushedAggregate = aggregate
+        Array.empty[Aggregate]
+      } else {
+        aggregate
+      }
+    } else {
+      aggregate
+    }
+  }
+
+  override def pushedAggregates(): Array[Aggregate] = pushedAggregate
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // JDBC doesn't support nested column pruning.
@@ -65,6 +84,7 @@ case class JDBCScanBuilder(
     val resolver = session.sessionState.conf.resolver
     val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
     val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
-    JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), prunedSchema, pushedFilter)
+    JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session),
+      prunedSchema, pushedFilter, pushedAggregate)
   }
 }

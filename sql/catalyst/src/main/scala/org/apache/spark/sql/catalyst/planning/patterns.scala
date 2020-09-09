@@ -288,69 +288,77 @@ object PhysicalAggregation {
 
   def unapply(a: Any): Option[ReturnType] = a match {
     case logical.Aggregate(groupingExpressions, resultExpressions, child) =>
-      // A single aggregate expression might appear multiple times in resultExpressions.
-      // In order to avoid evaluating an individual aggregate function multiple times, we'll
-      // build a set of semantically distinct aggregate expressions and re-write expressions so
-      // that they reference the single copy of the aggregate function which actually gets computed.
-      // Non-deterministic aggregate expressions are not deduplicated.
-      val equivalentAggregateExpressions = new EquivalentExpressions
-      val aggregateExpressions = resultExpressions.flatMap { expr =>
-        expr.collect {
-          // addExpr() always returns false for non-deterministic expressions and do not add them.
-          case agg: AggregateExpression
-            if !equivalentAggregateExpressions.addExpr(agg) => agg
-          case udf: PythonUDF
-            if PythonUDF.isGroupedAggPandasUDF(udf) &&
-              !equivalentAggregateExpressions.addExpr(udf) => udf
-        }
-      }
-
-      val namedGroupingExpressions = groupingExpressions.map {
-        case ne: NamedExpression => ne -> ne
-        // If the expression is not a NamedExpressions, we add an alias.
-        // So, when we generate the result of the operator, the Aggregate Operator
-        // can directly get the Seq of attributes representing the grouping expressions.
-        case other =>
-          val withAlias = Alias(other, other.toString)()
-          other -> withAlias
-      }
-      val groupExpressionMap = namedGroupingExpressions.toMap
-
-      // The original `resultExpressions` are a set of expressions which may reference
-      // aggregate expressions, grouping column values, and constants. When aggregate operator
-      // emits output rows, we will use `resultExpressions` to generate an output projection
-      // which takes the grouping columns and final aggregate result buffer as input.
-      // Thus, we must re-write the result expressions so that their attributes match up with
-      // the attributes of the final result projection's input row:
-      val rewrittenResultExpressions = resultExpressions.map { expr =>
-        expr.transformDown {
-          case ae: AggregateExpression =>
-            // The final aggregation buffer's attributes will be `finalAggregationAttributes`,
-            // so replace each aggregate expression by its corresponding attribute in the set:
-            equivalentAggregateExpressions.getEquivalentExprs(ae).headOption
-              .getOrElse(ae).asInstanceOf[AggregateExpression].resultAttribute
-            // Similar to AggregateExpression
-          case ue: PythonUDF if PythonUDF.isGroupedAggPandasUDF(ue) =>
-            equivalentAggregateExpressions.getEquivalentExprs(ue).headOption
-              .getOrElse(ue).asInstanceOf[PythonUDF].resultAttribute
-          case expression =>
-            // Since we're using `namedGroupingAttributes` to extract the grouping key
-            // columns, we need to replace grouping key expressions with their corresponding
-            // attributes. We do not rely on the equality check at here since attributes may
-            // differ cosmetically. Instead, we use semanticEquals.
-            groupExpressionMap.collectFirst {
-              case (expr, ne) if expr semanticEquals expression => ne.toAttribute
-            }.getOrElse(expression)
-        }.asInstanceOf[NamedExpression]
-      }
-
-      Some((
-        namedGroupingExpressions.map(_._2),
-        aggregateExpressions,
-        rewrittenResultExpressions,
-        child))
-
+      createPhysicalAggregation(
+        groupingExpressions,
+        resultExpressions,
+        child)
     case _ => None
+  }
+
+  def createPhysicalAggregation(
+      groupingExpressions: Seq[Expression],
+      resultExpressions: Seq[NamedExpression],
+      child: LogicalPlan): Option[ReturnType] = {
+    // A single aggregate expression might appear multiple times in resultExpressions.
+    // In order to avoid evaluating an individual aggregate function multiple times, we'll
+    // build a set of semantically distinct aggregate expressions and re-write expressions so
+    // that they reference the single copy of the aggregate function which actually gets computed.
+    // Non-deterministic aggregate expressions are not deduplicated.
+    val equivalentAggregateExpressions = new EquivalentExpressions
+    val aggregateExpressions = resultExpressions.flatMap { expr =>
+      expr.collect {
+        // addExpr() always returns false for non-deterministic expressions and do not add them.
+        case agg: AggregateExpression
+          if !equivalentAggregateExpressions.addExpr(agg) => agg
+        case udf: PythonUDF
+          if PythonUDF.isGroupedAggPandasUDF(udf) &&
+            !equivalentAggregateExpressions.addExpr(udf) => udf
+      }
+    }
+
+    val namedGroupingExpressions = groupingExpressions.map {
+      case ne: NamedExpression => ne -> ne
+      // If the expression is not a NamedExpressions, we add an alias.
+      // So, when we generate the result of the operator, the Aggregate Operator
+      // can directly get the Seq of attributes representing the grouping expressions.
+      case other =>
+        val withAlias = Alias(other, other.toString)()
+        other -> withAlias
+    }
+    val groupExpressionMap = namedGroupingExpressions.toMap
+
+    // The original `resultExpressions` are a set of expressions which may reference
+    // aggregate expressions, grouping column values, and constants. When aggregate operator
+    // emits output rows, we will use `resultExpressions` to generate an output projection
+    // which takes the grouping columns and final aggregate result buffer as input.
+    // Thus, we must re-write the result expressions so that their attributes match up with
+    // the attributes of the final result projection's input row:
+    val rewrittenResultExpressions = resultExpressions.map { expr =>
+      expr.transformDown {
+        case ae: AggregateExpression =>
+          // The final aggregation buffer's attributes will be `finalAggregationAttributes`,
+          // so replace each aggregate expression by its corresponding attribute in the set:
+          equivalentAggregateExpressions.getEquivalentExprs(ae).headOption
+            .getOrElse(ae).asInstanceOf[AggregateExpression].resultAttribute
+        // Similar to AggregateExpression
+        case ue: PythonUDF if PythonUDF.isGroupedAggPandasUDF(ue) =>
+          equivalentAggregateExpressions.getEquivalentExprs(ue).headOption
+            .getOrElse(ue).asInstanceOf[PythonUDF].resultAttribute
+        case expression =>
+          // Since we're using `namedGroupingAttributes` to extract the grouping key
+          // columns, we need to replace grouping key expressions with their corresponding
+          // attributes. We do not rely on the equality check at here since attributes may
+          // differ cosmetically. Instead, we use semanticEquals.
+          groupExpressionMap.collectFirst {
+            case (expr, ne) if expr semanticEquals expression => ne.toAttribute
+          }.getOrElse(expression)
+      }.asInstanceOf[NamedExpression]
+    }
+    Some((
+      namedGroupingExpressions.map(_._2),
+      aggregateExpressions,
+      rewrittenResultExpressions,
+      child))
   }
 }
 
