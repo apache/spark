@@ -2372,9 +2372,10 @@ object SQLConf {
 
   val MAX_METADATA_STRING_LENGTH = buildConf("spark.sql.maxMetadataStringLength")
     .doc("Maximum number of characters to output for a metadata string. e.g. " +
-      "`DataSourceScanExec`, every value will be abbreviated if exceed length.")
+      "file location in `DataSourceScanExec`, every value will be abbreviated if exceed length.")
     .version("3.1.0")
     .intConf
+    .checkValue(_ > 4, "This value must be bigger than 4.")
     .createWithDefault(100)
 
   val SET_COMMAND_REJECTS_SPARK_CORE_CONFS =
