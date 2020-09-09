@@ -21,8 +21,8 @@ import java.time.{LocalDateTime, ZoneOffset}
 import java.util.Arrays
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, GenericInternalRow, Literal}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -31,77 +31,6 @@ import org.apache.spark.sql.types._
 private[sql] case class MyLabeledPoint(label: Double, features: TestUDT.MyDenseVector) {
   def getLabel: Double = label
   def getFeatures: TestUDT.MyDenseVector = features
-}
-
-// object and classes to test SPARK-19311
-
-// Trait/Interface for base type
-sealed trait IExampleBaseType extends Serializable {
-  def field: Int
-}
-
-// Trait/Interface for derived type
-sealed trait IExampleSubType extends IExampleBaseType
-
-// a base class
-class ExampleBaseClass(override val field: Int) extends IExampleBaseType
-
-// a derived class
-class ExampleSubClass(override val field: Int)
-  extends ExampleBaseClass(field) with IExampleSubType
-
-// UDT for base class
-class ExampleBaseTypeUDT extends UserDefinedType[IExampleBaseType] {
-
-  override def sqlType: StructType = {
-    StructType(Seq(
-      StructField("intfield", IntegerType, nullable = false)))
-  }
-
-  override def serialize(obj: IExampleBaseType): InternalRow = {
-    val row = new GenericInternalRow(1)
-    row.setInt(0, obj.field)
-    row
-  }
-
-  override def deserialize(datum: Any): IExampleBaseType = {
-    datum match {
-      case row: InternalRow =>
-        require(row.numFields == 1,
-          "ExampleBaseTypeUDT requires row with length == 1")
-        val field = row.getInt(0)
-        new ExampleBaseClass(field)
-    }
-  }
-
-  override def userClass: Class[IExampleBaseType] = classOf[IExampleBaseType]
-}
-
-// UDT for derived class
-private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] {
-
-  override def sqlType: StructType = {
-    StructType(Seq(
-      StructField("intfield", IntegerType, nullable = false)))
-  }
-
-  override def serialize(obj: IExampleSubType): InternalRow = {
-    val row = new GenericInternalRow(1)
-    row.setInt(0, obj.field)
-    row
-  }
-
-  override def deserialize(datum: Any): IExampleSubType = {
-    datum match {
-      case row: InternalRow =>
-        require(row.numFields == 1,
-          "ExampleSubTypeUDT requires row with length == 1")
-        val field = row.getInt(0)
-        new ExampleSubClass(field)
-    }
-  }
-
-  override def userClass: Class[IExampleSubType] = classOf[IExampleSubType]
 }
 
 private[sql] case class FooWithDate(date: LocalDateTime, s: String, i: Int)
@@ -136,9 +65,9 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
 
 
   test("SPARK-32090: equal") {
-    val udt1 = new ExampleBaseTypeUDT
-    val udt2 = new ExampleSubTypeUDT
-    val udt3 = new ExampleSubTypeUDT
+    val udt1 = new TestUDT.ExampleBaseTypeUDT
+    val udt2 = new TestUDT.ExampleSubTypeUDT
+    val udt3 = new TestUDT.ExampleSubTypeUDT
     assert(udt1 !== udt2)
     assert(udt2 !== udt1)
     assert(udt2 === udt3)
@@ -146,8 +75,8 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
   }
 
   test("SPARK-32090: acceptsType") {
-    val udt1 = new ExampleBaseTypeUDT
-    val udt2 = new ExampleSubTypeUDT
+    val udt1 = new TestUDT.ExampleBaseTypeUDT
+    val udt2 = new TestUDT.ExampleSubTypeUDT
     assert(udt1.acceptsType(udt2))
     assert(!udt2.acceptsType(udt1))
   }
@@ -271,23 +200,23 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
   }
 
   test("SPARK-19311: UDFs disregard UDT type hierarchy") {
-    UDTRegistration.register(classOf[IExampleBaseType].getName,
-      classOf[ExampleBaseTypeUDT].getName)
-    UDTRegistration.register(classOf[IExampleSubType].getName,
-      classOf[ExampleSubTypeUDT].getName)
+    UDTRegistration.register(classOf[TestUDT.IExampleBaseType].getName,
+      classOf[TestUDT.ExampleBaseTypeUDT].getName)
+    UDTRegistration.register(classOf[TestUDT.IExampleSubType].getName,
+      classOf[TestUDT.ExampleSubTypeUDT].getName)
 
     // UDF that returns a base class object
     sqlContext.udf.register("doUDF", (param: Int) => {
-      new ExampleBaseClass(param)
-    }: IExampleBaseType)
+      new TestUDT.ExampleBaseClass(param)
+    }: TestUDT.IExampleBaseType)
 
     // UDF that returns a derived class object
     sqlContext.udf.register("doSubTypeUDF", (param: Int) => {
-      new ExampleSubClass(param)
-    }: IExampleSubType)
+      new TestUDT.ExampleSubClass(param)
+    }: TestUDT.IExampleSubType)
 
     // UDF that takes a base class object as parameter
-    sqlContext.udf.register("doOtherUDF", (obj: IExampleBaseType) => {
+    sqlContext.udf.register("doOtherUDF", (obj: TestUDT.IExampleBaseType) => {
       obj.field
     }: Int)
 
