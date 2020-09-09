@@ -866,6 +866,28 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }.getMessage
     assert(message.contains("LOCAL is supported only with file: scheme"))
   }
+
+  test("SPARK-32508 " +
+    "Disallow empty part col values in partition spec before static partition writing") {
+    withTable("insertTable") {
+      sql(
+        """
+          |CREATE TABLE insertTable(i int, part1 string, part2 string) USING PARQUET
+          |PARTITIONED BY (part1, part2)
+            """.stripMargin)
+
+      withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
+        val e = intercept[AnalysisException] {
+          sql("INSERT INTO TABLE insertTable PARTITION(part1=1, part2='') SELECT 1")
+        }.getMessage
+        assert(e.contains("Partition spec is invalid"))
+      }
+
+      withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
+        sql("INSERT INTO TABLE insertTable PARTITION(part1=1, part2='') SELECT 1")
+      }
+    }
+  }
 }
 
 class FileExistingTestFileSystem extends RawLocalFileSystem {
