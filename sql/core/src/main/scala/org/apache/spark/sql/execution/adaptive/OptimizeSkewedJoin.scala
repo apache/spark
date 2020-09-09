@@ -22,11 +22,12 @@ import scala.collection.mutable
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.SortMergeJoinExec
+import org.apache.spark.sql.execution.joins.{BroadcastNestedLoopJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -248,6 +249,73 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       } else {
         smj
       }
+
+    case bnl @ BroadcastNestedLoopJoinExec(leftChild, rightChild, buildSide, joinType, _, _) =>
+      def resolveBroadcastNLJoinSkew(
+          stream: ShuffleStageInfo,
+          joinType: JoinType,
+          buildSide: BuildSide): SparkPlan = {
+        val streamMedSize = medianSize(stream.mapStats)
+        val numPartitions = stream.partitionsWithSizes.length
+        logDebug(
+          s"""
+             |Optimizing skewed join.
+             |Build Side:
+             |${buildSide}
+             |Stream side partitions size info:
+             |${getSizeInfo(streamMedSize, stream.mapStats.bytesByPartitionId)}
+        """.stripMargin)
+        val canSplitStream = canSplitLeftSide(joinType)
+        val streamActualSizes = stream.partitionsWithSizes.map(_._2)
+        val streamTargetSize = targetSize(streamActualSizes, streamMedSize)
+        val streamSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
+        var numSkewedLeft = 0
+        for (partitionIndex <- 0 until numPartitions) {
+          val leftActualSize = streamActualSizes(partitionIndex)
+          val isStreamSkew = isSkewed(leftActualSize, streamMedSize) && canSplitStream
+          val leftPartSpec = stream.partitionsWithSizes(partitionIndex)._1
+          val isStreamCoalesced = leftPartSpec.startReducerIndex + 1 < leftPartSpec.endReducerIndex
+          // A skewed partition should never be coalesced, but skip it here just to be safe.
+          val streamParts = if (isStreamSkew && !isStreamCoalesced) {
+            val reducerId = leftPartSpec.startReducerIndex
+            val skewSpecs = createSkewPartitionSpecs(
+              stream.mapStats.shuffleId, reducerId, streamTargetSize)
+            if (skewSpecs.isDefined) {
+              logDebug(s"Stream side partition $partitionIndex " +
+                s"(${FileUtils.byteCountToDisplaySize(leftActualSize)}) is skewed, " +
+                s"split it into ${skewSpecs.get.length} parts.")
+              numSkewedLeft += 1
+            }
+            skewSpecs.getOrElse(Seq(leftPartSpec))
+          } else {
+            Seq(leftPartSpec)
+          }
+
+          for {
+            streamSidePartition <- streamParts
+          } {
+            streamSidePartitions += streamSidePartition
+          }
+        }
+
+        logDebug(s"number of skewed partitions: left $numSkewedLeft")
+        if (numSkewedLeft > 0) {
+          val newStream = CustomShuffleReaderExec(stream.shuffleStage, streamSidePartitions.toSeq)
+          buildSide match {
+            case BuildRight => bnl.copy(left = newStream, right = bnl.right, isSkewJoin = true)
+            case BuildLeft => bnl.copy(left = bnl.left, right = newStream, isSkewJoin = true)
+          }
+        } else {
+          bnl
+        }
+      }
+
+      (leftChild, rightChild, buildSide) match {
+        case (ShuffleStage(left: ShuffleStageInfo), _, BuildRight) =>
+          resolveBroadcastNLJoinSkew(left, joinType, buildSide)
+        case (_, ShuffleStage(right: ShuffleStageInfo), BuildLeft) =>
+          resolveBroadcastNLJoinSkew(right, joinType, buildSide)
+      }
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
@@ -262,7 +330,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 
     val shuffleStages = collectShuffleStages(plan)
 
-    if (shuffleStages.length == 2) {
+    if (shuffleStages.length >= 1) {
       // When multi table join, there will be too many complex combination to consider.
       // Currently we only handle 2 table join like following use case.
       // SMJ

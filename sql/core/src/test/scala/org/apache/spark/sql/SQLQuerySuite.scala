@@ -3582,6 +3582,43 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(sql("SELECT 0 FROM ( SELECT * FROM B JOIN C USING (id)) " +
       "JOIN ( SELECT * FROM B JOIN C USING (id)) USING (id)"), Row(0))
   }
+
+  test("SPARK-32830: Optimize Skewed BroadcastNestedLoopJoin") {
+    Seq(true).foreach { conf =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> conf.toString,
+        SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "100k",
+        SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "50k",
+        SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR.key -> "3") {
+        val df1 = (0 to 100000).map(i => (
+          if (i > 10000) {
+            0
+          } else {
+            (10000 - i) % 100
+          }
+          , i * 10, i + "str"))
+          .toDF("a", "b", "c").repartition(100)
+        val df2 = (1000 to 3000).map(i => (i < 2000, i * 10, i + "str"))
+          .toDF("d", "e", "f").repartition(100)
+        val df3 = (50000 to 100000).map(i => (
+          (i % 100)
+          , i * 10, i + "str"))
+          .toDF("h", "i", "g")
+
+
+        val ret1 = df1
+          .repartition(col("a"))
+          .join(df3, col("b") < col("i"))
+
+        ret1.explain()
+        ret1.show()
+
+        val ret2 = df3
+          .join(df1.repartition(col("a")), col("b") < col("i"))
+        ret2.explain()
+        ret2.show()
+      }
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

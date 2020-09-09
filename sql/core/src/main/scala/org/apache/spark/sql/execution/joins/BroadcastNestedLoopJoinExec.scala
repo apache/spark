@@ -33,7 +33,12 @@ case class BroadcastNestedLoopJoinExec(
     right: SparkPlan,
     buildSide: BuildSide,
     joinType: JoinType,
-    condition: Option[Expression]) extends BaseJoinExec {
+    condition: Option[Expression],
+    isSkewJoin: Boolean = false) extends BaseJoinExec {
+
+  override def nodeName: String = {
+    if (isSkewJoin) super.nodeName + "(skew=true)" else super.nodeName
+  }
 
   override def leftKeys: Seq[Expression] = Nil
   override def rightKeys: Seq[Expression] = Nil
