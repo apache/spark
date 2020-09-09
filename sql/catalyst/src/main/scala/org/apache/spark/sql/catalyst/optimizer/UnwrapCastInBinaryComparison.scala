@@ -47,7 +47,7 @@ import org.apache.spark.sql.types._
  *  - `cast(fromExp, toType) > value` ==> if(isnull(fromExp), null, false)
  *  - `cast(fromExp, toType) >= value` ==> if(isnull(fromExp), null, false)
  *  - `cast(fromExp, toType) === value` ==> if(isnull(fromExp), null, false)
- *  - `cast(fromExp, toType) <=> value` ==> false
+ *  - `cast(fromExp, toType) <=> value` ==> false (only if `fromExp` is deterministic)
  *  - `cast(fromExp, toType) <= value` ==> if(isnull(fromExp), null, true)
  *  - `cast(fromExp, toType) < value` ==> if(isnull(fromExp), null, true)
  *
@@ -93,7 +93,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // In case both sides have integral type, optimize the comparison by removing casts or
     // moving cast to the literal side.
     case be @ BinaryComparison(
-      Cast(fromExp, _: IntegralType, _), Literal(value, toType: IntegralType))
+      Cast(fromExp, toType: IntegralType, _), Literal(value, _: IntegralType))
         if canImplicitlyCast(fromExp, toType) =>
       simplifyIntegral(be, fromExp, toType, value)
 
