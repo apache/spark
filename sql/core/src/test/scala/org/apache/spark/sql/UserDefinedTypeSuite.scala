@@ -65,9 +65,9 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
 
 
   test("SPARK-32090: equal") {
-    val udt1 = new TestUDT.ExampleBaseTypeUDT
-    val udt2 = new TestUDT.ExampleSubTypeUDT
-    val udt3 = new TestUDT.ExampleSubTypeUDT
+    val udt1 = new ExampleBaseTypeUDT
+    val udt2 = new ExampleSubTypeUDT
+    val udt3 = new ExampleSubTypeUDT
     assert(udt1 !== udt2)
     assert(udt2 !== udt1)
     assert(udt2 === udt3)
@@ -75,8 +75,8 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
   }
 
   test("SPARK-32090: acceptsType") {
-    val udt1 = new TestUDT.ExampleBaseTypeUDT
-    val udt2 = new TestUDT.ExampleSubTypeUDT
+    val udt1 = new ExampleBaseTypeUDT
+    val udt2 = new ExampleSubTypeUDT
     assert(udt1.acceptsType(udt2))
     assert(!udt2.acceptsType(udt1))
   }
@@ -200,23 +200,23 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
   }
 
   test("SPARK-19311: UDFs disregard UDT type hierarchy") {
-    UDTRegistration.register(classOf[TestUDT.IExampleBaseType].getName,
-      classOf[TestUDT.ExampleBaseTypeUDT].getName)
-    UDTRegistration.register(classOf[TestUDT.IExampleSubType].getName,
-      classOf[TestUDT.ExampleSubTypeUDT].getName)
+    UDTRegistration.register(classOf[IExampleBaseType].getName,
+      classOf[ExampleBaseTypeUDT].getName)
+    UDTRegistration.register(classOf[IExampleSubType].getName,
+      classOf[ExampleSubTypeUDT].getName)
 
     // UDF that returns a base class object
     sqlContext.udf.register("doUDF", (param: Int) => {
-      new TestUDT.ExampleBaseClass(param)
-    }: TestUDT.IExampleBaseType)
+      new ExampleBaseClass(param)
+    }: IExampleBaseType)
 
     // UDF that returns a derived class object
     sqlContext.udf.register("doSubTypeUDF", (param: Int) => {
-      new TestUDT.ExampleSubClass(param)
-    }: TestUDT.IExampleSubType)
+      new ExampleSubClass(param)
+    }: IExampleSubType)
 
     // UDF that takes a base class object as parameter
-    sqlContext.udf.register("doOtherUDF", (obj: TestUDT.IExampleBaseType) => {
+    sqlContext.udf.register("doOtherUDF", (obj: IExampleBaseType) => {
       obj.field
     }: Int)
 

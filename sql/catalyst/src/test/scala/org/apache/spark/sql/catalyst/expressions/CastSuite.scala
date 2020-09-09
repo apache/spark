@@ -1346,8 +1346,8 @@ class CastSuite extends CastSuiteBase {
   }
 
   test("SPARK-32828: cast from a derived user-defined type to a base type") {
-    val v = Literal.create(Row(1), new TestUDT.ExampleSubTypeUDT())
-    checkEvaluation(cast(v, new TestUDT.ExampleBaseTypeUDT), Row(1))
+    val v = Literal.create(Row(1), new ExampleSubTypeUDT())
+    checkEvaluation(cast(v, new ExampleBaseTypeUDT), Row(1))
   }
 }
 
