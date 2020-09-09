@@ -188,7 +188,6 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
 
     override def compressedSize: Int = _compressedSize
 
-
     override def gatherCompressibilityStats(row: InternalRow, ordinal: Int): Unit = {
       val value = columnType.getField(row, ordinal)
       val actualSize = columnType.actualSize(row, ordinal)
