@@ -1,18 +1,18 @@
-TakeOrderedAndProject [i_brand,i_category,i_class,i_product_name,qoh]
+TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
   WholeStageCodegen (6)
-    HashAggregate [count,i_brand,i_category,i_class,i_product_name,spark_grouping_id,sum] [avg(cast(inv_quantity_on_hand as bigint)),count,qoh,sum]
+    HashAggregate [i_product_name,i_brand,i_class,i_category,spark_grouping_id,sum,count] [avg(cast(inv_quantity_on_hand as bigint)),qoh,sum,count]
       InputAdapter
-        Exchange [i_brand,i_category,i_class,i_product_name,spark_grouping_id] #1
+        Exchange [i_product_name,i_brand,i_class,i_category,spark_grouping_id] #1
           WholeStageCodegen (5)
-            HashAggregate [i_brand,i_category,i_class,i_product_name,inv_quantity_on_hand,spark_grouping_id] [count,count,sum,sum]
-              Expand [i_brand,i_category,i_class,i_product_name,inv_quantity_on_hand]
+            HashAggregate [i_product_name,i_brand,i_class,i_category,spark_grouping_id,inv_quantity_on_hand] [sum,count,sum,count]
+              Expand [inv_quantity_on_hand,i_product_name,i_brand,i_class,i_category]
                 InputAdapter
                   BroadcastNestedLoopJoin
                     WholeStageCodegen (3)
-                      Project [i_brand,i_category,i_class,i_product_name,inv_quantity_on_hand]
-                        BroadcastHashJoin [i_item_sk,inv_item_sk]
+                      Project [inv_quantity_on_hand,i_brand,i_class,i_category,i_product_name]
+                        BroadcastHashJoin [inv_item_sk,i_item_sk]
                           Project [inv_item_sk,inv_quantity_on_hand]
-                            BroadcastHashJoin [d_date_sk,inv_date_sk]
+                            BroadcastHashJoin [inv_date_sk,d_date_sk]
                               Filter [inv_date_sk,inv_item_sk]
                                 ColumnarToRow
                                   InputAdapter
@@ -21,7 +21,7 @@ TakeOrderedAndProject [i_brand,i_category,i_class,i_product_name,qoh]
                                 BroadcastExchange #2
                                   WholeStageCodegen (1)
                                     Project [d_date_sk]
-                                      Filter [d_date_sk,d_month_seq]
+                                      Filter [d_month_seq,d_date_sk]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.date_dim [d_date_sk,d_month_seq]
@@ -31,7 +31,7 @@ TakeOrderedAndProject [i_brand,i_category,i_class,i_product_name,qoh]
                                 Filter [i_item_sk]
                                   ColumnarToRow
                                     InputAdapter
-                                      Scan parquet default.item [i_brand,i_category,i_class,i_item_sk,i_product_name]
+                                      Scan parquet default.item [i_item_sk,i_brand,i_class,i_category,i_product_name]
                     BroadcastExchange #4
                       WholeStageCodegen (4)
                         ColumnarToRow

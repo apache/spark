@@ -848,9 +848,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   private val shuffleFileLossTests = Seq(
-    ("executor process lost with shuffle service", ExecutorProcessLost("", false), true, false),
-    ("worker lost with shuffle service", ExecutorProcessLost("", true), true, true),
-    ("worker lost without shuffle service", ExecutorProcessLost("", true), false, true),
+    ("executor process lost with shuffle service", ExecutorProcessLost("", None), true, false),
+    ("worker lost with shuffle service", ExecutorProcessLost("", Some("hostA")), true, true),
+    ("worker lost without shuffle service", ExecutorProcessLost("", Some("hostA")), false, true),
     ("executor failure with shuffle service", ExecutorKilled, true, false),
     ("executor failure without shuffle service", ExecutorKilled, false, true))
 
@@ -874,10 +874,18 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
       submit(reduceRdd, Array(0))
       completeShuffleMapStageSuccessfully(0, 0, 1)
+      val expectHostFileLoss = event match {
+        case ExecutorProcessLost(_, workerHost, _) => workerHost.isDefined
+        case _ => false
+      }
       runEvent(ExecutorLost("hostA-exec", event))
       verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
       if (expectFileLoss) {
-        verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec")
+        if (expectHostFileLoss) {
+          verify(mapOutputTracker, times(1)).removeOutputsOnHost("hostA")
+        } else {
+          verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec")
+        }
         intercept[MetadataFetchFailedException] {
           mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0)
         }

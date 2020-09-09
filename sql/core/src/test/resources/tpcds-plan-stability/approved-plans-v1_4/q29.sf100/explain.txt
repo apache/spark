@@ -175,17 +175,17 @@ Input [9]: [ss_item_sk#2, ss_customer_sk#3, ss_ticket_number#5, ss_quantity#6, s
 
 (26) Exchange
 Input [8]: [ss_item_sk#2, ss_customer_sk#3, ss_ticket_number#5, ss_quantity#6, s_store_id#12, s_store_name#13, i_item_id#17, i_item_desc#18]
-Arguments: hashpartitioning(cast(ss_ticket_number#5 as bigint), cast(ss_item_sk#2 as bigint), cast(ss_customer_sk#3 as bigint), 5), true, [id=#20]
+Arguments: hashpartitioning(cast(ss_customer_sk#3 as bigint), cast(ss_item_sk#2 as bigint), cast(ss_ticket_number#5 as bigint), 5), true, [id=#20]
 
 (27) Sort [codegen id : 8]
 Input [8]: [ss_item_sk#2, ss_customer_sk#3, ss_ticket_number#5, ss_quantity#6, s_store_id#12, s_store_name#13, i_item_id#17, i_item_desc#18]
-Arguments: [cast(ss_ticket_number#5 as bigint) ASC NULLS FIRST, cast(ss_item_sk#2 as bigint) ASC NULLS FIRST, cast(ss_customer_sk#3 as bigint) ASC NULLS FIRST], false, 0
+Arguments: [cast(ss_customer_sk#3 as bigint) ASC NULLS FIRST, cast(ss_item_sk#2 as bigint) ASC NULLS FIRST, cast(ss_ticket_number#5 as bigint) ASC NULLS FIRST], false, 0
 
 (28) Scan parquet default.date_dim
 Output [3]: [d_date_sk#21, d_year#22, d_moy#23]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), GreaterThanOrEqual(d_moy,9), LessThanOrEqual(d_moy,12), EqualTo(d_year,1999), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), GreaterThanOrEqual(d_moy,9), LessThanOrEqual(d_moy,12), EqualTo(d_year,1999), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (29) ColumnarToRow [codegen id : 9]
@@ -193,7 +193,7 @@ Input [3]: [d_date_sk#21, d_year#22, d_moy#23]
 
 (30) Filter [codegen id : 9]
 Input [3]: [d_date_sk#21, d_year#22, d_moy#23]
-Condition : (((((isnotnull(d_year#22) AND isnotnull(d_moy#23)) AND (d_moy#23 >= 9)) AND (d_moy#23 <= 12)) AND (d_year#22 = 1999)) AND isnotnull(d_date_sk#21))
+Condition : (((((isnotnull(d_moy#23) AND isnotnull(d_year#22)) AND (d_moy#23 >= 9)) AND (d_moy#23 <= 12)) AND (d_year#22 = 1999)) AND isnotnull(d_date_sk#21))
 
 (31) Project [codegen id : 9]
 Output [1]: [d_date_sk#21]
@@ -207,7 +207,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 Output [5]: [sr_returned_date_sk#25, sr_item_sk#26, sr_customer_sk#27, sr_ticket_number#28, sr_return_quantity#29]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
-PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_customer_sk), IsNotNull(sr_item_sk), IsNotNull(sr_returned_date_sk)]
+PushedFilters: [IsNotNull(sr_customer_sk), IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number), IsNotNull(sr_returned_date_sk)]
 ReadSchema: struct<sr_returned_date_sk:bigint,sr_item_sk:bigint,sr_customer_sk:bigint,sr_ticket_number:bigint,sr_return_quantity:int>
 
 (34) ColumnarToRow
@@ -215,7 +215,7 @@ Input [5]: [sr_returned_date_sk#25, sr_item_sk#26, sr_customer_sk#27, sr_ticket_
 
 (35) Filter
 Input [5]: [sr_returned_date_sk#25, sr_item_sk#26, sr_customer_sk#27, sr_ticket_number#28, sr_return_quantity#29]
-Condition : (((isnotnull(sr_ticket_number#28) AND isnotnull(sr_customer_sk#27)) AND isnotnull(sr_item_sk#26)) AND isnotnull(sr_returned_date_sk#25))
+Condition : (((isnotnull(sr_customer_sk#27) AND isnotnull(sr_item_sk#26)) AND isnotnull(sr_ticket_number#28)) AND isnotnull(sr_returned_date_sk#25))
 
 (36) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [cast(d_date_sk#21 as bigint)]
@@ -228,15 +228,15 @@ Input [6]: [d_date_sk#21, sr_returned_date_sk#25, sr_item_sk#26, sr_customer_sk#
 
 (38) Exchange
 Input [4]: [sr_item_sk#26, sr_customer_sk#27, sr_ticket_number#28, sr_return_quantity#29]
-Arguments: hashpartitioning(sr_ticket_number#28, sr_item_sk#26, sr_customer_sk#27, 5), true, [id=#30]
+Arguments: hashpartitioning(sr_customer_sk#27, sr_item_sk#26, sr_ticket_number#28, 5), true, [id=#30]
 
 (39) Sort [codegen id : 11]
 Input [4]: [sr_item_sk#26, sr_customer_sk#27, sr_ticket_number#28, sr_return_quantity#29]
-Arguments: [sr_ticket_number#28 ASC NULLS FIRST, sr_item_sk#26 ASC NULLS FIRST, sr_customer_sk#27 ASC NULLS FIRST], false, 0
+Arguments: [sr_customer_sk#27 ASC NULLS FIRST, sr_item_sk#26 ASC NULLS FIRST, sr_ticket_number#28 ASC NULLS FIRST], false, 0
 
 (40) SortMergeJoin [codegen id : 12]
-Left keys [3]: [cast(ss_ticket_number#5 as bigint), cast(ss_item_sk#2 as bigint), cast(ss_customer_sk#3 as bigint)]
-Right keys [3]: [sr_ticket_number#28, sr_item_sk#26, sr_customer_sk#27]
+Left keys [3]: [cast(ss_customer_sk#3 as bigint), cast(ss_item_sk#2 as bigint), cast(ss_ticket_number#5 as bigint)]
+Right keys [3]: [sr_customer_sk#27, sr_item_sk#26, sr_ticket_number#28]
 Join condition: None
 
 (41) Project [codegen id : 12]

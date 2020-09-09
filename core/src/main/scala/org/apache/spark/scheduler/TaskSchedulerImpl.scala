@@ -143,18 +143,6 @@ private[spark] class TaskSchedulerImpl(
   // continue to run even after being asked to decommission, but they will eventually exit.
   val executorsPendingDecommission = new HashMap[String, ExecutorDecommissionState]
 
-  // When they exit and we know of that via heartbeat failure, we will add them to this cache.
-  // This cache is consulted to know if a fetch failure is because a source executor was
-  // decommissioned.
-  lazy val decommissionedExecutorsRemoved = CacheBuilder.newBuilder()
-    .expireAfterWrite(
-      conf.get(DECOMMISSIONED_EXECUTORS_REMEMBER_AFTER_REMOVAL_TTL), TimeUnit.SECONDS)
-    .ticker(new Ticker{
-      override def read(): Long = TimeUnit.MILLISECONDS.toNanos(clock.getTimeMillis())
-    })
-    .build[String, ExecutorDecommissionState]()
-    .asMap()
-
   def runningTasksByExecutors: Map[String, Int] = synchronized {
     executorIdToRunningTaskIds.toMap.mapValues(_.size).toMap
   }
@@ -922,28 +910,8 @@ private[spark] class TaskSchedulerImpl(
     synchronized {
       // Don't bother noting decommissioning for executors that we don't know about
       if (executorIdToHost.contains(executorId)) {
-        val oldDecomStateOpt = executorsPendingDecommission.get(executorId)
-        val newDecomState = if (oldDecomStateOpt.isEmpty) {
-          // This is the first time we are hearing of decommissioning this executor,
-          // so create a brand new state.
-          ExecutorDecommissionState(
-            clock.getTimeMillis(),
-            decommissionInfo.isHostDecommissioned)
-        } else {
-          val oldDecomState = oldDecomStateOpt.get
-          if (!oldDecomState.isHostDecommissioned && decommissionInfo.isHostDecommissioned) {
-            // Only the cluster manager is allowed to send decommission messages with
-            // isHostDecommissioned set. So the new decommissionInfo is from the cluster
-            // manager and is thus authoritative. Flip isHostDecommissioned to true but keep the old
-            // decommission start time.
-            ExecutorDecommissionState(
-              oldDecomState.startTime,
-              isHostDecommissioned = true)
-          } else {
-            oldDecomState
-          }
-        }
-        executorsPendingDecommission(executorId) = newDecomState
+        executorsPendingDecommission(executorId) =
+          ExecutorDecommissionState(clock.getTimeMillis(), decommissionInfo.workerHost)
       }
     }
     rootPool.executorDecommission(executorId)
@@ -952,26 +920,11 @@ private[spark] class TaskSchedulerImpl(
 
   override def getExecutorDecommissionState(executorId: String)
     : Option[ExecutorDecommissionState] = synchronized {
-    executorsPendingDecommission
-      .get(executorId)
-      .orElse(Option(decommissionedExecutorsRemoved.get(executorId)))
+    executorsPendingDecommission.get(executorId)
   }
 
-  override def executorLost(executorId: String, givenReason: ExecutorLossReason): Unit = {
+  override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {
     var failedExecutor: Option[String] = None
-    val reason = givenReason match {
-      // Handle executor process loss due to decommissioning
-      case ExecutorProcessLost(message, origWorkerLost, origCausedByApp) =>
-        val executorDecommissionState = getExecutorDecommissionState(executorId)
-        ExecutorProcessLost(
-          message,
-          // Also mark the worker lost if we know that the host was decommissioned
-          origWorkerLost || executorDecommissionState.exists(_.isHostDecommissioned),
-          // Executor loss is certainly not caused by app if we knew that this executor is being
-          // decommissioned
-          causedByApp = executorDecommissionState.isEmpty && origCausedByApp)
-      case e => e
-    }
 
     synchronized {
       if (executorIdToRunningTaskIds.contains(executorId)) {
@@ -1060,9 +1013,7 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
-
-    val decomState = executorsPendingDecommission.remove(executorId)
-    decomState.foreach(decommissionedExecutorsRemoved.put(executorId, _))
+    executorsPendingDecommission.remove(executorId)
 
     if (reason != LossReasonPending) {
       executorIdToHost -= executorId
@@ -1104,7 +1055,7 @@ private[spark] class TaskSchedulerImpl(
   // exposed for test
   protected final def isHostDecommissioned(host: String): Boolean = {
     hostToExecutors.get(host).exists { executors =>
-      executors.exists(e => getExecutorDecommissionState(e).exists(_.isHostDecommissioned))
+      executors.exists(e => getExecutorDecommissionState(e).exists(_.workerHost.isDefined))
     }
   }
 

@@ -580,7 +580,7 @@ private[spark] class ExecutorAllocationManager(
       // when the task backlog decreased.
       if (decommissionEnabled) {
         val executorIdsWithoutHostLoss = executorIdsToBeRemoved.toSeq.map(
-          id => (id, ExecutorDecommissionInfo("spark scale down", false))).toArray
+          id => (id, ExecutorDecommissionInfo("spark scale down"))).toArray
         client.decommissionExecutors(executorIdsWithoutHostLoss, adjustTargetNumExecutors = false)
       } else {
         client.killExecutors(executorIdsToBeRemoved.toSeq, adjustTargetNumExecutors = false,
