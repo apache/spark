@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Functio
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
-import org.apache.spark.sql.execution.TestUncaughtExceptionHandler
+import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan, TestUncaughtExceptionHandler}
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.command.{FunctionsCommand, LoadDataCommand}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
@@ -2561,44 +2561,29 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  ignore("Make Metastore convert session level control") {
-    Seq(true, false).foreach { key =>
-      withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> key.toString) {
-        withTable("t") {
-          sql("CREATE TABLE t (i INT) PARTITIONED BY (p STRING) STORED AS ORC")
-          sql("ALTER TABLE t ADD PARTITION(p=20200901)")
-          sql("INSERT INTO t PARTITION(p='20200901') SELECT 1")
-          sql(
-            """
-              |ALTER TABLE t PARTITION(p='20200901')
-              |SET SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-              |
-            """.stripMargin)
-          sql("ALTER TABLE t SET FILEFORMAT TEXTFILE")
-          sql("ALTER TABLE t ADD PARTITION(p='20200902')")
-          sql("INSERT INTO t PARTITION(p='20200902') SELECT 2")
+  test("SPARK-32818: make metastore convert session level configurable") {
+    withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
+      withTable("t") {
+        sql("CREATE TABLE t (i INT) PARTITIONED BY (p STRING) STORED AS ORC")
+        sql("INSERT INTO t PARTITION(p='20200901') SELECT 1")
 
-          sql("desc formatted t").show(false)
-          sql("desc formatted t partition(p='20200901')").show(false)
-          sql("desc formatted t partition(p='20200902')").show(false)
-          if (key) {
-            checkAnswer(
-              sql(
-                """
-                  |SELECT * FROM t
-                  |WHERE p='20200902'
-                """.stripMargin),
-              Row(2, "20200902"))
-          } else {
-            checkAnswer(
-              sql(
-                """
-                  |SELECT * FROM t
-                  |WHERE p='20200902'
-                """.stripMargin),
-              Row(2, "20200902"))
+        val query =
+          """
+            |SELECT * FROM t
+            |WHERE p='20200901'
+          """.stripMargin
+
+        def assertScanType(clazz: Class[_]): Unit = {
+          val plan = sql(query).queryExecution.sparkPlan
+          val scan = plan.collectFirst {
+            case scan if scan.getClass == clazz => scan
           }
+          assert(scan.isDefined)
         }
+
+        assertScanType(classOf[FileSourceScanExec])
+        sql("SET spark.sql.hive.convertMetastoreOrc=false")
+        assertScanType(classOf[HiveTableScanExec])
       }
     }
   }
