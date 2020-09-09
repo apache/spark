@@ -2371,9 +2371,8 @@ object SQLConf {
     .createWithDefaultString(s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}")
 
   val MAX_METADATA_STRING_LENGTH = buildConf("spark.sql.maxMetadataStringLength")
-    .doc("Maximum number of characters to output for a metadata string. e.g. `DataSourceScanExec`," +
-      "every value will be abbreviated if exceed length. The default value is from" +
-      "`DataSourceScanExec.maxMetadataValueLength`.")
+    .doc("Maximum number of characters to output for a metadata string. e.g. " +
+      "`DataSourceScanExec`, every value will be abbreviated if exceed length.")
     .version("3.1.0")
     .intConf
     .createWithDefault(100)
