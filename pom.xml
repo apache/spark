@@ -202,8 +202,8 @@
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.0.0</commons-crypto.version>
     <!--
-    If you are changing Arrow version specification, please check ./python/pyspark/sql/utils.py,
-    and ./python/setup.py too.
+    If you are changing Arrow version specification, please check
+    ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
     <arrow.version>1.0.1</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
