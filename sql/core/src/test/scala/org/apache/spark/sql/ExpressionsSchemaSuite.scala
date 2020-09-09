@@ -95,7 +95,9 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
       spark.sessionState.catalog.lookupFunctionInfo(funcId)
     }
 
-    val classFunsMap = funInfos.groupBy(_.getClassName).toSeq.sortBy(_._1)
+    val classFunsMap = funInfos.groupBy(_.getClassName).toSeq.sortBy(_._1).map {
+      case (className, infos) => (className, infos.sortBy(_.getName))
+    }
     val outputBuffer = new ArrayBuffer[String]
     val outputs = new ArrayBuffer[QueryOutput]
     val missingExamples = new ArrayBuffer[String]

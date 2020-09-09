@@ -211,7 +211,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
             .exists(_._2.map(_._2.exprId).distinct.length > 1),
             "Found duplicate rewrite attributes")
 
-          val attributeRewrites = AttributeMap(attrMappingForCurrentPlan)
+          val attributeRewrites = AttributeMap(attrMappingForCurrentPlan.toSeq)
           // Using attrMapping from the children plans to rewrite their parent node.
           // Note that we shouldn't rewrite a node using attrMapping from its sibling nodes.
           newPlan = newPlan.transformExpressions {
@@ -225,7 +225,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
         attrMapping ++= newAttrMapping.filter {
           case (a1, a2) => a1.exprId != a2.exprId
         }
-        newPlan -> attrMapping
+        newPlan -> attrMapping.toSeq
       }
     }
     rewrite(this)._1
