@@ -3691,7 +3691,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(sql("SELECT id FROM t WHERE (SELECT true)"), Row(0L))
     }
   }
-  
+
   test("SPARK-32830: Optimize Skewed BroadcastNestedLoopJoin") {
     Seq(true).foreach { conf =>
       withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> conf.toString,
