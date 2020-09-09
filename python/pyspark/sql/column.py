@@ -329,6 +329,31 @@ class Column(object):
                 DeprecationWarning)
         return self[name]
 
+    @since(3.1)
+    def withField(self, fieldName, col):
+        """
+        An expression that adds/replaces field in StructType by name.
+
+        >>> from pyspark.sql import Row, functions
+        >>> df = spark.createDataFrame([Row(a=Row(b=1, c=2))])
+        >>> df.withColumn('a', df['a'].withField('b', functions.lit(3))).select('a.b').show()
+        +---+
+        |  b|
+        +---+
+        |  3|
+        +---+
+        >>> df.withColumn('a', df['a'].withField('d', functions.lit(4))).select('a.d').show()
+        +---+
+        |  d|
+        +---+
+        |  4|
+        +---+
+        """
+        if not isinstance(col, Column):
+            raise TypeError("col should be a Column")
+
+        return Column(self._jc.withField(fieldName, col._jc))
+
     def __getattr__(self, item):
         if item.startswith("__"):
             raise AttributeError(item)

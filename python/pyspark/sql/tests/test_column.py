@@ -139,6 +139,33 @@ class ColumnTests(ReusedSQLTestCase):
         result = df.select(functions.bitwiseNOT(df.b)).collect()[0].asDict()
         self.assertEqual(~75, result['~b'])
 
+    def test_with_field(self):
+        from pyspark.sql import functions
+        row = Row(a=Row(b=1, c=2))
+        df = self.spark.createDataFrame([row])
+        self.assertIsInstance(df['a'].withField('d', functions.lit(3)), Column)
+        result = df.withColumn('a', df['a'].withField('d', functions.lit(3))).collect()[0].asDict()
+        self.assertEqual(1, result['a']['b'])
+        self.assertEqual(2, result['a']['c'])
+        self.assertEqual(3, result['a']['d'])
+        result = df.withColumn('a', df['a'].withField('b', functions.lit(3))).collect()[0].asDict()
+        self.assertEqual(3, result['a']['b'])
+        self.assertEqual(2, result['a']['c'])
+        nested = df.withColumn(
+            'a',
+            df['a'].withField('e', functions.struct(functions.lit(4).alias('f')))
+        )
+        result = nested.collect()[0].asDict()
+        self.assertEqual(1, result['a']['b'])
+        self.assertEqual(2, result['a']['c'])
+        self.assertEqual(4, result['a']['e']['f'])
+        result = nested.withColumn(
+            'a',
+            nested['a'].withField('e.f', functions.lit(5))
+        ).collect()[0].asDict()
+        self.assertEqual(1, result['a']['b'])
+        self.assertEqual(2, result['a']['c'])
+        self.assertEqual(5, result['a']['e']['f'])
 
 if __name__ == "__main__":
     import unittest
