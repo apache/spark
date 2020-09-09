@@ -33,6 +33,7 @@ import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.execution.SimpleMode
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileScan}
@@ -877,6 +878,28 @@ class FileBasedDataSourceSuite extends QueryTest
               spark.read.schema(rootColumnCaseInsensitiveSchema).format(format).load(path),
               Row(Row(0, 1)))
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-32827: Add spark.sql.maxMetadataStringLength config") {
+    withTempDir { dir =>
+      val tableName = "t1"
+      val path = s"${dir.getCanonicalPath}/$tableName"
+      withTable(tableName) {
+        sql(s"create table t1(c int) using parquet location '$path'")
+        withSQLConf(SQLConf.MAX_METADATA_STRING_LENGTH.key -> "5") {
+          val explain = spark.table("t1").queryExecution.explainString(SimpleMode)
+          assert(!explain.contains(path))
+          // metadata has abbreviated by ...
+          assert(explain.contains("..."))
+        }
+
+        withSQLConf(SQLConf.MAX_METADATA_STRING_LENGTH.key -> "1000") {
+          val explain = spark.table("t1").queryExecution.explainString(SimpleMode)
+          assert(explain.contains(path))
+          assert(!explain.contains("..."))
         }
       }
     }
