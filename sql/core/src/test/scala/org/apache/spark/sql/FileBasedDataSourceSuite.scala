@@ -885,19 +885,19 @@ class FileBasedDataSourceSuite extends QueryTest
 
   test("SPARK-32827: Add spark.sql.maxMetadataStringLength config") {
     withTempDir { dir =>
-      val tableName = "t1"
+      val tableName = "t"
       val path = s"${dir.getCanonicalPath}/$tableName"
       withTable(tableName) {
-        sql(s"create table t1(c int) using parquet location '$path'")
+        sql(s"CREATE TABLE $tableName(c INT) USING PARQUET LOCATION '$path'")
         withSQLConf(SQLConf.MAX_METADATA_STRING_LENGTH.key -> "5") {
-          val explain = spark.table("t1").queryExecution.explainString(SimpleMode)
+          val explain = spark.table(tableName).queryExecution.explainString(SimpleMode)
           assert(!explain.contains(path))
           // metadata has abbreviated by ...
           assert(explain.contains("..."))
         }
 
         withSQLConf(SQLConf.MAX_METADATA_STRING_LENGTH.key -> "1000") {
-          val explain = spark.table("t1").queryExecution.explainString(SimpleMode)
+          val explain = spark.table(tableName).queryExecution.explainString(SimpleMode)
           assert(explain.contains(path))
           assert(!explain.contains("..."))
         }
