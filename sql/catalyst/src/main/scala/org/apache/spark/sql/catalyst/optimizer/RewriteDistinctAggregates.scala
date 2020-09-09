@@ -301,7 +301,6 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
                 distinctAggChildAttrLookup.get(x).map(evalWithinGroup(id, _, condition))
               }
             }
-
             (e, e.copy(aggregateFunction = naf, isDistinct = false, filter = None))
           }
 
