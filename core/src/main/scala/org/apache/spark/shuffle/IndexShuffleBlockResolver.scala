@@ -101,19 +101,31 @@ private[spark] class IndexShuffleBlockResolver(
       .getOrElse(blockManager.diskBlockManager.getFile(blockId))
   }
 
-  private def getMergedBlockDataFile(appId: String, shuffleId: Int, reduceId: Int): File = {
+  private def getMergedBlockDataFile(
+    appId: String,
+    shuffleId: Int,
+    reduceId: Int,
+    dirs: Option[Array[String]] = None): File = {
     blockManager.diskBlockManager.getMergedShuffleFile(
-      ShuffleMergedBlockId(appId, shuffleId, reduceId))
+      ShuffleMergedBlockId(appId, shuffleId, reduceId), dirs)
   }
 
-  private def getMergedBlockIndexFile(appId: String, shuffleId: Int, reduceId: Int): File = {
+  private def getMergedBlockIndexFile(
+    appId: String,
+    shuffleId: Int,
+    reduceId: Int,
+    dirs: Option[Array[String]] = None): File = {
     blockManager.diskBlockManager.getMergedShuffleFile(
-      ShuffleMergedIndexBlockId(appId, shuffleId, reduceId))
+      ShuffleMergedIndexBlockId(appId, shuffleId, reduceId), dirs)
   }
 
-  private def getMergedBlockMetaFile(appId: String, shuffleId: Int, reduceId: Int): File = {
+  private def getMergedBlockMetaFile(
+    appId: String,
+    shuffleId: Int,
+    reduceId: Int,
+    dirs: Option[Array[String]] = None): File = {
     blockManager.diskBlockManager.getMergedShuffleFile(
-      ShuffleMergedMetaBlockId(appId, shuffleId, reduceId))
+      ShuffleMergedMetaBlockId(appId, shuffleId, reduceId), dirs)
   }
 
   /**
@@ -347,9 +359,12 @@ private[spark] class IndexShuffleBlockResolver(
    * merged shuffle file need to be identified at once, so the ShuffleBlockFetcherIterator
    * knows how to consume local merged shuffle file as multiple chunks.
    */
-  override def getMergedBlockData(blockId: ShuffleBlockId): Seq[ManagedBuffer] = {
-    val indexFile = getMergedBlockIndexFile(conf.getAppId, blockId.shuffleId, blockId.reduceId)
-    val dataFile = getMergedBlockDataFile(conf.getAppId, blockId.shuffleId, blockId.reduceId)
+  override def getMergedBlockData(
+      blockId: ShuffleBlockId,
+      dirs: Option[Array[String]]): Seq[ManagedBuffer] = {
+    val indexFile =
+      getMergedBlockIndexFile(conf.getAppId, blockId.shuffleId, blockId.reduceId, dirs)
+    val dataFile = getMergedBlockDataFile(conf.getAppId, blockId.shuffleId, blockId.reduceId, dirs)
     // Load all the indexes in order to identify all chunks in the specified merged shuffle file.
     val size = indexFile.length.toInt
     val buffer = ByteBuffer.allocate(size)
@@ -376,8 +391,11 @@ private[spark] class IndexShuffleBlockResolver(
   /**
    * This is only used for reading local merged block meta data.
    */
-  override def getMergedBlockMeta(blockId: ShuffleBlockId): MergedBlockMeta = {
-    val indexFile = getMergedBlockIndexFile(conf.getAppId, blockId.shuffleId, blockId.reduceId)
+  override def getMergedBlockMeta(
+      blockId: ShuffleBlockId,
+      dirs: Option[Array[String]]): MergedBlockMeta = {
+    val indexFile =
+      getMergedBlockIndexFile(conf.getAppId, blockId.shuffleId, blockId.reduceId, dirs)
     val size = indexFile.length.toInt
     val numChunks = (size / 8) - 1
     val metaFile = getMergedBlockMetaFile(conf.getAppId, blockId.shuffleId, blockId.reduceId)

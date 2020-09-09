@@ -43,6 +43,14 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   private[spark] val localDirs: Array[File] = createLocalDirs(conf)
   private[spark] val localDirsForMergedShuffleBlock: Array[File] =
     createLocalDirsForMergedShuffleBlocks(conf)
+
+  private[spark] val localDirsString: Array[String] = localDirs.map(_.toString)
+
+  /**
+   * Create merge directories
+   */
+  createLocalDirsForMergedShuffleBlocks(conf)
+
   if (localDirs.isEmpty) {
     logError("Failed to create any local dir.")
     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
@@ -89,20 +97,25 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
    * This should be in sync with
    * org.apache.spark.network.shuffle.RemoteBlockPushResolver#getMergedShuffleFile
    */
-  def getMergedShuffleFile(blockId: BlockId): File = {
+  def getMergedShuffleFile(blockId: BlockId, dirs: Option[Array[String]]): File = {
     blockId match {
       case mergedBlockId: ShuffleMergedBlockId =>
-        getMergedShuffleFile(mergedBlockId.appId, mergedBlockId.name)
+        getMergedShuffleFile(mergedBlockId.name, dirs)
       case mergedIndexBlockId: ShuffleMergedIndexBlockId =>
-        getMergedShuffleFile(mergedIndexBlockId.appId, mergedIndexBlockId.name)
+        getMergedShuffleFile(mergedIndexBlockId.name, dirs)
       case mergedMetaBlockId: ShuffleMergedMetaBlockId =>
-        getMergedShuffleFile(mergedMetaBlockId.appId, mergedMetaBlockId.name)
+        getMergedShuffleFile(mergedMetaBlockId.name, dirs)
       case _ =>
         throw new RuntimeException(s"Only merged block ID is supported, but got ${blockId}")
     }
   }
 
-  private def getMergedShuffleFile(appId: String, filename: String): File = {
+  private def getMergedShuffleFile(filename: String, dirs: Option[Array[String]]): File = {
+    if (!dirs.isDefined) {
+      throw new RuntimeException(
+        s"Cannot read $filename because active merged shuffle dirs is empty")
+    }
+    val localDirsForMergedShuffleBlock = dirs.get
     val hash = Utils.nonNegativeHash(filename)
     val mergedDir = localDirsForMergedShuffleBlock(hash % localDirsForMergedShuffleBlock.length)
     new File(mergedDir, filename)

@@ -24,18 +24,15 @@ import java.util.concurrent.{CompletableFuture, Semaphore}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
-
 import org.mockito.ArgumentMatchers.{any, eq => meq}
-import org.mockito.Mockito.{mock, times, verify, when}
+import org.mockito.Mockito.{doThrow, mock, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.roaringbitmap.RoaringBitmap
 import org.scalatest.PrivateMethodTester
-
 import org.apache.spark.{MapOutputTracker, SparkFunSuite, TaskContext}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
-import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockStoreClient, DownloadFileManager,
-  ExternalBlockStoreClient, MergedBlockMeta, MergedBlocksMetaListener}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockStoreClient, DownloadFileManager, ExternalBlockStoreClient, MergedBlockMeta, MergedBlocksMetaListener}
 import org.apache.spark.network.util.LimitedInputStream
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.ShuffleBlockFetcherIterator.FetchBlockInfo
@@ -88,6 +85,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       blockStoreClient = mockExternalBlockStoreClient)
 
     when(blockManager.hostLocalDirManager).thenReturn(Some(hostLocalDirManager))
+    when(blockManager.isShuffleHostLocalDiskReadEnabled).thenReturn(true)
     when(mockExternalBlockStoreClient.getHostLocalDirs(any(), any(), any(), any()))
       .thenAnswer { invocation =>
         val completableFuture = invocation.getArguments()(3)
@@ -1251,9 +1249,15 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
   test("failed to fetch local merged blocks then fall back to fetch original shuffle blocks") {
     val blockManager = mock(classOf[BlockManager])
-    val localBmId = BlockManagerId("test-client", "test-client", 1)
+    val localBmId = BlockManagerId("test-client", "test-local-host", 1)
+    val mergedBmId = BlockManagerId("", "test-local-host", 1)
     doReturn(localBmId).when(blockManager).blockManagerId
+    val localDirs = Array("testPath1", "testPath2")
+    val hostLocalDirs = Map("" -> localDirs)
+    initHostLocalDirManager(blockManager, hostLocalDirs)
 
+    val localBlocks = Set[ShuffleBlockId](ShuffleBlockId(0, 0, 0), ShuffleBlockId(0, 0, 1))
+    val mergedLocalBlocks = Set[ShuffleBlockId](ShuffleBlockId(0, -1, 2))
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])](
       (localBmId, Seq((ShuffleBlockId(0, 0, 0), 1L, 0), (ShuffleBlockId(0, 0, 1), 1L, 0))),
       (BlockManagerId("", "test-client", 1), Seq((ShuffleBlockId(0, -1, 2), 2L, -1))))
@@ -1268,19 +1272,89 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       .getLocalBlockData(ShuffleBlockId(0, 0, 0))
     doReturn(blockChunks(ShuffleBlockId(0, 0, 1))).when(blockManager)
       .getLocalBlockData(ShuffleBlockId(0, 0, 1))
+    doThrow(new RuntimeException("Forced error")).when(blockManager)
+      .getMergedBlockData(ShuffleBlockId(0, -1, 2), localDirs)
     doReturn(blockChunks(ShuffleBlockId(0, 0, 2))).when(blockManager)
       .getLocalBlockData(ShuffleBlockId(0, 0, 2))
     doReturn(blockChunks(ShuffleBlockId(0, 1, 2))).when(blockManager)
       .getLocalBlockData(ShuffleBlockId(0, 1, 2))
-    when(blockManager.getMergedBlockData(ShuffleBlockId(0, -1, 2)))
-      .thenThrow(new RuntimeException("Forced Error"))
+        .getLocalBlockData(ShuffleBlockId(0, 1, 2))
 
     // Get a valid chunk meta for this test
     val bitmaps = Array(new RoaringBitmap)
     bitmaps(0).add(0) // chunk 0 has mapId 0
     bitmaps(0).add(1) // chunk 1 has mapId 1
     val mergedBlockMeta = createMockMergedBlockMeta(1, bitmaps)
-    when(blockManager.getMergedBlockMeta(ShuffleBlockId(0, -1, 2))).thenReturn(mergedBlockMeta)
+    when(blockManager.getMergedBlockMeta(ShuffleBlockId(0, -1, 2), localDirs))
+      .thenReturn(mergedBlockMeta)
+
+    val mockMapOutputTracker = mock(classOf[MapOutputTracker])
+    when(mockMapOutputTracker.getMapSizesForMergeResult(0, 2)).thenAnswer(
+      new Answer[Seq[(BlockManagerId, Seq[(BlockId, Long)])]] {
+        override def answer(
+          invocationOnMock: InvocationOnMock): Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
+          Seq((localBmId, Seq((ShuffleBlockId(0, 0, 2), 1), (ShuffleBlockId(0, 1, 2), 1))))
+        }
+      })
+
+    val transfer = mock(classOf[BlockTransferService])
+    val localBlocksByAddress = createBlocksByAddress(localBmId, localBlocks)
+    val mergedLocalBlocksByAddress = createBlocksByAddress(mergedBmId, mergedLocalBlocks)
+     val blocksByAddress = localBlocksByAddress ++ mergedLocalBlocksByAddress
+    val iterator = createShuffleBlockIteratorWithDefaults(transfer, blocksByAddress,
+      blockManager, mockMapOutputTracker)
+
+    val (id1, _) = iterator.next()
+    assert(id1 === ShuffleBlockId(0, 0, 0))
+    val (id2, _) = iterator.next()
+    assert(id2 === ShuffleBlockId(0, 0, 1))
+    val (id3, _) = iterator.next()
+    assert(id3 === ShuffleBlockId(0, 0, 2))
+    val (id4, _) = iterator.next()
+    assert(id4 === ShuffleBlockId(0, 1, 2))
+    assert(!iterator.hasNext)
+  }
+
+  test("failed to fetch local merged blocks then fall back to fetch original shuffle blocks " +
+    "which contains host-local blocks with host local blocks reading enabled") {
+    val blockManager = mock(classOf[BlockManager])
+    val localBmId = BlockManagerId("test-client", "test-host", 1)
+    val mergedBmId = BlockManagerId("", "test-host", 1)
+    // BlockManagerId from another executor on the same host
+    val hostLocalBmId = BlockManagerId("test-client-1", "test-host", 1)
+    doReturn(localBmId).when(blockManager).blockManagerId
+    val hostLocalDirs = Map("test-client-1" -> Array("local-dir"), "" -> Array("local-dir"))
+    // enable host local read, returning local dir for hostLocalBmId
+    initHostLocalDirManager(blockManager, hostLocalDirs)
+
+    val localBlocks = Set[ShuffleBlockId](ShuffleBlockId(0, 0, 0), ShuffleBlockId(0, 0, 1))
+    val mergedLocalBlocks = Set[ShuffleBlockId](ShuffleBlockId(0, -1, 2))
+    val blockChunks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 0, 1) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 0, 2) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 1, 2) -> createMockManagedBuffer()
+    )
+
+    doReturn(blockChunks(ShuffleBlockId(0, 0, 0))).when(blockManager)
+      .getLocalBlockData(ShuffleBlockId(0, 0, 0))
+    doReturn(blockChunks(ShuffleBlockId(0, 0, 1))).when(blockManager)
+      .getLocalBlockData(ShuffleBlockId(0, 0, 1))
+    doThrow(new RuntimeException("Forced error")).when(blockManager)
+      .getMergedBlockData(ShuffleBlockId(0, -1, 2), Array("local-dir"))
+    doReturn(blockChunks(ShuffleBlockId(0, 0, 2))).when(blockManager)
+      .getLocalBlockData(ShuffleBlockId(0, 0, 2))
+    // host Local read for this original shuffle block
+    doReturn(blockChunks(ShuffleBlockId(0, 1, 2))).when(blockManager)
+      .getHostLocalShuffleData(ShuffleBlockId(0, 1, 2), Array("local-dir"))
+
+    // Get a valid chunk meta for this test
+    val bitmaps = Array(new RoaringBitmap)
+    bitmaps(0).add(0) // chunk 0 has mapId 0
+    bitmaps(0).add(1) // chunk 1 has mapId 1
+    val mergedBlockMeta = createMockMergedBlockMeta(1, bitmaps)
+    when(blockManager.getMergedBlockMeta(ShuffleBlockId(0, -1, 2), Array("local-dir")))
+      .thenReturn(mergedBlockMeta)
 
     val mockMapOutputTracker = mock(classOf[MapOutputTracker])
     when(mockMapOutputTracker.getMapSizesForMergeResult(0, 2)).thenAnswer(
@@ -1288,6 +1362,9 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
         Seq((localBmId, Seq((ShuffleBlockId(0, 0, 2), 1L, 0), (ShuffleBlockId(0, 1, 2), 1L, 0))))
       })
     val transfer = mock(classOf[BlockTransferService])
+    val localBlocksByAddress = createBlocksByAddress(localBmId, localBlocks)
+    val mergedLocalBlocksByAddress = createBlocksByAddress(mergedBmId, mergedLocalBlocks)
+    val blocksByAddress = localBlocksByAddress ++ mergedLocalBlocksByAddress
     val iterator = createShuffleBlockIteratorWithDefaults(transfer, blocksByAddress,
       blockManager, mockMapOutputTracker)
     val (id1, _) = iterator.next()
@@ -1316,13 +1393,20 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
   test("failure while reading shuffle chunks should fallback to original shuffle blocks") {
     val blockManager = mock(classOf[BlockManager])
-    val localBmId = BlockManagerId("test-client", "test-client", 1)
+    val localBmId = BlockManagerId("test-client", "test-local-host", 1)
+    val mergedBmId = BlockManagerId("", "test-local-host", 1)
+    val remoteBmId = BlockManagerId("remote-client", "remote-client", 2)
+    val localDirs = Array("testPath1", "testPath2")
+
     doReturn(localBmId).when(blockManager).blockManagerId
+
+    val hostLocalDirs = Map("" -> localDirs)
+    // returning local dir for hostLocalBmId
 
     // This will throw an IOException when input stream is created from the ManagedBuffer
     doReturn(Seq({
       new FileSegmentManagedBuffer(null, new File("non-existent"), 0, 100)
-    })).when(blockManager).getMergedBlockData(ShuffleBlockId(0, -1, 0))
+    })).when(blockManager).getMergedBlockData(ShuffleBlockId(0, -1, 0), localDirs)
 
     val blocksSem = new Semaphore(0)
     val transfer = createBasicMockTransfer(blocksSem, Map[BlockId, ManagedBuffer](
@@ -1337,10 +1421,13 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val bitmaps = Array(new RoaringBitmap)
     bitmaps(0).add(0) // chunk 0 has mapId 0
     val mergedBlockMeta = createMockMergedBlockMeta(1, bitmaps)
-    when(blockManager.getMergedBlockMeta(ShuffleBlockId(0, -1, 0))).thenReturn(mergedBlockMeta)
+    when(blockManager.getMergedBlockMeta(ShuffleBlockId(0, -1, 0), localDirs))
+      .thenReturn(mergedBlockMeta)
 
-    val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])](
-      (BlockManagerId("", "test-client", 1), Seq((ShuffleBlockId(0, -1, 0), 2L, 0))))
+    initHostLocalDirManager(blockManager, hostLocalDirs)
+
+    val blocks = Set[ShuffleBlockId](ShuffleBlockId(0, -1, 0))
+    val blocksByAddress = createBlocksByAddress(mergedBmId, blocks)
     val iterator = createShuffleBlockIteratorWithDefaults(transfer, blocksByAddress,
       blockManager, mapOutputTracker = mockMapOutputTracker)
     val (id1, _) = iterator.next()
@@ -1352,10 +1439,17 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   test("failure when reading chunkBitmaps of local merged block should fallback to " +
     "original shuffle blocks") {
     val blockManager = mock(classOf[BlockManager])
-    val localBmId = BlockManagerId("test-client", "test-client", 1)
+    val localBmId = BlockManagerId("test-client", "test-local-host", 1)
+    val mergedBmId = BlockManagerId("", "test-local-host", 1)
+    val remoteBmId = BlockManagerId("remote-client", "remote-client", 2)
+    val localDirs = Array("testPath1", "testPath2")
+
+    val hostLocalDirs = Map("" -> localDirs)
+    initHostLocalDirManager(blockManager, hostLocalDirs)
+
     doReturn(localBmId).when(blockManager).blockManagerId
     doReturn(Seq(createMockManagedBuffer())).when(blockManager)
-      .getMergedBlockData(ShuffleBlockId(0, -1, 0))
+      .getMergedBlockData(ShuffleBlockId(0, -1, 0), localDirs)
 
     val mockMapOutputTracker = mock(classOf[MapOutputTracker])
     val remoteBlocksByAddr = Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])](
@@ -1363,10 +1457,11 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     when(mockMapOutputTracker.getMapSizesForMergeResult(any(), any()))
       .thenReturn(remoteBlocksByAddr)
     val mergedBlockMeta = createMockMergedBlockMeta(1, null)
-    when(blockManager.getMergedBlockMeta(ShuffleBlockId(0, -1, 0))).thenReturn(mergedBlockMeta)
+    when(blockManager.getMergedBlockMeta(ShuffleBlockId(0, -1, 0), localDirs))
+      .thenReturn(mergedBlockMeta)
 
-    val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])](
-      (BlockManagerId("", "test-client", 1), Seq((ShuffleBlockId(0, -1, 0), 2L, 0))))
+    val blocks = Set[ShuffleBlockId](ShuffleBlockId(0, -1, 0))
+    val blocksByAddress = createBlocksByAddress(mergedBmId, blocks)
     val blocksSem = new Semaphore(0)
     val transfer = createBasicMockTransfer(blocksSem, Map[BlockId, ManagedBuffer](
       ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer()))
