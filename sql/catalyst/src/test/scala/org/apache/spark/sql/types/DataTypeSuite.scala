@@ -510,6 +510,54 @@ class DataTypeSuite extends SparkFunSuite {
     true,
     ignoreNullability = true)
 
+  checkEqualsStructurally(
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    true,
+    ignoreNullability = false)
+
+  checkEqualsStructurally(
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), false),
+    false,
+    ignoreNullability = false)
+
+  checkEqualsStructurally(
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, false), true),
+    false,
+    ignoreNullability = false)
+
+  checkEqualsStructurally(
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), false),
+    true,
+    ignoreNullability = true)
+
+  checkEqualsStructurally(
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, false), true),
+    true,
+    ignoreNullability = true)
+
+  checkEqualsStructurally(
+    MapType(
+      ArrayType(IntegerType, false), ArrayType(IntegerType, true), true),
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    true,
+    ignoreNullability = true)
+
   test("SPARK-25031: MapType should produce current formatted string for complex types") {
     val keyType: DataType = StructType(Seq(
       StructField("a", DataTypes.IntegerType),
