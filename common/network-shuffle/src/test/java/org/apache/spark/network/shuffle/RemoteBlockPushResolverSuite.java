@@ -52,6 +52,9 @@ public class RemoteBlockPushResolverSuite {
   private TransportConf conf;
   private RemoteBlockPushResolver pushResolver;
   private String[] localDirs;
+  private final String MERGE_DIR_RELATIVE_PATH = "usercache/%s/appcache/%s/";
+  private final String USER = "testuser";
+  private final String BLOCK_MANAGER_DIR = "blockmgr-193d8401";
 
   @Before
   public void before() throws IOException {
@@ -61,7 +64,7 @@ public class RemoteBlockPushResolverSuite {
     MapConfigProvider provider = new MapConfigProvider(
         ImmutableMap.of("spark.shuffle.server.minChunkSizeInMergedShuffleFile", "4"));
     conf = new TransportConf("shuffle", provider);
-    pushResolver = new RemoteBlockPushResolver(conf, localDirs);
+    pushResolver = new RemoteBlockPushResolver(conf, MERGE_DIR_RELATIVE_PATH);
   }
 
   @After
@@ -84,7 +87,7 @@ public class RemoteBlockPushResolverSuite {
   public void testNoIndexFile() {
     try {
       String appId = "app_NoIndexFile";
-      registerApplication(appId, localDirs);
+      registerApplication(appId, USER);
       pushResolver.getMergedBlockMeta(appId, 0, 0);
       removeApplication(appId);
     } catch (Throwable t) {
@@ -96,7 +99,8 @@ public class RemoteBlockPushResolverSuite {
   @Test
   public void testChunkCountsAndBlockData() throws IOException {
     String appId = "app_ChunkCountsAndBlockData";
-    registerApplication(appId, localDirs);
+    registerApplication(appId, USER);
+    registerExecutor(appId, prepareBlockManagerLocalDirs(appId, USER, localDirs));
     PushBlockStream[] pushBlocks = new PushBlockStream[] {
         new PushBlockStream(appId, "shuffle_0_0_0", 0),
         new PushBlockStream(appId, "shuffle_0_1_0", 0),
@@ -114,7 +118,8 @@ public class RemoteBlockPushResolverSuite {
   @Test
   public void testMultipleBlocksInAChunk() throws IOException {
     String appId = "app_MultipleBlocksInAChunk";
-    registerApplication(appId, localDirs);
+    registerApplication(appId, USER);
+    registerExecutor(appId, prepareBlockManagerLocalDirs(appId, USER, localDirs));
     PushBlockStream[] pushBlocks = new PushBlockStream[] {
         new PushBlockStream(appId, "shuffle_0_0_0", 0),
         new PushBlockStream(appId, "shuffle_0_1_0", 0),
@@ -137,7 +142,8 @@ public class RemoteBlockPushResolverSuite {
   public void testAppUsingFewerLocalDirs() throws IOException {
     String appId = "app_AppUsingFewerLocalDirs";
     String[] activeLocalDirs = Arrays.stream(localDirs).skip(1).toArray(String[]::new);
-    registerApplication(appId, activeLocalDirs);
+    registerApplication(appId, USER);
+    registerExecutor(appId, prepareBlockManagerLocalDirs(appId, USER, activeLocalDirs));
     PushBlockStream[] pushBlocks = new PushBlockStream[] {
         new PushBlockStream(appId, "shuffle_0_0_0", 0),
         new PushBlockStream(appId, "shuffle_0_1_0", 0),
@@ -161,11 +167,23 @@ public class RemoteBlockPushResolverSuite {
    * This is because when the application gets removed, the directory cleaner removes the merged
    * data and file in a different thread which can delete the relevant data of a different test.
    */
-  private void registerApplication(String appId, String[] activeLocalDirs) throws IOException {
-    for (String localDir : activeLocalDirs) {
-      Files.createDirectories(Paths.get(localDir).resolve(appId + "/merge_manager"));
+  private void registerApplication(String appId, String user) throws IOException {
+    pushResolver.registerApplication(appId, user);
+  }
+
+  private void registerExecutor(String appId, String[] localDirs) throws IOException {
+    pushResolver.registerExecutor(appId, localDirs);
+    for (String localDir : pushResolver.getMergedBlockDirs(appId)) {
+      Files.createDirectories(Paths.get(localDir));
     }
-    pushResolver.registerApplication(appId, appId + "/merge_manager");
+  }
+
+  private String[] prepareBlockManagerLocalDirs(String appId, String user, String[] localDirs){
+    return Arrays.stream(localDirs)
+        .map(localDir ->
+            localDir + "/" +
+                String.format(MERGE_DIR_RELATIVE_PATH + BLOCK_MANAGER_DIR, user, appId))
+        .toArray(String[]::new);
   }
 
   private void removeApplication(String appId) {

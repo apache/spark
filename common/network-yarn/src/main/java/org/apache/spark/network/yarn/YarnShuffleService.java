@@ -21,7 +21,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -97,10 +96,7 @@ public class YarnShuffleService extends AuxiliaryService {
   private static final boolean DEFAULT_STOP_ON_FAILURE = false;
 
   // Used by shuffle merge manager to create merged shuffle files.
-  private static final String YARN_LOCAL_DIRS = "yarn.nodemanager.local-dirs";
-  private static final String MERGE_MANAGER_DIR = "merge_manager";
-  protected static final String MERGE_DIR_RELATIVE_PATH =
-      "usercache/%s/appcache/%s/" + MERGE_MANAGER_DIR;
+  protected static final String APP_BASE_RELATIVE_PATH = "usercache/%s/appcache/%s/";
 
   // just for testing when you want to find an open port
   @VisibleForTesting
@@ -182,9 +178,7 @@ public class YarnShuffleService extends AuxiliaryService {
       }
 
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
-      String[] localDirs = Arrays.stream(conf.getTrimmedStrings(YARN_LOCAL_DIRS)).sorted()
-          .map(dir -> new Path(dir).toUri().getPath()).toArray(String[]::new);
-      shuffleMergeManager = new RemoteBlockPushResolver(transportConf, localDirs);
+      shuffleMergeManager = new RemoteBlockPushResolver(transportConf, APP_BASE_RELATIVE_PATH);
       blockHandler = new ExternalBlockHandler(transportConf, registeredExecutorFile, shuffleMergeManager);
 
       // If authentication is enabled, set up the shuffle server to use a
@@ -289,11 +283,10 @@ public class YarnShuffleService extends AuxiliaryService {
         }
         secretManager.registerApp(appId, shuffleSecret);
       }
-      shuffleMergeManager.registerApplication(
-          appId, String.format(MERGE_DIR_RELATIVE_PATH, context.getUser(), appId));
     } catch (Exception e) {
       logger.error("Exception when initializing application {}", appId, e);
     }
+    shuffleMergeManager.registerApplication(appId, context.getUser());
   }
 
   @Override
