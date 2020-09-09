@@ -20,6 +20,7 @@ package org.apache.spark.network.shuffle;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -175,6 +176,7 @@ public class ExternalBlockHandler extends RpcHandler
         RegisterExecutor msg = (RegisterExecutor) msgObj;
         checkAuth(client, msg.appId);
         blockManager.registerExecutor(msg.appId, msg.execId, msg.executorInfo);
+        mergeManager.registerExecutor(msg.appId, msg.executorInfo.localDirs);
         callback.onSuccess(ByteBuffer.wrap(new byte[0]));
       } finally {
         responseDelayContext.stop();
@@ -190,6 +192,9 @@ public class ExternalBlockHandler extends RpcHandler
       GetLocalDirsForExecutors msg = (GetLocalDirsForExecutors) msgObj;
       checkAuth(client, msg.appId);
       Map<String, String[]> localDirs = blockManager.getLocalDirs(msg.appId, msg.execIds);
+      if (Arrays.stream(msg.execIds).anyMatch(execId -> execId.isEmpty())) {
+        localDirs.put("", mergeManager.getMergedBlockDirs(msg.appId));
+      }
       callback.onSuccess(new LocalDirsForExecutors(localDirs).toByteBuffer());
 
     } else if (msgObj instanceof FinalizeShuffleMerge) {
@@ -539,8 +544,13 @@ public class ExternalBlockHandler extends RpcHandler
     }
 
     @Override
-    public void registerApplication(String appId, String relativeAppPath) {
+    public void registerApplication(String appId, String user) {
       throw new UnsupportedOperationException("Cannot handle shuffle block merge");
+    }
+
+    @Override
+    public void registerExecutor(String appId, String[] localDirs) {
+      // No-Op. Do nothing.
     }
 
     @Override
@@ -557,6 +567,11 @@ public class ExternalBlockHandler extends RpcHandler
     @Override
     public MergedBlockMeta getMergedBlockMeta(String appId, int shuffleId, int reduceId) {
       return null;
+    }
+
+    @Override
+    public String[] getMergedBlockDirs(String appId) {
+      throw new UnsupportedOperationException("Cannot handle shuffle block merge");
     }
   }
 

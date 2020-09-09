@@ -56,17 +56,25 @@ public interface MergedShuffleFileManager {
   MergeStatuses finalizeShuffleMerge(FinalizeShuffleMerge msg) throws IOException;
 
   /**
-   * Registers an application when it starts. This provides the application specific path
-   * so MergedShuffleFileManager knows where to store and look for shuffle data for a
-   * given application. Right now, this is invoked by YarnShuffleService.
+   * Registers an application when it starts. It also stores the username which is necessary
+   * for generating the host local directories for merged shuffle files.
+   * Right now, this is invoked by YarnShuffleService.
    *
    * @param appId application ID
-   * @param relativeAppPath The relative path which is application unique. The actual directory
-   *                        path is split into 2 parts, where the first half is one of the
-   *                        several configured local dirs that're shared across all applications
-   *                        and the second half is application unique.
+   * @param user username
    */
-  void registerApplication(String appId, String relativeAppPath);
+  void registerApplication(String appId, String user);
+
+  /**
+   * Registers an executor with its local dir list when it starts. This provides the specific path
+   * so MergedShuffleFileManager knows where to store and look for shuffle data for a
+   * given application. It is invoked by the RPC call when executor tries to register with the
+   * local shuffle service.
+   *
+   * @param appId application ID
+   * @param localDirs The list of local dirs that this executor gets granted from NodeManager
+   */
+  void registerExecutor(String appId, String[] localDirs);
 
   /**
    * Invoked when an application finishes. This cleans up any remaining metadata associated with
@@ -100,4 +108,11 @@ public interface MergedShuffleFileManager {
    * @return meta information of a merged block
    */
   MergedBlockMeta getMergedBlockMeta(String appId, int shuffleId, int reduceId);
+
+  /**
+   * Get the local directories which stores the merged shuffle files.
+   *
+   * @param appId application ID
+   */
+  String[] getMergedBlockDirs(String appId);
 }
