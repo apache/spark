@@ -36,8 +36,6 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * The general idea is to divide each skew partition into smaller partitions and replicate its
  * matching partition on the other side of the join so that they can run in parallel tasks.
- * Note that when matching partitions from the left side and the right side both have skew,
- * it will become a cartesian product of splits from left and right joining together.
  *
  * For example,
  *  case 1: assume the Sort-Merge join has 4 partitions
@@ -51,6 +49,9 @@ import org.apache.spark.sql.internal.SQLConf
  *    (L2-1, R2), (L2-2, R2),
  *    (L3, R3-1), (L3, R3-2),
  *    (L4-1, R4-1), (L4-2, R4-1), (L4-1, R4-2), (L4-2, R4-2)
+ *
+ *    Note that when matching partitions from the left side and the right side both have skew,
+ *    it will become a cartesian product of splits from left and right joining together.
  *
  *  case 2: assume the BroadcastNestedLoopJoin with BuildRight and left with 4 partitions
  *    left:  [L1, L2, L3, L4]
