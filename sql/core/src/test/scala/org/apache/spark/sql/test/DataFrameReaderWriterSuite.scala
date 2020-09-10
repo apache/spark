@@ -1208,7 +1208,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         val msg = intercept[AnalysisException] {
           spark.read.option("p1", "v3").table("t").count()
         }.getMessage
-        assert(msg.contains("duplicated keys with input options"))
+        assert(msg.contains("duplicated key"))
 
         val df = spark.read.option("p2", "v2").option("p3", "v3").table("t")
         val options = df.queryExecution.analyzed.collectFirst {

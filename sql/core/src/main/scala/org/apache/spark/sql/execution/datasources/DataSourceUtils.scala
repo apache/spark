@@ -32,6 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 
@@ -193,16 +194,13 @@ object DataSourceUtils {
   }
 
   private[sql] def checkDuplicateOptions(
-      extraOptionsMap: Map[String, String], table: CatalogTable): Unit = {
-    val duplicatedKeys = extraOptionsMap.keySet.intersect(table.storage.properties.keySet)
-    val withDiffValues = duplicatedKeys.filter { key =>
-      extraOptionsMap.get(key) != table.storage.properties.get(key)
-    }
-    if (withDiffValues.nonEmpty) {
-      throw new AnalysisException(
-        s"Fail to create datasource for the table ${table.identifier.table} since the table " +
-          s"property has the following duplicated keys with input options: " +
-          s"${withDiffValues.mkString(" ,")}")
+      extraOptionsMap: CaseInsensitiveStringMap, table: CatalogTable): Unit = {
+    table.storage.properties.foreach { case (k, v) =>
+      if (extraOptionsMap.containsKey(k) && extraOptionsMap.get(k) != v) {
+        throw new AnalysisException(
+          s"Fail to create datasource for the table ${table.identifier.table} since the table " +
+            s"property has the duplicated key $k with input options.")
+      }
     }
   }
 }

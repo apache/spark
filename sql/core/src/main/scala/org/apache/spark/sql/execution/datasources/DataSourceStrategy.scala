@@ -243,8 +243,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       table: CatalogTable, extraOptions: CaseInsensitiveStringMap): LogicalPlan = {
     val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
     val catalog = sparkSession.sessionState.catalog
-    val extraOptionsMap = extraOptions.asScala.toMap
-    DataSourceUtils.checkDuplicateOptions(extraOptionsMap, table)
+    DataSourceUtils.checkDuplicateOptions(extraOptions, table)
     catalog.getCachedPlan(qualifiedTableName, () => {
       val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
       val dataSource =
@@ -256,7 +255,8 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
           partitionColumns = table.partitionColumnNames,
           bucketSpec = table.bucketSpec,
           className = table.provider.get,
-          options = extraOptionsMap ++ table.storage.properties ++ pathOption,
+          options = extraOptions.asCaseSensitiveMap.asScala.toMap
+            ++ table.storage.properties ++ pathOption,
           catalogTable = Some(table))
       LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
     })
