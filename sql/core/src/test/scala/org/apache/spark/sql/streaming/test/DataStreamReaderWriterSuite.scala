@@ -196,7 +196,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     assert(LastOptions.parameters("path") == "5")
   }
 
-  test("SPARK-32832: later option should override earlier options for save()") {
+  test("SPARK-32832: later option should override earlier options for start()") {
     val ds = spark.readStream
       .format("org.apache.spark.sql.streaming.test")
       .load()
