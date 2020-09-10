@@ -213,7 +213,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       case provider: TableProvider if !provider.isInstanceOf[FileDataSourceV2] =>
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           source = provider, conf = sparkSession.sessionState.conf)
-        val options = sessionOptions ++ extraOptions
+        val options = sessionOptions ++ extraOptions.toMap
         val dsOptions = new CaseInsensitiveStringMap(options.asJava)
         val table = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
