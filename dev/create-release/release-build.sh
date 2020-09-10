@@ -288,7 +288,7 @@ if [[ "$1" == "package" ]]; then
   fi
 
   declare -A BINARY_PKGS_EXTRA
-  BINARY_PKGS_EXTRA["hadoop2.7"]="withpip,withr"
+  BINARY_PKGS_EXTRA["hadoop3.2"]="withpip,withr"
 
   if [[ $PUBLISH_SCALA_2_11 = 1 ]]; then
     key="without-hadoop-scala-2.11"
