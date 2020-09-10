@@ -26,6 +26,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -189,5 +190,19 @@ object DataSourceUtils {
       micros
     case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseGregorianToJulianMicros
     case LegacyBehaviorPolicy.CORRECTED => identity[Long]
+  }
+
+  private[sql] def checkDuplicateOptions(
+      extraOptionsMap: Map[String, String], table: CatalogTable): Unit = {
+    val duplicatedKeys = extraOptionsMap.keySet.intersect(table.storage.properties.keySet)
+    val withDiffValues = duplicatedKeys.filter { key =>
+      extraOptionsMap.get(key) != table.storage.properties.get(key)
+    }
+    if (withDiffValues.nonEmpty) {
+      throw new AnalysisException(
+        s"Fail to create datasource for the table ${table.identifier.table} since the table " +
+          s"property has the following duplicated keys with input options: " +
+          s"${withDiffValues.mkString(" ,")}")
+    }
   }
 }
