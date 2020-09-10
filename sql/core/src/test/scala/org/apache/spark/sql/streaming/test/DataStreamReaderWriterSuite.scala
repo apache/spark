@@ -712,7 +712,9 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     }
 
     verifyLoadFails(spark.readStream.option("path", "tmp1").parquet("tmp2"))
+    verifyLoadFails(spark.readStream.option("path", "tmp1").parquet(""))
     verifyLoadFails(spark.readStream.option("path", "tmp1").format("parquet").load("tmp2"))
+    verifyLoadFails(spark.readStream.option("path", "tmp1").format("parquet").load(""))
 
     withClue("SPARK-32516: legacy behavior") {
       withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
@@ -731,24 +733,35 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .format("org.apache.spark.sql.streaming.test")
       .load("tmp1")
 
-    val e = intercept[AnalysisException] {
+    def verifyStartFails(f: => StreamingQuery): Unit = {
+      val e = intercept[AnalysisException](f)
+      assert(e.getMessage.contains(
+        "Either remove the path option, or call start() without the parameter"))
+    }
+
+    verifyStartFails(
       df.writeStream
         .format("org.apache.spark.sql.streaming.test")
         .option("path", "tmp2")
-        .start("tmp3")
-        .stop()
-    }
-    assert(e.getMessage.contains(
-      "Either remove the path option, or call start() without the parameter"))
+        .start("tmp3"))
+    verifyStartFails(
+      df.writeStream
+        .format("org.apache.spark.sql.streaming.test")
+        .option("path", "tmp2")
+        .start(""))
 
     withClue("SPARK-32516: legacy behavior") {
-      withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
-        spark.readStream
-          .format("org.apache.spark.sql.streaming.test")
-          .option("path", "tmp4")
-          .load("tmp5")
-        // The legacy behavior overwrites the path option.
-        assert(LastOptions.parameters("path") == "tmp5")
+      withTempDir { checkpointPath =>
+        withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true",
+          SQLConf.CHECKPOINT_LOCATION.key -> checkpointPath.getAbsolutePath) {
+          val query = df.writeStream
+            .format("org.apache.spark.sql.streaming.test")
+            .option("path", "tmp4")
+            .start("tmp5")
+          // The legacy behavior overwrites the path option.
+          assert(LastOptions.parameters("path") == "tmp5")
+          query.stop()
+        }
       }
     }
   }
