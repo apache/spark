@@ -3131,12 +3131,12 @@ class Dataset[T] private[sql](
    * Returns a new Dataset that contains only the unique rows from this Dataset.
    * This is an alias for `dropDuplicates`.
    *
-   * Note that for a streaming [[Dataset]], this method only returns distinct rows only once
+   * Note that for a streaming [[Dataset]], this method returns distinct rows only once
    * regardless of the output mode, which the behavior may not be same with `DISTINCT` in SQL
    * against streaming [[Dataset]].
    *
    * @note Equality checking is performed directly on the encoded representation of the data
-   * and thus is not affected by a custom equals function defined on `T`.
+   * and thus is not affected by a custom `equals` function defined on `T`.
    *
    * @group typedrel
    * @since 2.0.0
