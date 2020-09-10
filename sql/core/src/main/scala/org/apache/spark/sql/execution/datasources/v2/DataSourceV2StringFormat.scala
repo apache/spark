@@ -21,7 +21,6 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.util.Utils
 
@@ -50,7 +49,7 @@ trait DataSourceV2StringFormat {
   /**
    * The filters which have been pushed to the data source.
    */
-  def pushedFilters: Seq[Filter]
+  def pushedFilters: Seq[Expression]
 
   private def sourceName: String = source match {
     case registered: DataSourceRegister => registered.shortName()

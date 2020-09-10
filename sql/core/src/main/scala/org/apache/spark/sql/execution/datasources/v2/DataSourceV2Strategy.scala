@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, Rep
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
-import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReader
 
@@ -39,11 +38,11 @@ object DataSourceV2Strategy extends Strategy {
    */
   private def pushFilters(
       reader: DataSourceReader,
-      filters: Seq[Expression]): (Seq[Filter], Seq[Expression]) = {
+      filters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
     reader match {
       case r: SupportsPushDownFilters =>
         // A map from translated data source filters to original catalyst filter expressions.
-        val translatedFilterToExpr = mutable.HashMap.empty[Filter, Expression]
+        val translatedFilterToExpr = mutable.HashMap.empty[sources.Filter, Expression]
         // Catalyst filter expression that can't be translated to data source filters.
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
@@ -62,7 +61,8 @@ object DataSourceV2Strategy extends Strategy {
         val postScanFilters = r.pushFilters(translatedFilterToExpr.keys.toArray)
           .map(translatedFilterToExpr)
         // The filters which are marked as pushed to this data source
-        (r.pushedFilters(), untranslatableExprs ++ postScanFilters)
+        val pushedFilters = r.pushedFilters().map(translatedFilterToExpr)
+        (pushedFilters, untranslatableExprs ++ postScanFilters)
 
       case _ => (Nil, filters)
     }
