@@ -24,7 +24,7 @@ import org.apache.log4j.Level
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
@@ -747,29 +747,32 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-32830: Optimize Skewed BroadcastNestedLoopJoin") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "1k",
-      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "5k",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "500",
       SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR.key -> "3") {
       withTempView("skewData1", "skewData2") {
         spark
-          .range(0, 10000, 1, 50)
+          .range(0, 1000, 1, 50)
           .select(
-            when('id > 1000, 100)
-              .when('id <= 1000, 'id % 10)
+            when('id > 100, 10)
+              .when('id <= 100, 'id % 10)
               .otherwise('id).as("key1"),
             'id as "value1", ('id + "str").as("str"))
           .createOrReplaceTempView("skewData1")
         spark
-          .range(5000, 10000, 1, 10)
-          .select(('id % 10).as("key2"),
+          .range(500, 1000, 1, 10)
+          .select(when('id > 600, 10)
+            .when('id <= 600, 'id % 10)
+            .otherwise('id).as("key2"),
             'id as "value2", ('id + "str").as("str"))
           .createOrReplaceTempView("skewData2")
 
-        def checkSkewJoin(
+        def checkBroadcastNLSkewJoin(
             joins: Seq[BroadcastNestedLoopJoinExec],
+            buildSides: BuildSide,
             leftSkewNum: Int,
             rightSkewNum: Int): Unit = {
-          assert(joins.size == 1 && joins.head.isSkewJoin)
+          assert(joins.size == 1 && joins.head.isSkewJoin && joins.head.buildSide == buildSides)
           if (leftSkewNum > 0) {
             assert(joins.head.left.collect {
               case r: CustomShuffleReaderExec => r
@@ -786,21 +789,52 @@ class AdaptiveQueryExecSuite
           }
         }
 
-        val (_, adaptivePlan1) = runAdaptiveAndVerifyResult(
-          """
-             |SELECT * FROM (SELECT /*+ REPARTITION(key1) */ * FROM skewData1) skewData1
-             |JOIN skewData2 ON key1 < key2
-          """.stripMargin)
-        val buildRightBroadcastNLJoin = findTopLevelBroadcastNLJoin(adaptivePlan1)
-        checkSkewJoin(buildRightBroadcastNLJoin, 1, 0)
+        // `LEFT ANTI JOIN`, `LEFT SEMI JOIN` will remove `Exchange hashpartitioning`
+        Seq("INNER", "LEFT OUTER", "FULL OUTER", "CROSS").foreach { joinType =>
+          val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+            s"""
+               |SELECT * FROM (SELECT /*+ REPARTITION(key1) */ * FROM skewData1) skewData1
+               |${joinType} JOIN
+               |(SELECT /*+ REPARTITION(key2) */ * FROM skewData2) skewData2 ON key1 < key2
+            """.stripMargin)
+          val buildRightBroadcastNLJoin = findTopLevelBroadcastNLJoin(adaptivePlan)
+          checkBroadcastNLSkewJoin(buildRightBroadcastNLJoin, BuildRight, 1, 0)
+        }
 
-        val (_, adaptivePlan2) = runAdaptiveAndVerifyResult(
-          """
-            |SELECT * FROM skewData2
-            |JOIN (SELECT /*+ REPARTITION(key1) */ * FROM skewData1) skewData1 ON key1 < key2
-          """.stripMargin)
-        val buildLeftBroadcastNLJoin = findTopLevelBroadcastNLJoin(adaptivePlan2)
-        checkSkewJoin(buildLeftBroadcastNLJoin, 0, 1)
+        // `RIGHT OUTER JOIN` generate Build Left BroadcastNestedLoopJoin.
+        Seq("RIGHT OUTER").foreach { joinType =>
+          val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+            s"""
+               |SELECT * FROM (SELECT /*+ REPARTITION(key1) */ * FROM skewData1) skewData1
+               |${joinType} JOIN
+               |(SELECT /*+ REPARTITION(key2) */ * FROM skewData2) skewData2 ON key1 < key2
+            """.stripMargin)
+          val buildLeftBroadcastNLJoin = findTopLevelBroadcastNLJoin(adaptivePlan)
+          checkBroadcastNLSkewJoin(buildLeftBroadcastNLJoin, BuildLeft, 0, 1)
+        }
+
+        Seq("INNER", "RIGHT OUTER", "FULL OUTER", "CROSS").foreach { joinType =>
+          val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+            s"""
+               |SELECT * FROM (SELECT /*+ REPARTITION(key2) */ * FROM skewData2) skewData2
+               |${joinType} JOIN
+               |(SELECT /*+ REPARTITION(key1) */ * FROM skewData1) skewData1 ON key1 < key2
+            """.stripMargin)
+          val buildLeftBroadcastNLJoin = findTopLevelBroadcastNLJoin(adaptivePlan)
+          checkBroadcastNLSkewJoin(buildLeftBroadcastNLJoin, BuildLeft, 0, 1)
+        }
+
+        // `LEFT OUTER JOIN` generate Build Right BroadcastNestedLoopJoin.
+        Seq("LEFT OUTER").foreach { joinType =>
+          val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+            s"""
+               |SELECT * FROM (SELECT /*+ REPARTITION(key2) */ * FROM skewData2) skewData2
+               |${joinType} JOIN
+               |(SELECT /*+ REPARTITION(key1) */ * FROM skewData1) skewData1 ON key1 < key2
+            """.stripMargin)
+          val buildRightBroadcastNLJoin = findTopLevelBroadcastNLJoin(adaptivePlan)
+          checkBroadcastNLSkewJoin(buildRightBroadcastNLJoin, BuildRight, 1, 0)
+        }
       }
     }
   }
