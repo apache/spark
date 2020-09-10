@@ -1361,6 +1361,72 @@ abstract class DynamicPartitionPruningSuiteBase
       checkAnswer(df, Nil)
     }
   }
+
+  test("dynamic partition pruning hint") {
+    Given("no predicate on the dimension table will not insert dynamic pruning filter")
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val df = sql(
+        """
+          |SELECT * FROM fact_sk f
+          |JOIN code_stats s
+          |ON f.store_id = s.store_id
+          """.stripMargin)
+
+      checkPartitionPruningPredicate(df, false, false)
+    }
+
+    Given("inner join insert dynamic pruning by hint")
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val df = sql(
+        """
+          |SELECT /*+ DYNAMIC_PRUNING(f) */ * FROM fact_sk f
+          |JOIN code_stats s
+          |ON f.store_id = s.store_id
+          """.stripMargin)
+
+      checkPartitionPruningPredicate(df, false, true)
+    }
+
+    Given("left join only insert dynamic pruning on right side by hint")
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val leftHint = sql(
+        """
+          |SELECT /*+ DYNAMIC_PRUNING(f) */ * FROM fact_sk f
+          |LEFT JOIN code_stats s
+          |ON f.store_id = s.store_id
+          """.stripMargin)
+      checkPartitionPruningPredicate(leftHint, false, false)
+
+      val rightHint = sql(
+        """
+          |SELECT /*+ DYNAMIC_PRUNING(s) */ * FROM fact_sk f
+          |LEFT JOIN code_stats s
+          |ON f.store_id = s.store_id
+          """.stripMargin)
+      rightHint.explain()
+      checkPartitionPruningPredicate(rightHint, true, false)
+    }
+
+    Given("right join only insert dynamic pruning on left side by hint")
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val leftHint = sql(
+        """
+          |SELECT /*+ DYNAMIC_PRUNING(f) */ * FROM fact_sk f
+          |RIGHT JOIN code_stats s
+          |ON f.store_id = s.store_id
+          """.stripMargin)
+      checkPartitionPruningPredicate(leftHint, true, false)
+
+      val rightHint = sql(
+        """
+          |SELECT /*+ DYNAMIC_PRUNING(s) */ * FROM fact_sk f
+          |RIGHT JOIN code_stats s
+          |ON f.store_id = s.store_id
+          """.stripMargin)
+      rightHint.explain()
+      checkPartitionPruningPredicate(rightHint, false, false)
+    }
+  }
 }
 
 class DynamicPartitionPruningSuiteAEOff extends DynamicPartitionPruningSuiteBase {

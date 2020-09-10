@@ -115,7 +115,8 @@ object JoinStrategyHint {
     BROADCAST,
     SHUFFLE_MERGE,
     SHUFFLE_HASH,
-    SHUFFLE_REPLICATE_NL)
+    SHUFFLE_REPLICATE_NL,
+    DYNAMIC_PRUNING)
 }
 
 /**
@@ -165,6 +166,12 @@ case object SHUFFLE_REPLICATE_NL extends JoinStrategyHint {
 case object NO_BROADCAST_HASH extends JoinStrategyHint {
   override def displayName: String = "no_broadcast_hash"
   override def hintAliases: Set[String] = Set.empty
+}
+
+case object DYNAMIC_PRUNING extends JoinStrategyHint {
+  override def displayName: String = "dynamic_pruning"
+  override def hintAliases: Set[String] = Set(
+    "DYNAMIC_PRUNING")
 }
 
 /**

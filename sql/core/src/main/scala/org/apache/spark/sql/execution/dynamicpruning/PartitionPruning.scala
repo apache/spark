@@ -85,18 +85,24 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
       filteringKey: Expression,
       filteringPlan: LogicalPlan,
       joinKeys: Seq[Expression],
-      hasBenefit: Boolean): LogicalPlan = {
+      hasBenefit: Boolean,
+      pruningHint: Boolean): LogicalPlan = {
     val reuseEnabled = SQLConf.get.exchangeReuseEnabled
     val index = joinKeys.indexOf(filteringKey)
-    if (hasBenefit || reuseEnabled) {
+    if (pruningHint || hasBenefit || reuseEnabled) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning
+      val reuseBroadcastOnly = if (pruningHint) {
+        false
+      } else {
+        !hasBenefit || SQLConf.get.dynamicPartitionPruningReuseBroadcastOnly
+      }
       Filter(
         DynamicPruningSubquery(
           pruningKey,
           filteringPlan,
           joinKeys,
           index,
-          !hasBenefit || SQLConf.get.dynamicPartitionPruningReuseBroadcastOnly),
+          reuseBroadcastOnly),
         pruningPlan)
     } else {
       // abort dynamic partition pruning
@@ -196,6 +202,14 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
+  private def hintToDynamicPruningLeft(hint: JoinHint): Boolean = {
+    hint.leftHint.exists(_.strategy.contains(DYNAMIC_PRUNING))
+  }
+
+  private def hintToDynamicPruningRight(hint: JoinHint): Boolean = {
+    hint.rightHint.exists(_.strategy.contains(DYNAMIC_PRUNING))
+  }
+
   private def prune(plan: LogicalPlan): LogicalPlan = {
     plan transformUp {
       // skip this rule if there's already a DPP subquery on the LHS of a join
@@ -233,15 +247,17 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
             // otherwise the pruning will not trigger
             var partScan = getPartitionTableScan(l, left)
             if (partScan.isDefined && canPruneLeft(joinType) &&
-                hasPartitionPruningFilter(right)) {
+                (hasPartitionPruningFilter(right) || hintToDynamicPruningLeft(hint))) {
               val hasBenefit = pruningHasBenefit(l, partScan.get, r, right)
-              newLeft = insertPredicate(l, newLeft, r, right, rightKeys, hasBenefit)
+              val pruningHint = hintToDynamicPruningLeft(hint)
+              newLeft = insertPredicate(l, newLeft, r, right, rightKeys, hasBenefit, pruningHint)
             } else {
               partScan = getPartitionTableScan(r, right)
               if (partScan.isDefined && canPruneRight(joinType) &&
-                  hasPartitionPruningFilter(left) ) {
+                  (hasPartitionPruningFilter(left) || hintToDynamicPruningRight(hint))) {
                 val hasBenefit = pruningHasBenefit(r, partScan.get, l, left)
-                newRight = insertPredicate(r, newRight, l, left, leftKeys, hasBenefit)
+                val pruningHint = hintToDynamicPruningRight(hint)
+                newRight = insertPredicate(r, newRight, l, left, leftKeys, hasBenefit, pruningHint)
               }
             }
           case _ =>
