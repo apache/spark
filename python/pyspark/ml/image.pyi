@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.ml.image (Python 3)
-#
-
 from typing import Dict, List
 
 from pyspark.sql.types import Row, StructType

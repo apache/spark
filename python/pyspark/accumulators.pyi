@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.accumulators (Python 3.7)
-#
-
 from typing import Callable, Generic, Tuple, Type, TypeVar
 
 import socketserver.BaseRequestHandler  # type: ignore

@@ -16,8 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.ml.linalg (Python 3)
-
 from typing import overload
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 

@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.sql.conf (Python 3.5)
-#
-
 from typing import Optional
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 

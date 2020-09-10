@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.mllib.recommendation (Python 3.5)
-#
-
 from typing import List, Optional, Tuple, Union
 
 import array

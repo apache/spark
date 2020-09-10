@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.context (Python 3.5)
-#
-
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, TypeVar
 
 from py4j.java_gateway import JavaGateway, JavaObject  # type: ignore[import]

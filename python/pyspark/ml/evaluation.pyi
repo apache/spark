@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.ml.evaluation (Python 3.5)
-#
-
 import abc
 from typing import Optional, Type
 from pyspark.ml._typing import (

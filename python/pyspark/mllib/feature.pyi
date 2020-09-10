@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.mllib.feature (Python 3.5)
-#
-
 from typing import overload
 from typing import Iterable, Hashable, List, Tuple
 

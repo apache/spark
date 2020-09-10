@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.rddsampler (Python 3.5)
-#
-
 from typing import Any, Dict, Iterator, Optional, Tuple, TypeVar
 
 T = TypeVar("T")

@@ -16,8 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.ml.wrapper (Python 3)
-
 import abc
 from typing import Any, Optional, Type
 from pyspark.ml._typing import P, T, JM, ParamMap

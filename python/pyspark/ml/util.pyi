@@ -16,8 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.ml.util (Python 3)
-
 from typing import Any, Dict, Generic, Optional, Type, TypeVar, Union
 
 from pyspark import SparkContext as SparkContext, since as since  # noqa: F401

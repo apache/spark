@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.mllib.stat.test (Python 3.5)
-#
-
 from typing import Generic, Tuple, TypeVar
 
 from pyspark.mllib.common import JavaModelWrapper

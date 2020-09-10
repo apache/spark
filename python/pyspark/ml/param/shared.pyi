@@ -16,8 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.ml.param.shared (Python 3)
-
 from typing import Any, Generic, List
 from pyspark.ml._typing import T
 

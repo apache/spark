@@ -16,8 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.ml.pipeline (Python 3)
-
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 from pyspark.ml._typing import PipelineStage

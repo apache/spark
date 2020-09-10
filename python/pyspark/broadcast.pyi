@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.broadcast (Python 3.5)
-#
-
 import threading
 from typing import Any, Generic, Optional, TypeVar
 

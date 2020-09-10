@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.mllib.util (Python 3)
-#
-
 from typing import Generic, List, Optional, TypeVar
 
 from pyspark.mllib._typing import VectorLike

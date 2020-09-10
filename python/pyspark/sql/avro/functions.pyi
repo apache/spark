@@ -16,8 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.sql.avro.functions (Python 3)
-
 from typing import Dict
 
 from pyspark.sql._typing import ColumnOrName

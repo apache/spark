@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.mllib.fpm (Python 3.5)
-#
-
 from typing import Generic, List, TypeVar
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD

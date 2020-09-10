@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.mllib.stat.distribution (Python 3)
-#
-
 from typing import NamedTuple
 
 from pyspark.mllib.linalg import Vector, Matrix

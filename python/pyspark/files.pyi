@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.files (Python 3.5)
-#
-
 class SparkFiles:
     def __init__(self) -> None: ...
     @classmethod

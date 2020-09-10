@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.sql.udf (Python 3)
-#
-
 from typing import Any, Callable, Optional
 
 from pyspark.sql._typing import ColumnOrName, DataTypeOrString

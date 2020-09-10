@@ -16,6 +16,4 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.version (Python 3.5)
-#
 __version__: str

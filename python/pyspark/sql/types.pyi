@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.sql.types (Python 3.5)
-#
-
 from typing import overload
 from typing import Any, Callable, Dict, Iterator, List, Optional, Union, Tuple, TypeVar
 import datetime

@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.ml.base (Python 3)
-#
-
 from typing import Any, Optional
 
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable

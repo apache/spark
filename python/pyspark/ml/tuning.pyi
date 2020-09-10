@@ -16,8 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.ml.tuning (Python 3)
-
 from typing import overload
 from typing import Any, List, Optional, Tuple, Type
 from pyspark.ml._typing import ParamMap

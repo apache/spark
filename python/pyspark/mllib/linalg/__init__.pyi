@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.mllib.linalg (Python 3.5)
-#
-
 from typing import overload
 from typing import Any, Dict, Generic, Iterable, List, Optional, Tuple, TypeVar, Union
 from pyspark.ml import linalg as newlinalg

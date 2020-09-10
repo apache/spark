@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspzwark.conf (Python 3.5)
-#
-
 from typing import overload
 from typing import List, Optional, Tuple
 

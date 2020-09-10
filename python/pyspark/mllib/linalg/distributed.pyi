@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.mllib.linalg.distributed (Python 3.5)
-#
-
 from typing import Generic, Sequence, Optional, Tuple, TypeVar, Union
 from pyspark.rdd import RDD
 from pyspark.storagelevel import StorageLevel

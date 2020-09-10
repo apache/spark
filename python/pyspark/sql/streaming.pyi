@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.sql.streaming (Python 3.5)
-#
-
 from typing import overload
 from typing import Any, Callable, Dict, List, Optional, Union
 

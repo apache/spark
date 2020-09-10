@@ -16,8 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.mllib.common (Python 3.5)
-
 def callJavaFunc(sc, func, *args): ...
 def callMLlibFunc(name, *args): ...
 

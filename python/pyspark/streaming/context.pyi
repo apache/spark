@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.streaming.context (Python 3.5)
-#
-
 from typing import Any, Callable, List, Optional, TypeVar, Union
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]

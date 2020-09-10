@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.statcounter (Python 3.5)
-#
-
 from typing import Any, Dict, Iterable, Optional, Union
 
 maximum: Any

@@ -16,9 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Stubs for pyspark.resultiterable (Python 3.5)
-#
-
 from pyspark._typing import SizedIterable
 from typing import Iterator, TypeVar
 
