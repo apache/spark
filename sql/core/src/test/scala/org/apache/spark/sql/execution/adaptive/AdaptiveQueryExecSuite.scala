@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -103,6 +103,12 @@ class AdaptiveQueryExecSuite
   private def findTopLevelBaseJoin(plan: SparkPlan): Seq[BaseJoinExec] = {
     collect(plan) {
       case j: BaseJoinExec => j
+    }
+  }
+
+  private def findTopLevelBroadcastNLJoin(plan: SparkPlan): Seq[BroadcastNestedLoopJoinExec] = {
+    collect(plan) {
+      case j: BroadcastNestedLoopJoinExec => j
     }
   }
 
@@ -738,6 +744,67 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("SPARK-32830: Optimize Skewed BroadcastNestedLoopJoin") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "1k",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "5k",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR.key -> "3") {
+      withTempView("skewData1", "skewData2") {
+        spark
+          .range(0, 10000, 1, 50)
+          .select(
+            when('id > 1000, 100)
+              .when('id <= 1000, 'id % 10)
+              .otherwise('id).as("key1"),
+            'id as "value1", ('id + "str").as("str"))
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(5000, 10000, 1, 10)
+          .select(('id % 10).as("key2"),
+            'id as "value2", ('id + "str").as("str"))
+          .createOrReplaceTempView("skewData2")
+
+        def checkSkewJoin(
+            joins: Seq[BroadcastNestedLoopJoinExec],
+            leftSkewNum: Int,
+            rightSkewNum: Int): Unit = {
+          assert(joins.size == 1 && joins.head.isSkewJoin)
+          if (leftSkewNum > 0) {
+            assert(joins.head.left.collect {
+              case r: CustomShuffleReaderExec => r
+            }.head.partitionSpecs.collect {
+              case p: PartialReducerPartitionSpec => p.reducerIndex
+            }.distinct.length == leftSkewNum)
+          }
+          if (rightSkewNum > 0) {
+            assert(joins.head.right.collect {
+              case r: CustomShuffleReaderExec => r
+            }.head.partitionSpecs.collect {
+              case p: PartialReducerPartitionSpec => p.reducerIndex
+            }.distinct.length == rightSkewNum)
+          }
+        }
+
+        val (_, adaptivePlan1) = runAdaptiveAndVerifyResult(
+          """
+             |SELECT * FROM (SELECT /*+ REPARTITION(key1) */ * FROM skewData1) skewData1
+             |JOIN skewData2 ON key1 < key2
+          """.stripMargin)
+        val buildRightBroadcastNLJoin = findTopLevelBroadcastNLJoin(adaptivePlan1)
+        checkSkewJoin(buildRightBroadcastNLJoin, 1, 0)
+
+        val (_, adaptivePlan2) = runAdaptiveAndVerifyResult(
+          """
+            |SELECT * FROM skewData2
+            |JOIN (SELECT /*+ REPARTITION(key1) */ * FROM skewData1) skewData1 ON key1 < key2
+          """.stripMargin)
+        val buildLeftBroadcastNLJoin = findTopLevelBroadcastNLJoin(adaptivePlan2)
+        checkSkewJoin(buildLeftBroadcastNLJoin, 0, 1)
+      }
+    }
+  }
+
 
   test("SPARK-30291: AQE should catch the exceptions when doing materialize") {
     withSQLConf(

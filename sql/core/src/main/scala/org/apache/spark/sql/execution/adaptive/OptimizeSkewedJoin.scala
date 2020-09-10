@@ -269,26 +269,27 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
         val streamActualSizes = stream.partitionsWithSizes.map(_._2)
         val streamTargetSize = targetSize(streamActualSizes, streamMedSize)
         val streamSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
-        var numSkewedLeft = 0
+        var numSkewedStream = 0
         for (partitionIndex <- 0 until numPartitions) {
-          val leftActualSize = streamActualSizes(partitionIndex)
-          val isStreamSkew = isSkewed(leftActualSize, streamMedSize) && canSplitStream
-          val leftPartSpec = stream.partitionsWithSizes(partitionIndex)._1
-          val isStreamCoalesced = leftPartSpec.startReducerIndex + 1 < leftPartSpec.endReducerIndex
+          val streamActualSize = streamActualSizes(partitionIndex)
+          val isStreamSkew = isSkewed(streamActualSize, streamMedSize) && canSplitStream
+          val streamPartSpec = stream.partitionsWithSizes(partitionIndex)._1
+          val isStreamCoalesced =
+            streamPartSpec.startReducerIndex + 1 < streamPartSpec.endReducerIndex
           // A skewed partition should never be coalesced, but skip it here just to be safe.
           val streamParts = if (isStreamSkew && !isStreamCoalesced) {
-            val reducerId = leftPartSpec.startReducerIndex
+            val reducerId = streamPartSpec.startReducerIndex
             val skewSpecs = createSkewPartitionSpecs(
               stream.mapStats.shuffleId, reducerId, streamTargetSize)
             if (skewSpecs.isDefined) {
               logDebug(s"Stream side partition $partitionIndex " +
-                s"(${FileUtils.byteCountToDisplaySize(leftActualSize)}) is skewed, " +
+                s"(${FileUtils.byteCountToDisplaySize(streamActualSize)}) is skewed, " +
                 s"split it into ${skewSpecs.get.length} parts.")
-              numSkewedLeft += 1
+              numSkewedStream += 1
             }
-            skewSpecs.getOrElse(Seq(leftPartSpec))
+            skewSpecs.getOrElse(Seq(streamPartSpec))
           } else {
-            Seq(leftPartSpec)
+            Seq(streamPartSpec)
           }
 
           for {
@@ -298,8 +299,8 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
           }
         }
 
-        logDebug(s"number of skewed partitions: left $numSkewedLeft")
-        if (numSkewedLeft > 0) {
+        logDebug(s"number of skewed partitions: left $numSkewedStream")
+        if (numSkewedStream > 0) {
           val newStream = CustomShuffleReaderExec(stream.shuffleStage, streamSidePartitions.toSeq)
           buildSide match {
             case BuildRight => bnl.copy(left = newStream, right = bnl.right, isSkewJoin = true)
