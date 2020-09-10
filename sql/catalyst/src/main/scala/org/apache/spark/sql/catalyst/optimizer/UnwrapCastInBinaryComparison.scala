@@ -147,8 +147,10 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         fromExp.trueIfNotNull
       case (_, 0, LessThan(_, _)) =>
         Not(EqualTo(fromExp, Literal(max, fromType)))
-      case (_, 0, GreaterThanOrEqual(_, _) | EqualTo(_, _) | EqualNullSafe(_, _)) =>
+      case (_, 0, GreaterThanOrEqual(_, _) | EqualTo(_, _)) =>
         EqualTo(fromExp, Literal(max, fromType))
+      case (_, 0, EqualNullSafe(_, _)) =>
+        EqualNullSafe(fromExp, Literal(max, fromType))
       case (_, 0, _) => exp
 
       case (-1, _, GreaterThan(_, _) | GreaterThanOrEqual(_, _)) =>
@@ -166,8 +168,10 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         fromExp.trueIfNotNull
       case (0, _, GreaterThan(_, _)) =>
         Not(EqualTo(fromExp, Literal(min, fromType)))
-      case (0, _, LessThanOrEqual(_, _) | EqualTo(_, _) | EqualNullSafe(_, _)) =>
+      case (0, _, LessThanOrEqual(_, _) | EqualTo(_, _)) =>
         EqualTo(fromExp, Literal(min, fromType))
+      case (0, _, EqualNullSafe(_, _)) =>
+        EqualNullSafe(fromExp, Literal(min, fromType))
       case (0, _, _) => exp
 
       case (_, _, GreaterThan(_, _)) => GreaterThan(fromExp, lit)
