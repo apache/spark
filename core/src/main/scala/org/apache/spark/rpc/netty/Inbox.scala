@@ -202,10 +202,9 @@ private[netty] class Inbox(val endpointName: String, val endpoint: RpcEndpoint)
   private def safelyCall(endpoint: RpcEndpoint)(action: => Unit): Unit = {
     def dealWithFatalError(fatal: Throwable): Unit = {
       inbox.synchronized {
-        // Should reduce the number of active threads before throw the error
-        if (numActiveThreads > 0) {
-          numActiveThreads -= 1
-        }
+        assert(numActiveThreads > 0, "The number of active threads should be positive.")
+        // Should reduce the number of active threads before throw the error.
+        numActiveThreads -= 1
       }
       logError(s"An error happened while processing message in the inbox for $endpointName", fatal)
       throw fatal
