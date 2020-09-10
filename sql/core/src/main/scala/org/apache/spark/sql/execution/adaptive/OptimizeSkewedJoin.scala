@@ -167,8 +167,8 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
    *  2. Assuming partition0 is skewed in left side, and it has 5 mappers (Map0, Map1...Map4).
    *     And we may split the 5 Mappers into 3 mapper ranges [(Map0, Map1), (Map2, Map3), (Map4)]
    *     based on the map size and the max split number.
-   *  3. Wrap the join left child with a special shuffle reader that reads each mapper range with one
-   *      task, so total 3 tasks.
+   *  3. Wrap the join left child with a special shuffle reader that reads each mapper range with
+   *     one task, so total 3 tasks.
    *  4. Wrap the join right child with a special shuffle reader that reads partition0 3 times by
    *      3 tasks separately.
    *
