@@ -186,6 +186,37 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     query.stop()
   }
 
+  test("SPARK-32832: later option should override earlier options for load()") {
+    spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .option("paTh", "1")
+      .option("PATH", "2")
+      .option("Path", "3")
+      .option("patH", "4")
+      .option("path", "5")
+      .load()
+    assert(LastOptions.parameters("path") == "5")
+  }
+
+  test("SPARK-32832: later option should override earlier options for start()") {
+    val ds = spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .load()
+    assert(LastOptions.parameters.isEmpty)
+
+    val query = ds.writeStream
+      .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", newMetadataDir)
+      .option("paTh", "1")
+      .option("PATH", "2")
+      .option("Path", "3")
+      .option("patH", "4")
+      .option("path", "5")
+      .start()
+    assert(LastOptions.parameters("path") == "5")
+    query.stop()
+  }
+
   test("partitioning") {
     val df = spark.readStream
       .format("org.apache.spark.sql.streaming.test")
