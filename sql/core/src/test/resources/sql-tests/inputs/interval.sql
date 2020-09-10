@@ -206,3 +206,7 @@ select interval '1.2';
 select interval '- 2';
 select interval '1 day -';
 select interval '1 day 1';
+
+select interval '1 day 2' day;
+select interval 'interval 1' day;
+select interval '-\t 1' day;
