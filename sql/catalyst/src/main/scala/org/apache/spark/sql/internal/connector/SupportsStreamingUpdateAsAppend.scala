@@ -19,8 +19,15 @@ package org.apache.spark.sql.internal.connector
 
 import org.apache.spark.sql.connector.write.WriteBuilder
 
-// An internal `WriteBuilder` mixin to support UPDATE streaming output mode.
-// TODO: design an official API for streaming output mode UPDATE.
-trait SupportsStreamingUpdate extends WriteBuilder {
-  def update(): WriteBuilder
+/**
+ * An internal `WriteBuilder` mixin to support UPDATE streaming output mode. Now there's no good
+ * way to pass the `keys` to upsert or replace (delete -> append), we do the same with append writes
+ * and let end users to deal with.
+ *
+ * This approach may be still valid for streaming writers which can't do the upsert or replace.
+ * We can promote the API to the official API along with the new API for upsert/replace.
+ */
+// TODO: design an official API for streaming output mode UPDATE which can do the upsert
+//  (or delete -> append).
+trait SupportsStreamingUpdateAsAppend extends WriteBuilder {
 }
