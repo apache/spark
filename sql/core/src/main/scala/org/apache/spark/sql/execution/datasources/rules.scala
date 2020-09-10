@@ -407,10 +407,8 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
       catalogTable.isDefined &&
       catalogTable.get.partitionColumnNames.nonEmpty &&
       catalogTable.get.tracksPartitionsInCatalog
-    // check static partition
     if (partitionsTrackedByCatalog &&
-      normalizedPartSpec.nonEmpty &&
-      staticPartCols.size == partColNames.size) {
+      normalizedPartSpec.nonEmpty) {
       // empty partition column value
       if (normalizedPartSpec.filter(_._2.isDefined).exists(_._2.get.isEmpty)) {
         val spec = normalizedPartSpec.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
