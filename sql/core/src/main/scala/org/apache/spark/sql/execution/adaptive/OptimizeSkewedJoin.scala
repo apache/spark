@@ -39,17 +39,30 @@ import org.apache.spark.sql.internal.SQLConf
  * Note that when matching partitions from the left side and the right side both have skew,
  * it will become a cartesian product of splits from left and right joining together.
  *
- * For example, assume the Sort-Merge join has 4 partitions:
- * left:  [L1, L2, L3, L4]
- * right: [R1, R2, R3, R4]
+ * For example,
+ *  case 1: assume the Sort-Merge join has 4 partitions
+ *    left:  [L1, L2, L3, L4]
+ *    right: [R1, R2, R3, R4]
  *
- * Let's say L2, L4 and R3, R4 are skewed, and each of them get split into 2 sub-partitions. This
- * is scheduled to run 4 tasks at the beginning: (L1, R1), (L2, R2), (L3, R3), (L4, R4).
- * This rule expands it to 9 tasks to increase parallelism:
- * (L1, R1),
- * (L2-1, R2), (L2-2, R2),
- * (L3, R3-1), (L3, R3-2),
- * (L4-1, R4-1), (L4-2, R4-1), (L4-1, R4-2), (L4-2, R4-2)
+ *    Let's say L2, L4 and R3, R4 are skewed, and each of them get split into 2 sub-partitions. This
+ *    is scheduled to run 4 tasks at the beginning: (L1, R1), (L2, R2), (L3, R3), (L4, R4).
+ *    This rule expands it to 9 tasks to increase parallelism:
+ *    (L1, R1),
+ *    (L2-1, R2), (L2-2, R2),
+ *    (L3, R3-1), (L3, R3-2),
+ *    (L4-1, R4-1), (L4-2, R4-1), (L4-1, R4-2), (L4-2, R4-2)
+ *
+ *  case 2: assume the BroadcastNestedLoopJoin with BuildRight and left with 4 partitions
+ *    left:  [L1, L2, L3, L4]
+ *    right: For BroadcastNestedLoopJoin, we don't need to consider build side.
+ *
+ *    Let's say L2, L4 is skewed and each of them get split into 2 sub-partitions. This is scheduled
+ *    to run 4 task at the  beginning: (L1, right), (L2, right), (L3, right), (L4, right).
+ *    This rule expands it to 6 tasks to increase parallelism:
+ *    (L1, right),
+ *    (L2-1, right), (L2-2, right),
+ *    (L3, right),
+ *    (L4-1, right), (L4-2, right)
  *
  * Note that, when this rule is enabled, it also coalesces non-skewed partitions like
  * `CoalesceShufflePartitions` does.
@@ -146,16 +159,28 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   /*
-   * This method aim to optimize the skewed join with the following steps:
-   * 1. Check whether the shuffle partition is skewed based on the median size
-   *    and the skewed partition threshold in origin smj.
-   * 2. Assuming partition0 is skewed in left side, and it has 5 mappers (Map0, Map1...Map4).
-   *    And we may split the 5 Mappers into 3 mapper ranges [(Map0, Map1), (Map2, Map3), (Map4)]
-   *    based on the map size and the max split number.
-   * 3. Wrap the join left child with a special shuffle reader that reads each mapper range with one
-   *    task, so total 3 tasks.
-   * 4. Wrap the join right child with a special shuffle reader that reads partition0 3 times by
-   *    3 tasks separately.
+   * This method aim to optimize the skewed join.
+   * For Sort-merge Join with the following steps:
+   *  1. Check whether the shuffle partition is skewed based on the median size
+   *     and the skewed partition threshold in origin smj.
+   *  2. Assuming partition0 is skewed in left side, and it has 5 mappers (Map0, Map1...Map4).
+   *     And we may split the 5 Mappers into 3 mapper ranges [(Map0, Map1), (Map2, Map3), (Map4)]
+   *     based on the map size and the max split number.
+   *  3. Wrap the join left child with a special shuffle reader that reads each mapper range with one
+   *      task, so total 3 tasks.
+   *  4. Wrap the join right child with a special shuffle reader that reads partition0 3 times by
+   *      3 tasks separately.
+   *
+   * For BroadcastNestedLoopJoin with following steps:
+   *  1. Check whether the stream side shuffle partition is skewed based on the median size
+   *     and the skewed partition threshold in origin BroadcastNLJ.
+   *  2. Assuming partition0 is skewed in stream side, and it has 5 mappers (Map0, Map1...Map4).
+   *     And we may split the 5 Mappers into 3 mapper ranges [(Map0, Map1), (Map2, Map3), (Map4)]
+   *     based on the map size and the max split number.
+   *  3. Wrap the join stream side child with a special shuffle reader that reads each mapper range
+   *     with one task, so total 3 tasks.
+   *  4. The join build side child with be broadcast 3 times to stream side partition0 by 3 tasks
+   *     separately.
    */
   def optimizeSkewJoin(plan: SparkPlan): SparkPlan = plan.transformUp {
     case smj @ SortMergeJoinExec(_, _, joinType, _,
@@ -331,10 +356,21 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
     if (shuffleStages.length >= 1) {
       // When multi table join, there will be too many complex combination to consider.
       // Currently we only handle 2 table join like following use case.
-      // SMJ
-      //   Sort
+      // case 1:
+      //  SMJ
+      //    Sort
+      //      Shuffle
+      //    Sort
+      //      Shuffle
+      //
+      // case 2:
+      //   BroadcastNLJ BuildRight
       //     Shuffle
-      //   Sort
+      //     BroadcastExchange
+      //
+      // case 3:
+      //   BroadcastNLJ BuildLeft
+      //     BroadcastExchange
       //     Shuffle
       val optimizePlan = optimizeSkewJoin(plan)
       val numShuffles = ensureRequirements.apply(optimizePlan).collect {
