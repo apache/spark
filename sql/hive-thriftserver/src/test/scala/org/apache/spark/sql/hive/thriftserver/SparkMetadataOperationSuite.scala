@@ -350,4 +350,31 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       }
     }
   }
+
+  test("handling null in view for get columns operations") {
+    val viewName = "view_null"
+    val ddl = s"CREATE GLOBAL TEMP VIEW $viewName as select null as n"
+
+    withJdbcStatement(viewName) { statement =>
+      statement.execute(ddl)
+      val data = statement.getConnection.getMetaData
+      val rowSet = data.getColumns("", "global_temp", viewName, "n")
+      while (rowSet.next()) {
+        assert(rowSet.getString("TABLE_CAT") === null)
+        assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
+        assert(rowSet.getString("TABLE_NAME") === viewName)
+        assert(rowSet.getString("COLUMN_NAME") === "n")
+        assert(rowSet.getInt("DATA_TYPE") === java.sql.Types.NULL)
+        assert(rowSet.getString("TYPE_NAME").equalsIgnoreCase(NullType.sql))
+        assert(rowSet.getInt("COLUMN_SIZE") === 1)
+        assert(rowSet.getInt("DECIMAL_DIGITS") === 0)
+        assert(rowSet.getInt("NUM_PREC_RADIX") === 0)
+        assert(rowSet.getInt("NULLABLE") === 1)
+        assert(rowSet.getString("REMARKS") === "")
+        assert(rowSet.getInt("ORDINAL_POSITION") === 0)
+        assert(rowSet.getString("IS_NULLABLE") === "YES")
+        assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
+      }
+    }
+  }
 }
