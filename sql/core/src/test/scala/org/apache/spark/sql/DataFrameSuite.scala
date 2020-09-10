@@ -2557,12 +2557,14 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-32816: aggregating multiple distinct DECIMAL columns") {
-    spark.range(0, 100, 1, 1)
-      .selectExpr("id", "cast(id as decimal(9, 0)) as decimal_col")
-      .createOrReplaceTempView("test_table")
-    checkAnswer(
-      sql("select avg(distinct decimal_col), sum(distinct decimal_col) from test_table"),
-      Row(49.5, 4950))
+    withTempView("test_table") {
+      spark.range(0, 100, 1, 1)
+        .selectExpr("id", "cast(id as decimal(9, 0)) as decimal_col")
+        .createOrReplaceTempView("test_table")
+      checkAnswer(
+        sql("select avg(distinct decimal_col), sum(distinct decimal_col) from test_table"),
+        Row(49.5, 4950))
+    }
   }
 }
 
