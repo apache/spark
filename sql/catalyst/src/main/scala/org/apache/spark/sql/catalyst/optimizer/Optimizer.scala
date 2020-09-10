@@ -20,13 +20,13 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
@@ -81,6 +81,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         InferFiltersFromConstraints,
         // Operator combine
         CollapseRepartition,
+        CombineRepartitionAndRange,
         CollapseProject,
         CollapseWindow,
         CombineFilters,
@@ -821,6 +822,30 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     case r @ RepartitionByExpression(_, child: RepartitionOperation, _) =>
       r.copy(child = child.child)
   }
+}
+
+/**
+ * Combine [[RepartitionByExpression]] operator and its descendant [[Range]] operator if the
+ * partitioning is [[RangePartitioning]] and its ordering matches the ordering of the [[Range]].
+ */
+object CombineRepartitionAndRange extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case r: RepartitionByExpression =>
+      r.partitioning match {
+        case rangePart: RangePartitioning => findRangeSubtree(r.child, rangePart).getOrElse(r)
+        case _ => r
+      }
+  }
+
+  // Find subtree which contains Range as the leaf node.
+  def findRangeSubtree(plan: LogicalPlan, partitioning: RangePartitioning): Option[LogicalPlan] =
+    plan match {
+      case o: OrderPreservingUnaryNode =>
+        findRangeSubtree(o.child, partitioning).map(p => o.withNewChildren(Seq(p)))
+      case r: Range if partitioning.ordering == r.outputOrdering =>
+        Some(r.copy(numSlices = Some(partitioning.numPartitions)))
+      case _ => None
+    }
 }
 
 /**

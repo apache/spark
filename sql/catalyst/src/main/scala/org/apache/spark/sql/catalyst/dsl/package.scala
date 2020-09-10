@@ -344,6 +344,8 @@ package object dsl {
 
       def limit(limitExpr: Expression): LogicalPlan = Limit(limitExpr, logicalPlan)
 
+      def tail(tailExpr: Expression): LogicalPlan = Tail(tailExpr, logicalPlan)
+
       def join(
         otherPlan: LogicalPlan,
         joinType: JoinType = Inner,
