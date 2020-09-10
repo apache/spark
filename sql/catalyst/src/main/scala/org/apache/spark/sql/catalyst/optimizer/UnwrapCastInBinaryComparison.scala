@@ -55,7 +55,7 @@ import org.apache.spark.sql.types._
  *  - `cast(fromExp, toType) >= value` ==> if(isnull(fromExp), null, false)
  *  - `cast(fromExp, toType) === value` ==> if(isnull(fromExp), null, false)
  *  - `cast(fromExp, toType) <=> value` ==> false (if `fromExp` is deterministic)
- *  - `cast(fromExp, toType) <=> value` ==> fromExp <=> cast(value, fromExp) (if `fromExp` is
+ *  - `cast(fromExp, toType) <=> value` ==> cast(fromExp, toType) <=> value (if `fromExp` is
  *       non-deterministic)
  *  - `cast(fromExp, toType) <= value` ==> if(isnull(fromExp), null, true)
  *  - `cast(fromExp, toType) < value` ==> if(isnull(fromExp), null, true)
@@ -64,7 +64,7 @@ import org.apache.spark.sql.types._
  *  - `cast(fromExp, toType) > value` ==> if(isnull(fromExp), null, false)
  *  - `cast(fromExp, toType) >= value` ==> fromExp == max
  *  - `cast(fromExp, toType) === value` ==> fromExp == max
- *  - `cast(fromExp, toType) <=> value` ==> fromExp == max
+ *  - `cast(fromExp, toType) <=> value` ==> fromExp <=> max
  *  - `cast(fromExp, toType) <= value` ==> if(isnull(fromExp), null, true)
  *  - `cast(fromExp, toType) < value` ==> fromExp =!= max
  *
@@ -86,8 +86,8 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // Not a canonical form. In this case we first canonicalize the expression by swapping the
     // literal and cast side, then process the result and swap the literal and cast again to
     // restore the original order.
-    case BinaryComparison(Literal(_, toType: IntegralType), Cast(fromExp, _: IntegralType, _))
-        if canImplicitlyCast(fromExp, toType) =>
+    case BinaryComparison(Literal(_, literalType), Cast(fromExp, toType, _))
+        if canImplicitlyCast(fromExp, toType, literalType) =>
       def swap(e: Expression): Expression = e match {
         case GreaterThan(left, right) => LessThan(right, left)
         case GreaterThanOrEqual(left, right) => LessThanOrEqual(right, left)
@@ -97,13 +97,14 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case LessThan(left, right) => GreaterThan(right, left)
         case _ => e
       }
+
       swap(unwrapCast(swap(exp)))
 
     // In case both sides have integral type, optimize the comparison by removing casts or
     // moving cast to the literal side.
     case be @ BinaryComparison(
-      Cast(fromExp, toType: IntegralType, _), Literal(value, _: IntegralType))
-        if canImplicitlyCast(fromExp, toType) =>
+      Cast(fromExp, toType: IntegralType, _), Literal(value, literalType))
+        if canImplicitlyCast(fromExp, toType, literalType) =>
       simplifyIntegralComparison(be, fromExp, toType, value)
 
     case _ => exp
@@ -133,18 +134,18 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
 
     (minCmp.signum, maxCmp.signum, exp) match {
       case (_, 1, EqualTo(_, _) | GreaterThan(_, _) | GreaterThanOrEqual(_, _)) =>
-        fromExp.falseIfNotNull
+        falseIfNotNull(fromExp)
       case (_, 1, LessThan(_, _) | LessThanOrEqual(_, _)) =>
-        fromExp.trueIfNotNull
+        trueIfNotNull(fromExp)
       // make sure the expression is evaluated if it is non-deterministic
       case (_, 1, EqualNullSafe(_, _)) if exp.deterministic =>
         FalseLiteral
       case (_, 1, _) => exp
 
       case (_, 0, GreaterThan(_, _)) =>
-        fromExp.falseIfNotNull
+        falseIfNotNull(fromExp)
       case (_, 0, LessThanOrEqual(_, _)) =>
-        fromExp.trueIfNotNull
+        trueIfNotNull(fromExp)
       case (_, 0, LessThan(_, _)) =>
         Not(EqualTo(fromExp, Literal(max, fromType)))
       case (_, 0, GreaterThanOrEqual(_, _) | EqualTo(_, _)) =>
@@ -154,18 +155,18 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       case (_, 0, _) => exp
 
       case (-1, _, GreaterThan(_, _) | GreaterThanOrEqual(_, _)) =>
-        fromExp.trueIfNotNull
+        trueIfNotNull(fromExp)
       case (-1, _, LessThan(_, _) | LessThanOrEqual(_, _) | EqualTo(_, _)) =>
-        fromExp.falseIfNotNull
+        falseIfNotNull(fromExp)
       // make sure the expression is evaluated if it is non-deterministic
       case (-1, _, EqualNullSafe(_, _)) if exp.deterministic =>
         FalseLiteral
       case (-1, _, _) => exp
 
       case (0, _, LessThan(_, _)) =>
-        fromExp.falseIfNotNull
+        falseIfNotNull(fromExp)
       case (0, _, GreaterThanOrEqual(_, _)) =>
-        fromExp.trueIfNotNull
+        trueIfNotNull(fromExp)
       case (0, _, GreaterThan(_, _)) =>
         Not(EqualTo(fromExp, Literal(min, fromType)))
       case (0, _, LessThanOrEqual(_, _) | EqualTo(_, _)) =>
@@ -189,8 +190,11 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
    * i.e., the conversion is injective. Note this only handles the case when both sides are of
    * integral type.
    */
-  private def canImplicitlyCast(fromExp: Expression, toType: DataType): Boolean = {
-    fromExp.dataType.isInstanceOf[IntegralType] && toType.isInstanceOf[IntegralType] &&
+  private def canImplicitlyCast(fromExp: Expression, toType: DataType,
+      literalType: DataType): Boolean = {
+    toType.sameType(literalType) &&
+      fromExp.dataType.isInstanceOf[IntegralType] &&
+      toType.isInstanceOf[IntegralType] &&
       Cast.canUpCast(fromExp.dataType, toType)
   }
 
@@ -199,19 +203,22 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     case ShortType => (Short.MinValue, Short.MaxValue)
     case IntegerType => (Int.MinValue, Int.MaxValue)
     case LongType => (Long.MinValue, Long.MaxValue)
+    case other => throw new IllegalArgumentException(s"Unsupported type: ${other.catalogString}")
   }
 
-  private[optimizer] implicit class ExpressionWrapper(e: Expression) {
-    /**
-     * Wraps input expression `e` with `if(isnull(e), null, false)`. The if-clause is represented
-     * using `and(isnull(e), null)` which is semantically equivalent by applying 3-valued logic.
-     */
-    def falseIfNotNull: Expression = And(IsNull(e), Literal(null, BooleanType))
+  /**
+   * Wraps input expression `e` with `if(isnull(e), null, false)`. The if-clause is represented
+   * using `and(isnull(e), null)` which is semantically equivalent by applying 3-valued logic.
+   */
+  private[optimizer] def falseIfNotNull(e: Expression): Expression = {
+    And(IsNull(e), Literal(null, BooleanType))
+  }
 
-    /**
-     * Wraps input expression `e` with `if(isnull(e), null, true)`. The if-clause is represented
-     * using `or(isnotnull(e), null)` which is semantically equivalent by applying 3-valued logic.
-     */
-    def trueIfNotNull: Expression = Or(IsNotNull(e), Literal(null, BooleanType))
+  /**
+   * Wraps input expression `e` with `if(isnull(e), null, true)`. The if-clause is represented
+   * using `or(isnotnull(e), null)` which is semantically equivalent by applying 3-valued logic.
+   */
+  private[optimizer] def trueIfNotNull(e: Expression): Expression = {
+    Or(IsNotNull(e), Literal(null, BooleanType))
   }
 }

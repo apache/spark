@@ -37,46 +37,46 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
   val testRelation: LocalRelation = LocalRelation('a.short, 'b.float)
-  val f = 'a.short.canBeNull.at(0)
+  val f: BoundReference = 'a.short.canBeNull.at(0)
 
   test("unwrap casts when literal == max") {
     val v = Short.MaxValue
-    assertEquivalent(castInt(f) > v.toInt, f.falseIfNotNull)
+    assertEquivalent(castInt(f) > v.toInt, falseIfNotNull(f))
     assertEquivalent(castInt(f) >= v.toInt, f === v)
     assertEquivalent(castInt(f) === v.toInt, f === v)
     assertEquivalent(castInt(f) <=> v.toInt, f <=> v)
-    assertEquivalent(castInt(f) <= v.toInt, f.trueIfNotNull)
+    assertEquivalent(castInt(f) <= v.toInt, trueIfNotNull(f))
     assertEquivalent(castInt(f) < v.toInt, f =!= v)
   }
 
   test("unwrap casts when literal > max") {
     val v: Int = positiveInt
-    assertEquivalent(castInt(f) > v, f.falseIfNotNull)
-    assertEquivalent(castInt(f) >= v, f.falseIfNotNull)
-    assertEquivalent(castInt(f) === v, f.falseIfNotNull)
+    assertEquivalent(castInt(f) > v, falseIfNotNull(f))
+    assertEquivalent(castInt(f) >= v, falseIfNotNull(f))
+    assertEquivalent(castInt(f) === v, falseIfNotNull(f))
     assertEquivalent(castInt(f) <=> v, false)
-    assertEquivalent(castInt(f) <= v, f.trueIfNotNull)
-    assertEquivalent(castInt(f) < v, f.trueIfNotNull)
+    assertEquivalent(castInt(f) <= v, trueIfNotNull(f))
+    assertEquivalent(castInt(f) < v, trueIfNotNull(f))
   }
 
   test("unwrap casts when literal == min") {
     val v = Short.MinValue
     assertEquivalent(castInt(f) > v.toInt, f =!= v)
-    assertEquivalent(castInt(f) >= v.toInt, f.trueIfNotNull)
+    assertEquivalent(castInt(f) >= v.toInt, trueIfNotNull(f))
     assertEquivalent(castInt(f) === v.toInt, f === v)
     assertEquivalent(castInt(f) <=> v.toInt, f <=> v)
     assertEquivalent(castInt(f) <= v.toInt, f === v)
-    assertEquivalent(castInt(f) < v.toInt, f.falseIfNotNull)
+    assertEquivalent(castInt(f) < v.toInt, falseIfNotNull(f))
   }
 
   test("unwrap casts when literal < min") {
     val v: Int = negativeInt
-    assertEquivalent(castInt(f) > v, f.trueIfNotNull)
-    assertEquivalent(castInt(f) >= v, f.trueIfNotNull)
-    assertEquivalent(castInt(f) === v, f.falseIfNotNull)
+    assertEquivalent(castInt(f) > v, trueIfNotNull(f))
+    assertEquivalent(castInt(f) >= v, trueIfNotNull(f))
+    assertEquivalent(castInt(f) === v, falseIfNotNull(f))
     assertEquivalent(castInt(f) <=> v, false)
-    assertEquivalent(castInt(f) <= v, f.falseIfNotNull)
-    assertEquivalent(castInt(f) < v, f.falseIfNotNull)
+    assertEquivalent(castInt(f) <= v, falseIfNotNull(f))
+    assertEquivalent(castInt(f) < v, falseIfNotNull(f))
   }
 
   test("unwrap casts when literal is within range (min, max)") {
@@ -90,11 +90,11 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
   test("unwrap casts when cast is on rhs") {
     val v = Short.MaxValue
-    assertEquivalent(Literal(v.toInt) < castInt(f), f.falseIfNotNull)
+    assertEquivalent(Literal(v.toInt) < castInt(f), falseIfNotNull(f))
     assertEquivalent(Literal(v.toInt) <= castInt(f), Literal(v) === f)
     assertEquivalent(Literal(v.toInt) === castInt(f), Literal(v) === f)
     assertEquivalent(Literal(v.toInt) <=> castInt(f), Literal(v) <=> f)
-    assertEquivalent(Literal(v.toInt) >= castInt(f), f.trueIfNotNull)
+    assertEquivalent(Literal(v.toInt) >= castInt(f), trueIfNotNull(f))
     assertEquivalent(Literal(v.toInt) > castInt(f), f =!= v)
 
     assertEquivalent(Literal(30) <= castInt(f), Literal(30.toShort) <= f)
@@ -102,18 +102,18 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
   test("unwrap cast should have no effect when input is not integral type") {
     Seq(
-      Cast('b, DoubleType) > 42.0,
-      Cast('b, DoubleType) >= 42.0,
-      Cast('b, DoubleType) === 42.0,
-      Cast('b, DoubleType) <=> 42.0,
-      Cast('b, DoubleType) <= 42.0,
-      Cast('b, DoubleType) < 42.0,
-      Literal(42.0) > Cast('b, DoubleType),
-      Literal(42.0) >= Cast('b, DoubleType),
-      Literal(42.0) === Cast('b, DoubleType),
-      Literal(42.0) <=> Cast('b, DoubleType),
-      Literal(42.0) <= Cast('b, DoubleType),
-      Literal(42.0) < Cast('b, DoubleType),
+      castDouble('b) > 42.0,
+      castDouble('b) >= 42.0,
+      castDouble('b) === 42.0,
+      castDouble('b) <=> 42.0,
+      castDouble('b) <= 42.0,
+      castDouble('b) < 42.0,
+      Literal(42.0) > castDouble('b),
+      Literal(42.0) >= castDouble('b),
+      Literal(42.0) === castDouble('b),
+      Literal(42.0) <=> castDouble('b),
+      Literal(42.0) <= castDouble('b),
+      Literal(42.0) < castDouble('b)
     ).foreach(e =>
       assertEquivalent(e, e, evaluate = false)
     )
@@ -141,7 +141,9 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     assertEquivalent(Cast(f, ByteType) > 100.toByte, Cast(f, ByteType) > 100.toByte)
   }
 
-  private def castInt(f: BoundReference): Expression = Cast(f, IntegerType)
+  private def castInt(e: Expression): Expression = Cast(e, IntegerType)
+
+  private def castDouble(e: Expression): Expression = Cast(e, DoubleType)
 
   private def assertEquivalent(e1: Expression, e2: Expression, evaluate: Boolean = true): Unit = {
     val plan = testRelation.where(e1).analyze
