@@ -44,9 +44,9 @@ class CombineRepartitionAndRangeSuite extends PlanTest {
       .select('id, 'id * 2)
       .limit(50)
       .tail(10)
-      .distribute('id.asc)(20)
+      .distribute('id.asc)(10)
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = Range(1, 100, 1, 20)
+    val correctAnswer = Range(1, 100, 1, 10)
       .where('id > 2)
       .select('id, 'id * 2)
       .limit(50)
@@ -57,11 +57,24 @@ class CombineRepartitionAndRangeSuite extends PlanTest {
   }
 
   test("Do not effect if not all intermediate nodes are OrderPreservingUnaryNode") {
-        val query = Range(1, 100, 1, 10)
+    val query = Range(1, 100, 1, 10)
       .where('id > 2)
       .select('id, 'id * 2)
       .limit(50)
       .orderBy('id.desc)
+      .tail(10)
+      .distribute('id.asc)(20)
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = query.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Do not effect if num partitions is different between range partitioning and range") {
+    val query = Range(1, 100, 1, 10)
+      .where('id > 2)
+      .select('id, 'id * 2)
+      .limit(50)
       .tail(10)
       .distribute('id.asc)(20)
     val optimized = Optimize.execute(query.analyze)

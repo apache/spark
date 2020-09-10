@@ -831,8 +831,12 @@ object CollapseRepartition extends Rule[LogicalPlan] {
 object CombineRepartitionAndRange extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case r: RepartitionByExpression =>
-      r.partitioning match {
-        case rangePart: RangePartitioning => findRangeSubtree(r.child, rangePart).getOrElse(r)
+      (r.partitioning, r.child) match {
+        case (rangePart: RangePartitioning, child: OrderPreservingUnaryNode) =>
+          findRangeSubtree(r.child, rangePart).getOrElse(r)
+        case (rangePart: RangePartitioning, child: Range)
+            if rangePart.ordering == child.outputOrdering =>
+          child.copy(numSlices = Some(rangePart.numPartitions))
         case _ => r
       }
   }
@@ -842,7 +846,9 @@ object CombineRepartitionAndRange extends Rule[LogicalPlan] {
     plan match {
       case o: OrderPreservingUnaryNode =>
         findRangeSubtree(o.child, partitioning).map(p => o.withNewChildren(Seq(p)))
-      case r: Range if partitioning.ordering == r.outputOrdering =>
+      case r: Range
+          if partitioning.ordering == r.outputOrdering && r.numSlices.isDefined
+            && partitioning.numPartitions == r.numSlices.get =>
         Some(r.copy(numSlices = Some(partitioning.numPartitions)))
       case _ => None
     }
