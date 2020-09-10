@@ -65,9 +65,16 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
               V1ScanWrapper(v1, translated, pushedFilters, translatedAggregate, pushedAggregates)
             case _ => scan
           }
-          buildLogicalPlan(project, relation, wrappedScan, output, normalizedProjects,
-            postScanFilters, Aggregate(groupingExpressions, resultExpressions, child))
-        case _ => child
+          if (!pushedAggregates.isEmpty) {
+            buildLogicalPlan(project, relation, wrappedScan, output, normalizedProjects,
+              postScanFilters, Aggregate(groupingExpressions, resultExpressions, child))
+          } else {
+            val r = buildLogicalPlan(project, relation, wrappedScan, output, normalizedProjects,
+              postScanFilters, null)
+            Aggregate(groupingExpressions, resultExpressions, r)
+          }
+        case _ =>
+          Aggregate(groupingExpressions, resultExpressions, child)
       }
     case ScanOperation(project, filters, relation: DataSourceV2Relation) =>
       val scanBuilder = relation.table.asReadable.newScanBuilder(relation.options)
