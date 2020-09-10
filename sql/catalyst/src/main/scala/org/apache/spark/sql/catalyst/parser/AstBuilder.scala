@@ -2120,8 +2120,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
-  private final lazy val intervalValStrPattern = "^[+-]?\\s*\\d*\\.?\\d*$".r.pattern
-
   /**
    * Creates a [[CalendarInterval]] with multiple unit value pairs, e.g. 1 YEAR 2 DAYS.
    */
@@ -2135,7 +2133,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           val u = units(i).getText
           val v = if (values(i).STRING() != null) {
             val value = string(values(i).STRING()).trim
-            if (!intervalValStrPattern.matcher(value).matches()) {
+            if (value.exists(Character.isLetter)) {
               throw new ParseException("Can only use numbers in the interval value part for" +
                 s" multiple unit value pairs interval form, but got invalid value: $value", ctx)
             }
