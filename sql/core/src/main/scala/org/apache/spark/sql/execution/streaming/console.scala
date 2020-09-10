@@ -76,7 +76,7 @@ object ConsoleTable extends Table with SupportsWrite {
     new WriteBuilder with SupportsTruncate with SupportsStreamingUpdateAsAppend {
       private val inputSchema: StructType = info.schema()
 
-      // Do nothing for truncate/update. Console sink is special and it just prints all the records.
+      // Do nothing for truncate. Console sink is special and it just prints all the records.
       override def truncate(): WriteBuilder = this
 
       override def buildForStreaming(): StreamingWrite = {
