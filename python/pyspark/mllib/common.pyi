@@ -17,12 +17,6 @@
 # under the License.
 
 # Stubs for pyspark.mllib.common (Python 3.5)
-#
-
-from typing import Type
-
-long: Type[int]
-unicode: Type[str]
 
 def callJavaFunc(sc, func, *args): ...
 def callMLlibFunc(name, *args): ...
