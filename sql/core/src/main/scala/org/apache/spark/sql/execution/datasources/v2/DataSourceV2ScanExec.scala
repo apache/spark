@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.streaming.continuous._
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReader
@@ -39,7 +40,7 @@ case class DataSourceV2ScanExec(
     output: Seq[AttributeReference],
     @transient source: DataSourceV2,
     @transient options: Map[String, String],
-    @transient pushedFilters: Seq[Expression],
+    @transient pushedFilters: Seq[Filter],
     @transient reader: DataSourceReader)
   extends LeafExecNode with DataSourceV2StringFormat with ColumnarBatchScan {
 

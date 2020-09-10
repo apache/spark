@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelat
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.sources.DataSourceRegister
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, ReadSupport, WriteSupport}
 import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, SupportsReportStatistics}
 import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
@@ -54,7 +55,7 @@ case class DataSourceV2Relation(
     tableIdent.map(_.unquotedString).getOrElse(s"${source.name}:unknown")
   }
 
-  override def pushedFilters: Seq[Expression] = Seq.empty
+  override def pushedFilters: Seq[Filter] = Seq.empty
 
   override def simpleString: String = "RelationV2 " + metadataString
 
@@ -92,7 +93,7 @@ case class StreamingDataSourceV2Relation(
 
   override def simpleString: String = "Streaming RelationV2 " + metadataString
 
-  override def pushedFilters: Seq[Expression] = Nil
+  override def pushedFilters: Seq[Filter] = Nil
 
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
 
