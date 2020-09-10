@@ -16,14 +16,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib.util
 import glob
 import os
 import sys
 from setuptools import setup
+from setuptools.command.install import install
 from shutil import copyfile, copytree, rmtree
 
 try:
     exec(open('pyspark/version.py').read())
+    spec = importlib.util.spec_from_file_location("install", "pyspark/install.py")
+    install_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(install_module)
 except IOError:
     print("Failed to load PySpark version file for packaging. You must be in Spark's python dir.",
           file=sys.stderr)
@@ -102,6 +107,27 @@ if (in_spark):
 # Also don't forget to update python/docs/source/getting_started/install.rst.
 _minimum_pandas_version = "0.23.2"
 _minimum_pyarrow_version = "1.0.0"
+
+
+class InstallCommand(install):
+    # TODO(SPARK-32837) leverage pip's custom options
+
+    def run(self):
+        install.run(self)
+        if ("HADOOP_VERSION" in os.environ) or ("HIVE_VERSION" in os.environ):
+
+            # Note that SPARK_VERSION environment is just a testing purpose.
+            spark_version, hadoop_version, hive_version = install_module.checked_versions(
+                os.environ.get("SPARK_VERSION", VERSION).lower(),
+                os.environ.get("HADOOP_VERSION", install_module.DEFAULT_HADOOP).lower(),
+                os.environ.get("HIVE_VERSION", install_module.DEFAULT_HIVE).lower())
+
+            install_module.install_spark(
+                dest=os.path.join(self.install_lib, "pyspark", "spark-distribution"),
+                spark_version=spark_version,
+                hadoop_version=hadoop_version,
+                hive_version=hive_version)
+
 
 try:
     # We copy the shell script to be under pyspark/python/pyspark so that the launcher scripts
@@ -223,7 +249,10 @@ try:
             'Programming Language :: Python :: 3.7',
             'Programming Language :: Python :: 3.8',
             'Programming Language :: Python :: Implementation :: CPython',
-            'Programming Language :: Python :: Implementation :: PyPy']
+            'Programming Language :: Python :: Implementation :: PyPy'],
+        cmdclass={
+            'install': InstallCommand,
+        },
     )
 finally:
     # We only cleanup the symlink farm if we were in Spark, otherwise we are installing rather than
