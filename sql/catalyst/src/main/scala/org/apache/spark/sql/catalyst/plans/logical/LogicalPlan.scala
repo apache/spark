@@ -240,15 +240,10 @@ object LogicalPlanIntegrity {
    */
   def checkIfSameExprIdNotReused(plan: LogicalPlan): Boolean = {
     plan.collect { case p if p.resolved =>
-      val inputExprIds = p.inputSet.filter(_.resolved).map(_.exprId).toSet
-      val newExprIds = p.expressions.filter(_.resolved).flatMap { e =>
-        e.collect {
-          // Only accepts the case of aliases renaming foldable expressions, e.g.,
-          // `FoldablePropagation` generates this renaming pattern.
-          case a: Alias if !a.child.foldable => a.exprId
-        }
-      }.toSet
-      inputExprIds.intersect(newExprIds).isEmpty
+      p.expressions.forall {
+        case a: Alias => !a.references.contains(a.toAttribute)
+        case _ => true
+      }
     }.forall(identity)
   }
 
