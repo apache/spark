@@ -180,3 +180,7 @@ SELECT
   to_json(from_json('{"a":"1 days"}', 'a interval')),
   to_json(map('a', interval 25 month 100 day 130 minute)),
   from_json(to_json(map('a', interval 25 month 100 day 130 minute)), 'a interval');
+
+select interval '1 day 2' day;
+select interval 'interval 1' day;
+select interval '-\t 1' day;
