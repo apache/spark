@@ -26,7 +26,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
+import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, RangeExec, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, SortMergeJoinExec}
@@ -1105,10 +1105,11 @@ class AdaptiveQueryExecSuite
         val partitionsNum2 = df2.rdd.collectPartitions().length
 
         if (enableAQE) {
-          assert(partitionsNum1 < 10)
+          assert(partitionsNum1  === 10)
           assert(partitionsNum2 < 10)
 
-          checkInitialPartitionNum(df1, 10)
+          assert(df1.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+          assert(df1.queryExecution.executedPlan.children(0).isInstanceOf[RangeExec])
           checkInitialPartitionNum(df2, 10)
         } else {
           assert(partitionsNum1 === 10)
