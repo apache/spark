@@ -476,9 +476,10 @@ class SparkSession(SparkConversionMixin):
         return SparkSession.builder.getOrCreate()
 
     @since(2.0)
-    def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True):
+    def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True, pandasRDD=False):
         """
-        Creates a :class:`DataFrame` from an :class:`RDD`, a list or a :class:`pandas.DataFrame`.
+        Creates a :class:`DataFrame` from an :class:`RDD`, an :class:`RDD[pandas.DataFrame]`,
+        a list or a :class:`pandas.DataFrame`.
 
         When ``schema`` is a list of column names, the type of each column
         will be inferred from ``data``.
@@ -496,7 +497,7 @@ class SparkSession(SparkConversionMixin):
         If schema inference is needed, ``samplingRatio`` is used to determined the ratio of
         rows used for schema inference. The first row will be used if ``samplingRatio`` is ``None``.
 
-        :param data: an RDD of any kind of SQL data representation (e.g. row, tuple, int, boolean,
+        :param data: an RDD of any kind of SQL data representation (e.g. row, tuple, int, boolean, pd.DataFrame
             etc.), :class:`list`, or :class:`pandas.DataFrame`.
         :param schema: a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is ``None``.  The data type string format equals to
@@ -506,6 +507,7 @@ class SparkSession(SparkConversionMixin):
             ``int`` as a short name for ``IntegerType``.
         :param samplingRatio: the sample ratio of rows used for inferring
         :param verifySchema: verify data types of every row against schema.
+        :param pandasRDD: indicates that the input RDD contains pandas.DataFrame.
         :return: :class:`DataFrame`
 
         .. versionchanged:: 2.1
@@ -529,6 +531,14 @@ class SparkSession(SparkConversionMixin):
         >>> df = spark.createDataFrame(rdd, ['name', 'age'])
         >>> df.collect()
         [Row(name='Alice', age=1)]
+
+        >>> prdd = sc.range(0, 10).map(lambda x: pd.DataFrame([[x,]*4], columns=list('ABCD')))
+        >>> df = spark.createDataFrame(prdd, schema=None, pandasRDD=True)
+        >>> df.collect()
+        [Row(A=0, B=0, C=0, D=0),
+         Row(A=1, B=1, C=1, D=1),
+         Row(A=2, B=2, C=2, D=2),
+         Row(A=3, B=3, C=3, D=3)]
 
         >>> from pyspark.sql import Row
         >>> Person = Row('name', 'age')
@@ -576,10 +586,10 @@ class SparkSession(SparkConversionMixin):
             has_pandas = True
         except Exception:
             has_pandas = False
-        if has_pandas and isinstance(data, pandas.DataFrame):
+        if has_pandas and (isinstance(data, pandas.DataFrame) or pandasRDD):
             # Create a DataFrame from pandas DataFrame.
             return super(SparkSession, self).createDataFrame(
-                data, schema, samplingRatio, verifySchema)
+                data, schema, samplingRatio, verifySchema, pandasRDD)
         return self._create_dataframe(data, schema, samplingRatio, verifySchema)
 
     def _create_dataframe(self, data, schema, samplingRatio, verifySchema):

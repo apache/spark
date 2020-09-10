@@ -311,6 +311,17 @@ class ArrowTests(ReusedSQLTestCase):
         schema_rt = from_arrow_schema(arrow_schema)
         self.assertEquals(self.schema, schema_rt)
 
+    def test_createDataFrame_from_pandas_rdd(self):
+        pdfs = [self.create_pandas_data_frame() for _ in range(4)]
+        prdd = self.sc.parallelize(pdfs)
+
+        df_from_rdd = self.spark.createDataFrame(prdd, schema=self.schema, pandasRDD=True)
+        df_from_pdf = self.spark.createDataFrame(pd.concat(pdfs), schema=self.schema)
+
+        result_prdd = df_from_rdd.collect()
+        result_single_pdf = df_from_pdf.collect()
+        self.assertEquals(result_prdd, result_single_pdf)
+
     def test_createDataFrame_with_array_type(self):
         pdf = pd.DataFrame({"a": [[1, 2], [3, 4]], "b": [[u"x", u"y"], [u"y", u"z"]]})
         df, df_arrow = self._createDataFrame_toggle(pdf)

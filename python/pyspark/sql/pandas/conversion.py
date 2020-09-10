@@ -250,8 +250,9 @@ class SparkConversionMixin(object):
     """
     Min-in for the conversion from pandas to Spark. Currently, only :class:`SparkSession`
     can use this class.
+    pandasRDD=True creates a DataFrame from an RDD of pandas dataframes (currently only supported using arrow)
     """
-    def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True):
+    def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True, pandasRDD=False):
         from pyspark.sql import SparkSession
 
         assert isinstance(self, SparkSession)
@@ -260,6 +261,13 @@ class SparkConversionMixin(object):
         require_minimum_pandas_version()
 
         timezone = self._wrapped._conf.sessionLocalTimeZone()
+
+        if self._wrapped._conf.arrowPySparkEnabled() and pandasRDD:
+            from pyspark.rdd import RDD
+            if not isinstance(data, RDD):
+                raise ValueError('pandasRDD is set but data is of type %s, expected RDD type.' % type(data))
+            # TODO: Support non-arrow conversion? might be *very* slow
+            return self._create_from_pandas_rdd_with_arrow(data, schema, timezone)
 
         # If no schema supplied by user then get the names of columns only
         if schema is None:
@@ -302,30 +310,8 @@ class SparkConversionMixin(object):
         assert isinstance(self, SparkSession)
 
         if timezone is not None:
-            from pyspark.sql.pandas.types import _check_series_convert_timestamps_tz_local
-            copied = False
-            if isinstance(schema, StructType):
-                for field in schema:
-                    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-                    if isinstance(field.dataType, TimestampType):
-                        s = _check_series_convert_timestamps_tz_local(pdf[field.name], timezone)
-                        if s is not pdf[field.name]:
-                            if not copied:
-                                # Copy once if the series is modified to prevent the original
-                                # Pandas DataFrame from being updated
-                                pdf = pdf.copy()
-                                copied = True
-                            pdf[field.name] = s
-            else:
-                for column, series in pdf.iteritems():
-                    s = _check_series_convert_timestamps_tz_local(series, timezone)
-                    if s is not series:
-                        if not copied:
-                            # Copy once if the series is modified to prevent the original
-                            # Pandas DataFrame from being updated
-                            pdf = pdf.copy()
-                            copied = True
-                        pdf[column] = s
+            from pyspark.sql.pandas.types import _check_dataframe_covert_timestamps_tz_local
+            pdf = _check_dataframe_covert_timestamps_tz_local(pdf, timezone, schema)
 
         # Convert pandas.DataFrame to list of numpy records
         np_records = pdf.to_records(index=False)
@@ -361,6 +347,36 @@ class SparkConversionMixin(object):
                 has_rec_fix = True
             record_type_list.append((str(col_names[i]), curr_type))
         return np.dtype(record_type_list) if has_rec_fix else None
+
+    def _create_from_pandas_rdd_with_arrow(self, prdd, schema, timezone):
+        """
+        Create a DataFrame from an RDD of pandas.DataFrames by converting each DF to one or more
+        Arrow RecordBatches which are then sent to the JVM.
+        If a schema is passed in, the data types will be used to coerce the data in
+        Pandas to Arrow conversion.
+        """
+        import pandas as pd
+        import pyarrow as pa
+
+        # Convert to an RDD of arrow record batches
+        rb_rdd = (prdd.
+                  filter(lambda x: isinstance(x, pd.DataFrame)).
+                  flatMap(lambda x: _dataframe_to_arrow_record_batch(x, timezone=timezone, schema=schema)))
+
+        from pyspark.sql.dataframe import DataFrame
+        from pyspark.sql.pandas.types import from_arrow_schema
+
+        # In case no schema is passed, extract inferred schema from the first record batch
+        if schema is None:
+            schema = pa.ipc.open_stream(rb_rdd.first()).schema
+            schema = from_arrow_schema(schema)
+
+        # Create Spark DataFrame from Arrow record batches RDD
+        jrdd = rb_rdd._to_java_object_rdd()
+        jdf = self._jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), self._wrapped._jsqlContext)
+        df = DataFrame(jdf, self._wrapped)
+        df._schema = schema
+        return df
 
     def _create_from_pandas_with_arrow(self, pdf, schema, timezone):
         """
@@ -430,6 +446,77 @@ class SparkConversionMixin(object):
         df = DataFrame(jdf, self._wrapped)
         df._schema = schema
         return df
+
+
+def _sanitize_arrow_schema(schema):
+    import pyarrow as pa
+    import re
+    sanitized_fields = []
+
+    # Convert pyarrow schema to a spark compatible one
+    _SPARK_DISALLOWED_CHARS = re.compile('[ ,;{}()\n\t=]')
+
+    def _sanitized_spark_field_name(name):
+        return _SPARK_DISALLOWED_CHARS.sub('_', name)
+
+    for field in schema:
+        name = field.name
+        sanitized_name = _sanitized_spark_field_name(name)
+
+        if sanitized_name != name:
+            sanitized_field = pa.field(sanitized_name, field.type,
+                                       field.nullable, field.metadata)
+            sanitized_fields.append(sanitized_field)
+        else:
+            sanitized_fields.append(field)
+
+    new_schema = pa.schema(sanitized_fields, metadata=schema.metadata)
+    return new_schema
+
+
+def _dataframe_to_arrow_record_batch(pdf, schema=None, timezone=None, max_batch_size=None):
+    """
+    Create a DataFrame from a given pandas.DataFrame by slicing it into partitions, converting
+    to Arrow data, then sending to the JVM to parallelize. If a schema is passed in, the
+    data types will be used to coerce the data in Pandas to Arrow conversion.
+    """
+    import re
+    import pyarrow as pa
+    from pyspark.sql.pandas.types import to_arrow_schema
+    from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
+
+    require_minimum_pandas_version()
+    require_minimum_pyarrow_version()
+
+    if timezone is not None:
+        from pyspark.sql.pandas.types import _check_dataframe_covert_timestamps_tz_local
+        pdf = _check_dataframe_covert_timestamps_tz_local(pdf, timezone, schema)
+
+    # Determine arrow types to coerce data when creating batches
+    if schema is not None:
+        arrow_schema = to_arrow_schema(schema)
+    else:
+        # Any timestamps must be coerced to be compatible with Spark
+        arrow_schema = pa.Schema.from_pandas(pdf)
+
+    # Sanitize arrow schema for spark compatibility
+    arrow_schema = _sanitize_arrow_schema(arrow_schema)
+
+    # Create Arrow record batches
+    batches = pa.Table.from_pandas(pdf, schema=arrow_schema).to_batches(max_chunksize=max_batch_size)
+
+    # If schema is available, no need to include it in the payload
+    if schema is not None:
+        return list(map(bytearray, map(pa.RecordBatch.serialize, batches)))
+    else:
+        def _record_batch_dumps(batch):
+            sink = pa.BufferOutputStream()
+            writer = pa.ipc.new_stream(sink, batch.schema)
+            writer.write_batch(batch)
+            writer.close()
+            return sink.getvalue()
+
+        return list(map(bytearray, map(_record_batch_dumps, batches)))
 
 
 def _test():

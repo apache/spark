@@ -270,3 +270,39 @@ def _check_series_convert_timestamps_tz_local(s, timezone):
     :return pandas.Series where if it is a timestamp, has been converted to tz-naive
     """
     return _check_series_convert_timestamps_localize(s, timezone, None)
+
+
+def _check_dataframe_covert_timestamps_tz_local(pdf, timezone, schema=None):
+    """
+    Convert timestamp to timezone-naive in the specified timezone or local timezone
+
+    :param pdf: a pandas.DataFrame
+    :param timezone: the timezone to convert from. if None then use local timezone
+    :param schema: an optional spark schema that defines which timestamp columns to inspect
+    :return pandas.DataFrame where if it is a timestamp, has been converted to tz-naive
+    """
+    copied = False
+    if isinstance(schema, StructType):
+        for field in schema:
+            # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+            if isinstance(field.dataType, TimestampType):
+                s = _check_series_convert_timestamps_tz_local(pdf[field.name], timezone)
+                if s is not pdf[field.name]:
+                    if not copied:
+                        # Copy once if the series is modified to prevent the original
+                        # Pandas DataFrame from being updated
+                        pdf = pdf.copy()
+                        copied = True
+                    pdf[field.name] = s
+    else:
+        for column, series in pdf.iteritems():
+            s = _check_series_convert_timestamps_tz_local(series, timezone)
+            if s is not series:
+                if not copied:
+                    # Copy once if the series is modified to prevent the original
+                    # Pandas DataFrame from being updated
+                    pdf = pdf.copy()
+                    copied = True
+                pdf[column] = s
+
+    return pdf
