@@ -169,18 +169,51 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
     LastOptions.clear()
 
-    df.writeStream
+    val query = df.writeStream
       .format("org.apache.spark.sql.streaming.test")
-      .option("opt1", "1")
-      .options(Map("opt2" -> "2"))
+      .option("opt1", "5")
+      .options(Map("opt2" -> "4"))
       .options(map)
       .option("checkpointLocation", newMetadataDir)
       .start()
-      .stop()
 
-    assert(LastOptions.parameters("opt1") == "1")
-    assert(LastOptions.parameters("opt2") == "2")
+    assert(LastOptions.parameters("opt1") == "5")
+    assert(LastOptions.parameters("opt2") == "4")
     assert(LastOptions.parameters("opt3") == "3")
+    assert(LastOptions.parameters.contains("checkpointLocation"))
+
+    query.stop()
+  }
+
+  test("SPARK-32832: later option should override earlier options for load()") {
+    spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .option("paTh", "1")
+      .option("PATH", "2")
+      .option("Path", "3")
+      .option("patH", "4")
+      .option("path", "5")
+      .load()
+    assert(LastOptions.parameters("path") == "5")
+  }
+
+  test("SPARK-32832: later option should override earlier options for start()") {
+    val ds = spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .load()
+    assert(LastOptions.parameters.isEmpty)
+
+    val query = ds.writeStream
+      .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", newMetadataDir)
+      .option("paTh", "1")
+      .option("PATH", "2")
+      .option("Path", "3")
+      .option("patH", "4")
+      .option("path", "5")
+      .start()
+    assert(LastOptions.parameters("path") == "5")
+    query.stop()
   }
 
   test("partitioning") {

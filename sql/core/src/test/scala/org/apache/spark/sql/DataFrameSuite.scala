@@ -2450,6 +2450,11 @@ class DataFrameSuite extends QueryTest
       assert(df.schema === new StructType().add(StructField("d", DecimalType(38, 0))))
     }
   }
+
+  test("SPARK-32764: -0.0 and 0.0 should be equal") {
+    val df = Seq(0.0 -> -0.0).toDF("pos", "neg")
+    checkAnswer(df.select($"pos" > $"neg"), Row(false))
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)

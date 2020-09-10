@@ -933,57 +933,99 @@ struct<from_json({"a":"1 days"}):struct<a:interval>,to_json(from_json({"a":"1 da
 -- !query
 select interval '+'
 -- !query schema
-struct<CAST(NULL AS INTERVAL):interval>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.parser.ParseException
+
+Cannot parse the INTERVAL value: +(line 1, pos 7)
+
+== SQL ==
+select interval '+'
+-------^^^
 
 
 -- !query
 select interval '+.'
 -- !query schema
-struct<CAST(NULL AS INTERVAL):interval>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.parser.ParseException
+
+Cannot parse the INTERVAL value: +.(line 1, pos 7)
+
+== SQL ==
+select interval '+.'
+-------^^^
 
 
 -- !query
 select interval '1'
 -- !query schema
-struct<CAST(NULL AS INTERVAL):interval>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.parser.ParseException
+
+Cannot parse the INTERVAL value: 1(line 1, pos 7)
+
+== SQL ==
+select interval '1'
+-------^^^
 
 
 -- !query
 select interval '1.2'
 -- !query schema
-struct<CAST(NULL AS INTERVAL):interval>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.parser.ParseException
+
+Cannot parse the INTERVAL value: 1.2(line 1, pos 7)
+
+== SQL ==
+select interval '1.2'
+-------^^^
 
 
 -- !query
 select interval '- 2'
 -- !query schema
-struct<CAST(NULL AS INTERVAL):interval>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.parser.ParseException
+
+Cannot parse the INTERVAL value: - 2(line 1, pos 7)
+
+== SQL ==
+select interval '- 2'
+-------^^^
 
 
 -- !query
 select interval '1 day -'
 -- !query schema
-struct<CAST(NULL AS INTERVAL):interval>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.parser.ParseException
+
+Cannot parse the INTERVAL value: 1 day -(line 1, pos 7)
+
+== SQL ==
+select interval '1 day -'
+-------^^^
 
 
 -- !query
 select interval '1 day 1'
 -- !query schema
-struct<CAST(NULL AS INTERVAL):interval>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.parser.ParseException
+
+Cannot parse the INTERVAL value: 1 day 1(line 1, pos 7)
+
+== SQL ==
+select interval '1 day 1'
+-------^^^
 
 
 -- !query
