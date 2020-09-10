@@ -470,16 +470,20 @@ class CatalogSuite extends SharedSparkSession {
   }
 
   test("createTable with 'path' in options") {
+    val description = "this is a test table"
+
     withTable("t") {
       withTempDir { dir =>
         spark.catalog.createTable(
           tableName = "t",
           source = "json",
           schema = new StructType().add("i", "int"),
+          description = description,
           options = Map("path" -> dir.getAbsolutePath))
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.tableType == CatalogTableType.EXTERNAL)
         assert(table.storage.locationUri.get == makeQualifiedPath(dir.getAbsolutePath))
+        assert(table.comment == Some(description))
 
         Seq((1)).toDF("i").write.insertInto("t")
         assert(dir.exists() && dir.listFiles().nonEmpty)

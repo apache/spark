@@ -27,9 +27,8 @@ import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
-import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
-import org.codehaus.commons.compiler.util.reflect.ByteArrayClassLoader
-import org.codehaus.janino.{ClassBodyEvaluator, SimpleCompiler}
+import org.codehaus.commons.compiler.CompileException
+import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, InternalCompilerException, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
 
 import org.apache.spark.{TaskContext, TaskKilledException}
@@ -39,7 +38,7 @@ import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
@@ -134,7 +133,7 @@ class CodegenContext extends Logging {
   def addReferenceObj(objName: String, obj: Any, className: String = null): String = {
     val idx = references.length
     references += obj
-    val clsName = Option(className).getOrElse(obj.getClass.getName)
+    val clsName = Option(className).getOrElse(CodeGenerator.typeName(obj.getClass))
     s"(($clsName) references[$idx] /* $objName */)"
   }
 
@@ -625,8 +624,12 @@ class CodegenContext extends Logging {
   def genComp(dataType: DataType, c1: String, c2: String): String = dataType match {
     // java boolean doesn't support > or < operator
     case BooleanType => s"($c1 == $c2 ? 0 : ($c1 ? 1 : -1))"
-    case DoubleType => s"java.lang.Double.compare($c1, $c2)"
-    case FloatType => s"java.lang.Float.compare($c1, $c2)"
+    case DoubleType =>
+      val clsName = SQLOrderingUtil.getClass.getName.stripSuffix("$")
+      s"$clsName.compareDoubles($c1, $c2)"
+    case FloatType =>
+      val clsName = SQLOrderingUtil.getClass.getName.stripSuffix("$")
+      s"$clsName.compareFloats($c1, $c2)"
     // use c1 - c2 may overflow
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
@@ -1421,10 +1424,9 @@ object CodeGenerator extends Logging {
   private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): ByteCodeStats = {
     // First retrieve the generated classes.
     val classes = {
-      val scField = classOf[ClassBodyEvaluator].getDeclaredField("sc")
-      scField.setAccessible(true)
-      val compiler = scField.get(evaluator).asInstanceOf[SimpleCompiler]
-      val loader = compiler.getClassLoader.asInstanceOf[ByteArrayClassLoader]
+      val resultField = classOf[SimpleCompiler].getDeclaredField("result")
+      resultField.setAccessible(true)
+      val loader = resultField.get(evaluator).asInstanceOf[ByteArrayClassLoader]
       val classesField = loader.getClass.getDeclaredField("classes")
       classesField.setAccessible(true)
       classesField.get(loader).asInstanceOf[JavaMap[String, Array[Byte]]].asScala

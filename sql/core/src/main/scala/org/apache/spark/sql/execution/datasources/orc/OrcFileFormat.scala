@@ -153,11 +153,6 @@ class OrcFileFormat
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    if (sparkSession.sessionState.conf.orcFilterPushDown) {
-      OrcFilters.createFilter(dataSchema, filters).foreach { f =>
-        OrcInputFormat.setSearchArgument(hadoopConf, f, dataSchema.fieldNames)
-      }
-    }
 
     val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
     val sqlConf = sparkSession.sessionState.conf
@@ -169,6 +164,8 @@ class OrcFileFormat
     val broadcastedConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
     val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val orcFilterPushDown = sparkSession.sessionState.conf.orcFilterPushDown
+    val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
 
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
@@ -186,6 +183,15 @@ class OrcFileFormat
       if (resultedColPruneInfo.isEmpty) {
         Iterator.empty
       } else {
+        // ORC predicate pushdown
+        if (orcFilterPushDown) {
+          OrcUtils.readCatalystSchema(filePath, conf, ignoreCorruptFiles).map { fileSchema =>
+            OrcFilters.createFilter(fileSchema, filters).foreach { f =>
+              OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
+            }
+          }
+        }
+
         val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
         val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
           dataSchema, resultSchema, partitionSchema, conf)

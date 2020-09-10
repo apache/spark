@@ -14,10 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import random
 import unittest
 
-from pyspark.resource import ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder,\
+from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder,\
     TaskResourceRequests
 
 
@@ -73,7 +72,7 @@ class ResourceProfileTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.resource.tests.test_resources import *
+    from pyspark.resource.tests.test_resources import *  # noqa: F401
 
     try:
         import xmlrunner

@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
-import org.apache.spark.internal.config.ALLOW_SPARK_CONTEXT_IN_EXECUTORS
+import org.apache.spark.internal.config.EXECUTOR_ALLOW_SPARK_CONTEXT
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -277,7 +277,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
 
     session.range(1).foreach { v =>
       SparkSession.builder.master("local")
-        .config(ALLOW_SPARK_CONTEXT_IN_EXECUTORS.key, true).getOrCreate().stop()
+        .config(EXECUTOR_ALLOW_SPARK_CONTEXT.key, true).getOrCreate().stop()
       ()
     }
   }

@@ -280,10 +280,11 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       if (maybeSingleFileWriter.isPresent()) {
         // Here, we don't need to perform any metrics updates because the bytes written to this
         // output file would have already been counted as shuffle bytes written.
+        long[] partitionLengths = spills[0].partitionLengths;
+        logger.debug("Merge shuffle spills for mapId {} with length {}", mapId,
+            partitionLengths.length);
         mapOutputCommitMessage = maybeSingleFileWriter.get().transferMapSpillFile(
-            spills[0].file, spills[0].partitionLengths);
-        assert Arrays.equals(
-            spills[0].partitionLengths, mapOutputCommitMessage.getPartitionLengths());
+            spills[0].file, partitionLengths);
       } else {
         mapOutputCommitMessage = mergeSpillsUsingStandardWriter(spills);
       }
@@ -370,6 +371,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       SpillInfo[] spills,
       ShuffleMapOutputWriter mapWriter,
       @Nullable CompressionCodec compressionCodec) throws IOException {
+    logger.debug("Merge shuffle spills with FileStream for mapId {}", mapId);
     final int numPartitions = partitioner.numPartitions();
     final InputStream[] spillInputStreams = new InputStream[spills.length];
 
@@ -379,6 +381,11 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         spillInputStreams[i] = new NioBufferedFileInputStream(
           spills[i].file,
           inputBufferSizeInBytes);
+        // Only convert the partitionLengths when debug level is enabled.
+        if (logger.isDebugEnabled()) {
+          logger.debug("Partition lengths for mapId {} in Spill {}: {}", mapId, i,
+              Arrays.toString(spills[i].partitionLengths));
+        }
       }
       for (int partition = 0; partition < numPartitions; partition++) {
         boolean copyThrewException = true;
@@ -441,6 +448,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private void mergeSpillsWithTransferTo(
       SpillInfo[] spills,
       ShuffleMapOutputWriter mapWriter) throws IOException {
+    logger.debug("Merge shuffle spills with TransferTo for mapId {}", mapId);
     final int numPartitions = partitioner.numPartitions();
     final FileChannel[] spillInputChannels = new FileChannel[spills.length];
     final long[] spillInputChannelPositions = new long[spills.length];
@@ -449,6 +457,11 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     try {
       for (int i = 0; i < spills.length; i++) {
         spillInputChannels[i] = new FileInputStream(spills[i].file).getChannel();
+        // Only convert the partitionLengths when debug level is enabled.
+        if (logger.isDebugEnabled()) {
+          logger.debug("Partition lengths for mapId {} in Spill {}: {}", mapId, i,
+              Arrays.toString(spills[i].partitionLengths));
+        }
       }
       for (int partition = 0; partition < numPartitions; partition++) {
         boolean copyThrewException = true;

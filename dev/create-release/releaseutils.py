@@ -23,7 +23,7 @@ import sys
 from subprocess import Popen, PIPE
 
 try:
-    from jira.client import JIRA
+    from jira.client import JIRA  # noqa: F401
     # Old versions have JIRAError in exceptions package, new (0.5+) in utils.
     try:
         from jira.exceptions import JIRAError
@@ -31,11 +31,11 @@ try:
         from jira.utils import JIRAError
 except ImportError:
     print("This tool requires the jira-python library")
-    print("Install using 'sudo pip install jira'")
+    print("Install using 'sudo pip3 install jira'")
     sys.exit(-1)
 
 try:
-    from github import Github
+    from github import Github  # noqa: F401
     from github import GithubException
 except ImportError:
     print("This tool requires the PyGithub library")

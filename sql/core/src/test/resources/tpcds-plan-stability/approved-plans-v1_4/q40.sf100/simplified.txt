@@ -1,0 +1,56 @@
+TakeOrderedAndProject [w_state,i_item_id,sales_before,sales_after]
+  WholeStageCodegen (9)
+    HashAggregate [w_state,i_item_id,sum,isEmpty,sum,isEmpty] [sum(CASE WHEN (d_date < 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END),sum(CASE WHEN (d_date >= 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END),sales_before,sales_after,sum,isEmpty,sum,isEmpty]
+      InputAdapter
+        Exchange [w_state,i_item_id] #1
+          WholeStageCodegen (8)
+            HashAggregate [w_state,i_item_id,d_date,cs_sales_price,cr_refunded_cash] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
+              Project [cs_sales_price,cr_refunded_cash,w_state,i_item_id,d_date]
+                BroadcastHashJoin [cs_warehouse_sk,w_warehouse_sk]
+                  Project [cs_warehouse_sk,cs_sales_price,cr_refunded_cash,i_item_id,d_date]
+                    BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                      Project [cs_sold_date_sk,cs_warehouse_sk,cs_sales_price,cr_refunded_cash,i_item_id]
+                        BroadcastHashJoin [cs_item_sk,i_item_sk]
+                          Project [cs_sold_date_sk,cs_warehouse_sk,cs_item_sk,cs_sales_price,cr_refunded_cash]
+                            InputAdapter
+                              SortMergeJoin [cs_order_number,cs_item_sk,cr_order_number,cr_item_sk]
+                                WholeStageCodegen (2)
+                                  Sort [cs_order_number,cs_item_sk]
+                                    InputAdapter
+                                      Exchange [cs_order_number,cs_item_sk] #2
+                                        WholeStageCodegen (1)
+                                          Filter [cs_warehouse_sk,cs_item_sk,cs_sold_date_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.catalog_sales [cs_sold_date_sk,cs_warehouse_sk,cs_item_sk,cs_order_number,cs_sales_price]
+                                WholeStageCodegen (4)
+                                  Sort [cr_order_number,cr_item_sk]
+                                    InputAdapter
+                                      Exchange [cr_order_number,cr_item_sk] #3
+                                        WholeStageCodegen (3)
+                                          Filter [cr_order_number,cr_item_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.catalog_returns [cr_item_sk,cr_order_number,cr_refunded_cash]
+                          InputAdapter
+                            BroadcastExchange #4
+                              WholeStageCodegen (5)
+                                Project [i_item_sk,i_item_id]
+                                  Filter [i_current_price,i_item_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.item [i_item_sk,i_item_id,i_current_price]
+                      InputAdapter
+                        BroadcastExchange #5
+                          WholeStageCodegen (6)
+                            Filter [d_date,d_date_sk]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.date_dim [d_date_sk,d_date]
+                  InputAdapter
+                    BroadcastExchange #6
+                      WholeStageCodegen (7)
+                        Filter [w_warehouse_sk]
+                          ColumnarToRow
+                            InputAdapter
+                              Scan parquet default.warehouse [w_warehouse_sk,w_state]

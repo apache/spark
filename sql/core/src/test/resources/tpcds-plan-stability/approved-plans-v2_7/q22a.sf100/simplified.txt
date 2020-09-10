@@ -1,0 +1,87 @@
+TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
+  Union
+    WholeStageCodegen (8)
+      HashAggregate [i_product_name,i_brand,i_class,i_category,sum,count] [avg(qoh),qoh,sum,count]
+        HashAggregate [i_product_name,i_brand,i_class,i_category,qoh] [sum,count,sum,count]
+          HashAggregate [i_product_name,i_brand,i_class,i_category,sum,count] [avg(cast(inv_quantity_on_hand as bigint)),qoh,sum,count]
+            InputAdapter
+              Exchange [i_product_name,i_brand,i_class,i_category] #1
+                WholeStageCodegen (7)
+                  HashAggregate [i_product_name,i_brand,i_class,i_category,inv_quantity_on_hand] [sum,count,sum,count]
+                    Project [inv_quantity_on_hand,i_brand,i_class,i_category,i_product_name]
+                      SortMergeJoin [inv_item_sk,i_item_sk]
+                        InputAdapter
+                          WholeStageCodegen (4)
+                            Sort [inv_item_sk]
+                              InputAdapter
+                                Exchange [inv_item_sk] #2
+                                  WholeStageCodegen (3)
+                                    Project [inv_item_sk,inv_quantity_on_hand]
+                                      BroadcastHashJoin [inv_date_sk,d_date_sk]
+                                        Project [inv_date_sk,inv_item_sk,inv_quantity_on_hand]
+                                          BroadcastHashJoin [inv_warehouse_sk,w_warehouse_sk]
+                                            Filter [inv_date_sk,inv_item_sk,inv_warehouse_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.inventory [inv_date_sk,inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand]
+                                            InputAdapter
+                                              BroadcastExchange #3
+                                                WholeStageCodegen (1)
+                                                  Filter [w_warehouse_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.warehouse [w_warehouse_sk]
+                                        InputAdapter
+                                          BroadcastExchange #4
+                                            WholeStageCodegen (2)
+                                              Project [d_date_sk]
+                                                Filter [d_month_seq,d_date_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.date_dim [d_date_sk,d_month_seq]
+                        InputAdapter
+                          WholeStageCodegen (6)
+                            Sort [i_item_sk]
+                              InputAdapter
+                                Exchange [i_item_sk] #5
+                                  WholeStageCodegen (5)
+                                    Filter [i_item_sk]
+                                      ColumnarToRow
+                                        InputAdapter
+                                          Scan parquet default.item [i_item_sk,i_brand,i_class,i_category,i_product_name]
+    WholeStageCodegen (17)
+      HashAggregate [i_product_name,i_brand,i_class,sum,count] [avg(qoh),i_category,qoh,sum,count]
+        InputAdapter
+          Exchange [i_product_name,i_brand,i_class] #6
+            WholeStageCodegen (16)
+              HashAggregate [i_product_name,i_brand,i_class,qoh] [sum,count,sum,count]
+                HashAggregate [i_product_name,i_brand,i_class,i_category,sum,count] [avg(cast(inv_quantity_on_hand as bigint)),qoh,sum,count]
+                  InputAdapter
+                    ReusedExchange [i_product_name,i_brand,i_class,i_category,sum,count] #1
+    WholeStageCodegen (26)
+      HashAggregate [i_product_name,i_brand,sum,count] [avg(qoh),i_class,i_category,qoh,sum,count]
+        InputAdapter
+          Exchange [i_product_name,i_brand] #7
+            WholeStageCodegen (25)
+              HashAggregate [i_product_name,i_brand,qoh] [sum,count,sum,count]
+                HashAggregate [i_product_name,i_brand,i_class,i_category,sum,count] [avg(cast(inv_quantity_on_hand as bigint)),qoh,sum,count]
+                  InputAdapter
+                    ReusedExchange [i_product_name,i_brand,i_class,i_category,sum,count] #1
+    WholeStageCodegen (35)
+      HashAggregate [i_product_name,sum,count] [avg(qoh),i_brand,i_class,i_category,qoh,sum,count]
+        InputAdapter
+          Exchange [i_product_name] #8
+            WholeStageCodegen (34)
+              HashAggregate [i_product_name,qoh] [sum,count,sum,count]
+                HashAggregate [i_product_name,i_brand,i_class,i_category,sum,count] [avg(cast(inv_quantity_on_hand as bigint)),qoh,sum,count]
+                  InputAdapter
+                    ReusedExchange [i_product_name,i_brand,i_class,i_category,sum,count] #1
+    WholeStageCodegen (44)
+      HashAggregate [sum,count] [avg(qoh),i_product_name,i_brand,i_class,i_category,qoh,sum,count]
+        InputAdapter
+          Exchange #9
+            WholeStageCodegen (43)
+              HashAggregate [qoh] [sum,count,sum,count]
+                HashAggregate [i_product_name,i_brand,i_class,i_category,sum,count] [avg(cast(inv_quantity_on_hand as bigint)),qoh,sum,count]
+                  InputAdapter
+                    ReusedExchange [i_product_name,i_brand,i_class,i_category,sum,count] #1
