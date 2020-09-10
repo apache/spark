@@ -995,18 +995,11 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("Change the number of partitions to zero when a range is empty") {
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
-      val range = spark.range(1, 1, 1, 1000)
-      val numPartitions = range.rdd.getNumPartitions
-      assert(numPartitions == 0)
-    }
-
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-      val range = spark.range(1, 1, 1, 1000)
-      val numPartitions = range.rdd.getNumPartitions
-      assert(numPartitions == 0)
-    }
+  testWithWholeStageCodegenOnAndOff("Change the number of partitions to zero " +
+    "when a range is empty") { _ =>
+    val range = spark.range(1, 1, 1, 1000)
+    val numPartitions = range.rdd.getNumPartitions
+    assert(numPartitions == 0)
   }
 }
 
