@@ -221,9 +221,11 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   def doCleanupShuffle(shuffleId: Int, blocking: Boolean): Unit = {
     try {
       logDebug("Cleaning shuffle " + shuffleId)
-      mapOutputTrackerMaster.unregisterShuffle(shuffleId, blocking)
-      listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
-      logDebug("Cleaned shuffle " + shuffleId)
+      val shuffleRemoved = mapOutputTrackerMaster.unregisterShuffle(shuffleId, blocking)
+      if (shuffleRemoved) {
+        listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
+        logDebug("Cleaned shuffle " + shuffleId)
+      }
     } catch {
       case e: Exception => logError("Error cleaning shuffle " + shuffleId, e)
     }

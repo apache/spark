@@ -56,5 +56,5 @@ public final class LocalDiskShuffleOutputTracker implements ShuffleOutputTracker
       int shuffleId, int mapIndex, long mapId, MapOutputMetadata mapOutputMetadata) {}
 
   @Override
-  public void removeMapOutput(int shuffleId, int mapId, long mapTaskAttemptId) {}
+  public void removeMapOutput(int shuffleId, int mapIndex, long mapId) {}
 }

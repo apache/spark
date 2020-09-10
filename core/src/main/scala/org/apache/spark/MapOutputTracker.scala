@@ -380,8 +380,10 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
   /**
    * Deletes map output status information for the specified shuffle stage.
+   *
+   * @return true if a shuffle status was present and was removed
    */
-  def unregisterShuffle(shuffleId: Int, blocking: Boolean): Unit
+  def unregisterShuffle(shuffleId: Int, blocking: Boolean): Boolean
 
   def stop(): Unit = {}
 }
@@ -540,11 +542,13 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /** Unregister shuffle data */
-  def unregisterShuffle(shuffleId: Int, blocking: Boolean): Unit = {
-    shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
+  def unregisterShuffle(shuffleId: Int, blocking: Boolean): Boolean = {
+    val removedStatus = shuffleStatuses.remove(shuffleId)
+    removedStatus.foreach { shuffleStatus =>
       shuffleStatus.invalidateSerializedMapOutputStatusCache()
       shuffleOutputTracker.unregisterShuffle(shuffleId, blocking)
     }
+    removedStatus.isDefined
   }
 
   /**
@@ -874,8 +878,8 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
 
 
   /** Unregister shuffle data. */
-  def unregisterShuffle(shuffleId: Int, blocking: Boolean): Unit = {
-    mapStatuses.remove(shuffleId)
+  def unregisterShuffle(shuffleId: Int, blocking: Boolean): Boolean = {
+    mapStatuses.remove(shuffleId).isDefined
   }
 
   /**

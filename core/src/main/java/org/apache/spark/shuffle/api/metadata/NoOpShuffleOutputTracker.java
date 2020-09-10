@@ -17,6 +17,9 @@
 
 package org.apache.spark.shuffle.api.metadata;
 
+/**
+ * An implementation of shuffle output tracking that does not keep track of any shuffle state.
+ */
 public class NoOpShuffleOutputTracker implements ShuffleOutputTracker {
 
   @Override
@@ -30,5 +33,5 @@ public class NoOpShuffleOutputTracker implements ShuffleOutputTracker {
       int shuffleId, int mapIndex, long mapId, MapOutputMetadata mapOutputMetadata) {}
 
   @Override
-  public void removeMapOutput(int shuffleId, int mapId, long mapTaskAttemptId) {}
+  public void removeMapOutput(int shuffleId, int mapIndex, long mapId) {}
 }
