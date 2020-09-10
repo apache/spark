@@ -20,15 +20,15 @@ TakeOrderedAndProject (36)
       :        :        :                 +- Scan parquet default.customer_address (4)
       :        :        +- BroadcastExchange (21)
       :        :           +- * Project (20)
-      :        :              +- * BroadcastHashJoin Inner BuildLeft (19)
-      :        :                 :- BroadcastExchange (15)
-      :        :                 :  +- * Project (14)
-      :        :                 :     +- * Filter (13)
-      :        :                 :        +- * ColumnarToRow (12)
-      :        :                 :           +- Scan parquet default.income_band (11)
-      :        :                 +- * Filter (18)
-      :        :                    +- * ColumnarToRow (17)
-      :        :                       +- Scan parquet default.household_demographics (16)
+      :        :              +- * BroadcastHashJoin Inner BuildRight (19)
+      :        :                 :- * Filter (13)
+      :        :                 :  +- * ColumnarToRow (12)
+      :        :                 :     +- Scan parquet default.household_demographics (11)
+      :        :                 +- BroadcastExchange (18)
+      :        :                    +- * Project (17)
+      :        :                       +- * Filter (16)
+      :        :                          +- * ColumnarToRow (15)
+      :        :                             +- Scan parquet default.income_band (14)
       :        +- * Filter (27)
       :           +- * ColumnarToRow (26)
       :              +- Scan parquet default.customer_demographics (25)
@@ -82,63 +82,63 @@ Join condition: None
 Output [5]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_first_name#5, c_last_name#6]
 Input [7]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_current_addr_sk#4, c_first_name#5, c_last_name#6, ca_address_sk#7]
 
-(11) Scan parquet default.income_band
-Output [3]: [ib_income_band_sk#10, ib_lower_bound#11, ib_upper_bound#12]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/income_band]
-PushedFilters: [IsNotNull(ib_lower_bound), IsNotNull(ib_upper_bound), GreaterThanOrEqual(ib_lower_bound,38128), LessThanOrEqual(ib_upper_bound,88128), IsNotNull(ib_income_band_sk)]
-ReadSchema: struct<ib_income_band_sk:int,ib_lower_bound:int,ib_upper_bound:int>
-
-(12) ColumnarToRow [codegen id : 2]
-Input [3]: [ib_income_band_sk#10, ib_lower_bound#11, ib_upper_bound#12]
-
-(13) Filter [codegen id : 2]
-Input [3]: [ib_income_band_sk#10, ib_lower_bound#11, ib_upper_bound#12]
-Condition : ((((isnotnull(ib_lower_bound#11) AND isnotnull(ib_upper_bound#12)) AND (ib_lower_bound#11 >= 38128)) AND (ib_upper_bound#12 <= 88128)) AND isnotnull(ib_income_band_sk#10))
-
-(14) Project [codegen id : 2]
-Output [1]: [ib_income_band_sk#10]
-Input [3]: [ib_income_band_sk#10, ib_lower_bound#11, ib_upper_bound#12]
-
-(15) BroadcastExchange
-Input [1]: [ib_income_band_sk#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#13]
-
-(16) Scan parquet default.household_demographics
-Output [2]: [hd_demo_sk#14, hd_income_band_sk#15]
+(11) Scan parquet default.household_demographics
+Output [2]: [hd_demo_sk#10, hd_income_band_sk#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
 PushedFilters: [IsNotNull(hd_demo_sk), IsNotNull(hd_income_band_sk)]
 ReadSchema: struct<hd_demo_sk:int,hd_income_band_sk:int>
 
-(17) ColumnarToRow
-Input [2]: [hd_demo_sk#14, hd_income_band_sk#15]
+(12) ColumnarToRow [codegen id : 3]
+Input [2]: [hd_demo_sk#10, hd_income_band_sk#11]
 
-(18) Filter
-Input [2]: [hd_demo_sk#14, hd_income_band_sk#15]
-Condition : (isnotnull(hd_demo_sk#14) AND isnotnull(hd_income_band_sk#15))
+(13) Filter [codegen id : 3]
+Input [2]: [hd_demo_sk#10, hd_income_band_sk#11]
+Condition : (isnotnull(hd_demo_sk#10) AND isnotnull(hd_income_band_sk#11))
+
+(14) Scan parquet default.income_band
+Output [3]: [ib_income_band_sk#12, ib_lower_bound#13, ib_upper_bound#14]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/income_band]
+PushedFilters: [IsNotNull(ib_lower_bound), IsNotNull(ib_upper_bound), GreaterThanOrEqual(ib_lower_bound,38128), LessThanOrEqual(ib_upper_bound,88128), IsNotNull(ib_income_band_sk)]
+ReadSchema: struct<ib_income_band_sk:int,ib_lower_bound:int,ib_upper_bound:int>
+
+(15) ColumnarToRow [codegen id : 2]
+Input [3]: [ib_income_band_sk#12, ib_lower_bound#13, ib_upper_bound#14]
+
+(16) Filter [codegen id : 2]
+Input [3]: [ib_income_band_sk#12, ib_lower_bound#13, ib_upper_bound#14]
+Condition : ((((isnotnull(ib_lower_bound#13) AND isnotnull(ib_upper_bound#14)) AND (ib_lower_bound#13 >= 38128)) AND (ib_upper_bound#14 <= 88128)) AND isnotnull(ib_income_band_sk#12))
+
+(17) Project [codegen id : 2]
+Output [1]: [ib_income_band_sk#12]
+Input [3]: [ib_income_band_sk#12, ib_lower_bound#13, ib_upper_bound#14]
+
+(18) BroadcastExchange
+Input [1]: [ib_income_band_sk#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#15]
 
 (19) BroadcastHashJoin [codegen id : 3]
-Left keys [1]: [ib_income_band_sk#10]
-Right keys [1]: [hd_income_band_sk#15]
+Left keys [1]: [hd_income_band_sk#11]
+Right keys [1]: [ib_income_band_sk#12]
 Join condition: None
 
 (20) Project [codegen id : 3]
-Output [1]: [hd_demo_sk#14]
-Input [3]: [ib_income_band_sk#10, hd_demo_sk#14, hd_income_band_sk#15]
+Output [1]: [hd_demo_sk#10]
+Input [3]: [hd_demo_sk#10, hd_income_band_sk#11, ib_income_band_sk#12]
 
 (21) BroadcastExchange
-Input [1]: [hd_demo_sk#14]
+Input [1]: [hd_demo_sk#10]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#16]
 
 (22) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [c_current_hdemo_sk#3]
-Right keys [1]: [hd_demo_sk#14]
+Right keys [1]: [hd_demo_sk#10]
 Join condition: None
 
 (23) Project [codegen id : 4]
 Output [4]: [c_customer_id#1, c_current_cdemo_sk#2, c_first_name#5, c_last_name#6]
-Input [6]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_first_name#5, c_last_name#6, hd_demo_sk#14]
+Input [6]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_first_name#5, c_last_name#6, hd_demo_sk#10]
 
 (24) BroadcastExchange
 Input [4]: [c_customer_id#1, c_current_cdemo_sk#2, c_first_name#5, c_last_name#6]

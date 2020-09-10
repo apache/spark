@@ -30,7 +30,11 @@ TakeOrderedAndProject [c_customer_id,customer_id,customername]
                               BroadcastExchange #4
                                 WholeStageCodegen (3)
                                   Project [hd_demo_sk]
-                                    BroadcastHashJoin [ib_income_band_sk,hd_income_band_sk]
+                                    BroadcastHashJoin [hd_income_band_sk,ib_income_band_sk]
+                                      Filter [hd_demo_sk,hd_income_band_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.household_demographics [hd_demo_sk,hd_income_band_sk]
                                       InputAdapter
                                         BroadcastExchange #5
                                           WholeStageCodegen (2)
@@ -39,10 +43,6 @@ TakeOrderedAndProject [c_customer_id,customer_id,customername]
                                                 ColumnarToRow
                                                   InputAdapter
                                                     Scan parquet default.income_band [ib_income_band_sk,ib_lower_bound,ib_upper_bound]
-                                      Filter [hd_demo_sk,hd_income_band_sk]
-                                        ColumnarToRow
-                                          InputAdapter
-                                            Scan parquet default.household_demographics [hd_demo_sk,hd_income_band_sk]
                   Filter [cd_demo_sk]
                     ColumnarToRow
                       InputAdapter

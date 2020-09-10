@@ -7,7 +7,7 @@ WholeStageCodegen (43)
             BroadcastHashJoin [ca_county,ca_county,web_sales,web_sales,store_sales,store_sales,web_sales,store_sales]
               Project [store_sales,store_sales,ca_county,d_year,store_sales]
                 BroadcastHashJoin [ca_county,ca_county]
-                  Project [store_sales,ca_county,store_sales]
+                  Project [ca_county,store_sales,store_sales]
                     BroadcastHashJoin [ca_county,ca_county]
                       HashAggregate [ca_county,d_qoy,d_year,sum] [sum(UnscaledValue(ss_ext_sales_price)),store_sales,sum]
                         InputAdapter
@@ -116,9 +116,9 @@ WholeStageCodegen (43)
               InputAdapter
                 BroadcastExchange #14
                   WholeStageCodegen (41)
-                    Project [web_sales,ca_county,web_sales,web_sales]
+                    Project [ca_county,web_sales,web_sales,web_sales]
                       BroadcastHashJoin [ca_county,ca_county]
-                        Project [web_sales,ca_county,web_sales]
+                        Project [ca_county,web_sales,web_sales]
                           BroadcastHashJoin [ca_county,ca_county]
                             HashAggregate [ca_county,d_qoy,d_year,sum] [sum(UnscaledValue(ws_ext_sales_price)),web_sales,sum]
                               InputAdapter
@@ -140,7 +140,7 @@ WholeStageCodegen (43)
                                                               InputAdapter
                                                                 Scan parquet default.web_sales [ws_sold_date_sk,ws_bill_addr_sk,ws_ext_sales_price]
                                                           InputAdapter
-                                                            ReusedExchange [d_date_sk,d_year,d_qoy] #9
+                                                            ReusedExchange [d_date_sk,d_year,d_qoy] #13
                                           InputAdapter
                                             WholeStageCodegen (25)
                                               Sort [ca_address_sk]
@@ -169,7 +169,7 @@ WholeStageCodegen (43)
                                                                     InputAdapter
                                                                       Scan parquet default.web_sales [ws_sold_date_sk,ws_bill_addr_sk,ws_ext_sales_price]
                                                                 InputAdapter
-                                                                  ReusedExchange [d_date_sk,d_year,d_qoy] #13
+                                                                  ReusedExchange [d_date_sk,d_year,d_qoy] #4
                                                 InputAdapter
                                                   WholeStageCodegen (31)
                                                     Sort [ca_address_sk]
@@ -198,7 +198,7 @@ WholeStageCodegen (43)
                                                                 InputAdapter
                                                                   Scan parquet default.web_sales [ws_sold_date_sk,ws_bill_addr_sk,ws_ext_sales_price]
                                                             InputAdapter
-                                                              ReusedExchange [d_date_sk,d_year,d_qoy] #4
+                                                              ReusedExchange [d_date_sk,d_year,d_qoy] #9
                                             InputAdapter
                                               WholeStageCodegen (38)
                                                 Sort [ca_address_sk]
