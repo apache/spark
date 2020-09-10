@@ -105,7 +105,7 @@ object CatalystErrors {
   def legacyStoreAssignmentPolicyError(): Throwable = {
     val configKey = SQLConf.STORE_ASSIGNMENT_POLICY.key
     new AnalysisException(
-      s"LEGACY store assignment policy is disallowed in Spark data source V2. " +
+      "LEGACY store assignment policy is disallowed in Spark data source V2. " +
         s"Please set the configuration $configKey to other values.")
   }
 
@@ -127,7 +127,7 @@ object CatalystErrors {
       schema: StructType, maxOrdinal: Int): Throwable = {
     new AnalysisException(
       s"Try to map ${schema.catalogString} to Tuple${maxOrdinal + 1}, " +
-        s"but failed as the number of fields does not line up.")
+        "but failed as the number of fields does not line up.")
   }
 
   def upCastFailureError(
