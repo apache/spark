@@ -169,18 +169,20 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
     LastOptions.clear()
 
-    df.writeStream
+    val query = df.writeStream
       .format("org.apache.spark.sql.streaming.test")
-      .option("opt1", "1")
-      .options(Map("opt2" -> "2"))
+      .option("opt1", "5")
+      .options(Map("opt2" -> "4"))
       .options(map)
       .option("checkpointLocation", newMetadataDir)
       .start()
-      .stop()
 
-    assert(LastOptions.parameters("opt1") == "1")
-    assert(LastOptions.parameters("opt2") == "2")
+    assert(LastOptions.parameters("opt1") == "5")
+    assert(LastOptions.parameters("opt2") == "4")
     assert(LastOptions.parameters("opt3") == "3")
+    assert(LastOptions.parameters.contains("checkpointLocation"))
+
+    query.stop()
   }
 
   test("partitioning") {
