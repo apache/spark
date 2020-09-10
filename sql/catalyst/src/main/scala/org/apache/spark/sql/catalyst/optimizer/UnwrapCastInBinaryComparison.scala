@@ -34,11 +34,18 @@ import org.apache.spark.sql.types._
  * constructs, or moving the cast from the expression side to the literal side, which enables them
  * to be optimized away later and pushed down to data sources.
  *
- * Currently this only handles cases where `fromType` (of `fromExp`) and `toType` are of integral
- * types (i.e., byte, short, int and long). The rule checks to see if the literal `value` is
- * within range `(min, max)`, where `min` and `max` are the minimum and maximum value of
- * `fromType`, respectively. If this is true then it means we can safely cast `value` to `fromType`
- * and thus able to move the cast to the literal side.
+ * Currently this only handles cases where:
+ *   1). `fromType` (of `fromExp`) and `toType` are of integral types (i.e., byte, short, int and
+ *     long)
+ *   2). `fromType` can be safely coerced to `toType` without precision loss (e.g., short to int,
+ *     int to long, but not long to int)
+ *
+ * If the above conditions are satisfied, the rule checks to see if the literal `value` is within
+ * range `(min, max)`, where `min` and `max` are the minimum and maximum value of `fromType`,
+ * respectively. If this is true then it means we can safely cast `value` to `fromType` and thus
+ * able to move the cast to the literal side. That is:
+ *
+ *   `cast(fromExp, toType) op value` ==> `fromExp op cast(value, fromType)`
  *
  * If the `value` is not within range `(min, max)`, the rule breaks the scenario into different
  * cases and try to replace each with simpler constructs.
@@ -47,7 +54,9 @@ import org.apache.spark.sql.types._
  *  - `cast(fromExp, toType) > value` ==> if(isnull(fromExp), null, false)
  *  - `cast(fromExp, toType) >= value` ==> if(isnull(fromExp), null, false)
  *  - `cast(fromExp, toType) === value` ==> if(isnull(fromExp), null, false)
- *  - `cast(fromExp, toType) <=> value` ==> false (only if `fromExp` is deterministic)
+ *  - `cast(fromExp, toType) <=> value` ==> false (if `fromExp` is deterministic)
+ *  - `cast(fromExp, toType) <=> value` ==> fromExp <=> cast(value, fromExp) (if `fromExp` is
+ *       non-deterministic)
  *  - `cast(fromExp, toType) <= value` ==> if(isnull(fromExp), null, true)
  *  - `cast(fromExp, toType) < value` ==> if(isnull(fromExp), null, true)
  *
@@ -95,7 +104,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     case be @ BinaryComparison(
       Cast(fromExp, toType: IntegralType, _), Literal(value, _: IntegralType))
         if canImplicitlyCast(fromExp, toType) =>
-      simplifyIntegral(be, fromExp, toType, value)
+      simplifyIntegralComparison(be, fromExp, toType, value)
 
     case _ => exp
   }
@@ -106,7 +115,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
    * optimizes the expression by moving the cast to the literal side. Otherwise if result is not
    * true, this replaces the input binary comparison `exp` with simpler expressions.
    */
-  private def simplifyIntegral(
+  private def simplifyIntegralComparison(
       exp: BinaryComparison,
       fromExp: Expression,
       toType: IntegralType,
@@ -130,7 +139,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       // make sure the expression is evaluated if it is non-deterministic
       case (_, 1, EqualNullSafe(_, _)) if exp.deterministic =>
         FalseLiteral
-      case (_, 1, _) => exp // impossible but safe guard, same below
+      case (_, 1, _) => exp
 
       case (_, 0, GreaterThan(_, _)) =>
         fromExp.falseIfNotNull
@@ -167,7 +176,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       case (_, _, EqualNullSafe(_, _)) => EqualNullSafe(fromExp, lit)
       case (_, _, LessThan(_, _)) => LessThan(fromExp, lit)
       case (_, _, LessThanOrEqual(_, _)) => LessThanOrEqual(fromExp, lit)
-      case (_, _, _) => exp
+      case _ => exp
     }
   }
 

@@ -115,10 +115,10 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest {
   }
 
   test("unwrap cast should skip when expression is non-deterministic") {
-    assertEquivalent(Cast(First('a, ignoreNulls = true), IntegerType) <=> positiveInt,
-      Cast(First('a, ignoreNulls = true), IntegerType) <=> positiveInt)
-    assertEquivalent(Cast(First('a, ignoreNulls = true), IntegerType) <=> negativeInt,
-      Cast(First('a, ignoreNulls = true), IntegerType) <=> negativeInt)
+    Seq(positiveInt, negativeInt).foreach (v => {
+      val e = Cast(First('a, ignoreNulls = true), IntegerType) <=> v
+      assertEquivalent(e, e)
+    })
   }
 
   test("unwrap casts when literal is null") {
