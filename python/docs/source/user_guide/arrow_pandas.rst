@@ -386,8 +386,8 @@ working with timestamps in ``pandas_udf``\s to get the best performance, see
 Recommended Pandas and PyArrow Versions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For usage with pyspark.sql, the supported versions of Pandas is 0.24.2 and PyArrow is 0.15.1. Higher
-versions may be used, however, compatibility and data correctness can not be guaranteed and should
+For usage with pyspark.sql, the minimum supported versions of Pandas is 0.23.2 and PyArrow is 1.0.0.
+Higher versions may be used, however, compatibility and data correctness can not be guaranteed and should
 be verified by the user.
 
 Compatibility Setting for PyArrow >= 0.15.0 and Spark 2.3.x, 2.4.x
