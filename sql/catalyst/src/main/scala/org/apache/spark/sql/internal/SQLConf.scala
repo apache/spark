@@ -2737,8 +2737,9 @@ object SQLConf {
       .internal()
       .doc("When true, the extra options will be ignored for DataFrameReader.table(). If set it " +
         "to false, which is the default, Spark will check if the extra options have the same " +
-        "key, but the value is different with the table properties. If the check passes, the " +
-        "extra options will be merged. Otherwise, an exception will be thrown.")
+        "key, but the value is different with the table serde properties. If the check passes, " +
+        "the extra options will be merged with the serde properties as the scan options. " +
+        "Otherwise, an exception will be thrown.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
