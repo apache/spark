@@ -157,14 +157,16 @@ case class StreamingSymmetricHashJoinExec(
       " the checkpoint and rerun the query. See SPARK-26154 for more details.")
   }
 
+  private lazy val errorMessageForJoinType =
+    s"${getClass.getSimpleName} should not take $joinType as the JoinType"
+
   private def throwBadJoinTypeException(): Nothing = {
-    throw new IllegalArgumentException(
-      s"${getClass.getSimpleName} should not take $joinType as the JoinType")
+    throw new IllegalArgumentException(errorMessageForJoinType)
   }
 
   require(
     joinType == Inner || joinType == LeftOuter || joinType == RightOuter,
-    s"${getClass.getSimpleName} should not take $joinType as the JoinType")
+    errorMessageForJoinType)
   require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType))
 
   private val storeConf = new StateStoreConf(sqlContext.conf)
