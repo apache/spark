@@ -306,7 +306,10 @@ object SparkBuild extends PomBuild {
         sys.error(s"$failed fatal warnings")
       }
       analysis
-    }
+    },
+    // disable Mima check for all modules,
+    // to be enabled in specific ones that have previous artifacts
+    MimaKeys.mimaFailOnNoPrevious := false
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
