@@ -1422,12 +1422,14 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       val df = spark.read.parquet(path.getAbsolutePath)
       Seq(true, false).foreach { pushEnabled =>
         withSQLConf(
+          SQLConf.OPTIMIZER_INSET_RANGE_CHECK_THRESHOLD.key -> "20",
           SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> pushEnabled.toString) {
-          Seq(1, 5, 10, 11).foreach { count =>
+          Seq(1, 5, 10, 11, 21).foreach { count =>
             val filter = s"a in(${Range(0, count).mkString(",")})"
             assert(df.where(filter).count() === count)
             val actual = stripSparkFilter(df.where(filter)).collect().length
-            if (pushEnabled && count <= conf.parquetFilterPushDownInFilterThreshold) {
+            if (pushEnabled && (count <= conf.parquetFilterPushDownInFilterThreshold ||
+                                count > conf.optimizerInSetRangeCheckThreshold)) {
               assert(actual > 1 && actual < data.length)
             } else {
               assert(actual === data.length)

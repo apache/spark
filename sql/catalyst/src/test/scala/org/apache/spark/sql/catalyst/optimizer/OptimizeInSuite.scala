@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.internal.SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD
+import org.apache.spark.sql.internal.SQLConf.{OPTIMIZER_INSET_CONVERSION_THRESHOLD, OPTIMIZER_INSET_RANGE_CHECK_THRESHOLD}
 import org.apache.spark.sql.types._
 
 class OptimizeInSuite extends PlanTest {
@@ -46,7 +46,7 @@ class OptimizeInSuite extends PlanTest {
     val originalQuery =
       testRelation
         .where(In(UnresolvedAttribute("a"),
-          Seq(Literal(1), Literal(1), Literal(3), Literal(3), Literal(1), Literal(3))))
+          Seq(Literal(1), Literal(1), Literal(2), Literal(2), Literal(1), Literal(2))))
         .where(In(UnresolvedAttribute("b"),
           Seq(UnresolvedAttribute("a"), UnresolvedAttribute("a"),
             Round(UnresolvedAttribute("a"), 0), Round(UnresolvedAttribute("a"), 0),
@@ -56,7 +56,7 @@ class OptimizeInSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(3))))
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2))))
         .where(In(UnresolvedAttribute("b"),
           Seq(UnresolvedAttribute("a"), UnresolvedAttribute("a"),
             Round(UnresolvedAttribute("a"), 0), Round(UnresolvedAttribute("a"), 0),
@@ -69,7 +69,7 @@ class OptimizeInSuite extends PlanTest {
   test("OptimizedIn test: In clause not optimized to InSet when less than 10 items") {
     val originalQuery =
       testRelation
-        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(3))))
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2))))
         .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -79,13 +79,13 @@ class OptimizeInSuite extends PlanTest {
   test("OptimizedIn test: In clause optimized to InSet when more than 10 items") {
     val originalQuery =
       testRelation
-        .where(In(UnresolvedAttribute("a"), (1 to(22, 2)).map(Literal(_))))
+        .where(In(UnresolvedAttribute("a"), (1 to 11).map(Literal(_))))
         .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .where(InSet(UnresolvedAttribute("a"), (1 to(22, 2)).toSet))
+        .where(InSet(UnresolvedAttribute("a"), (1 to 11).toSet))
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -239,33 +239,62 @@ class OptimizeInSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("OptimizedIn test: optimize range compare") {
+  test("OptimizedIn test: optimize for continuous range") {
     val originalQuery = testRelation
       .select('a)
-      .where('a in(4, 1, 2, 3, 3, 5))
+      .where(In('a, (1 to 21).map(Literal(_))))
 
     val optimized = Optimize.execute(originalQuery.analyze)
-
     val expected = testRelation
       .select('a)
-      .where('a >= 1 && 'a <= 5)
+      .where('a >= 1 && 'a <= 21)
       .analyze
 
     comparePlans(optimized, expected)
+
+    // increase the range check threshold
+    withSQLConf(OPTIMIZER_INSET_RANGE_CHECK_THRESHOLD.key -> "30") {
+      val nonOptimized = Optimize.execute(originalQuery.analyze)
+      val answer = testRelation
+        .select('a)
+        .where(InSet('a, (1 to 21).toSet))
+        .analyze
+
+      comparePlans(nonOptimized, answer)
+    }
   }
 
-  test("OptimizedIn test: do not optimize range compare if non-continuous") {
+  test("OptimizedIn test: do not optimize for non-integer") {
+    val tmpRelation = LocalRelation('a.double)
+    val originalQuery = tmpRelation
+      .select('a)
+      .where('a in(1.0, 2.0, 3.0, 4.0))
+
+    withSQLConf(OPTIMIZER_INSET_RANGE_CHECK_THRESHOLD.key -> "3") {
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val expected = tmpRelation
+        .select('a)
+        .where('a in(1.0, 2.0, 3.0, 4.0))
+        .analyze
+
+      comparePlans(optimized, expected)
+    }
+  }
+
+  test("OptimizedIn test: do not optimize for non-continuous range") {
     val originalQuery = testRelation
       .select('a)
       .where('a in(1, 2, 3, 3, 5))
 
-    val optimized = Optimize.execute(originalQuery.analyze)
+    withSQLConf(OPTIMIZER_INSET_RANGE_CHECK_THRESHOLD.key -> "3") {
+      val optimized = Optimize.execute(originalQuery.analyze)
 
-    val expected = testRelation
-      .select('a)
-      .where('a in(1, 2, 3, 5))
-      .analyze
+      val expected = testRelation
+        .select('a)
+        .where('a in(1, 2, 3, 5))
+        .analyze
 
-    comparePlans(optimized, expected)
+      comparePlans(optimized, expected)
+    }
   }
 }

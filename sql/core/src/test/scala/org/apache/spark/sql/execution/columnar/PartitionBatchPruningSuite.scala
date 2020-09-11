@@ -44,6 +44,8 @@ class PartitionBatchPruningSuite extends SharedSparkSession {
     spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING.key, true)
     // Enable in-memory table scan accumulators
     spark.conf.set(SQLConf.IN_MEMORY_TABLE_SCAN_STATISTICS_ENABLED.key, "true")
+    // Disable IN range check optimization
+    spark.conf.set(SQLConf.OPTIMIZER_INSET_RANGE_CHECK_THRESHOLD.key, 31)
   }
 
   override protected def afterAll(): Unit = {

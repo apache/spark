@@ -197,6 +197,14 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val OPTIMIZER_INSET_RANGE_CHECK_THRESHOLD =
+    buildConf("spark.sql.optimizer.inSetRangeCheckThreshold")
+      .internal()
+      .doc("The threshold of set size for continuous range check conversion.")
+      .version("2.0.0")
+      .intConf
+      .createWithDefault(20)
+
   val OPTIMIZER_INSET_CONVERSION_THRESHOLD =
     buildConf("spark.sql.optimizer.inSetConversionThreshold")
       .internal()
@@ -2854,6 +2862,8 @@ class SQLConf extends Serializable with Logging {
   def optimizerExcludedRules: Option[String] = getConf(OPTIMIZER_EXCLUDED_RULES)
 
   def optimizerMaxIterations: Int = getConf(OPTIMIZER_MAX_ITERATIONS)
+
+  def optimizerInSetRangeCheckThreshold: Int = getConf(OPTIMIZER_INSET_RANGE_CHECK_THRESHOLD)
 
   def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
 

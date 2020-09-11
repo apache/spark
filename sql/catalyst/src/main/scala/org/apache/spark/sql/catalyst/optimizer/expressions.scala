@@ -236,33 +236,28 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
  *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
 object OptimizeIn extends Rule[LogicalPlan] {
-  private def isContinousIntegers(nums: Set[Expression]): Boolean = {
-    if (nums.nonEmpty && isInteger(nums.head)) {
+  private def getIntegerBound(nums: Set[Expression]): Option[(Expression, Expression)] = {
+    def getBound(nums: Set[Expression]): (Expression, Expression) = {
+      val values = nums.map(e => e.eval(EmptyRow))
+      val dt = nums.head.dataType
+      val ordering = dt.asInstanceOf[AtomicType].ordering.asInstanceOf[Ordering[Any]]
+      val min = values.min(ordering)
+      val max = values.max(ordering)
+      (Literal(min, dt), Literal(max, dt))
+    }
+
+    def isInteger(v: Expression): Boolean = v.dataType match {
+      case _ : IntegralType => true
+      case _ => false
+    }
+
+    if (nums.nonEmpty && isInteger(nums.head) && nums.forall(_.eval(EmptyRow) != null)) {
       val (min, max) = getBound(nums)
       val minL = min.eval(EmptyRow).asInstanceOf[Number].longValue()
       val maxL = max.eval(EmptyRow).asInstanceOf[Number].longValue()
-       minL + (nums.size - 1) == maxL
+       if (minL + (nums.size - 1) == maxL) Some(min, max) else None
     } else {
-      false
-    }
-  }
-
-  private def isInteger(v: Expression): Boolean =
-    v.dataType.isInstanceOf[ShortType] ||
-      v.dataType.isInstanceOf[IntegerType] ||
-      v.dataType.isInstanceOf[LongType]
-
-  def getBound(nums: Set[Expression]): (Expression, Expression) = {
-    nums.head.dataType match {
-      case ShortType =>
-        val values = nums.map(e => e.eval(EmptyRow).asInstanceOf[Short])
-        (Literal(values.min, ShortType), Literal(values.max, ShortType))
-      case IntegerType =>
-        val values = nums.map(e => e.eval(EmptyRow).asInstanceOf[Integer])
-        (Literal(values.min, IntegerType), Literal(values.max, IntegerType))
-      case LongType =>
-        val values = nums.map(e => e.eval(EmptyRow).asInstanceOf[Long])
-        (Literal(values.min, LongType), Literal(values.max, LongType))
+      None
     }
   }
 
@@ -280,17 +275,21 @@ object OptimizeIn extends Rule[LogicalPlan] {
           && !v.isInstanceOf[CreateNamedStruct]
           && !newList.head.isInstanceOf[CreateNamedStruct]) {
           EqualTo(v, newList.head)
-        } else if (isInteger(v) && isContinousIntegers(newList.toSet)) {
-          val (min, max) = getBound(newList.toSet)
-          And(GreaterThanOrEqual(v, min),
-            LessThanOrEqual(v, max))
-        } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
-          val hSet = newList.map(e => e.eval(EmptyRow))
-          InSet(v, HashSet() ++ hSet)
-        } else if (newList.length < list.length) {
-          expr.copy(list = newList)
-        } else { // newList.length == list.length && newList.length > 1
-          expr
+        } else {
+          // can this be simplified into a range query?
+          val bound = getIntegerBound(newList.toSet)
+          if (newList.length > SQLConf.get.optimizerInSetRangeCheckThreshold && bound.isDefined) {
+            val (min, max) = bound.get
+            And(GreaterThanOrEqual(v, min),
+              LessThanOrEqual(v, max))
+          } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
+            val hSet = newList.map(e => e.eval(EmptyRow))
+            InSet(v, HashSet() ++ hSet)
+          } else if (newList.length < list.length) {
+            expr.copy(list = newList)
+          } else { // newList.length == list.length && newList.length > 1
+            expr
+          }
         }
     }
   }
