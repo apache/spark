@@ -44,7 +44,7 @@ class ConsumerStrategySuite extends SparkFunSuite {
 
   private def adminProps = {
     Map[String, Object](
-      CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> testUtils.brokerAddress,
+      CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> testUtils.brokerAddress
     ).asJava
   }
 
