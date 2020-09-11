@@ -2132,7 +2132,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         val kvs = units.indices.map { i =>
           val u = units(i).getText
           val v = if (values(i).STRING() != null) {
-            string(values(i).STRING())
+            val value = string(values(i).STRING())
+            // SPARK-32840: For invalid cases, e.g. INTERVAL '1 day 2' hour,
+            // INTERVAL 'interval 1' day, we need to check ahead before they are concatenated with
+            // units and become valid ones, e.g. '1 day 2 hour'.
+            // Ideally, we only ensure the value parts don't contain any units here.
+            if (value.exists(Character.isLetter)) {
+              throw new ParseException("Can only use numbers in the interval value part for" +
+                s" multiple unit value pairs interval form, but got invalid value: $value", ctx)
+            }
+            value
           } else {
             values(i).getText
           }

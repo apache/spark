@@ -123,127 +123,6 @@ object AnalysisContext {
   }
 }
 
-object Analyzer {
-
-  /**
-   * Rewrites a given `plan` recursively based on rewrite mappings from old plans to new ones.
-   * This method also updates all the related references in the `plan` accordingly.
-   *
-   * @param plan to rewrite
-   * @param rewritePlanMap has mappings from old plans to new ones for the given `plan`.
-   * @return a rewritten plan and updated references related to a root node of
-   *         the given `plan` for rewriting it.
-   */
-  def rewritePlan(plan: LogicalPlan, rewritePlanMap: Map[LogicalPlan, LogicalPlan])
-    : (LogicalPlan, Seq[(Attribute, Attribute)]) = {
-    if (plan.resolved) {
-      val attrMapping = new mutable.ArrayBuffer[(Attribute, Attribute)]()
-      val newChildren = plan.children.map { child =>
-        // If not, we'd rewrite child plan recursively until we find the
-        // conflict node or reach the leaf node.
-        val (newChild, childAttrMapping) = rewritePlan(child, rewritePlanMap)
-        attrMapping ++= childAttrMapping.filter { case (oldAttr, _) =>
-          // `attrMapping` is not only used to replace the attributes of the current `plan`,
-          // but also to be propagated to the parent plans of the current `plan`. Therefore,
-          // the `oldAttr` must be part of either `plan.references` (so that it can be used to
-          // replace attributes of the current `plan`) or `plan.outputSet` (so that it can be
-          // used by those parent plans).
-          (plan.outputSet ++ plan.references).contains(oldAttr)
-        }
-        newChild
-      }
-
-      val newPlan = if (rewritePlanMap.contains(plan)) {
-        rewritePlanMap(plan).withNewChildren(newChildren)
-      } else {
-        plan.withNewChildren(newChildren)
-      }
-
-      assert(!attrMapping.groupBy(_._1.exprId)
-        .exists(_._2.map(_._2.exprId).distinct.length > 1),
-        "Found duplicate rewrite attributes")
-
-      val attributeRewrites = AttributeMap(attrMapping)
-      // Using attrMapping from the children plans to rewrite their parent node.
-      // Note that we shouldn't rewrite a node using attrMapping from its sibling nodes.
-      val p = newPlan.transformExpressions {
-        case a: Attribute =>
-          updateAttr(a, attributeRewrites)
-        case s: SubqueryExpression =>
-          s.withNewPlan(updateOuterReferencesInSubquery(s.plan, attributeRewrites))
-      }
-      attrMapping ++= plan.output.zip(p.output)
-        .filter { case (a1, a2) => a1.exprId != a2.exprId }
-      p -> attrMapping
-    } else {
-      // Just passes through unresolved nodes
-      plan.mapChildren {
-        rewritePlan(_, rewritePlanMap)._1
-      } -> Nil
-    }
-  }
-
-  private def updateAttr(attr: Attribute, attrMap: AttributeMap[Attribute]): Attribute = {
-    val exprId = attrMap.getOrElse(attr, attr).exprId
-    attr.withExprId(exprId)
-  }
-
-  /**
-   * The outer plan may have old references and the function below updates the
-   * outer references to refer to the new attributes.
-   *
-   * For example (SQL):
-   * {{{
-   *   SELECT * FROM t1
-   *   INTERSECT
-   *   SELECT * FROM t1
-   *   WHERE EXISTS (SELECT 1
-   *                 FROM t2
-   *                 WHERE t1.c1 = t2.c1)
-   * }}}
-   * Plan before resolveReference rule.
-   *    'Intersect
-   *    :- Project [c1#245, c2#246]
-   *    :  +- SubqueryAlias t1
-   *    :     +- Relation[c1#245,c2#246] parquet
-   *    +- 'Project [*]
-   *       +- Filter exists#257 [c1#245]
-   *       :  +- Project [1 AS 1#258]
-   *       :     +- Filter (outer(c1#245) = c1#251)
-   *       :        +- SubqueryAlias t2
-   *       :           +- Relation[c1#251,c2#252] parquet
-   *       +- SubqueryAlias t1
-   *          +- Relation[c1#245,c2#246] parquet
-   * Plan after the resolveReference rule.
-   *    Intersect
-   *    :- Project [c1#245, c2#246]
-   *    :  +- SubqueryAlias t1
-   *    :     +- Relation[c1#245,c2#246] parquet
-   *    +- Project [c1#259, c2#260]
-   *       +- Filter exists#257 [c1#259]
-   *       :  +- Project [1 AS 1#258]
-   *       :     +- Filter (outer(c1#259) = c1#251) => Updated
-   *       :        +- SubqueryAlias t2
-   *       :           +- Relation[c1#251,c2#252] parquet
-   *       +- SubqueryAlias t1
-   *          +- Relation[c1#259,c2#260] parquet  => Outer plan's attributes are rewritten.
-   */
-  private def updateOuterReferencesInSubquery(
-      plan: LogicalPlan,
-      attrMap: AttributeMap[Attribute]): LogicalPlan = {
-    AnalysisHelper.allowInvokingTransformsInAnalyzer {
-      plan transformDown { case currentFragment =>
-        currentFragment transformExpressions {
-          case OuterReference(a: Attribute) =>
-            OuterReference(updateAttr(a, attrMap))
-          case s: SubqueryExpression =>
-            s.withNewPlan(updateOuterReferencesInSubquery(s.plan, attrMap))
-        }
-      }
-    }
-  }
-}
-
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
  * [[UnresolvedRelation]]s into fully typed objects using information in a [[SessionCatalog]].
@@ -1376,7 +1255,14 @@ class Analyzer(
       if (conflictPlans.isEmpty) {
         right
       } else {
-        Analyzer.rewritePlan(right, conflictPlans.toMap)._1
+        val planMapping = conflictPlans.toMap
+        right.transformUpWithNewOutput {
+          case oldPlan =>
+            val newPlanOpt = planMapping.get(oldPlan)
+            newPlanOpt.map { newPlan =>
+              newPlan -> oldPlan.output.zip(newPlan.output)
+            }.getOrElse(oldPlan -> Nil)
+        }
       }
     }
 
