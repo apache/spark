@@ -1091,7 +1091,7 @@ case object EmptyHashedRelation extends HashedRelation {
   override def keyIsUnique: Boolean = true
 
   override def keys(): Iterator[InternalRow] = {
-    throw new UnsupportedOperationException
+    Iterator.empty
   }
 
   override def close(): Unit = {}

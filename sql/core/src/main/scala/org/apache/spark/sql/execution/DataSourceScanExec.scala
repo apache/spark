@@ -177,7 +177,7 @@ case class FileSourceScanExec(
 
   private lazy val needsUnsafeRowConversion: Boolean = {
     if (relation.fileFormat.isInstanceOf[ParquetSource]) {
-      SparkSession.getActiveSession.get.sessionState.conf.parquetVectorizedReaderEnabled
+      sqlContext.conf.parquetVectorizedReaderEnabled
     } else {
       false
     }
@@ -444,9 +444,7 @@ case class FileSourceScanExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files read"),
     "metadataTime" -> SQLMetrics.createTimingMetric(sparkContext, "metadata time"),
-    "filesSize" -> SQLMetrics.createSizeMetric(sparkContext, "size of files read"),
-    "pruningTime" ->
-      SQLMetrics.createTimingMetric(sparkContext, "dynamic partition pruning time")
+    "filesSize" -> SQLMetrics.createSizeMetric(sparkContext, "size of files read")
   ) ++ {
     // Tracking scan time has overhead, we can't afford to do it for each row, and can only do
     // it for each batch.
@@ -457,9 +455,12 @@ case class FileSourceScanExec(
     }
   } ++ {
     if (relation.partitionSchemaOption.isDefined) {
-      Some("numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions read"))
+      Map(
+        "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions read"),
+        "pruningTime" ->
+          SQLMetrics.createTimingMetric(sparkContext, "dynamic partition pruning time"))
     } else {
-      None
+      Map.empty[String, SQLMetric]
     }
   } ++ staticMetrics
 

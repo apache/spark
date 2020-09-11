@@ -158,8 +158,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       .exists(s => s.contains(exec0) && s.contains(exec1)))
     assert(scheduler.getExecutorsAliveOnHost(host1).exists(_.contains(exec2)))
 
-    scheduler.executorDecommission(exec1, ExecutorDecommissionInfo("test", false))
-    scheduler.executorDecommission(exec2, ExecutorDecommissionInfo("test", true))
+    scheduler.executorDecommission(exec1, ExecutorDecommissionInfo("test", None))
+    scheduler.executorDecommission(exec2, ExecutorDecommissionInfo("test", Some(host1)))
 
     assert(scheduler.isExecutorAlive(exec0))
     assert(!Seq(exec1, exec2).exists(scheduler.isExecutorAlive))
@@ -1864,18 +1864,14 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   test("scheduler should keep the decommission state where host was decommissioned") {
     val clock = new ManualClock(10000L)
     val scheduler = setupSchedulerForDecommissionTests(clock, 2)
-    val oldTime = clock.getTimeMillis()
-    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("0", false))
-    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1", true))
-
-    clock.advance(3000L)
-    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("0 new", false))
-    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1 new", false))
+    val decomTime = clock.getTimeMillis()
+    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("0", None))
+    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1", Some("host1")))
 
     assert(scheduler.getExecutorDecommissionState("executor0")
-      === Some(ExecutorDecommissionState(oldTime, false)))
+      === Some(ExecutorDecommissionState(decomTime, None)))
     assert(scheduler.getExecutorDecommissionState("executor1")
-      === Some(ExecutorDecommissionState(oldTime, true)))
+      === Some(ExecutorDecommissionState(decomTime, Some("host1"))))
     assert(scheduler.getExecutorDecommissionState("executor2").isEmpty)
   }
 
@@ -1890,7 +1886,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(scheduler.getExecutorDecommissionState("executor0").isEmpty)
     scheduler.executorLost("executor0", ExecutorExited(0, false, "normal"))
     assert(scheduler.getExecutorDecommissionState("executor0").isEmpty)
-    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("", false))
+    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("", None))
     assert(scheduler.getExecutorDecommissionState("executor0").isEmpty)
 
     // 0th task just died above
@@ -1903,30 +1899,16 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(scheduler.getExecutorDecommissionState("executor1").isEmpty)
 
     // executor 1 is decommissioned before loosing
-    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("", false))
+    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("", None))
     assert(scheduler.getExecutorDecommissionState("executor1").isDefined)
     clock.advance(2000)
 
     // executor1 is eventually lost
     scheduler.executorLost("executor1", ExecutorExited(0, false, "normal"))
-    assert(scheduler.decommissionedExecutorsRemoved.size === 1)
     assert(scheduler.executorsPendingDecommission.isEmpty)
     // So now both the tasks are no longer running
     assert(manager.copiesRunning.take(2) === Array(0, 0))
     clock.advance(2000)
-
-    // Decommission state should hang around a bit after removal ...
-    assert(scheduler.getExecutorDecommissionState("executor1").isDefined)
-    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("", false))
-    clock.advance(2000)
-    assert(scheduler.decommissionedExecutorsRemoved.size === 1)
-    assert(scheduler.getExecutorDecommissionState("executor1").isDefined)
-
-    // The default timeout for expiry is 300k milliseconds (5 minutes) which completes now,
-    // and the executor1's decommission state should finally be purged.
-    clock.advance(300000)
-    assert(scheduler.getExecutorDecommissionState("executor1").isEmpty)
-    assert(scheduler.decommissionedExecutorsRemoved.isEmpty)
 
     // Now give it some resources and both tasks should be rerun
     val taskDescriptions = taskScheduler.resourceOffers(IndexedSeq(

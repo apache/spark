@@ -15,20 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.status.api.v1.sql
+package org.apache.spark.sql.internal.connector
 
-import javax.ws.rs.{Path, PathParam}
+import org.apache.spark.sql.connector.write.WriteBuilder
 
-import org.apache.spark.status.api.v1.ApiRequestContext
-
-@Path("/v1")
-private[v1] class ApiSqlRootResource extends ApiRequestContext {
-
-  @Path("applications/{appId}/sql")
-  def sqlList(@PathParam("appId") appId: String): Class[SqlResource] = classOf[SqlResource]
-
-  @Path("applications/{appId}/{attemptId}/sql")
-  def sqlList(
-      @PathParam("appId") appId: String,
-      @PathParam("attemptId") attemptId: String): Class[SqlResource] = classOf[SqlResource]
+/**
+ * An internal `WriteBuilder` mixin to support UPDATE streaming output mode. Now there's no good
+ * way to pass the `keys` to upsert or replace (delete -> append), we do the same with append writes
+ * and let end users to deal with.
+ *
+ * This approach may be still valid for streaming writers which can't do the upsert or replace.
+ * We can promote the API to the official API along with the new API for upsert/replace.
+ */
+// TODO: design an official API for streaming output mode UPDATE which can do the upsert
+//  (or delete -> append).
+trait SupportsStreamingUpdateAsAppend extends WriteBuilder {
 }

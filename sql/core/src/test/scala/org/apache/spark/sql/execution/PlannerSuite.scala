@@ -994,6 +994,13 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       }
     }
   }
+
+  testWithWholeStageCodegenOnAndOff("Change the number of partitions to zero " +
+    "when a range is empty") { _ =>
+    val range = spark.range(1, 1, 1, 1000)
+    val numPartitions = range.rdd.getNumPartitions
+    assert(numPartitions == 0)
+  }
 }
 
 // Used for unit-testing EnsureRequirements
