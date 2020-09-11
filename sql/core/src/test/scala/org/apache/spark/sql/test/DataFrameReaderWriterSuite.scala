@@ -1135,17 +1135,21 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   }
 
   test("SPARK-32516: 'path' or 'paths' option cannot coexist with load()'s path parameters") {
-    def verifyLoadFails(f: () => DataFrame): Unit = {
-      val e = intercept[AnalysisException](f())
+    def verifyLoadFails(f: => DataFrame): Unit = {
+      val e = intercept[AnalysisException](f)
       assert(e.getMessage.contains(
         "Either remove the path option if it's the same as the path parameter"))
     }
 
     val path = "/tmp"
-    verifyLoadFails(() => spark.read.option("path", path).parquet(path))
-    verifyLoadFails(() => spark.read.option("path", path).format("parquet").load(path))
-    verifyLoadFails(() => spark.read.option("paths", path).parquet(path))
-    verifyLoadFails(() => spark.read.option("paths", path).format("parquet").load(path))
+    verifyLoadFails(spark.read.option("path", path).parquet(path))
+    verifyLoadFails(spark.read.option("path", path).parquet(""))
+    verifyLoadFails(spark.read.option("path", path).format("parquet").load(path))
+    verifyLoadFails(spark.read.option("path", path).format("parquet").load(""))
+    verifyLoadFails(spark.read.option("paths", path).parquet(path))
+    verifyLoadFails(spark.read.option("paths", path).parquet(""))
+    verifyLoadFails(spark.read.option("paths", path).format("parquet").load(path))
+    verifyLoadFails(spark.read.option("paths", path).format("parquet").load(""))
   }
 
   test("SPARK-32516: legacy path option behavior in load()") {
@@ -1182,29 +1186,8 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     val df = Seq(1).toDF
     val path = "tmp"
     verifyLoadFails(df.write.option("path", path).parquet(path))
+    verifyLoadFails(df.write.option("path", path).parquet(""))
     verifyLoadFails(df.write.option("path", path).format("parquet").save(path))
-  }
-
-  test("SPARK-32810: CSV and JSON data sources should be able to read files with " +
-    "escaped glob metacharacter in the paths") {
-    def escape(str: String): String = {
-      """(\[|\]|\{|\})""".r.replaceAllIn(str, """\\$1""")
-    }
-
-    withTempDir { dir =>
-      val basePath = dir.getCanonicalPath
-
-      // test CSV writer / reader without specifying schema
-      val csvTableName = "[abc]"
-      spark.range(3).coalesce(1).write.csv(s"$basePath/$csvTableName")
-      val csvDf = spark.read.csv(s"$basePath/${escape(csvTableName)}")
-      assert(csvDf.collect sameElements Array(Row("0"), Row("1"), Row("2")))
-
-      // test JSON writer / reader without specifying schema
-      val jsonTableName = "{def}"
-      spark.range(3).coalesce(1).write.json(s"$basePath/$jsonTableName")
-      val jsonDf = spark.read.json(s"$basePath/${escape(jsonTableName)}")
-      assert(jsonDf.collect sameElements Array(Row(0), Row(1), Row(2)))
-    }
+    verifyLoadFails(df.write.option("path", path).format("parquet").save(""))
   }
 }

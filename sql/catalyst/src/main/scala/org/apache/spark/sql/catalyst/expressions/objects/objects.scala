@@ -842,7 +842,7 @@ case class MapObjects private(
     val array = ctx.freshName("array")
     val determineCollectionType = inputData.dataType match {
       case ObjectType(cls) if cls == classOf[Object] =>
-        val seqClass = classOf[Seq[_]].getName
+        val seqClass = classOf[scala.collection.Seq[_]].getName
         s"""
           $seqClass $seq = null;
           $elementJavaType[] $array = null;
@@ -1755,7 +1755,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
         Seq(classOf[java.math.BigDecimal], classOf[scala.math.BigDecimal], classOf[Decimal])
           .map(cls => s"$obj instanceof ${cls.getName}").mkString(" || ")
       case _: ArrayType =>
-        s"$obj.getClass().isArray() || $obj instanceof ${classOf[Seq[_]].getName}"
+        s"$obj.getClass().isArray() || $obj instanceof ${classOf[scala.collection.Seq[_]].getName}"
       case _ =>
         s"$obj instanceof ${CodeGenerator.boxedType(dataType)}"
     }

@@ -995,13 +995,20 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
   }
 
+  testWithWholeStageCodegenOnAndOff("Change the number of partitions to zero " +
+    "when a range is empty") { _ =>
+    val range = spark.range(1, 1, 1, 1000)
+    val numPartitions = range.rdd.getNumPartitions
+    assert(numPartitions == 0)
+  }
+
   test("Remove redundant shuffle exchange") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "200") {
         val ordered = spark.range(1, 100).repartitionByRange(10, $"id".desc).orderBy($"id")
         val orderedPlan = ordered.queryExecution.executedPlan
         val exchangesInOrdered =
-          orderedPlan.collect { case s: ShuffleExchangeExec => s}
+          orderedPlan.collect { case s: ShuffleExchangeExec => s }
         assert(exchangesInOrdered.size == 1)
 
         val partitioning = exchangesInOrdered.head.outputPartitioning
@@ -1013,7 +1020,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         val joined = left.join(right, left("value") + 1 === right("value"))
         val joinedPlan = joined.queryExecution.executedPlan
         val exchangesInJoined =
-          joinedPlan.collect { case s: ShuffleExchangeExec => s}
+          joinedPlan.collect { case s: ShuffleExchangeExec => s }
         assert(exchangesInJoined.size == 2)
 
         val leftPartitioning = exchangesInJoined(0).outputPartitioning

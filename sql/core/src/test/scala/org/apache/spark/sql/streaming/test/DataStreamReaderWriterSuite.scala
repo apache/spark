@@ -170,18 +170,51 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
     LastOptions.clear()
 
-    df.writeStream
+    val query = df.writeStream
       .format("org.apache.spark.sql.streaming.test")
-      .option("opt1", "1")
-      .options(Map("opt2" -> "2"))
+      .option("opt1", "5")
+      .options(Map("opt2" -> "4"))
       .options(map)
       .option("checkpointLocation", newMetadataDir)
       .start()
-      .stop()
 
-    assert(LastOptions.parameters("opt1") == "1")
-    assert(LastOptions.parameters("opt2") == "2")
+    assert(LastOptions.parameters("opt1") == "5")
+    assert(LastOptions.parameters("opt2") == "4")
     assert(LastOptions.parameters("opt3") == "3")
+    assert(LastOptions.parameters.contains("checkpointLocation"))
+
+    query.stop()
+  }
+
+  test("SPARK-32832: later option should override earlier options for load()") {
+    spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .option("paTh", "1")
+      .option("PATH", "2")
+      .option("Path", "3")
+      .option("patH", "4")
+      .option("path", "5")
+      .load()
+    assert(LastOptions.parameters("path") == "5")
+  }
+
+  test("SPARK-32832: later option should override earlier options for start()") {
+    val ds = spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .load()
+    assert(LastOptions.parameters.isEmpty)
+
+    val query = ds.writeStream
+      .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", newMetadataDir)
+      .option("paTh", "1")
+      .option("PATH", "2")
+      .option("Path", "3")
+      .option("patH", "4")
+      .option("path", "5")
+      .start()
+    assert(LastOptions.parameters("path") == "5")
+    query.stop()
   }
 
   test("partitioning") {
@@ -712,7 +745,9 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     }
 
     verifyLoadFails(spark.readStream.option("path", "tmp1").parquet("tmp2"))
+    verifyLoadFails(spark.readStream.option("path", "tmp1").parquet(""))
     verifyLoadFails(spark.readStream.option("path", "tmp1").format("parquet").load("tmp2"))
+    verifyLoadFails(spark.readStream.option("path", "tmp1").format("parquet").load(""))
 
     withClue("SPARK-32516: legacy behavior") {
       withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
@@ -731,24 +766,35 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .format("org.apache.spark.sql.streaming.test")
       .load("tmp1")
 
-    val e = intercept[AnalysisException] {
+    def verifyStartFails(f: => StreamingQuery): Unit = {
+      val e = intercept[AnalysisException](f)
+      assert(e.getMessage.contains(
+        "Either remove the path option, or call start() without the parameter"))
+    }
+
+    verifyStartFails(
       df.writeStream
         .format("org.apache.spark.sql.streaming.test")
         .option("path", "tmp2")
-        .start("tmp3")
-        .stop()
-    }
-    assert(e.getMessage.contains(
-      "Either remove the path option, or call start() without the parameter"))
+        .start("tmp3"))
+    verifyStartFails(
+      df.writeStream
+        .format("org.apache.spark.sql.streaming.test")
+        .option("path", "tmp2")
+        .start(""))
 
     withClue("SPARK-32516: legacy behavior") {
-      withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
-        spark.readStream
-          .format("org.apache.spark.sql.streaming.test")
-          .option("path", "tmp4")
-          .load("tmp5")
-        // The legacy behavior overwrites the path option.
-        assert(LastOptions.parameters("path") == "tmp5")
+      withTempDir { checkpointPath =>
+        withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true",
+          SQLConf.CHECKPOINT_LOCATION.key -> checkpointPath.getAbsolutePath) {
+          val query = df.writeStream
+            .format("org.apache.spark.sql.streaming.test")
+            .option("path", "tmp4")
+            .start("tmp5")
+          // The legacy behavior overwrites the path option.
+          assert(LastOptions.parameters("path") == "tmp5")
+          query.stop()
+        }
       }
     }
   }
