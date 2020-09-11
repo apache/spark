@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -85,16 +86,11 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         childrenIndexes.map(children).filterNot(_.isInstanceOf[ShuffleExchangeExec])
           .map(_.outputPartitioning.numPartitions)
       val expectedChildrenNumPartitions = if (nonShuffleChildrenNumPartitions.nonEmpty) {
-        if (nonShuffleChildrenNumPartitions.length == childrenIndexes.length) {
-          // Here we pick the max number of partitions among these non-shuffle children.
-          nonShuffleChildrenNumPartitions.max
-        } else {
-          // Here we pick the max number of partitions among these non-shuffle children as the
-          // expected number of shuffle partitions. However, if it's smaller than
-          // `conf.numShufflePartitions`, we pick `conf.numShufflePartitions` as the
-          // expected number of shuffle partitions.
-          math.max(nonShuffleChildrenNumPartitions.max, conf.defaultNumShufflePartitions)
-        }
+        // Here we pick the max number of partitions among these non-shuffle children as the
+        // expected number of shuffle partitions. However, if it's smaller than
+        // `conf.numShufflePartitions`, we pick `conf.numShufflePartitions` as the
+        // expected number of shuffle partitions.
+        math.max(nonShuffleChildrenNumPartitions.max, conf.defaultNumShufflePartitions)
       } else {
         childrenNumPartitions.max
       }
@@ -124,7 +120,18 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       if (SortOrder.orderingSatisfies(child.outputOrdering, requiredOrdering)) {
         child
       } else {
-        SortExec(requiredOrdering, global = false, child = child)
+        operator match {
+          case WindowExec(_, partitionSpec, orderSpec, _)
+            if (partitionSpec != null && partitionSpec.size != 0) =>
+            WindowSortExec(
+              partitionSpec,
+              orderSpec,
+              requiredOrdering,
+              global = false,
+              child = child)
+          case _ =>
+            SortExec(requiredOrdering, global = false, child = child)
+        }
       }
     }
 
@@ -167,7 +174,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
           return (leftKeys, rightKeys)
       }
     }
-    (leftKeysBuffer.toSeq, rightKeysBuffer.toSeq)
+    (leftKeysBuffer, rightKeysBuffer)
   }
 
   private def reorderJoinKeys(

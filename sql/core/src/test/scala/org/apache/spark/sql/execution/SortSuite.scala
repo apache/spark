@@ -119,4 +119,38 @@ class SortSuite extends SparkPlanTest with SharedSparkSession {
       )
     }
   }
+
+  test("sorting in windows") {
+    val input = Seq(
+      ("Hello", 4, 2.0),
+      ("World", 1, 1.0),
+      ("Hello", 8, 3.0)
+    )
+
+    checkAnswer(
+      input.toDF("a", "b", "c"),
+      (child: SparkPlan) => WindowSortExec(
+        'a :: Nil,
+        'b.asc :: Nil,
+        'a.asc :: 'b.asc :: Nil,
+        global = true, child = child),
+      input.sortBy(t => (t._1, t._2)).map(Row.fromTuple),
+      sortAnswers = false)
+  }
+
+  test("sorting many windows") {
+    val input1: Seq[(Int, Int, Double)] = (1 to 300).toList.map(x => (x, 1, 300.0))
+    val input2: Seq[(Int, Int, Double)] = (301 to 600).toList.map(x => (x, 301, 600.0)).reverse
+    val input: Seq[(Int, Int, Double)] = input1 ++ input2
+
+    checkAnswer(
+      input.toDF("a", "b", "c"),
+      (child: SparkPlan) => WindowSortExec(
+        'a :: Nil,
+        'b.asc :: Nil,
+        'a.asc :: 'b.asc :: Nil,
+        global = true, child = child),
+      input.sortBy(t => (t._2, t._1)).map(Row.fromTuple),
+      sortAnswers = false)
+  }
 }

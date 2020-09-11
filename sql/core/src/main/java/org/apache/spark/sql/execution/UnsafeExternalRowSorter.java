@@ -37,7 +37,7 @@ import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterIterator;
 
-public final class UnsafeExternalRowSorter {
+public final class UnsafeExternalRowSorter extends UnsafeExternalRowSorterBase {
 
   /**
    * If positive, forces records to be spilled to disk at the given frequency (measured in numbers
@@ -127,12 +127,14 @@ public final class UnsafeExternalRowSorter {
   /**
    * Forces spills to occur every `frequency` records. Only for use in tests.
    */
+  @Override
   @VisibleForTesting
   void setTestSpillFrequency(int frequency) {
     assert frequency > 0 : "Frequency must be positive";
     testSpillFrequency = frequency;
   }
 
+  @Override
   public void insertRow(UnsafeRow row) throws IOException {
     final PrefixComputer.Prefix prefix = prefixComputer.computePrefix(row);
     sorter.insertRecord(
@@ -148,9 +150,18 @@ public final class UnsafeExternalRowSorter {
     }
   }
 
+  public long getNumRowsInserted() {
+    return numRowsInserted;
+  }
+
+  public void spill() throws IOException {
+    sorter.spill();
+  }
+
   /**
    * Return the peak memory used so far, in bytes.
    */
+  @Override
   public long getPeakMemoryUsage() {
     return sorter.getPeakMemoryUsedBytes();
   }
@@ -158,19 +169,37 @@ public final class UnsafeExternalRowSorter {
   /**
    * @return the total amount of time spent sorting data (in-memory only).
    */
+  @Override
   public long getSortTimeNanos() {
     return sorter.getSortTimeNanos();
   }
 
+  @Override
   public void cleanupResources() {
     isReleased = true;
     sorter.cleanupResources();
   }
 
+  @Override
+  public Iterator<InternalRow> getIterator() throws IOException {
+    return getIterator(false);
+  }
+
+  @Override
   public Iterator<InternalRow> sort() throws IOException {
+    return getIterator(true);
+  }
+
+  Iterator<InternalRow> getIterator(boolean sorted) throws IOException {
     try {
-      final UnsafeSorterIterator sortedIterator = sorter.getSortedIterator();
-      if (!sortedIterator.hasNext()) {
+      final UnsafeSorterIterator unsafeSorterIterator;
+      if (sorted) {
+        unsafeSorterIterator = sorter.getSortedIterator();
+      } else {
+        unsafeSorterIterator = sorter.getIterator(0);
+      }
+
+      if (!unsafeSorterIterator.hasNext()) {
         // Since we won't ever call next() on an empty iterator, we need to clean up resources
         // here in order to prevent memory leaks.
         cleanupResources();
@@ -183,17 +212,17 @@ public final class UnsafeExternalRowSorter {
         @Override
         public boolean advanceNext() {
           try {
-            if (!isReleased && sortedIterator.hasNext()) {
-              sortedIterator.loadNext();
+            if (!isReleased && unsafeSorterIterator.hasNext()) {
+              unsafeSorterIterator.loadNext();
               row.pointTo(
-                  sortedIterator.getBaseObject(),
-                  sortedIterator.getBaseOffset(),
-                  sortedIterator.getRecordLength());
+                  unsafeSorterIterator.getBaseObject(),
+                  unsafeSorterIterator.getBaseOffset(),
+                  unsafeSorterIterator.getRecordLength());
               // Here is the initial bug fix in SPARK-9364: the bug fix of use-after-free bug
               // when returning the last row from an iterator. For example, in
               // [[GroupedIterator]], we still use the last row after traversing the iterator
               // in `fetchNextGroupIterator`
-              if (!sortedIterator.hasNext()) {
+              if (!unsafeSorterIterator.hasNext()) {
                 row = row.copy(); // so that we don't have dangling pointers to freed page
                 cleanupResources();
               }
@@ -221,6 +250,7 @@ public final class UnsafeExternalRowSorter {
     }
   }
 
+  @Override
   public Iterator<InternalRow> sort(Iterator<UnsafeRow> inputIterator) throws IOException {
     while (inputIterator.hasNext()) {
       insertRow(inputIterator.next());

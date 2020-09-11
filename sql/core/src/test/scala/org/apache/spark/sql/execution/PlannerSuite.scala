@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAg
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -658,6 +659,58 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       shouldHaveSort = true)
   }
 
+  private def assertWindowSortRequirementsAreSatisfied(
+      childPlan: SparkPlan,
+      partitionSpec: Seq[Expression],
+      orderSpec: Seq[SortOrder],
+      shouldHaveWindowSort: Boolean): Unit = {
+    val exprId: ExprId = NamedExpression.newExprId
+    val attribute1 =
+      AttributeReference(
+        name = "col1",
+        dataType = LongType,
+        nullable = false
+      ) (exprId = exprId,
+        qualifier = Seq("col1_qualifier")
+      )
+    val inputPlan = WindowExec(
+      Seq(attribute1),
+      partitionSpec,
+      orderSpec,
+      child = childPlan)
+
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (shouldHaveWindowSort) {
+      if (outputPlan.collect { case s: WindowSortExec => true }.isEmpty) {
+        fail(s"WindowSortExec should have been added:\n$outputPlan")
+      }
+    } else {
+      if (outputPlan.collect { case s: WindowSortExec => true }.nonEmpty) {
+        fail(s"No WindowSortExec should have been added:\n$outputPlan")
+      }
+    }
+  }
+
+  test("EnsureRequirements for WindowSortExec operator under WindowExec") {
+    val clustering = Literal(1) :: Nil
+    val distribution = ClusteredDistribution(clustering)
+    val dummyChildPlan = DummySparkPlan(
+      children = Seq(
+        DummySparkPlan(outputPartitioning = HashPartitioning(clustering, 1)),
+        DummySparkPlan(outputPartitioning = HashPartitioning(clustering, 2))
+      ),
+      requiredChildDistribution = Seq(distribution, distribution),
+      requiredChildOrdering = Seq(Seq.empty, Seq.empty)
+    )
+
+    assertWindowSortRequirementsAreSatisfied(
+      dummyChildPlan,
+      Seq(exprA),
+      Seq(orderingB, orderingC),
+      true)
+  }
+
   test("SPARK-24242: RangeExec should have correct output ordering and partitioning") {
     val df = spark.range(10)
     val rangeExec = df.queryExecution.executedPlan.collect {
@@ -974,32 +1027,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         }
       }
     }
-  }
-
-  test("aliases in the sort aggregate expressions should not introduce extra sort") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
-        val t1 = spark.range(10).selectExpr("floor(id/4) as k1")
-        val t2 = spark.range(20).selectExpr("floor(id/4) as k2")
-
-        val agg1 = t1.groupBy("k1").agg(collect_list("k1")).withColumnRenamed("k1", "k3")
-        val agg2 = t2.groupBy("k2").agg(collect_list("k2"))
-
-        val planned = agg1.join(agg2, $"k3" === $"k2").queryExecution.executedPlan
-        assert(planned.collect { case s: SortAggregateExec => s }.nonEmpty)
-
-        // We expect two SortExec nodes on each side of join.
-        val sorts = planned.collect { case s: SortExec => s }
-        assert(sorts.size == 4)
-      }
-    }
-  }
-
-  testWithWholeStageCodegenOnAndOff("Change the number of partitions to zero " +
-    "when a range is empty") { _ =>
-    val range = spark.range(1, 1, 1, 1000)
-    val numPartitions = range.rdd.getNumPartitions
-    assert(numPartitions == 0)
   }
 }
 

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
 
 /**
  * Performs (external) sorting.
@@ -38,6 +39,140 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  *                           spill every `frequency` records.
  */
 case class SortExec(
+    sortOrder: Seq[SortOrder],
+    global: Boolean,
+    child: SparkPlan,
+    testSpillFrequency: Int = 0)
+  extends SortExecBase(
+    sortOrder,
+    global,
+    child,
+    testSpillFrequency) {
+
+  /**
+   * This method gets invoked only once for each SortExec instance to initialize an
+   * UnsafeExternalRowSorter, both `plan.execute` and code generation are using it.
+   * In the code generation code path, we need to call this function outside the class so we
+   * should make it public.
+   */
+  def createSorter(): UnsafeExternalRowSorter = {
+    rowSorter = UnsafeExternalRowSorter.create(
+      schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
+
+    if (testSpillFrequency > 0) {
+      rowSorter.setTestSpillFrequency(testSpillFrequency)
+    }
+    rowSorter.asInstanceOf[UnsafeExternalRowSorter]
+  }
+
+  override protected def doProduce(ctx: CodegenContext): String = {
+    doProduce(ctx, classOf[UnsafeExternalRowSorter].getName)
+  }
+}
+
+case class WindowSortExec(
+    partitionSpec: Seq[Expression],
+    sortOrderInWindow: Seq[SortOrder],
+    sortOrder: Seq[SortOrder],
+    global: Boolean,
+    child: SparkPlan,
+    testSpillFrequency: Int = 0,
+    rankLimit: Int = -1)
+  extends SortExecBase(
+    sortOrder,
+    global,
+    child,
+    testSpillFrequency) {
+
+  /**
+   * This method gets invoked only once for each WindowSortExec instance to initialize an
+   * UnsafeExternalRowWindowSorter, both `plan.execute` and code generation are using it.
+   * In the code generation code path, we need to call this function outside the class so we
+   * should make it public.
+   */
+  def createSorter(): UnsafeExternalRowWindowSorter = {
+    val partitionSpecGrouping = UnsafeProjection.create(partitionSpec, output)
+
+    // The schema of partition key
+    val partitionKeySchema: Seq[Attribute] = output.filter(x => {
+      x.references.subsetOf(AttributeSet(partitionSpec))
+    })
+
+    // Generate the ordering of partition key
+    val orderingOfPartitionKey = RowOrdering.create(
+      sortOrder diff sortOrderInWindow,
+      partitionKeySchema)
+
+    // No prefix comparator
+    val nullPrefixComparator = new PrefixComparator {
+      override def compare(prefix1: Long, prefix2: Long): Int = 0
+    }
+
+    if (sortOrderInWindow == null || sortOrderInWindow.size == 0) {
+      rowSorter = UnsafeExternalRowWindowSorter.create(
+        schema,
+        partitionSpecGrouping,
+        orderingOfPartitionKey,
+        null,
+        ordering,
+        nullPrefixComparator,
+        prefixComparator,
+        createPrefixComputer(null),
+        prefixComputer,
+        false,
+        canUseRadixSort,
+        pageSize,
+        -1)
+    } else {
+      // Generate the bound expression in a window
+      val boundSortExpressionInWindow = BindReferences.bindReference(
+        sortOrderInWindow.head, output)
+
+      // Generate the ordering based on sort order in a window
+      val orderingInWindow = RowOrdering.create(sortOrderInWindow, output)
+
+      // The expression for sort prefix in a window
+      val sortPrefixExprInWindow = SortPrefix(boundSortExpressionInWindow)
+
+      // The comparator for comparing prefix in a window
+      val prefixComparatorInWindow = SortPrefixUtils.getPrefixComparator(
+        boundSortExpressionInWindow)
+
+      // The computer for prefix in a window
+      val prefixComputerInWindow = createPrefixComputer(sortPrefixExprInWindow)
+
+      // Can use radix sort or not in a window
+      val canUseRadixSortInWindow = enableRadixSort && sortOrderInWindow.length == 1 &&
+        SortPrefixUtils.canSortFullyWithPrefix(boundSortExpressionInWindow)
+
+      rowSorter = UnsafeExternalRowWindowSorter.create(
+        schema,
+        partitionSpecGrouping,
+        orderingOfPartitionKey,
+        orderingInWindow,
+        ordering,
+        prefixComparatorInWindow,
+        prefixComparator,
+        prefixComputerInWindow,
+        prefixComputer,
+        canUseRadixSortInWindow,
+        canUseRadixSort,
+        pageSize,
+        -1)
+    }
+
+    if (testSpillFrequency > 0) {
+      rowSorter.setTestSpillFrequency(testSpillFrequency)
+    }
+    rowSorter.asInstanceOf[UnsafeExternalRowWindowSorter]
+  }
+
+  override protected def doProduce(ctx: CodegenContext): String = {
+    doProduce(ctx, classOf[UnsafeExternalRowWindowSorter].getName)
+  }
+}
+
+abstract class SortExecBase(
     sortOrder: Seq[SortOrder],
     global: Boolean,
     child: SparkPlan,
@@ -55,53 +190,58 @@ case class SortExec(
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
-  private val enableRadixSort = sqlContext.conf.enableRadixSort
+  val enableRadixSort = sqlContext.conf.enableRadixSort
+
+  lazy val boundSortExpression = BindReferences.bindReference(sortOrder.head, output)
+  lazy val ordering = RowOrdering.create(sortOrder, output)
+  lazy val sortPrefixExpr = SortPrefix(boundSortExpression)
+
+  // The comparator for comparing prefix
+  lazy val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
+
+  // The generator for prefix
+  lazy val prefixComputer = createPrefixComputer(sortPrefixExpr)
+
+  lazy val canUseRadixSort = enableRadixSort && sortOrder.length == 1 &&
+    SortPrefixUtils.canSortFullyWithPrefix(boundSortExpression)
+
+  lazy val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
 
   override lazy val metrics = Map(
     "sortTime" -> SQLMetrics.createTimingMetric(sparkContext, "sort time"),
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
-  private[sql] var rowSorter: UnsafeExternalRowSorter = _
+  private[sql] var rowSorter: UnsafeExternalRowSorterBase = _
 
-  /**
-   * This method gets invoked only once for each SortExec instance to initialize an
-   * UnsafeExternalRowSorter, both `plan.execute` and code generation are using it.
-   * In the code generation code path, we need to call this function outside the class so we
-   * should make it public.
-   */
-  def createSorter(): UnsafeExternalRowSorter = {
-    val ordering = RowOrdering.create(sortOrder, output)
+  def createSorter(): UnsafeExternalRowSorterBase
 
-    // The comparator for comparing prefix
-    val boundSortExpression = BindReferences.bindReference(sortOrder.head, output)
-    val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
+  protected def createPrefixComputer(prefixExpr: SortPrefix):
+      UnsafeExternalRowSorter.PrefixComputer = {
+    if (prefixExpr != null) {
+      val prefixProjection = UnsafeProjection.create(Seq(prefixExpr))
 
-    val canUseRadixSort = enableRadixSort && sortOrder.length == 1 &&
-      SortPrefixUtils.canSortFullyWithPrefix(boundSortExpression)
-
-    // The generator for prefix
-    val prefixExpr = SortPrefix(boundSortExpression)
-    val prefixProjection = UnsafeProjection.create(Seq(prefixExpr))
-    val prefixComputer = new UnsafeExternalRowSorter.PrefixComputer {
-      private val result = new UnsafeExternalRowSorter.PrefixComputer.Prefix
-      override def computePrefix(row: InternalRow):
-          UnsafeExternalRowSorter.PrefixComputer.Prefix = {
-        val prefix = prefixProjection.apply(row)
-        result.isNull = prefix.isNullAt(0)
-        result.value = if (result.isNull) prefixExpr.nullValue else prefix.getLong(0)
-        result
+      new UnsafeExternalRowSorter.PrefixComputer {
+        override def computePrefix(row: InternalRow):
+            UnsafeExternalRowSorter.PrefixComputer.Prefix = {
+          val prefix = prefixProjection.apply(row)
+          new UnsafeExternalRowSorter.PrefixComputer.Prefix {
+            isNull = prefix.isNullAt(0)
+            value = if (prefix.isNullAt(0)) prefixExpr.nullValue else prefix.getLong(0)
+          }
+        }
+      }
+    } else {
+      new UnsafeExternalRowSorter.PrefixComputer {
+        override def computePrefix(row: InternalRow):
+            UnsafeExternalRowSorter.PrefixComputer.Prefix = {
+          new UnsafeExternalRowSorter.PrefixComputer.Prefix {
+            isNull = false
+            value = 0
+          }
+        }
       }
     }
-
-    val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
-    rowSorter = UnsafeExternalRowSorter.create(
-      schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
-
-    if (testSpillFrequency > 0) {
-      rowSorter.setTestSpillFrequency(testSpillFrequency)
-    }
-    rowSorter
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -135,7 +275,7 @@ case class SortExec(
   // Name of sorter variable used in codegen.
   private var sorterVariable: String = _
 
-  override protected def doProduce(ctx: CodegenContext): String = {
+  protected def doProduce(ctx: CodegenContext, sortClassType: String): String = {
     val needToSort =
       ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "needToSort", v => s"$v = true;")
 
@@ -143,7 +283,7 @@ case class SortExec(
     // the iterator to return sorted rows.
     val thisPlan = ctx.addReferenceObj("plan", this)
     // Inline mutable state since not many Sort operations in a task
-    sorterVariable = ctx.addMutableState(classOf[UnsafeExternalRowSorter].getName, "sorter",
+    sorterVariable = ctx.addMutableState(sortClassType, "sorter",
       v => s"$v = $thisPlan.createSorter();", forceInline = true)
     val metrics = ctx.addMutableState(classOf[TaskMetrics].getName, "metrics",
       v => s"$v = org.apache.spark.TaskContext.get().taskMetrics();", forceInline = true)
@@ -191,7 +331,8 @@ case class SortExec(
   }
 
   /**
-   * In SortExec, we overwrites cleanupResources to close UnsafeExternalRowSorter.
+   * In SortExec, we overwrite cleanupResources to close UnsafeExternalRowSorter.
+   * In WindowSortExec, we overwrite cleanupResources to close UnsafeExternalRowWindowSorter.
    */
   override protected[sql] def cleanupResources(): Unit = {
     if (rowSorter != null) {
