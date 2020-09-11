@@ -798,4 +798,19 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       }
     }
   }
+
+  test("SPARK-32853: consecutive load/start calls should be allowed") {
+    val dfr = spark.readStream.format(classOf[DefaultSource].getName)
+    var df = dfr.load("1")
+    df = dfr.load("2")
+    withTempDir { checkpointPath =>
+      val dfw = df.writeStream
+        .option("checkpointLocation", checkpointPath.getCanonicalPath)
+        .format(classOf[DefaultSource].getName)
+      var query = dfw.start("1")
+      query.stop()
+      query = dfw.start("2")
+      query.stop()
+    }
+  }
 }
