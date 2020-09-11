@@ -59,6 +59,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     checkDecimal(Decimal(1000000000000000000L, 20, 2), "10000000000000000.00", 20, 2)
     checkDecimal(Decimal(Long.MaxValue), Long.MaxValue.toString, 20, 0)
     checkDecimal(Decimal(Long.MinValue), Long.MinValue.toString, 20, 0)
+    checkDecimal(Decimal("6.0790316E+25569151"), "0", 25569152, 0)
     intercept[ArithmeticException](Decimal(170L, 2, 1))
     intercept[ArithmeticException](Decimal(170L, 2, 0))
     intercept[ArithmeticException](Decimal(BigDecimal("10.030"), 2, 1))
