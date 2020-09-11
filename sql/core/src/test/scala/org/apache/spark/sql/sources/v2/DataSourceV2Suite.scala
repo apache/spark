@@ -395,25 +395,25 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-32708: same columns with different ExprIds should be equal after canonicalization ") {
-    def getV2ScanExecs(query: DataFrame): Seq[DataSourceV2ScanExec] = {
+    def getV2ScanExec(query: DataFrame): DataSourceV2ScanExec = {
       query.queryExecution.executedPlan.collect {
         case d: DataSourceV2ScanExec => d
-      }
+      }.head
     }
 
     val df1 = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
-    val q1 = df1.select(($"i" + 1).as("k"), ($"i" - 1).as("j")).filter('i > 5)
+    val q1 = df1.select('i).filter('i > 6)
     val df2 = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
-    val q2 = df2.select(($"i" + 1).as("k"), ($"i" - 1).as("j")).filter('i > 5)
+    val q2 = df2.select('i).filter('i > 6)
+    val scan1 = getV2ScanExec(q1)
+    val scan2 = getV2ScanExec(q2)
+    assert(scan1.sameResult(scan2))
+    assert(scan1.doCanonicalize().equals(scan2.doCanonicalize()))
 
-    val scans1 = getV2ScanExecs(q1.join(q2, "j"))
-    assert(scans1(0).sameResult(scans1(1)))
-    assert(scans1(0).doCanonicalize().equals(scans1(1).doCanonicalize()))
-
-    val q3 = df2.select(($"i" + 1).as("k"), ($"i" - 1).as("j")).filter('i > 6)
-    val scans2 = getV2ScanExecs(q1.join(q3, "j"))
-    assert(!scans2(0).sameResult(scans2(1)))
-    assert(!scans2(0).doCanonicalize().equals(scans2(1).doCanonicalize()))
+    val q3 = df2.select('i).filter('i > 5)
+    val scan3 = getV2ScanExec(q3)
+    assert(!scan1.sameResult(scan3))
+    assert(!scan1.doCanonicalize().equals(scan3.doCanonicalize()))
   }
 
 }
