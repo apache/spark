@@ -241,8 +241,14 @@ object LogicalPlanIntegrity {
   def checkIfSameExprIdNotReused(plan: LogicalPlan): Boolean = {
     plan.collect { case p if p.resolved =>
       p.expressions.forall {
-        case a: Alias => !a.references.contains(a.toAttribute)
-        case _ => true
+        case a: Alias =>
+          // Even if a plan is resolved, `a.references` can return unresolved references,
+          // e.g., in `Grouping`/`GroupingID`, so we need to filter out them and
+          // check if the same `exprId` in `Alias` does not exist
+          // among reference `exprId`s.
+          !a.references.filter(_.resolved).map(_.exprId).exists(_ == a.exprId)
+        case _ =>
+          true
       }
     }.forall(identity)
   }

@@ -43,6 +43,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
   // Currently we check after the execution of each rule if a plan:
   // - is still resolved
   // - only host special expressions in supported operators
+  // - has globally-unique attribute IDs
   override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
     !Utils.isTesting || (plan.resolved &&
       plan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&

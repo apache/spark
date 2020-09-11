@@ -43,7 +43,7 @@ class LogicalPlanIntegritySuite extends PlanTest {
     val Seq(a, b) = t.output
     assert(checkIfSameExprIdNotReused(t.select(Alias(a + 1, "a")())))
     assert(!checkIfSameExprIdNotReused(t.select(Alias(a + 1, "a")(exprId = a.exprId))))
-    assert(!checkIfSameExprIdNotReused(t.select(Alias(a + 1, "a")(exprId = b.exprId))))
+    assert(checkIfSameExprIdNotReused(t.select(Alias(a + 1, "a")(exprId = b.exprId))))
     assert(checkIfSameExprIdNotReused(t.select(Alias(a + b, "ab")())))
     assert(!checkIfSameExprIdNotReused(t.select(Alias(a + b, "ab")(exprId = a.exprId))))
     assert(!checkIfSameExprIdNotReused(t.select(Alias(a + b, "ab")(exprId = b.exprId))))
