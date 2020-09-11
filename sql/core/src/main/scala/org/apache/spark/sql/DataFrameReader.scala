@@ -28,10 +28,11 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
-import org.apache.spark.sql.catalyst.util.FailureSafeParser
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailureSafeParser}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsCatalogOptions, SupportsRead}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -40,6 +41,7 @@ import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
@@ -94,6 +96,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Adds an input option for the underlying data source.
    *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
+   *
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
@@ -121,12 +126,18 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Adds an input option for the underlying data source.
    *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
+   *
    * @since 2.0.0
    */
   def option(key: String, value: Boolean): DataFrameReader = option(key, value.toString)
 
   /**
    * Adds an input option for the underlying data source.
+   *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
    *
    * @since 2.0.0
    */
@@ -135,12 +146,18 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Adds an input option for the underlying data source.
    *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
+   *
    * @since 2.0.0
    */
   def option(key: String, value: Double): DataFrameReader = option(key, value.toString)
 
   /**
    * (Scala-specific) Adds input options for the underlying data source.
+   *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
    *
    * You can set the following option(s):
    * <ul>
@@ -168,6 +185,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
    * Adds input options for the underlying data source.
+   *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
    *
    * You can set the following option(s):
    * <ul>
@@ -211,7 +231,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def load(path: String): DataFrame = {
     // force invocation of `load(...varargs...)`
-    option("path", path).load(Seq.empty: _*)
+    if (sparkSession.sessionState.conf.legacyPathOptionBehavior) {
+      option("path", path).load(Seq.empty: _*)
+    } else {
+      load(Seq(path): _*)
+    }
   }
 
   /**
@@ -227,18 +251,34 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
+    val legacyPathOptionBehavior = sparkSession.sessionState.conf.legacyPathOptionBehavior
+    if (!legacyPathOptionBehavior &&
+        (extraOptions.contains("path") || extraOptions.contains("paths")) && paths.nonEmpty) {
+      throw new AnalysisException("There is a 'path' or 'paths' option set and load() is called " +
+        "with path parameters. Either remove the path option if it's the same as the path " +
+        "parameter, or add it to the load() parameter if you do want to read multiple paths. " +
+        s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
+    }
+
+    val updatedPaths = if (!legacyPathOptionBehavior && paths.length == 1) {
+      option("path", paths.head)
+      Seq.empty
+    } else {
+      paths
+    }
+
     DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).map { provider =>
       val catalogManager = sparkSession.sessionState.catalogManager
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         source = provider, conf = sparkSession.sessionState.conf)
-      val pathsOption = if (paths.isEmpty) {
+      val pathsOption = if (updatedPaths.isEmpty) {
         None
       } else {
         val objectMapper = new ObjectMapper()
-        Some("paths" -> objectMapper.writeValueAsString(paths.toArray))
+        Some("paths" -> objectMapper.writeValueAsString(updatedPaths.toArray))
       }
 
-      val finalOptions = sessionOptions ++ extraOptions.toMap ++ pathsOption
+      val finalOptions = sessionOptions ++ extraOptions.originalMap ++ pathsOption
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
       val (table, catalog, ident) = provider match {
         case _: SupportsCatalogOptions if userSpecifiedSchema.nonEmpty =>
@@ -263,9 +303,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
             sparkSession,
             DataSourceV2Relation.create(table, catalog, ident, dsOptions))
 
-        case _ => loadV1Source(paths: _*)
+        case _ => loadV1Source(updatedPaths: _*)
       }
-    }.getOrElse(loadV1Source(paths: _*))
+    }.getOrElse(loadV1Source(updatedPaths: _*))
   }
 
   private def loadV1Source(paths: String*) = {
@@ -276,7 +316,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         paths = paths,
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
-        options = extraOptions.toMap).resolveRelation())
+        options = extraOptions.originalMap).resolveRelation())
   }
 
   /**
@@ -290,7 +330,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     // properties should override settings in extraOptions.
     this.extraOptions ++= properties.asScala
     // explicit url and dbtable should override all
-    this.extraOptions += (JDBCOptions.JDBC_URL -> url, JDBCOptions.JDBC_TABLE_NAME -> table)
+    this.extraOptions ++= Seq(JDBCOptions.JDBC_URL -> url, JDBCOptions.JDBC_TABLE_NAME -> table)
     format("jdbc").load()
   }
 
@@ -361,7 +401,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       connectionProperties: Properties): DataFrame = {
     assertNoSpecifiedSchema("jdbc")
     // connectionProperties should override settings in extraOptions.
-    val params = extraOptions.toMap ++ connectionProperties.asScala.toMap
+    val params = extraOptions ++ connectionProperties.asScala
     val options = new JDBCOptions(url, table, params)
     val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
       JDBCPartition(part, i) : Partition
@@ -451,6 +491,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * It does not change the behavior of partition discovery.</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
+   * <li>`allowNonNumericNumbers` (default `true`): allows JSON parser to recognize set of
+   * "Not-a-Number" (NaN) tokens as legal floating number values:
+   *   <ul>
+   *     <li>`+INF` for positive infinity, as well as alias of `+Infinity` and `Infinity`.
+   *     <li>`-INF` for negative infinity), alias `-Infinity`.
+   *     <li>`NaN` for other not-a-numbers, like result of division by zero.
+   *   </ul>
+   * </li>
    * </ul>
    *
    * @since 2.0.0
@@ -776,7 +824,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def table(tableName: String): DataFrame = {
     assertNoSpecifiedSchema("table")
-    sparkSession.table(tableName)
+    val multipartIdentifier =
+      sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    Dataset.ofRows(sparkSession, UnresolvedRelation(multipartIdentifier,
+      new CaseInsensitiveStringMap(extraOptions.toMap.asJava)))
   }
 
   /**
@@ -879,6 +930,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   private var userSpecifiedSchema: Option[StructType] = None
 
-  private val extraOptions = new scala.collection.mutable.HashMap[String, String]
+  private var extraOptions = CaseInsensitiveMap[String](Map.empty)
 
 }

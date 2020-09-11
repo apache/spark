@@ -30,7 +30,7 @@ import org.apache.avro.Schema.Type._
 import org.apache.avro.generic._
 import org.apache.avro.util.Utf8
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
@@ -42,15 +42,18 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * A deserializer to deserialize data in avro format to data in catalyst format.
  */
-class AvroDeserializer(
+private[sql] class AvroDeserializer(
     rootAvroType: Schema,
     rootCatalystType: DataType,
-    datetimeRebaseMode: LegacyBehaviorPolicy.Value) {
+    datetimeRebaseMode: LegacyBehaviorPolicy.Value,
+    filters: StructFilters) {
 
   def this(rootAvroType: Schema, rootCatalystType: DataType) {
-    this(rootAvroType, rootCatalystType,
-      LegacyBehaviorPolicy.withName(
-        SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ)))
+    this(
+      rootAvroType,
+      rootCatalystType,
+      LegacyBehaviorPolicy.withName(SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ)),
+      new NoopFilters)
   }
 
   private lazy val decimalConversions = new DecimalConversion()
@@ -61,19 +64,20 @@ class AvroDeserializer(
   private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
     datetimeRebaseMode, "Avro")
 
-  private val converter: Any => Any = rootCatalystType match {
+  private val converter: Any => Option[Any] = rootCatalystType match {
     // A shortcut for empty schema.
     case st: StructType if st.isEmpty =>
-      (data: Any) => InternalRow.empty
+      (data: Any) => Some(InternalRow.empty)
 
     case st: StructType =>
       val resultRow = new SpecificInternalRow(st.map(_.dataType))
       val fieldUpdater = new RowUpdater(resultRow)
-      val writer = getRecordWriter(rootAvroType, st, Nil)
+      val applyFilters = filters.skipRow(resultRow, _)
+      val writer = getRecordWriter(rootAvroType, st, Nil, applyFilters)
       (data: Any) => {
         val record = data.asInstanceOf[GenericRecord]
-        writer(fieldUpdater, record)
-        resultRow
+        val skipRow = writer(fieldUpdater, record)
+        if (skipRow) None else Some(resultRow)
       }
 
     case _ =>
@@ -82,11 +86,11 @@ class AvroDeserializer(
       val writer = newWriter(rootAvroType, rootCatalystType, Nil)
       (data: Any) => {
         writer(fieldUpdater, 0, data)
-        tmpRow.get(0, rootCatalystType)
+        Some(tmpRow.get(0, rootCatalystType))
       }
   }
 
-  def deserialize(data: Any): Any = converter(data)
+  def deserialize(data: Any): Option[Any] = converter(data)
 
   /**
    * Creates a writer to write avro values to Catalyst values at the given ordinal with the given
@@ -178,7 +182,9 @@ class AvroDeserializer(
         updater.setDecimal(ordinal, decimal)
 
       case (RECORD, st: StructType) =>
-        val writeRecord = getRecordWriter(avroType, st, path)
+        // Avro datasource doesn't accept filters with nested attributes. See SPARK-32328.
+        // We can always return `false` from `applyFilters` for nested records.
+        val writeRecord = getRecordWriter(avroType, st, path, applyFilters = _ => false)
         (updater, ordinal, value) =>
           val row = new SpecificInternalRow(st)
           writeRecord(new RowUpdater(row), value.asInstanceOf[GenericRecord])
@@ -315,7 +321,8 @@ class AvroDeserializer(
   private def getRecordWriter(
       avroType: Schema,
       sqlType: StructType,
-      path: List[String]): (CatalystDataUpdater, GenericRecord) => Unit = {
+      path: List[String],
+      applyFilters: Int => Boolean): (CatalystDataUpdater, GenericRecord) => Boolean = {
     val validFieldIndexes = ArrayBuffer.empty[Int]
     val fieldWriters = ArrayBuffer.empty[(CatalystDataUpdater, Any) => Unit]
 
@@ -350,10 +357,13 @@ class AvroDeserializer(
 
     (fieldUpdater, record) => {
       var i = 0
-      while (i < validFieldIndexes.length) {
+      var skipRow = false
+      while (i < validFieldIndexes.length && !skipRow) {
         fieldWriters(i)(fieldUpdater, record.get(validFieldIndexes(i)))
+        skipRow = applyFilters(i)
         i += 1
       }
+      skipRow
     }
   }
 

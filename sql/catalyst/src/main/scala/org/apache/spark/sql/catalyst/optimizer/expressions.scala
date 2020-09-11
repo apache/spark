@@ -463,6 +463,10 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case If(Literal(null, _), _, falseValue) => falseValue
       case If(cond, trueValue, falseValue)
         if cond.deterministic && trueValue.semanticEquals(falseValue) => trueValue
+      case If(cond, l @ Literal(null, _), FalseLiteral) if !cond.nullable => And(cond, l)
+      case If(cond, l @ Literal(null, _), TrueLiteral) if !cond.nullable => Or(Not(cond), l)
+      case If(cond, FalseLiteral, l @ Literal(null, _)) if !cond.nullable => And(Not(cond), l)
+      case If(cond, TrueLiteral, l @ Literal(null, _)) if !cond.nullable => Or(cond, l)
 
       case e @ CaseWhen(branches, elseValue) if branches.exists(x => falseOrNullLiteral(x._1)) =>
         // If there are branches that are always false, remove them.
@@ -677,7 +681,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
   }
 
   /**
-   * Whitelist of all [[UnaryNode]]s for which allow foldable propagation.
+   * List of all [[UnaryNode]]s which allow foldable propagation.
    */
   private def canPropagateFoldables(u: UnaryNode): Boolean = u match {
     case _: Project => true
@@ -765,7 +769,7 @@ object CombineConcats extends Rule[LogicalPlan] {
           flattened += child
       }
     }
-    Concat(flattened)
+    Concat(flattened.toSeq)
   }
 
   private def hasNestedConcats(concat: Concat): Boolean = concat.children.exists {

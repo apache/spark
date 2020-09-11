@@ -90,7 +90,6 @@ private class DummyTaskScheduler extends TaskScheduler {
   override def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit = {}
   override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}
   override def defaultParallelism(): Int = 2
-  override def executorDecommission(executorId: String): Unit = {}
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
   override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
   override def applicationAttemptId(): Option[String] = None
@@ -99,4 +98,9 @@ private class DummyTaskScheduler extends TaskScheduler {
       accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
       blockManagerId: BlockManagerId,
       executorMetrics: Map[(Int, Int), ExecutorMetrics]): Boolean = true
+  override def executorDecommission(
+    executorId: String,
+    decommissionInfo: ExecutorDecommissionInfo): Unit = {}
+  override def getExecutorDecommissionState(
+    executorId: String): Option[ExecutorDecommissionState] = None
 }

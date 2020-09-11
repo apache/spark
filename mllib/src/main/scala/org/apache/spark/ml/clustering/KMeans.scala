@@ -32,7 +32,6 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
@@ -86,6 +85,9 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   /** @group expertGetParam */
   @Since("1.5.0")
   def getInitSteps: Int = $(initSteps)
+
+  setDefault(k -> 2, maxIter -> 20, initMode -> MLlibKMeans.K_MEANS_PARALLEL, initSteps -> 2,
+    tol -> 1e-4, distanceMeasure -> DistanceMeasure.EUCLIDEAN)
 
   /**
    * Validates and transforms the input schema.
@@ -271,14 +273,6 @@ class KMeans @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
   extends Estimator[KMeansModel] with KMeansParams with DefaultParamsWritable {
 
-  setDefault(
-    k -> 2,
-    maxIter -> 20,
-    initMode -> MLlibKMeans.K_MEANS_PARALLEL,
-    initSteps -> 2,
-    tol -> 1e-4,
-    distanceMeasure -> DistanceMeasure.EUCLIDEAN)
-
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeans = defaultCopy(extra)
 
@@ -335,22 +329,6 @@ class KMeans @Since("1.5.0") (
   override def fit(dataset: Dataset[_]): KMeansModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
 
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
-    } else {
-      lit(1.0)
-    }
-
-    val instances: RDD[(OldVector, Double)] = dataset
-      .select(DatasetUtils.columnToVector(dataset, getFeaturesCol), w).rdd.map {
-      case Row(point: Vector, weight: Double) => (OldVectors.fromML(point), weight)
-    }
-
-    if (handlePersistence) {
-      instances.persist(StorageLevel.MEMORY_AND_DISK)
-    }
-
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, featuresCol, predictionCol, k, initMode, initSteps, distanceMeasure,
@@ -363,8 +341,19 @@ class KMeans @Since("1.5.0") (
       .setSeed($(seed))
       .setEpsilon($(tol))
       .setDistanceMeasure($(distanceMeasure))
-    val parentModel = algo.runWithWeight(instances, Option(instr))
+
+    val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
+      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
+    } else {
+      lit(1.0)
+    }
+    val instances = dataset.select(DatasetUtils.columnToVector(dataset, getFeaturesCol), w)
+      .rdd.map { case Row(point: Vector, weight: Double) => (OldVectors.fromML(point), weight) }
+
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+    val parentModel = algo.runWithWeight(instances, handlePersistence, Some(instr))
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
+
     val summary = new KMeansSummary(
       model.transform(dataset),
       $(predictionCol),
@@ -375,9 +364,6 @@ class KMeans @Since("1.5.0") (
 
     model.setSummary(Some(summary))
     instr.logNamedValue("clusterSizes", summary.clusterSizes)
-    if (handlePersistence) {
-      instances.unpersist()
-    }
     model
   }
 

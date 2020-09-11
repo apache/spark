@@ -686,6 +686,23 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     }
   }
 
+  test("Query Intervals in VIEWs through thrift server") {
+    val viewName1 = "view_interval_1"
+    val viewName2 = "view_interval_2"
+    val ddl1 = s"CREATE GLOBAL TEMP VIEW $viewName1 AS SELECT INTERVAL 1 DAY AS i"
+    val ddl2 = s"CREATE TEMP VIEW $viewName2 as select * from global_temp.$viewName1"
+    withJdbcStatement(viewName1, viewName2) { statement =>
+      statement.executeQuery(ddl1)
+      statement.executeQuery(ddl2)
+      val rs = statement.executeQuery(s"SELECT v1.i as a, v2.i as b FROM global_temp.$viewName1" +
+        s" v1 join $viewName2 v2 on date_part('DAY', v1.i) = date_part('DAY', v2.i)")
+      while (rs.next()) {
+        assert(rs.getString("a") === "1 days")
+        assert(rs.getString("b") === "1 days")
+      }
+    }
+  }
+
   test("ThriftCLIService FetchResults FETCH_FIRST, FETCH_NEXT, FETCH_PRIOR") {
     def checkResult(rows: RowSet, start: Long, end: Long): Unit = {
       assert(rows.getStartOffset() == start)

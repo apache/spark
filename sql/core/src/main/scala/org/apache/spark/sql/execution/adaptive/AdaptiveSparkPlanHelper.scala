@@ -65,7 +65,7 @@ trait AdaptiveSparkPlanHelper {
   def mapPlans[A](p: SparkPlan)(f: SparkPlan => A): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     foreach(p)(ret += f(_))
-    ret
+    ret.toSeq
   }
 
   /**
@@ -75,7 +75,7 @@ trait AdaptiveSparkPlanHelper {
   def flatMap[A](p: SparkPlan)(f: SparkPlan => TraversableOnce[A]): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     foreach(p)(ret ++= f(_))
-    ret
+    ret.toSeq
   }
 
   /**
@@ -86,7 +86,7 @@ trait AdaptiveSparkPlanHelper {
     val ret = new collection.mutable.ArrayBuffer[B]()
     val lifted = pf.lift
     foreach(p)(node => lifted(node).foreach(ret.+=))
-    ret
+    ret.toSeq
   }
 
   /**

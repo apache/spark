@@ -18,7 +18,7 @@
 import unittest
 
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
-from pyspark.sql.types import *
+from pyspark.sql.types import DoubleType, StructType, StructField, LongType
 from pyspark.sql.utils import ParseException, PythonException
 from pyspark.rdd import PythonEvalType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
@@ -241,7 +241,7 @@ class PandasUDFTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_udf import *
+    from pyspark.sql.tests.test_pandas_udf import *  # noqa: F401
 
     try:
         import xmlrunner

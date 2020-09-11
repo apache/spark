@@ -528,6 +528,71 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
     }
   }
 
+  test("SPARK-32019: Add spark.sql.files.minPartitionNum config") {
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "1") {
+      val table =
+        createTable(files = Seq(
+          "file1" -> 1,
+          "file2" -> 1,
+          "file3" -> 1
+        ))
+      assert(table.rdd.partitions.length == 1)
+    }
+
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "10") {
+      val table =
+        createTable(files = Seq(
+          "file1" -> 1,
+          "file2" -> 1,
+          "file3" -> 1
+        ))
+      assert(table.rdd.partitions.length == 3)
+    }
+
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "16") {
+      val partitions = (1 to 100).map(i => s"file$i" -> 128 * 1024 * 1024)
+      val table = createTable(files = partitions)
+      // partition is limited by filesMaxPartitionBytes(128MB)
+      assert(table.rdd.partitions.length == 100)
+    }
+
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "32") {
+      val partitions = (1 to 800).map(i => s"file$i" -> 4 * 1024 * 1024)
+      val table = createTable(files = partitions)
+      assert(table.rdd.partitions.length == 50)
+    }
+  }
+
+  test("SPARK-32352: Partially push down support data filter if it mixed in partition filters") {
+    val table =
+      createTable(
+        files = Seq(
+          "p1=1/file1" -> 10,
+          "p1=2/file2" -> 10,
+          "p1=3/file3" -> 10,
+          "p1=4/file4" -> 10))
+
+    checkScan(table.where("(c1 = 1) OR (c1 = 2)")) { partitions =>
+      assert(partitions.size == 1, "when checking partitions")
+    }
+    checkDataFilters(Set(Or(EqualTo("c1", 1), EqualTo("c1", 2))))
+
+    checkScan(table.where("(p1 = 1 AND c1 = 1) OR (p1 = 2 and c1 = 2)")) { partitions =>
+      assert(partitions.size == 1, "when checking partitions")
+    }
+    checkDataFilters(Set(Or(EqualTo("c1", 1), EqualTo("c1", 2))))
+
+    checkScan(table.where("(p1 = '1' AND c1 = 2) OR (c1 = 1 OR p1 = '2')")) { partitions =>
+      assert(partitions.size == 1, "when checking partitions")
+    }
+    checkDataFilters(Set.empty)
+
+    checkScan(table.where("p1 = '1' OR (p1 = '2' AND c1 = 1)")) { partitions =>
+      assert(partitions.size == 1, "when checking partitions")
+    }
+    checkDataFilters(Set.empty)
+  }
+
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =

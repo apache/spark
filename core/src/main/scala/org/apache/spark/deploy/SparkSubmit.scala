@@ -28,7 +28,7 @@ import java.util.jar.JarInputStream
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.util.{Failure, Properties, Success, Try}
+import scala.util.{Properties, Try}
 
 import org.apache.commons.io.FilenameUtils
 import org.apache.commons.lang3.StringUtils
@@ -820,7 +820,7 @@ private[spark] class SparkSubmit extends Logging {
     }
     sparkConf.set(SUBMIT_PYTHON_FILES, formattedPyFiles.split(",").toSeq)
 
-    (childArgs, childClasspath, sparkConf, childMainClass)
+    (childArgs.toSeq, childClasspath.toSeq, sparkConf, childMainClass)
   }
 
   private def renameResourcesToLocalFS(resources: String, localResources: String): String = {
@@ -1347,6 +1347,13 @@ private[spark] object SparkSubmitUtils {
       ""
     } else {
       val sysOut = System.out
+      // Default configuration name for ivy
+      val ivyConfName = "default"
+
+      // A Module descriptor must be specified. Entries are dummy strings
+      val md = getModuleDescriptor
+
+      md.setDefaultConf(ivyConfName)
       try {
         // To prevent ivy from logging to system out
         System.setOut(printStream)
@@ -1374,14 +1381,6 @@ private[spark] object SparkSubmitUtils {
           resolveOptions.setDownload(true)
         }
 
-        // Default configuration name for ivy
-        val ivyConfName = "default"
-
-        // A Module descriptor must be specified. Entries are dummy strings
-        val md = getModuleDescriptor
-
-        md.setDefaultConf(ivyConfName)
-
         // Add exclusion rules for Spark and Scala Library
         addExclusionRules(ivySettings, ivyConfName, md)
         // add all supplied maven artifacts as dependencies
@@ -1399,12 +1398,10 @@ private[spark] object SparkSubmitUtils {
           packagesDirectory.getAbsolutePath + File.separator +
             "[organization]_[artifact]-[revision](-[classifier]).[ext]",
           retrieveOptions.setConfs(Array(ivyConfName)))
-        val paths = resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
-        val mdId = md.getModuleRevisionId
-        clearIvyResolutionFiles(mdId, ivySettings, ivyConfName)
-        paths
+        resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
       } finally {
         System.setOut(sysOut)
+        clearIvyResolutionFiles(md.getModuleRevisionId, ivySettings, ivyConfName)
       }
     }
   }

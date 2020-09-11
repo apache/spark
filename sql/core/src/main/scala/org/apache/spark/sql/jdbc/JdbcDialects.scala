@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Timestamp}
+import java.sql.{Connection, Date, SQLFeatureNotSupportedException, Timestamp}
+
+import scala.collection.mutable.ArrayBuilder
 
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.connector.catalog.TableChange._
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -180,6 +185,55 @@ abstract class JdbcDialect extends Serializable {
    * None: The behavior of TRUNCATE TABLE is unknown (default).
    */
   def isCascadingTruncateTable(): Option[Boolean] = None
+
+  /**
+   * Rename an existing table.
+   *
+   * @param oldTable The existing table.
+   * @param newTable New name of the table.
+   * @return The SQL statement to use for renaming the table.
+   */
+  def renameTable(oldTable: String, newTable: String): String = {
+    s"ALTER TABLE $oldTable RENAME TO $newTable"
+  }
+
+  /**
+   * Alter an existing table.
+   * TODO (SPARK-32523): Override this method in the dialects that have different syntax.
+   *
+   * @param tableName The name of the table to be altered.
+   * @param changes Changes to apply to the table.
+   * @return The SQL statements to use for altering the table.
+   */
+  def alterTable(tableName: String, changes: Seq[TableChange]): Array[String] = {
+    val updateClause = ArrayBuilder.make[String]
+    for (change <- changes) {
+      change match {
+        case add: AddColumn if add.fieldNames.length == 1 =>
+          val dataType = JdbcUtils.getJdbcType(add.dataType(), this).databaseTypeDefinition
+          val name = add.fieldNames
+          updateClause += s"ALTER TABLE $tableName ADD COLUMN ${name(0)} $dataType"
+        case rename: RenameColumn if rename.fieldNames.length == 1 =>
+          val name = rename.fieldNames
+          updateClause += s"ALTER TABLE $tableName RENAME COLUMN ${name(0)} TO ${rename.newName}"
+        case delete: DeleteColumn if delete.fieldNames.length == 1 =>
+          val name = delete.fieldNames
+          updateClause += s"ALTER TABLE $tableName DROP COLUMN ${name(0)}"
+        case updateColumnType: UpdateColumnType if updateColumnType.fieldNames.length == 1 =>
+          val name = updateColumnType.fieldNames
+          val dataType = JdbcUtils.getJdbcType(updateColumnType.newDataType(), this)
+            .databaseTypeDefinition
+          updateClause += s"ALTER TABLE $tableName ALTER COLUMN ${name(0)} $dataType"
+        case updateNull: UpdateColumnNullability if updateNull.fieldNames.length == 1 =>
+          val name = updateNull.fieldNames
+          val nullable = if (updateNull.nullable()) "NULL" else "NOT NULL"
+          updateClause += s"ALTER TABLE $tableName ALTER COLUMN ${name(0)} SET $nullable"
+        case _ =>
+          throw new SQLFeatureNotSupportedException(s"Unsupported TableChange $change")
+      }
+    }
+    updateClause.result()
+  }
 }
 
 /**

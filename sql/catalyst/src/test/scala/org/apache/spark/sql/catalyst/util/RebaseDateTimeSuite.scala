@@ -21,7 +21,7 @@ import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 import java.util.TimeZone
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -78,7 +78,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
     Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
   }
   private def fromJavaDateLegacy(date: Date): Int = {
-    millisToDaysLegacy(date.getTime, defaultTimeZone())
+    millisToDaysLegacy(date.getTime, TimeZone.getTimeZone(ZoneId.systemDefault()))
   }
 
   test("rebase gregorian to/from julian days") {

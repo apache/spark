@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.objects
 import java.lang.reflect.{Method, Modifier}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.Builder
+import scala.collection.mutable.{Builder, IndexedSeq, WrappedArray}
 import scala.reflect.ClassTag
 import scala.util.Try
 
@@ -678,6 +678,13 @@ object MapObjects {
       elementType: DataType,
       elementNullable: Boolean = true,
       customCollectionCls: Option[Class[_]] = None): MapObjects = {
+    // UnresolvedMapObjects does not serialize its 'function' field.
+    // If an array expression or array Encoder is not correctly resolved before
+    // serialization, this exception condition may occur.
+    require(function != null,
+      "MapObjects applied with a null function. " +
+      "Likely cause is failure to resolve an array expression or encoder. " +
+      "(See UnresolvedMapObjects)")
     val loopVar = LambdaVariable("MapObject", elementType, elementNullable)
     MapObjects(loopVar, function(loopVar), inputData, customCollectionCls)
   }
@@ -729,12 +736,12 @@ case class MapObjects private(
   }
 
   private lazy val convertToSeq: Any => Seq[_] = inputDataType match {
-    case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
-      _.asInstanceOf[Seq[_]]
+    case ObjectType(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
+      _.asInstanceOf[scala.collection.Seq[_]].toSeq
     case ObjectType(cls) if cls.isArray =>
       _.asInstanceOf[Array[_]].toSeq
     case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
-      _.asInstanceOf[java.util.List[_]].asScala
+      _.asInstanceOf[java.util.List[_]].asScala.toSeq
     case ObjectType(cls) if cls == classOf[Object] =>
       (inputCollection) => {
         if (inputCollection.getClass.isArray) {
@@ -748,7 +755,10 @@ case class MapObjects private(
   }
 
   private lazy val mapElements: Seq[_] => Any = customCollectionCls match {
-    case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
+    case Some(cls) if classOf[WrappedArray[_]].isAssignableFrom(cls) =>
+      // Scala WrappedArray
+      inputCollection => WrappedArray.make(executeFuncOnCollection(inputCollection).toArray)
+    case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
       // Scala sequence
       executeFuncOnCollection(_).toSeq
     case Some(cls) if classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
@@ -849,7 +859,7 @@ case class MapObjects private(
     // need to take care of Seq and List because they may have O(n) complexity for indexed accessing
     // like `list.get(1)`. Here we use Iterator to traverse Seq and List.
     val (getLength, prepareLoop, getLoopVar) = inputDataType match {
-      case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
+      case ObjectType(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
         val it = ctx.freshName("it")
         (
           s"${genInputData.value}.size()",
@@ -905,6 +915,20 @@ case class MapObjects private(
 
     val (initCollection, addElement, getResult): (String, String => String, String) =
       customCollectionCls match {
+        case Some(cls) if classOf[WrappedArray[_]].isAssignableFrom(cls) =>
+          // Scala WrappedArray
+          val getBuilder = s"${cls.getName}$$.MODULE$$.newBuilder()"
+          val builder = ctx.freshName("collectionBuilder")
+          (
+            s"""
+               ${classOf[Builder[_, _]].getName} $builder = $getBuilder;
+               $builder.sizeHint($dataLength);
+             """,
+            (genValue: String) => s"$builder.$$plus$$eq($genValue);",
+            s"(${cls.getName}) ${classOf[WrappedArray[_]].getName}$$." +
+              s"MODULE$$.make(((${classOf[IndexedSeq[_]].getName})$builder" +
+              s".result()).toArray(scala.reflect.ClassTag$$.MODULE$$.Object()));"
+          )
         case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) ||
           classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
           // Scala sequence or set

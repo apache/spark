@@ -29,6 +29,7 @@ import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.EXECUTOR_ALLOW_SPARK_CONTEXT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalog.Catalog
@@ -372,7 +373,7 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = withActive {
-    Dataset.ofRows(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
+    Dataset.ofRows(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala.toSeq))
   }
 
   /**
@@ -495,7 +496,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
-    createDataset(data.asScala)
+    createDataset(data.asScala.toSeq)
   }
 
   /**
@@ -900,7 +901,13 @@ object SparkSession extends Logging {
      * @since 2.0.0
      */
     def getOrCreate(): SparkSession = synchronized {
-      assertOnDriver()
+      val sparkConf = new SparkConf()
+      options.foreach { case (k, v) => sparkConf.set(k, v) }
+
+      if (!sparkConf.get(EXECUTOR_ALLOW_SPARK_CONTEXT)) {
+        assertOnDriver()
+      }
+
       // Get the session from current thread's active session.
       var session = activeThreadSession.get()
       if ((session ne null) && !session.sparkContext.isStopped) {
@@ -919,9 +926,6 @@ object SparkSession extends Logging {
 
         // No active nor global default session. Create a new one.
         val sparkContext = userSuppliedContext.getOrElse {
-          val sparkConf = new SparkConf()
-          options.foreach { case (k, v) => sparkConf.set(k, v) }
-
           // set a random app name if not given.
           if (!sparkConf.contains("spark.app.name")) {
             sparkConf.setAppName(java.util.UUID.randomUUID().toString)
@@ -1063,6 +1067,7 @@ object SparkSession extends Logging {
       sparkContext.addSparkListener(new SparkListener {
         override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
           defaultSession.set(null)
+          listenerRegistered.set(false)
         }
       })
       listenerRegistered.set(true)
@@ -1086,7 +1091,7 @@ object SparkSession extends Logging {
   }
 
   private def assertOnDriver(): Unit = {
-    if (Utils.isTesting && TaskContext.get != null) {
+    if (TaskContext.get != null) {
       // we're accessing it during task execution, fail.
       throw new IllegalStateException(
         "SparkSession should only be created and accessed on the driver.")

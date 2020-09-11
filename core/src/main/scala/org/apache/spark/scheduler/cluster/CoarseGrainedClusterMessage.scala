@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.scheduler.ExecutorDecommissionInfo
 import org.apache.spark.scheduler.ExecutorLossReason
 import org.apache.spark.util.SerializableBuffer
 
@@ -94,7 +95,8 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RemoveExecutor(executorId: String, reason: ExecutorLossReason)
     extends CoarseGrainedClusterMessage
 
-  case class DecommissionExecutor(executorId: String)  extends CoarseGrainedClusterMessage
+  case class DecommissionExecutor(executorId: String, decommissionInfo: ExecutorDecommissionInfo)
+    extends CoarseGrainedClusterMessage
 
   case class RemoveWorker(workerId: String, host: String, message: String)
     extends CoarseGrainedClusterMessage
@@ -132,4 +134,9 @@ private[spark] object CoarseGrainedClusterMessages {
   // Used internally by executors to shut themselves down.
   case object Shutdown extends CoarseGrainedClusterMessage
 
+  // The message to check if `CoarseGrainedSchedulerBackend` thinks the executor is alive or not.
+  case class IsExecutorAlive(executorId: String) extends CoarseGrainedClusterMessage
+
+  // Used to ask an executor to decommission itself. (Can be an internal message)
+  case object DecommissionSelf extends CoarseGrainedClusterMessage
 }

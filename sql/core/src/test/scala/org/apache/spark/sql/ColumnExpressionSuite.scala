@@ -20,11 +20,9 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 import java.util.Locale
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
-import org.scalatest.Matchers._
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
 import org.apache.spark.sql.execution.ProjectExec
@@ -922,5 +920,621 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   test("SPARK-31563: sql of InSet for UTF8String collection") {
     val inSet = InSet(Literal("a"), Set("a", "b").map(UTF8String.fromString))
     assert(inSet.sql === "('a' IN ('a', 'b'))")
+  }
+
+  def checkAnswerAndSchema(
+      df: => DataFrame,
+      expectedAnswer: Seq[Row],
+      expectedSchema: StructType): Unit = {
+
+    checkAnswer(df, expectedAnswer)
+    assert(df.schema == expectedSchema)
+  }
+
+  private lazy val structType = StructType(Seq(
+    StructField("a", IntegerType, nullable = false),
+    StructField("b", IntegerType, nullable = true),
+    StructField("c", IntegerType, nullable = false)))
+
+  private lazy val structLevel1: DataFrame = spark.createDataFrame(
+    sparkContext.parallelize(Row(Row(1, null, 3)) :: Nil),
+    StructType(Seq(StructField("a", structType, nullable = false))))
+
+  private lazy val nullStructLevel1: DataFrame = spark.createDataFrame(
+    sparkContext.parallelize(Row(null) :: Nil),
+    StructType(Seq(StructField("a", structType, nullable = true))))
+
+  private lazy val structLevel2: DataFrame = spark.createDataFrame(
+    sparkContext.parallelize(Row(Row(Row(1, null, 3))) :: Nil),
+    StructType(Seq(
+      StructField("a", StructType(Seq(
+        StructField("a", structType, nullable = false))),
+        nullable = false))))
+
+  private lazy val nullStructLevel2: DataFrame = spark.createDataFrame(
+    sparkContext.parallelize(Row(Row(null)) :: Nil),
+    StructType(Seq(
+      StructField("a", StructType(Seq(
+        StructField("a", structType, nullable = true))),
+        nullable = false))))
+
+  private lazy val structLevel3: DataFrame = spark.createDataFrame(
+    sparkContext.parallelize(Row(Row(Row(Row(1, null, 3)))) :: Nil),
+    StructType(Seq(
+      StructField("a", StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", structType, nullable = false))),
+          nullable = false))),
+        nullable = false))))
+
+  test("withField should throw an exception if called on a non-StructType column") {
+    intercept[AnalysisException] {
+      testData.withColumn("key", $"key".withField("a", lit(2)))
+    }.getMessage should include("struct argument should be struct type, got: int")
+  }
+
+  test("withField should throw an exception if either fieldName or col argument are null") {
+    intercept[IllegalArgumentException] {
+      structLevel1.withColumn("a", $"a".withField(null, lit(2)))
+    }.getMessage should include("fieldName cannot be null")
+
+    intercept[IllegalArgumentException] {
+      structLevel1.withColumn("a", $"a".withField("b", null))
+    }.getMessage should include("col cannot be null")
+
+    intercept[IllegalArgumentException] {
+      structLevel1.withColumn("a", $"a".withField(null, null))
+    }.getMessage should include("fieldName cannot be null")
+  }
+
+  test("withField should throw an exception if any intermediate structs don't exist") {
+    intercept[AnalysisException] {
+      structLevel2.withColumn("a", 'a.withField("x.b", lit(2)))
+    }.getMessage should include("No such struct field x in a")
+
+    intercept[AnalysisException] {
+      structLevel3.withColumn("a", 'a.withField("a.x.b", lit(2)))
+    }.getMessage should include("No such struct field x in a")
+  }
+
+  test("withField should throw an exception if intermediate field is not a struct") {
+    intercept[AnalysisException] {
+      structLevel1.withColumn("a", 'a.withField("b.a", lit(2)))
+    }.getMessage should include("struct argument should be struct type, got: int")
+  }
+
+  test("withField should throw an exception if intermediate field reference is ambiguous") {
+    intercept[AnalysisException] {
+      val structLevel2: DataFrame = spark.createDataFrame(
+        sparkContext.parallelize(Row(Row(Row(1, null, 3), 4)) :: Nil),
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", structType, nullable = false),
+            StructField("a", structType, nullable = false))),
+            nullable = false))))
+
+      structLevel2.withColumn("a", 'a.withField("a.b", lit(2)))
+    }.getMessage should include("Ambiguous reference to fields")
+  }
+
+  test("withField should add field with no name") {
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", $"a".withField("", lit(4))),
+      Row(Row(1, null, 3, 4)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = false),
+          StructField("", IntegerType, nullable = false))),
+          nullable = false))))
+  }
+
+  test("withField should add field to struct") {
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", 'a.withField("d", lit(4))),
+      Row(Row(1, null, 3, 4)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = false),
+          StructField("d", IntegerType, nullable = false))),
+          nullable = false))))
+  }
+
+  test("withField should add field to null struct") {
+    checkAnswerAndSchema(
+      nullStructLevel1.withColumn("a", $"a".withField("d", lit(4))),
+      Row(null) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = false),
+          StructField("d", IntegerType, nullable = false))),
+          nullable = true))))
+  }
+
+  test("withField should add field to nested null struct") {
+    checkAnswerAndSchema(
+      nullStructLevel2.withColumn("a", $"a".withField("a.d", lit(4))),
+      Row(Row(null)) :: Nil,
+      StructType(
+        Seq(StructField("a", StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("b", IntegerType, nullable = true),
+            StructField("c", IntegerType, nullable = false),
+            StructField("d", IntegerType, nullable = false))),
+            nullable = true))),
+          nullable = false))))
+  }
+
+  test("withField should add null field to struct") {
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", 'a.withField("d", lit(null).cast(IntegerType))),
+      Row(Row(1, null, 3, null)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = false),
+          StructField("d", IntegerType, nullable = true))),
+          nullable = false))))
+  }
+
+  test("withField should add multiple fields to struct") {
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", 'a.withField("d", lit(4)).withField("e", lit(5))),
+      Row(Row(1, null, 3, 4, 5)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = false),
+          StructField("d", IntegerType, nullable = false),
+          StructField("e", IntegerType, nullable = false))),
+          nullable = false))))
+  }
+
+  test("withField should add field to nested struct") {
+    Seq(
+      structLevel2.withColumn("a", 'a.withField("a.d", lit(4))),
+      structLevel2.withColumn("a", 'a.withField("a", $"a.a".withField("d", lit(4))))
+    ).foreach { df =>
+      checkAnswerAndSchema(
+        df,
+        Row(Row(Row(1, null, 3, 4))) :: Nil,
+        StructType(
+          Seq(StructField("a", StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = true),
+              StructField("c", IntegerType, nullable = false),
+              StructField("d", IntegerType, nullable = false))),
+              nullable = false))),
+            nullable = false))))
+    }
+  }
+
+  test("withField should add field to deeply nested struct") {
+    checkAnswerAndSchema(
+      structLevel3.withColumn("a", 'a.withField("a.a.d", lit(4))),
+      Row(Row(Row(Row(1, null, 3, 4)))) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = true),
+              StructField("c", IntegerType, nullable = false),
+              StructField("d", IntegerType, nullable = false))),
+              nullable = false))),
+            nullable = false))),
+          nullable = false))))
+  }
+
+  test("withField should replace field in struct") {
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", 'a.withField("b", lit(2))),
+      Row(Row(1, 2, 3)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = false),
+          StructField("c", IntegerType, nullable = false))),
+          nullable = false))))
+  }
+
+  test("withField should replace field in null struct") {
+    checkAnswerAndSchema(
+      nullStructLevel1.withColumn("a", 'a.withField("b", lit("foo"))),
+      Row(null) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", StringType, nullable = false),
+          StructField("c", IntegerType, nullable = false))),
+          nullable = true))))
+  }
+
+  test("withField should replace field in nested null struct") {
+    checkAnswerAndSchema(
+      nullStructLevel2.withColumn("a", $"a".withField("a.b", lit("foo"))),
+      Row(Row(null)) :: Nil,
+      StructType(
+        Seq(StructField("a", StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("b", StringType, nullable = false),
+            StructField("c", IntegerType, nullable = false))),
+            nullable = true))),
+          nullable = false))))
+  }
+
+  test("withField should replace field with null value in struct") {
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", 'a.withField("c", lit(null).cast(IntegerType))),
+      Row(Row(1, null, null)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = true))),
+          nullable = false))))
+  }
+
+  test("withField should replace multiple fields in struct") {
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", 'a.withField("a", lit(10)).withField("b", lit(20))),
+      Row(Row(10, 20, 3)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = false),
+          StructField("c", IntegerType, nullable = false))),
+          nullable = false))))
+  }
+
+  test("withField should replace field in nested struct") {
+    Seq(
+      structLevel2.withColumn("a", $"a".withField("a.b", lit(2))),
+      structLevel2.withColumn("a", 'a.withField("a", $"a.a".withField("b", lit(2))))
+    ).foreach { df =>
+      checkAnswerAndSchema(
+        df,
+        Row(Row(Row(1, 2, 3))) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = false),
+              StructField("c", IntegerType, nullable = false))),
+              nullable = false))),
+            nullable = false))))
+    }
+  }
+
+  test("withField should replace field in deeply nested struct") {
+    checkAnswerAndSchema(
+      structLevel3.withColumn("a", $"a".withField("a.a.b", lit(2))),
+      Row(Row(Row(Row(1, 2, 3)))) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = false),
+              StructField("c", IntegerType, nullable = false))),
+              nullable = false))),
+            nullable = false))),
+          nullable = false))))
+  }
+
+  test("withField should replace all fields with given name in struct") {
+    val structLevel1 = spark.createDataFrame(
+      sparkContext.parallelize(Row(Row(1, 2, 3)) :: Nil),
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = false))),
+          nullable = false))))
+
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", 'a.withField("b", lit(100))),
+      Row(Row(1, 100, 100)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = false))),
+          nullable = false))))
+  }
+
+  test("withField should replace fields in struct in given order") {
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", 'a.withField("b", lit(2)).withField("b", lit(20))),
+      Row(Row(1, 20, 3)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = false),
+          StructField("c", IntegerType, nullable = false))),
+          nullable = false))))
+  }
+
+  test("withField should add field and then replace same field in struct") {
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", 'a.withField("d", lit(4)).withField("d", lit(5))),
+      Row(Row(1, null, 3, 5)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = false),
+          StructField("d", IntegerType, nullable = false))),
+          nullable = false))))
+  }
+
+  test("withField should handle fields with dots in their name if correctly quoted") {
+    val df: DataFrame = spark.createDataFrame(
+      sparkContext.parallelize(Row(Row(Row(1, null, 3))) :: Nil),
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a.b", StructType(Seq(
+            StructField("c.d", IntegerType, nullable = false),
+            StructField("e.f", IntegerType, nullable = true),
+            StructField("g.h", IntegerType, nullable = false))),
+            nullable = false))),
+          nullable = false))))
+
+    checkAnswerAndSchema(
+      df.withColumn("a", 'a.withField("`a.b`.`e.f`", lit(2))),
+      Row(Row(Row(1, 2, 3))) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a.b", StructType(Seq(
+            StructField("c.d", IntegerType, nullable = false),
+            StructField("e.f", IntegerType, nullable = false),
+            StructField("g.h", IntegerType, nullable = false))),
+            nullable = false))),
+          nullable = false))))
+
+    intercept[AnalysisException] {
+      df.withColumn("a", 'a.withField("a.b.e.f", lit(2)))
+    }.getMessage should include("No such struct field a in a.b")
+  }
+
+  private lazy val mixedCaseStructLevel1: DataFrame = spark.createDataFrame(
+    sparkContext.parallelize(Row(Row(1, 1)) :: Nil),
+    StructType(Seq(
+      StructField("a", StructType(Seq(
+        StructField("a", IntegerType, nullable = false),
+        StructField("B", IntegerType, nullable = false))),
+        nullable = false))))
+
+  test("withField should replace field in struct even if casing is different") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      checkAnswerAndSchema(
+        mixedCaseStructLevel1.withColumn("a", 'a.withField("A", lit(2))),
+        Row(Row(2, 1)) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("A", IntegerType, nullable = false),
+            StructField("B", IntegerType, nullable = false))),
+            nullable = false))))
+
+      checkAnswerAndSchema(
+        mixedCaseStructLevel1.withColumn("a", 'a.withField("b", lit(2))),
+        Row(Row(1, 2)) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("b", IntegerType, nullable = false))),
+            nullable = false))))
+    }
+  }
+
+  test("withField should add field to struct because casing is different") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswerAndSchema(
+        mixedCaseStructLevel1.withColumn("a", 'a.withField("A", lit(2))),
+        Row(Row(1, 1, 2)) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("B", IntegerType, nullable = false),
+            StructField("A", IntegerType, nullable = false))),
+            nullable = false))))
+
+      checkAnswerAndSchema(
+        mixedCaseStructLevel1.withColumn("a", 'a.withField("b", lit(2))),
+        Row(Row(1, 1, 2)) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("B", IntegerType, nullable = false),
+            StructField("b", IntegerType, nullable = false))),
+            nullable = false))))
+    }
+  }
+
+  private lazy val mixedCaseStructLevel2: DataFrame = spark.createDataFrame(
+    sparkContext.parallelize(Row(Row(Row(1, 1), Row(1, 1))) :: Nil),
+    StructType(Seq(
+      StructField("a", StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = false))),
+          nullable = false),
+        StructField("B", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = false))),
+          nullable = false))),
+        nullable = false))))
+
+  test("withField should replace nested field in struct even if casing is different") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      checkAnswerAndSchema(
+        mixedCaseStructLevel2.withColumn("a", 'a.withField("A.a", lit(2))),
+        Row(Row(Row(2, 1), Row(1, 1))) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("A", StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = false))),
+              nullable = false),
+            StructField("B", StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = false))),
+              nullable = false))),
+            nullable = false))))
+
+      checkAnswerAndSchema(
+        mixedCaseStructLevel2.withColumn("a", 'a.withField("b.a", lit(2))),
+        Row(Row(Row(1, 1), Row(2, 1))) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = false))),
+              nullable = false),
+            StructField("b", StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = false))),
+              nullable = false))),
+            nullable = false))))
+    }
+  }
+
+  test("withField should throw an exception because casing is different") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      intercept[AnalysisException] {
+        mixedCaseStructLevel2.withColumn("a", 'a.withField("A.a", lit(2)))
+      }.getMessage should include("No such struct field A in a, B")
+
+      intercept[AnalysisException] {
+        mixedCaseStructLevel2.withColumn("a", 'a.withField("b.a", lit(2)))
+      }.getMessage should include("No such struct field b in a, B")
+    }
+  }
+
+  test("withField user-facing examples") {
+    checkAnswer(
+      sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+        .select($"struct_col".withField("c", lit(3))),
+      Row(Row(1, 2, 3)))
+
+    checkAnswer(
+      sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+        .select($"struct_col".withField("b", lit(3))),
+      Row(Row(1, 3)))
+
+    checkAnswer(
+      sql("SELECT CAST(NULL AS struct<a:int,b:int>) struct_col")
+        .select($"struct_col".withField("c", lit(3))),
+      Row(null))
+
+    checkAnswer(
+      sql("SELECT named_struct('a', 1, 'b', 2, 'b', 3) struct_col")
+        .select($"struct_col".withField("b", lit(100))),
+      Row(Row(1, 100, 100)))
+
+    checkAnswer(
+      sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+        .select($"struct_col".withField("a.c", lit(3))),
+      Row(Row(Row(1, 2, 3))))
+
+    intercept[AnalysisException] {
+      sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
+        .select($"struct_col".withField("a.c", lit(3)))
+    }.getMessage should include("Ambiguous reference to fields")
+  }
+
+  test("SPARK-32641: extracting field from non-null struct column after withField should return " +
+    "field value") {
+    // extract newly added field
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", $"a".withField("d", lit(4)).getField("d")),
+      Row(4) :: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = false))))
+
+    // extract newly replaced field
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", $"a".withField("a", lit(4)).getField("a")),
+      Row(4) :: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = false))))
+
+    // add new field, extract another field from original struct
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", $"a".withField("d", lit(4)).getField("c")),
+      Row(3):: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = false))))
+
+    // replace field, extract another field from original struct
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", $"a".withField("a", lit(4)).getField("c")),
+      Row(3):: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = false))))
+  }
+
+  test("SPARK-32641: extracting field from null struct column after withField should return " +
+    "null if the original struct was null") {
+    // extract newly added field
+    checkAnswerAndSchema(
+      nullStructLevel1.withColumn("a", $"a".withField("d", lit(4)).getField("d")),
+      Row(null) :: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = true))))
+
+    // extract newly replaced field
+    checkAnswerAndSchema(
+      nullStructLevel1.withColumn("a", $"a".withField("a", lit(4)).getField("a")),
+      Row(null):: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = true))))
+
+    // add new field, extract another field from original struct
+    checkAnswerAndSchema(
+      nullStructLevel1.withColumn("a", $"a".withField("d", lit(4)).getField("c")),
+      Row(null):: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = true))))
+
+    // replace field, extract another field from original struct
+    checkAnswerAndSchema(
+      nullStructLevel1.withColumn("a", $"a".withField("a", lit(4)).getField("c")),
+      Row(null):: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = true))))
+  }
+
+  test("SPARK-32641: extracting field from nullable struct column which contains both null and " +
+    "non-null values after withField should return null if the original struct was null") {
+    val df = spark.createDataFrame(
+      sparkContext.parallelize(Row(Row(1, null, 3)) :: Row(null) :: Nil),
+      StructType(Seq(StructField("a", structType, nullable = true))))
+
+    // extract newly added field
+    checkAnswerAndSchema(
+      df.withColumn("a", $"a".withField("d", lit(4)).getField("d")),
+      Row(4) :: Row(null) :: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = true))))
+
+    // extract newly replaced field
+    checkAnswerAndSchema(
+      df.withColumn("a", $"a".withField("a", lit(4)).getField("a")),
+      Row(4) :: Row(null):: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = true))))
+
+    // add new field, extract another field from original struct
+    checkAnswerAndSchema(
+      df.withColumn("a", $"a".withField("d", lit(4)).getField("c")),
+      Row(3) :: Row(null):: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = true))))
+
+    // replace field, extract another field from original struct
+    checkAnswerAndSchema(
+      df.withColumn("a", $"a".withField("a", lit(4)).getField("c")),
+      Row(3) :: Row(null):: Nil,
+      StructType(Seq(StructField("a", IntegerType, nullable = true))))
   }
 }

@@ -20,8 +20,6 @@ An example for VarianceThresholdSelector.
 Run with:
   bin/spark-submit examples/src/main/python/ml/variance_threshold_selector_example.py
 """
-from __future__ import print_function
-
 from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.feature import VarianceThresholdSelector

@@ -173,15 +173,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     this
   }
 
-  /**
-   * Set multiple parameters together
-   */
-  @deprecated("Use setAll(Iterable) instead", "3.0.0")
-  def setAll(settings: Traversable[(String, String)]): SparkConf = {
-    settings.foreach { case (k, v) => set(k, v) }
-    this
-  }
-
   /** Set a parameter if it isn't already configured */
   def setIfMissing(key: String, value: String): SparkConf = {
     if (settings.putIfAbsent(key, value) == null) {
