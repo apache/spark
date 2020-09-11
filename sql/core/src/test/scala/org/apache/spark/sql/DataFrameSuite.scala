@@ -2555,16 +2555,6 @@ class DataFrameSuite extends QueryTest
     val df = Seq(0.0 -> -0.0).toDF("pos", "neg")
     checkAnswer(df.select($"pos" > $"neg"), Row(false))
   }
-
-  test("SPARK-32816: aggregating multiple distinct DECIMAL columns") {
-    checkAnswer(
-      sql(
-        s"""
-           |SELECT AVG(DISTINCT decimal_col), SUM(DISTINCT decimal_col)
-           |  FROM VALUES (CAST(1 AS DECIMAL(9, 0))) t(decimal_col)
-        """.stripMargin),
-      Row(1, 1))
-  }
 }
 
 case class GroupByKey(a: Int, b: Int)
