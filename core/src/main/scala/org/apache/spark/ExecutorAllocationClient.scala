@@ -94,8 +94,9 @@ private[spark] trait ExecutorAllocationClient {
    * @return the ids of the executors acknowledged by the cluster manager to be removed.
    */
   def decommissionExecutors(
-    executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
-    adjustTargetNumExecutors: Boolean): Seq[String] = {
+      executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
+      adjustTargetNumExecutors: Boolean,
+      decommissionFromDriver: Boolean): Seq[String] = {
     killExecutors(executorsAndDecomInfo.map(_._1),
       adjustTargetNumExecutors,
       countFailures = false)
@@ -109,14 +110,19 @@ private[spark] trait ExecutorAllocationClient {
    * @param executorId identifiers of executor to decommission
    * @param decommissionInfo information about the decommission (reason, host loss)
    * @param adjustTargetNumExecutors if we should adjust the target number of executors.
+   * @param decommissionFromDriver whether the decommission is triggered by sending the
+   *                                `DecommissionExecutor` from driver to executor
    * @return whether the request is acknowledged by the cluster manager.
    */
-  final def decommissionExecutor(executorId: String,
+  final def decommissionExecutor(
+      executorId: String,
       decommissionInfo: ExecutorDecommissionInfo,
-      adjustTargetNumExecutors: Boolean): Boolean = {
+      adjustTargetNumExecutors: Boolean,
+      decommissionFromDriver: Boolean = true): Boolean = {
     val decommissionedExecutors = decommissionExecutors(
       Array((executorId, decommissionInfo)),
-      adjustTargetNumExecutors = adjustTargetNumExecutors)
+      adjustTargetNumExecutors = adjustTargetNumExecutors,
+      decommissionFromDriver = decommissionFromDriver)
     decommissionedExecutors.nonEmpty && decommissionedExecutors(0).equals(executorId)
   }
 

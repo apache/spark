@@ -61,13 +61,28 @@ private[deploy] object DeployMessages {
   }
 
   /**
-   * @param id the worker id
-   * @param worker the worker endpoint ref
+   * An internal message that used by Master itself, in order to handle the
+   * `DecommissionWorkersOnHosts` request from `MasterWebUI` asynchronously.
+   * @param ids A collection of Worker ids, which are pending to be decommissioned.
    */
-  case class WorkerDecommission(
-      id: String,
-      worker: RpcEndpointRef)
-    extends DeployMessage
+  case class DecommissionWorkers(ids: Seq[String])
+
+  /**
+   * A message that sent from Master to Worker to decommission the Worker.
+   * It's used for the case where decommission is triggered at MasterWebUI.
+   *
+   * Note that decommission a Worker will cause all the executors on that Worker
+   * to be decommissioned as well.
+   */
+  object DecommissionWorker extends DeployMessage
+
+  /**
+   * A message that sent from Worker to Master to tell Master that the Worker has been
+   * decommissioned. It's used for the case where decommission is triggered at Worker.
+   *
+   * @param id the worker id
+   */
+  case class WorkerDecommissioned(id: String) extends DeployMessage
 
   case class ExecutorStateChanged(
       appId: String,

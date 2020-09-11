@@ -70,7 +70,7 @@ private[deploy] class Worker(
   if (conf.get(config.DECOMMISSION_ENABLED)) {
     logInfo("Registering SIGPWR handler to trigger decommissioning.")
     SignalUtils.register("PWR", "Failed to register SIGPWR handler - " +
-      "disabling worker decommission feature.")(decommissionSelf)
+      "disabling worker decommission feature.")(decommissionSelf(fromMaster = false))
   } else {
     logInfo("Worker decommissioning not enabled, SIGPWR will result in exiting.")
   }
@@ -668,8 +668,8 @@ private[deploy] class Worker(
       finishedApps += id
       maybeCleanupApplication(id)
 
-    case WorkerDecommission(_, _) =>
-      decommissionSelf()
+    case DecommissionWorker =>
+      decommissionSelf(fromMaster = true)
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -768,11 +768,13 @@ private[deploy] class Worker(
     }
   }
 
-  private[deploy] def decommissionSelf(): Boolean = {
+  private[deploy] def decommissionSelf(fromMaster: Boolean): Boolean = {
     if (conf.get(config.DECOMMISSION_ENABLED)) {
       logDebug("Decommissioning self")
       decommissioned = true
-      sendToMaster(WorkerDecommission(workerId, self))
+      if (!fromMaster) {
+        sendToMaster(WorkerDecommissioned(workerId))
+      }
     } else {
       logWarning("Asked to decommission self, but decommissioning not enabled")
     }

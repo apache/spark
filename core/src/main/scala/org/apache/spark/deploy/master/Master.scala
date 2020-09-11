@@ -245,14 +245,14 @@ private[deploy] class Master(
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
 
-    case WorkerDecommission(id, workerRef) =>
-      logInfo("Recording worker %s decommissioning".format(id))
-      if (state == RecoveryState.STANDBY) {
-        workerRef.send(MasterInStandby)
-      } else {
+    case WorkerDecommissioned(id) =>
+      idToWorker.get(id).foreach(w => decommissionWorker(w, sentFromWorker = true))
+
+    case DecommissionWorkers(ids) =>
+      ids.foreach ( id =>
         // We use foreach since get gives us an option and we can skip the failures.
-        idToWorker.get(id).foreach(decommissionWorker)
-      }
+        idToWorker.get(id).foreach(w => decommissionWorker(w, sentFromWorker = false))
+      )
 
     case RegisterWorker(
       id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl,
@@ -891,16 +891,13 @@ private[deploy] class Master(
     logInfo(s"Decommissioning the workers with host:ports ${workersToRemoveHostPorts}")
 
     // The workers are removed async to avoid blocking the receive loop for the entire batch
-    workersToRemove.foreach(wi => {
-      logInfo(s"Sending the worker decommission to ${wi.id} and ${wi.endpoint}")
-      self.send(WorkerDecommission(wi.id, wi.endpoint))
-    })
+    self.send(DecommissionWorkers(workersToRemove.map(_.id).toSeq))
 
     // Return the count of workers actually removed
     workersToRemove.size
   }
 
-  private def decommissionWorker(worker: WorkerInfo): Unit = {
+  private def decommissionWorker(worker: WorkerInfo, sentFromWorker: Boolean): Unit = {
     if (worker.state != WorkerState.DECOMMISSIONED) {
       logInfo("Decommissioning worker %s on %s:%d".format(worker.id, worker.host, worker.port))
       worker.setState(WorkerState.DECOMMISSIONED)
@@ -915,6 +912,9 @@ private[deploy] class Master(
           Some(worker.host)))
         exec.state = ExecutorState.DECOMMISSIONED
         exec.application.removeExecutor(exec)
+      }
+      if (!sentFromWorker) {
+        worker.endpoint.send(DecommissionWorker)
       }
       // On recovery do not add a decommissioned executor
       persistenceEngine.removeWorker(worker)
