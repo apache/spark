@@ -194,7 +194,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       _uncompressedSize += actualSize
 
       if (lastValue == null) {
-        lastValue = columnType.clone(columnType.getField(row, ordinal))
+        lastValue = columnType.clone(value)
         lastRun = 1
         _compressedSize += actualSize + 4
       } else {
@@ -202,7 +202,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
           lastRun += 1
         } else {
           _compressedSize += actualSize + 4
-          lastValue = columnType.clone(columnType.getField(row, ordinal))
+          lastValue = columnType.clone(value)
           lastRun = 1
         }
       }
