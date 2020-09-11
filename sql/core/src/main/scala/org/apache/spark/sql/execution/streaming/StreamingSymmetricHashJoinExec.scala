@@ -56,7 +56,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
  * - Apply the optional condition to filter the joined rows as the final output.
  *
  * If a timestamp column with event time watermark is present in the join keys or in the input
- * data, then it uses the watermark figure out which rows in the buffer will not join with
+ * data, then it uses the watermark to figure out which rows in the buffer will not join with
  * the new data, and therefore can be discarded. Depending on the provided query conditions, we
  * can define thresholds on both state key (i.e. joining keys) and state value (i.e. input rows).
  * There are three kinds of queries possible regarding this as explained below.
