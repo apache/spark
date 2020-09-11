@@ -393,6 +393,29 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-32708: same columns with different ExprIds should be equal after canonicalization ") {
+    def getV2ScanExecs(query: DataFrame): Seq[DataSourceV2ScanExec] = {
+      query.queryExecution.executedPlan.collect {
+        case d: DataSourceV2ScanExec => d
+      }
+    }
+
+    val df1 = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
+    val q1 = df1.select(($"i" + 1).as("k"), ($"i" - 1).as("j")).filter('i > 5)
+    val df2 = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
+    val q2 = df2.select(($"i" + 1).as("k"), ($"i" - 1).as("j")).filter('i > 5)
+
+    val scans1 = getV2ScanExecs(q1.join(q2, "j"))
+    assert(scans1(0).sameResult(scans1(1)))
+    assert(scans1(0).doCanonicalize().equals(scans1(1).doCanonicalize()))
+
+    val q3 = df2.select(($"i" + 1).as("k"), ($"i" - 1).as("j")).filter('i > 6)
+    val scans2 = getV2ScanExecs(q1.join(q3, "j"))
+    assert(!scans2(0).sameResult(scans2(1)))
+    assert(!scans2(0).doCanonicalize().equals(scans2(1).doCanonicalize()))
+  }
+
 }
 
 class SimpleSinglePartitionSource extends DataSourceV2 with ReadSupport {
