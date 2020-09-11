@@ -45,15 +45,15 @@ trait ShuffleBlockResolver {
    * Retrieve the data for the specified merged shuffle block as multiple chunks.
    */
   def getMergedBlockData(
-    blockId: ShuffleBlockId,
-    dirs: Option[Array[String]] = None): Seq[ManagedBuffer]
+      blockId: ShuffleBlockId,
+      dirs: Option[Array[String]] = None): Seq[ManagedBuffer]
 
   /**
    * Retrieve the meta data for the specified merged shuffle block.
    */
   def getMergedBlockMeta(
-    blockId: ShuffleBlockId,
-    dirs: Option[Array[String]] = None): MergedBlockMeta
+      blockId: ShuffleBlockId,
+      dirs: Option[Array[String]] = None): MergedBlockMeta
 
   def stop(): Unit
 }

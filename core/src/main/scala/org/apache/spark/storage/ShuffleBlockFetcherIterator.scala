@@ -710,8 +710,6 @@ final class ShuffleBlockFetcherIterator(
       numBlocksToFetch += bufs.size - 1
       for (chunkId <- bufs.indices) {
         val buf = bufs(chunkId)
-        shuffleMetrics.incLocalBlocksFetched(1)
-        shuffleMetrics.incLocalBytesRead(buf.size)
         buf.retain()
         val shuffleChunkId = ShuffleBlockChunkId(
           shuffleBlockId.shuffleId, shuffleBlockId.reduceId, chunkId)
@@ -837,12 +835,12 @@ final class ShuffleBlockFetcherIterator(
       .get(blockMgrWithEmptyExecId.executorId)
     if (cachedLocalMergedDirs.isDefined) {
       logDebug(s"Synchronous fetching local merged blocks with cached executors' dir: " +
-        s"${cachedLocalMergedDirs.mkString(", ")}")
+        s"${cachedLocalMergedDirs.get.mkString(", ")}")
       mergedLocalBlocks.foreach{ case blockId =>
         fetchMergedLocalBlock(blockId, cachedLocalMergedDirs.get, blockMgrWithEmptyExecId)
       }
     } else {
-      logDebug(s"Asynchronous fetching local merged blocks without cached executors' dir: ")
+      logDebug(s"Asynchronous fetching local merged blocks without cached executors' dir")
       hostLocalDirManager.getHostLocalDirs(Array(blockMgrWithEmptyExecId.executorId)) {
         case Success(dirs) =>
           mergedLocalBlocks.takeWhile {
@@ -1050,7 +1048,7 @@ final class ShuffleBlockFetcherIterator(
           throwFetchFailedException(blockId, mapIndex, address, e)
 
         case IgnoreFetchResult(blockId, address, size, isNetworkReqDone) =>
-          if (isRemoteOrHostLocal(address)) {
+          if (isRemote(address)) {
             numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
             bytesInFlight -= size
           }
@@ -1117,6 +1115,16 @@ final class ShuffleBlockFetcherIterator(
    * Returns true if the address is of remote block manager. false otherwise.
    */
   private def isRemoteOrHostLocal(address: BlockManagerId): Boolean = {
+    // If the executor id is empty then it is a merged block so we compare the hosts to check
+    // if it's remote. Otherwise, compare the blockManager Id.
+    (address.executorId.isEmpty && address.host != blockManager.blockManagerId.host) ||
+      (address.executorId.nonEmpty && address != blockManager.blockManagerId)
+  }
+
+  /**
+   * Returns true if the address is of remote block manager. false otherwise.
+   */
+  private def isRemote(address: BlockManagerId): Boolean = {
     // If the executor id is empty then it is a merged block so we compare the hosts to check
     // if it's remote. Otherwise, compare the blockManager Id.
     (address.executorId.isEmpty && address.host != blockManager.blockManagerId.host) ||
