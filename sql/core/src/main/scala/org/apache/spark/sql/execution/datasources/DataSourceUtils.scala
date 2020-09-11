@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.Path
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
@@ -26,7 +28,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -193,14 +195,32 @@ object DataSourceUtils {
     case LegacyBehaviorPolicy.CORRECTED => identity[Long]
   }
 
-  private[sql] def checkDuplicateOptions(
-      extraOptionsMap: CaseInsensitiveStringMap, table: CatalogTable): Unit = {
-    table.storage.properties.foreach { case (k, v) =>
-      if (extraOptionsMap.containsKey(k) && extraOptionsMap.get(k) != v) {
-        throw new AnalysisException(
-          s"Fail to create datasource for the table ${table.identifier.table} since the table " +
-            s"property has the duplicated key $k with input options.")
+  def generateDatasourceOptions(
+      extraOptionsMap: CaseInsensitiveStringMap, table: CatalogTable): Map[String, String] = {
+    val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+    val options = table.storage.properties ++ pathOption
+    if (!SQLConf.get.getConf(SQLConf.LEGACY_EXTRA_OPTIONS_BEHAVIOR)) {
+      // Check the same key with different values
+      table.storage.properties.foreach { case (k, v) =>
+        if (extraOptionsMap.containsKey(k) && extraOptionsMap.get(k) != v) {
+          throw new AnalysisException(
+            s"Fail to create datasource for the table ${table.identifier.table} since the table " +
+              s"property has the duplicated key $k with input options. To fix this, you can " +
+              "rollback to the legacy behavior of ignoring the input options by setting the " +
+              s"config ${SQLConf.LEGACY_EXTRA_OPTIONS_BEHAVIOR.key} to `false`, or address the " +
+              s"conflicts of the same config.")
+        }
       }
+      // To keep the original key from table properties, here we filter all case insensitive
+      // duplicate keys out from extra options.
+      val caseInsensitiveDuplicateKeys =
+        table.storage.properties.keySet.map(_.toLowerCase(Locale.ROOT))
+          .intersect(extraOptionsMap.keySet.asScala)
+      extraOptionsMap.asCaseSensitiveMap().asScala.filterNot {
+        case (k, _) => caseInsensitiveDuplicateKeys.contains(k.toLowerCase(Locale.ROOT))
+      }.toMap ++ options
+    } else {
+      options
     }
   }
 }

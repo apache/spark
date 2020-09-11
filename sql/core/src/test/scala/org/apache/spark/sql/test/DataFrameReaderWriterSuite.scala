@@ -1200,17 +1200,17 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     dfw.save("2")
   }
 
-  test("DataFrameReader.table take the specified options for V1 relation") {
+  test("SPARK-32844: DataFrameReader.table take the specified options for V1 relation") {
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
       withTable("t") {
         sql("CREATE TABLE t(i int, d double) USING parquet OPTIONS ('p1'='v1', 'p2'='v2')")
 
         val msg = intercept[AnalysisException] {
-          spark.read.option("p1", "v3").table("t").count()
+          spark.read.option("P1", "v3").table("t").count()
         }.getMessage
         assert(msg.contains("duplicated key"))
 
-        val df = spark.read.option("p2", "v2").option("p3", "v3").table("t")
+        val df = spark.read.option("P2", "v2").option("p3", "v3").table("t")
         val options = df.queryExecution.analyzed.collectFirst {
           case r: LogicalRelation => r.relation.asInstanceOf[HadoopFsRelation].options
         }.get
