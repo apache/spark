@@ -9,7 +9,7 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                 InputAdapter
                   Window [item_sk,d_date]
                     WholeStageCodegen (26)
-                      Sort [item_sk,d_date]
+                      WindowSort [item_sk,d_date]
                         InputAdapter
                           Exchange [item_sk] #1
                             WholeStageCodegen (25)
@@ -34,7 +34,7 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                                                                   InputAdapter
                                                                     Window [ws_item_sk,d_date]
                                                                       WholeStageCodegen (4)
-                                                                        Sort [ws_item_sk,d_date]
+                                                                        WindowSort [ws_item_sk,d_date]
                                                                           InputAdapter
                                                                             Exchange [ws_item_sk] #4
                                                                               WholeStageCodegen (3)
@@ -65,7 +65,7 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                                                                         InputAdapter
                                                                           Window [ws_item_sk,d_date]
                                                                             WholeStageCodegen (8)
-                                                                              Sort [ws_item_sk,d_date]
+                                                                              WindowSort [ws_item_sk,d_date]
                                                                                 InputAdapter
                                                                                   ReusedExchange [item_sk,d_date,sumws,ws_item_sk] #4
                                       WholeStageCodegen (24)
@@ -85,7 +85,7 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                                                                   InputAdapter
                                                                     Window [ss_item_sk,d_date]
                                                                       WholeStageCodegen (16)
-                                                                        Sort [ss_item_sk,d_date]
+                                                                        WindowSort [ss_item_sk,d_date]
                                                                           InputAdapter
                                                                             Exchange [ss_item_sk] #10
                                                                               WholeStageCodegen (15)
@@ -110,7 +110,7 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                                                                         InputAdapter
                                                                           Window [ss_item_sk,d_date]
                                                                             WholeStageCodegen (20)
-                                                                              Sort [ss_item_sk,d_date]
+                                                                              WindowSort [ss_item_sk,d_date]
                                                                                 InputAdapter
                                                                                   ReusedExchange [item_sk,d_date,sumss,ss_item_sk] #10
               InputAdapter
@@ -121,6 +121,6 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                         InputAdapter
                           Window [item_sk,d_date]
                             WholeStageCodegen (52)
-                              Sort [item_sk,d_date]
+                              WindowSort [item_sk,d_date]
                                 InputAdapter
                                   ReusedExchange [item_sk,d_date,web_sales,store_sales] #1

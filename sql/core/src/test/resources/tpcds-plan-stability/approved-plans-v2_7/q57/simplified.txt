@@ -8,7 +8,7 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,d_year,i_category,i_brand,d_m
               InputAdapter
                 Window [d_year,d_moy,i_category,i_brand,cc_name]
                   WholeStageCodegen (8)
-                    Sort [i_category,i_brand,cc_name,d_year,d_moy]
+                    WindowSort [i_category,i_brand,cc_name,d_year,d_moy]
                       InputAdapter
                         Exchange [i_category,i_brand,cc_name] #1
                           WholeStageCodegen (7)
@@ -16,7 +16,7 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,d_year,i_category,i_brand,d_m
                               InputAdapter
                                 Window [_w0,i_category,i_brand,cc_name,d_year]
                                   WholeStageCodegen (6)
-                                    Sort [i_category,i_brand,cc_name,d_year]
+                                    WindowSort [i_category,i_brand,cc_name,d_year]
                                       InputAdapter
                                         Exchange [i_category,i_brand,cc_name,d_year] #2
                                           WholeStageCodegen (5)
@@ -64,7 +64,7 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,d_year,i_category,i_brand,d_m
                       InputAdapter
                         Window [d_year,d_moy,i_category,i_brand,cc_name]
                           WholeStageCodegen (14)
-                            Sort [i_category,i_brand,cc_name,d_year,d_moy]
+                            WindowSort [i_category,i_brand,cc_name,d_year,d_moy]
                               InputAdapter
                                 Exchange [i_category,i_brand,cc_name] #8
                                   WholeStageCodegen (13)
@@ -79,6 +79,6 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,d_year,i_category,i_brand,d_m
                   InputAdapter
                     Window [d_year,d_moy,i_category,i_brand,cc_name]
                       WholeStageCodegen (21)
-                        Sort [i_category,i_brand,cc_name,d_year,d_moy]
+                        WindowSort [i_category,i_brand,cc_name,d_year,d_moy]
                           InputAdapter
                             ReusedExchange [i_category,i_brand,cc_name,d_year,d_moy,sum_sales] #8

@@ -4,7 +4,7 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
       InputAdapter
         Window [sumsales,i_category]
           WholeStageCodegen (54)
-            Sort [i_category,sumsales]
+            WindowSort [i_category,sumsales]
               InputAdapter
                 Exchange [i_category] #1
                   Union

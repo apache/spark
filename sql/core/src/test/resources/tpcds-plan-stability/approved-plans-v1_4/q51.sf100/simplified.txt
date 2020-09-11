@@ -4,7 +4,7 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
       InputAdapter
         Window [web_sales,item_sk,d_date,store_sales]
           WholeStageCodegen (14)
-            Sort [item_sk,d_date]
+            WindowSort [item_sk,d_date]
               InputAdapter
                 Exchange [item_sk] #1
                   WholeStageCodegen (13)
@@ -20,7 +20,7 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                                       InputAdapter
                                         Window [_w0,ws_item_sk,d_date]
                                           WholeStageCodegen (4)
-                                            Sort [ws_item_sk,d_date]
+                                            WindowSort [ws_item_sk,d_date]
                                               InputAdapter
                                                 Exchange [ws_item_sk] #3
                                                   WholeStageCodegen (3)
@@ -52,7 +52,7 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                                       InputAdapter
                                         Window [_w0,ss_item_sk,d_date]
                                           WholeStageCodegen (10)
-                                            Sort [ss_item_sk,d_date]
+                                            WindowSort [ss_item_sk,d_date]
                                               InputAdapter
                                                 Exchange [ss_item_sk] #7
                                                   WholeStageCodegen (9)

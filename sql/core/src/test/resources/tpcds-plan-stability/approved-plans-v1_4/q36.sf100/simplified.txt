@@ -4,7 +4,7 @@ TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,gross_margin,i
       InputAdapter
         Window [_w3,_w1,_w2]
           WholeStageCodegen (6)
-            Sort [_w1,_w2,_w3]
+            WindowSort [_w1,_w2,_w3]
               InputAdapter
                 Exchange [_w1,_w2] #1
                   WholeStageCodegen (5)

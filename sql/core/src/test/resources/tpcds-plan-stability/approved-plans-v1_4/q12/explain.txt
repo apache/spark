@@ -2,7 +2,7 @@
 TakeOrderedAndProject (24)
 +- * Project (23)
    +- Window (22)
-      +- * Sort (21)
+      +- * WindowSort (21)
          +- Exchange (20)
             +- * HashAggregate (19)
                +- Exchange (18)
