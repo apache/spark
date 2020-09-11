@@ -40,9 +40,10 @@ abstract class DynamicPartitionPruningSuiteBase
     with GivenWhenThen
     with AdaptiveSparkPlanHelper {
 
-  val tableFormat: String = "parquet"
+  def tableFormat: String = "parquet"
 
   import testImplicits._
+  import DynamicPartitionPruningSuiteBase._
 
   val adaptiveExecutionOn: Boolean
 
@@ -166,51 +167,6 @@ abstract class DynamicPartitionPruningSuiteBase
   }
 
   /**
-   * Check if the query plan has a partition pruning filter inserted as
-   * a subquery duplicate or as a custom broadcast exchange.
-   */
-  def checkPartitionPruningPredicate(
-      df: DataFrame,
-      withSubquery: Boolean,
-      withBroadcast: Boolean): Unit = {
-    val plan = df.queryExecution.executedPlan
-    val dpExprs = collectDynamicPruningExpressions(plan)
-    val hasSubquery = dpExprs.exists {
-      case InSubqueryExec(_, _: SubqueryExec, _, _) => true
-      case _ => false
-    }
-    val subqueryBroadcast = dpExprs.collect {
-      case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _) => b
-    }
-
-    val hasFilter = if (withSubquery) "Should" else "Shouldn't"
-    assert(hasSubquery == withSubquery,
-      s"$hasFilter trigger DPP with a subquery duplicate:\n${df.queryExecution}")
-    val hasBroadcast = if (withBroadcast) "Should" else "Shouldn't"
-    assert(subqueryBroadcast.nonEmpty == withBroadcast,
-      s"$hasBroadcast trigger DPP with a reused broadcast exchange:\n${df.queryExecution}")
-
-    subqueryBroadcast.foreach { s =>
-      s.child match {
-        case _: ReusedExchangeExec => // reuse check ok.
-        case b: BroadcastExchangeExec =>
-          val hasReuse = plan.find {
-            case ReusedExchangeExec(_, e) => e eq b
-            case _ => false
-          }.isDefined
-          assert(hasReuse, s"$s\nshould have been reused in\n$plan")
-        case _ =>
-          fail(s"Invalid child node found in\n$s")
-      }
-    }
-
-    val isMainQueryAdaptive = plan.isInstanceOf[AdaptiveSparkPlanExec]
-    subqueriesAll(plan).filterNot(subqueryBroadcast.contains).foreach { s =>
-      assert(s.find(_.isInstanceOf[AdaptiveSparkPlanExec]).isDefined == isMainQueryAdaptive)
-    }
-  }
-
-  /**
    * Check if the plan has the given number of distinct broadcast exchange subqueries.
    */
   def checkDistinctSubqueries(df: DataFrame, n: Int): Unit = {
@@ -219,18 +175,6 @@ abstract class DynamicPartitionPruningSuiteBase
         b.index
     }
     assert(buf.distinct.size == n)
-  }
-
-  /**
-   * Collect the children of all correctly pushed down dynamic pruning expressions in a spark plan.
-   */
-  private def collectDynamicPruningExpressions(plan: SparkPlan): Seq[Expression] = {
-    plan.flatMap {
-      case s: FileSourceScanExec => s.partitionFilters.collect {
-        case d: DynamicPruningExpression => d.child
-      }
-      case _ => Nil
-    }
   }
 
   /**
@@ -1342,6 +1286,68 @@ abstract class DynamicPartitionPruningSuiteBase
       }
     }
   }
+}
+
+object DynamicPartitionPruningSuiteBase
+    extends AdaptiveSparkPlanHelper {
+  /**
+   * Check if the query plan has a partition pruning filter inserted as
+   * a subquery duplicate or as a custom broadcast exchange.
+   */
+  def checkPartitionPruningPredicate(
+      df: DataFrame,
+      withSubquery: Boolean,
+      withBroadcast: Boolean,
+      collectFunc: SparkPlan => Seq[Expression] = collectDynamicPruningExpressions): Unit = {
+    val plan = df.queryExecution.executedPlan
+    val dpExprs = collectFunc(plan)
+    val hasSubquery = dpExprs.exists {
+      case InSubqueryExec(_, _: SubqueryExec, _, _) => true
+      case _ => false
+    }
+    val subqueryBroadcast = dpExprs.collect {
+      case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _) => b
+    }
+
+    val hasFilter = if (withSubquery) "Should" else "Shouldn't"
+    assert(hasSubquery == withSubquery,
+      s"$hasFilter trigger DPP with a subquery duplicate:\n${df.queryExecution}")
+    val hasBroadcast = if (withBroadcast) "Should" else "Shouldn't"
+    assert(subqueryBroadcast.nonEmpty == withBroadcast,
+      s"$hasBroadcast trigger DPP with a reused broadcast exchange:\n${df.queryExecution}")
+
+    subqueryBroadcast.foreach { s =>
+      s.child match {
+        case _: ReusedExchangeExec => // reuse check ok.
+        case b: BroadcastExchangeExec =>
+          val hasReuse = plan.find {
+            case ReusedExchangeExec(_, e) => e eq b
+            case _ => false
+          }.isDefined
+          assert(hasReuse, s"$s\nshould have been reused in\n$plan")
+        case _ =>
+          throw new AnalysisException(s"Invalid child node found in\n$s")
+      }
+    }
+
+    val isMainQueryAdaptive = plan.isInstanceOf[AdaptiveSparkPlanExec]
+    subqueriesAll(plan).filterNot(subqueryBroadcast.contains).foreach { s =>
+      assert(s.find(_.isInstanceOf[AdaptiveSparkPlanExec]).isDefined == isMainQueryAdaptive)
+    }
+  }
+
+  /**
+   * Collect the children of all correctly pushed down dynamic pruning expressions in a spark plan.
+   */
+  private def collectDynamicPruningExpressions(plan: SparkPlan): Seq[Expression] = {
+    plan.flatMap {
+      case s: FileSourceScanExec => s.partitionFilters.collect {
+        case d: DynamicPruningExpression => d.child
+      }
+      case _ => Nil
+    }
+  }
+
 }
 
 class DynamicPartitionPruningSuiteAEOff extends DynamicPartitionPruningSuiteBase {
