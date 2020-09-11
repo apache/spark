@@ -1002,7 +1002,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     assert(numPartitions == 0)
   }
 
-  test("Remove redundant shuffle exchange") {
+  test("SPARK-32820: Remove redundant shuffle exchange") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "200") {
         val ordered = spark.range(1, 100).repartitionByRange(10, $"id".desc).orderBy($"id")
