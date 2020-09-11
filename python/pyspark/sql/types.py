@@ -305,7 +305,7 @@ class ArrayType(DataType):
     @classmethod
     def fromJson(cls, json):
         return ArrayType(_parse_datatype_json_value(json["elementType"]),
-                         json["containsNull"])
+                         json.get("containsNull", True))
 
     def needConversion(self):
         return self.elementType.needConversion()
@@ -365,7 +365,7 @@ class MapType(DataType):
     def fromJson(cls, json):
         return MapType(_parse_datatype_json_value(json["keyType"]),
                        _parse_datatype_json_value(json["valueType"]),
-                       json["valueContainsNull"])
+                       json.get("valueContainsNull", True))
 
     def needConversion(self):
         return self.keyType.needConversion() or self.valueType.needConversion()
@@ -426,8 +426,8 @@ class StructField(DataType):
     def fromJson(cls, json):
         return StructField(json["name"],
                            _parse_datatype_json_value(json["type"]),
-                           json["nullable"],
-                           json["metadata"])
+                           json.get("nullable", True),
+                           json.get("metadata", {}))
 
     def needConversion(self):
         return self.dataType.needConversion()

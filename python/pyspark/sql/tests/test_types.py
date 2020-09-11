@@ -970,6 +970,66 @@ class DataTypeVerificationTests(unittest.TestCase):
         self.assertEqual(repr(r), "Row(b=1, a=2)")
 
 
+class DataTypeJsonTests(unittest.TestCase):
+
+    def test_data_type_json(self):
+        testname_sparktype_jsondata_expected_expectedjson = [
+            (
+                "ArrayType with default values",
+                ArrayType,
+                {"elementType": "string"},
+                ArrayType(StringType()),
+                {'type': 'array', 'elementType': 'string', 'containsNull': True}
+            ),
+            (
+                "ArrayType without default values",
+                ArrayType,
+                {"elementType": "string", "containsNull": False},
+                ArrayType(StringType(), False),
+                {'type': 'array', 'elementType': 'string', 'containsNull': False}
+            ),
+            (
+                "MapType with default values",
+                MapType,
+                {"keyType": "string", "valueType": "long"},
+                MapType(StringType(), LongType()),
+                {"keyType": "string", "valueType": "long", "valueContainsNull": True}
+            ),
+            (
+                "MapType without default values",
+                MapType,
+                {"keyType": "string", "valueType": "long", "valueContainsNull": False},
+                MapType(StringType(), LongType(), False),
+                {"keyType": "string", "valueType": "long", "valueContainsNull": False},
+            ),
+            (
+                "StructField with default values",
+                StructField,
+                {"name": "col1", "type": "string"},
+                StructField("col1", StringType()),
+                {"name": "col1", "type": "string", "nullable": True, "metadata": {}}
+            ),
+            (
+                "StructField without default values",
+                StructField,
+                {
+                    "name": "col1", "type": "string",
+                    "nullable": False, "metadata": {"thing1": "thing2"}
+                },
+                StructField("col1", StringType(), False, {"thing1": "thing2"}),
+                {"name": "col1", "type": "string", "nullable": False, "metadata": {"thing1": "thing2"}}
+            ),
+        ]
+        for testname, sparktype, jsondata, expected, expectedjson in testname_sparktype_jsondata_expected_expectedjson:
+            with self.subTest(testname):
+                # verify fromJson loads properly
+                self.assertEqual(expected, sparktype.fromJson(jsondata))
+                # verify expected can round trip properly
+                self.assertEqual(expected, sparktype.fromJson(expected.jsonValue()))
+                # verify jsonValue is as expected
+                self.assertEqual(expectedjson, expected.jsonValue())
+
+
 if __name__ == "__main__":
     from pyspark.sql.tests.test_types import *  # noqa: F401
 
