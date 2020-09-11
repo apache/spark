@@ -28,8 +28,8 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkException, SparkFiles, TestUtils}
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, FailedCodegenExpr, Row, SparkSession}
+import org.apache.spark.{SparkFiles, TestUtils}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
@@ -103,16 +103,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
                                 | ORDER BY a.key, b.key
                                 | LIMIT 20
                               """.stripMargin
-
-  test("should fail if errors happen when generating expr code") {
-    val errMsg = intercept[SparkException] {
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-        val df = spark.range(1)
-        df.select(Column(FailedCodegenExpr(df("id").expr)) :: Nil: _*).show()
-      }
-    }.getCause.getMessage
-    assert(errMsg.contains("failed to compile:"))
-  }
 
   createQueryTest("SPARK-10484 Optimize the Cartesian (Cross) Join with broadcast based JOIN #1",
     spark_10484_1)

@@ -27,25 +27,25 @@ import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
-object FailedCodegenProjection
-    extends CodeGeneratorWithInterpretedFallback[Seq[Expression], UnsafeProjection] {
-
-  override protected def createCodeGeneratedObject(in: Seq[Expression]): UnsafeProjection = {
-    val invalidCode = new CodeAndComment("invalid code", Map.empty)
-    // We assume this compilation throws an exception
-    CodeGenerator.compile(invalidCode)
-    null
-  }
-
-  override protected def createInterpretedObject(in: Seq[Expression]): UnsafeProjection = {
-    InterpretedUnsafeProjection.createProjection(in)
-  }
-}
-
 class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanTestBase {
 
   val codegenOnly = CodegenObjectFactoryMode.CODEGEN_ONLY.toString
   val noCodegen = CodegenObjectFactoryMode.NO_CODEGEN.toString
+
+  object FailedCodegenProjection
+      extends CodeGeneratorWithInterpretedFallback[Seq[Expression], UnsafeProjection] {
+
+    override protected def createCodeGeneratedObject(in: Seq[Expression]): UnsafeProjection = {
+      val invalidCode = new CodeAndComment("invalid code", Map.empty)
+      // We assume this compilation throws an exception
+      CodeGenerator.compile(invalidCode)
+      null
+    }
+
+    override protected def createInterpretedObject(in: Seq[Expression]): UnsafeProjection = {
+      InterpretedUnsafeProjection.createProjection(in)
+    }
+  }
 
   test("UnsafeProjection with codegen factory mode") {
     val input = Seq(BoundReference(0, IntegerType, nullable = true))

@@ -26,14 +26,14 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
+import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
-import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.{Expression, FailedCodegenProjection, UnaryExpression, Uuid}
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -2555,24 +2555,6 @@ class DataFrameSuite extends QueryTest
     val df = Seq(0.0 -> -0.0).toDF("pos", "neg")
     checkAnswer(df.select($"pos" > $"neg"), Row(false))
   }
-
-  test("should fail if errors happen when generating expr code") {
-    val errMsg = intercept[SparkException] {
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-        val df = spark.range(1)
-        df.select(Column(FailedCodegenExpr(df("id").expr)) :: Nil: _*).show()
-      }
-    }.getCause.getMessage
-    assert(errMsg.contains("failed to compile:"))
-  }
 }
 
 case class GroupByKey(a: Int, b: Int)
-
-case class FailedCodegenExpr(child: Expression) extends UnaryExpression with CodegenFallback {
-  private lazy val proj = FailedCodegenProjection.createObject(child :: Nil)
-  override def dataType: DataType = LongType
-  override def eval(input: InternalRow): Any = {
-    proj(input).getLong(0)
-  }
-}
