@@ -1327,22 +1327,26 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitComparison(ctx: ComparisonContext): Expression = withOrigin(ctx) {
     val left = expression(ctx.left)
     val right = expression(ctx.right)
+    val hasBinaryComparisons = left.isInstanceOf[BinaryComparison] ||
+      right.isInstanceOf[BinaryComparison]
     val operator = ctx.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
     operator.getSymbol.getType match {
-      case SqlBaseParser.EQ =>
+      case SqlBaseParser.EQ if !hasBinaryComparisons =>
         EqualTo(left, right)
-      case SqlBaseParser.NSEQ =>
+      case SqlBaseParser.NSEQ if !hasBinaryComparisons =>
         EqualNullSafe(left, right)
-      case SqlBaseParser.NEQ | SqlBaseParser.NEQJ =>
+      case SqlBaseParser.NEQ | SqlBaseParser.NEQJ if !hasBinaryComparisons =>
         Not(EqualTo(left, right))
-      case SqlBaseParser.LT =>
+      case SqlBaseParser.LT if !hasBinaryComparisons =>
         LessThan(left, right)
-      case SqlBaseParser.LTE =>
+      case SqlBaseParser.LTE if !hasBinaryComparisons =>
         LessThanOrEqual(left, right)
-      case SqlBaseParser.GT =>
+      case SqlBaseParser.GT if !hasBinaryComparisons =>
         GreaterThan(left, right)
-      case SqlBaseParser.GTE =>
+      case SqlBaseParser.GTE if !hasBinaryComparisons =>
         GreaterThanOrEqual(left, right)
+      case _ =>
+        throw new ParseException("Syntax error at or near", ctx)
     }
   }
 

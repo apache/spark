@@ -24,7 +24,7 @@ import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, EqualTo, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, RefreshResource}
@@ -304,6 +304,15 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual(
       "SELECT a || b || c FROM t",
       Project(UnresolvedAlias(concat) :: Nil, UnresolvedRelation(TableIdentifier("t"))))
+  }
+
+  test("Prohibit binary comparisons chain") {
+    assertEqual("SELECT a = b",
+      Project(UnresolvedAlias(EqualTo(UnresolvedAttribute("a"), UnresolvedAttribute("b"))) :: Nil,
+        OneRowRelation()))
+
+    intercept("SELECT a = b = c", "Syntax error at or near")
+    intercept("SELECT a < b > c", "Syntax error at or near")
   }
 
   test("database and schema tokens are interchangeable") {
