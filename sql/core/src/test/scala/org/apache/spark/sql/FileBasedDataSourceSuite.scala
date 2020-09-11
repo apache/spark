@@ -924,8 +924,8 @@ class FileBasedDataSourceSuite extends QueryTest
             sources.EqualTo("id", v)))
           checkPushedFilters(format, df.where('id === v.toInt), Array(sources.IsNotNull("id"),
             sources.EqualTo("id", v)))
-          checkPushedFilters(format, df.where('id <=> v.toInt), Array(sources.IsNotNull("id"),
-            sources.EqualTo("id", v)))
+          checkPushedFilters(format, df.where('id <=> v.toInt),
+            Array(sources.EqualNullSafe("id", v)))
           checkPushedFilters(format, df.where('id <= v.toInt), Array(sources.IsNotNull("id")))
           checkPushedFilters(format, df.where('id < v.toInt), Array(sources.IsNotNull("id"),
             sources.Not(sources.EqualTo("id", v))))
@@ -946,6 +946,8 @@ class FileBasedDataSourceSuite extends QueryTest
           checkPushedFilters(format, df.where(lit(v.toInt) <= 'id), Array(sources.IsNotNull("id")))
           checkPushedFilters(format, df.where(lit(v.toInt) === 'id), Array(sources.IsNotNull("id"),
             sources.EqualTo("id", v)))
+          checkPushedFilters(format, df.where(lit(v.toInt) <=> 'id),
+            Array(sources.EqualNullSafe("id", v)))
           checkPushedFilters(format, df.where(lit(v.toInt) >= 'id), Array(sources.IsNotNull("id"),
             sources.EqualTo("id", v)))
           checkPushedFilters(format, df.where(lit(v.toInt) > 'id), Array(), noScan = true)
