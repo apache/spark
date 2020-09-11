@@ -110,39 +110,32 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
   }
 
   test("scan with aggregate push-down") {
-    val df = sql("select MAX(ID) FROM h2.test.people where id > 0")
+    val df = sql("select MAX(ID) FROM h2.test.people where ID > 0")
     df.explain(true)
 //    == Parsed Logical Plan ==
 //    'Project [unresolvedalias('MAX('ID), None)]
-//    +- 'Filter ('id > 0)
+//    +- 'Filter ('ID > 0)
 //    +- 'UnresolvedRelation [h2, test, people], []
 //
 //    == Analyzed Logical Plan ==
 //    max(ID): int
-//    Aggregate [max(ID#69) AS max(ID)#71]
-//    +- Filter (id#69 > 0)
+//    Aggregate [max(ID#1) AS max(ID)#3]
+//    +- Filter (ID#1 > 0)
 //    +- SubqueryAlias h2.test.people
-//    +- RelationV2[NAME#68, ID#69] test.people
+//    +- RelationV2[NAME#0, ID#1] test.people
 //
 //    == Optimized Logical Plan ==
-//    RelationV2[ID#69] test.people
+//    Aggregate [max(ID#1) AS max(ID)#3]
+//    +- RelationV2[ID#1] test.people
 //
 //    == Physical Plan ==
-//      *(2) HashAggregate(keys=[], functions=[max(ID#69)], output=[max(ID)#71])
-//    +- Exchange SinglePartition, true, [id=#88]
-//    +- *(1) HashAggregate(keys=[], functions=[partial_max(ID#69)], output=[max#75])
-//    +- *(1) Scan org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCScan$$anon$1@7b377a53
-//       [ID#69]
-//       PushedAggregates: [*Max(ID)], PushedFilters: [IsNotNull(id), GreaterThan(id,0)],
-//       ReadSchema: struct<ID:int>
-//    df.show
-//    +-------+
-//    |max(ID)|
-//    +-------+
-//    |      2|
-//    +-------+
-    assert(df.collect.toSet === Set(Row(2)))
-    // checkAnswer(df, Seq(Row(2)))
+//      *(2) HashAggregate(keys=[], functions=[max(ID#1)], output=[max(ID)#3])
+//    +- Exchange SinglePartition, true, [id=#13]
+//    +- *(1) HashAggregate(keys=[], functions=[partial_max(ID#1)], output=[max#7])
+//    +- *(1) Scan org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCScan$$anon$1@f2b90fc
+//     [ID#1] PushedAggregates: [*Max(ID)], PushedFilters: [*IsNotNull(ID), *GreaterThan(ID,0)],
+//     ReadSchema: struct<ID:int>
+    checkAnswer(df, Seq(Row(2)))
   }
 
   test("read/write with partition info") {

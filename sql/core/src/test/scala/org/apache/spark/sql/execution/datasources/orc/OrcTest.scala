@@ -119,7 +119,7 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
 
     query.queryExecution.optimizedPlan match {
       case PhysicalOperation(_, filters,
-          DataSourceV2ScanRelation(_, o: OrcScan, _, _)) =>
+          DataSourceV2ScanRelation(_, o: OrcScan, _)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
         if (noneSupported) {
           assert(o.pushedFilters.isEmpty, "Unsupported filters should not show in pushed filters")

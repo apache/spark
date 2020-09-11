@@ -241,7 +241,7 @@ abstract class BaseRelation {
    *
    * @since 3.1.0
    */
-  def unhandledAggregates(aggregates: Array[Aggregate]): Array[Aggregate] =
+  def unhandledAggregates(aggregates: Array[AggregateFunction]): Array[AggregateFunction] =
     aggregates
 }
 
@@ -292,7 +292,7 @@ trait PrunedFilteredAggregateScan {
   def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
-      aggregates: Array[Aggregate]): RDD[Row]
+      aggregates: Array[AggregateFunction]): RDD[Row]
 }
 
 /**

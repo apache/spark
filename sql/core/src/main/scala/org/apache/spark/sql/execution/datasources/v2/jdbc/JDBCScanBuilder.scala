@@ -21,7 +21,7 @@ import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownA
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.jdbc.JdbcDialects
-import org.apache.spark.sql.sources.{Aggregate, Filter}
+import org.apache.spark.sql.sources.{AggregateFunction, Filter}
 import org.apache.spark.sql.types.StructType
 
 case class JDBCScanBuilder(
@@ -35,7 +35,7 @@ case class JDBCScanBuilder(
 
   private var pushedFilter = Array.empty[Filter]
 
-  private var pushedAggregate = Array.empty[Aggregate]
+  private var pushedAggregate = Array.empty[AggregateFunction]
 
   private var prunedSchema = schema
 
@@ -52,12 +52,12 @@ case class JDBCScanBuilder(
 
   override def pushedFilters(): Array[Filter] = pushedFilter
 
-  override def pushAggregates(aggregate: Array[Aggregate]): Array[Aggregate] = {
+  override def pushAggregates(aggregate: Array[AggregateFunction]): Array[AggregateFunction] = {
     if (jdbcOptions.pushDownAggregate) {
       val dialect = JdbcDialects.get(jdbcOptions.url)
       if (!JDBCRDD.compileAggregates(aggregate, dialect).isEmpty) {
         pushedAggregate = aggregate
-        Array.empty[Aggregate]
+        Array.empty[AggregateFunction]
       } else {
         aggregate
       }
@@ -66,7 +66,7 @@ case class JDBCScanBuilder(
     }
   }
 
-  override def pushedAggregates(): Array[Aggregate] = pushedAggregate
+  override def pushedAggregates(): Array[AggregateFunction] = pushedAggregate
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // JDBC doesn't support nested column pruning.

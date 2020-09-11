@@ -133,7 +133,8 @@ object JDBCRDD extends Logging {
     })
   }
 
-  def compileAggregates(aggregates: Seq[Aggregate], dialect: JdbcDialect): Map[String, String] = {
+  def compileAggregates(aggregates: Seq[AggregateFunction], dialect: JdbcDialect):
+    Map[String, String] = {
     def quote(colName: String): String = dialect.quoteIdentifier(colName)
     val compiledAggregates = aggregates.map {
       case Min(column) => Some(quote(column) -> s"MIN(${quote(column)})")
@@ -169,7 +170,7 @@ object JDBCRDD extends Logging {
       filters: Array[Filter],
       parts: Array[Partition],
       options: JDBCOptions,
-      aggregates: Array[Aggregate] = Array.empty[Aggregate]): RDD[InternalRow] = {
+      aggregates: Array[AggregateFunction] = Array.empty[AggregateFunction]): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
@@ -200,7 +201,7 @@ private[jdbc] class JDBCRDD(
     partitions: Array[Partition],
     url: String,
     options: JDBCOptions,
-    aggregates: Array[Aggregate] = Array.empty[Aggregate])
+    aggregates: Array[AggregateFunction] = Array.empty[AggregateFunction])
   extends RDD[InternalRow](sc, Nil) {
 
   /**

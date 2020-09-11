@@ -77,10 +77,10 @@ object PushDownUtils extends PredicateHelper {
      * @return pushed aggregates and post-scan aggregates.
      */
     def pushAggregates(scanBuilder: ScanBuilder, aggregates: Seq[AggregateExpression])
-      : (Seq[sources.Aggregate], Seq[AggregateExpression]) = {
+      : (Seq[sources.AggregateFunction], Seq[AggregateExpression]) = {
       scanBuilder match {
         case r: SupportsPushDownAggregates =>
-          val translatedAggregates = mutable.ArrayBuffer.empty[sources.Aggregate]
+          val translatedAggregates = mutable.ArrayBuffer.empty[sources.AggregateFunction]
           // Catalyst aggregate expression that can't be translated to data source aggregates.
           val untranslatableExprs = mutable.ArrayBuffer.empty[AggregateExpression]
 

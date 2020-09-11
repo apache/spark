@@ -265,12 +265,13 @@ private[sql] case class JDBCRelation(
     }
   }
 
-  override def unhandledAggregates(aggregates: Array[Aggregate]): Array[Aggregate] = {
+  override def unhandledAggregates(aggregates: Array[AggregateFunction]):
+    Array[AggregateFunction] = {
     if (jdbcOptions.pushDownAggregate) {
       if (JDBCRDD.compileAggregates(aggregates, JdbcDialects.get(jdbcOptions.url)).isEmpty) {
         aggregates
       } else {
-        Array.empty[Aggregate]
+        Array.empty[AggregateFunction]
       }
     } else {
       aggregates
@@ -291,7 +292,7 @@ private[sql] case class JDBCRelation(
   override def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
-      aggregates: Array[Aggregate]): RDD[Row] = {
+      aggregates: Array[AggregateFunction]): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sparkSession.sparkContext,

@@ -65,14 +65,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
               V1ScanWrapper(v1, translated, pushedFilters, translatedAggregate, pushedAggregates)
             case _ => scan
           }
-          if (!pushedAggregates.isEmpty) {
-            buildLogicalPlan(project, relation, wrappedScan, output, normalizedProjects,
-              postScanFilters, Aggregate(groupingExpressions, resultExpressions, child))
-          } else {
-            val r = buildLogicalPlan(project, relation, wrappedScan, output, normalizedProjects,
-              postScanFilters, null)
-            Aggregate(groupingExpressions, resultExpressions, r)
-          }
+          val r = buildLogicalPlan(project, relation, wrappedScan, output, normalizedProjects,
+            postScanFilters)
+          Aggregate(groupingExpressions, resultExpressions, r)
+
         case _ =>
           Aggregate(groupingExpressions, resultExpressions, child)
       }
@@ -93,13 +89,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
       val wrappedScan = scan match {
         case v1: V1Scan =>
           val translated = filters.flatMap(DataSourceStrategy.translateFilter(_, true))
-          V1ScanWrapper(v1, translated, pushedFilters, Seq.empty[sources.Aggregate],
-            Seq.empty[sources.Aggregate])
+          V1ScanWrapper(v1, translated, pushedFilters, Seq.empty[sources.AggregateFunction],
+            Seq.empty[sources.AggregateFunction])
         case _ => scan
       }
 
-      buildLogicalPlan(project, relation, wrappedScan, output, normalizedProjects, postScanFilters,
-        null)
+      buildLogicalPlan(project, relation, wrappedScan, output, normalizedProjects, postScanFilters)
   }
 
   private def processFilerAndColumn(
@@ -133,10 +128,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
       wrappedScan: Scan,
       output: Seq[AttributeReference],
       normalizedProjects: Seq[NamedExpression],
-      postScanFilters: Seq[Expression],
-      aggregate: Aggregate = null): LogicalPlan = {
-    val scanRelation = DataSourceV2ScanRelation(relation.table, wrappedScan, output,
-      aggregate)
+      postScanFilters: Seq[Expression]): LogicalPlan = {
+    val scanRelation = DataSourceV2ScanRelation(relation.table, wrappedScan, output)
     val projectionOverSchema = ProjectionOverSchema(output.toStructType)
     val projectionFunc = (expr: Expression) => expr transformDown {
       case projectionOverSchema(newExpr) => newExpr
@@ -166,8 +159,8 @@ case class V1ScanWrapper(
     v1Scan: V1Scan,
     translatedFilters: Seq[sources.Filter],
     handledFilters: Seq[sources.Filter],
-    translatedAggregates: Seq[sources.Aggregate],
-    handledAggregated: Seq[sources.Aggregate]) extends Scan {
+    translatedAggregates: Seq[sources.AggregateFunction],
+    handledAggregated: Seq[sources.AggregateFunction]) extends Scan {
   // Todo: Huaxin
   override def readSchema(): StructType = v1Scan.readSchema()
 }

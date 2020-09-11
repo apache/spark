@@ -17,17 +17,15 @@
 
 package org.apache.spark.sql.sources
 
-// case class Aggregation(
-//    aggregateExpressions: Seq[AggregateFunction],
-//    groupByExpressions: Seq[String],
-//    havingClause: Seq[Filter])
+case class Aggregation(aggregateExpressions: Seq[AggregateFunction],
+                       groupByExpressions: Seq[String])
 
-abstract class Aggregate
+abstract class AggregateFunction
 
-case class Avg (column: String) extends Aggregate
+case class Avg (column: String) extends AggregateFunction
 
-case class Min (column: String) extends Aggregate
+case class Min (column: String) extends AggregateFunction
 
-case class Max (column: String) extends Aggregate
+case class Max (column: String) extends AggregateFunction
 
-case class Sum (column: String) extends Aggregate
+case class Sum (column: String) extends AggregateFunction

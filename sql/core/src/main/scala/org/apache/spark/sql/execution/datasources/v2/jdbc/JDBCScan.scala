@@ -20,14 +20,14 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.connector.read.V1Scan
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation
-import org.apache.spark.sql.sources.{Aggregate, BaseRelation, Filter, TableScan}
+import org.apache.spark.sql.sources.{AggregateFunction, BaseRelation, Filter, TableScan}
 import org.apache.spark.sql.types.StructType
 
 case class JDBCScan(
     relation: JDBCRelation,
     prunedSchema: StructType,
     pushedFilters: Array[Filter],
-    pushedAggregates: Array[Aggregate]) extends V1Scan {
+    pushedAggregates: Array[AggregateFunction]) extends V1Scan {
 
   override def readSchema(): StructType = prunedSchema
 
