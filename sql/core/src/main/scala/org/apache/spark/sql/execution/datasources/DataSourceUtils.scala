@@ -196,28 +196,29 @@ object DataSourceUtils {
   }
 
   def generateDatasourceOptions(
-      extraOptionsMap: CaseInsensitiveStringMap, table: CatalogTable): Map[String, String] = {
+      extraOptions: CaseInsensitiveStringMap, table: CatalogTable): Map[String, String] = {
     val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
     val options = table.storage.properties ++ pathOption
     if (!SQLConf.get.getConf(SQLConf.LEGACY_EXTRA_OPTIONS_BEHAVIOR)) {
       // Check the same key with different values
       table.storage.properties.foreach { case (k, v) =>
-        if (extraOptionsMap.containsKey(k) && extraOptionsMap.get(k) != v) {
+        if (extraOptions.containsKey(k) && extraOptions.get(k) != v) {
           throw new AnalysisException(
-            s"Fail to create datasource for the table ${table.identifier.table} since the table " +
-              s"property has the duplicated key $k with input options. To fix this, you can " +
-              "rollback to the legacy behavior of ignoring the input options by setting the " +
-              s"config ${SQLConf.LEGACY_EXTRA_OPTIONS_BEHAVIOR.key} to `false`, or address the " +
+            s"Fail to resolve data source for the table ${table.identifier} since the table " +
+              s"serde property has the duplicated key $k with extra options specified for this " +
+              "scan operation. To fix this, you can rollback to the legacy behavior of ignoring " +
+              "the extra options by setting the config " +
+              s"${SQLConf.LEGACY_EXTRA_OPTIONS_BEHAVIOR.key} to `false`, or address the " +
               s"conflicts of the same config.")
         }
       }
       // To keep the original key from table properties, here we filter all case insensitive
       // duplicate keys out from extra options.
-      val caseInsensitiveDuplicateKeys =
+      val lowerCasedDuplicatedKeys =
         table.storage.properties.keySet.map(_.toLowerCase(Locale.ROOT))
-          .intersect(extraOptionsMap.keySet.asScala)
-      extraOptionsMap.asCaseSensitiveMap().asScala.filterNot {
-        case (k, _) => caseInsensitiveDuplicateKeys.contains(k.toLowerCase(Locale.ROOT))
+          .intersect(extraOptions.keySet.asScala)
+      extraOptions.asCaseSensitiveMap().asScala.filterNot {
+        case (k, _) => lowerCasedDuplicatedKeys.contains(k.toLowerCase(Locale.ROOT))
       }.toMap ++ options
     } else {
       options
