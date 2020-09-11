@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -46,7 +47,7 @@ import org.apache.spark.sql.internal.SQLConf
  *    subquery query twice, we keep the duplicated subquery
  *    (3) otherwise, we drop the subquery.
  */
-object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
+object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
 
   /**
    * Search the partitioned table scan for a given partition column in a logical plan
@@ -85,7 +86,8 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
       filteringKey: Expression,
       filteringPlan: LogicalPlan,
       joinKeys: Seq[Expression],
-      hasBenefit: Boolean): LogicalPlan = {
+      hasBenefit: Boolean,
+      isReuseBroadcastOnly: Boolean): LogicalPlan = {
     val reuseEnabled = SQLConf.get.exchangeReuseEnabled
     val index = joinKeys.indexOf(filteringKey)
     if (hasBenefit || reuseEnabled) {
@@ -96,7 +98,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
           filteringPlan,
           joinKeys,
           index,
-          !hasBenefit || SQLConf.get.dynamicPartitionPruningReuseBroadcastOnly),
+          isReuseBroadcastOnly),
         pruningPlan)
     } else {
       // abort dynamic partition pruning
@@ -196,6 +198,22 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
+  /**
+   * For some filtering side can not broadcast by join type but can broadcast by size,
+   * then we should not consider reuse broadcast only, for example:
+   * Left outer join and left side very small.
+   */
+  private def isReuseBroadcastOnly(
+      canBuildBroadcast: Boolean,
+      plan: LogicalPlan,
+      hasBenefit: Boolean): Boolean = {
+    if (canBuildBroadcast) {
+      !hasBenefit || SQLConf.get.dynamicPartitionPruningReuseBroadcastOnly
+    } else {
+      !(hasBenefit && canBroadcastBySize(plan, SQLConf.get))
+    }
+  }
+
   private def prune(plan: LogicalPlan): LogicalPlan = {
     plan transformUp {
       // skip this rule if there's already a DPP subquery on the LHS of a join
@@ -235,13 +253,15 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
             if (partScan.isDefined && canPruneLeft(joinType) &&
                 hasPartitionPruningFilter(right)) {
               val hasBenefit = pruningHasBenefit(l, partScan.get, r, right)
-              newLeft = insertPredicate(l, newLeft, r, right, rightKeys, hasBenefit)
+              newLeft = insertPredicate(l, newLeft, r, right, rightKeys, hasBenefit,
+                isReuseBroadcastOnly(canBuildBroadcastRight(joinType), right, hasBenefit))
             } else {
               partScan = getPartitionTableScan(r, right)
               if (partScan.isDefined && canPruneRight(joinType) &&
                   hasPartitionPruningFilter(left) ) {
                 val hasBenefit = pruningHasBenefit(r, partScan.get, l, left)
-                newRight = insertPredicate(r, newRight, l, left, leftKeys, hasBenefit)
+                newRight = insertPredicate(r, newRight, l, left, leftKeys, hasBenefit,
+                  isReuseBroadcastOnly(canBuildBroadcastLeft(joinType), left, hasBenefit))
               }
             }
           case _ =>

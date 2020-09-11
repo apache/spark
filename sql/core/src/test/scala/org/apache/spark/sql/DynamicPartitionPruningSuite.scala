@@ -1361,6 +1361,65 @@ abstract class DynamicPartitionPruningSuiteBase
       checkAnswer(df, Nil)
     }
   }
+
+  test("Filtering side can not broadcast by join type but can broadcast by size") {
+    withSQLConf(
+      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      Given("LEFT JOIN and left side can broadcast by size")
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+        val df = sql(
+          """
+            |SELECT f.date_id, f.store_id FROM dim_store s
+            |LEFT JOIN fact_sk f ON f.store_id = s.store_id WHERE s.country = 'NL'
+        """.stripMargin)
+
+        checkPartitionPruningPredicate(df, true, false)
+
+        checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
+      }
+
+      Given("LEFT JOIN and left side can not broadcast by size")
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
+        val df = sql(
+          """
+            |SELECT f.date_id, f.store_id FROM dim_store s
+            |LEFT JOIN fact_sk f ON f.store_id = s.store_id WHERE s.country = 'NL'
+        """.stripMargin)
+
+        checkPartitionPruningPredicate(df, false, false)
+
+        checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
+      }
+
+      Given("LEFT SEMI JOIN and left side can broadcast by size")
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+        val df = sql(
+          """
+            |SELECT s.store_id, s.state_province FROM dim_store s
+            |LEFT SEMI JOIN fact_sk f ON f.store_id = s.store_id WHERE s.country = 'NL'
+          """.stripMargin)
+
+        checkPartitionPruningPredicate(df, true, false)
+
+        checkAnswer(df, Row(1, "North-Holland") :: Row(2, "South-Holland") :: Nil)
+      }
+
+      Given("RIGHT OUTER JOIN and right side can broadcast by size")
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+        val df = sql(
+          """
+            |SELECT s.store_id, s.country FROM fact_sk f
+            |RIGHT JOIN dim_store s ON f.store_id = s.store_id
+            |WHERE s.state_province = 'North-Holland'
+          """.stripMargin)
+
+        checkPartitionPruningPredicate(df, true, false)
+
+        checkAnswer(df, Row(1, "NL") :: Nil)
+      }
+    }
+  }
 }
 
 class DynamicPartitionPruningSuiteAEOff extends DynamicPartitionPruningSuiteBase {

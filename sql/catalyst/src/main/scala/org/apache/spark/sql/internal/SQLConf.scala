@@ -277,7 +277,8 @@ object SQLConf {
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly")
       .internal()
       .doc("When true, dynamic partition pruning will only apply when the broadcast exchange of " +
-        "a broadcast hash join operation can be reused as the dynamic pruning filter.")
+        "a broadcast hash join operation can be reused as the dynamic pruning filter except " +
+        "for some filtering side can not broadcast by join type but can broadcast by size.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
