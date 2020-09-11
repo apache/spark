@@ -261,11 +261,13 @@ private[spark] class CoarseGrainedExecutorBackend(
       if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
         env.blockManager.decommissionBlockManager()
       }
-      // Tell master we are are decommissioned so it stops trying to schedule us
-      if (driver.nonEmpty && !fromDriver) {
-        driver.get.askSync[Boolean](ExecutorDecommissioned(executorId))
-      } else {
-        logError("No driver to message decommissioning.")
+      // Tell driver we are decommissioned so it stops trying to schedule us
+      if (!fromDriver) {
+        if (driver.nonEmpty) {
+          driver.get.askSync[Boolean](ExecutorDecommissioned(executorId))
+        } else {
+          logError("No driver to message decommissioning.")
+        }
       }
       if (executor != null) {
         executor.decommission()
