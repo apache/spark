@@ -2556,7 +2556,7 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df.select($"pos" > $"neg"), Row(false))
   }
 
-  test("SPARK-32851: should fail if errors happen when generating expr code") {
+  test("should fail if errors happen when generating expr code") {
     val errMsg = intercept[SparkException] {
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
         val df = spark.range(1)

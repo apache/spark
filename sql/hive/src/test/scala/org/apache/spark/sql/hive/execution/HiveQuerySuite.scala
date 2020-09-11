@@ -104,6 +104,16 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
                                 | LIMIT 20
                               """.stripMargin
 
+  test("should fail if errors happen when generating expr code") {
+    val errMsg = intercept[SparkException] {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        val df = spark.range(1)
+        df.select(Column(FailedCodegenExpr(df("id").expr)) :: Nil: _*).show()
+      }
+    }.getCause.getMessage
+    assert(errMsg.contains("failed to compile:"))
+  }
+
   createQueryTest("SPARK-10484 Optimize the Cartesian (Cross) Join with broadcast based JOIN #1",
     spark_10484_1)
 
@@ -1219,16 +1229,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         sql("select radians(143.2394) FROM src tablesample (1 rows)").collect()
       }
     }
-  }
-
-  test("SPARK-32851: should fail if errors happen when generating expr code") {
-    val errMsg = intercept[SparkException] {
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-        val df = spark.range(1)
-        df.select(Column(FailedCodegenExpr(df("id").expr)) :: Nil: _*).show()
-      }
-    }.getCause.getMessage
-    assert(errMsg.contains("failed to compile:"))
   }
 }
 
