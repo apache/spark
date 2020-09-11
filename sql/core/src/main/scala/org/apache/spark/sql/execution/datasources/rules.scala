@@ -403,8 +403,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
           s"including ${staticPartCols.size} partition column(s) having constant value(s).")
     }
 
-    val partitionsTrackedByCatalog = conf.manageFilesourcePartitions &&
-      catalogTable.isDefined &&
+    val partitionsTrackedByCatalog = catalogTable.isDefined &&
       catalogTable.get.partitionColumnNames.nonEmpty &&
       catalogTable.get.tracksPartitionsInCatalog
     if (partitionsTrackedByCatalog &&
