@@ -250,9 +250,11 @@ class SparkConversionMixin(object):
     """
     Min-in for the conversion from pandas to Spark. Currently, only :class:`SparkSession`
     can use this class.
-    pandasRDD=True creates a DataFrame from an RDD of pandas dataframes (currently only supported using arrow)
+    pandasRDD=True creates a DataFrame from an RDD of pandas dataframes
+    (currently only supported using arrow)
     """
-    def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True, pandasRDD=False):
+    def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True,
+                        pandasRDD=False):
         from pyspark.sql import SparkSession
 
         assert isinstance(self, SparkSession)
@@ -265,7 +267,8 @@ class SparkConversionMixin(object):
         if self._wrapped._conf.arrowPySparkEnabled() and pandasRDD:
             from pyspark.rdd import RDD
             if not isinstance(data, RDD):
-                raise ValueError('pandasRDD is set but data is of type %s, expected RDD type.' % type(data))
+                raise ValueError('pandasRDD is set but data is of type %s, expected RDD type.'
+                                 % type(data))
             # TODO: Support non-arrow conversion? might be *very* slow
             return self._create_from_pandas_rdd_with_arrow(data, schema, timezone)
 
@@ -358,20 +361,23 @@ class SparkConversionMixin(object):
         import pandas as pd
         import pyarrow as pa
 
+        safecheck = self._wrapped._conf.arrowSafeTypeConversion()
+
+        # In case no schema is passed, extract inferred schema from the first record batch
+        from pyspark.sql.pandas.types import from_arrow_schema
+        if schema is None:
+            schema = from_arrow_schema(pa.Schema.from_pandas(prdd.first()))
+
         # Convert to an RDD of arrow record batches
         rb_rdd = (prdd.
                   filter(lambda x: isinstance(x, pd.DataFrame)).
-                  flatMap(lambda x: _dataframe_to_arrow_record_batch(x, timezone=timezone, schema=schema)))
-
-        from pyspark.sql.dataframe import DataFrame
-        from pyspark.sql.pandas.types import from_arrow_schema
-
-        # In case no schema is passed, extract inferred schema from the first record batch
-        if schema is None:
-            schema = pa.ipc.open_stream(rb_rdd.first()).schema
-            schema = from_arrow_schema(schema)
+                  map(lambda x: _dataframe_to_arrow_record_batch(x,
+                                                                 timezone=timezone,
+                                                                 schema=schema,
+                                                                 safecheck=safecheck)))
 
         # Create Spark DataFrame from Arrow record batches RDD
+        from pyspark.sql.dataframe import DataFrame
         jrdd = rb_rdd._to_java_object_rdd()
         jdf = self._jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), self._wrapped._jsqlContext)
         df = DataFrame(jdf, self._wrapped)
@@ -474,7 +480,7 @@ def _sanitize_arrow_schema(schema):
     return new_schema
 
 
-def _dataframe_to_arrow_record_batch(pdf, schema=None, timezone=None, max_batch_size=None):
+def _dataframe_to_arrow_record_batch(pdf, schema=None, timezone=None, safecheck=False):
     """
     Create a DataFrame from a given pandas.DataFrame by slicing it into partitions, converting
     to Arrow data, then sending to the JVM to parallelize. If a schema is passed in, the
@@ -482,41 +488,32 @@ def _dataframe_to_arrow_record_batch(pdf, schema=None, timezone=None, max_batch_
     """
     import re
     import pyarrow as pa
-    from pyspark.sql.pandas.types import to_arrow_schema
-    from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
+    from pyspark.sql.pandas.types import to_arrow_schema, from_arrow_schema
+    from pyspark.sql.pandas.utils import require_minimum_pandas_version, \
+        require_minimum_pyarrow_version
 
     require_minimum_pandas_version()
     require_minimum_pyarrow_version()
-
-    if timezone is not None:
-        from pyspark.sql.pandas.types import _check_dataframe_covert_timestamps_tz_local
-        pdf = _check_dataframe_covert_timestamps_tz_local(pdf, timezone, schema)
 
     # Determine arrow types to coerce data when creating batches
     if schema is not None:
         arrow_schema = to_arrow_schema(schema)
     else:
         # Any timestamps must be coerced to be compatible with Spark
-        arrow_schema = pa.Schema.from_pandas(pdf)
+        arrow_schema = to_arrow_schema(from_arrow_schema(pa.Schema.from_pandas(pdf)))
 
     # Sanitize arrow schema for spark compatibility
     arrow_schema = _sanitize_arrow_schema(arrow_schema)
 
-    # Create Arrow record batches
-    batches = pa.Table.from_pandas(pdf, schema=arrow_schema).to_batches(max_chunksize=max_batch_size)
+    # Create an Arrow record batch, one batch per DF
+    from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
+    arrow_data = [(pdf[col_name], arrow_type) for col_name, arrow_type
+                  in zip(arrow_schema.names, arrow_schema.types)]
 
-    # If schema is available, no need to include it in the payload
-    if schema is not None:
-        return list(map(bytearray, map(pa.RecordBatch.serialize, batches)))
-    else:
-        def _record_batch_dumps(batch):
-            sink = pa.BufferOutputStream()
-            writer = pa.ipc.new_stream(sink, batch.schema)
-            writer.write_batch(batch)
-            writer.close()
-            return sink.getvalue()
+    col_by_name = True  # col by name only applies to StructType columns, can't happen here
+    ser = ArrowStreamPandasSerializer(timezone, safecheck, col_by_name)
 
-        return list(map(bytearray, map(_record_batch_dumps, batches)))
+    return bytearray(ser._create_batch(arrow_data).serialize())
 
 
 def _test():

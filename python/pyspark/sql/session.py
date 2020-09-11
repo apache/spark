@@ -476,7 +476,8 @@ class SparkSession(SparkConversionMixin):
         return SparkSession.builder.getOrCreate()
 
     @since(2.0)
-    def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True, pandasRDD=False):
+    def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True,
+                        pandasRDD=False):
         """
         Creates a :class:`DataFrame` from an :class:`RDD`, an :class:`RDD[pandas.DataFrame]`,
         a list or a :class:`pandas.DataFrame`.
@@ -497,8 +498,8 @@ class SparkSession(SparkConversionMixin):
         If schema inference is needed, ``samplingRatio`` is used to determined the ratio of
         rows used for schema inference. The first row will be used if ``samplingRatio`` is ``None``.
 
-        :param data: an RDD of any kind of SQL data representation (e.g. row, tuple, int, boolean, pd.DataFrame
-            etc.), :class:`list`, or :class:`pandas.DataFrame`.
+        :param data: an RDD of any kind of SQL data representation (e.g. row, tuple, int,
+            boolean, pd.DataFrame, etc.), :class:`list`, or :class:`pandas.DataFrame`.
         :param schema: a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is ``None``.  The data type string format equals to
             :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can

@@ -318,9 +318,9 @@ class ArrowTests(ReusedSQLTestCase):
         df_from_rdd = self.spark.createDataFrame(prdd, schema=self.schema, pandasRDD=True)
         df_from_pdf = self.spark.createDataFrame(pd.concat(pdfs), schema=self.schema)
 
-        result_prdd = df_from_rdd.collect()
-        result_single_pdf = df_from_pdf.collect()
-        self.assertEquals(result_prdd, result_single_pdf)
+        result_prdd = df_from_rdd.toPandas()
+        result_single_pdf = df_from_pdf.toPandas()
+        assert_frame_equal(result_prdd, result_single_pdf)
 
     def test_createDataFrame_with_array_type(self):
         pdf = pd.DataFrame({"a": [[1, 2], [3, 4]], "b": [[u"x", u"y"], [u"y", u"z"]]})
