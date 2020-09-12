@@ -237,8 +237,9 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
  */
 object OptimizeIn extends Rule[LogicalPlan] {
   private def getIntegerBound(nums: Set[Expression]): Option[(Expression, Expression)] = {
+    val values = nums.map(e => e.eval(EmptyRow))
+
     def getBound(nums: Set[Expression]): (Expression, Expression) = {
-      val values = nums.map(e => e.eval(EmptyRow))
       val dt = nums.head.dataType
       val ordering = dt.asInstanceOf[AtomicType].ordering.asInstanceOf[Ordering[Any]]
       val min = values.min(ordering)
@@ -251,7 +252,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
       case _ => false
     }
 
-    if (nums.nonEmpty && isInteger(nums.head) && nums.forall(_.eval(EmptyRow) != null)) {
+    if (nums.nonEmpty && isInteger(nums.head) && !values.contains(null)) {
       val (min, max) = getBound(nums)
       val minL = min.eval(EmptyRow).asInstanceOf[Number].longValue()
       val maxL = max.eval(EmptyRow).asInstanceOf[Number].longValue()

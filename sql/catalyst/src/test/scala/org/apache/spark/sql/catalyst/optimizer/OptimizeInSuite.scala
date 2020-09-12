@@ -239,7 +239,7 @@ class OptimizeInSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("OptimizedIn test: optimize for continuous range") {
+  test("OptimizedIn test: Range check conversion for continuous range") {
     val originalQuery = testRelation
       .select('a)
       .where(In('a, (1 to 21).map(Literal(_))))
@@ -264,7 +264,7 @@ class OptimizeInSuite extends PlanTest {
     }
   }
 
-  test("OptimizedIn test: do not optimize for non-integer") {
+  test("OptimizedIn test: Range check conversion do not apply for non-integer") {
     val tmpRelation = LocalRelation('a.double)
     val originalQuery = tmpRelation
       .select('a)
@@ -281,7 +281,23 @@ class OptimizeInSuite extends PlanTest {
     }
   }
 
-  test("OptimizedIn test: do not optimize for non-continuous range") {
+  test("OptimizedIn test: Range check conversion do not apply if list contains null") {
+    val originalQuery = testRelation
+      .select('a)
+      .where(In('a, List(Literal(1), Literal(2), Literal(3), Literal(null, IntegerType))))
+
+    withSQLConf(OPTIMIZER_INSET_RANGE_CHECK_THRESHOLD.key -> "2") {
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val expected = testRelation
+        .select('a)
+        .where(In('a, List(Literal(1), Literal(2), Literal(3), Literal(null, IntegerType))))
+        .analyze
+
+      comparePlans(optimized, expected)
+    }
+  }
+
+  test("OptimizedIn test: Range check conversion do not apply for non-continuous range") {
     val originalQuery = testRelation
       .select('a)
       .where('a in(1, 2, 3, 3, 5))
