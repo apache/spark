@@ -458,7 +458,8 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("left-semi join with partition column on the right side")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
         val df = sql(
           """
             |SELECT * FROM dim_store s
@@ -483,7 +484,8 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("right outer join with partition column on the left side")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
         val df = sql(
           """
             |SELECT * FROM fact_sk f RIGHT OUTER JOIN dim_store s
@@ -1366,8 +1368,8 @@ abstract class DynamicPartitionPruningSuiteBase
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
-      Given("LEFT JOIN and left side can broadcast by size")
-      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      Given("LEFT SortMergeJoin and left side can broadcast by size")
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
         val df = sql(
           """
             |SELECT f.date_id, f.store_id FROM dim_store s
@@ -1379,7 +1381,20 @@ abstract class DynamicPartitionPruningSuiteBase
         checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
       }
 
-      Given("LEFT JOIN and left side can not broadcast by size")
+      Given("LEFT SortMergeJoin and right side broadcast by hint")
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+        val df = sql(
+          """
+            |SELECT /*+ BROADCAST(f) */  f.date_id, f.store_id FROM dim_store s
+            |LEFT JOIN fact_sk f ON f.store_id = s.store_id WHERE s.country = 'NL'
+        """.stripMargin)
+
+        checkPartitionPruningPredicate(df, false, false)
+
+        checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
+      }
+
+      Given("LEFT SortMergeJoin and left side can not broadcast by size")
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
         val df = sql(
           """
@@ -1405,7 +1420,7 @@ abstract class DynamicPartitionPruningSuiteBase
         checkAnswer(df, Row(1, "North-Holland") :: Row(2, "South-Holland") :: Nil)
       }
 
-      Given("RIGHT OUTER JOIN and right side can broadcast by size")
+      Given("RIGHT SortMergeJoin and right side can broadcast by size")
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
         val df = sql(
           """

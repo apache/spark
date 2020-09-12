@@ -205,12 +205,15 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    */
   private def isReuseBroadcastOnly(
       canBuildBroadcast: Boolean,
-      plan: LogicalPlan,
-      hasBenefit: Boolean): Boolean = {
+      hasBenefit: Boolean,
+      hintToBroadcastPruningSide: Boolean,
+      pruningPlan: LogicalPlan,
+      filteringPlan: LogicalPlan): Boolean = {
     if (canBuildBroadcast) {
       !hasBenefit || SQLConf.get.dynamicPartitionPruningReuseBroadcastOnly
     } else {
-      !(hasBenefit && canBroadcastBySize(plan, SQLConf.get))
+      !(hasBenefit && canBroadcastBySize(filteringPlan, SQLConf.get) &&
+        !hintToBroadcastPruningSide && !canBroadcastBySize(pruningPlan, SQLConf.get))
     }
   }
 
@@ -253,15 +256,21 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             if (partScan.isDefined && canPruneLeft(joinType) &&
                 hasPartitionPruningFilter(right)) {
               val hasBenefit = pruningHasBenefit(l, partScan.get, r, right)
-              newLeft = insertPredicate(l, newLeft, r, right, rightKeys, hasBenefit,
-                isReuseBroadcastOnly(canBuildBroadcastRight(joinType), right, hasBenefit))
+              val reuseBroadcastOnly = isReuseBroadcastOnly(
+                canBuildBroadcastRight(joinType), hasBenefit, hintToBroadcastLeft(hint), left,
+                right)
+              newLeft = insertPredicate(
+                l, newLeft, r, right, rightKeys, hasBenefit, reuseBroadcastOnly)
             } else {
               partScan = getPartitionTableScan(r, right)
               if (partScan.isDefined && canPruneRight(joinType) &&
                   hasPartitionPruningFilter(left) ) {
                 val hasBenefit = pruningHasBenefit(r, partScan.get, l, left)
+                val reuseBroadcastOnly = isReuseBroadcastOnly(
+                  canBuildBroadcastLeft(joinType), hasBenefit, hintToBroadcastRight(hint), right,
+                  left)
                 newRight = insertPredicate(r, newRight, l, left, leftKeys, hasBenefit,
-                  isReuseBroadcastOnly(canBuildBroadcastLeft(joinType), left, hasBenefit))
+                  reuseBroadcastOnly)
               }
             }
           case _ =>
