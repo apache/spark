@@ -88,6 +88,7 @@ public class RemoteBlockPushResolverSuite {
     try {
       String appId = "app_NoIndexFile";
       registerApplication(appId, USER);
+      registerExecutor(appId, prepareBlockManagerLocalDirs(appId, USER, localDirs));
       pushResolver.getMergedBlockMeta(appId, 0, 0);
       removeApplication(appId);
     } catch (Throwable t) {
@@ -160,6 +161,37 @@ public class RemoteBlockPushResolverSuite {
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(appId, 0, 0);
     validateChunks(appId, 0, 0, blockMeta, new int[]{5, 5, 3}, new int[][]{{0, 1}, {2}, {3}});
     removeApplication(appId);
+  }
+
+  @Test(expected = NullPointerException.class)
+  public void testUpdateLocalDirsOnlyOnce() throws IOException {
+    String appId = "app_App1";
+    // First app init and executor register will store the active local dirs list
+    registerApplication(appId, USER);
+    String[] activeLocalDirs = Arrays.stream(localDirs).skip(1).toArray(String[]::new);
+    registerExecutor(appId, prepareBlockManagerLocalDirs(appId, USER, activeLocalDirs));
+    assertEquals(pushResolver.getMergedBlockDirs(appId).length, 1);
+    assertTrue(pushResolver.getMergedBlockDirs(appId)[0].contains(
+        "l2/usercache/testuser/appcache/app_App1/merge_manager"));
+    // Any later app init or executor register from the same application
+    // won't change the active local dirs list
+    registerApplication(appId, USER);
+    assertEquals(pushResolver.getMergedBlockDirs(appId).length, 1);
+    assertTrue(pushResolver.getMergedBlockDirs(appId)[0].contains(
+        "l2/usercache/testuser/appcache/app_App1/merge_manager"));
+    activeLocalDirs = Arrays.stream(localDirs).toArray(String[]::new);
+    registerExecutor(appId, prepareBlockManagerLocalDirs(appId, USER, activeLocalDirs));
+    assertEquals(pushResolver.getMergedBlockDirs(appId).length, 1);
+    assertTrue(pushResolver.getMergedBlockDirs(appId)[0].contains(
+        "l2/usercache/testuser/appcache/app_App1/merge_manager"));
+    removeApplication(appId);
+    try {
+      pushResolver.getMergedBlockDirs(appId);
+    } catch (Throwable e) {
+      assertTrue(e.getMessage()
+          .startsWith("application app_App1 is not registered or NM was restarted."));
+      Throwables.propagate(e);
+    }
   }
 
   /**
