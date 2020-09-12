@@ -537,7 +537,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - 1") {
+  test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - simple") {
     val df1 = Seq(((1, 2, 3), 0), ((2, 3, 4), 1), ((3, 4, 5), 2)).toDF("a", "idx")
     val df2 = Seq(((3, 4), 0), ((1, 2), 1), ((2, 3), 2)).toDF("a", "idx")
     val df3 = Seq(((100, 101, 102, 103), 0), ((110, 111, 112, 113), 1), ((120, 121, 122, 123), 2))
@@ -569,7 +569,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       "`a` STRUCT<`_1`: INT, `_2`: INT, `_3`: INT, `_4`: INT>,`idx` INT")
   }
 
-  test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - 2") {
+  test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - nested") {
     val df1 = Seq((0, UnionClass1a(0, 1L, UnionClass2(1, "2")))).toDF("id", "a")
     val df2 = Seq((1, UnionClass1b(1, 2L, UnionClass3(2, 3L)))).toDF("id", "a")
 

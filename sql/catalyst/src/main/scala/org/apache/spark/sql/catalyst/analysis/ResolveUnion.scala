@@ -100,15 +100,20 @@ object ResolveUnion extends Rule[LogicalPlan] {
           case (source: StructType, target: StructType)
               if allowMissingCol && !source.sameType(target) =>
             // Having an output with same name, but different struct type.
-            // We need to add missing fields.
+            // We need to add missing fields. Note that if there are deeply nested structs such as
+            // nested struct of array in struct, we don't support to add missing deeply nested field
+            // like that. For such case, simply use original attribute.
             addFields(found.get, target).map { added =>
               aliased += found.get
               Alias(added, found.get.name)()
-            }.getOrElse(found.get) // Data type doesn't change. We should add fields at other side.
+            }.getOrElse(found.get)
           case _ =>
-            // Same struct type, or
-            // unsupported: different types, array or map types, or
-            // `allowMissingCol` is disabled.
+            // We don't need/try to add missing fields if:
+            // 1. The attributes of left and right side are the same struct type
+            // 2. The attributes are not struct types. They might be primitive types, or array, map
+            //    types. We don't support adding missing fields of nested structs in array or map
+            //    types now.
+            // 3. `allowMissingCol` is disabled.
             found.get
         }
       } else {
@@ -133,7 +138,6 @@ object ResolveUnion extends Rule[LogicalPlan] {
 
     // Builds a project list for `right` based on `left` output names
     val (rightProjectList, aliased) = compareAndAddFields(left, right, allowMissingCol)
-
 
     // Delegates failure checks to `CheckAnalysis`
     val notFoundAttrs = rightOutputAttrs.diff(rightProjectList ++ aliased)
