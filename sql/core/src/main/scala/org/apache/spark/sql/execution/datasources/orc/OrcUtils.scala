@@ -142,11 +142,12 @@ object OrcUtils extends Logging {
       reader: Reader,
       conf: Configuration): Option[(Array[Int], Boolean)] = {
     val orcFieldNames = reader.getSchema.getFieldNames.asScala
+    val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
     if (orcFieldNames.isEmpty) {
       // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.
       None
     } else {
-      if (orcFieldNames.forall(_.startsWith("_col"))) {
+      if (forcePositionalEvolution || orcFieldNames.forall(_.startsWith("_col"))) {
         // This is a ORC file written by Hive, no field names in the physical schema, assume the
         // physical schema maps to the data scheme by index.
         assert(orcFieldNames.length <= dataSchema.length, "The given data schema " +

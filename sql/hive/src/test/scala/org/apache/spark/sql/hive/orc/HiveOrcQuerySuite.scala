@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.orc
 import java.io.File
 
 import com.google.common.io.Files
+import org.apache.orc.OrcConf
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -311,6 +312,26 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
 
             val df = spark.sql("SELECT _col2 FROM test_hive_orc_impl")
             checkAnswer(df, Row("12"))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-32864: Support ORC forced positional evolution") {
+    Seq("native", "hive").foreach { orcImpl =>
+      withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl,
+        OrcConf.FORCE_POSITIONAL_EVOLUTION.getAttribute -> "true") {
+        withTempPath { f =>
+          val path = f.getCanonicalPath
+          Seq(1 -> 2).toDF("c1", "c2").write.orc(path)
+          checkAnswer(spark.read.orc(path), Row(1, 2))
+
+          withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") { // default since 2.3.0
+            withTable("t") {
+              sql(s"CREATE EXTERNAL TABLE t(c3 INT, c4 INT) STORED AS ORC LOCATION '$path'")
+              checkAnswer(spark.table("t"), Row(1, 2))
+            }
           }
         }
       }
