@@ -75,7 +75,7 @@ Note that `PySpark at Conda <https://anaconda.org/conda-forge/pyspark>`_ is avai
 Official Release Channel
 ------------------------
 
-Different flavors of PySpark is available in the `official release channel <https://spark.apache.org/downloads.html>`_.
+Different flavors of PySpark are available in the `Apache Spark website <https://spark.apache.org/downloads.html>`_.
 Any suitable version can be downloaded and extracted as below:
 
 .. code-block:: bash
@@ -97,7 +97,7 @@ Installing from Source
 
 To install PySpark from source, refer to `Building Spark <https://spark.apache.org/docs/latest/building-spark.html>`_.
 
-Refer to `Official Release Channel <#official-release-channel>`_ for steps to define ``PYTHONPATH``. 
+Refer to `steps above <#official-release-channel>`_ to define ``PYTHONPATH``.
 
 Dependencies
 ------------
