@@ -317,7 +317,6 @@ class SparkSqlParserSuite extends AnalysisTest {
         EqualTo(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
         Literal.TrueLiteral)) :: Nil, OneRowRelation()))
 
-    intercept("SELECT a <> b <> c", "Syntax error at or near")
     intercept("SELECT a = b = c", "Syntax error at or near")
     intercept("SELECT a <=> b <=> c", "Syntax error at or near")
     intercept("SELECT a <> b <> c", "Syntax error at or near")
