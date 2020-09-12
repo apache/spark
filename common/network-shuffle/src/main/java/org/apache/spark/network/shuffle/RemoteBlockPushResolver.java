@@ -207,13 +207,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     String relativePath = getRelativePath(appPathsInfo.user, appId);
     Path filePath = localDir.resolve(relativePath);
     File targetFile = new File(filePath.toFile(), filename);
-    logger.info("Get the file for " + targetFile.getAbsolutePath());
+    logger.debug("Get the file for {}", targetFile.getAbsolutePath());
     return targetFile;
   }
 
   private Path[] getActiveLocalDirs(String[] activeLocalDirs) {
-    return Arrays.stream(activeLocalDirs)
-        .map(localDir -> Paths.get(localDir)).toArray(Path[]::new);
+    Preconditions.checkNotNull(activeLocalDirs,
+        "Active local dirs list has not been updated by any executor registration");
+    return
+        Arrays.stream(activeLocalDirs).map(localDir -> Paths.get(localDir)).toArray(Path[]::new);
   }
 
   private String getRelativePath(String user, String appId) {
@@ -240,7 +242,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     AppPathsInfo appPathsInfo = Preconditions.checkNotNull(
         appsPathInfo.get(appId),
         "application " + appId + " is not registered or NM was restarted.");
-    return Arrays.stream(appPathsInfo.activeLocalDirs)
+    String[] activeLocalDirs = Preconditions.checkNotNull(
+        appsPathInfo.get(appId).activeLocalDirs,
+        "application " + appId +
+            " active local dirs list has not been updated by any executor registration");
+    return Arrays.stream(activeLocalDirs)
         .map(dir -> dir + getRelativePath(appPathsInfo.user, appId))
         .toArray(String[]::new);
   }
@@ -250,7 +256,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     logger.info("Application {} removed, cleanupLocalDirs = {}", appId, cleanupLocalDirs);
     // TODO: Change the message when this service is able to handle NM restart
     AppPathsInfo appPathsInfo = Preconditions.checkNotNull(
-        appsPathInfo.get(appId),
+        appsPathInfo.remove(appId),
         "application " + appId + " is not registered or NM was restarted.");
     Iterator<Map.Entry<AppShufflePartitionId, AppShufflePartitionInfo>> iterator =
         partitions.entrySet().iterator();
@@ -619,7 +625,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @Override
   public void registerApplication(String appId, String user) {
     logger.debug("register application with RemoteBlockPushResolver {} {}", appId, user);
-    appsPathInfo.put(appId, new AppPathsInfo(user));
+    appsPathInfo.putIfAbsent(appId, new AppPathsInfo(user));
   }
 
   @Override
@@ -840,7 +846,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         activeLocalDirs = Arrays.stream(localDirs)
             .map(localDir -> localDir.substring(0, localDir.indexOf(relativePath)))
             .toArray(String[]::new);
-        logger.info("Updated the active local dirs " + Arrays.toString(activeLocalDirs));
+        logger.info("Updated the active local dirs {} for application {}",
+            Arrays.toString(activeLocalDirs), appId);
       }
       return this;
     }
