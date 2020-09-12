@@ -1327,23 +1327,26 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitComparison(ctx: ComparisonContext): Expression = withOrigin(ctx) {
     val left = expression(ctx.left)
     val right = expression(ctx.right)
-    val hasBinaryComparisons = left.isInstanceOf[BinaryComparison] ||
-      right.isInstanceOf[BinaryComparison]
+    val isUnsupportedComparison = (left, right) match {
+      case (_: Attribute, _: Predicate) => true
+      case (_: Predicate, _: Attribute) => true
+      case _ => false
+    }
     val operator = ctx.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
     operator.getSymbol.getType match {
-      case SqlBaseParser.EQ if !hasBinaryComparisons =>
+      case SqlBaseParser.EQ if !isUnsupportedComparison =>
         EqualTo(left, right)
-      case SqlBaseParser.NSEQ if !hasBinaryComparisons =>
+      case SqlBaseParser.NSEQ if !isUnsupportedComparison =>
         EqualNullSafe(left, right)
-      case SqlBaseParser.NEQ | SqlBaseParser.NEQJ if !hasBinaryComparisons =>
+      case SqlBaseParser.NEQ | SqlBaseParser.NEQJ if !isUnsupportedComparison =>
         Not(EqualTo(left, right))
-      case SqlBaseParser.LT if !hasBinaryComparisons =>
+      case SqlBaseParser.LT if !isUnsupportedComparison =>
         LessThan(left, right)
-      case SqlBaseParser.LTE if !hasBinaryComparisons =>
+      case SqlBaseParser.LTE if !isUnsupportedComparison =>
         LessThanOrEqual(left, right)
-      case SqlBaseParser.GT if !hasBinaryComparisons =>
+      case SqlBaseParser.GT if !isUnsupportedComparison =>
         GreaterThan(left, right)
-      case SqlBaseParser.GTE if !hasBinaryComparisons =>
+      case SqlBaseParser.GTE if !isUnsupportedComparison =>
         GreaterThanOrEqual(left, right)
       case _ =>
         throw new ParseException("Syntax error at or near", ctx)

@@ -24,7 +24,7 @@ import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, EqualTo, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, EqualTo, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, RefreshResource}
@@ -307,12 +307,24 @@ class SparkSqlParserSuite extends AnalysisTest {
   }
 
   test("Prohibit binary comparisons chain") {
-    assertEqual("SELECT a = b",
-      Project(UnresolvedAlias(EqualTo(UnresolvedAttribute("a"), UnresolvedAttribute("b"))) :: Nil,
-        OneRowRelation()))
+    assertEqual("SELECT (a = b) = (b = c)",
+      Project(UnresolvedAlias(EqualTo(
+        EqualTo(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
+        EqualTo(UnresolvedAttribute("b"), UnresolvedAttribute("c")))) :: Nil, OneRowRelation()))
 
+    assertEqual("SELECT (a = b) = true",
+      Project(UnresolvedAlias(EqualTo(
+        EqualTo(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
+        Literal.TrueLiteral)) :: Nil, OneRowRelation()))
+
+    intercept("SELECT a <> b <> c", "Syntax error at or near")
     intercept("SELECT a = b = c", "Syntax error at or near")
-    intercept("SELECT a < b > c", "Syntax error at or near")
+    intercept("SELECT a <=> b <=> c", "Syntax error at or near")
+    intercept("SELECT a <> b <> c", "Syntax error at or near")
+    intercept("SELECT a < b < c", "Syntax error at or near")
+    intercept("SELECT a <= b <= c", "Syntax error at or near")
+    intercept("SELECT a > b > c", "Syntax error at or near")
+    intercept("SELECT a >= b >= c", "Syntax error at or near")
   }
 
   test("database and schema tokens are interchangeable") {
