@@ -95,7 +95,8 @@ object ResolveUnion extends Rule[LogicalPlan] {
     val rightProjectList = leftOutputAttrs.map { lattr =>
       val found = rightOutputAttrs.find { rattr => resolver(lattr.name, rattr.name) }
       if (found.isDefined) {
-        val foundDt = found.get.dataType
+        val foundAttr = found.get
+        val foundDt = foundAttr.dataType
         (foundDt, lattr.dataType) match {
           case (source: StructType, target: StructType)
               if allowMissingCol && !source.sameType(target) =>
@@ -103,10 +104,10 @@ object ResolveUnion extends Rule[LogicalPlan] {
             // We need to add missing fields. Note that if there are deeply nested structs such as
             // nested struct of array in struct, we don't support to add missing deeply nested field
             // like that. For such case, simply use original attribute.
-            addFields(found.get, target).map { added =>
-              aliased += found.get
-              Alias(added, found.get.name)()
-            }.getOrElse(found.get)
+            addFields(foundAttr, target).map { added =>
+              aliased += foundAttr
+              Alias(added, foundAttr.name)()
+            }.getOrElse(foundAttr)
           case _ =>
             // We don't need/try to add missing fields if:
             // 1. The attributes of left and right side are the same struct type

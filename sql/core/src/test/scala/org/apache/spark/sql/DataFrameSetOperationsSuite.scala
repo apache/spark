@@ -573,34 +573,31 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     val df1 = Seq((0, UnionClass1a(0, 1L, UnionClass2(1, "2")))).toDF("id", "a")
     val df2 = Seq((1, UnionClass1b(1, 2L, UnionClass3(2, 3L)))).toDF("id", "a")
 
+    val expectedSchema = "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
+      "`nested`: STRUCT<`a`: INT, `b`: BIGINT, `c`: STRING>>"
+
     var unionDf = df1.unionByName(df2, true)
     checkAnswer(unionDf,
       Row(0, Row(0, 1, Row(1, null, "2"))) ::
         Row(1, Row(1, 2, Row(2, 3L, null))) :: Nil)
-    assert(unionDf.schema.toDDL ==
-      "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
-        "`nested`: STRUCT<`a`: INT, `b`: BIGINT, `c`: STRING>>")
+    assert(unionDf.schema.toDDL == expectedSchema)
 
     unionDf = df2.unionByName(df1, true)
     checkAnswer(unionDf,
       Row(1, Row(1, 2, Row(2, 3L, null))) ::
         Row(0, Row(0, 1, Row(1, null, "2"))) :: Nil)
-    assert(unionDf.schema.toDDL ==
-      "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
-        "`nested`: STRUCT<`a`: INT, `b`: BIGINT, `c`: STRING>>")
+    assert(unionDf.schema.toDDL == expectedSchema)
 
     val df3 = Seq((2, UnionClass1b(2, 3L, null))).toDF("id", "a")
     unionDf = df1.unionByName(df3, true)
     checkAnswer(unionDf,
       Row(0, Row(0, 1, Row(1, null, "2"))) ::
         Row(2, Row(2, 3, null)) :: Nil)
-    assert(unionDf.schema.toDDL ==
-      "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
-        "`nested`: STRUCT<`a`: INT, `b`: BIGINT, `c`: STRING>>")
+    assert(unionDf.schema.toDDL == expectedSchema)
   }
 
   test("SPARK-32376: Make unionByName null-filling behavior work with struct columns" +
-      "- case-sensitive cases") {
+      " - case-sensitive cases") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       val df1 = Seq((0, UnionClass1a(0, 1L, UnionClass2(1, "2")))).toDF("id", "a")
       val df2 = Seq((1, UnionClass1c(1, 2L, UnionClass4(2, 3L)))).toDF("id", "a")
