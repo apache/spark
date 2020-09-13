@@ -399,7 +399,7 @@ If you are building a packaged PySpark application or library you can add it to 
 
 {% highlight python %}
     install_requires=[
-        'pyspark=={site.SPARK_VERSION}'
+        'pyspark=={{site.SPARK_VERSION}}'
     ]
 {% endhighlight %}
 
