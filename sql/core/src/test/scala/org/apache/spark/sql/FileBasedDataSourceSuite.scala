@@ -883,7 +883,7 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
-  test("SPARK-32827: Add spark.sql.maxMetadataStringLength config") {
+  test("SPARK-32827: Set max metadata string length") {
     withTempDir { dir =>
       val tableName = "t"
       val path = s"${dir.getCanonicalPath}/$tableName"
