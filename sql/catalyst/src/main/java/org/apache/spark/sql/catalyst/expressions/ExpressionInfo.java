@@ -144,8 +144,8 @@ public class ExpressionInfo {
         if (!since.isEmpty()) {
             if (!since.matches("[0-9]+\\.[0-9]+\\.[0-9]+")) {
                 throw new IllegalArgumentException("'since' is malformed in the expression [" +
-                        this.name + "]. It should follow the MAJOR.MINOR.PATCH pattern; however, " +
-                        "got [" + since + "].");
+                    this.name + "]. It should follow the MAJOR.MINOR.PATCH pattern; however, " +
+                    "got [" + since + "].");
             }
             this.extended += "\n    Since: " + since + "\n";
         }
