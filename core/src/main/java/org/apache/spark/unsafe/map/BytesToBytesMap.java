@@ -818,7 +818,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
           }
         } else if (numKeys >= growthThreshold && longArray.size() / 2 >= MAX_CAPACITY) {
           // The map has reached its growth threshold, but is already at MAX_CAPACITY and cannot
-          // grow. Instead, we prevent the map from accepting any more new elements.
+          // grow. Instead, we prevent the map from accepting any more new elements to make sure we
+          // don't exceed the load factor. If we need to spill later, this allows
+          // UnsafeKVExternalSorter to reuse the array for sorting.
           canGrowArray = false;
         }
       }
