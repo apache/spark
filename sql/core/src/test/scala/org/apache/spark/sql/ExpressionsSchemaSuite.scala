@@ -178,7 +178,15 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
           s"$numberOfQueries record in result file. Try regenerating the result files.")
 
       val numberOfMissingExamples = lines(3).split(":")(1).trim.toInt
-      val expectedMissingExamples = lines(4).split(":")(1).trim.split(",")
+      val expectedMissingExamples = {
+        val missingExamples = lines(4).split(":")(1).trim
+        // Splitting on a empty string would return [""]
+        if (missingExamples.nonEmpty) {
+          missingExamples.split(",")
+        } else {
+          Array.empty[String]
+        }
+      }
 
       assert(numberOfMissingExamples == expectedMissingExamples.size,
         s"expected missing examples size: ${expectedMissingExamples.size} not same as " +

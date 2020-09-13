@@ -267,7 +267,11 @@ struct<function_desc:string>
 -- !query output
 Class: org.apache.spark.sql.catalyst.expressions.Cast
 Extended Usage:
-    No example/argument for boolean.
+    Examples:
+      > SELECT boolean(1);
+       true
+  
+    Since: 2.0.1
 
 Function: boolean
 Usage: boolean(expr) - Casts the value `expr` to the target data type `boolean`.
