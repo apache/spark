@@ -274,8 +274,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         extraOptions + ("paths" -> objectMapper.writeValueAsString(paths.toArray))
       }
 
-      val finalOptions =
-        sessionOptions.filterKeys(!optionsWithPath.contains(_)) ++ optionsWithPath.originalMap
+      val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
+        optionsWithPath.originalMap
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
       val (table, catalog, ident) = provider match {
         case _: SupportsCatalogOptions if userSpecifiedSchema.nonEmpty =>
