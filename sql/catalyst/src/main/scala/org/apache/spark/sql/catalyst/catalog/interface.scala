@@ -24,6 +24,8 @@ import java.util.Date
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
@@ -31,8 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -690,4 +691,29 @@ case class HiveTableRelation(
   override def newInstance(): HiveTableRelation = copy(
     dataCols = dataCols.map(_.newInstance()),
     partitionCols = partitionCols.map(_.newInstance()))
+
+
+  override def simpleString(maxFields: Int): String = {
+    val catalogTable = tableMeta.storage.serde match {
+      case Some(serde) => tableMeta.identifier :: serde :: Nil
+      case _ => tableMeta.identifier :: Nil
+    }
+
+    val metadataEntries = Map(
+      "CatalogTable" -> catalogTable.mkString(", "),
+      "Data Cols" -> truncatedString(dataCols, "[", ", ", "]", maxFields),
+      "Partition Cols" -> truncatedString(partitionCols, "[", ", ", "]", maxFields),
+      "Statistic" -> tableStats.map(_.simpleString).getOrElse(""),
+      "Pruned Partitions" -> prunedPartitions.map { partitions =>
+        val specs = partitions.map(_.spec.map { case (k, v) => s"$k=$v" }.mkString(", "))
+        truncatedString(specs, "[", ", ", "]", maxFields)
+      }.getOrElse("")
+    ).filter(_._2.length > 0).toSeq.sorted.map {
+      case (key, value) if key == "CatalogTable" => value
+      case (key, value) =>
+        key + ": " + StringUtils.abbreviate(value, SQLConf.get.maxMetadataValueLength)
+    }
+    val metadataStr = truncatedString(metadataEntries, "[", ", ", "]", maxFields)
+    s"$nodeName $metadataStr"
+  }
 }
