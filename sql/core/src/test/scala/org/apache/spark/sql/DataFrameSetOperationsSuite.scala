@@ -598,9 +598,45 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
         "`nested`: STRUCT<`a`: INT, `b`: BIGINT, `c`: STRING>>")
   }
+
+  test("SPARK-32376: Make unionByName null-filling behavior work with struct columns" +
+      "- case-sensitive cases") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val df1 = Seq((0, UnionClass1a(0, 1L, UnionClass2(1, "2")))).toDF("id", "a")
+      val df2 = Seq((1, UnionClass1c(1, 2L, UnionClass4(2, 3L)))).toDF("id", "a")
+
+      var unionDf = df1.unionByName(df2, true)
+      checkAnswer(unionDf,
+        Row(0, Row(0, 1, Row(null, 1, null, "2"))) ::
+          Row(1, Row(1, 2, Row(2, null, 3L, null))) :: Nil)
+      assert(unionDf.schema.toDDL ==
+        "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
+          "`nested`: STRUCT<`A`: INT, `a`: INT, `b`: BIGINT, `c`: STRING>>")
+
+      unionDf = df2.unionByName(df1, true)
+      checkAnswer(unionDf,
+        Row(1, Row(1, 2, Row(2, null, 3L, null))) ::
+          Row(0, Row(0, 1, Row(null, 1, null, "2"))) :: Nil)
+      assert(unionDf.schema.toDDL ==
+        "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
+          "`nested`: STRUCT<`A`: INT, `a`: INT, `b`: BIGINT, `c`: STRING>>")
+
+      val df3 = Seq((2, UnionClass1b(2, 3L, UnionClass3(4, 5L)))).toDF("id", "a")
+      unionDf = df2.unionByName(df3, true)
+      checkAnswer(unionDf,
+        Row(1, Row(1, 2, Row(2, null, 3L))) ::
+          Row(2, Row(2, 3, Row(null, 4, 5L))) :: Nil)
+      assert(unionDf.schema.toDDL ==
+        "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
+          "`nested`: STRUCT<`A`: INT, `a`: INT, `b`: BIGINT>>")
+    }
+  }
 }
 
 case class UnionClass1a(a: Int, b: Long, nested: UnionClass2)
 case class UnionClass1b(a: Int, b: Long, nested: UnionClass3)
+case class UnionClass1c(a: Int, b: Long, nested: UnionClass4)
+
 case class UnionClass2(a: Int, c: String)
 case class UnionClass3(a: Int, b: Long)
+case class UnionClass4(A: Int, b: Long)
