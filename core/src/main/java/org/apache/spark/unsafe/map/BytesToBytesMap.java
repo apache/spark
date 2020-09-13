@@ -817,8 +817,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
             canGrowArray = false;
           }
         } else if (numKeys >= growthThreshold && longArray.size() / 2 >= MAX_CAPACITY) {
-          // The map needs to grow, but this would cause it to exceed MAX_CAPACITY. Prevent the map
-          // from accepting any more new elements.
+          // The map cannot grow because doing so would cause it to exceed MAX_CAPACITY. Instead, we
+          // prevent the map from accepting any more new elements.
           canGrowArray = false;
         }
       }
