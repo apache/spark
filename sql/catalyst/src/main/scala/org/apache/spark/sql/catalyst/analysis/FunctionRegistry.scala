@@ -551,18 +551,18 @@ object FunctionRegistry {
     // cast
     expression[Cast]("cast"),
     // Cast aliases (SPARK-16730)
-    castAlias("boolean", BooleanType),
-    castAlias("tinyint", ByteType),
-    castAlias("smallint", ShortType),
-    castAlias("int", IntegerType),
-    castAlias("bigint", LongType),
-    castAlias("float", FloatType),
-    castAlias("double", DoubleType),
-    castAlias("decimal", DecimalType.USER_DEFAULT),
-    castAlias("date", DateType),
-    castAlias("timestamp", TimestampType),
-    castAlias("binary", BinaryType),
-    castAlias("string", StringType),
+    castAlias("boolean", BooleanType, "1", "true"),
+    castAlias("tinyint", ByteType, "1.0", "1"),
+    castAlias("smallint", ShortType, "1.0", "1"),
+    castAlias("int", IntegerType, "1.0", "1"),
+    castAlias("bigint", LongType, "1.0", "1"),
+    castAlias("float", FloatType, "1", "1.0"),
+    castAlias("double", DoubleType, "1", "1.0"),
+    castAlias("decimal", DecimalType.USER_DEFAULT, "1.0", "1"),
+    castAlias("date", DateType, "'1970-01-01T12'", "1970-01-01"),
+    castAlias("timestamp", TimestampType, "'1970-01-01 12:00'", "1970-01-01 12:00:00"),
+    castAlias("binary", BinaryType, "'spark'", "spark"),
+    castAlias("string", StringType, "1.0", "1.0"),
 
     // csv
     expression[CsvToStructs]("from_csv"),
@@ -651,7 +651,9 @@ object FunctionRegistry {
    */
   private def castAlias(
       name: String,
-      dataType: DataType): (String, (ExpressionInfo, FunctionBuilder)) = {
+      dataType: DataType,
+      exampleIn: String,
+      exampleOut: String): (String, (ExpressionInfo, FunctionBuilder)) = {
     val builder = (args: Seq[Expression]) => {
       if (args.size != 1) {
         throw new AnalysisException(s"Function $name accepts only one argument")
@@ -660,8 +662,13 @@ object FunctionRegistry {
     }
     val clazz = scala.reflect.classTag[Cast].runtimeClass
     val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
-    val expressionInfo =
-      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "", "", "")
+    val examples = s"""
+    Examples:
+      > SELECT _FUNC_($exampleIn);
+       $exampleOut
+  """
+    val expressionInfo = new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "",
+      examples, "", "", "2.0.1", "")
     (name, (expressionInfo, builder))
   }
 

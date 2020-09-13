@@ -37,6 +37,7 @@ import org.apache.spark.util.sketch.CountMinSketch
  * @param confidenceExpression confidence, must be positive and less than 1.0
  * @param seedExpression random seed
  */
+// scalastyle:off nonascii
 @ExpressionDescription(
   usage = """
     _FUNC_(col, eps, confidence, seed) - Returns a count-min sketch of a column with the given esp,
@@ -44,8 +45,14 @@ import org.apache.spark.util.sketch.CountMinSketch
       `CountMinSketch` before usage. Count-min sketch is a probabilistic data structure used for
       cardinality estimation using sub-linear space.
   """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col, 0.1d, 0.9d, 0) FROM VALUES (1), (2), (1) AS tab(col);
+       ]�Z0jl����M��_
+  """,
   group = "agg_funcs",
   since = "2.2.0")
+// scalastyle:on nonascii
 case class CountMinSketchAgg(
     child: Expression,
     epsExpression: Expression,

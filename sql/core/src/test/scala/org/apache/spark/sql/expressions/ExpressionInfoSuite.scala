@@ -47,13 +47,15 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     Seq("agg_funcs", "array_funcs", "datetime_funcs", "json_funcs", "map_funcs", "window_funcs")
         .foreach { groupName =>
       val info = new ExpressionInfo(
-        "testClass", null, "testName", null, "", "", "", groupName, "", "")
+        "testClass", null, "testName", "_FUNC_", "",
+        "    Examples:", "", groupName, "1.0.0", "")
       assert(info.getGroup === groupName)
     }
 
     val errMsg = intercept[IllegalArgumentException] {
       val invalidGroupName = "invalid_group_funcs"
-      new ExpressionInfo("testClass", null, "testName", null, "", "", "", invalidGroupName, "", "")
+      new ExpressionInfo("testClass", null, "testName", "_FUNC_", "",
+        "    Examples:", "", invalidGroupName, "1.0.0", "")
     }.getMessage
     assert(errMsg.contains("'group' is malformed in the expression [testName]."))
   }
@@ -61,19 +63,22 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
   test("error handling in ExpressionInfo") {
     val errMsg1 = intercept[IllegalArgumentException] {
       val invalidNote = "  invalid note"
-      new ExpressionInfo("testClass", null, "testName", null, "", "", invalidNote, "", "", "")
+      new ExpressionInfo("testClass", null, "testName", "_FUNC_", "",
+        "    Examples:", invalidNote, "", "1.0.0", "")
     }.getMessage
     assert(errMsg1.contains("'note' is malformed in the expression [testName]."))
 
     val errMsg2 = intercept[IllegalArgumentException] {
       val invalidSince = "-3.0.0"
-      new ExpressionInfo("testClass", null, "testName", null, "", "", "", "", invalidSince, "")
+      new ExpressionInfo("testClass", null, "testName", "_FUNC_", "",
+        "    Examples:", "", "", invalidSince, "")
     }.getMessage
     assert(errMsg2.contains("'since' is malformed in the expression [testName]."))
 
     val errMsg3 = intercept[IllegalArgumentException] {
       val invalidDeprecated = "  invalid deprecated"
-      new ExpressionInfo("testClass", null, "testName", null, "", "", "", "", "", invalidDeprecated)
+      new ExpressionInfo("testClass", null, "testName", "_FUNC_", "",
+        "    Examples:", "", "", "1.0.0", invalidDeprecated)
     }.getMessage
     assert(errMsg3.contains("'deprecated' is malformed in the expression [testName]."))
   }
@@ -130,7 +135,10 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.Shuffle",
       "org.apache.spark.sql.catalyst.expressions.Uuid",
       // The example calls methods that return unstable results.
-      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
+      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection",
+      "org.apache.spark.sql.catalyst.expressions.SparkVersion",
+      // Encoding issues make the comparison fail
+      "org.apache.spark.sql.catalyst.expressions.aggregate.CountMinSketchAgg")
 
     val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
     parFuncs.foreach { funcId =>
