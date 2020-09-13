@@ -816,6 +816,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
           } catch (SparkOutOfMemoryError oom) {
             canGrowArray = false;
           }
+        } else if (numKeys >= growthThreshold && longArray.size() / 2 >= MAX_CAPACITY) {
+          // The map needs to grow, but this would cause it to exceed MAX_CAPACITY. Prevent the map
+          // from accepting any more new elements.
+          canGrowArray = false;
         }
       }
       return true;
