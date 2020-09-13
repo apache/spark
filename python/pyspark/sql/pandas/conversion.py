@@ -486,7 +486,6 @@ def _dataframe_to_arrow_record_batch(pdf, schema=None, timezone=None, safecheck=
     to Arrow data, then sending to the JVM to parallelize. If a schema is passed in, the
     data types will be used to coerce the data in Pandas to Arrow conversion.
     """
-    import re
     import pyarrow as pa
     from pyspark.sql.pandas.types import to_arrow_schema, from_arrow_schema
     from pyspark.sql.pandas.utils import require_minimum_pandas_version, \

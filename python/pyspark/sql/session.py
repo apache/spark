@@ -533,14 +533,6 @@ class SparkSession(SparkConversionMixin):
         >>> df.collect()
         [Row(name='Alice', age=1)]
 
-        >>> prdd = sc.range(0, 10).map(lambda x: pd.DataFrame([[x,]*4], columns=list('ABCD')))
-        >>> df = spark.createDataFrame(prdd, schema=None, pandasRDD=True)
-        >>> df.collect()
-        [Row(A=0, B=0, C=0, D=0),
-         Row(A=1, B=1, C=1, D=1),
-         Row(A=2, B=2, C=2, D=2),
-         Row(A=3, B=3, C=3, D=3)]
-
         >>> from pyspark.sql import Row
         >>> Person = Row('name', 'age')
         >>> person = rdd.map(lambda r: Person(*r))
@@ -555,6 +547,15 @@ class SparkSession(SparkConversionMixin):
         >>> df3 = spark.createDataFrame(rdd, schema)
         >>> df3.collect()
         [Row(name='Alice', age=1)]
+
+        >>> # doctest: +SKIP
+        ... prdd = sc.range(0, 10).map(lambda x: pandas.DataFrame([[x,]*4], columns=list('ABCD')))
+        ... df4 = spark.createDataFrame(prdd, schema=None, pandasRDD=True)
+        ... df4.collect()
+        [Row(A=0, B=0, C=0, D=0),
+         Row(A=1, B=1, C=1, D=1),
+         Row(A=2, B=2, C=2, D=2),
+         Row(A=3, B=3, C=3, D=3)]
 
         >>> spark.createDataFrame(df.toPandas()).collect()  # doctest: +SKIP
         [Row(name='Alice', age=1)]
