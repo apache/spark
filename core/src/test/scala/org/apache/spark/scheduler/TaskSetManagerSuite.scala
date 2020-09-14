@@ -41,7 +41,7 @@ import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AccumulatorV2, ManualClock}
+import org.apache.spark.util.{AccumulatorV2, Clock, ManualClock, SystemClock}
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   extends DAGScheduler(sc) {
@@ -109,8 +109,11 @@ object FakeRackUtil {
  * a list of "live" executors and their hostnames for isExecutorAlive and hasExecutorsAliveOnHost
  * to work, and these are required for locality in TaskSetManager.
  */
-class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* execId, host */)
-  extends TaskSchedulerImpl(sc)
+class FakeTaskScheduler(
+    sc: SparkContext,
+    clock: Clock,
+    liveExecutors: (String, String)* /* execId, host */)
+  extends TaskSchedulerImpl(sc, sc.conf.get(config.TASK_MAX_FAILURES), clock = clock)
 {
   val startedTasks = new ArrayBuffer[Long]
   val endedTasks = new mutable.HashMap[Long, TaskEndReason]
@@ -119,6 +122,10 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
   val speculativeTasks = new ArrayBuffer[Int]
 
   val executors = new mutable.HashMap[String, String]
+
+  def this(sc: SparkContext, liveExecutors: (String, String)*) = {
+    this(sc, new SystemClock, liveExecutors: _*)
+  }
 
   // this must be initialized before addExecutor
   override val defaultRackValue: Option[String] = Some("default")
@@ -149,13 +156,12 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
 
   override def taskSetFinished(manager: TaskSetManager): Unit = finishedManagers += manager
 
-  override def isExecutorAlive(execId: String): Boolean = executors.contains(execId)
+  override def isExecutorAlive(execId: String): Boolean =
+    executors.contains(execId) && !isExecutorDecommissioned(execId)
 
-  override def hasExecutorsAliveOnHost(host: String): Boolean = executors.values.exists(_ == host)
-
-  override def hasHostAliveOnRack(rack: String): Boolean = {
-    hostsByRack.get(rack) != None
-  }
+  override def hasExecutorsAliveOnHost(host: String): Boolean =
+    !isHostDecommissioned(host) && executors
+      .exists { case (e, h) => h == host && !isExecutorDecommissioned(e) }
 
   def addExecutor(execId: String, host: String): Unit = {
     executors.put(execId, host)
@@ -651,6 +657,59 @@ class TaskSetManagerSuite
     // And we'll shift to the new highest locality level, which is PROCESS_LOCAL in this case.
     assert(manager.resourceOffer("execC", "host3", ANY)._1.isEmpty)
     assert(manager.resourceOffer("execA", "host1", ANY)._1.isDefined)
+  }
+
+  test("SPARK-32653: Decommissioned host should not be used to calculate locality levels") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc)
+    val backend = mock(classOf[SchedulerBackend])
+    doNothing().when(backend).reviveOffers()
+    sched.initialize(backend)
+
+    val exec0 = "exec0"
+    val exec1 = "exec1"
+    val host0 = "host0"
+    sched.addExecutor(exec0, host0)
+    sched.addExecutor(exec1, host0)
+
+    val taskSet = FakeTask.createTaskSet(2,
+      Seq(ExecutorCacheTaskLocation(host0, exec0)),
+      Seq(ExecutorCacheTaskLocation(host0, exec1)))
+    sched.submitTasks(taskSet)
+    val manager = sched.taskSetManagerForAttempt(0, 0).get
+
+    assert(manager.myLocalityLevels === Array(PROCESS_LOCAL, NODE_LOCAL, ANY))
+
+    // Decommission all executors on host0, to mimic CoarseGrainedSchedulerBackend.
+    sched.executorDecommission(exec0, ExecutorDecommissionInfo("test", Some(host0)))
+    sched.executorDecommission(exec1, ExecutorDecommissionInfo("test", Some(host0)))
+
+    assert(manager.myLocalityLevels === Array(ANY))
+  }
+
+  test("SPARK-32653: Decommissioned executor should not be used to calculate locality levels") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc)
+    val backend = mock(classOf[SchedulerBackend])
+    doNothing().when(backend).reviveOffers()
+    sched.initialize(backend)
+
+    val exec0 = "exec0"
+    val exec1 = "exec1"
+    val host0 = "host0"
+    sched.addExecutor(exec0, host0)
+    sched.addExecutor(exec1, host0)
+
+    val taskSet = FakeTask.createTaskSet(1, Seq(ExecutorCacheTaskLocation(host0, exec0)))
+    sched.submitTasks(taskSet)
+    val manager = sched.taskSetManagerForAttempt(0, 0).get
+
+    assert(manager.myLocalityLevels === Array(PROCESS_LOCAL, NODE_LOCAL, ANY))
+
+    // Decommission the only executor (without the host) that the task is interested in running on.
+    sched.executorDecommission(exec0, ExecutorDecommissionInfo("test", None))
+
+    assert(manager.myLocalityLevels === Array(NODE_LOCAL, ANY))
   }
 
   test("test RACK_LOCAL tasks") {
@@ -1922,14 +1981,16 @@ class TaskSetManagerSuite
   test("SPARK-21040: Check speculative tasks are launched when an executor is decommissioned" +
     " and the tasks running on it cannot finish within EXECUTOR_DECOMMISSION_KILL_INTERVAL") {
     sc = new SparkContext("local", "test")
-    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"), ("exec3", "host3"))
+    val clock = new ManualClock()
+    sched = new FakeTaskScheduler(sc, clock,
+      ("exec1", "host1"), ("exec2", "host2"), ("exec3", "host3"))
+    sched.backend = mock(classOf[SchedulerBackend])
     val taskSet = FakeTask.createTaskSet(4)
     sc.conf.set(config.SPECULATION_ENABLED, true)
     sc.conf.set(config.SPECULATION_MULTIPLIER, 1.5)
     sc.conf.set(config.SPECULATION_QUANTILE, 0.5)
     sc.conf.set(config.EXECUTOR_DECOMMISSION_KILL_INTERVAL.key, "5s")
-    val clock = new ManualClock()
-    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    val manager = sched.createTaskSetManager(taskSet, MAX_TASK_FAILURES)
     val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
       task.metrics.internalAccums
     }
@@ -1965,13 +2026,12 @@ class TaskSetManagerSuite
     assert(!manager.checkSpeculatableTasks(0))
     assert(sched.speculativeTasks.toSet === Set())
 
-    // decommission exec-2. All tasks running on exec-2 (i.e. TASK 2,3)  will be added to
-    // executorDecommissionSpeculationTriggerTimeoutOpt
+    // decommission exec-2. All tasks running on exec-2 (i.e. TASK 2,3) will be now
+    // checked if they should be speculated.
     // (TASK 2 -> 15, TASK 3 -> 15)
-    manager.executorDecommission("exec2")
-    assert(manager.tidToExecutorKillTimeMapping.keySet === Set(2, 3))
-    assert(manager.tidToExecutorKillTimeMapping(2) === 15*1000)
-    assert(manager.tidToExecutorKillTimeMapping(3) === 15*1000)
+    sched.executorDecommission("exec2", ExecutorDecommissionInfo("decom", None))
+    assert(sched.getExecutorDecommissionState("exec2").map(_.startTime) ===
+      Some(clock.getTimeMillis()))
 
     assert(manager.checkSpeculatableTasks(0))
     // TASK 2 started at t=0s, so it can still finish before t=15s (Median task runtime = 10s)

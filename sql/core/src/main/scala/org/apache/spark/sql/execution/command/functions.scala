@@ -88,7 +88,9 @@ case class CreateFunctionCommand(
       } else {
         // For a permanent, we will store the metadata into underlying external catalog.
         // This function will be loaded into the FunctionRegistry when a query uses it.
-        // We do not load it into FunctionRegistry right now.
+        // We do not load it into FunctionRegistry right now, to avoid loading the resource and
+        // UDF class immediately, as the Spark application to create the function may not have
+        // access to the resource and/or UDF class.
         catalog.createFunction(func, ignoreIfExists)
       }
     }
@@ -251,8 +253,8 @@ case class RefreshFunctionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (FunctionRegistry.builtin.functionExists(FunctionIdentifier(functionName))) {
-      throw new AnalysisException(s"Cannot refresh builtin function $functionName")
+    if (FunctionRegistry.builtin.functionExists(FunctionIdentifier(functionName, databaseName))) {
+      throw new AnalysisException(s"Cannot refresh built-in function $functionName")
     }
     if (catalog.isTemporaryFunction(FunctionIdentifier(functionName, databaseName))) {
       throw new AnalysisException(s"Cannot refresh temporary function $functionName")

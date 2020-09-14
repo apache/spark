@@ -55,7 +55,7 @@ TakeOrderedAndProject (51)
 (1) Scan parquet default.web_sales
 Output [7]: [ws_sold_date_sk#1, ws_item_sk#2, ws_web_page_sk#3, ws_order_number#4, ws_quantity#5, ws_sales_price#6, ws_net_profit#7]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/web_sales]
+Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_item_sk), IsNotNull(ws_order_number), IsNotNull(ws_web_page_sk), IsNotNull(ws_sold_date_sk), Or(Or(And(GreaterThanOrEqual(ws_sales_price,100.00),LessThanOrEqual(ws_sales_price,150.00)),And(GreaterThanOrEqual(ws_sales_price,50.00),LessThanOrEqual(ws_sales_price,100.00))),And(GreaterThanOrEqual(ws_sales_price,150.00),LessThanOrEqual(ws_sales_price,200.00))), Or(Or(And(GreaterThanOrEqual(ws_net_profit,100.00),LessThanOrEqual(ws_net_profit,200.00)),And(GreaterThanOrEqual(ws_net_profit,150.00),LessThanOrEqual(ws_net_profit,300.00))),And(GreaterThanOrEqual(ws_net_profit,50.00),LessThanOrEqual(ws_net_profit,250.00)))]
 ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_web_page_sk:int,ws_order_number:int,ws_quantity:int,ws_sales_price:decimal(7,2),ws_net_profit:decimal(7,2)>
 
@@ -69,7 +69,7 @@ Condition : (((((isnotnull(ws_item_sk#2) AND isnotnull(ws_order_number#4)) AND i
 (4) Scan parquet default.web_returns
 Output [8]: [wr_item_sk#8, wr_refunded_cdemo_sk#9, wr_refunded_addr_sk#10, wr_returning_cdemo_sk#11, wr_reason_sk#12, wr_order_number#13, wr_fee#14, wr_refunded_cash#15]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/web_returns]
+Location [not included in comparison]/{warehouse_dir}/web_returns]
 PushedFilters: [IsNotNull(wr_item_sk), IsNotNull(wr_order_number), IsNotNull(wr_refunded_cdemo_sk), IsNotNull(wr_returning_cdemo_sk), IsNotNull(wr_refunded_addr_sk), IsNotNull(wr_reason_sk)]
 ReadSchema: struct<wr_item_sk:bigint,wr_refunded_cdemo_sk:bigint,wr_refunded_addr_sk:bigint,wr_returning_cdemo_sk:bigint,wr_reason_sk:bigint,wr_order_number:bigint,wr_fee:decimal(7,2),wr_refunded_cash:decimal(7,2)>
 
@@ -96,7 +96,7 @@ Input [15]: [ws_sold_date_sk#1, ws_item_sk#2, ws_web_page_sk#3, ws_order_number#
 (10) Scan parquet default.web_page
 Output [1]: [wp_web_page_sk#17]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/web_page]
+Location [not included in comparison]/{warehouse_dir}/web_page]
 PushedFilters: [IsNotNull(wp_web_page_sk)]
 ReadSchema: struct<wp_web_page_sk:int>
 
@@ -123,7 +123,7 @@ Input [12]: [ws_sold_date_sk#1, ws_web_page_sk#3, ws_quantity#5, ws_sales_price#
 (16) Scan parquet default.customer_demographics
 Output [3]: [cd_demo_sk#19, cd_marital_status#20, cd_education_status#21]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/customer_demographics]
+Location [not included in comparison]/{warehouse_dir}/customer_demographics]
 PushedFilters: [IsNotNull(cd_demo_sk), IsNotNull(cd_marital_status), IsNotNull(cd_education_status), Or(Or(And(EqualTo(cd_marital_status,M),EqualTo(cd_education_status,Advanced Degree)),And(EqualTo(cd_marital_status,S),EqualTo(cd_education_status,College))),And(EqualTo(cd_marital_status,W),EqualTo(cd_education_status,2 yr Degree)))]
 ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string,cd_education_status:string>
 
@@ -150,8 +150,8 @@ Input [13]: [ws_sold_date_sk#1, ws_quantity#5, ws_sales_price#6, ws_net_profit#7
 (22) Scan parquet default.customer_demographics
 Output [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/customer_demographics]
-PushedFilters: [IsNotNull(cd_education_status), IsNotNull(cd_demo_sk), IsNotNull(cd_marital_status)]
+Location [not included in comparison]/{warehouse_dir}/customer_demographics]
+PushedFilters: [IsNotNull(cd_demo_sk), IsNotNull(cd_marital_status), IsNotNull(cd_education_status)]
 ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string,cd_education_status:string>
 
 (23) ColumnarToRow [codegen id : 4]
@@ -159,7 +159,7 @@ Input [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
 
 (24) Filter [codegen id : 4]
 Input [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
-Condition : ((isnotnull(cd_education_status#25) AND isnotnull(cd_demo_sk#23)) AND isnotnull(cd_marital_status#24))
+Condition : ((isnotnull(cd_demo_sk#23) AND isnotnull(cd_marital_status#24)) AND isnotnull(cd_education_status#25))
 
 (25) BroadcastExchange
 Input [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
@@ -177,7 +177,7 @@ Input [13]: [ws_sold_date_sk#1, ws_quantity#5, ws_net_profit#7, wr_refunded_addr
 (28) Scan parquet default.customer_address
 Output [3]: [ca_address_sk#27, ca_state#28, ca_country#29]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/customer_address]
+Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_country), EqualTo(ca_country,United States), IsNotNull(ca_address_sk), Or(Or(In(ca_state, [IN,OH,NJ]),In(ca_state, [WI,CT,KY])),In(ca_state, [LA,IA,AR]))]
 ReadSchema: struct<ca_address_sk:int,ca_state:string,ca_country:string>
 
@@ -208,7 +208,7 @@ Input [9]: [ws_sold_date_sk#1, ws_quantity#5, ws_net_profit#7, wr_refunded_addr_
 (35) Scan parquet default.date_dim
 Output [2]: [d_date_sk#31, d_year#32]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
@@ -239,7 +239,7 @@ Input [6]: [ws_sold_date_sk#1, ws_quantity#5, wr_reason_sk#12, wr_fee#14, wr_ref
 (42) Scan parquet default.reason
 Output [2]: [r_reason_sk#34, r_reason_desc#35]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/reason]
+Location [not included in comparison]/{warehouse_dir}/reason]
 PushedFilters: [IsNotNull(r_reason_sk)]
 ReadSchema: struct<r_reason_sk:int,r_reason_desc:string>
 

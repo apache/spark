@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapabi
 import org.apache.spark.sql.connector.write.{DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.streaming.Sink
-import org.apache.spark.sql.internal.connector.SupportsStreamingUpdate
+import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -54,7 +54,7 @@ class MemorySink extends Table with SupportsWrite with Logging {
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
-    new WriteBuilder with SupportsTruncate with SupportsStreamingUpdate {
+    new WriteBuilder with SupportsTruncate with SupportsStreamingUpdateAsAppend {
       private var needTruncate: Boolean = false
       private val inputSchema: StructType = info.schema()
 
@@ -62,9 +62,6 @@ class MemorySink extends Table with SupportsWrite with Logging {
         this.needTruncate = true
         this
       }
-
-      // The in-memory sink treats update as append.
-      override def update(): WriteBuilder = this
 
       override def buildForStreaming(): StreamingWrite = {
         new MemoryStreamingWrite(MemorySink.this, inputSchema, needTruncate)

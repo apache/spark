@@ -35,7 +35,7 @@ TakeOrderedAndProject (31)
 (1) Scan parquet default.item
 Output [4]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilitySuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [Or(And(In(i_category, [Home,Books,Electronics]),In(i_class, [wallpaper,parenting,musical])),And(In(i_category, [Shoes,Jewelry,Men]),In(i_class, [womens,birdal,pants]))), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_brand:string,i_class:string,i_category:string>
 
@@ -49,7 +49,7 @@ Condition : (((i_category#4 IN (Home,Books,Electronics) AND i_class#3 IN (wallpa
 (4) Scan parquet default.store_sales
 Output [4]: [ss_sold_date_sk#5, ss_item_sk#6, ss_store_sk#7, ss_sales_price#8]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilitySuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_sold_date_sk), GreaterThanOrEqual(ss_sold_date_sk,2451545), LessThanOrEqual(ss_sold_date_sk,2451910), IsNotNull(ss_item_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_store_sk:int,ss_sales_price:decimal(7,2)>
 
@@ -76,7 +76,7 @@ Input [8]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4, ss_sold_date_sk#5, 
 (10) Scan parquet default.date_dim
 Output [3]: [d_date_sk#10, d_year#11, d_moy#12]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilitySuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), GreaterThanOrEqual(d_date_sk,2451545), LessThanOrEqual(d_date_sk,2451910), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
@@ -107,7 +107,7 @@ Input [8]: [i_brand#2, i_class#3, i_category#4, ss_sold_date_sk#5, ss_store_sk#7
 (17) Scan parquet default.store
 Output [3]: [s_store_sk#14, s_store_name#15, s_company_name#16]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilitySuite/store]
+Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string,s_company_name:string>
 

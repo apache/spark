@@ -32,7 +32,7 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
 
   override def beforeEach(): Unit = {
     val conf = new SparkConf().setAppName("test").setMaster("local")
-      .set(config.Worker.WORKER_DECOMMISSION_ENABLED, true)
+      .set(config.DECOMMISSION_ENABLED, true)
 
     sc = new SparkContext("local-cluster[2, 1, 1024]", "test", conf)
   }
@@ -77,7 +77,7 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
     val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
     val execs = sched.getExecutorIds()
     // Make the executors decommission, finish, exit, and not be replaced.
-    val execsAndDecomInfo = execs.map((_, ExecutorDecommissionInfo("", false))).toArray
+    val execsAndDecomInfo = execs.map((_, ExecutorDecommissionInfo("", None))).toArray
     sched.decommissionExecutors(execsAndDecomInfo, adjustTargetNumExecutors = true)
     val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 20.seconds)
     assert(asyncCountResult === 10)

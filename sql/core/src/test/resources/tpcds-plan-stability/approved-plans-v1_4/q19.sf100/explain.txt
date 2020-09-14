@@ -49,7 +49,7 @@ TakeOrderedAndProject (45)
 (1) Scan parquet default.item
 Output [6]: [i_item_sk#1, i_brand_id#2, i_brand#3, i_manufact_id#4, i_manufact#5, i_manager_id#6]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_manager_id), EqualTo(i_manager_id,8), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_brand:string,i_manufact_id:int,i_manufact:string,i_manager_id:int>
 
@@ -71,7 +71,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (6) Scan parquet default.store_sales
 Output [5]: [ss_sold_date_sk#8, ss_item_sk#9, ss_customer_sk#10, ss_store_sk#11, ss_ext_sales_price#12]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_sold_date_sk), IsNotNull(ss_item_sk), IsNotNull(ss_customer_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ext_sales_price:decimal(7,2)>
 
@@ -94,7 +94,7 @@ Input [10]: [i_item_sk#1, i_brand_id#2, i_brand#3, i_manufact_id#4, i_manufact#5
 (11) Scan parquet default.date_dim
 Output [3]: [d_date_sk#13, d_year#14, d_moy#15]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), EqualTo(d_moy,11), EqualTo(d_year,1998), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
@@ -125,7 +125,7 @@ Input [9]: [i_brand_id#2, i_brand#3, i_manufact_id#4, i_manufact#5, ss_sold_date
 (18) Scan parquet default.store
 Output [2]: [s_store_sk#17, s_zip#18]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/store]
+Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_zip), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_zip:string>
 
@@ -160,7 +160,7 @@ Arguments: [ss_customer_sk#10 ASC NULLS FIRST], false, 0
 (26) Scan parquet default.customer_address
 Output [2]: [ca_address_sk#21, ca_zip#22]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/customer_address]
+Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_address_sk), IsNotNull(ca_zip)]
 ReadSchema: struct<ca_address_sk:int,ca_zip:string>
 
@@ -182,7 +182,7 @@ Arguments: [ca_address_sk#21 ASC NULLS FIRST], false, 0
 (31) Scan parquet default.customer
 Output [2]: [c_customer_sk#24, c_current_addr_sk#25]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/customer]
+Location [not included in comparison]/{warehouse_dir}/customer]
 PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_current_addr_sk)]
 ReadSchema: struct<c_customer_sk:int,c_current_addr_sk:int>
 

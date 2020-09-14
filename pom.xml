@@ -185,7 +185,7 @@
     <commons-pool2.version>2.6.2</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
-    <janino.version>3.1.2</janino.version>
+    <janino.version>3.0.16</janino.version>
     <jersey.version>2.30</jersey.version>
     <joda.version>2.10.5</joda.version>
     <jodd.version>3.5.2</jodd.version>
@@ -202,10 +202,10 @@
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.0.0</commons-crypto.version>
     <!--
-    If you are changing Arrow version specification, please check ./python/pyspark/sql/utils.py,
-    and ./python/setup.py too.
+    If you are changing Arrow version specification, please check
+    ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>0.15.1</arrow.version>
+    <arrow.version>1.0.1</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
 
@@ -2329,8 +2329,19 @@
           </exclusion>
           <exclusion>
             <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
+            <artifactId>jackson-core</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-common</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.arrow</groupId>
+        <artifactId>arrow-memory-netty</artifactId>
+        <version>${arrow.version}</version>
+        <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
             <artifactId>netty-buffer</artifactId>
@@ -2339,16 +2350,12 @@
             <groupId>io.netty</groupId>
             <artifactId>netty-common</artifactId>
           </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-handler</artifactId>
-          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
         <groupId>com.univocity</groupId>
         <artifactId>univocity-parsers</artifactId>
-        <version>2.8.3</version>
+        <version>2.9.0</version>
       </dependency>
       <dependency>
         <groupId>org.apache.hive</groupId>

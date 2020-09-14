@@ -14,12 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import sys
 
 from py4j.java_gateway import JavaClass
 
 from pyspark import RDD, since
 from pyspark.sql.column import _to_seq, _to_java_column
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType
 from pyspark.sql import utils
 from pyspark.sql.utils import to_str
 
@@ -1225,7 +1226,6 @@ class DataFrameWriterV2(object):
         Overwrite rows matching the given filter condition with the contents of the data frame in
         the output table.
         """
-        condition = _to_java_column(column)
         self._jwriter.overwrite(condition)
 
     @since(3.1)
