@@ -243,7 +243,7 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
         .filter(_ < org.apache.spark.SPARK_VERSION)
     } catch {
       // do not throw exception during object initialization.
-      case NonFatal(_) => Seq("2.3.4", "2.4.5") // A temporary fallback to use a specific version
+      case NonFatal(_) => Seq("3.0.1", "2.4.7") // A temporary fallback to use a specific version
     }
   }
 
