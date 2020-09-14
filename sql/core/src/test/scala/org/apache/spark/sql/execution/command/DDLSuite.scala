@@ -1873,7 +1873,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             |       6
             |
             |    Since: 1.4.0
-            |  """.stripMargin) ::
+            |""".stripMargin) ::
         Row("Function: ^") ::
         Row("Usage: expr1 ^ expr2 - Returns the result of " +
           "bitwise exclusive OR of `expr1` and `expr2`.") :: Nil
