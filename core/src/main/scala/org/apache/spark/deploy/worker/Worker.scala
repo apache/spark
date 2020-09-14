@@ -772,6 +772,7 @@ private[deploy] class Worker(
     if (conf.get(config.DECOMMISSION_ENABLED)) {
       logDebug("Decommissioning self")
       decommissioned = true
+      // No need to notify the Master if the decommission message already came from it
       if (!fromMaster) {
         sendToMaster(WorkerDecommissioned(workerId, self))
       }
