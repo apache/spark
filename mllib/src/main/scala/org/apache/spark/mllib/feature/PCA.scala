@@ -126,7 +126,7 @@ private[feature] object PCAUtil {
   def memoryCost(k: Int, numFeatures: Int): Long = {
     3L * math.min(k, numFeatures) * math.min(k, numFeatures) +
       math.max(math.max(k, numFeatures), 4L * math.min(k, numFeatures) *
-        math.min(k, numFeatures) + 4L * math.min(k, numFeatures))
+      math.min(k, numFeatures) + 4L * math.min(k, numFeatures))
   }
 
 }
