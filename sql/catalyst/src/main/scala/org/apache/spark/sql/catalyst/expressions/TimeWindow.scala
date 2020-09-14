@@ -27,28 +27,6 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(timeColumn, windowDuration[, slideDuration[, startTime]]) - Create potentially overlapping time windows and create a new row for each window, that contains the value in `timeColumn`",
-  arguments = """
-    Arguments:
-      * timeColumn - the timestamp, that is compared with the created time windows
-      * windowDuration - the length of each time window
-      * slideDuration - the offset between the starts of consecutive windows
-      * startTime -
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(timestamp('1970-01-01 12:00'), '10 minute', '5 minute');
-       {"start":1970-01-01 11:55:00,"end":1970-01-01 12:05:00}
-       {"start":1970-01-01 12:00:00,"end":1970-01-01 12:10:00}
-      > SELECT _FUNC_(timestamp('1970-01-01 12:00'), '10 minute', '5 minute', '2 minute');
-       {"start":1970-01-01 11:52:00,"end":1970-01-01 12:02:00}
-       {"start":1970-01-01 11:57:00,"end":1970-01-01 12:07:00}
-  """,
-  group = "datetime_funcs",
-  since = "2.0.0")
-// scalastyle:on line.size.limit
 case class TimeWindow(
     timeColumn: Expression,
     windowDuration: Long,

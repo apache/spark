@@ -107,12 +107,17 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
 
   test("SPARK-32870: Default expressions in FunctionRegistry should have their " +
     "usage, examples and since filled") {
+    val ignoreSet = Set(
+      "org.apache.spark.sql.catalyst.expressions.TimeWindow")
+
     spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
       val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
-      withClue(s"Function '${info.getName}', Expression class '${info.getClassName}'") {
-        assert(info.getUsage.nonEmpty)
-        assert(info.getExamples.nonEmpty)
-        assert(info.getSince.nonEmpty)
+      if (!ignoreSet.contains(info.getClassName)) {
+        withClue(s"Function '${info.getName}', Expression class '${info.getClassName}'") {
+          assert(info.getUsage.nonEmpty)
+          assert(info.getExamples.nonEmpty)
+          assert(info.getSince.nonEmpty)
+        }
       }
     }
   }
