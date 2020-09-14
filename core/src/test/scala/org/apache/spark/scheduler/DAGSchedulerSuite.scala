@@ -48,21 +48,21 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * This test ensures that DAGScheduler build stage graph correctly.
-    *
-    * Suppose you have the following DAG:
-    *
-    * [A] <--(s_A)-- [B] <--(s_B)-- [C] <--(s_C)-- [D]
-    *             \                /
-    *               <-------------
-    *
-    * Here, RDD B has a shuffle dependency on RDD A, and RDD C has shuffle dependency on both
-    * B and A. The shuffle dependency IDs are numbers in the DAGScheduler, but to make the example
-    * easier to understand, let's call the shuffled data from A shuffle dependency ID s_A and the
-    * shuffled data from B shuffle dependency ID s_B.
-    *
-    * Note: [] means an RDD, () means a shuffle dependency.
-    */
+   * This test ensures that DAGScheduler build stage graph correctly.
+   *
+   * Suppose you have the following DAG:
+   *
+   * [A] <--(s_A)-- [B] <--(s_B)-- [C] <--(s_C)-- [D]
+   *             \                /
+   *               <-------------
+   *
+   * Here, RDD B has a shuffle dependency on RDD A, and RDD C has shuffle dependency on both
+   * B and A. The shuffle dependency IDs are numbers in the DAGScheduler, but to make the example
+   * easier to understand, let's call the shuffled data from A shuffle dependency ID s_A and the
+   * shuffled data from B shuffle dependency ID s_B.
+   *
+   * Note: [] means an RDD, () means a shuffle dependency.
+   */
   test("[SPARK-13902] Ensure no duplicate stages are created") {
     val rddA = new MyRDD(sc, 1, Nil)
     val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(1))
@@ -283,18 +283,18 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * This test ensures that if a particular RDD is cached, RDDs earlier in the dependency chain
-    * are not computed. It constructs the following chain of dependencies:
-    * +---+ shuffle +---+    +---+    +---+
-    * | A |<--------| B |<---| C |<---| D |
-    * +---+         +---+    +---+    +---+
-    * Here, B is derived from A by performing a shuffle, C has a one-to-one dependency on B,
-    * and D similarly has a one-to-one dependency on C. If none of the RDDs were cached, this
-    * set of RDDs would result in a two stage job: one ShuffleMapStage, and a ResultStage that
-    * reads the shuffled data from RDD A. This test ensures that if C is cached, the scheduler
-    * doesn't perform a shuffle, and instead computes the result using a single ResultStage
-    * that reads C's cached data.
-    */
+   * This test ensures that if a particular RDD is cached, RDDs earlier in the dependency chain
+   * are not computed. It constructs the following chain of dependencies:
+   * +---+ shuffle +---+    +---+    +---+
+   * | A |<--------| B |<---| C |<---| D |
+   * +---+         +---+    +---+    +---+
+   * Here, B is derived from A by performing a shuffle, C has a one-to-one dependency on B,
+   * and D similarly has a one-to-one dependency on C. If none of the RDDs were cached, this
+   * set of RDDs would result in a two stage job: one ShuffleMapStage, and a ResultStage that
+   * reads the shuffled data from RDD A. This test ensures that if C is cached, the scheduler
+   * doesn't perform a shuffle, and instead computes the result using a single ResultStage
+   * that reads C's cached data.
+   */
   test("getMissingParentStages should consider all ancestor RDDs' cache statuses") {
     val rddA = new MyRDD(sc, 1, Nil)
     val rddB = new MyRDD(sc, 1, List(new ShuffleDependency(rddA, new HashPartitioner(1))),
@@ -531,10 +531,10 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * In this test, we simulate a job where many tasks in the same stage fail. We want to show
-    * that many fetch failures inside a single stage attempt do not trigger an abort
-    * on their own, but only when there are enough failing stage attempts.
-    */
+   * In this test, we simulate a job where many tasks in the same stage fail. We want to show
+   * that many fetch failures inside a single stage attempt do not trigger an abort
+   * on their own, but only when there are enough failing stage attempts.
+   */
   test("Single stage fetch failure should not abort the stage.") {
     setupStageAbortTest(sc)
 
@@ -566,10 +566,10 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * In this test we simulate a job failure where the first stage completes successfully and
-    * the second stage fails due to a fetch failure. Multiple successive fetch failures of a stage
-    * trigger an overall job abort to avoid endless retries.
-    */
+   * In this test we simulate a job failure where the first stage completes successfully and
+   * the second stage fails due to a fetch failure. Multiple successive fetch failures of a stage
+   * trigger an overall job abort to avoid endless retries.
+   */
   test("Multiple consecutive stage fetch failures should lead to job being aborted.") {
     setupStageAbortTest(sc)
 
@@ -608,10 +608,10 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * In this test, we create a job with two consecutive shuffles, and simulate 2 failures for each
-    * shuffle fetch. In total In total, the job has had four failures overall but not four failures
-    * for a particular stage, and as such should not be aborted.
-    */
+   * In this test, we create a job with two consecutive shuffles, and simulate 2 failures for each
+   * shuffle fetch. In total In total, the job has had four failures overall but not four failures
+   * for a particular stage, and as such should not be aborted.
+   */
   test("Failures in different stages should not trigger an overall abort") {
     setupStageAbortTest(sc)
 
@@ -656,11 +656,11 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * In this test we demonstrate that only consecutive failures trigger a stage abort. A stage may
-    * fail multiple times, succeed, then fail a few more times (because its run again by downstream
-    * dependencies). The total number of failed attempts for one stage will go over the limit,
-    * but that doesn't matter, since they have successes in the middle.
-    */
+   * In this test we demonstrate that only consecutive failures trigger a stage abort. A stage may
+   * fail multiple times, succeed, then fail a few more times (because its run again by downstream
+   * dependencies). The total number of failed attempts for one stage will go over the limit,
+   * but that doesn't matter, since they have successes in the middle.
+   */
   test("Non-consecutive stage failures don't trigger abort") {
     setupStageAbortTest(sc)
 
@@ -751,9 +751,9 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * This tests the case where another FetchFailed comes in while the map stage is getting
-    * re-run.
-    */
+   * This tests the case where another FetchFailed comes in while the map stage is getting
+   * re-run.
+   */
   test("late fetch failures don't cause multiple concurrent attempts for the same map stage") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
@@ -806,9 +806,9 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * This tests the case where a late FetchFailed comes in after the map stage has finished getting
-    * retried and a new reduce stage starts running.
-    */
+   * This tests the case where a late FetchFailed comes in after the map stage has finished getting
+   * retried and a new reduce stage starts running.
+   */
   test("extremely late fetch failures don't cause multiple concurrent attempts for " +
     "the same stage") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
@@ -979,11 +979,11 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * Run two jobs, with a shared dependency.  We simulate a fetch failure in the second job, which
-    * requires regenerating some outputs of the shared dependency.  One key aspect of this test is
-    * that the second job actually uses a different stage for the shared dependency (a "skipped"
-    * stage).
-    */
+   * Run two jobs, with a shared dependency.  We simulate a fetch failure in the second job, which
+   * requires regenerating some outputs of the shared dependency.  One key aspect of this test is
+   * that the second job actually uses a different stage for the shared dependency (a "skipped"
+   * stage).
+   */
   test("shuffle fetch failure in a reused shuffle dependency") {
     // Run the first job successfully, which creates one shuffle dependency
 
@@ -1020,11 +1020,11 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * This test runs a three stage job, with a fetch failure in stage 1.  but during the retry, we
-    * have completions from both the first & second attempt of stage 1.  So all the map output is
-    * available before we finish any task set for stage 1.  We want to make sure that we don't
-    * submit stage 2 until the map output for stage 1 is registered
-    */
+   * This test runs a three stage job, with a fetch failure in stage 1.  but during the retry, we
+   * have completions from both the first & second attempt of stage 1.  So all the map output is
+   * available before we finish any task set for stage 1.  We want to make sure that we don't
+   * submit stage 2 until the map output for stage 1 is registered
+   */
   test("don't submit stage until its dependencies map outputs are registered (SPARK-5259)") {
     val firstRDD = new MyRDD(sc, 3, Nil)
     val firstShuffleDep = new ShuffleDependency(firstRDD, new HashPartitioner(3))
@@ -1117,9 +1117,9 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * We lose an executor after completing some shuffle map tasks on it.  Those tasks get
-    * resubmitted, and when they finish the job completes normally
-    */
+   * We lose an executor after completing some shuffle map tasks on it.  Those tasks get
+   * resubmitted, and when they finish the job completes normally
+   */
   test("register map outputs correctly after ExecutorLost and task Resubmitted") {
     val firstRDD = new MyRDD(sc, 3, Nil)
     val firstShuffleDep = new ShuffleDependency(firstRDD, new HashPartitioner(2))
@@ -1166,22 +1166,22 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * Makes sure that failures of stage used by multiple jobs are correctly handled.
-    *
-    * This test creates the following dependency graph:
-    *
-    * shuffleMapRdd1     shuffleMapRDD2
-    *        |     \        |
-    *        |      \       |
-    *        |       \      |
-    *        |        \     |
-    *   reduceRdd1    reduceRdd2
-    *
-    * We start both shuffleMapRdds and then fail shuffleMapRdd1.  As a result, the job listeners for
-    * reduceRdd1 and reduceRdd2 should both be informed that the job failed.  shuffleMapRDD2 should
-    * also be cancelled, because it is only used by reduceRdd2 and reduceRdd2 cannot complete
-    * without shuffleMapRdd1.
-    */
+   * Makes sure that failures of stage used by multiple jobs are correctly handled.
+   *
+   * This test creates the following dependency graph:
+   *
+   * shuffleMapRdd1     shuffleMapRDD2
+   *        |     \        |
+   *        |      \       |
+   *        |       \      |
+   *        |        \     |
+   *   reduceRdd1    reduceRdd2
+   *
+   * We start both shuffleMapRdds and then fail shuffleMapRdd1.  As a result, the job listeners for
+   * reduceRdd1 and reduceRdd2 should both be informed that the job failed.  shuffleMapRDD2 should
+   * also be cancelled, because it is only used by reduceRdd2 and reduceRdd2 cannot complete
+   * without shuffleMapRdd1.
+   */
   test("failure of stage used by two jobs") {
     val shuffleMapRdd1 = new MyRDD(sc, 2, Nil)
     val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
@@ -1265,9 +1265,9 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * Makes sure that tasks for a stage used by multiple jobs are submitted with the properties of a
-    * later, active job if they were previously run under a job that is no longer active
-    */
+   * Makes sure that tasks for a stage used by multiple jobs are submitted with the properties of a
+   * later, active job if they were previously run under a job that is no longer active
+   */
   test("stage used by two jobs, the first no longer active (SPARK-6880)") {
     launchJobsThatShareStageAndCancelFirst()
 
@@ -1286,10 +1286,10 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * Makes sure that tasks for a stage used by multiple jobs are submitted with the properties of a
-    * later, active job if they were previously run under a job that is no longer active, even when
-    * there are fetch failures
-    */
+   * Makes sure that tasks for a stage used by multiple jobs are submitted with the properties of a
+   * later, active job if they were previously run under a job that is no longer active, even when
+   * there are fetch failures
+   */
   test("stage used by two jobs, some fetch failures, and the first job no longer active " +
     "(SPARK-6880)") {
     val shuffleDep1 = launchJobsThatShareStageAndCancelFirst()
@@ -1318,11 +1318,11 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * In this test, we run a map stage where one of the executors fails but we still receive a
-    * "zombie" complete message from a task that ran on that executor. We want to make sure the
-    * stage is resubmitted so that the task that ran on the failed executor is re-executed, and
-    * that the stage is only marked as finished once that task completes.
-    */
+   * In this test, we run a map stage where one of the executors fails but we still receive a
+   * "zombie" complete message from a task that ran on that executor. We want to make sure the
+   * stage is resubmitted so that the task that ran on the failed executor is re-executed, and
+   * that the stage is only marked as finished once that task completes.
+   */
   test("run trivial shuffle with out-of-band executor failure and retry") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
@@ -1492,11 +1492,11 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * The job will be failed on first task throwing an error.
-    *  Any subsequent task WILL throw a legitimate java.lang.UnsupportedOperationException.
-    *  If multiple tasks, there exists a race condition between the SparkDriverExecutionExceptions
-    *  and their differing causes as to which will represent result for job...
-    */
+   * The job will be failed on first task throwing an error.
+   *  Any subsequent task WILL throw a legitimate java.lang.UnsupportedOperationException.
+   *  If multiple tasks, there exists a race condition between the SparkDriverExecutionExceptions
+   *  and their differing causes as to which will represent result for job...
+   */
   test("misbehaved resultHandler should not crash DAGScheduler and SparkContext") {
     failAfter(1.minute) { // If DAGScheduler crashes, the following test will hang forever
       for (error <- Seq(
@@ -1828,10 +1828,10 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * In this test, we have three RDDs with shuffle dependencies, and we submit map stage jobs
-    * that are waiting on each one, as well as a reduce job on the last one. We test that all of
-    * these jobs complete even if there are some fetch failures in both shuffles.
-    */
+   * In this test, we have three RDDs with shuffle dependencies, and we submit map stage jobs
+   * that are waiting on each one, as well as a reduce job on the last one. We test that all of
+   * these jobs complete even if there are some fetch failures in both shuffles.
+   */
   test("map stage submission with multiple shared stages and failures") {
     val rdd1 = new MyRDD(sc, 2, Nil)
     val dep1 = new ShuffleDependency(rdd1, new HashPartitioner(2))
@@ -1948,15 +1948,15 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * In this test, we run a map stage where one of the executors fails but we still receive a
-    * "zombie" complete message from that executor. We want to make sure the stage is not reported
-    * as done until all tasks have completed.
-    *
-    * Most of the functionality in this test is tested in "run trivial shuffle with out-of-band
-    * executor failure and retry".  However, that test uses ShuffleMapStages that are followed by
-    * a ResultStage, whereas in this test, the ShuffleMapStage is tested in isolation, without a
-    * ResultStage after it.
-    */
+   * In this test, we run a map stage where one of the executors fails but we still receive a
+   * "zombie" complete message from that executor. We want to make sure the stage is not reported
+   * as done until all tasks have completed.
+   *
+   * Most of the functionality in this test is tested in "run trivial shuffle with out-of-band
+   * executor failure and retry".  However, that test uses ShuffleMapStages that are followed by
+   * a ResultStage, whereas in this test, the ShuffleMapStage is tested in isolation, without a
+   * ResultStage after it.
+   */
   test("map stage submission with executor failure late map task completions") {
     val shuffleMapRdd = new MyRDD(sc, 3, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
@@ -2015,18 +2015,18 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * Checks the DAGScheduler's internal logic for traversing an RDD DAG by making sure that
-    * getShuffleDependenciesAndResourceProfiles correctly returns the direct shuffle dependencies
-    * of a particular RDD. The test creates the following RDD graph (where n denotes a narrow
-    * dependency and s denotes a shuffle dependency):
-    *
-    * A <------------s---------,
-    *                           \
-    * B <--s-- C <--s-- D <--n------ E
-    *
-    * Here, the direct shuffle dependency of C is just the shuffle dependency on B. The direct
-    * shuffle dependencies of E are the shuffle dependency on A and the shuffle dependency on C.
-    */
+   * Checks the DAGScheduler's internal logic for traversing an RDD DAG by making sure that
+   * getShuffleDependenciesAndResourceProfiles correctly returns the direct shuffle dependencies
+   * of a particular RDD. The test creates the following RDD graph (where n denotes a narrow
+   * dependency and s denotes a shuffle dependency):
+   *
+   * A <------------s---------,
+   *                           \
+   * B <--s-- C <--s-- D <--n------ E
+   *
+   * Here, the direct shuffle dependency of C is just the shuffle dependency on B. The direct
+   * shuffle dependencies of E are the shuffle dependency on A and the shuffle dependency on C.
+   */
   test("getShuffleDependenciesAndResourceProfiles correctly returns only direct shuffle parents") {
     val rddA = new MyRDD(sc, 2, Nil)
     val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(1))
@@ -2426,18 +2426,18 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * Checks the DAGScheduler's internal logic for traversing an RDD DAG by making sure that
-    * getShuffleDependenciesAndResourceProfiles correctly returns the direct shuffle dependencies
-    * of a particular RDD. The test creates the following RDD graph (where n denotes a narrow
-    * dependency and s denotes a shuffle dependency):
-    *
-    * A <------------s---------,
-    *                           \
-    * B <--s-- C <--s-- D <--n------ E
-    *
-    * Here, the direct shuffle dependency of C is just the shuffle dependency on B. The direct
-    * shuffle dependencies of E are the shuffle dependency on A and the shuffle dependency on C.
-    */
+   * Checks the DAGScheduler's internal logic for traversing an RDD DAG by making sure that
+   * getShuffleDependenciesAndResourceProfiles correctly returns the direct shuffle dependencies
+   * of a particular RDD. The test creates the following RDD graph (where n denotes a narrow
+   * dependency and s denotes a shuffle dependency):
+   *
+   * A <------------s---------,
+   *                           \
+   * B <--s-- C <--s-- D <--n------ E
+   *
+   * Here, the direct shuffle dependency of C is just the shuffle dependency on B. The direct
+   * shuffle dependencies of E are the shuffle dependency on A and the shuffle dependency on C.
+   */
   test("getShuffleDependenciesAndResourceProfiles returns deps and profiles correctly") {
     import org.apache.spark.resource._
     val ereqs = new ExecutorResourceRequests().cores(4)
@@ -2477,9 +2477,9 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
   }
 
   /**
-    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
-    * Note that this checks only the host and not the executor ID.
-    */
+   * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
+   * Note that this checks only the host and not the executor ID.
+   */
   private def assertLocations(taskSet: TaskSet, hosts: Seq[Seq[String]]): Unit = {
     assert(hosts.size === taskSet.tasks.size)
     for ((taskLocs, expectedLocs) <- taskSet.tasks.map(_.preferredLocations).zip(hosts)) {

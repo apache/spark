@@ -458,14 +458,14 @@ class DAGSchedulerTestHelper extends SparkFunSuite with TempLocalSparkContext wi
   }
 
   /**
-    * Common code to get the next stage attempt, confirm it's the one we expect, and complete it
-    * successfully.
-    *
-    * @param stageId - The current stageId
-    * @param attemptIdx - The current attempt count
-    * @param numShufflePartitions - The number of partitions in the next stage
-    * @param hostNames - Host on which each task in the task set is executed
-    */
+   * Common code to get the next stage attempt, confirm it's the one we expect, and complete it
+   * successfully.
+   *
+   * @param stageId - The current stageId
+   * @param attemptIdx - The current attempt count
+   * @param numShufflePartitions - The number of partitions in the next stage
+   * @param hostNames - Host on which each task in the task set is executed
+   */
   protected def completeShuffleMapStageSuccessfully(
       stageId: Int,
       attemptIdx: Int,
@@ -490,13 +490,13 @@ class DAGSchedulerTestHelper extends SparkFunSuite with TempLocalSparkContext wi
   }
 
   /**
-    * Common code to get the next stage attempt, confirm it's the one we expect, and complete it
-    * with all FetchFailure.
-    *
-    * @param stageId - The current stageId
-    * @param attemptIdx - The current attempt count
-    * @param shuffleDep - The shuffle dependency of the stage with a fetch failure
-    */
+   * Common code to get the next stage attempt, confirm it's the one we expect, and complete it
+   * with all FetchFailure.
+   *
+   * @param stageId - The current stageId
+   * @param attemptIdx - The current attempt count
+   * @param shuffleDep - The shuffle dependency of the stage with a fetch failure
+   */
   protected def completeNextStageWithFetchFailure(
       stageId: Int,
       attemptIdx: Int,
@@ -509,12 +509,12 @@ class DAGSchedulerTestHelper extends SparkFunSuite with TempLocalSparkContext wi
   }
 
   /**
-    * Common code to get the next result stage attempt, confirm it's the one we expect, and
-    * complete it with a success where we return 42.
-    *
-    * @param stageId - The current stageId
-    * @param attemptIdx - The current attempt count
-    */
+   * Common code to get the next result stage attempt, confirm it's the one we expect, and
+   * complete it with a success where we return 42.
+   *
+   * @param stageId - The current stageId
+   * @param attemptIdx - The current attempt count
+   */
   protected def completeNextResultStageWithSuccess(
       stageId: Int,
       attemptIdx: Int,
