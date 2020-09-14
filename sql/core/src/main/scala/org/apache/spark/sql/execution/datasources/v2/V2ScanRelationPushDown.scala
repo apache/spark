@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.sources.{AggregateFunction, Aggregation}
 import org.apache.spark.sql.types.StructType
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] {
@@ -42,8 +43,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
             }
           }.distinct
 
-          val (pushedAggregates, _) = PushDownUtils.pushAggregates(
-            scanBuilder, aggregates)
+          val aggregation = PushDownUtils.pushAggregates(scanBuilder, aggregates,
+            groupingExpressions)
 
           val (pushedFilters, postScanFilters, scan, output, normalizedProjects) =
             processFilerAndColumn(scanBuilder, project, filters, relation)
@@ -53,22 +54,20 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
                |Pushing operators to ${relation.name}
                |Pushed Filters: ${pushedFilters.mkString(", ")}
                |Post-Scan Filters: ${postScanFilters.mkString(",")}
-               |Pushed Aggregates: ${pushedAggregates.mkString(", ")}
+               |Pushed Aggregate Functions: ${aggregation.aggregateExpressions.mkString(", ")}
+               |Pushed Groupby: ${aggregation.groupByExpressions.mkString(", ")}
                |Output: ${output.mkString(", ")}
              """.stripMargin)
 
           val wrappedScan = scan match {
             case v1: V1Scan =>
               val translated = filters.flatMap(DataSourceStrategy.translateFilter(_, true))
-              val translatedAggregate = aggregates
-                .flatMap(DataSourceStrategy.translateAggregate(_))
-              V1ScanWrapper(v1, translated, pushedFilters, translatedAggregate, pushedAggregates)
+              V1ScanWrapper(v1, translated, pushedFilters, aggregation)
             case _ => scan
           }
           val r = buildLogicalPlan(project, relation, wrappedScan, output, normalizedProjects,
             postScanFilters)
           Aggregate(groupingExpressions, resultExpressions, r)
-
         case _ =>
           Aggregate(groupingExpressions, resultExpressions, child)
       }
@@ -89,8 +88,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
       val wrappedScan = scan match {
         case v1: V1Scan =>
           val translated = filters.flatMap(DataSourceStrategy.translateFilter(_, true))
-          V1ScanWrapper(v1, translated, pushedFilters, Seq.empty[sources.AggregateFunction],
-            Seq.empty[sources.AggregateFunction])
+          V1ScanWrapper(v1, translated, pushedFilters,
+            Aggregation(Seq.empty[AggregateFunction], Seq.empty[String]))
+
         case _ => scan
       }
 
@@ -147,9 +147,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
     } else {
       withFilter
     }
-
     withProjection
-
   }
 }
 
@@ -159,8 +157,6 @@ case class V1ScanWrapper(
     v1Scan: V1Scan,
     translatedFilters: Seq[sources.Filter],
     handledFilters: Seq[sources.Filter],
-    translatedAggregates: Seq[sources.AggregateFunction],
-    handledAggregated: Seq[sources.AggregateFunction]) extends Scan {
-  // Todo: Huaxin
+    pushedAggregates: sources.Aggregation) extends Scan {
   override def readSchema(): StructType = v1Scan.readSchema()
 }

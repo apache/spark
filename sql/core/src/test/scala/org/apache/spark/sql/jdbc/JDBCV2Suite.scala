@@ -64,6 +64,17 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
         .executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"people\" VALUES ('fred', 1)").executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"people\" VALUES ('mary', 2)").executeUpdate()
+      conn.prepareStatement(
+        "CREATE TABLE \"test\".\"employee\" (dept INTEGER, name TEXT(32), salary INTEGER," +
+          " bonus INTEGER)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee\" VALUES (1, 'amy', 10000, 1000)")
+        .executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee\" VALUES (2, 'alex', 12000, 1200)")
+        .executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee\" VALUES (1, 'cathy', 9000, 1200)")
+        .executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee\" VALUES (2, 'david', 10000, 1300)")
+        .executeUpdate()
     }
   }
 
@@ -110,32 +121,40 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
   }
 
   test("scan with aggregate push-down") {
-    val df = sql("select MAX(ID) FROM h2.test.people where ID > 0")
-    df.explain(true)
-//    == Parsed Logical Plan ==
-//    'Project [unresolvedalias('MAX('ID), None)]
-//    +- 'Filter ('ID > 0)
-//    +- 'UnresolvedRelation [h2, test, people], []
-//
-//    == Analyzed Logical Plan ==
-//    max(ID): int
-//    Aggregate [max(ID#1) AS max(ID)#3]
-//    +- Filter (ID#1 > 0)
-//    +- SubqueryAlias h2.test.people
-//    +- RelationV2[NAME#0, ID#1] test.people
-//
-//    == Optimized Logical Plan ==
-//    Aggregate [max(ID#1) AS max(ID)#3]
-//    +- RelationV2[ID#1] test.people
-//
-//    == Physical Plan ==
-//      *(2) HashAggregate(keys=[], functions=[max(ID#1)], output=[max(ID)#3])
-//    +- Exchange SinglePartition, true, [id=#13]
-//    +- *(1) HashAggregate(keys=[], functions=[partial_max(ID#1)], output=[max#7])
-//    +- *(1) Scan org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCScan$$anon$1@f2b90fc
-//     [ID#1] PushedAggregates: [*Max(ID)], PushedFilters: [*IsNotNull(ID), *GreaterThan(ID,0)],
-//     ReadSchema: struct<ID:int>
-    checkAnswer(df, Seq(Row(2)))
+    val df = sql("select MAX(SALARY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
+      " group by DEPT")
+    // df.explain(true)
+    // scalastyle:off line.size.limit
+    // == Parsed Logical Plan ==
+    // 'Aggregate ['DEPT], [unresolvedalias('MAX('SALARY), None), unresolvedalias('MIN('BONUS), None)]
+    // +- 'Filter ('dept > 0)
+    // +- 'UnresolvedRelation [h2, test, employee], []
+    //
+    // == Analyzed Logical Plan ==
+    // max(SALARY): int, min(BONUS): int
+    // Aggregate [DEPT#0], [max(SALARY#2) AS max(SALARY)#6, min(BONUS#3) AS min(BONUS)#7]
+    // +- Filter (dept#0 > 0)
+    // +- SubqueryAlias h2.test.employee
+    // +- RelationV2[DEPT#0, NAME#1, SALARY#2, BONUS#3] test.employee
+    //
+    // == Optimized Logical Plan ==
+    // Aggregate [DEPT#0], [max(SALARY#2) AS max(SALARY)#6, min(BONUS#3) AS min(BONUS)#7]
+    // +- RelationV2[DEPT#0, SALARY#2, BONUS#3] test.employee
+    //
+    // == Physical Plan ==
+    //  *(2) HashAggregate(keys=[DEPT#0], functions=[max(SALARY#2), min(BONUS#3)], output=[max(SALARY)#6, min(BONUS)#7])
+    // +- Exchange hashpartitioning(DEPT#0, 5), true, [id=#13]
+    // +- *(1) HashAggregate(keys=[DEPT#0], functions=[partial_max(SALARY#2), partial_min(BONUS#3)], output=[DEPT#0, max#15, min#16])
+    // +- *(1) Scan org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCScan$$anon$1@739e8b96 [DEPT#0,SALARY#2,BONUS#3] PushedAggregates: [*Max(SALARY), *Min(BONUS)], PushedFilters: [IsNotNull(dept), GreaterThan(dept,0)], PushedGroupby: [*DEPT], ReadSchema: struct<DEPT:int,SALARY:int,BONUS:int>
+    // scalastyle:on line.size.limit
+    // df.show()
+    // +-----------+----------+
+    // |max(SALARY)|min(BONUS)|
+    // +-----------+----------+
+    // |      10000|      1000|
+    // |      12000|      1200|
+    // +-----------+----------+
+    checkAnswer(df, Seq(Row(10000, 1000), Row(12000, 1200)))
   }
 
   test("read/write with partition info") {
@@ -174,7 +193,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
 
   test("show tables") {
     checkAnswer(sql("SHOW TABLES IN h2.test"),
-      Seq(Row("test", "people", false), Row("test", "empty_table", false)))
+      Seq(Row("test", "people", false), Row("test", "empty_table", false),
+        Row("test", "employee", false)))
   }
 
   test("SQL API: create table as select") {
@@ -223,9 +243,11 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
       checkAnswer(
         sql("SELECT name, id FROM h2.test.abc"),
         Seq(Row("fred", 1), Row("mary", 2), Row("lucy", 3)))
+      sql("SELECT name, id FROM h2.test.abc").show
 
       sql("INSERT OVERWRITE h2.test.abc SELECT 'bob', 4")
       checkAnswer(sql("SELECT name, id FROM h2.test.abc"), Row("bob", 4))
+      sql("SELECT name, id FROM h2.test.abc").show
     }
   }
 

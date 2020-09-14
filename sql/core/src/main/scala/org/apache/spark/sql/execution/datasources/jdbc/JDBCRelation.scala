@@ -292,7 +292,7 @@ private[sql] case class JDBCRelation(
   override def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
-      aggregates: Array[AggregateFunction]): RDD[Row] = {
+      aggregation: Aggregation): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sparkSession.sparkContext,
@@ -301,7 +301,7 @@ private[sql] case class JDBCRelation(
       filters,
       parts,
       jdbcOptions,
-      aggregates).asInstanceOf[RDD[Row]]
+      aggregation).asInstanceOf[RDD[Row]]
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {

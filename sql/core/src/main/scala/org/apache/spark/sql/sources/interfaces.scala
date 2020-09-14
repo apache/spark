@@ -292,7 +292,7 @@ trait PrunedFilteredAggregateScan {
   def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
-      aggregates: Array[AggregateFunction]): RDD[Row]
+      aggregation: Aggregation): RDD[Row]
 }
 
 /**

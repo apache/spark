@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.AggregateFunction;
+import org.apache.spark.sql.sources.Aggregation;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
@@ -30,18 +30,15 @@ import org.apache.spark.sql.sources.AggregateFunction;
 public interface SupportsPushDownAggregates extends ScanBuilder {
 
   /**
-   * Pushes down Aggregation and returns aggregates that need to be evaluated after scanning.
+   * Pushes down Aggregation to datasource.
    * The Aggregation can be pushed down only if all the Aggregate Functions can
    * be pushed down.
-   * @since 3.1.0
    */
-  AggregateFunction[] pushAggregates(AggregateFunction[] aggregate);
+  void pushAggregation(Aggregation aggregation);
 
   /**
    * Returns the aggregates that are pushed to the data source via
-   * {@link #pushAggregates(AggregateFunction[] aggregate)}.
-   *
-   * @since 3.1.0
+   * {@link #pushAggregation(Aggregation aggregation)}.
    */
-  AggregateFunction[] pushedAggregates();
+  Aggregation pushedAggregation();
 }

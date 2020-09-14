@@ -26,6 +26,7 @@ import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownA
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.sources.{AggregateFunction, Aggregation}
 import org.apache.spark.sql.types.StructType
 
 object PushDownUtils extends PredicateHelper {
@@ -74,10 +75,12 @@ object PushDownUtils extends PredicateHelper {
     /**
      * Pushes down aggregates to the data source reader
      *
-     * @return pushed aggregates and post-scan aggregates.
+     * @return pushed aggregation.
      */
-    def pushAggregates(scanBuilder: ScanBuilder, aggregates: Seq[AggregateExpression])
-      : (Seq[sources.AggregateFunction], Seq[AggregateExpression]) = {
+    def pushAggregates(
+        scanBuilder: ScanBuilder,
+        aggregates: Seq[AggregateExpression],
+        groupby: Seq[Expression]): Aggregation = {
       scanBuilder match {
         case r: SupportsPushDownAggregates =>
           val translatedAggregates = mutable.ArrayBuffer.empty[sources.AggregateFunction]
@@ -93,12 +96,17 @@ object PushDownUtils extends PredicateHelper {
             }
           }
 
-          if (untranslatableExprs.isEmpty) r.pushAggregates(translatedAggregates.toArray)
+          def columnAsString(e: Expression): String = e match {
+            case AttributeReference(name, _, _, _) => name
+          }
 
-          // push down only if all the aggregates can be pushed down
-          if (!r.pushedAggregates.isEmpty) (r.pushedAggregates, Nil) else (Nil, aggregates)
+          if (untranslatableExprs.isEmpty) {
+            r.pushAggregation(Aggregation(translatedAggregates, groupby.map(columnAsString(_))))
+          }
 
-        case _ => (Nil, aggregates)
+          r.pushedAggregation
+
+        case _ => Aggregation(Seq.empty[AggregateFunction], Seq.empty[String])
       }
     }
 

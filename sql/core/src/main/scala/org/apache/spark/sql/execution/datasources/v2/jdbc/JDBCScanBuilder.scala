@@ -21,7 +21,7 @@ import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownA
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.jdbc.JdbcDialects
-import org.apache.spark.sql.sources.{AggregateFunction, Filter}
+import org.apache.spark.sql.sources.{AggregateFunction, Aggregation, Filter}
 import org.apache.spark.sql.types.StructType
 
 case class JDBCScanBuilder(
@@ -35,7 +35,7 @@ case class JDBCScanBuilder(
 
   private var pushedFilter = Array.empty[Filter]
 
-  private var pushedAggregate = Array.empty[AggregateFunction]
+  private var pushedAggregations = Aggregation(Seq.empty[AggregateFunction], Seq.empty[String])
 
   private var prunedSchema = schema
 
@@ -52,21 +52,16 @@ case class JDBCScanBuilder(
 
   override def pushedFilters(): Array[Filter] = pushedFilter
 
-  override def pushAggregates(aggregate: Array[AggregateFunction]): Array[AggregateFunction] = {
+  override def pushAggregation(aggregation: Aggregation): Unit = {
     if (jdbcOptions.pushDownAggregate) {
       val dialect = JdbcDialects.get(jdbcOptions.url)
-      if (!JDBCRDD.compileAggregates(aggregate, dialect).isEmpty) {
-        pushedAggregate = aggregate
-        Array.empty[AggregateFunction]
-      } else {
-        aggregate
+      if (!JDBCRDD.compileAggregates(aggregation.aggregateExpressions, dialect).isEmpty) {
+        pushedAggregations = aggregation
       }
-    } else {
-      aggregate
     }
   }
 
-  override def pushedAggregates(): Array[AggregateFunction] = pushedAggregate
+  override def pushedAggregation(): Aggregation = pushedAggregations
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // JDBC doesn't support nested column pruning.
@@ -85,6 +80,6 @@ case class JDBCScanBuilder(
     val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
     val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
     JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session),
-      prunedSchema, pushedFilter, pushedAggregate)
+      prunedSchema, pushedFilter, pushedAggregation)
   }
 }

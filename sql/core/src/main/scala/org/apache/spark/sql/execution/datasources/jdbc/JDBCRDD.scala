@@ -134,20 +134,28 @@ object JDBCRDD extends Logging {
   }
 
   def compileAggregates(aggregates: Seq[AggregateFunction], dialect: JdbcDialect):
-    Map[String, String] = {
+  Map[String, Array[String]] = {
     def quote(colName: String): String = dialect.quoteIdentifier(colName)
     val compiledAggregates = aggregates.map {
       case Min(column) => Some(quote(column) -> s"MIN(${quote(column)})")
       case Max(column) => Some(quote(column) -> s"MAX(${quote(column)})")
-      case Sum(column) => Some(quote(column) -> s"Sum(${quote(column)})")
-      case Avg(column) => Some(quote(column) -> s"Avg(${quote(column)})")
+      case Sum(column) => Some(quote(column) -> s"SUM(${quote(column)})")
+      case Avg(column) => Some(quote(column) -> s"AVG(${quote(column)})")
       case _ => None
     }
+    var map: Map[String, Array[String]] = Map()
     if (!compiledAggregates.contains(None)) {
-      compiledAggregates.flatMap(x => x).toMap
-    } else {
-      Map.empty[String, String]
+      for (i <- 0 until compiledAggregates.length) {
+        val key = compiledAggregates(i).get._1
+        val value = map.get(key)
+        if (value == None) {
+          map += (key -> Array(compiledAggregates(i).get._2))
+        } else {
+          map += (key -> (value.get :+ compiledAggregates(i).get._2))
+        }
+      }
     }
+    map
   }
 
   /**
@@ -170,7 +178,8 @@ object JDBCRDD extends Logging {
       filters: Array[Filter],
       parts: Array[Partition],
       options: JDBCOptions,
-      aggregates: Array[AggregateFunction] = Array.empty[AggregateFunction]): RDD[InternalRow] = {
+      aggregation: Aggregation = Aggregation(Seq.empty[AggregateFunction], Seq.empty[String]))
+    : RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
@@ -183,7 +192,7 @@ object JDBCRDD extends Logging {
       parts,
       url,
       options,
-      aggregates)
+      aggregation)
   }
 }
 
@@ -201,7 +210,7 @@ private[jdbc] class JDBCRDD(
     partitions: Array[Partition],
     url: String,
     options: JDBCOptions,
-    aggregates: Array[AggregateFunction] = Array.empty[AggregateFunction])
+    aggregation: Aggregation = Aggregation(Seq.empty[AggregateFunction], Seq.empty[String]))
   extends RDD[InternalRow](sc, Nil) {
 
   /**
@@ -213,11 +222,15 @@ private[jdbc] class JDBCRDD(
    * `columns`, but as a String suitable for injection into a SQL query.
    */
   private val columnList: String = {
-    val compiledAggregates = JDBCRDD.compileAggregates(aggregates, JdbcDialects.get(url))
+    val compiledAggregates = JDBCRDD.compileAggregates(aggregation.aggregateExpressions,
+      JdbcDialects.get(url))
     val sb = new StringBuilder()
-
-    columns.map(c => compiledAggregates.getOrElse(c, c))
-      .foreach(x => sb.append(", ").append(x))
+    columns.map(c => compiledAggregates.getOrElse(c, c)).foreach(
+      x => x match {
+        case str: String => sb.append(", ").append(str)
+        case array: Array[String] => sb.append(", ").append(array.mkString(", "))
+      }
+    )
     if (sb.length == 0) "1" else sb.substring(1)
   }
 
@@ -239,6 +252,18 @@ private[jdbc] class JDBCRDD(
       "WHERE " + part.whereClause
     } else if (filterWhereClause.length > 0) {
       "WHERE " + filterWhereClause
+    } else {
+      ""
+    }
+  }
+
+  /**
+   * A GROUP BY clause representing pushed-down grouping columns.
+   */
+  private def getGroupByClause: String = {
+    if (aggregation.groupByExpressions.length > 0) {
+      val quotedColumns = aggregation.groupByExpressions.map(JdbcDialects.get(url).quoteIdentifier)
+      s"GROUP BY ${quotedColumns.mkString(", ")}"
     } else {
       ""
     }
@@ -319,7 +344,8 @@ private[jdbc] class JDBCRDD(
 
     val myWhereClause = getWhereClause(part)
 
-    val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myWhereClause"
+    val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myWhereClause" +
+      s" $getGroupByClause"
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)

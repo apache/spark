@@ -22,10 +22,10 @@ case class Aggregation(aggregateExpressions: Seq[AggregateFunction],
 
 abstract class AggregateFunction
 
-case class Avg (column: String) extends AggregateFunction
+case class Avg(column: String) extends AggregateFunction
 
-case class Min (column: String) extends AggregateFunction
+case class Min(column: String) extends AggregateFunction
 
-case class Max (column: String) extends AggregateFunction
+case class Max(column: String) extends AggregateFunction
 
-case class Sum (column: String) extends AggregateFunction
+case class Sum(column: String) extends AggregateFunction
