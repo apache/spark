@@ -1135,17 +1135,21 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   }
 
   test("SPARK-32516: 'path' or 'paths' option cannot coexist with load()'s path parameters") {
-    def verifyLoadFails(f: () => DataFrame): Unit = {
-      val e = intercept[AnalysisException](f())
+    def verifyLoadFails(f: => DataFrame): Unit = {
+      val e = intercept[AnalysisException](f)
       assert(e.getMessage.contains(
         "Either remove the path option if it's the same as the path parameter"))
     }
 
     val path = "/tmp"
-    verifyLoadFails(() => spark.read.option("path", path).parquet(path))
-    verifyLoadFails(() => spark.read.option("path", path).format("parquet").load(path))
-    verifyLoadFails(() => spark.read.option("paths", path).parquet(path))
-    verifyLoadFails(() => spark.read.option("paths", path).format("parquet").load(path))
+    verifyLoadFails(spark.read.option("path", path).parquet(path))
+    verifyLoadFails(spark.read.option("path", path).parquet(""))
+    verifyLoadFails(spark.read.option("path", path).format("parquet").load(path))
+    verifyLoadFails(spark.read.option("path", path).format("parquet").load(""))
+    verifyLoadFails(spark.read.option("paths", path).parquet(path))
+    verifyLoadFails(spark.read.option("paths", path).parquet(""))
+    verifyLoadFails(spark.read.option("paths", path).format("parquet").load(path))
+    verifyLoadFails(spark.read.option("paths", path).format("parquet").load(""))
   }
 
   test("SPARK-32516: legacy path option behavior in load()") {
@@ -1182,6 +1186,17 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     val df = Seq(1).toDF
     val path = "tmp"
     verifyLoadFails(df.write.option("path", path).parquet(path))
+    verifyLoadFails(df.write.option("path", path).parquet(""))
     verifyLoadFails(df.write.option("path", path).format("parquet").save(path))
+    verifyLoadFails(df.write.option("path", path).format("parquet").save(""))
+  }
+
+  test("SPARK-32853: consecutive load/save calls should be allowed") {
+    val dfr = spark.read.format(classOf[FakeSourceOne].getName)
+    dfr.load("1")
+    dfr.load("2")
+    val dfw = spark.range(10).write.format(classOf[DefaultSource].getName)
+    dfw.save("1")
+    dfw.save("2")
   }
 }
