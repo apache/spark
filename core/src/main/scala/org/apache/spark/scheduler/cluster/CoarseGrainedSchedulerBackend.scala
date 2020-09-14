@@ -275,8 +275,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             executorId,
             ExecutorDecommissionInfo(s"Executor $executorId is decommissioned."),
             adjustTargetNumExecutors = false,
-            // TODO: add a new type like `ExecutorDecommissionInfo` for the case where executor
-            // is decommissioned at executor first, so we don't need this extra parameter.
             decommissionFromDriver = false))
 
       case RetrieveSparkAppConfig(resourceProfileId) =>
