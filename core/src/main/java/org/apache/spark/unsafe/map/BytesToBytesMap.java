@@ -763,7 +763,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
           if (longArray.size() / 2 < MAX_CAPACITY) {
             try {
               growAndRehash();
-            } catch (SparkOutOfMemoryError oom) {
+            } catch (OutOfMemoryError oom) {
               canGrowArray = false;
             }
           } else {
