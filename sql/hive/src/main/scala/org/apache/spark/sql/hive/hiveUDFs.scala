@@ -47,7 +47,8 @@ private[hive] case class HiveSimpleUDF(
   with HiveInspectors
   with CodegenFallback
   with Logging
-  with UserDefinedExpression {
+  with UserDefinedExpression
+  with ImplicitCastInputTypes {
 
   override lazy val deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
 
@@ -57,8 +58,19 @@ private[hive] case class HiveSimpleUDF(
   lazy val function = funcWrapper.createFunction[UDF]()
 
   @transient
-  private lazy val method =
-    function.getResolver.getEvalMethod(children.map(_.dataType.toTypeInfo).asJava)
+  private lazy val method = {
+    // the simple UDF method must be 'evaluate'
+    val methods = function.getClass.getMethods.filter(_.getName == "evaluate")
+    val passedMethod = methods.filter(_.getGenericParameterTypes.length == children.length)
+
+    // no matching parameter num for evaluate method
+    if (passedMethod.isEmpty) {
+      throw new NoMatchingMethodException(function.getClass,
+        children.map(_.dataType.toTypeInfo).asJava, methods.toSeq.asJava)
+    }
+    // if there exists many method, we choose the first
+    methods.head
+  }
 
   @transient
   private lazy val arguments = children.map(toInspector).toArray
@@ -67,6 +79,10 @@ private[hive] case class HiveSimpleUDF(
   private lazy val isUDFDeterministic = {
     val udfType = function.getClass.getAnnotation(classOf[HiveUDFType])
     udfType != null && udfType.deterministic() && !udfType.stateful()
+  }
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    method.getGenericParameterTypes.map(javaTypeToDataType)
   }
 
   override def foldable: Boolean = isUDFDeterministic && children.forall(_.foldable)
