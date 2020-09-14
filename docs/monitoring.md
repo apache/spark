@@ -1159,7 +1159,7 @@ This is the component with the largest amount of instrumented metrics
     namespace can be found in the corresponding entry for the Executor component instance.
     
 - namespace=ExecutorMetrics
-  - **note:** These metrics are conditional to a configuration parameter:
+  - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.executorMetricsSource.enabled` (default is true) 
   - This source contains memory-related metrics. A full list of available metrics in this 
     namespace can be found in the corresponding entry for the Executor component instance.
