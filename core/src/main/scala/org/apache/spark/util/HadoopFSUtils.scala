@@ -336,7 +336,7 @@ private[spark] object HadoopFSUtils extends Logging {
         s"the following files were missing during file scan:\n  ${missingFiles.mkString("\n  ")}")
     }
 
-    resolvedLeafStatuses.toSeq
+    resolvedLeafStatuses
   }
   // scalastyle:on argcount
 
