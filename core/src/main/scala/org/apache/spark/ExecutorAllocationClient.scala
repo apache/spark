@@ -110,11 +110,10 @@ private[spark] trait ExecutorAllocationClient {
    * @param executorId identifiers of executor to decommission
    * @param decommissionInfo information about the decommission (reason, host loss)
    * @param adjustTargetNumExecutors if we should adjust the target number of executors.
-   * @param triggeredByExecutor   whether the decommission is triggered by sending the
-   *                                 `DecommissionExecutor` from driver to executor
-   *                                 (TODO: add a new type like `ExecutorDecommissionInfo` for the
-   *                                 case where executor is decommissioned at executor first, so we
-   *                                 don't need this extra parameter.)
+   * @param triggeredByExecutor   whether the decommission is triggered at executor.
+   *                              (TODO: add a new type like `ExecutorDecommissionInfo` for the
+   *                              case where executor is decommissioned at executor first, so we
+   *                              don't need this extra parameter.)
    * @return whether the request is acknowledged by the cluster manager.
    */
   final def decommissionExecutor(
