@@ -124,9 +124,9 @@ private[feature] object PCAUtil {
   // 6e541be066d547a097f5089165cd7c38c3ca276d/math/src/main/scala/breeze/linalg/
   // functions/svd.scala#L87
   def memoryCost(k: Int, numFeatures: Int): Long = {
-    3L * math.min(k, numFeatures) * math.min(k, numFeatures)
-    + math.max(math.max(k, numFeatures), 4L * math.min(k, numFeatures)
-    * math.min(k, numFeatures) + 4L * math.min(k, numFeatures))
+    3L * math.min(k, numFeatures) * math.min(k, numFeatures) +
+      math.max(math.max(k, numFeatures), 4L * math.min(k, numFeatures) *
+      math.min(k, numFeatures) + 4L * math.min(k, numFeatures))
   }
 
 }
