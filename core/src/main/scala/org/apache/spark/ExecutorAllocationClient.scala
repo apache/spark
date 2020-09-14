@@ -88,7 +88,7 @@ private[spark] trait ExecutorAllocationClient {
    * Default implementation delegates to kill, scheduler must override
    * if it supports graceful decommissioning.
    *
-   * @param executorsAndDecomInfo    identifiers of executors & decom info.
+   * @param executorsAndDecomInfo identifiers of executors & decom info.
    * @param adjustTargetNumExecutors whether the target number of executors will be adjusted down
    *                                 after these executors have been decommissioned.
    * @param triggeredByExecutor whether the decommission is triggered at executor.

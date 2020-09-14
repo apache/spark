@@ -22,6 +22,7 @@ import java.text.SimpleDateFormat
 import java.util.{Date, Locale, UUID}
 import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.function.Supplier
 
 import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
@@ -70,7 +71,12 @@ private[deploy] class Worker(
   if (conf.get(config.DECOMMISSION_ENABLED)) {
     logInfo("Registering SIGPWR handler to trigger decommissioning.")
     SignalUtils.register("PWR", "Failed to register SIGPWR handler - " +
-      "disabling worker decommission feature.")(decommissionSelf(triggeredByWorker = true))
+      "disabling worker decommission feature.") {
+       self.send(DecommissionWorker)
+       // Tell master we starts decommissioning so it stops trying to launch executor/driver on us
+       sendToMaster(WorkerDecommissioning(workerId, self))
+       true
+    }
   } else {
     logInfo("Worker decommissioning not enabled, SIGPWR will result in exiting.")
   }
@@ -137,7 +143,8 @@ private[deploy] class Worker(
   private var registered = false
   private var connected = false
   private var decommissioned = false
-  private val workerId = generateWorkerId()
+  // expose for test
+  private[spark] val workerId = generateWorkerId()
   private val sparkHome =
     if (sys.props.contains(IS_TESTING.key)) {
       assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
@@ -542,7 +549,7 @@ private[deploy] class Worker(
     case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_, resources_) =>
       if (masterUrl != activeMasterUrl) {
         logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
-      } else if (decommissioned) {
+      } else if (decommissioned.get()) {
         logWarning("Asked to launch an executor while decommissioned. Not launching executor.")
       } else {
         try {
@@ -669,7 +676,7 @@ private[deploy] class Worker(
       maybeCleanupApplication(id)
 
     case DecommissionWorker =>
-      decommissionSelf(triggeredByWorker = false)
+      decommissionSelf()
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -768,19 +775,15 @@ private[deploy] class Worker(
     }
   }
 
-  private[deploy] def decommissionSelf(triggeredByWorker: Boolean): Boolean = {
-    if (conf.get(config.DECOMMISSION_ENABLED)) {
-      logDebug("Decommissioning self")
+  private[deploy] def decommissionSelf(): Unit = {
+    if (conf.get(config.DECOMMISSION_ENABLED) && !decommissioned) {
       decommissioned = true
-      // No need to notify the Master if the decommission message already came from it
-      if (triggeredByWorker) {
-        sendToMaster(WorkerDecommissioning(workerId, self))
-      }
+      logInfo(s"Decommission worker $workerId.")
+    } else if (decommissioned) {
+      logWarning(s"Worker $workerId already started decommissioning.")
     } else {
-      logWarning("Asked to decommission self, but decommissioning not enabled")
+      logWarning(s"Receive decommission request, but decommission feature is disabled.")
     }
-    // Return true since can be called as a signal handler
-    true
   }
 
   private[worker] def handleDriverStateChanged(driverStateChanged: DriverStateChanged): Unit = {

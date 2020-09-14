@@ -250,13 +250,17 @@ private[deploy] class Master(
         workerRef.send(MasterInStandby)
       } else {
         // We use foreach since get gives us an option and we can skip the failures.
-        idToWorker.get(id).foreach(w => decommissionWorker(w, triggeredByWorker = true))
+        idToWorker.get(id).foreach(w => decommissionWorker(w))
       }
 
     case DecommissionWorkers(ids) =>
       ids.foreach ( id =>
         // We use foreach since get gives us an option and we can skip the failures.
-        idToWorker.get(id).foreach(w => decommissionWorker(w, triggeredByWorker = false))
+        idToWorker.get(id).foreach { w =>
+          decommissionWorker(w)
+          // Also send a message to the worker node to notify.
+          w.endpoint.send(DecommissionWorker)
+        }
       )
 
     case RegisterWorker(
@@ -902,7 +906,7 @@ private[deploy] class Master(
     workersToRemove.size
   }
 
-  private def decommissionWorker(worker: WorkerInfo, triggeredByWorker: Boolean): Unit = {
+  private def decommissionWorker(worker: WorkerInfo): Unit = {
     if (worker.state != WorkerState.DECOMMISSIONED) {
       logInfo("Decommissioning worker %s on %s:%d".format(worker.id, worker.host, worker.port))
       worker.setState(WorkerState.DECOMMISSIONED)
@@ -917,9 +921,6 @@ private[deploy] class Master(
           Some(worker.host)))
         exec.state = ExecutorState.DECOMMISSIONED
         exec.application.removeExecutor(exec)
-      }
-      if (!triggeredByWorker) {
-        worker.endpoint.send(DecommissionWorker)
       }
       // On recovery do not add a decommissioned executor
       persistenceEngine.removeWorker(worker)

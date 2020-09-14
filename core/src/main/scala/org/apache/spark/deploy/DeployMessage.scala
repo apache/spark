@@ -68,8 +68,9 @@ private[deploy] object DeployMessages {
   case class DecommissionWorkers(ids: Seq[String])
 
   /**
-   * A message that sent from Master to Worker to decommission the Worker.
-   * It's used for the case where decommission is triggered at MasterWebUI.
+   * A message that sent to Worker to decommission the Worker. The message can be sent by the Master
+   * if decommission is triggered at MasterWebUI or the Worker itself if decommission is triggered
+   * at Worker.
    *
    * Note that decommission a Worker will cause all the executors on that Worker
    * to be decommissioned as well.
