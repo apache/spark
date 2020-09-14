@@ -821,7 +821,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
           } else {
             // The map is already at MAX_CAPACITY and cannot grow. Instead, we prevent it from
             // accepting any more new elements to make sure we don't exceed the load factor. If we
-            // need to spill later, this allows UnsafeKVExternalSorter to reuse the array for sorting.
+            // need to spill later, this allows UnsafeKVExternalSorter to reuse the array for
+            // sorting.
             canGrowArray = false;
           }
         }
