@@ -243,11 +243,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
       checkAnswer(
         sql("SELECT name, id FROM h2.test.abc"),
         Seq(Row("fred", 1), Row("mary", 2), Row("lucy", 3)))
-      sql("SELECT name, id FROM h2.test.abc").show
 
       sql("INSERT OVERWRITE h2.test.abc SELECT 'bob', 4")
       checkAnswer(sql("SELECT name, id FROM h2.test.abc"), Row("bob", 4))
-      sql("SELECT name, id FROM h2.test.abc").show
     }
   }
 

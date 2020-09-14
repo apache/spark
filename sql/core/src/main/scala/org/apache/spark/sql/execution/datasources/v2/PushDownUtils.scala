@@ -98,10 +98,14 @@ object PushDownUtils extends PredicateHelper {
 
           def columnAsString(e: Expression): String = e match {
             case AttributeReference(name, _, _, _) => name
+            case _ => ""
           }
 
           if (untranslatableExprs.isEmpty) {
-            r.pushAggregation(Aggregation(translatedAggregates, groupby.map(columnAsString(_))))
+            val groupByCols = groupby.map(columnAsString(_))
+            if (!groupByCols.exists(_.isEmpty)) {
+              r.pushAggregation(Aggregation(translatedAggregates, groupByCols))
+            }
           }
 
           r.pushedAggregation
