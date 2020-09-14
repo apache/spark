@@ -100,7 +100,7 @@ private[spark] object CoarseGrainedClusterMessages {
   case class ExecutorDecommissioned(executorId: String)
 
   // A message that sent from driver to executor to decommission that executor.
-  // It's used for Standalone's case yet, where decommission is triggered at Worker.
+  // It's used for Standalone's cases, where decommission is triggered at MasterWebUI or Worker.
   object DecommissionExecutor extends CoarseGrainedClusterMessage
 
   case class RemoveWorker(workerId: String, host: String, message: String)
