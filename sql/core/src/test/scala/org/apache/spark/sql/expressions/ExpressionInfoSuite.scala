@@ -121,7 +121,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     def unindentAndTrim(s: String): String = {
       s.replaceAll("\n\\s+", "\n").trim
     }
-    val beginSqlStmtRe = "  > ".r
+    val beginSqlStmtRe = "\n      > ".r
     val endSqlStmtRe = ";\n".r
     def checkExampleSyntax(example: String): Unit = {
       val beginStmtNum = beginSqlStmtRe.findAllIn(example).length

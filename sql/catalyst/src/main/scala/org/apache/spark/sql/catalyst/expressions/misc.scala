@@ -209,10 +209,10 @@ case class SparkVersion() extends LeafExpression with CodegenFallback {
   usage = """_FUNC_(expr) - Return DDL-formatted type string for the data type of the input.""",
   examples = """
     Examples:
-     > SELECT _FUNC_(1);
-      int
-     > SELECT _FUNC_(array(1));
-      array<int>
+      > SELECT _FUNC_(1);
+       int
+      > SELECT _FUNC_(array(1));
+       array<int>
   """,
   since = "3.0.0")
 case class TypeOf(child: Expression) extends UnaryExpression {
