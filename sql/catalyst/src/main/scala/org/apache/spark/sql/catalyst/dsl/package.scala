@@ -197,6 +197,12 @@ package object dsl {
       Max(e).toAggregateExpression(isDistinct = false, filter = filter)
     def maxDistinct(e: Expression, filter: Option[Expression] = None): Expression =
       Max(e).toAggregateExpression(isDistinct = true, filter = filter)
+    def bitAnd(e: Expression, filter: Option[Expression] = None): Expression =
+      BitAndAgg(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def bitOr(e: Expression, filter: Option[Expression] = None): Expression =
+      BitOrAgg(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def bitXor(e: Expression, filter: Option[Expression] = None): Expression =
+      BitXorAgg(e).toAggregateExpression(isDistinct = false, filter = filter)
     def upper(e: Expression): Expression = Upper(e)
     def lower(e: Expression): Expression = Lower(e)
     def coalesce(args: Expression*): Expression = Coalesce(args)
