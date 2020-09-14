@@ -197,7 +197,7 @@ private[kafka010] class KafkaOffsetReader(
                 s"${partitionTimestamps(tp)}.")
             }
 
-            if (offsetSpec == null) {
+            if (offsetSpec.offset() == OffsetFetchResponse.INVALID_OFFSET) {
               tp -> KafkaOffsetRangeLimit.LATEST
             } else {
               tp -> offsetSpec.offset()
