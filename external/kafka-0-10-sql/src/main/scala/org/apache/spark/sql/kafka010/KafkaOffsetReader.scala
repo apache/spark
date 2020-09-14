@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.util.{UninterruptibleThread, UninterruptibleThreadRunner}
 
 /**
- * This class uses Kafka's its own [[Admin]] API to read data offsets from Kafka.
+ * This class uses Kafka's own [[Admin]] API to read data offsets from Kafka.
  * The [[ConsumerStrategy]] class defines which Kafka topics and partitions should be read
  * by this source. These strategies directly correspond to the different consumption options
  * in. This class is designed to return a configured [[Admin]] that is used by the
@@ -68,19 +68,15 @@ private[kafka010] class KafkaOffsetReader(
     _admin
   }
 
-  def isolationLevel(): IsolationLevel = {
+  lazy val isolationLevel: IsolationLevel = {
     Option(driverKafkaParams.get(ConsumerConfig.ISOLATION_LEVEL_CONFIG)) match {
       case Some(s: String) => IsolationLevel.valueOf(s.toUpperCase(Locale.ROOT))
-      case _ => IsolationLevel.valueOf(
-        ConsumerConfig.DEFAULT_ISOLATION_LEVEL.toUpperCase(Locale.ROOT))
-    }
-      case s: String => IsolationLevel.valueOf(s.toUpperCase(Locale.ROOT))
-      case null => IsolationLevel.valueOf(
+      case None => IsolationLevel.valueOf(
         ConsumerConfig.DEFAULT_ISOLATION_LEVEL.toUpperCase(Locale.ROOT))
     }
   }
 
-  private def listOffsetsOptions() = new ListOffsetsOptions(isolationLevel())
+  private lazy val listOffsetsOptions = new ListOffsetsOptions(isolationLevel)
 
   private[kafka010] val maxOffsetFetchAttempts =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, "3").toInt
@@ -188,10 +184,10 @@ private[kafka010] class KafkaOffsetReader(
     }
 
     val fnRetrievePartitionOffsets: ju.Set[TopicPartition] => Map[TopicPartition, Long] = { _ => {
-        val listOffsetsParams = partitionTimestamps.map { p =>
-          p._1 -> OffsetSpec.forTimestamp(p._2)
+        val listOffsetsParams = partitionTimestamps.map { case (tp, timestamp) =>
+          tp -> OffsetSpec.forTimestamp(timestamp)
         }.asJava
-        admin.listOffsets(listOffsetsParams, listOffsetsOptions()).all().get().asScala.map {
+        admin.listOffsets(listOffsetsParams, listOffsetsOptions).all().get().asScala.map {
           case (tp, offsetSpec) =>
             if (failsOnNoMatchingOffset) {
               assert(offsetSpec.offset() != OffsetFetchResponse.INVALID_OFFSET, "No offset " +
@@ -232,7 +228,7 @@ private[kafka010] class KafkaOffsetReader(
           }
         }
         val resolvedPartitionOffsets = admin.listOffsets(listOffsetsParams.asJava,
-          listOffsetsOptions()).all().get().asScala.map(result => result._1 -> result._2.offset())
+          listOffsetsOptions).all().get().asScala.map(result => result._1 -> result._2.offset())
           .toMap
 
         partitionOffsets.map { case (tp, off) =>
@@ -258,7 +254,7 @@ private[kafka010] class KafkaOffsetReader(
   def fetchEarliestOffsets(): Map[TopicPartition, Long] = partitionsAssignedToConsumer(
     partitions => {
       val listOffsetsParams = partitions.asScala.map(p => p -> OffsetSpec.earliest()).toMap.asJava
-      val partitionOffsets = admin.listOffsets(listOffsetsParams, listOffsetsOptions()).all().get()
+      val partitionOffsets = admin.listOffsets(listOffsetsParams, listOffsetsOptions).all().get()
         .asScala.map(result => result._1 -> result._2.offset()).toMap
       logDebug(s"Got earliest offsets for partitions: $partitionOffsets")
       partitionOffsets
@@ -283,7 +279,7 @@ private[kafka010] class KafkaOffsetReader(
     partitionsAssignedToConsumer { partitions => {
       if (knownOffsets.isEmpty) {
         val listOffsetsParams = partitions.asScala.map(_ -> OffsetSpec.latest()).toMap.asJava
-        val partitionOffsets = admin.listOffsets(listOffsetsParams, listOffsetsOptions()).all()
+        val partitionOffsets = admin.listOffsets(listOffsetsParams, listOffsetsOptions).all()
           .get().asScala.map(result => result._1 -> result._2.offset()).toMap
         logDebug(s"Got latest offsets for partitions: $partitionOffsets")
         partitionOffsets
@@ -317,7 +313,7 @@ private[kafka010] class KafkaOffsetReader(
         var attempt = 0
         do {
           val listOffsetsParams = partitions.asScala.map(_ -> OffsetSpec.latest()).toMap.asJava
-          partitionOffsets = admin.listOffsets(listOffsetsParams, listOffsetsOptions()).all().get()
+          partitionOffsets = admin.listOffsets(listOffsetsParams, listOffsetsOptions).all().get()
             .asScala.map(result => result._1 -> result._2.offset()).toMap
           attempt += 1
 
@@ -354,7 +350,7 @@ private[kafka010] class KafkaOffsetReader(
           // `partitions`. So we need to ignore them
           partitions.contains(newPartition)
         }.map(partition => partition -> OffsetSpec.earliest()).toMap.asJava
-        val partitionOffsets = admin.listOffsets(listOffsetsParams, listOffsetsOptions()).all()
+        val partitionOffsets = admin.listOffsets(listOffsetsParams, listOffsetsOptions).all()
           .get().asScala.map(result => result._1 -> result._2.offset()).toMap
         logDebug(s"Got earliest offsets for new partitions: $partitionOffsets")
         partitionOffsets
