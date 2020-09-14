@@ -470,17 +470,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   override def decommissionExecutors(
       executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
       adjustTargetNumExecutors: Boolean,
-      decommissionFromDriver: Boolean): Seq[String] = {
-    val executorsToDecommission = withLock {
-      executorsAndDecomInfo.flatMap { case (executorId, decomInfo) =>
-        // Only bother decommissioning executors which are alive.
-        if (isExecutorActive(executorId)) {
-          scheduler.executorDecommission(executorId, decomInfo)
-          executorsPendingDecommission(executorId) = decomInfo.workerHost
-          Some(executorId)
-        } else {
-          None
-        }
+      decommissionFromDriver: Boolean): Seq[String] = withLock {
+    val executorsToDecommission = executorsAndDecomInfo.flatMap { case (executorId, decomInfo) =>
+      // Only bother decommissioning executors which are alive.
+      if (isExecutorActive(executorId)) {
+        scheduler.executorDecommission(executorId, decomInfo)
+        executorsPendingDecommission(executorId) = decomInfo.workerHost
+        Some(executorId)
+      } else {
+        None
       }
     }
 
@@ -498,11 +496,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     if (decommissionFromDriver) {
-      CoarseGrainedSchedulerBackend.this.synchronized {
-        executorsToDecommission.foreach { executorId =>
-          logInfo(s"Asking executor $executorId to decommissioning.")
-          executorDataMap(executorId).executorEndpoint.send(DecommissionExecutor)
-        }
+      executorsToDecommission.foreach { executorId =>
+        logInfo(s"Asking executor $executorId to decommissioning.")
+        executorDataMap(executorId).executorEndpoint.send(DecommissionExecutor)
       }
     }
 
