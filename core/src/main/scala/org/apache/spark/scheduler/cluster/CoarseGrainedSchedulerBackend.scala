@@ -493,7 +493,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // decommission notification to executors. So, it's less likely to lead to the race
     // condition where `getPeer` request from the decommissioned executor comes first
     // before the BlockManagers are marked as decommissioned.
-    scheduler.sc.env.blockManager.master.decommissionBlockManagers(executorsToDecommission)
+    if (conf.get(STORAGE_DECOMMISSION_ENABLED)) {
+      scheduler.sc.env.blockManager.master.decommissionBlockManagers(executorsToDecommission)
+    }
 
     if (decommissionFromDriver) {
       CoarseGrainedSchedulerBackend.this.synchronized {
