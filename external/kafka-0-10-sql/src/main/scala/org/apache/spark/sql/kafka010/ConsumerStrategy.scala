@@ -49,7 +49,8 @@ private[kafka010] sealed trait ConsumerStrategy extends Logging {
 
   /** Returns the assigned or subscribed [[TopicPartition]] */
   def assignedTopicPartitions(admin: Admin): Set[TopicPartition]
-protected def retrieveAllPartitions(admin: Admin, topics: Set[String]): Set[TopicPartition] = {
+
+  protected def retrieveAllPartitions(admin: Admin, topics: Set[String]): Set[TopicPartition] = {
     admin.describeTopics(topics.asJava).all().get().asScala.filterNot(_._2.isInternal).flatMap {
       case (topic, topicDescription) =>
         topicDescription.partitions().asScala.map { topicPartitionInfo =>
@@ -69,15 +70,7 @@ private[kafka010] case class AssignStrategy(partitions: Array[TopicPartition])
   override def assignedTopicPartitions(admin: Admin): Set[TopicPartition] = {
     val topics = partitions.map(_.topic()).toSet
     logDebug(s"Topics for assignment: $topics")
-    admin.describeTopics(topics.asJava).all().get().asScala.filterNot(_._2.isInternal)
-      .flatMap { topicDescription =>
-        topicDescription._2.partitions().asScala.map { topicPartitionInfo =>
-          val topic = topicDescription._1
-          val partition = topicPartitionInfo.partition()
-          logDebug(s"Partition added: $topic:$partition")
-          new TopicPartition(topic, partition)
-        }
-      }.filter(partitions.contains(_)).toSet
+    retrieveAllPartitions(admin, topics).filter(partitions.contains(_))
   }
 
   override def toString: String = s"Assign[${partitions.mkString(", ")}]"
@@ -89,15 +82,7 @@ private[kafka010] case class AssignStrategy(partitions: Array[TopicPartition])
 private[kafka010] case class SubscribeStrategy(topics: Seq[String])
     extends ConsumerStrategy with Logging {
   override def assignedTopicPartitions(admin: Admin): Set[TopicPartition] = {
-    admin.describeTopics(topics.asJava).all().get().asScala.filterNot(_._2.isInternal)
-      .flatMap { topicDescription =>
-        topicDescription._2.partitions().asScala.map { topicPartitionInfo =>
-          val topic = topicDescription._1
-          val partition = topicPartitionInfo.partition()
-          logDebug(s"Partition added: $topic:$partition")
-          new TopicPartition(topic, partition)
-        }
-      }.toSet
+    retrieveAllPartitions(admin, topics.toSet)
   }
 
   override def toString: String = s"Subscribe[${topics.mkString(", ")}]"
@@ -121,14 +106,7 @@ private[kafka010] case class SubscribePatternStrategy(topicPattern: String)
         topics :+= name
       }
     }
-    admin.describeTopics(topics.asJava).all().get().asScala.flatMap { topicDescription =>
-      topicDescription._2.partitions().asScala.map { topicPartitionInfo =>
-        val topic = topicDescription._1
-        val partition = topicPartitionInfo.partition()
-        logDebug(s"Partition added: $topic:$partition")
-        new TopicPartition(topic, partition)
-      }
-    }.toSet
+    retrieveAllPartitions(admin, topics.toSet)
   }
 
   override def toString: String = s"SubscribePattern[$topicPattern]"
