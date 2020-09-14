@@ -338,9 +338,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     } catch {
       case e: Exception =>
         logError("Unexpected error while decommissioning self", e)
-        return false
     }
-    decommissioned.get()
   }
 }
 
