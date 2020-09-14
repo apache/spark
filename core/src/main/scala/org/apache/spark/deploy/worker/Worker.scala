@@ -549,7 +549,7 @@ private[deploy] class Worker(
     case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_, resources_) =>
       if (masterUrl != activeMasterUrl) {
         logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
-      } else if (decommissioned.get()) {
+      } else if (decommissioned) {
         logWarning("Asked to launch an executor while decommissioned. Not launching executor.")
       } else {
         try {
