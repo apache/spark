@@ -49,6 +49,16 @@ private[kafka010] sealed trait ConsumerStrategy extends Logging {
 
   /** Returns the assigned or subscribed [[TopicPartition]] */
   def assignedTopicPartitions(admin: Admin): Set[TopicPartition]
+protected def retrieveAllPartitions(admin: Admin, topics: Set[String]): Set[TopicPartition] = {
+    admin.describeTopics(topics.asJava).all().get().asScala.filterNot(_._2.isInternal).flatMap {
+      case (topic, topicDescription) =>
+        topicDescription.partitions().asScala.map { topicPartitionInfo =>
+          val partition = topicPartitionInfo.partition()
+          logDebug(s"Partition added: $topic:$partition")
+          new TopicPartition(topic, partition)
+        }
+    }.toSet
+  }
 }
 
 /**
