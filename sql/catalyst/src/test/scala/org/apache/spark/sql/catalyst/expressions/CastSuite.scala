@@ -1400,4 +1400,31 @@ class AnsiCastSuite extends CastSuiteBase {
       checkEvaluation(cast(negativeTs, LongType), expectedSecs)
     }
   }
+
+  test("Fast fall for cast string to decimal 2") {
+    checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
+      Decimal("12345678901234567890123456789012345678"))
+    checkExceptionInExpression[ArithmeticException](
+      cast("123456789012345678901234567890123456789", DecimalType(38, 0)),
+      "out of decimal type range")
+    checkExceptionInExpression[ArithmeticException](
+      cast("12345678901234567890123456789012345678", DecimalType(38, 1)),
+      "cannot be represented as Decimal(38, 1)")
+
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
+      Decimal("0E-18"))
+
+    checkEvaluation(cast("6E+37", DecimalType(38, 0)),
+      Decimal("60000000000000000000000000000000000000"))
+    checkExceptionInExpression[ArithmeticException](
+      cast("6E+38", DecimalType(38, 0)),
+      "out of decimal type range")
+    checkExceptionInExpression[ArithmeticException](
+      cast("6E+37", DecimalType(38, 1)),
+      "cannot be represented as Decimal(38, 1)")
+  }
 }

@@ -658,6 +658,37 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     }
   }
 
+  private[this] def stringToDecimal(str: UTF8String, decimalType: DecimalType): Decimal = {
+    val bigDecimal = try {
+      // According the benchmark test,  `s.toString.trim` is much faster than `s.trim.toString`.
+      // Please refer to https://github.com/apache/spark/pull/26640
+      new JavaBigDecimal(str.toString.trim)
+    } catch {
+      case _: NumberFormatException =>
+        if (ansiEnabled) {
+          throw new NumberFormatException(s"invalid input syntax for type numeric: $str")
+        } else {
+          null
+        }
+    }
+
+    val precision = if (bigDecimal.scale < 0) {
+      bigDecimal.precision - bigDecimal.scale
+    } else {
+      bigDecimal.precision
+    }
+
+    if (precision > DecimalType.MAX_PRECISION) {
+      if (ansiEnabled) {
+        throw new ArithmeticException(s"out of decimal type range: $str")
+      } else {
+        null
+      }
+    } else {
+      changePrecision(Decimal(bigDecimal), decimalType)
+    }
+  }
+
   /**
    * Create new `Decimal` with precision and scale given in `decimalType` (if any).
    * If overflow occurs, if `spark.sql.ansi.enabled` is false, null is returned;
@@ -670,18 +701,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => try {
-        // According the benchmark test,  `s.toString.trim` is much faster than `s.trim.toString`.
-        // Please refer to https://github.com/apache/spark/pull/26640
-        changePrecision(Decimal(new JavaBigDecimal(s.toString.trim)), target)
-      } catch {
-        case _: NumberFormatException =>
-          if (ansiEnabled) {
-            throw new NumberFormatException(s"invalid input syntax for type numeric: $s")
-          } else {
-            null
-          }
-      })
+      buildCast[UTF8String](_, s => stringToDecimal(s, target))
     case BooleanType =>
       buildCast[Boolean](_, b => toPrecision(if (b) Decimal.ONE else Decimal.ZERO, target))
     case DateType =>
@@ -1183,6 +1203,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       from: DataType,
       target: DecimalType,
       ctx: CodegenContext): CastFunction = {
+    val tmpBigDecimal = ctx.freshVariable("tmpBigDecimal", classOf[java.math.BigDecimal])
+    val tmpPrecision = ctx.freshVariable("tmpPrecision", classOf[Integer])
     val tmp = ctx.freshVariable("tmpDecimal", classOf[Decimal])
     val canNullSafeCast = Cast.canNullSafeCastToDecimal(from, target)
     from match {
@@ -1193,12 +1215,33 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           } else {
             s"$evNull =true;"
           }
+          val outOfDecimalCode = if (!ansiEnabled) {
+            s"$evNull = true;"
+          } else {
+            s"""throw new ArithmeticException("out of decimal type range: " + $c);"""
+          }
           code"""
+            java.math.BigDecimal $tmpBigDecimal = null;
             try {
-              Decimal $tmp = Decimal.apply(new java.math.BigDecimal($c.toString().trim()));
-              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+              $tmpBigDecimal = new java.math.BigDecimal($c.toString().trim());
             } catch (java.lang.NumberFormatException e) {
               $handleException
+            }
+
+            if ($tmpBigDecimal != null) {
+              int $tmpPrecision = 0;
+              if ($tmpBigDecimal.scale() < 0) {
+                $tmpPrecision = $tmpBigDecimal.precision() - $tmpBigDecimal.scale();
+              } else {
+                $tmpPrecision = $tmpBigDecimal.precision();
+              }
+
+              if ($tmpPrecision > ${DecimalType.MAX_PRECISION}) {
+                $outOfDecimalCode
+              } else {
+                Decimal $tmp = Decimal.apply($tmpBigDecimal);
+                ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+              }
             }
           """
       case BooleanType =>
