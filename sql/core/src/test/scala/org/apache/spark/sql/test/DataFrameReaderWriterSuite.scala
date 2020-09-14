@@ -1190,4 +1190,13 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     verifyLoadFails(df.write.option("path", path).format("parquet").save(path))
     verifyLoadFails(df.write.option("path", path).format("parquet").save(""))
   }
+
+  test("SPARK-32853: consecutive load/save calls should be allowed") {
+    val dfr = spark.read.format(classOf[FakeSourceOne].getName)
+    dfr.load("1")
+    dfr.load("2")
+    val dfw = spark.range(10).write.format(classOf[DefaultSource].getName)
+    dfw.save("1")
+    dfw.save("2")
+  }
 }

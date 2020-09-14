@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 import java.util.concurrent.{CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
@@ -125,14 +125,14 @@ class MyRDD(
 
 class DAGSchedulerSuiteDummyException extends Exception
 
-class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLimits {
+class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with TimeLimits {
 
   import DAGSchedulerSuite._
 
   // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
   implicit val defaultSignaler: Signaler = ThreadSignaler
 
-  val conf = new SparkConf
+  private var firstInit: Boolean = _
   /** Set of TaskSets the DAGScheduler has requested executed. */
   val taskSets = scala.collection.mutable.Buffer[TaskSet]()
 
@@ -297,11 +297,19 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    init(new SparkConf())
+    firstInit = true
   }
 
-  private def init(testConf: SparkConf): Unit = {
-    sc = new SparkContext("local[2]", "DAGSchedulerSuite", testConf)
+  override def sc: SparkContext = {
+    val sc = super.sc
+    if (firstInit) {
+      init(sc)
+      firstInit = false
+    }
+    sc
+  }
+
+  private def init(sc: SparkContext): Unit = {
     sparkListener = new EventInfoRecordingListener
     failure = null
     sc.addSparkListener(sparkListener)
@@ -310,10 +318,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     cancelledStages.clear()
     cacheLocations.clear()
     results.clear()
-    securityMgr = new SecurityManager(conf)
-    broadcastManager = new BroadcastManager(true, conf, securityMgr)
-    mapOutputTracker = spy(new MyMapOutputTrackerMaster(conf, broadcastManager))
-    blockManagerMaster = spy(new MyBlockManagerMaster(conf))
+    securityMgr = new SecurityManager(sc.getConf)
+    broadcastManager = new BroadcastManager(true, sc.getConf, securityMgr)
+    mapOutputTracker = spy(new MyMapOutputTrackerMaster(sc.getConf, broadcastManager))
+    blockManagerMaster = spy(new MyBlockManagerMaster(sc.getConf))
     scheduler = new DAGScheduler(
       sc,
       taskScheduler,
@@ -353,6 +361,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
    * DAGScheduler event loop.
    */
   private def runEvent(event: DAGSchedulerEvent): Unit = {
+    // Ensure the initialization of various components
+    sc
     dagEventProcessLoopTester.post(event)
   }
 
@@ -491,12 +501,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   test("All shuffle files on the storage endpoint should be cleaned up when it is lost") {
-    // reset the test context with the right shuffle service config
-    afterEach()
-    val conf = new SparkConf()
     conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
     conf.set("spark.files.fetchFailure.unRegisterOutputOnHost", "true")
-    init(conf)
     runEvent(ExecutorAdded("hostA-exec1", "hostA"))
     runEvent(ExecutorAdded("hostA-exec2", "hostA"))
     runEvent(ExecutorAdded("hostB-exec", "hostB"))
@@ -565,11 +571,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   test("SPARK-32003: All shuffle files for executor should be cleaned up on fetch failure") {
-    // reset the test context with the right shuffle service config
-    afterEach()
-    val conf = new SparkConf()
     conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
-    init(conf)
 
     val shuffleMapRdd = new MyRDD(sc, 3, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(3))
@@ -861,11 +863,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       "not lost"
     }
     test(s"shuffle files $maybeLost when $eventDescription") {
-      // reset the test context with the right shuffle service config
-      afterEach()
-      val conf = new SparkConf()
       conf.set(config.SHUFFLE_SERVICE_ENABLED.key, shuffleServiceOn.toString)
-      init(conf)
       assert(sc.env.blockManager.externalShuffleServiceEnabled == shuffleServiceOn)
 
       val shuffleMapRdd = new MyRDD(sc, 2, Nil)
@@ -2888,11 +2886,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   test("SPARK-25341: abort stage while using old fetch protocol") {
-    // reset the test context with using old fetch protocol
-    afterEach()
-    val conf = new SparkConf()
     conf.set(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL.key, "true")
-    init(conf)
     // Construct the scenario of indeterminate stage fetch failed.
     constructIndeterminateStageFetchFailed()
     // The job should fail because Spark can't rollback the shuffle map stage while
@@ -3220,10 +3214,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   test("test 2 resource profile with merge conflict config true") {
-    afterEach()
-    val conf = new SparkConf()
     conf.set(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key, "true")
-    init(conf)
 
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
@@ -3241,10 +3232,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   test("test multiple resource profiles created from merging use same rp") {
-    afterEach()
-    val conf = new SparkConf()
     conf.set(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key, "true")
-    init(conf)
 
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
@@ -3338,10 +3326,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   test("test merge 3 resource profiles") {
-    afterEach()
-    val conf = new SparkConf()
     conf.set(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key, "true")
-    init(conf)
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
     val rp1 = new ResourceProfile(ereqs.requests, treqs.requests)
