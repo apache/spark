@@ -268,7 +268,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         removeWorker(workerId, host, message)
         context.reply(true)
 
-      case ExecutorDecommissioned(executorId) =>
+      case ExecutorDecommissioning(executorId) =>
         logWarning(s"Received executor $executorId decommissioned message")
         context.reply(
           decommissionExecutor(

@@ -264,7 +264,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       // Tell driver we are decommissioned so it stops trying to schedule us
       if (!fromDriver) {
         if (driver.nonEmpty) {
-          driver.get.askSync[Boolean](ExecutorDecommissioned(executorId))
+          driver.get.askSync[Boolean](ExecutorDecommissioning(executorId))
         } else {
           logError("No driver to message decommissioning.")
         }
