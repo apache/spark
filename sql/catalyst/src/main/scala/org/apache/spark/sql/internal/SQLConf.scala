@@ -573,7 +573,7 @@ object SQLConf {
       " a heavily underestimated result.")
     .version("2.3.1")
     .doubleConf
-    .checkValue(_ > 0, "the value of fileDataSizeFactor must be greater than 0")
+    .checkValue(_ > 0, "the value of fileCompressionFactor must be greater than 0")
     .createWithDefault(1.0)
 
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")

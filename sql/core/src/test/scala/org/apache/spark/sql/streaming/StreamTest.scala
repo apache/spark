@@ -306,6 +306,14 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
     def apply(func: StreamExecution => Any): AssertOnQuery = apply("Execute")(func)
   }
 
+  /** Call `StreamingQuery.processAllAvailable()` to wait. */
+  object ProcessAllAvailable {
+    def apply(): AssertOnQuery = AssertOnQuery { query =>
+      query.processAllAvailable()
+      true
+    }
+  }
+
   object AwaitEpoch {
     def apply(epoch: Long): AssertOnQuery =
       Execute {

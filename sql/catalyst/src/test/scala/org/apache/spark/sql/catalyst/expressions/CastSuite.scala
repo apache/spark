@@ -1345,6 +1345,11 @@ class CastSuite extends CastSuiteBase {
     }
   }
 
+  test("SPARK-32828: cast from a derived user-defined type to a base type") {
+    val v = Literal.create(Row(1), new ExampleSubTypeUDT())
+    checkEvaluation(cast(v, new ExampleBaseTypeUDT), Row(1))
+  }
+
   test("Fast fail for cast string type to decimal type") {
     checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
       Decimal("12345678901234567890123456789012345678"))

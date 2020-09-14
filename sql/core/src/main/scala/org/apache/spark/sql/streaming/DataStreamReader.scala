@@ -25,6 +25,7 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -187,10 +188,18 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *
    * @since 2.0.0
    */
-  def load(): DataFrame = {
+  def load(): DataFrame = loadInternal(None)
+
+  private def loadInternal(path: Option[String]): DataFrame = {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "read files of Hive data source directly.")
+    }
+
+    val optionsWithPath = if (path.isEmpty) {
+      extraOptions
+    } else {
+      extraOptions + ("path" -> path.get)
     }
 
     val ds = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf).
@@ -202,7 +211,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       sparkSession,
       userSpecifiedSchema = userSpecifiedSchema,
       className = source,
-      options = extraOptions.toMap)
+      options = optionsWithPath.originalMap)
     val v1Relation = ds match {
       case _: StreamSourceProvider => Some(StreamingRelation(v1DataSource))
       case _ => None
@@ -212,8 +221,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       case provider: TableProvider if !provider.isInstanceOf[FileDataSourceV2] =>
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           source = provider, conf = sparkSession.sessionState.conf)
-        val options = sessionOptions ++ extraOptions
-        val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+        val finalOptions =
+          sessionOptions.filterKeys(!optionsWithPath.contains(_)) ++ optionsWithPath.originalMap
+        val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
         val table = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         table match {
@@ -241,12 +251,12 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    */
   def load(path: String): DataFrame = {
     if (!sparkSession.sessionState.conf.legacyPathOptionBehavior &&
-        extraOptions.contains("path") && path.nonEmpty) {
+        extraOptions.contains("path")) {
       throw new AnalysisException("There is a 'path' option set and load() is called with a path" +
         "parameter. Either remove the path option, or call load() without the parameter. " +
         s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
     }
-    option("path", path).load()
+    loadInternal(Some(path))
   }
 
   /**
@@ -535,5 +545,5 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
 
   private var userSpecifiedSchema: Option[StructType] = None
 
-  private var extraOptions = new scala.collection.mutable.HashMap[String, String]
+  private var extraOptions = CaseInsensitiveMap[String](Map.empty)
 }

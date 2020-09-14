@@ -3176,21 +3176,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
-
-  test("SPARK-32677: Load function resource before create") {
-    withUserDefinedFunction("func1" -> false) {
-      val func = FunctionIdentifier("func1", Some("default"))
-      val msg = intercept[AnalysisException] {
-        sql("CREATE FUNCTION func1 AS 'test.non.exists.udf'")
-      }.getMessage
-      assert(msg.contains("please make sure it is on the classpath"))
-      assert(!spark.sessionState.catalog.functionExists(func))
-      assert(!spark.sessionState.catalog.isRegisteredFunction(func))
-
-      sql("CREATE FUNCTION func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
-      assert(spark.sessionState.catalog.functionExists(func))
-    }
-  }
 }
 
 object FakeLocalFsFileSystem {
