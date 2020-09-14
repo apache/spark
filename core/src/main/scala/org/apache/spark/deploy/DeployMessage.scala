@@ -63,7 +63,7 @@ private[deploy] object DeployMessages {
   /**
    * An internal message that used by Master itself, in order to handle the
    * `DecommissionWorkersOnHosts` request from `MasterWebUI` asynchronously.
-   * @param ids A collection of Worker ids, which are pending to be decommissioned.
+   * @param ids A collection of Worker ids, which should be decommissioned.
    */
   case class DecommissionWorkers(ids: Seq[String])
 
