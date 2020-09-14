@@ -58,19 +58,8 @@ private[hive] case class HiveSimpleUDF(
   lazy val function = funcWrapper.createFunction[UDF]()
 
   @transient
-  private lazy val method = {
-    // the simple UDF method must be 'evaluate'
-    val methods = function.getClass.getMethods.filter(_.getName == "evaluate")
-    val passedMethod = methods.filter(_.getGenericParameterTypes.length == children.length)
-
-    // no matching parameter num for evaluate method
-    if (passedMethod.isEmpty) {
-      throw new NoMatchingMethodException(function.getClass,
-        children.map(_.dataType.toTypeInfo).asJava, methods.toSeq.asJava)
-    }
-    // if there exists many method, we choose the first
-    methods.head
-  }
+  private lazy val method =
+    function.getResolver.getEvalMethod(children.map(_.dataType.toTypeInfo).asJava)
 
   @transient
   private lazy val arguments = children.map(toInspector).toArray
@@ -82,7 +71,20 @@ private[hive] case class HiveSimpleUDF(
   }
 
   override def inputTypes: Seq[AbstractDataType] = {
-    method.getGenericParameterTypes.map(javaTypeToDataType)
+    val inTypes = children.map(_.dataType)
+    if (!inTypes.exists(_.existsRecursively(_.isInstanceOf[DecimalType]))) {
+      inTypes
+    } else {
+      val expectTypes = method.getGenericParameterTypes.map(javaTypeToDataType)
+      // check decimal
+      inTypes.zip(expectTypes).map { case (in, expect) =>
+        if (in.existsRecursively(_.isInstanceOf[DecimalType])) {
+          expect
+        } else {
+          in
+        }
+      }
+    }
   }
 
   override def foldable: Boolean = isUDFDeterministic && children.forall(_.foldable)
