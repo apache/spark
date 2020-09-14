@@ -205,7 +205,6 @@ class EliminateSortsSuite extends PlanTest {
       (e : Expression) => maxDistinct(e),
       (e : Expression) => count(e),
       (e : Expression) => countDistinct(e),
-      (e : Expression) => approxCountDistinct(e),
       (e : Expression) => bitAnd(e),
       (e : Expression) => bitOr(e),
       (e : Expression) => bitXor(e)
