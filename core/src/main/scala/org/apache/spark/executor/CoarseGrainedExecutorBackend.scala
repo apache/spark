@@ -84,7 +84,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   override def onStart(): Unit = {
     logInfo("Registering PWR handler.")
     SignalUtils.register("PWR", "Failed to register SIGPWR handler - " +
-      "disabling decommission feature.")(decommissionSelf(fromDriver = false))
+      "disabling decommission feature.")(decommissionSelf(triggeredByExecutor = true))
 
     logInfo("Connecting to driver: " + driverUrl)
     try {
@@ -204,7 +204,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     case DecommissionExecutor =>
       logInfo("Received decommission self")
-      decommissionSelf(fromDriver = true)
+      decommissionSelf(triggeredByExecutor = false)
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -253,7 +253,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     System.exit(code)
   }
 
-  private def decommissionSelf(fromDriver: Boolean): Boolean = {
+  private def decommissionSelf(triggeredByExecutor: Boolean): Boolean = {
     val msg = "Decommissioning self w/sync"
     logInfo(msg)
     try {
@@ -261,8 +261,8 @@ private[spark] class CoarseGrainedExecutorBackend(
       if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
         env.blockManager.decommissionBlockManager()
       }
-      // Tell driver we are decommissioned so it stops trying to schedule us
-      if (!fromDriver) {
+      // Tell driver we starts decommissioning so it stops trying to schedule us
+      if (triggeredByExecutor) {
         if (driver.nonEmpty) {
           driver.get.askSync[Boolean](ExecutorDecommissioning(executorId))
         } else {
