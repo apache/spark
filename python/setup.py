@@ -26,11 +26,17 @@ from shutil import copyfile, copytree, rmtree
 
 try:
     exec(open('pyspark/version.py').read())
+except IOError:
+    print("Failed to load PySpark version file for packaging. You must be in Spark's python dir.",
+          file=sys.stderr)
+    sys.exit(-1)
+try:
     spec = importlib.util.spec_from_file_location("install", "pyspark/install.py")
     install_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(install_module)
 except IOError:
-    print("Failed to load PySpark version file for packaging. You must be in Spark's python dir.",
+    print("Failed to load the installing module (pyspark/install.py) which had to be "
+          "packaged together.",
           file=sys.stderr)
     sys.exit(-1)
 VERSION = __version__  # noqa
@@ -115,12 +121,16 @@ class InstallCommand(install):
     def run(self):
         install.run(self)
         if ("HADOOP_VERSION" in os.environ) or ("HIVE_VERSION" in os.environ):
-
             # Note that SPARK_VERSION environment is just a testing purpose.
             spark_version, hadoop_version, hive_version = install_module.checked_versions(
                 os.environ.get("SPARK_VERSION", VERSION).lower(),
                 os.environ.get("HADOOP_VERSION", install_module.DEFAULT_HADOOP).lower(),
                 os.environ.get("HIVE_VERSION", install_module.DEFAULT_HIVE).lower())
+
+            if ((install_module.DEFAULT_HADOOP, install_module.DEFAULT_HIVE) ==
+                    (hadoop_version, hive_version)):
+                # Do not download and install if they are same as default.
+                return
 
             install_module.install_spark(
                 dest=os.path.join(self.install_lib, "pyspark", "spark-distribution"),
