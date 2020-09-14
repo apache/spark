@@ -120,7 +120,7 @@ private[spark] trait ExecutorAllocationClient {
       executorId: String,
       decommissionInfo: ExecutorDecommissionInfo,
       adjustTargetNumExecutors: Boolean,
-      triggeredByExecutor: Boolean = true): Boolean = {
+      triggeredByExecutor: Boolean = false): Boolean = {
     val decommissionedExecutors = decommissionExecutors(
       Array((executorId, decommissionInfo)),
       adjustTargetNumExecutors = adjustTargetNumExecutors,

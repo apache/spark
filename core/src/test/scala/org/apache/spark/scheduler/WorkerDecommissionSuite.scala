@@ -81,7 +81,7 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
     sched.decommissionExecutors(
       execsAndDecomInfo,
       adjustTargetNumExecutors = true,
-      triggeredByExecutor = true)
+      triggeredByExecutor = false)
     val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 20.seconds)
     assert(asyncCountResult === 10)
   }

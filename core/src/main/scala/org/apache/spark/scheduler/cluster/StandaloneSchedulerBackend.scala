@@ -183,7 +183,7 @@ private[spark] class StandaloneSchedulerBackend(
     decommissionExecutors(
       Array((execId, decommissionInfo)),
       adjustTargetNumExecutors = false,
-      triggeredByExecutor = true)
+      triggeredByExecutor = false)
     logInfo("Executor %s decommissioned: %s".format(fullId, decommissionInfo))
   }
 
