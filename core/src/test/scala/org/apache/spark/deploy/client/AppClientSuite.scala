@@ -122,7 +122,7 @@ class AppClientSuite
 
       // Send a decommission self to all the workers
       // Note: normally the worker would send this on their own.
-      workers.foreach(worker => worker.decommissionSelf(triggeredByWorker = true))
+      workers.foreach(worker => worker.decommissionSelf(triggeredByMaster = false))
 
       // Decommissioning is async.
       eventually(timeout(1.seconds), interval(10.millis)) {
