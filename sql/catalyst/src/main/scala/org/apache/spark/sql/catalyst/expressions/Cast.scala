@@ -672,20 +672,24 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         }
     }
 
-    val precision = if (bigDecimal.scale < 0) {
-      bigDecimal.precision - bigDecimal.scale
-    } else {
-      bigDecimal.precision
-    }
-
-    if (precision > DecimalType.MAX_PRECISION) {
-      if (ansiEnabled) {
-        throw new ArithmeticException(s"out of decimal type range: $str")
+    if (bigDecimal != null) {
+      val precision = if (bigDecimal.scale < 0) {
+        bigDecimal.precision - bigDecimal.scale
       } else {
-        null
+        bigDecimal.precision
+      }
+
+      if (precision > DecimalType.MAX_PRECISION) {
+        if (ansiEnabled) {
+          throw new ArithmeticException(s"out of decimal type range: $str")
+        } else {
+          null
+        }
+      } else {
+        changePrecision(Decimal(bigDecimal), decimalType)
       }
     } else {
-      changePrecision(Decimal(bigDecimal), decimalType)
+      null
     }
   }
 

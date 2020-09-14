@@ -1344,6 +1344,27 @@ class CastSuite extends CastSuiteBase {
       }
     }
   }
+
+  test("Fast fail for cast string type to decimal type") {
+    checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
+      Decimal("12345678901234567890123456789012345678"))
+    checkEvaluation(cast("123456789012345678901234567890123456789", DecimalType(38, 0)), null)
+    checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 1)), null)
+
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
+      Decimal("0E-18"))
+
+    checkEvaluation(cast("6E+37", DecimalType(38, 0)),
+      Decimal("60000000000000000000000000000000000000"))
+    checkEvaluation(cast("6E+38", DecimalType(38, 0)), null)
+    checkEvaluation(cast("6E+37", DecimalType(38, 1)), null)
+
+    checkEvaluation(cast("abcd", DecimalType(38, 1)), null)
+  }
 }
 
 /**
@@ -1401,7 +1422,7 @@ class AnsiCastSuite extends CastSuiteBase {
     }
   }
 
-  test("Fast fall for cast string to decimal 2") {
+  test("Fast fail for cast string type to decimal type in ansi mode") {
     checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
       Decimal("12345678901234567890123456789012345678"))
     checkExceptionInExpression[ArithmeticException](
@@ -1426,5 +1447,9 @@ class AnsiCastSuite extends CastSuiteBase {
     checkExceptionInExpression[ArithmeticException](
       cast("6E+37", DecimalType(38, 1)),
       "cannot be represented as Decimal(38, 1)")
+
+    checkExceptionInExpression[NumberFormatException](
+      cast("abcd", DecimalType(38, 1)),
+      "invalid input syntax for type numeric")
   }
 }
