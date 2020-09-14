@@ -105,8 +105,9 @@ public class ExpressionInfo {
             String deprecated) {
         assert name != null;
         assert arguments != null;
+        assert arguments.isEmpty() || arguments.startsWith("\n    Arguments:\n");
         assert examples != null;
-        assert examples.isEmpty() || examples.contains("    Examples:");
+        assert examples.isEmpty() || examples.startsWith("\n    Examples:\n");
         assert note != null;
         assert group != null;
         assert since != null;
