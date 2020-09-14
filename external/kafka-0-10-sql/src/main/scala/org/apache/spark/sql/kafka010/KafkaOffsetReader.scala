@@ -69,7 +69,11 @@ private[kafka010] class KafkaOffsetReader(
   }
 
   def isolationLevel(): IsolationLevel = {
-    driverKafkaParams.get(ConsumerConfig.ISOLATION_LEVEL_CONFIG) match {
+    Option(driverKafkaParams.get(ConsumerConfig.ISOLATION_LEVEL_CONFIG)) match {
+      case Some(s: String) => IsolationLevel.valueOf(s.toUpperCase(Locale.ROOT))
+      case _ => IsolationLevel.valueOf(
+        ConsumerConfig.DEFAULT_ISOLATION_LEVEL.toUpperCase(Locale.ROOT))
+    }
       case s: String => IsolationLevel.valueOf(s.toUpperCase(Locale.ROOT))
       case null => IsolationLevel.valueOf(
         ConsumerConfig.DEFAULT_ISOLATION_LEVEL.toUpperCase(Locale.ROOT))
