@@ -245,8 +245,12 @@ private[deploy] class Master(
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
 
-    case WorkerDecommissioned(id) =>
-      idToWorker.get(id).foreach(w => decommissionWorker(w, sentFromWorker = true))
+    case WorkerDecommissioned(id, workerRef) =>
+      if (state == RecoveryState.STANDBY) {
+        workerRef.send(MasterInStandby)
+      } else {
+        idToWorker.get(id).foreach(w => decommissionWorker(w, sentFromWorker = true))
+      }
 
     case DecommissionWorkers(ids) =>
       ids.foreach ( id =>

@@ -773,7 +773,7 @@ private[deploy] class Worker(
       logDebug("Decommissioning self")
       decommissioned = true
       if (!fromMaster) {
-        sendToMaster(WorkerDecommissioned(workerId))
+        sendToMaster(WorkerDecommissioned(workerId, self))
       }
     } else {
       logWarning("Asked to decommission self, but decommissioning not enabled")
