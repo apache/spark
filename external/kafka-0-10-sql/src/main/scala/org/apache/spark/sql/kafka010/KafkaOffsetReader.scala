@@ -73,6 +73,8 @@ private[kafka010] class KafkaOffsetReader(
       case Some(s: String) => IsolationLevel.valueOf(s.toUpperCase(Locale.ROOT))
       case None => IsolationLevel.valueOf(
         ConsumerConfig.DEFAULT_ISOLATION_LEVEL.toUpperCase(Locale.ROOT))
+      case _ => throw new IllegalArgumentException(s"${ConsumerConfig.ISOLATION_LEVEL_CONFIG} " +
+        "must be either not defined or with type String")
     }
   }
 

@@ -94,7 +94,7 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
       KafkaSourceProvider.kafkaParamsForDriver(kafkaParams),
       CaseInsensitiveMap(Map.empty)
     )
-    assert(reader.isolationLevel() === isolationLevel)
+    assert(reader.isolationLevel === isolationLevel)
   }
 
   test("SPARK-30656: getOffsetRangesFromUnresolvedOffsets - using specific offsets") {
