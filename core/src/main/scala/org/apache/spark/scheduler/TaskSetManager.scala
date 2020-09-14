@@ -952,7 +952,7 @@ private[spark] class TaskSetManager(
   }
 
   override def isSchedulable: Boolean = !isZombie &&
-    (pendingTasks.all.isEmpty || pendingSpeculatableTasks.all.isEmpty)
+    (pendingTasks.all.nonEmpty || pendingSpeculatableTasks.all.nonEmpty)
 
   override def addSchedulable(schedulable: Schedulable): Unit = {}
 
