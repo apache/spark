@@ -143,9 +143,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.Uuid",
       // The example calls methods that return unstable results.
       "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection",
-      "org.apache.spark.sql.catalyst.expressions.SparkVersion",
-      // Encoding issues make the comparison fail
-      "org.apache.spark.sql.catalyst.expressions.aggregate.CountMinSketchAgg")
+      "org.apache.spark.sql.catalyst.expressions.SparkVersion")
 
     val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
     parFuncs.foreach { funcId =>

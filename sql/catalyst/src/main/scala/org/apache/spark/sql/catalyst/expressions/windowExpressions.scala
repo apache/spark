@@ -429,7 +429,8 @@ abstract class OffsetWindowFunction
   """,
   examples = """
     Examples:
-      > SELECT a, b, _FUNC_(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A2', 3), ('A1', 1) tab(a, b);
+      > SELECT a, b, _FUNC_(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
+       A1	1	1
        A1	1	2
        A1	2	NULL
        A2	3	NULL
@@ -472,8 +473,9 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
   """,
   examples = """
     Examples:
-      > SELECT a, b, _FUNC_(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A2', 3), ('A1', 1) tab(a, b);
+      > SELECT a, b, _FUNC_(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
        A1	1	NULL
+       A1	1	1
        A1	2	1
        A2	3	NULL
   """,
@@ -540,9 +542,10 @@ object SizeBasedWindowFunction {
   """,
   examples = """
     Examples:
-      > SELECT a, b, _FUNC_() OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A2', 3), ('A1', 1) tab(a, b);
+      > SELECT a, b, _FUNC_() OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
        A1	1	1
-       A1	2	2
+       A1	1	2
+       A1	2	3
        A2	3	1
   """,
   since = "2.0.0",
@@ -568,8 +571,9 @@ case class RowNumber() extends RowNumberLike {
   """,
   examples = """
     Examples:
-      > SELECT a, b, _FUNC_() OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A2', 3), ('A1', 1) tab(a, b);
-       A1	1	0.5
+      > SELECT a, b, _FUNC_() OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
+       A1	1	0.6666666666666666
+       A1	1	0.6666666666666666
        A1	2	1.0
        A2	3	1.0
   """,
@@ -617,7 +621,8 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   """,
   examples = """
     Examples:
-      > SELECT a, b, _FUNC_(2) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A2', 3), ('A1', 1) tab(a, b);
+      > SELECT a, b, _FUNC_(2) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
+       A1	1	1
        A1	1	1
        A1	2	2
        A2	3	1
@@ -753,9 +758,10 @@ abstract class RankLike extends AggregateWindowFunction {
   """,
   examples = """
     Examples:
-      > SELECT a, b, _FUNC_(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A2', 3), ('A1', 1) tab(a, b);
+      > SELECT a, b, _FUNC_(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
        A1	1	1
-       A1	2	2
+       A1	1	1
+       A1	2	3
        A2	3	1
   """,
   since = "2.0.0",
@@ -788,7 +794,8 @@ case class Rank(children: Seq[Expression]) extends RankLike {
   """,
   examples = """
     Examples:
-      > SELECT a, b, _FUNC_(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A2', 3), ('A1', 1) tab(a, b);
+      > SELECT a, b, _FUNC_(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
+       A1	1	1
        A1	1	1
        A1	2	2
        A2	3	1
@@ -829,7 +836,8 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
   """,
   examples = """
     Examples:
-      > SELECT a, b, _FUNC_(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A2', 3), ('A1', 1) tab(a, b);
+      > SELECT a, b, _FUNC_(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
+       A1	1	0.0
        A1	1	0.0
        A1	2	1.0
        A2	3	0.0

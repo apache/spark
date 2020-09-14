@@ -37,7 +37,7 @@ import org.apache.spark.util.sketch.CountMinSketch
  * @param confidenceExpression confidence, must be positive and less than 1.0
  * @param seedExpression random seed
  */
-// scalastyle:off nonascii
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(col, eps, confidence, seed) - Returns a count-min sketch of a column with the given esp,
@@ -47,12 +47,12 @@ import org.apache.spark.util.sketch.CountMinSketch
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(col, 0.1d, 0.9d, 0) FROM VALUES (1), (2), (1) AS tab(col);
-       ]�Z0jl����M��_
+      > SELECT hex(_FUNC_(col, 0.5d, 0.5d, 1)) FROM VALUES (1), (2), (1) AS tab(col);
+       0000000100000000000000030000000100000004000000005D8D6AB90000000000000000000000000000000200000000000000010000000000000000
   """,
   group = "agg_funcs",
   since = "2.2.0")
-// scalastyle:on nonascii
+// scalastyle:on line.size.limit
 case class CountMinSketchAgg(
     child: Expression,
     epsExpression: Expression,
