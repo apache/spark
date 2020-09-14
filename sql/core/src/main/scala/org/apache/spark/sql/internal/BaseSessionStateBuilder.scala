@@ -57,7 +57,8 @@ import org.apache.spark.sql.util.ExecutionListenerManager
 @Unstable
 abstract class BaseSessionStateBuilder(
     val session: SparkSession,
-    val parentState: Option[SessionState] = None) {
+    val parentState: Option[SessionState],
+    val options: Map[String, String]) {
   type NewBuilder = (SparkSession, Option[SessionState]) => BaseSessionStateBuilder
 
   /**
@@ -97,6 +98,9 @@ abstract class BaseSessionStateBuilder(
     }.getOrElse {
       val conf = new SQLConf
       mergeSparkConf(conf, session.sparkContext.conf)
+      options.foreach {
+        case (k, v) => conf.setConfString(k, v)
+      }
       conf
     }
   }
