@@ -59,6 +59,8 @@ private[spark] class Pool(
     }
   }
 
+  override def isSchedulable: Boolean = true
+
   override def addSchedulable(schedulable: Schedulable): Unit = {
     require(schedulable != null)
     schedulableQueue.add(schedulable)
@@ -107,7 +109,7 @@ private[spark] class Pool(
     for (schedulable <- sortedSchedulableQueue) {
       sortedTaskSetQueue ++= schedulable.getSortedTaskSetQueue
     }
-    sortedTaskSetQueue
+    sortedTaskSetQueue.filter(_.isSchedulable)
   }
 
   def increaseRunningTasks(taskNum: Int): Unit = {
