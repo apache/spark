@@ -77,12 +77,12 @@ private[deploy] object DeployMessages {
   object DecommissionWorker extends DeployMessage
 
   /**
-   * A message that sent from Worker to Master to tell Master that the Worker has been
-   * decommissioned. It's used for the case where decommission is triggered at Worker.
+   * A message sent from Worker to Master to tell Master that the Worker has started
+   * decommissioning. It's used for the case where decommission is triggered at Worker.
    *
    * @param id the worker id
    */
-  case class WorkerDecommissioned(id: String, workerRef: RpcEndpointRef) extends DeployMessage
+  case class WorkerDecommissioning(id: String, workerRef: RpcEndpointRef) extends DeployMessage
 
   case class ExecutorStateChanged(
       appId: String,

@@ -245,7 +245,7 @@ private[deploy] class Master(
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
 
-    case WorkerDecommissioned(id, workerRef) =>
+    case WorkerDecommissioning(id, workerRef) =>
       if (state == RecoveryState.STANDBY) {
         workerRef.send(MasterInStandby)
       } else {

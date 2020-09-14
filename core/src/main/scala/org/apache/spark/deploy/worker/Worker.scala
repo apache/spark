@@ -774,7 +774,7 @@ private[deploy] class Worker(
       decommissioned = true
       // No need to notify the Master if the decommission message already came from it
       if (!triggeredByMaster) {
-        sendToMaster(WorkerDecommissioned(workerId, self))
+        sendToMaster(WorkerDecommissioning(workerId, self))
       }
     } else {
       logWarning("Asked to decommission self, but decommissioning not enabled")
