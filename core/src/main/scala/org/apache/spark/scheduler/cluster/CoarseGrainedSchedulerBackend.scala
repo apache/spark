@@ -275,7 +275,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             executorId,
             ExecutorDecommissionInfo(s"Executor $executorId is decommissioned."),
             adjustTargetNumExecutors = false,
-            decommissionFromDriver = false))
+            triggeredByExecutor = true))
 
       case RetrieveSparkAppConfig(resourceProfileId) =>
         val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(resourceProfileId)
@@ -468,7 +468,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   override def decommissionExecutors(
       executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
       adjustTargetNumExecutors: Boolean,
-      decommissionFromDriver: Boolean): Seq[String] = withLock {
+      triggeredByExecutor: Boolean): Seq[String] = withLock {
     val executorsToDecommission = executorsAndDecomInfo.flatMap { case (executorId, decomInfo) =>
       // Only bother decommissioning executors which are alive.
       if (isExecutorActive(executorId)) {
@@ -493,7 +493,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       scheduler.sc.env.blockManager.master.decommissionBlockManagers(executorsToDecommission)
     }
 
-    if (decommissionFromDriver) {
+    if (triggeredByExecutor) {
       executorsToDecommission.foreach { executorId =>
         logInfo(s"Asking executor $executorId to decommissioning.")
         executorDataMap(executorId).executorEndpoint.send(DecommissionExecutor)

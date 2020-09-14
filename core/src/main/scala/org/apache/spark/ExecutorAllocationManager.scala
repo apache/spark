@@ -584,7 +584,7 @@ private[spark] class ExecutorAllocationManager(
         client.decommissionExecutors(
           executorIdsWithoutHostLoss,
           adjustTargetNumExecutors = false,
-          decommissionFromDriver = true)
+          triggeredByExecutor = true)
       } else {
         client.killExecutors(executorIdsToBeRemoved.toSeq, adjustTargetNumExecutors = false,
           countFailures = false, force = false)

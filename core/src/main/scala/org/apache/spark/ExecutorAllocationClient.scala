@@ -96,7 +96,7 @@ private[spark] trait ExecutorAllocationClient {
   def decommissionExecutors(
       executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
       adjustTargetNumExecutors: Boolean,
-      decommissionFromDriver: Boolean): Seq[String] = {
+      triggeredByExecutor: Boolean): Seq[String] = {
     killExecutors(executorsAndDecomInfo.map(_._1),
       adjustTargetNumExecutors,
       countFailures = false)
@@ -110,7 +110,7 @@ private[spark] trait ExecutorAllocationClient {
    * @param executorId identifiers of executor to decommission
    * @param decommissionInfo information about the decommission (reason, host loss)
    * @param adjustTargetNumExecutors if we should adjust the target number of executors.
-   * @param decommissionFromDriver   whether the decommission is triggered by sending the
+   * @param triggeredByExecutor   whether the decommission is triggered by sending the
    *                                 `DecommissionExecutor` from driver to executor
    *                                 (TODO: add a new type like `ExecutorDecommissionInfo` for the
    *                                 case where executor is decommissioned at executor first, so we
@@ -121,11 +121,11 @@ private[spark] trait ExecutorAllocationClient {
       executorId: String,
       decommissionInfo: ExecutorDecommissionInfo,
       adjustTargetNumExecutors: Boolean,
-      decommissionFromDriver: Boolean = true): Boolean = {
+      triggeredByExecutor: Boolean = true): Boolean = {
     val decommissionedExecutors = decommissionExecutors(
       Array((executorId, decommissionInfo)),
       adjustTargetNumExecutors = adjustTargetNumExecutors,
-      decommissionFromDriver = decommissionFromDriver)
+      triggeredByExecutor = triggeredByExecutor)
     decommissionedExecutors.nonEmpty && decommissionedExecutors(0).equals(executorId)
   }
 
