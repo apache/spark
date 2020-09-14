@@ -334,15 +334,16 @@ class Column(object):
         """
         An expression that adds/replaces a field in :class:`StructType` by name.
 
-        >>> from pyspark.sql import Row, functions
+        >>> from pyspark.sql import Row
+        >>> from pyspark.sql.functions import lit
         >>> df = spark.createDataFrame([Row(a=Row(b=1, c=2))])
-        >>> df.withColumn('a', df['a'].withField('b', functions.lit(3))).select('a.b').show()
+        >>> df.withColumn('a', df['a'].withField('b', lit(3))).select('a.b').show()
         +---+
         |  b|
         +---+
         |  3|
         +---+
-        >>> df.withColumn('a', df['a'].withField('d', functions.lit(4))).select('a.d').show()
+        >>> df.withColumn('a', df['a'].withField('d', lit(4))).select('a.d').show()
         +---+
         |  d|
         +---+
