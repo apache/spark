@@ -609,7 +609,7 @@ object WithFields {
    * Adds/replaces field in `StructType` into `col` expression by name.
    */
   def apply(col: Expression, fieldName: String, expr: Expression): Expression = {
-    WithFields(col, fieldName, expr, false)
+    WithFields(col, fieldName, expr, sortOutputColumns = false)
   }
 
   def apply(

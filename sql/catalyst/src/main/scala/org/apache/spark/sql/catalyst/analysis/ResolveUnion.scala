@@ -34,9 +34,10 @@ import org.apache.spark.sql.util.SchemaUtils
 object ResolveUnion extends Rule[LogicalPlan] {
   /**
    * Adds missing fields recursively into given `col` expression, based on the target `StructType`.
-   * For example, given `col` as "a struct<a:int, b:int>, b int" and `target` as
-   * "a struct<a:int, b:int, c:long>, b int, c string", this method should add `a.c` and `c` to
-   * `col` expression.
+   * This is called by `compareAndAddFields` when we find two struct columns with same name but
+   * different nested fields. This method will find out the missing nested fields from `col` to
+   * `target` struct and add these missing nested fields. Currently we don't support finding out
+   * missing nested fields of struct nested in array or struct nested in map.
    */
   private def addFields(col: NamedExpression, target: StructType): Option[Expression] = {
     assert(col.dataType.isInstanceOf[StructType], "Only support StructType.")
@@ -53,9 +54,13 @@ object ResolveUnion extends Rule[LogicalPlan] {
 
   /**
    * Adds missing fields recursively into given `col` expression. The missing fields are given
-   * in `fields`. For example, given `col` as "a struct<a:int, b:int>, b int", and `fields` is
-   * "a struct<c:long>, c string". This method will add a nested `a.c` field and a top-level
-   * `c` field to `col` and fill null values for them.
+   * in `fields`. For example, given `col` as "z struct<z:int, y:int>, x int", and `fields` is
+   * "z struct<w:long>, w string". This method will add a nested `z.w` field and a top-level
+   * `w` field to `col` and fill null values for them. Note that because we might also add missing
+   * fields at other side of Union, we must make sure corresponding attributes at two sides have
+   * same field order in structs, so when we adding missing fields, we will sort the fields based on
+   * field names. So the data type of returned expression will be
+   * "w string, x int, z struct<w:long, y:int, z:int>".
    */
   private def addFieldsInto(col: Expression, base: String, fields: Seq[StructField]): Expression = {
     fields.foldLeft(col) { case (currCol, field) =>
@@ -82,6 +87,12 @@ object ResolveUnion extends Rule[LogicalPlan] {
     }
   }
 
+  /**
+   * This method will compare right to left plan's outputs. If there is one struct attribute
+   * at right side has same name with left side struct attribute, but two structs are not the
+   * same data type, i.e., some missing (nested) fields at right struct attribute, then this
+   * method will try to add missing (nested) fields into the right attribute with null values.
+   */
   private def compareAndAddFields(
       left: LogicalPlan,
       right: LogicalPlan,
@@ -115,7 +126,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
             //    types. We don't support adding missing fields of nested structs in array or map
             //    types now.
             // 3. `allowMissingCol` is disabled.
-            found.get
+            foundAttr
         }
       } else {
         if (allowMissingCol) {
