@@ -1025,7 +1025,7 @@ class Analyzer(
         case SessionCatalogAndIdentifier(catalog, ident) =>
           lazy val loaded = CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table =>
-              v1SessionCatalog.getRelation(v1Table.v1Table)
+              v1SessionCatalog.getRelation(v1Table.v1Table, options)
             case table =>
               SubqueryAlias(
                 catalog.name +: ident.asMultipartIdentifier,
