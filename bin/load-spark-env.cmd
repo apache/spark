@@ -29,10 +29,7 @@ if [%SPARK_ENV_LOADED%] == [] (
     set SPARK_CONF_DIR=%~dp0..\conf
   )
 
-  set SPARK_ENV_CMD=%SPARK_CONF_DIR%\%SPARK_ENV_CMD%
-  if exist %SPARK_ENV_CMD% (
-    call %SPARK_ENV_CMD%
-  )
+  call :LoadSparkEnv
 )
 
 rem Setting SPARK_SCALA_VERSION if not already set.
@@ -60,3 +57,8 @@ rem     set SPARK_SCALA_VERSION=%SCALA_VERSION_2%
 rem   )
 rem )
 exit /b 0
+
+:LoadSparkEnv
+if exist "%SPARK_CONF_DIR%\spark-env.cmd" (
+  call "%SPARK_CONF_DIR%\spark-env.cmd"
+)

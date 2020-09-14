@@ -1132,8 +1132,8 @@ class DDLParserSuite extends AnalysisTest {
           |MERGE INTO testcat1.ns1.ns2.tbl AS target
           |USING testcat2.ns1.ns2.tbl AS source
           |ON target.col1 = source.col1
-          |WHEN MATCHED THEN DELETE
           |WHEN MATCHED THEN UPDATE SET target.col2 = source.col2
+          |WHEN MATCHED THEN DELETE
           |WHEN NOT MATCHED AND (target.col2='insert')
           |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
         """.stripMargin)

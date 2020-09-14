@@ -57,12 +57,12 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
     val name = UIUtils.getQueryName(query)
     val status = UIUtils.getQueryStatus(query)
     val duration = if (queryActive) {
-      SparkUIUtils.formatDurationVerbose(System.currentTimeMillis() - query.startTimestamp)
+      System.currentTimeMillis() - query.startTimestamp
     } else {
       withNoProgress(query, {
         val endTimeMs = query.lastProgress.timestamp
-        SparkUIUtils.formatDurationVerbose(parseProgressTimestamp(endTimeMs) - query.startTimestamp)
-      }, "-")
+        parseProgressTimestamp(endTimeMs) - query.startTimestamp
+      }, 0)
     }
 
     <tr>
@@ -71,7 +71,9 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
       <td> {query.id} </td>
       <td> <a href={statisticsLink}> {query.runId} </a> </td>
       <td> {SparkUIUtils.formatDate(query.startTimestamp)} </td>
-      <td> {duration} </td>
+      <td sorttable_customkey={duration.toString}>
+        {SparkUIUtils.formatDurationVerbose(duration)}
+      </td>
       <td> {withNoProgress(query, {
         (query.recentProgress.map(p => withNumberInvalid(p.inputRowsPerSecond)).sum /
           query.recentProgress.length).formatted("%.2f") }, "NaN")}
@@ -93,8 +95,13 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
         "Name", "Status", "Id", "Run ID", "Start Time", "Duration", "Avg Input /sec",
         "Avg Process /sec", "Lastest Batch")
 
+      val headerCss = Seq("", "", "", "", "", "sorttable_numeric", "sorttable_numeric",
+        "sorttable_numeric", "")
+      // header classes size must be equal to header row size
+      assert(headerRow.size == headerCss.size)
+
       Some(SparkUIUtils.listingTable(headerRow, generateDataRow(request, queryActive = true),
-        activeQueries, true, Some("activeQueries-table"), Seq(null), false))
+        activeQueries, true, Some("activeQueries-table"), headerCss, false))
     } else {
       None
     }
@@ -104,8 +111,12 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
         "Name", "Status", "Id", "Run ID", "Start Time", "Duration", "Avg Input /sec",
         "Avg Process /sec", "Lastest Batch", "Error")
 
+      val headerCss = Seq("", "", "", "", "", "sorttable_numeric", "sorttable_numeric",
+        "sorttable_numeric", "", "")
+      assert(headerRow.size == headerCss.size)
+
       Some(SparkUIUtils.listingTable(headerRow, generateDataRow(request, queryActive = false),
-        inactiveQueries, true, Some("completedQueries-table"), Seq(null), false))
+        inactiveQueries, true, Some("completedQueries-table"), headerCss, false))
     } else {
       None
     }

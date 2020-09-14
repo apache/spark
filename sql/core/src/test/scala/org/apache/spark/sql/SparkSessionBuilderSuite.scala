@@ -19,7 +19,8 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark.internal.config.EXECUTOR_ALLOW_SPARK_CONTEXT
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -239,5 +240,28 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(session.conf.get("spark.app.name") === "test-app-SPARK-31532-2")
     assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532-2")
     assert(session.conf.get(WAREHOUSE_PATH) === "SPARK-31532-db-2")
+  }
+
+  test("SPARK-32160: Disallow to create SparkSession in executors if the config is set") {
+    val session = SparkSession.builder().master("local-cluster[3, 1, 1024]").getOrCreate()
+
+    val error = intercept[SparkException] {
+      session.range(1).foreach { v =>
+        SparkSession.builder.master("local")
+          .config(EXECUTOR_ALLOW_SPARK_CONTEXT.key, false).getOrCreate()
+        ()
+      }
+    }.getMessage()
+
+    assert(error.contains("SparkSession should only be created and accessed on the driver."))
+  }
+
+  test("SPARK-32160: Allow to create SparkSession in executors") {
+    val session = SparkSession.builder().master("local-cluster[3, 1, 1024]").getOrCreate()
+
+    session.range(1).foreach { v =>
+      SparkSession.builder.master("local").getOrCreate().stop()
+      ()
+    }
   }
 }

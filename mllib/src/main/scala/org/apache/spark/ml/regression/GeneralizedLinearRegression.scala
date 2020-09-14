@@ -180,6 +180,9 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
       s"${supportedSolvers.mkString(", ")}. (Default irls)",
     ParamValidators.inArray[String](supportedSolvers))
 
+  setDefault(family -> Gaussian.name, variancePower -> 0.0, maxIter -> 25, tol -> 1E-6,
+    regParam -> 0.0, solver -> IRLS)
+
   @Since("2.0.0")
   override def validateAndTransformSchema(
       schema: StructType,
@@ -256,7 +259,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.0.0")
   def setFamily(value: String): this.type = set(family, value)
-  setDefault(family -> Gaussian.name)
 
   /**
    * Sets the value of param [[variancePower]].
@@ -267,7 +269,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.2.0")
   def setVariancePower(value: Double): this.type = set(variancePower, value)
-  setDefault(variancePower -> 0.0)
 
   /**
    * Sets the value of param [[linkPower]].
@@ -304,7 +305,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.0.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
-  setDefault(maxIter -> 25)
 
   /**
    * Sets the convergence tolerance of iterations.
@@ -315,7 +315,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.0.0")
   def setTol(value: Double): this.type = set(tol, value)
-  setDefault(tol -> 1E-6)
 
   /**
    * Sets the regularization parameter for L2 regularization.
@@ -331,7 +330,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.0.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
-  setDefault(regParam -> 0.0)
 
   /**
    * Sets the value of param [[weightCol]].
@@ -363,7 +361,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.0.0")
   def setSolver(value: String): this.type = set(solver, value)
-  setDefault(solver -> IRLS)
 
   /**
    * Sets the link prediction (linear predictor) column name.

@@ -36,6 +36,7 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.RESOURCES_WARNING_TESTING
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceAllocation
 import org.apache.spark.resource.ResourceUtils._
@@ -890,6 +891,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       .setAppName("test-cluster")
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(EXECUTOR_GPU_ID.amountConf, "4")
+    conf.set(RESOURCES_WARNING_TESTING, true)
 
     var error = intercept[SparkException] {
       sc = new SparkContext(conf)
@@ -948,6 +950,27 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       eventually(timeout(10.seconds)) {
         assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
       }
+    }
+  }
+
+  test("SPARK-32160: Disallow to create SparkContext in executors if the config is set") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+
+    val error = intercept[SparkException] {
+      sc.range(0, 1).foreach { _ =>
+        new SparkContext(new SparkConf().setAppName("test").setMaster("local")
+          .set(EXECUTOR_ALLOW_SPARK_CONTEXT, false))
+      }
+    }.getMessage()
+
+    assert(error.contains("SparkContext should only be created and accessed on the driver."))
+  }
+
+  test("SPARK-32160: Allow to create SparkContext in executors") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+
+    sc.range(0, 1).foreach { _ =>
+      new SparkContext(new SparkConf().setAppName("test").setMaster("local")).stop()
     }
   }
 }

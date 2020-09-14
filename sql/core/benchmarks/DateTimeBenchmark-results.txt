@@ -453,5 +453,9 @@ From java.time.Instant                              236            243          
 Collect longs                                      1280           1337          79          3.9         256.1       0.3X
 Collect java.sql.Timestamp                         1485           1501          15          3.4         297.0       0.3X
 Collect java.time.Instant                          1441           1465          37          3.5         288.1       0.3X
+java.sql.Date to Hive string                      18745          20895        1364          0.3        3749.0       0.0X
+java.time.LocalDate to Hive string                15296          15450         143          0.3        3059.2       0.0X
+java.sql.Timestamp to Hive string                 46421          47210         946          0.1        9284.2       0.0X
+java.time.Instant to Hive string                  34747          35187         382          0.1        6949.4       0.0X
 
 

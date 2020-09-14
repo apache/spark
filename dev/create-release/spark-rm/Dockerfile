@@ -21,7 +21,7 @@
 # * Java 8
 # * Ivy
 # * Python (2.7.15/3.6.7)
-# * R-base/R-base-dev (3.6.1)
+# * R-base/R-base-dev (4.0.2)
 # * Ruby 2.3 build utilities
 
 FROM ubuntu:18.04
@@ -43,7 +43,7 @@ ARG GEM_PKGS="jekyll:4.0.0 jekyll-redirect-from:0.16.0 rouge:3.15.0"
 # This is all in a single "RUN" command so that if anything changes, "apt update" is run to fetch
 # the most current package versions (instead of potentially using old versions cached by docker).
 RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
-  echo 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran35/' >> /etc/apt/sources.list && \
+  echo 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran40/' >> /etc/apt/sources.list && \
   gpg --keyserver keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9 && \
   gpg -a --export E084DAB9 | apt-key add - && \
   apt-get clean && \
@@ -63,6 +63,8 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   $APT_INSTALL nodejs && \
   # Install needed python packages. Use pip for installing packages (for consistency).
   $APT_INSTALL libpython3-dev python3-pip python3-setuptools && \
+  # qpdf is required for CRAN checks to pass.
+  $APT_INSTALL qpdf jq && \
   # Change default python version to python3.
   update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 && \
   update-alternatives --install /usr/bin/python python /usr/bin/python3.6 2 && \

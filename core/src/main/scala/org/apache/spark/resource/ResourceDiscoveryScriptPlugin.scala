@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils.executeAndGetOutput
 /**
  * The default plugin that is loaded into a Spark application to control how custom
  * resources are discovered. This executes the discovery script specified by the user
- * and gets the json output back and contructs ResourceInformation objects from that.
+ * and gets the json output back and constructs ResourceInformation objects from that.
  * If the user specifies custom plugins, this is the last one to be executed and
  * throws if the resource isn't discovered.
  *

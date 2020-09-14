@@ -19,7 +19,7 @@ import unittest
 import sys
 
 from pyspark.sql.functions import array, explode, col, lit, udf, sum, pandas_udf, PandasUDFType
-from pyspark.sql.types import DoubleType, StructType, StructField
+from pyspark.sql.types import DoubleType, StructType, StructField, Row
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
@@ -192,6 +192,22 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         with self.assertRaisesRegexp(ValueError, 'Invalid function'):
             left.groupby('id').cogroup(right.groupby('id')) \
                 .applyInPandas(lambda: 1, StructType([StructField("d", DoubleType())]))
+
+    def test_case_insensitive_grouping_column(self):
+        # SPARK-31915: case-insensitive grouping column should work.
+        df1 = self.spark.createDataFrame([(1, 1)], ("column", "value"))
+
+        row = df1.groupby("ColUmn").cogroup(
+            df1.groupby("COLUMN")
+        ).applyInPandas(lambda r, l: r + l, "column long, value long").first()
+        self.assertEquals(row.asDict(), Row(column=2, value=2).asDict())
+
+        df2 = self.spark.createDataFrame([(1, 1)], ("column", "value"))
+
+        row = df1.groupby("ColUmn").cogroup(
+            df2.groupby("COLUMN")
+        ).applyInPandas(lambda r, l: r + l, "column long, value long").first()
+        self.assertEquals(row.asDict(), Row(column=2, value=2).asDict())
 
     @staticmethod
     def _test_with_key(left, right, isLeft):

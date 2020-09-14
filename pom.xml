@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.12</artifactId>
-  <version>3.0.0</version>
+  <version>3.0.1</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -116,6 +116,7 @@
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
     <maven.version>3.6.3</maven.version>
+    <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.30</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
@@ -144,6 +145,10 @@
     <chill.version>0.9.5</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
+    <!--
+    If you changes codahale.metrics.version, you also need to change
+    the link to metrics.dropwizard.io in docs/monitoring.md.
+    -->
     <codahale.metrics.version>4.1.1</codahale.metrics.version>
     <avro.version>1.8.2</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
@@ -162,6 +167,7 @@
     <commons.collections.version>3.2.2</commons.collections.version>
     <scala.version>2.12.10</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
+    <scalatest-maven-plugin.version>2.0.0</scalatest-maven-plugin.version>
     <scalafmt.parameters>--test</scalafmt.parameters>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
@@ -249,6 +255,8 @@
     <spark.test.webdriver.chrome.driver></spark.test.webdriver.chrome.driver>
 
     <CodeCacheSize>1g</CodeCacheSize>
+    <!-- Needed for consistent times -->
+    <maven.build.timestamp.format>yyyy-MM-dd HH:mm:ss z</maven.build.timestamp.format>
   </properties>
   <repositories>
     <repository>
@@ -2279,7 +2287,7 @@
       <dependency>
         <groupId>com.univocity</groupId>
         <artifactId>univocity-parsers</artifactId>
-        <version>2.8.3</version>
+        <version>2.9.0</version>
       </dependency>
       <dependency>
         <groupId>org.apache.hive</groupId>
@@ -2342,11 +2350,39 @@
             </execution>
           </executions>
         </plugin>
-        <plugin>
-          <groupId>org.codehaus.mojo</groupId>
-          <artifactId>build-helper-maven-plugin</artifactId>
-          <version>3.0.0</version>
-        </plugin>
+	<plugin>
+	  <groupId>org.codehaus.mojo</groupId>
+	  <artifactId>build-helper-maven-plugin</artifactId>
+	  <version>3.2.0</version>
+	  <executions>
+	    <execution>
+	      <id>module-timestamp-property</id>
+	      <phase>validate</phase>
+	      <goals>
+		<goal>timestamp-property</goal>
+	      </goals>
+	      <configuration>
+		<name>module.build.timestamp</name>
+		<pattern>${maven.build.timestamp.format}</pattern>
+		<timeSource>current</timeSource>
+		<timeZone>America/Los_Angeles</timeZone>
+	      </configuration>
+	    </execution>
+	    <execution>
+	      <id>local-timestamp-property</id>
+	      <phase>validate</phase>
+	      <goals>
+		<goal>timestamp-property</goal>
+	      </goals>
+	      <configuration>
+		<name>local.build.timestamp</name>
+		<pattern>${maven.build.timestamp.format}</pattern>
+		<timeSource>build</timeSource>
+		<timeZone>America/Los_Angeles</timeZone>
+	      </configuration>
+	    </execution>
+	  </executions>
+	</plugin>
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
@@ -2479,7 +2515,7 @@
         <plugin>
           <groupId>org.scalatest</groupId>
           <artifactId>scalatest-maven-plugin</artifactId>
-          <version>2.0.0</version>
+          <version>${scalatest-maven-plugin.version}</version>
           <!-- Note config is repeated in surefire config -->
           <configuration>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
@@ -2615,7 +2651,7 @@
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>exec-maven-plugin</artifactId>
-          <version>1.6.0</version>
+          <version>${exec-maven-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>

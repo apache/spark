@@ -275,11 +275,12 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
 
   test("SPARK-31485: barrier stage should fail if only partial tasks are launched") {
     initLocalClusterSparkContext(2)
+    val id = sc.getExecutorIds().head
     val rdd0 = sc.parallelize(Seq(0, 1, 2, 3), 2)
     val dep = new OneToOneDependency[Int](rdd0)
-    // set up a barrier stage with 2 tasks and both tasks prefer executor 0 (only 1 core) for
+    // set up a barrier stage with 2 tasks and both tasks prefer the same executor (only 1 core) for
     // scheduling. So, one of tasks won't be scheduled in one round of resource offer.
-    val rdd = new MyRDD(sc, 2, List(dep), Seq(Seq("executor_h_0"), Seq("executor_h_0")))
+    val rdd = new MyRDD(sc, 2, List(dep), Seq(Seq(s"executor_h_$id"), Seq(s"executor_h_$id")))
     val errorMsg = intercept[SparkException] {
       rdd.barrier().mapPartitions { iter =>
         BarrierTaskContext.get().barrier()

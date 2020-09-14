@@ -244,7 +244,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //   4. Pick cartesian product if join type is inner like.
       //   5. Pick broadcast nested loop join as the final solution. It may OOM but we don't have
       //      other choice.
-      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right, hint) =>
+      case j @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, nonEquiCond, left, right, hint) =>
         def createBroadcastHashJoin(buildLeft: Boolean, buildRight: Boolean) = {
           val wantToBuildLeft = canBuildLeft(joinType) && buildLeft
           val wantToBuildRight = canBuildRight(joinType) && buildRight
@@ -254,7 +254,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               rightKeys,
               joinType,
               buildSide,
-              condition,
+              nonEquiCond,
               planLater(left),
               planLater(right)))
           }
@@ -269,7 +269,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               rightKeys,
               joinType,
               buildSide,
-              condition,
+              nonEquiCond,
               planLater(left),
               planLater(right)))
           }
@@ -278,7 +278,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         def createSortMergeJoin() = {
           if (RowOrdering.isOrderable(leftKeys)) {
             Some(Seq(joins.SortMergeJoinExec(
-              leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right))))
+              leftKeys, rightKeys, joinType, nonEquiCond, planLater(left), planLater(right))))
           } else {
             None
           }
@@ -286,7 +286,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         def createCartesianProduct() = {
           if (joinType.isInstanceOf[InnerLike]) {
-            Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), condition)))
+            // `CartesianProductExec` can't implicitly evaluate equal join condition, here we should
+            // pass the original condition which includes both equal and non-equal conditions.
+            Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), j.condition)))
           } else {
             None
           }
@@ -311,7 +313,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               // This join could be very slow or OOM
               val buildSide = getSmallerSide(left, right)
               Seq(joins.BroadcastNestedLoopJoinExec(
-                planLater(left), planLater(right), buildSide, joinType, condition))
+                planLater(left), planLater(right), buildSide, joinType, nonEquiCond))
             }
         }
 
@@ -527,6 +529,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val normalizedGroupingExpressions = groupingExpressions.map { e =>
           NormalizeFloatingNumbers.normalize(e) match {
             case n: NamedExpression => n
+            // Keep the name of the original expression.
             case other => Alias(other, e.name)(exprId = e.exprId)
           }
         }
@@ -539,10 +542,34 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               resultExpressions,
               planLater(child))
           } else {
+            // functionsWithDistinct is guaranteed to be non-empty. Even though it may contain
+            // more than one DISTINCT aggregate function, all of those functions will have the
+            // same column expressions. For example, it would be valid for functionsWithDistinct
+            // to be [COUNT(DISTINCT foo), MAX(DISTINCT foo)], but
+            // [COUNT(DISTINCT bar), COUNT(DISTINCT foo)] is disallowed because those two distinct
+            // aggregates have different column expressions.
+            val distinctExpressions = functionsWithDistinct.head.aggregateFunction.children
+            val normalizedNamedDistinctExpressions = distinctExpressions.map { e =>
+              // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here
+              // because `distinctExpressions` is not extracted during logical phase.
+              NormalizeFloatingNumbers.normalize(e) match {
+                case ne: NamedExpression => ne
+                case other =>
+                  // Keep the name of the original expression.
+                  val name = e match {
+                    case ne: NamedExpression => ne.name
+                    case _ => e.toString
+                  }
+                  Alias(other, name)()
+              }
+            }
+
             AggUtils.planAggregateWithOneDistinct(
               normalizedGroupingExpressions,
               functionsWithDistinct,
               functionsWithoutDistinct,
+              distinctExpressions,
+              normalizedNamedDistinctExpressions,
               resultExpressions,
               planLater(child))
           }
@@ -725,7 +752,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
           ShuffleExchangeExec(RoundRobinPartitioning(numPartitions),
-            planLater(child), canChangeNumPartitions = false) :: Nil
+            planLater(child), noUserSpecifiedNumPartition = false) :: Nil
         } else {
           execution.CoalesceExec(numPartitions, planLater(child)) :: Nil
         }
@@ -759,7 +786,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
         exchange.ShuffleExchangeExec(
-          r.partitioning, planLater(r.child), canChangeNumPartitions = false) :: Nil
+          r.partitioning, planLater(r.child), noUserSpecifiedNumPartition = false) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil

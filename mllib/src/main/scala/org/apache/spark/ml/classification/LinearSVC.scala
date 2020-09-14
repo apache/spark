@@ -54,6 +54,9 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
    */
   final override val threshold: DoubleParam = new DoubleParam(this, "threshold",
     "threshold in binary classification prediction applied to rawPrediction")
+
+  setDefault(regParam -> 0.0, maxIter -> 100, fitIntercept -> true, tol -> 1E-6,
+    standardization -> true, threshold -> 0.0, aggregationDepth -> 2)
 }
 
 /**
@@ -81,7 +84,6 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.2.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
-  setDefault(regParam -> 0.0)
 
   /**
    * Set the maximum number of iterations.
@@ -91,7 +93,6 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.2.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
-  setDefault(maxIter -> 100)
 
   /**
    * Whether to fit an intercept term.
@@ -101,7 +102,6 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.2.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
-  setDefault(fitIntercept -> true)
 
   /**
    * Set the convergence tolerance of iterations.
@@ -112,7 +112,6 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.2.0")
   def setTol(value: Double): this.type = set(tol, value)
-  setDefault(tol -> 1E-6)
 
   /**
    * Whether to standardize the training features before fitting the model.
@@ -122,7 +121,6 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.2.0")
   def setStandardization(value: Boolean): this.type = set(standardization, value)
-  setDefault(standardization -> true)
 
   /**
    * Set the value of param [[weightCol]].
@@ -141,7 +139,6 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.2.0")
   def setThreshold(value: Double): this.type = set(threshold, value)
-  setDefault(threshold -> 0.0)
 
   /**
    * Suggested depth for treeAggregate (greater than or equal to 2).
@@ -153,7 +150,6 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.2.0")
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
-  setDefault(aggregationDepth -> 2)
 
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
@@ -300,7 +296,6 @@ class LinearSVCModel private[classification] (
 
   @Since("2.2.0")
   def setThreshold(value: Double): this.type = set(threshold, value)
-  setDefault(threshold, 0.0)
 
   private val margin: Vector => Double = (features) => {
     BLAS.dot(features, coefficients) + intercept

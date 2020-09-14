@@ -3449,6 +3449,58 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(sql("select CAST(-32768 as short) DIV CAST (-1 as short)"),
       Seq(Row(Short.MinValue.toLong * -1)))
   }
+
+  test("normalize special floating numbers in subquery") {
+    withTempView("v1", "v2", "v3") {
+      Seq(-0.0).toDF("d").createTempView("v1")
+      Seq(0.0).toDF("d").createTempView("v2")
+      spark.range(2).createTempView("v3")
+
+      // non-correlated subquery
+      checkAnswer(sql("SELECT (SELECT v1.d FROM v1 JOIN v2 ON v1.d = v2.d)"), Row(-0.0))
+      // correlated subquery
+      checkAnswer(
+        sql(
+          """
+            |SELECT id FROM v3 WHERE EXISTS
+            |  (SELECT v1.d FROM v1 JOIN v2 ON v1.d = v2.d WHERE id > 0)
+            |""".stripMargin), Row(1))
+    }
+  }
+
+  test("SPARK-32237: Hint in CTE") {
+    withTable("t") {
+      sql("CREATE TABLE t USING PARQUET AS SELECT 1 AS id")
+      checkAnswer(
+        sql("""
+              |WITH cte AS (SELECT /*+ REPARTITION(3) */ * FROM t)
+              |SELECT * FROM cte
+            """.stripMargin),
+        Row(1) :: Nil)
+    }
+  }
+
+  test("SPARK-32372: ResolveReferences.dedupRight should only rewrite attributes for ancestor " +
+    "plans of the conflict plan") {
+    sql("SELECT name, avg(age) as avg_age FROM person GROUP BY name")
+      .createOrReplaceTempView("person_a")
+    sql("SELECT p1.name, p2.avg_age FROM person p1 JOIN person_a p2 ON p1.name = p2.name")
+      .createOrReplaceTempView("person_b")
+    sql("SELECT * FROM person_a UNION SELECT * FROM person_b")
+      .createOrReplaceTempView("person_c")
+    checkAnswer(
+      sql("SELECT p1.name, p2.avg_age FROM person_c p1 JOIN person_c p2 ON p1.name = p2.name"),
+      Row("jim", 20.0) :: Row("mike", 30.0) :: Nil)
+  }
+
+  test("SPARK-32280: Avoid duplicate rewrite attributes when there're multiple JOINs") {
+    sql("SELECT 1 AS id").createOrReplaceTempView("A")
+    sql("SELECT id, 'foo' AS kind FROM A").createOrReplaceTempView("B")
+    sql("SELECT l.id as id FROM B AS l LEFT SEMI JOIN B AS r ON l.kind = r.kind")
+      .createOrReplaceTempView("C")
+    checkAnswer(sql("SELECT 0 FROM ( SELECT * FROM B JOIN C USING (id)) " +
+      "JOIN ( SELECT * FROM B JOIN C USING (id)) USING (id)"), Row(0))
+  }
 }
 
 case class Foo(bar: Option[String])

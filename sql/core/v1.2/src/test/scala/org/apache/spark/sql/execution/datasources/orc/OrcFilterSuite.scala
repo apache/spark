@@ -24,9 +24,10 @@ import java.sql.{Date, Timestamp}
 import scala.collection.JavaConverters._
 
 import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
+import org.apache.orc.storage.ql.io.sarg.SearchArgumentFactory.newBuilder
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame}
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -468,6 +469,143 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           new java.math.BigDecimal(3.14, MathContext.DECIMAL64).setScale(2)))
       ).get.toString
     }
+  }
+
+  test("SPARK-32622: case sensitivity in predicate pushdown") {
+    withTempPath { dir =>
+      val count = 10
+      val tableName = "spark_32622"
+      val tableDir1 = dir.getAbsoluteFile + "/table1"
+
+      // Physical ORC files have both `A` and `a` fields.
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        spark.range(count).repartition(count).selectExpr("id - 1 as A", "id as a")
+          .write.mode("overwrite").orc(tableDir1)
+      }
+
+      // Metastore table has both `A` and `a` fields too.
+      withTable(tableName) {
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          sql(
+            s"""
+               |CREATE TABLE $tableName (A LONG, a LONG) USING ORC LOCATION '$tableDir1'
+             """.stripMargin)
+
+          checkAnswer(sql(s"select a, A from $tableName"), (0 until count).map(c => Row(c, c - 1)))
+
+          val actual1 = stripSparkFilter(sql(s"select A from $tableName where A < 0"))
+          assert(actual1.count() == 1)
+
+          val actual2 = stripSparkFilter(sql(s"select A from $tableName where a < 0"))
+          assert(actual2.count() == 0)
+        }
+
+        // Exception thrown for ambiguous case.
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+          val e = intercept[AnalysisException] {
+            sql(s"select a from $tableName where a < 0").collect()
+          }
+          assert(e.getMessage.contains(
+            "Reference 'a' is ambiguous"))
+        }
+      }
+
+      // Metastore table has only `A` field.
+      withTable(tableName) {
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+          sql(
+            s"""
+               |CREATE TABLE $tableName (A LONG) USING ORC LOCATION '$tableDir1'
+             """.stripMargin)
+
+          val e = intercept[SparkException] {
+            sql(s"select A from $tableName where A < 0").collect()
+          }
+          assert(e.getCause.isInstanceOf[RuntimeException] && e.getCause.getMessage.contains(
+            """Found duplicate field(s) "A": [A, a] in case-insensitive mode"""))
+        }
+      }
+
+      // Physical ORC files have only `A` field.
+      val tableDir2 = dir.getAbsoluteFile + "/table2"
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        spark.range(count).repartition(count).selectExpr("id - 1 as A")
+          .write.mode("overwrite").orc(tableDir2)
+      }
+
+      withTable(tableName) {
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+          sql(
+            s"""
+               |CREATE TABLE $tableName (a LONG) USING ORC LOCATION '$tableDir2'
+             """.stripMargin)
+
+          checkAnswer(sql(s"select a from $tableName"), (0 until count).map(c => Row(c - 1)))
+
+          val actual = stripSparkFilter(sql(s"select a from $tableName where a < 0"))
+          assert(actual.count() == 1)
+        }
+      }
+
+      withTable(tableName) {
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          sql(
+            s"""
+               |CREATE TABLE $tableName (A LONG) USING ORC LOCATION '$tableDir2'
+             """.stripMargin)
+
+          checkAnswer(sql(s"select A from $tableName"), (0 until count).map(c => Row(c - 1)))
+
+          val actual = stripSparkFilter(sql(s"select A from $tableName where A < 0"))
+          assert(actual.count() == 1)
+        }
+      }
+    }
+  }
+
+  test("SPARK-32646: Case-insensitive field resolution for pushdown when reading ORC") {
+    import org.apache.spark.sql.sources._
+
+    def getOrcFilter(
+        schema: StructType,
+        filters: Seq[Filter],
+        caseSensitive: String): Option[SearchArgument] = {
+      var orcFilter: Option[SearchArgument] = None
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        orcFilter =
+          OrcFilters.createFilter(schema, filters)
+      }
+      orcFilter
+    }
+
+    def testFilter(
+        schema: StructType,
+        filters: Seq[Filter],
+        expected: SearchArgument): Unit = {
+      val caseSensitiveFilters = getOrcFilter(schema, filters, "true")
+      val caseInsensitiveFilters = getOrcFilter(schema, filters, "false")
+
+      assert(caseSensitiveFilters.isEmpty)
+      assert(caseInsensitiveFilters.isDefined)
+
+      assert(caseInsensitiveFilters.get.getLeaves().size() > 0)
+      assert(caseInsensitiveFilters.get.getLeaves().size() == expected.getLeaves().size())
+      (0 until expected.getLeaves().size()).foreach { index =>
+        assert(caseInsensitiveFilters.get.getLeaves().get(index) == expected.getLeaves().get(index))
+      }
+    }
+
+    val schema = StructType(Seq(StructField("cint", IntegerType)))
+    testFilter(schema, Seq(GreaterThan("CINT", 1)),
+      newBuilder.startNot()
+        .lessThanEquals("cint", OrcFilters.getPredicateLeafType(IntegerType), 1L).`end`().build())
+    testFilter(schema, Seq(
+      And(GreaterThan("CINT", 1), EqualTo("Cint", 2))),
+      newBuilder.startAnd()
+        .startNot()
+        .lessThanEquals("cint", OrcFilters.getPredicateLeafType(IntegerType), 1L).`end`()
+        .equals("cint", OrcFilters.getPredicateLeafType(IntegerType), 2L)
+        .`end`().build())
   }
 }
 

@@ -1450,10 +1450,22 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
       val ds = sampledTestData.coalesce(1)
       ds.write.text(path.getAbsolutePath)
 
-      val readback = spark.read
+      val readback1 = spark.read
         .option("inferSchema", true).option("samplingRatio", 0.1)
         .csv(path.getCanonicalPath)
-      assert(readback.schema == new StructType().add("_c0", IntegerType))
+      assert(readback1.schema == new StructType().add("_c0", IntegerType))
+
+      withClue("SPARK-32621: 'path' option can cause issues while inferring schema") {
+        // During infer, "path" option gets added again to the paths that have already been listed.
+        // This results in reading more data than necessary and causes different schema to be
+        // inferred when sampling ratio is involved.
+        val readback2 = spark.read
+          .option("inferSchema", true).option("samplingRatio", 0.1)
+          .option("path", path.getCanonicalPath)
+          .format("csv")
+          .load
+        assert(readback2.schema == new StructType().add("_c0", IntegerType))
+      }
     })
   }
 
@@ -1890,25 +1902,26 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
 
   test("SPARK-25387: bad input should not cause NPE") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
-    val input = spark.createDataset(Seq("\u0000\u0000\u0001234"))
+    val input = spark.createDataset(Seq("\u0001\u0000\u0001234"))
 
     checkAnswer(spark.read.schema(schema).csv(input), Row(null))
     checkAnswer(spark.read.option("multiLine", true).schema(schema).csv(input), Row(null))
-    assert(spark.read.csv(input).collect().toSet == Set(Row()))
+    assert(spark.read.schema(schema).csv(input).collect().toSet == Set(Row(null)))
   }
 
   test("SPARK-31261: bad csv input with `columnNameCorruptRecord` should not cause NPE") {
     val schema = StructType(
       StructField("a", IntegerType) :: StructField("_corrupt_record", StringType) :: Nil)
-    val input = spark.createDataset(Seq("\u0000\u0000\u0001234"))
+    val input = spark.createDataset(Seq("\u0001\u0000\u0001234"))
 
     checkAnswer(
       spark.read
         .option("columnNameOfCorruptRecord", "_corrupt_record")
         .schema(schema)
         .csv(input),
-      Row(null, null))
-    assert(spark.read.csv(input).collect().toSet == Set(Row()))
+      Row(null, "\u0001\u0000\u0001234"))
+    assert(spark.read.schema(schema).csv(input).collect().toSet ==
+      Set(Row(null, "\u0001\u0000\u0001234")))
   }
 
   test("field names of inferred schema shouldn't compare to the first row") {
@@ -2339,6 +2352,17 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
     }
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "corrected") {
       checkAnswer(csv, Row(null))
+    }
+  }
+
+  test("SPARK-32614: don't treat rows starting with null char as comment") {
+    withTempPath { path =>
+      Seq("\u0000foo", "bar", "baz").toDS.write.text(path.getCanonicalPath)
+      val df = spark.read.format("csv")
+        .option("header", "false")
+        .option("inferSchema", "true")
+        .load(path.getCanonicalPath)
+      assert(df.count() == 3)
     }
   }
 }

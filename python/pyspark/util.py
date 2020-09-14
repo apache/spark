@@ -114,33 +114,6 @@ def fail_on_stopiteration(f):
     return wrapper
 
 
-def _warn_pin_thread(name):
-    if os.environ.get("PYSPARK_PIN_THREAD", "false").lower() == "true":
-        msg = (
-            "PYSPARK_PIN_THREAD feature is enabled. "
-            "However, note that it cannot inherit the local properties from the parent thread "
-            "although it isolates each thread on PVM and JVM with its own local properties. "
-            "\n"
-            "To work around this, you should manually copy and set the local properties from "
-            "the parent thread to the child thread when you create another thread.")
-    else:
-        msg = (
-            "Currently, '%s' (set to local properties) with multiple threads does "
-            "not properly work. "
-            "\n"
-            "Internally threads on PVM and JVM are not synced, and JVM thread can be reused "
-            "for multiple threads on PVM, which fails to isolate local properties for each "
-            "thread on PVM. "
-            "\n"
-            "To work around this, you can set PYSPARK_PIN_THREAD to true (see SPARK-22340). "
-            "However, note that it cannot inherit the local properties from the parent thread "
-            "although it isolates each thread on PVM and JVM with its own local properties. "
-            "\n"
-            "To work around this, you should manually copy and set the local properties from "
-            "the parent thread to the child thread when you create another thread." % name)
-    warnings.warn(msg, UserWarning)
-
-
 def _print_missing_jar(lib_name, pkg_name, jar_name, spark_version):
     print("""
 ________________________________________________________________________________________________

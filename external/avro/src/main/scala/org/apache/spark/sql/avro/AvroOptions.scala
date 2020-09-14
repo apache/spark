@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Options for Avro Reader and Writer stored in case insensitive manner.
  */
-class AvroOptions(
+private[sql] class AvroOptions(
     @transient val parameters: CaseInsensitiveMap[String],
     @transient val conf: Configuration) extends Logging with Serializable {
 
@@ -95,7 +95,7 @@ class AvroOptions(
     parameters.get("mode").map(ParseMode.fromString).getOrElse(FailFastMode)
 }
 
-object AvroOptions {
+private[sql] object AvroOptions {
   def apply(parameters: Map[String, String]): AvroOptions = {
     val hadoopConf = SparkSession
       .getActiveSession

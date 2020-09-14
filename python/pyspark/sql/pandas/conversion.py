@@ -413,7 +413,7 @@ class SparkConversionMixin(object):
 
         # Slice the DataFrame to be batched
         step = -(-len(pdf) // self.sparkContext.defaultParallelism)  # round int up
-        pdf_slices = (pdf[start:start + step] for start in xrange(0, len(pdf), step))
+        pdf_slices = (pdf.iloc[start:start + step] for start in xrange(0, len(pdf), step))
 
         # Create list of Arrow (columns, type) for serializer dump_stream
         arrow_data = [[(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)]

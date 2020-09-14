@@ -50,7 +50,6 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
    */
   @Since("2.2.0")
   val itemsCol: Param[String] = new Param[String](this, "itemsCol", "items column name")
-  setDefault(itemsCol -> "items")
 
   /** @group getParam */
   @Since("2.2.0")
@@ -66,7 +65,6 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
   val minSupport: DoubleParam = new DoubleParam(this, "minSupport",
     "the minimal support level of a frequent pattern",
     ParamValidators.inRange(0.0, 1.0))
-  setDefault(minSupport -> 0.3)
 
   /** @group getParam */
   @Since("2.2.0")
@@ -95,11 +93,12 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
   val minConfidence: DoubleParam = new DoubleParam(this, "minConfidence",
     "minimal confidence for generating Association Rule",
     ParamValidators.inRange(0.0, 1.0))
-  setDefault(minConfidence -> 0.8)
 
   /** @group getParam */
   @Since("2.2.0")
   def getMinConfidence: Double = $(minConfidence)
+
+  setDefault(minSupport -> 0.3, itemsCol -> "items", minConfidence -> 0.8)
 
   /**
    * Validates and transforms the input schema.

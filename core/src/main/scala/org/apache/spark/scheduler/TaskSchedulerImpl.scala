@@ -446,7 +446,17 @@ private[spark] class TaskSchedulerImpl(
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
     for (taskSet <- sortedTaskSets) {
-      val availableSlots = availableCpus.map(c => c / CPUS_PER_TASK).sum
+      // we only need to calculate available slots if using barrier scheduling, otherwise the
+      // value is -1
+      val availableSlots = if (taskSet.isBarrier) {
+        val availableResourcesAmount = availableResources.map { resourceMap =>
+          // note that the addresses here have been expanded according to the numParts
+          resourceMap.map { case (name, addresses) => (name, addresses.length) }
+        }
+        calculateAvailableSlots(this, availableCpus, availableResourcesAmount)
+      } else {
+        -1
+      }
       // Skip the barrier taskSet if the available slots are less than the number of pending tasks.
       if (taskSet.isBarrier && availableSlots < taskSet.numTasks) {
         // Skip the launch process.
@@ -932,6 +942,30 @@ private[spark] class TaskSchedulerImpl(
 private[spark] object TaskSchedulerImpl {
 
   val SCHEDULER_MODE_PROPERTY = SCHEDULER_MODE.key
+
+  /**
+   * Calculate the max available task slots given the `availableCpus` and `availableResources`
+   * from a collection of executors.
+   *
+   * @param scheduler the TaskSchedulerImpl instance
+   * @param availableCpus an Array of the amount of available cpus from the executors.
+   * @param availableResources an Array of the resources map from the executors. In the resource
+   *                           map, it maps from the resource name to its amount.
+   * @return the number of max task slots
+   */
+  def calculateAvailableSlots(
+      scheduler: TaskSchedulerImpl,
+      availableCpus: Array[Int],
+      availableResources: Array[Map[String, Int]]): Int = {
+    val cpusPerTask = scheduler.CPUS_PER_TASK
+    val resourcesReqsPerTask = scheduler.resourcesReqsPerTask
+    availableCpus.zip(availableResources).map { case (cpu, resources) =>
+      val cpuNum = cpu / cpusPerTask
+      resourcesReqsPerTask.map { req =>
+        resources.get(req.resourceName).map(_ / req.amount).getOrElse(0)
+      }.reduceOption(Math.min).map(_.min(cpuNum)).getOrElse(cpuNum)
+    }.sum
+  }
 
   /**
    * Used to balance containers across hosts.

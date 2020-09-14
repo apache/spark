@@ -82,6 +82,11 @@ class SparkContext(config: SparkConf) extends Logging {
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
+  if (!config.get(EXECUTOR_ALLOW_SPARK_CONTEXT)) {
+    // In order to prevent SparkContext from being created in executors.
+    SparkContext.assertOnDriver()
+  }
+
   // In order to prevent multiple SparkContexts from being active at the same time, mark this
   // context as having started construction.
   // NOTE: this must be placed at the beginning of the SparkContext constructor.
@@ -1592,7 +1597,8 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Get the max number of tasks that can be concurrent launched currently.
+   * Get the max number of tasks that can be concurrent launched based on the resources
+   * could be used, even if some of them are being used at the moment.
    * Note that please don't cache the value returned by this method, because the number can change
    * due to add/remove executors.
    *
@@ -2540,6 +2546,19 @@ object SparkContext extends Logging {
   }
 
   /**
+   * Called to ensure that SparkContext is created or accessed only on the Driver.
+   *
+   * Throws an exception if a SparkContext is about to be created in executors.
+   */
+  private def assertOnDriver(): Unit = {
+    if (TaskContext.get != null) {
+      // we're accessing it during task execution, fail.
+      throw new IllegalStateException(
+        "SparkContext should only be created and accessed on the driver.")
+    }
+  }
+
+  /**
    * This function may be used to get or instantiate a SparkContext and register it as a
    * singleton object. Because we can only have one active SparkContext per JVM,
    * this is useful when applications may wish to share a SparkContext.
@@ -2758,8 +2777,9 @@ object SparkContext extends Logging {
       }
       // some cluster managers don't set the EXECUTOR_CORES config by default (standalone
       // and mesos coarse grained), so we can't rely on that config for those.
-      val shouldCheckExecCores = executorCores.isDefined || sc.conf.contains(EXECUTOR_CORES) ||
+      var shouldCheckExecCores = executorCores.isDefined || sc.conf.contains(EXECUTOR_CORES) ||
         (master.equalsIgnoreCase("yarn") || master.startsWith("k8s"))
+      shouldCheckExecCores &= !sc.conf.get(SKIP_VALIDATE_CORES_TESTING)
 
       // Number of cores per executor must meet at least one task requirement.
       if (shouldCheckExecCores && execCores < taskCores) {
@@ -2815,7 +2835,7 @@ object SparkContext extends Logging {
           limitingResourceName = taskReq.resourceName
         }
       }
-      if(!shouldCheckExecCores && Utils.isDynamicAllocationEnabled(sc.conf)) {
+      if(!shouldCheckExecCores) {
         // if we can't rely on the executor cores config throw a warning for user
         logWarning("Please ensure that the number of slots available on your " +
           "executors is limited by the number of cores to task cpus and not another " +
@@ -2839,7 +2859,7 @@ object SparkContext extends Logging {
             s"result in wasted resources due to resource ${limitingResourceName} limiting the " +
             s"number of runnable tasks per executor to: ${numSlots}. Please adjust " +
             s"your configuration."
-          if (Utils.isTesting) {
+          if (sc.conf.get(RESOURCES_WARNING_TESTING)) {
             throw new SparkException(message)
           } else {
             logWarning(message)

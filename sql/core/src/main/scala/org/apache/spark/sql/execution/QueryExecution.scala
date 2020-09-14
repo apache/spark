@@ -129,7 +129,7 @@ class QueryExecution(
       Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))))
   }
 
-  private def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
+  protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
     tracker.measurePhase(phase)(block)
   }
 

@@ -201,7 +201,7 @@ trait ProgressReporter extends Logging {
 
     if (hasExecuted) {
       // Reset noDataEventTimestamp if we processed any data
-      lastNoExecutionProgressEventTime = Long.MinValue
+      lastNoExecutionProgressEventTime = triggerClock.getTimeMillis()
       updateProgress(newProgress)
     } else {
       val now = triggerClock.getTimeMillis()

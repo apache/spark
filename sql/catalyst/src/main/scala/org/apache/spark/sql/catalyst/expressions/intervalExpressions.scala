@@ -149,6 +149,8 @@ case class DivideInterval(
        100 years 11 months 8 days 12 hours 30 minutes 1.001001 seconds
       > SELECT _FUNC_(100, null, 3);
        NULL
+      > SELECT _FUNC_(0, 1, 0, 1, 0, 0, 100.000001);
+       1 months 1 days 1 minutes 40.000001 seconds
   """,
   since = "3.0.0")
 // scalastyle:on line.size.limit
@@ -169,7 +171,7 @@ case class MakeInterval(
       days: Expression,
       hours: Expression,
       mins: Expression) = {
-    this(years, months, weeks, days, hours, mins, Literal(Decimal(0, 8, 6)))
+    this(years, months, weeks, days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
   }
   def this(
       years: Expression,
@@ -191,7 +193,7 @@ case class MakeInterval(
   // Accept `secs` as DecimalType to avoid loosing precision of microseconds while converting
   // them to the fractional part of `secs`.
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, IntegerType,
-    IntegerType, IntegerType, IntegerType, DecimalType(8, 6))
+    IntegerType, IntegerType, IntegerType, DecimalType(Decimal.MAX_LONG_DIGITS, 6))
   override def dataType: DataType = CalendarIntervalType
   override def nullable: Boolean = true
 
@@ -211,7 +213,7 @@ case class MakeInterval(
         day.asInstanceOf[Int],
         hour.asInstanceOf[Int],
         min.asInstanceOf[Int],
-        sec.map(_.asInstanceOf[Decimal]).getOrElse(Decimal(0, 8, 6)))
+        sec.map(_.asInstanceOf[Decimal]).getOrElse(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
     } catch {
       case _: ArithmeticException => null
     }

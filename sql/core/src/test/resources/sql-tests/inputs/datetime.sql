@@ -33,6 +33,8 @@ select year('1500-01-01'), month('1500-01-01'), dayOfYear('1500-01-01');
 
 select date '2019-01-01\t';
 select timestamp '2019-01-01\t';
+select date '2020-01-01中文';
+select timestamp '2019-01-01中文';
 
 -- time add/sub
 select timestamp'2011-11-11 11:11:11' + interval '2' day;
@@ -146,7 +148,3 @@ select from_json('{"time":"26/October/2015"}', 'time Timestamp', map('timestampF
 select from_json('{"date":"26/October/2015"}', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'));
-
-select from_unixtime(1, 'yyyyyyyyyyy-MM-dd');
-select date_format(timestamp '2018-11-17 13:33:33', 'yyyyyyyyyy-MM-dd HH:mm:ss');
-select date_format(date '2018-11-17', 'yyyyyyyyyyy-MM-dd');

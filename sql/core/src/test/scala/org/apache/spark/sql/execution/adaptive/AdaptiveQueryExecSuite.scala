@@ -68,7 +68,7 @@ class AdaptiveQueryExecSuite
     val result = dfAdaptive.collect()
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = sql(query)
-      QueryTest.sameRows(result.toSeq, df.collect().toSeq)
+      checkAnswer(df, result)
     }
     val planAfter = dfAdaptive.queryExecution.executedPlan
     assert(planAfter.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
@@ -869,6 +869,22 @@ class AdaptiveQueryExecSuite
           assert(checkDone)
         } finally {
           spark.sparkContext.removeSparkListener(listener)
+        }
+      }
+    }
+  }
+
+  test("SPARK-31220 repartition obeys initialPartitionNum when adaptiveExecutionEnabled") {
+    Seq(true, false).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+        SQLConf.SHUFFLE_PARTITIONS.key -> "6",
+        SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "7") {
+        val partitionsNum = spark.range(10).repartition($"id").rdd.collectPartitions().length
+        if (enableAQE) {
+          assert(partitionsNum === 7)
+        } else {
+          assert(partitionsNum === 6)
         }
       }
     }
