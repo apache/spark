@@ -264,8 +264,6 @@ private[spark] class BlockManager(
     shuffleManager.shuffleBlockResolver.asInstanceOf[MigratableResolver]
   }
 
-  def decommissionBlockManager(): Unit = storageEndpoint.ask(DecommissionBlockManager)
-
   override def getLocalDiskDirs: Array[String] = diskBlockManager.localDirsString
 
   /**
@@ -1810,6 +1808,8 @@ private[spark] class BlockManager(
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster = false) }
     blocksToRemove.size
   }
+
+  def decommissionBlockManager(): Unit = storageEndpoint.ask(DecommissionBlockManager)
 
   private[spark] def decommissionSelf(): Unit = synchronized {
     decommissioner match {
