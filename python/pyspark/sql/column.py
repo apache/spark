@@ -332,7 +332,7 @@ class Column(object):
     @since(3.1)
     def withField(self, fieldName, col):
         """
-        An expression that adds/replaces field in StructType by name.
+        An expression that adds/replaces a field in :class:`StructType` by name.
 
         >>> from pyspark.sql import Row, functions
         >>> df = spark.createDataFrame([Row(a=Row(b=1, c=2))])
@@ -349,6 +349,9 @@ class Column(object):
         |  4|
         +---+
         """
+        if not isinstance(fieldName, str):
+            raise TypeError("fieldName should be a string")
+
         if not isinstance(col, Column):
             raise TypeError("col should be a Column")
 
