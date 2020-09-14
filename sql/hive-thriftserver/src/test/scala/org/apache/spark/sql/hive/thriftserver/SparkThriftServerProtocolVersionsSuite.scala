@@ -150,6 +150,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.getByte(1) === 1.toByte)
         val metaData = rs.getMetaData
         assert(metaData.getColumnName(1) === "CAST(1 AS TINYINT)")
+        assert(metaData.getColumnTypeName(1) === "tinyint")
         assert(metaData.getColumnType(1) === java.sql.Types.TINYINT)
         assert(metaData.getPrecision(1) === 3)
         assert(metaData.getScale(1) === 0)
@@ -162,6 +163,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.getShort(1) === 1.toShort)
         val metaData = rs.getMetaData
         assert(metaData.getColumnName(1) === "CAST(1 AS SMALLINT)")
+        assert(metaData.getColumnTypeName(1) === "smallint")
         assert(metaData.getColumnType(1) === java.sql.Types.SMALLINT)
         assert(metaData.getPrecision(1) === 5)
         assert(metaData.getScale(1) === 0)
@@ -174,6 +176,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.getInt(1) === 1)
         val metaData = rs.getMetaData
         assert(metaData.getColumnName(1) === "1")
+        assert(metaData.getColumnTypeName(1) === "int")
         assert(metaData.getColumnType(1) === java.sql.Types.INTEGER)
         assert(metaData.getPrecision(1) === 10)
         assert(metaData.getScale(1) === 0)
@@ -186,6 +189,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.getLong(1) === 1L)
         val metaData = rs.getMetaData
         assert(metaData.getColumnName(1) === "CAST(1 AS BIGINT)")
+        assert(metaData.getColumnTypeName(1) === "bigint")
         assert(metaData.getColumnType(1) === java.sql.Types.BIGINT)
         assert(metaData.getPrecision(1) === 19)
         assert(metaData.getScale(1) === 0)
@@ -198,6 +202,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.getFloat(1) === 1.2F)
         val metaData = rs.getMetaData
         assert(metaData.getColumnName(1) === "CAST(1.2 AS FLOAT)")
+        assert(metaData.getColumnTypeName(1) === "float")
         assert(metaData.getColumnType(1) === java.sql.Types.FLOAT)
         assert(metaData.getPrecision(1) === 7)
         assert(metaData.getScale(1) === 7)
@@ -210,6 +215,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.getDouble(1) === 1.2D)
         val metaData = rs.getMetaData
         assert(metaData.getColumnName(1) === "CAST(1.2 AS DOUBLE)")
+        assert(metaData.getColumnTypeName(1) === "double")
         assert(metaData.getColumnType(1) === java.sql.Types.DOUBLE)
         assert(metaData.getPrecision(1) === 15)
         assert(metaData.getScale(1) === 15)
@@ -226,6 +232,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         val metaData = rs.getMetaData
         (1 to 3) foreach { i =>
           assert(metaData.getColumnName(i) === s"col${i - 1}")
+          assert(metaData.getColumnTypeName(i) === "decimal")
           assert(metaData.getColumnType(i) === java.sql.Types.DECIMAL)
           assert(metaData.getPrecision(i) == 12 - i * 3)
           assert(metaData.getScale(i) == i)
@@ -244,6 +251,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.getString(1) === "str")
         val metaData = rs.getMetaData
         assert(metaData.getColumnName(1) ==="str")
+        assert(metaData.getColumnTypeName(1) === "string")
         assert(metaData.getColumnType(1) === java.sql.Types.VARCHAR)
         assert(metaData.getPrecision(1) === Int.MaxValue)
         assert(metaData.getScale(1) === 0)
@@ -257,6 +265,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.getString(1) === "char-str")
         val metaData = rs.getMetaData
         assert(metaData.getColumnName(1) ==="CAST(char-str AS STRING)")
+        assert(metaData.getColumnTypeName(1) === "string")
         assert(metaData.getColumnType(1) === java.sql.Types.VARCHAR)
         assert(metaData.getPrecision(1) === Int.MaxValue)
         assert(metaData.getScale(1) === 0)
@@ -270,6 +279,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.getString(1) === "varchar-str")
         val metaData = rs.getMetaData
         assert(metaData.getColumnName(1) ==="CAST(varchar-str AS STRING)")
+        assert(metaData.getColumnTypeName(1) === "string")
         assert(metaData.getColumnType(1) === java.sql.Types.VARCHAR)
         assert(metaData.getPrecision(1) === Int.MaxValue)
         assert(metaData.getScale(1) === 0)
@@ -282,6 +292,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.getString(1) === "ABC")
         val metaData = rs.getMetaData
         assert(metaData.getColumnName(1) === "CAST(ABC AS BINARY)")
+        assert(metaData.getColumnTypeName(1) === "binary")
         assert(metaData.getColumnType(1) === java.sql.Types.BINARY)
         assert(metaData.getPrecision(1) === Int.MaxValue)
         assert(metaData.getScale(1) === 0)
@@ -302,6 +313,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.getBoolean(1) === true)
         val metaData = rs.getMetaData
         assert(metaData.getColumnName(1) === "true")
+        assert(metaData.getColumnTypeName(1) === "boolean")
         assert(metaData.getColumnType(1) === java.sql.Types.BOOLEAN)
         assert(metaData.getPrecision(1) === 1)
         assert(metaData.getScale(1) === 0)
@@ -314,6 +326,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.getDate(1) === Date.valueOf("2019-07-22"))
         val metaData = rs.getMetaData
         assert(metaData.getColumnName(1) === "CAST(2019-07-22 AS DATE)")
+        assert(metaData.getColumnTypeName(1) === "date")
         assert(metaData.getColumnType(1) === java.sql.Types.DATE)
         assert(metaData.getPrecision(1) === 10)
         assert(metaData.getScale(1) === 0)
@@ -327,6 +340,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.getTimestamp(1) === Timestamp.valueOf("2019-07-22 18:14:00"))
         val metaData = rs.getMetaData
         assert(metaData.getColumnName(1) === "CAST(2019-07-22 18:14:00 AS TIMESTAMP)")
+        assert(metaData.getColumnTypeName(1) === "timestamp")
         assert(metaData.getColumnType(1) === java.sql.Types.TIMESTAMP)
         assert(metaData.getPrecision(1) === 29)
         assert(metaData.getScale(1) === 9)
@@ -339,6 +353,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.getString(1) === null)
         val metaData = rs.getMetaData
         assert(metaData.getColumnName(1) === "NULL")
+        assert(metaData.getColumnTypeName(1) === "void")
         assert(metaData.getColumnType(1) === java.sql.Types.NULL)
         assert(metaData.getPrecision(1) === 0)
         assert(metaData.getScale(1) === 0)
@@ -351,6 +366,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.getString(1) === "1 years 2 days")
         val metaData = rs.getMetaData
         assert(metaData.getColumnName(1) === "INTERVAL '1 years 2 days'")
+        assert(metaData.getColumnTypeName(1) === "string")
         assert(metaData.getColumnType(1) === java.sql.Types.VARCHAR)
         assert(metaData.getPrecision(1) === Int.MaxValue)
         assert(metaData.getScale(1) === 0)
@@ -367,6 +383,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         val metaData = rs.getMetaData
         (1 to 2) foreach { i =>
           assert(metaData.getColumnName(i) === s"col$i")
+          assert(metaData.getColumnTypeName(i) === "array")
           assert(metaData.getColumnType(i) === java.sql.Types.ARRAY)
           assert(metaData.getPrecision(i) === Int.MaxValue)
           assert(metaData.getScale(i) == 0)
@@ -384,6 +401,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         val metaData = rs.getMetaData
         (1 to 2) foreach { i =>
           assert(metaData.getColumnName(i).startsWith("map("))
+          assert(metaData.getColumnTypeName(1) === "map")
           assert(metaData.getColumnType(i) === java.sql.Types.JAVA_OBJECT)
           assert(metaData.getPrecision(i) === Int.MaxValue)
           assert(metaData.getScale(i) == 0)
@@ -402,6 +420,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         val metaData = rs.getMetaData
         (1 to 3) foreach { i =>
           assert(metaData.getColumnName(i) === s"col${i - 1}")
+          assert(metaData.getColumnTypeName(1) === "struct")
           assert(metaData.getColumnType(i) === java.sql.Types.STRUCT)
           assert(metaData.getPrecision(i) === Int.MaxValue)
           assert(metaData.getScale(i) == 0)
