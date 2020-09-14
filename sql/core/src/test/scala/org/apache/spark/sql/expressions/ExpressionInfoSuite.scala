@@ -115,8 +115,14 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       if (!ignoreSet.contains(info.getClassName)) {
         withClue(s"Function '${info.getName}', Expression class '${info.getClassName}'") {
           assert(info.getUsage.nonEmpty)
-          assert(info.getExamples.nonEmpty)
-          assert(info.getSince.nonEmpty)
+          assert(info.getExamples.startsWith("\n    Examples:\n"))
+          assert(info.getExamples.endsWith("\n  "))
+          assert(info.getSince.matches("[0-9]+\\.[0-9]+\\.[0-9]+"))
+
+          if (info.getArguments.nonEmpty) {
+            assert(info.getArguments.startsWith("\n    Arguments:\n"))
+            assert(info.getArguments.endsWith("\n  "))
+          }
         }
       }
     }
@@ -148,7 +154,12 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.Uuid",
       // The example calls methods that return unstable results.
       "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection",
-      "org.apache.spark.sql.catalyst.expressions.SparkVersion")
+      "org.apache.spark.sql.catalyst.expressions.SparkVersion",
+      "org.apache.spark.sql.catalyst.expressions.MonotonicallyIncreasingID",
+      "org.apache.spark.sql.catalyst.expressions.SparkPartitionID",
+      "org.apache.spark.sql.catalyst.expressions.InputFileName",
+      "org.apache.spark.sql.catalyst.expressions.InputFileBlockStart",
+      "org.apache.spark.sql.catalyst.expressions.InputFileBlockLength")
 
     val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
     parFuncs.foreach { funcId =>

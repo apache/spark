@@ -105,9 +105,8 @@ public class ExpressionInfo {
             String deprecated) {
         assert name != null;
         assert arguments != null;
-        assert arguments.isEmpty() || arguments.startsWith("\n    Arguments:\n");
         assert examples != null;
-        assert examples.isEmpty() || examples.startsWith("\n    Examples:\n");
+        assert examples.isEmpty() || examples.contains("    Examples:");
         assert note != null;
         assert group != null;
         assert since != null;
@@ -143,9 +142,9 @@ public class ExpressionInfo {
                 "got [" + group + "].");
         }
         if (!since.isEmpty()) {
-            if (!since.matches("[0-9]+\\.[0-9]+\\.[0-9]+")) {
+            if (Integer.parseInt(since.split("\\.")[0]) < 0) {
                 throw new IllegalArgumentException("'since' is malformed in the expression [" +
-                    this.name + "]. It should follow the MAJOR.MINOR.PATCH pattern; however, " +
+                    this.name + "]. It should not start with a negative number; however, " +
                     "got [" + since + "].");
             }
             this.extended += "\n    Since: " + since + "\n";

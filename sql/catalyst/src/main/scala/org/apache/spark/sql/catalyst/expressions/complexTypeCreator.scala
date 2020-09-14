@@ -350,10 +350,10 @@ object CreateStruct {
       "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.",
       "",
       """
-    Examples:
-      > SELECT _FUNC_(1, 2, 3);
-       {"col1":1,"col2":2,"col3":3}
-  """,
+        |    Examples:
+        |      > SELECT _FUNC_(1, 2, 3);
+        |       {"col1":1,"col2":2,"col3":3}
+        |  """.stripMargin,
       "",
       "",
       "1.4.0",
