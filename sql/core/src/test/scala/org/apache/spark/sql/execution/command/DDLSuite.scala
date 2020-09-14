@@ -1863,6 +1863,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             "Returns the concatenation of col1, col2, ..., colN.") :: Nil
     )
     // extended mode
+    // scalastyle:off whitespace.end.of.line
     checkAnswer(
       sql("DESCRIBE FUNCTION EXTENDED ^"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.BitwiseXor") ::
@@ -1878,6 +1879,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         Row("Usage: expr1 ^ expr2 - Returns the result of " +
           "bitwise exclusive OR of `expr1` and `expr2`.") :: Nil
     )
+    // scalastyle:on whitespace.end.of.line
   }
 
   test("create a data source table without schema") {
