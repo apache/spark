@@ -2067,7 +2067,8 @@ class Dataset[T] private[sql](
    *   // +----+----+----+----+
    * }}}
    *
-   * Note that `allowMissingColumns` supports nested column in struct types. Missing nested columns
+   * Note that `allowMissingColumns` supports nested column in struct types, if the config
+   * `spark.sql.unionByName.structSupport.enabled` is enabled. Missing nested columns
    * of struct columns with same name will also be filled with null values. This currently does not
    * support nested columns in array and map types.
    *

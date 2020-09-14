@@ -103,6 +103,8 @@ object ResolveUnion extends Rule[LogicalPlan] {
 
     val aliased = mutable.ArrayBuffer.empty[Attribute]
 
+    val supportStruct = SQLConf.get.unionByNameStructSupportEnabled
+
     val rightProjectList = leftOutputAttrs.map { lattr =>
       val found = rightOutputAttrs.find { rattr => resolver(lattr.name, rattr.name) }
       if (found.isDefined) {
@@ -110,7 +112,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
         val foundDt = foundAttr.dataType
         (foundDt, lattr.dataType) match {
           case (source: StructType, target: StructType)
-              if allowMissingCol && !source.sameType(target) =>
+              if supportStruct && allowMissingCol && !source.sameType(target) =>
             // Having an output with same name, but different struct type.
             // We need to add missing fields. Note that if there are deeply nested structs such as
             // nested struct of array in struct, we don't support to add missing deeply nested field
