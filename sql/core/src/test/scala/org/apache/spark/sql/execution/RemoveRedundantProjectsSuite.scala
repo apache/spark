@@ -127,6 +127,7 @@ abstract class RemoveRedundantProjectsSuiteBase
 
       val data = sql("select key, a, b, count(*) from testData group by key, a, b limit 2")
       val df = data.selectExpr("a", "b", "key", "explode(array(key, a, b)) as d").filter("d > 0")
+      df.collect()
       val plan = df.queryExecution.executedPlan
       val numProjects = collectWithSubqueries(plan) { case p: ProjectExec => p }.length
 
