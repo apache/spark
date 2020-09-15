@@ -65,7 +65,7 @@ private[deploy] object DeployMessages {
    * `DecommissionWorkersOnHosts` request from `MasterWebUI` asynchronously.
    * @param ids A collection of Worker ids, which should be decommissioned.
    */
-  case class DecommissionWorkers(ids: Seq[String])
+  case class DecommissionWorkers(ids: Seq[String]) extends DeployMessage
 
   /**
    * A message that sent from Master to Worker to decommission the Worker.
