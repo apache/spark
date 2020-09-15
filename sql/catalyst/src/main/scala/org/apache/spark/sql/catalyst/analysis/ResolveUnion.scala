@@ -92,15 +92,16 @@ object ResolveUnion extends Rule[LogicalPlan] {
     val resolver = SQLConf.get.resolver
     val missingFields =
       StructType.findMissingFields(col.dataType.asInstanceOf[StructType], target, resolver)
+
+    // We need to sort columns in result, because we might add another column in other side.
+    // E.g., we want to union two structs "a int, b long" and "a int, c string".
+    // If we don't sort, we will have "a int, b long, c string" and
+    // "a int, c string, b long", which are not compatible.
     if (missingFields.isEmpty) {
       sortStructFields(col)
     } else {
       missingFields.map { s =>
         val struct = addFieldsInto(col, "", s.fields)
-        // We need to sort columns in result, because we might add another column in other side.
-        // E.g., we want to union two structs "a int, b long" and "a int, c string".
-        // If we don't sort, we will have "a int, b long, c string" and
-        // "a int, c string, b long", which are not compatible.
         sortStructFieldsInWithFields(struct)
       }.get
     }
