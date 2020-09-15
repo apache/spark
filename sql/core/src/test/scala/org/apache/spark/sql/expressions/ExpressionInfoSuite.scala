@@ -108,7 +108,10 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
   test("SPARK-32870: Default expressions in FunctionRegistry should have their " +
     "usage, examples and since filled") {
     val ignoreSet = Set(
-      "org.apache.spark.sql.catalyst.expressions.TimeWindow")
+      // Explicitly inherits NonSQLExpression, and has no ExpressionDescription
+      "org.apache.spark.sql.catalyst.expressions.TimeWindow",
+      // Cast aliases do not need examples
+      "org.apache.spark.sql.catalyst.expressions.Cast")
 
     spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
       val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
@@ -152,14 +155,15 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.Randn",
       "org.apache.spark.sql.catalyst.expressions.Shuffle",
       "org.apache.spark.sql.catalyst.expressions.Uuid",
-      // The example calls methods that return unstable results.
-      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection",
-      "org.apache.spark.sql.catalyst.expressions.SparkVersion",
+      // Other nondeterministic expressions
       "org.apache.spark.sql.catalyst.expressions.MonotonicallyIncreasingID",
       "org.apache.spark.sql.catalyst.expressions.SparkPartitionID",
       "org.apache.spark.sql.catalyst.expressions.InputFileName",
       "org.apache.spark.sql.catalyst.expressions.InputFileBlockStart",
-      "org.apache.spark.sql.catalyst.expressions.InputFileBlockLength")
+      "org.apache.spark.sql.catalyst.expressions.InputFileBlockLength",
+      // The example calls methods that return unstable results.
+      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection",
+      "org.apache.spark.sql.catalyst.expressions.SparkVersion")
 
     val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
     parFuncs.foreach { funcId =>
