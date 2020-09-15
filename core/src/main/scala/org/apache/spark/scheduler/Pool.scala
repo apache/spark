@@ -107,9 +107,9 @@ private[spark] class Pool(
     val sortedSchedulableQueue =
       schedulableQueue.asScala.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)
     for (schedulable <- sortedSchedulableQueue) {
-      sortedTaskSetQueue ++= schedulable.getSortedTaskSetQueue
+      sortedTaskSetQueue ++= schedulable.getSortedTaskSetQueue.filter(_.isSchedulable)
     }
-    sortedTaskSetQueue.filter(_.isSchedulable)
+    sortedTaskSetQueue
   }
 
   def increaseRunningTasks(taskNum: Int): Unit = {
