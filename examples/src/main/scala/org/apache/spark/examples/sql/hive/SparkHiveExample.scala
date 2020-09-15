@@ -19,7 +19,7 @@ package org.apache.spark.examples.sql.hive
 // $example on:spark_hive$
 import java.io.File
 
-import org.apache.spark.sql.{Row, SaveMode, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
 // $example off:spark_hive$
 
 object SparkHiveExample {
@@ -106,7 +106,7 @@ object SparkHiveExample {
     // `USING hive`
     sql("CREATE TABLE hive_records(key int, value string) STORED AS PARQUET")
     // Save DataFrame to the Hive managed table
-    val df = spark.table("src")
+    val df: DataFrame = spark.table("src")
     df.write.mode(SaveMode.Overwrite).saveAsTable("hive_records")
     // After insertion, the Hive managed table has data now
     sql("SELECT * FROM hive_records").show()

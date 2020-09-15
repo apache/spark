@@ -44,9 +44,9 @@ import org.apache.spark.internal.Logging
 @JsonInclude(Include.NON_ABSENT)
 @JsonPropertyOrder(Array("id", "name", "parent"))
 private[spark] class RDDOperationScope(
-    val name: String,
-    val parent: Option[RDDOperationScope] = None,
-    val id: String = RDDOperationScope.nextScopeId().toString) {
+                                        val name: String,
+                                        val parent: Option[RDDOperationScope] = None,
+                                        val id: String = RDDOperationScope.nextScopeId().toString) {
 
   def toJson: String = {
     RDDOperationScope.jsonMapper.writeValueAsString(this)
@@ -95,20 +95,33 @@ private[spark] object RDDOperationScope extends Logging {
    * same as this method's.
    *
    * Note: Return statements are NOT allowed in body.
+   *
    */
   private[spark] def withScope[T](
-      sc: SparkContext,
-      allowNesting: Boolean = false)(body: => T): T = {
-    val ourMethodName = "withScope"
-    val callerMethodName = Thread.currentThread.getStackTrace()
-      .dropWhile(_.getMethodName != ourMethodName)
+                                   sc: SparkContext,
+                                   allowNesting: Boolean = false)(body: => T): T = {
+
+    ///设置跟踪堆的轨迹的scope名字
+    val ourMethodName: String = "withScope"
+
+
+    // 获取当前线程的
+    val callerMethodName: String = Thread.currentThread.getStackTrace()
+      //移除前几个匹配断言函数的元素，移除该线程下的方法名不是ourMethodName（withScope）的前几个(以ourMethodName分割)元素
+      .dropWhile(_.getMethodName != ourMethodName) //首先会调用 getStackTrace
+      // 获取线程中方法名不是 ourMethodName（withScope）的方法名
       .find(_.getMethodName != ourMethodName)
-      .map(_.getMethodName)
+      .map(_.getMethodName) // 最终得到的结果 就是具体的调用算子（map reduce ...）
       .getOrElse {
         // Log a warning just in case, but this should almost certainly never happen
+        // 异常日志 ，通常情况下不会触发
         logWarning("No valid method name for this RDD operation scope!")
         "N/A"
       }
+
+
+
+    //调用withScope 方法
     withScope[T](sc, callerMethodName, allowNesting, ignoreParent = false)(body)
   }
 
@@ -126,16 +139,18 @@ private[spark] object RDDOperationScope extends Logging {
    * Note: Return statements are NOT allowed in body.
    */
   private[spark] def withScope[T](
-      sc: SparkContext,
-      name: String,
-      allowNesting: Boolean,
-      ignoreParent: Boolean)(body: => T): T = {
+                                   sc: SparkContext, // sparkcontext
+                                   name: String, //方法名
+                                   allowNesting: Boolean, // 是否允许嵌套
+                                   ignoreParent: Boolean
+                                 )
+                                 (body: => T): T = {
     // Save the old scope to restore it later
-    val scopeKey = SparkContext.RDD_SCOPE_KEY
-    val noOverrideKey = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY
-    val oldScopeJson = sc.getLocalProperty(scopeKey)
-    val oldScope = Option(oldScopeJson).map(RDDOperationScope.fromJson)
-    val oldNoOverride = sc.getLocalProperty(noOverrideKey)
+    val scopeKey: String = SparkContext.RDD_SCOPE_KEY
+    val noOverrideKey: String = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY
+    val oldScopeJson: String = sc.getLocalProperty(scopeKey)
+    val oldScope: Option[RDDOperationScope] = Option(oldScopeJson).map(RDDOperationScope.fromJson)
+    val oldNoOverride: String = sc.getLocalProperty(noOverrideKey)
     try {
       if (ignoreParent) {
         // Ignore all parent settings and scopes and start afresh with our own root scope

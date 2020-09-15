@@ -47,7 +47,7 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
   override lazy val deterministic: Boolean = false
 
   override def update(buffer: T, input: InternalRow): T = {
-    val value = child.eval(input)
+    val value: Any = child.eval(input)
 
     // Do not allow null values. We follow the semantics of Hive's collect_list/collect_set here.
     // See: org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMkCollectionEvaluator

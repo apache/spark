@@ -141,7 +141,8 @@ class BernoulliCellSampler[T](lb: Double, ub: Double, complement: Boolean = fals
  * @tparam T item type
  */
 @DeveloperApi
-class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T] {
+class BernoulliSampler[T: ClassTag]
+(fraction: Double) extends RandomSampler[T, T] {
 
   /** epsilon slop to avoid failure from floating point jitter */
   require(

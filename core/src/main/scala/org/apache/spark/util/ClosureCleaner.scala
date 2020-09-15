@@ -198,8 +198,10 @@ private[spark] object ClosureCleaner extends Logging {
     writeReplace.invoke(closure).asInstanceOf[java.lang.invoke.SerializedLambda]
   }
 
+
   /**
    * Helper method to clean the given closure in place.
+   *
    *
    * The mechanism is to traverse the hierarchy of enclosing closures and null out any
    * references along the way that are not actually used by the starting closure, but are
@@ -236,8 +238,13 @@ private[spark] object ClosureCleaner extends Logging {
    * @param func the starting closure to clean
    * @param checkSerializable whether to verify that the closure is serializable after cleaning
    * @param cleanTransitively whether to clean enclosing closures transitively
-   * @param accessedFields a map from a class to a set of its fields that are accessed by
-   *                       the starting closure
+   * @param accessedFields    a map from a class to a set of its fields that are accessed by
+   *                          the starting closure
+   *
+   *
+   *
+   *
+   *
    */
   private def clean(
       func: AnyRef,
@@ -248,7 +255,7 @@ private[spark] object ClosureCleaner extends Logging {
     // most likely to be the case with 2.12, 2.13
     // so we check first
     // non LMF-closures should be less frequent from now on
-    val lambdaFunc = getSerializedLambda(func)
+    val lambdaFunc: Option[SerializedLambda] = getSerializedLambda(func)
 
     if (!isClosure(func.getClass) && lambdaFunc.isEmpty) {
       logDebug(s"Expected a closure; got ${func.getClass.getName}")
@@ -393,6 +400,10 @@ private[spark] object ClosureCleaner extends Logging {
     }
   }
 
+
+
+
+
   private def ensureSerializable(func: AnyRef) {
     try {
       if (SparkEnv.get != null) {
@@ -419,6 +430,10 @@ private[spark] object ClosureCleaner extends Logging {
     obj
   }
 }
+
+
+
+
 
 private[spark] class ReturnStatementInClosureException
   extends SparkException("Return statements aren't allowed in Spark closures")

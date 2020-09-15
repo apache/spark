@@ -445,6 +445,7 @@ trait Row extends Serializable {
     var i = 0
     while (i < n) {
       values.update(i, get(i))
+
       i += 1
     }
     values.toSeq
