@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, Im
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.types.StructType
@@ -472,6 +472,16 @@ class SessionCatalog(
     val table = formatTableName(name.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Some(db)))
+    externalCatalog.getTable(db, table)
+  }
+
+  /**
+   * Retrieve the metadata of a catalog identifier.
+   */
+  def getTableMetadata(ident: Identifier): CatalogTable = {
+    assert(ident.namespace.length == 1)
+    val db = formatDatabaseName(ident.namespace.head)
+    val table = formatTableName(ident.name)
     externalCatalog.getTable(db, table)
   }
 

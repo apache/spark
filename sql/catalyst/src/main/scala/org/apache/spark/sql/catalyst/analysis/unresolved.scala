@@ -45,7 +45,8 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
  */
 case class UnresolvedRelation(
     multipartIdentifier: Seq[String],
-    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
+    override val isStreaming: Boolean = false)
   extends LeafNode with NamedRelation {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -60,6 +61,14 @@ case class UnresolvedRelation(
 }
 
 object UnresolvedRelation {
+  def apply(
+      tableIdentifier: TableIdentifier,
+      extraOptions: CaseInsensitiveStringMap,
+      isStreaming: Boolean): UnresolvedRelation = {
+    UnresolvedRelation(
+      tableIdentifier.database.toSeq :+ tableIdentifier.table, extraOptions, isStreaming)
+  }
+
   def apply(tableIdentifier: TableIdentifier): UnresolvedRelation =
     UnresolvedRelation(tableIdentifier.database.toSeq :+ tableIdentifier.table)
 }

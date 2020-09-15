@@ -815,3 +815,26 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     }
   }
 }
+
+class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
+  test("table API") {
+    withTempDir { tempDir =>
+      val tblName = "my_table"
+      val dir = tempDir.getAbsolutePath
+      withTable(tblName) {
+        spark.range(3).write.format("parquet").option("path", dir).saveAsTable(tblName)
+
+        testStream(spark.readStream.table(tblName))(
+          ProcessAllAvailable(),
+          CheckAnswer(Row(0), Row(1), Row(2))
+        )
+      }
+    }
+  }
+
+  test("read non-exist table") {
+    intercept[AnalysisException] {
+      spark.readStream.table("not_exist_table")
+    }.message.contains("Table not found")
+  }
+}

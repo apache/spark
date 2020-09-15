@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableProvider}
@@ -473,6 +474,23 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    */
   def parquet(path: String): DataFrame = {
     format("parquet").load(path)
+  }
+
+  /**
+   * Define a Streaming DataFrame on a Table. The DataSource corresponding to the table should
+   * support streaming mode.
+   * @param tableName The name of the table
+   * @since 2.4.0
+   */
+  def table(tableName: String): DataFrame = {
+    require(tableName != null, "The table name can't be null")
+    val identifier = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    Dataset.ofRows(
+      sparkSession,
+      UnresolvedRelation(
+        identifier,
+        new CaseInsensitiveStringMap(extraOptions.toMap.asJava),
+        isStreaming = true))
   }
 
   /**

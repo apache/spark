@@ -78,6 +78,22 @@ class RateStreamProviderSuite extends StreamTest {
     )
   }
 
+  test("stream table API support") {
+    val tblName = "my_table"
+    withTable(tblName) {
+      spark.readStream
+        .format("rate")
+        .option("rowsPerSecond", "10")
+        .option("useManualClock", "true")
+        .load().createOrReplaceTempView(tblName)
+
+      testStream(spark.readStream.table(tblName))(
+        AdvanceRateManualClock(seconds = 1),
+        CheckLastBatch((0 until 10).map(v => new java.sql.Timestamp(v * 100L) -> v): _*)
+      )
+    }
+  }
+
   test("microbatch - restart") {
     val input = spark.readStream
       .format("rate")

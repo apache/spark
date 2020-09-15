@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog._
@@ -219,6 +220,7 @@ class Analyzer(
       ResolveInsertInto ::
       ResolveRelations ::
       ResolveTables ::
+      ResolveStreamingRelation ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
       ResolveDeserializer ::
@@ -846,9 +848,9 @@ class Analyzer(
    */
   object ResolveTempViews extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case u @ UnresolvedRelation(ident, _) =>
+      case u @ UnresolvedRelation(ident, _, _) =>
         lookupTempView(ident).getOrElse(u)
-      case i @ InsertIntoStatement(UnresolvedRelation(ident, _), _, _, _, _) =>
+      case i @ InsertIntoStatement(UnresolvedRelation(ident, _, _), _, _, _, _) =>
         lookupTempView(ident)
           .map(view => i.copy(table = view))
           .getOrElse(i)
@@ -894,7 +896,7 @@ class Analyzer(
    */
   object ResolveTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
-      case u: UnresolvedRelation =>
+      case u @ UnresolvedRelation(_, _, false) =>
         lookupV2Relation(u.multipartIdentifier, u.options)
           .map { rel =>
             val ident = rel.identifier.get
@@ -923,6 +925,19 @@ class Analyzer(
 
       case u: UnresolvedV2Relation =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
+
+      case u @ UnresolvedRelation(_, extraOptions, true) =>
+        val r = expandRelationName(u.multipartIdentifier) match {
+          case NonSessionCatalogAndIdentifier(catalog, ident) =>
+            CatalogV2Util.loadTable(catalog, ident) match {
+              case Some(table) =>
+                Some(StreamingRelationV2(
+                  None, table.name, table, extraOptions, table.schema.toAttributes, None))
+              case None => None
+            }
+          case _ => None
+        }
+        r.getOrElse(u)
     }
 
     /**
@@ -940,6 +955,48 @@ class Analyzer(
           }
         case _ => None
       }
+  }
+
+  /**
+   * Replace [[UnresolvedRelation]] with concrete streaming logical plans.
+   */
+  object ResolveStreamingRelation extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case u: UnresolvedRelation if u.isStreaming =>
+        val res = lookupStreamingRelation(u.multipartIdentifier, u.options)
+        res.getOrElse(u)
+    }
+
+    // Look up a relation from the session catalog with the following logic:
+    // 1) If the resolved catalog is not session catalog, return None.
+    // 2) If a relation is not found in the catalog, return None.
+    // 3) If a v1 table is found, create a v1 relation. Otherwise, pass the table to
+    //    UnresolvedStreamingRelation.
+    private def lookupStreamingRelation(
+      identifier: Seq[String],
+      extraOptions: CaseInsensitiveStringMap): Option[LogicalPlan] = {
+
+      expandRelationName(identifier) match {
+        case SessionCatalogAndIdentifier(catalog, ident) =>
+          lazy val loaded = CatalogV2Util.loadTable(catalog, ident).map {
+            case v1Table: V1Table =>
+              UnresolvedCatalogRelation(v1Table.v1Table, extraOptions, isStreaming = true)
+            case table =>
+              val tableMeta = v1SessionCatalog.getTableMetadata(ident)
+              StreamingRelationV2(
+                None, table.name, table, extraOptions, table.schema.toAttributes,
+                Some(UnresolvedCatalogRelation(tableMeta, isStreaming = true)))
+          }
+          val key = catalog.name +: ident.namespace :+ ident.name
+          AnalysisContext.get.relationCache.get(key).map(_.transform {
+            case multi: MultiInstanceRelation => multi.newInstance()
+          }).orElse {
+            loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
+            loaded
+          }
+        case _ => None
+      }
+    }
   }
 
   /**
@@ -976,7 +1033,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case i @ InsertIntoStatement(table, _, _, _, _) if i.query.resolved =>
         val relation = table match {
-          case u: UnresolvedRelation =>
+          case u @ UnresolvedRelation(_, _, false) =>
             lookupRelation(u.multipartIdentifier, u.options).getOrElse(u)
           case other => other
         }
@@ -987,7 +1044,7 @@ class Analyzer(
           case other => i.copy(table = other)
         }
 
-      case u: UnresolvedRelation =>
+      case u @ UnresolvedRelation(_, _, false) =>
         lookupRelation(u.multipartIdentifier, u.options).map(resolveViews).getOrElse(u)
 
       case u @ UnresolvedTable(identifier) =>
