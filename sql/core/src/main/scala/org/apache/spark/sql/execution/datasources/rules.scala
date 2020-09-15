@@ -406,8 +406,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     val partitionsTrackedByCatalog = catalogTable.isDefined &&
       catalogTable.get.partitionColumnNames.nonEmpty &&
       catalogTable.get.tracksPartitionsInCatalog
-    if (partitionsTrackedByCatalog &&
-      normalizedPartSpec.nonEmpty) {
+    if (partitionsTrackedByCatalog && normalizedPartSpec.nonEmpty) {
       // empty partition column value
       if (normalizedPartSpec.filter(_._2.isDefined).exists(_._2.get.isEmpty)) {
         val spec = normalizedPartSpec.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
