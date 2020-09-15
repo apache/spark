@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -45,7 +46,11 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 private[sql] object OrcFileFormat {
   private def checkFieldName(name: String): Unit = {
     try {
-      TypeDescription.fromString(s"struct<$name:int>")
+      if (SQLConf.get.getConfString("spark.sql.orc.column.allowSpecialChar", "false").toBoolean) {
+        TypeDescription.fromString(s"struct<`$name`:int>")
+      } else {
+        TypeDescription.fromString(s"struct<$name:int>")
+      }
     } catch {
       case _: IllegalArgumentException =>
         throw new AnalysisException(

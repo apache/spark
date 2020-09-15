@@ -2242,6 +2242,29 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
+  test("SPARK-32889 ORC table column name supports special characters like $ eg.") {
+    Seq("$").foreach { name =>
+      Seq("ORC").foreach { source =>
+        withSQLConf("spark.sql.orc.column.allowSpecialChar" -> "true") {
+          Seq(s"CREATE TABLE t32889(`col$name` INT) USING $source",
+              s"CREATE TABLE t32889 STORED AS $source AS SELECT 1 `col$name`",
+              s"CREATE TABLE t32889 USING $source AS SELECT 1 `col$name`",
+              s"CREATE TABLE t32889(`col$name` INT) USING hive OPTIONS (fileFormat '$source')")
+          .foreach { command =>
+            withTable("t32889") {
+              sql(command)
+            }
+          }
+
+          withTable("t32889") {
+            sql(s"CREATE TABLE t32889(`col` INT) USING $source")
+            sql(s"ALTER TABLE t32889 ADD COLUMNS(`col$name` INT)")
+          }
+        }
+      }
+    }
+  }
+
   Seq("orc", "parquet").foreach { format =>
     test(s"SPARK-18355 Read data from a hive table with a new column - $format") {
       val client =
