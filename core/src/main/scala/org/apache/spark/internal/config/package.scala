@@ -1415,10 +1415,9 @@ package object config {
 
   private[spark] val SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED =
     ConfigBuilder("spark.shuffle.readHostLocalDisk")
-      .doc(s"If enabled (and `${SHUFFLE_USE_OLD_FETCH_PROTOCOL.key}` is disabled and external " +
-        s"shuffle `${SHUFFLE_SERVICE_ENABLED.key}` is enabled), shuffle " +
-        "blocks requested from those block managers which are running on the same host are read " +
-        "from the disk directly instead of being fetched as remote blocks over the network.")
+      .doc(s"If enabled (and `${SHUFFLE_USE_OLD_FETCH_PROTOCOL.key}` is disabled, shuffle " +
+        "blocks requested from those block managers which are running on the same host are " +
+        "read from the disk directly instead of being fetched as remote blocks over the network.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
@@ -1889,16 +1888,6 @@ package object config {
       .version("3.1.0")
       .timeConf(TimeUnit.SECONDS)
       .createOptional
-
-  private[spark] val DECOMMISSIONED_EXECUTORS_REMEMBER_AFTER_REMOVAL_TTL =
-    ConfigBuilder("spark.executor.decommission.removed.infoCacheTTL")
-      .doc("Duration for which a decommissioned executor's information will be kept after its" +
-        "removal. Keeping the decommissioned info after removal helps pinpoint fetch failures to " +
-        "decommissioning even after the mapper executor has been decommissioned. This allows " +
-        "eager recovery from fetch failures caused by decommissioning, increasing job robustness.")
-      .version("3.1.0")
-      .timeConf(TimeUnit.SECONDS)
-      .createWithDefaultString("5m")
 
   private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
     .doc("Staging directory used while submitting applications.")

@@ -119,7 +119,7 @@ Condition : (isnotnull(ss_item_sk#2) AND isnotnull(ss_sold_date_sk#1))
 Output [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_class_id), IsNotNull(i_brand_id), IsNotNull(i_category_id)]
+PushedFilters: [IsNotNull(i_brand_id), IsNotNull(i_class_id), IsNotNull(i_category_id)]
 ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_class_id:int,i_category_id:int>
 
 (5) ColumnarToRow [codegen id : 11]
@@ -127,7 +127,7 @@ Input [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
 
 (6) Filter [codegen id : 11]
 Input [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
-Condition : ((isnotnull(i_class_id#7) AND isnotnull(i_brand_id#6)) AND isnotnull(i_category_id#8))
+Condition : ((isnotnull(i_brand_id#6) AND isnotnull(i_class_id#7)) AND isnotnull(i_category_id#8))
 
 (7) Scan parquet default.store_sales
 Output [2]: [ss_sold_date_sk#1, ss_item_sk#2]
@@ -147,7 +147,7 @@ Condition : (isnotnull(ss_item_sk#2) AND isnotnull(ss_sold_date_sk#1))
 Output [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_brand_id), IsNotNull(i_category_id), IsNotNull(i_class_id)]
+PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_brand_id), IsNotNull(i_class_id), IsNotNull(i_category_id)]
 ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_class_id:int,i_category_id:int>
 
 (11) ColumnarToRow [codegen id : 1]
@@ -155,7 +155,7 @@ Input [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
 
 (12) Filter [codegen id : 1]
 Input [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
-Condition : (((isnotnull(i_item_sk#5) AND isnotnull(i_brand_id#6)) AND isnotnull(i_category_id#8)) AND isnotnull(i_class_id#7))
+Condition : (((isnotnull(i_item_sk#5) AND isnotnull(i_brand_id#6)) AND isnotnull(i_class_id#7)) AND isnotnull(i_category_id#8))
 
 (13) BroadcastExchange
 Input [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
@@ -368,7 +368,7 @@ Join condition: None
 Output [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_class_id), IsNotNull(i_category_id), IsNotNull(i_brand_id)]
+PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_brand_id), IsNotNull(i_class_id), IsNotNull(i_category_id)]
 ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_class_id:int,i_category_id:int>
 
 (59) ColumnarToRow [codegen id : 23]
@@ -376,7 +376,7 @@ Input [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
 
 (60) Filter [codegen id : 23]
 Input [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
-Condition : (((isnotnull(i_item_sk#5) AND isnotnull(i_class_id#7)) AND isnotnull(i_category_id#8)) AND isnotnull(i_brand_id#6))
+Condition : (((isnotnull(i_item_sk#5) AND isnotnull(i_brand_id#6)) AND isnotnull(i_class_id#7)) AND isnotnull(i_category_id#8))
 
 (61) ReusedExchange [Reuses operator id: 56]
 Output [1]: [ss_item_sk#25]
@@ -719,7 +719,7 @@ Subquery:2 Hosting operator id = 68 Hosting Expression = Subquery scalar-subquer
 Output [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), IsNotNull(d_dom), EqualTo(d_year,2000), EqualTo(d_moy,12), EqualTo(d_dom,11)]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), IsNotNull(d_dom), EqualTo(d_year,2000), EqualTo(d_moy,12), EqualTo(d_dom,11)]
 ReadSchema: struct<d_week_seq:int,d_year:int,d_moy:int,d_dom:int>
 
 (128) ColumnarToRow [codegen id : 1]
@@ -727,7 +727,7 @@ Input [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
 
 (129) Filter [codegen id : 1]
 Input [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
-Condition : (((((isnotnull(d_moy#86) AND isnotnull(d_year#11)) AND isnotnull(d_dom#87)) AND (d_year#11 = 2000)) AND (d_moy#86 = 12)) AND (d_dom#87 = 11))
+Condition : (((((isnotnull(d_year#11) AND isnotnull(d_moy#86)) AND isnotnull(d_dom#87)) AND (d_year#11 = 2000)) AND (d_moy#86 = 12)) AND (d_dom#87 = 11))
 
 (130) Project [codegen id : 1]
 Output [1]: [d_week_seq#28]
@@ -746,7 +746,7 @@ Subquery:4 Hosting operator id = 88 Hosting Expression = Subquery scalar-subquer
 Output [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), IsNotNull(d_dom), EqualTo(d_year,1999), EqualTo(d_moy,12), EqualTo(d_dom,11)]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), IsNotNull(d_dom), EqualTo(d_year,1999), EqualTo(d_moy,12), EqualTo(d_dom,11)]
 ReadSchema: struct<d_week_seq:int,d_year:int,d_moy:int,d_dom:int>
 
 (132) ColumnarToRow [codegen id : 1]
@@ -754,7 +754,7 @@ Input [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
 
 (133) Filter [codegen id : 1]
 Input [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
-Condition : (((((isnotnull(d_moy#86) AND isnotnull(d_year#11)) AND isnotnull(d_dom#87)) AND (d_year#11 = 1999)) AND (d_moy#86 = 12)) AND (d_dom#87 = 11))
+Condition : (((((isnotnull(d_year#11) AND isnotnull(d_moy#86)) AND isnotnull(d_dom#87)) AND (d_year#11 = 1999)) AND (d_moy#86 = 12)) AND (d_dom#87 = 11))
 
 (134) Project [codegen id : 1]
 Output [1]: [d_week_seq#28]

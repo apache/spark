@@ -2407,6 +2407,19 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
       }
     }
   }
+
+  test("SPARK-32810: CSV data source should be able to read files with " +
+    "escaped glob metacharacter in the paths") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      // test CSV writer / reader without specifying schema
+      val csvTableName = "[abc]"
+      spark.range(3).coalesce(1).write.csv(s"$basePath/$csvTableName")
+      val readback = spark.read
+        .csv(s"$basePath/${"""(\[|\]|\{|\})""".r.replaceAllIn(csvTableName, """\\$1""")}")
+      assert(readback.collect sameElements Array(Row("0"), Row("1"), Row("2")))
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {

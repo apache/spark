@@ -296,7 +296,7 @@ object SparkBuild extends PomBuild {
       var failed = 0
       analysis.infos.allInfos.foreach { case (k, i) =>
         i.reportedProblems foreach { p =>
-          val deprecation = p.message.contains("is deprecated")
+          val deprecation = p.message.contains("deprecated")
 
           if (!deprecation) {
             failed = failed + 1

@@ -98,7 +98,7 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
       /** Verify that a particular executor was scaled down. */
       def verifyScaledDownExec(expectedExec: Option[String]): Unit = {
         if (expectedExec.nonEmpty) {
-          val decomInfo = ExecutorDecommissionInfo("spark scale down", false)
+          val decomInfo = ExecutorDecommissionInfo("spark scale down", None)
           if (decommissioning) {
             verify(allocationClient, times(1)).decommissionExecutor(
               meq(expectedExec.get), meq(decomInfo), meq(true))

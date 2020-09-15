@@ -1224,4 +1224,18 @@ class AdaptiveQueryExecSuite
       })
     }
   }
+
+  test("SPARK-32753: Only copy tags to node with no tags") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withTempView("v1") {
+        spark.range(10).union(spark.range(10)).createOrReplaceTempView("v1")
+
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT id FROM v1 GROUP BY id DISTRIBUTE BY id")
+        assert(collect(adaptivePlan) {
+          case s: ShuffleExchangeExec => s
+        }.length == 1)
+      }
+    }
+  }
 }

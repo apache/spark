@@ -155,7 +155,7 @@ Arguments: HashedRelationBroadcastMode(List(input[3, string, true]),false), [id=
 Output [3]: [ca_state#25, ca_zip#26, ca_country#27]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [IsNotNull(ca_zip), IsNotNull(ca_country)]
+PushedFilters: [IsNotNull(ca_country), IsNotNull(ca_zip)]
 ReadSchema: struct<ca_state:string,ca_zip:string,ca_country:string>
 
 (25) ColumnarToRow
@@ -163,7 +163,7 @@ Input [3]: [ca_state#25, ca_zip#26, ca_country#27]
 
 (26) Filter
 Input [3]: [ca_state#25, ca_zip#26, ca_country#27]
-Condition : (isnotnull(ca_zip#26) AND isnotnull(ca_country#27))
+Condition : (isnotnull(ca_country#27) AND isnotnull(ca_zip#26))
 
 (27) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [s_zip#23]
@@ -176,11 +176,11 @@ Input [7]: [s_store_sk#19, s_store_name#20, s_state#22, s_zip#23, ca_state#25, c
 
 (29) BroadcastExchange
 Input [5]: [s_store_sk#19, s_store_name#20, s_state#22, ca_state#25, ca_country#27]
-Arguments: HashedRelationBroadcastMode(List(upper(input[4, string, true]), input[0, int, true]),false), [id=#28]
+Arguments: HashedRelationBroadcastMode(List(input[0, int, true], upper(input[4, string, true])),false), [id=#28]
 
 (30) BroadcastHashJoin [codegen id : 8]
-Left keys [2]: [c_birth_country#17, ss_store_sk#3]
-Right keys [2]: [upper(ca_country#27), s_store_sk#19]
+Left keys [2]: [ss_store_sk#3, c_birth_country#17]
+Right keys [2]: [s_store_sk#19, upper(ca_country#27)]
 Join condition: None
 
 (31) Project [codegen id : 8]
@@ -452,11 +452,11 @@ Input [16]: [s_store_name#20, s_state#22, s_zip#23, ss_item_sk#1, ss_customer_sk
 
 (77) Exchange
 Input [14]: [s_store_name#20, s_state#22, s_zip#23, ss_item_sk#1, ss_ticket_number#4, ss_net_paid#5, i_current_price#7, i_size#8, i_color#9, i_units#10, i_manager_id#11, c_first_name#15, c_last_name#16, c_birth_country#17]
-Arguments: hashpartitioning(s_zip#23, c_birth_country#17, 5), true, [id=#53]
+Arguments: hashpartitioning(c_birth_country#17, s_zip#23, 5), true, [id=#53]
 
 (78) Sort [codegen id : 11]
 Input [14]: [s_store_name#20, s_state#22, s_zip#23, ss_item_sk#1, ss_ticket_number#4, ss_net_paid#5, i_current_price#7, i_size#8, i_color#9, i_units#10, i_manager_id#11, c_first_name#15, c_last_name#16, c_birth_country#17]
-Arguments: [s_zip#23 ASC NULLS FIRST, c_birth_country#17 ASC NULLS FIRST], false, 0
+Arguments: [c_birth_country#17 ASC NULLS FIRST, s_zip#23 ASC NULLS FIRST], false, 0
 
 (79) Scan parquet default.customer_address
 Output [3]: [ca_state#25, ca_zip#26, ca_country#27]
@@ -474,15 +474,15 @@ Condition : (isnotnull(ca_country#27) AND isnotnull(ca_zip#26))
 
 (82) Exchange
 Input [3]: [ca_state#25, ca_zip#26, ca_country#27]
-Arguments: hashpartitioning(ca_zip#26, upper(ca_country#27), 5), true, [id=#54]
+Arguments: hashpartitioning(upper(ca_country#27), ca_zip#26, 5), true, [id=#54]
 
 (83) Sort [codegen id : 13]
 Input [3]: [ca_state#25, ca_zip#26, ca_country#27]
-Arguments: [ca_zip#26 ASC NULLS FIRST, upper(ca_country#27) ASC NULLS FIRST], false, 0
+Arguments: [upper(ca_country#27) ASC NULLS FIRST, ca_zip#26 ASC NULLS FIRST], false, 0
 
 (84) SortMergeJoin [codegen id : 14]
-Left keys [2]: [s_zip#23, c_birth_country#17]
-Right keys [2]: [ca_zip#26, upper(ca_country#27)]
+Left keys [2]: [c_birth_country#17, s_zip#23]
+Right keys [2]: [upper(ca_country#27), ca_zip#26]
 Join condition: None
 
 (85) Project [codegen id : 14]

@@ -205,7 +205,7 @@ function sphinx_test {
     fi
 
     # TODO(SPARK-32666): Install ipython in Jenkins machines
-    PYTHON_HAS_IPYTHON=$("$PYTHON_EXECUTABLE" -c 'import importlib.util; print(importlib.util.find_spec("ipython") is not None)')
+    PYTHON_HAS_IPYTHON=$("$PYTHON_EXECUTABLE" -c 'import importlib.util; print(importlib.util.find_spec("IPython") is not None)')
     if [[ "$PYTHON_HAS_IPYTHON" == "False" ]]; then
         echo "$PYTHON_EXECUTABLE does not have ipython installed. Skipping Sphinx build for now."
         echo

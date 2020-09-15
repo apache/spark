@@ -75,7 +75,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 
-  override lazy val validConstraints: Set[Expression] =
+  override lazy val validConstraints: ExpressionSet =
     getAllValidConstraints(projectList)
 }
 
@@ -143,10 +143,10 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   override def maxRows: Option[Long] = child.maxRows
 
-  override protected lazy val validConstraints: Set[Expression] = {
+  override protected lazy val validConstraints: ExpressionSet = {
     val predicates = splitConjunctivePredicates(condition)
       .filterNot(SubqueryExpression.hasCorrelatedSubquery)
-    child.constraints.union(predicates.toSet)
+    child.constraints.union(ExpressionSet(predicates))
   }
 }
 
@@ -154,9 +154,9 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
 
   def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
-  protected def leftConstraints: Set[Expression] = left.constraints
+  protected def leftConstraints: ExpressionSet = left.constraints
 
-  protected def rightConstraints: Set[Expression] = {
+  protected def rightConstraints: ExpressionSet = {
     require(left.output.size == right.output.size)
     val attributeRewrites = AttributeMap(right.output.zip(left.output))
     right.constraints.map(_ transform {
@@ -188,7 +188,7 @@ case class Intersect(
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
 
-  override protected lazy val validConstraints: Set[Expression] =
+  override protected lazy val validConstraints: ExpressionSet =
     leftConstraints.union(rightConstraints)
 
   override def maxRows: Option[Long] = {
@@ -208,7 +208,7 @@ case class Except(
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
 
-  override protected lazy val validConstraints: Set[Expression] = leftConstraints
+  override protected lazy val validConstraints: ExpressionSet = leftConstraints
 }
 
 /** Factory for constructing new `Union` nodes. */
@@ -292,7 +292,7 @@ case class Union(
   private def rewriteConstraints(
       reference: Seq[Attribute],
       original: Seq[Attribute],
-      constraints: Set[Expression]): Set[Expression] = {
+      constraints: ExpressionSet): ExpressionSet = {
     require(reference.size == original.size)
     val attributeRewrites = AttributeMap(original.zip(reference))
     constraints.map(_ transform {
@@ -300,7 +300,7 @@ case class Union(
     })
   }
 
-  private def merge(a: Set[Expression], b: Set[Expression]): Set[Expression] = {
+  private def merge(a: ExpressionSet, b: ExpressionSet): ExpressionSet = {
     val common = a.intersect(b)
     // The constraint with only one reference could be easily inferred as predicate
     // Grouping the constraints by it's references so we can combine the constraints with same
@@ -314,7 +314,7 @@ case class Union(
     common ++ others
   }
 
-  override protected lazy val validConstraints: Set[Expression] = {
+  override protected lazy val validConstraints: ExpressionSet = {
     children
       .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
       .reduce(merge(_, _))
@@ -346,15 +346,15 @@ case class Join(
     }
   }
 
-  override protected lazy val validConstraints: Set[Expression] = {
+  override protected lazy val validConstraints: ExpressionSet = {
     joinType match {
       case _: InnerLike if condition.isDefined =>
         left.constraints
           .union(right.constraints)
-          .union(splitConjunctivePredicates(condition.get).toSet)
+          .union(ExpressionSet(splitConjunctivePredicates(condition.get)))
       case LeftSemi if condition.isDefined =>
         left.constraints
-          .union(splitConjunctivePredicates(condition.get).toSet)
+          .union(ExpressionSet(splitConjunctivePredicates(condition.get)))
       case j: ExistenceJoin =>
         left.constraints
       case _: InnerLike =>
@@ -366,7 +366,7 @@ case class Join(
       case RightOuter =>
         right.constraints
       case FullOuter =>
-        Set.empty[Expression]
+        ExpressionSet()
     }
   }
 
@@ -588,7 +588,7 @@ case class Aggregate(
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
-  override lazy val validConstraints: Set[Expression] = {
+  override lazy val validConstraints: ExpressionSet = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
     getAllValidConstraints(nonAgg)
   }
@@ -717,7 +717,7 @@ case class Expand(
 
   // This operator can reuse attributes (for example making them null when doing a roll up) so
   // the constraints of the child may no longer be valid.
-  override protected lazy val validConstraints: Set[Expression] = Set.empty[Expression]
+  override protected lazy val validConstraints: ExpressionSet = ExpressionSet()
 }
 
 /**

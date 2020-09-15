@@ -573,7 +573,7 @@ object SQLConf {
       " a heavily underestimated result.")
     .version("2.3.1")
     .doubleConf
-    .checkValue(_ > 0, "the value of fileDataSizeFactor must be greater than 0")
+    .checkValue(_ > 0, "the value of fileCompressionFactor must be greater than 0")
     .createWithDefault(1.0)
 
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
@@ -2728,6 +2728,18 @@ object SQLConf {
         "DataFrameReader.load(), DataFrameWriter.save(), DataStreamReader.load(), or " +
         "DataStreamWriter.start(). Also, \"path\" option is added to the overall paths if " +
         "multiple path parameters are passed to DataFrameReader.load()")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_EXTRA_OPTIONS_BEHAVIOR =
+    buildConf("spark.sql.legacy.extraOptionsBehavior.enabled")
+      .internal()
+      .doc("When true, the extra options will be ignored for DataFrameReader.table(). If set it " +
+        "to false, which is the default, Spark will check if the extra options have the same " +
+        "key, but the value is different with the table serde properties. If the check passes, " +
+        "the extra options will be merged with the serde properties as the scan options. " +
+        "Otherwise, an exception will be thrown.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)

@@ -951,6 +951,9 @@ private[spark] class TaskSetManager(
     null
   }
 
+  override def isSchedulable: Boolean = !isZombie &&
+    (pendingTasks.all.nonEmpty || pendingSpeculatableTasks.all.nonEmpty)
+
   override def addSchedulable(schedulable: Schedulable): Unit = {}
 
   override def removeSchedulable(schedulable: Schedulable): Unit = {}
@@ -988,7 +991,7 @@ private[spark] class TaskSetManager(
     for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
       val exitCausedByApp: Boolean = reason match {
         case exited: ExecutorExited => exited.exitCausedByApp
-        case ExecutorKilled => false
+        case ExecutorKilled | ExecutorDecommission(_) => false
         case ExecutorProcessLost(_, _, false) => false
         case _ => true
       }

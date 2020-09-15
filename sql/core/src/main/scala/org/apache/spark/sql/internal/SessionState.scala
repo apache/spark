@@ -136,9 +136,10 @@ private[sql] object SessionState {
 @Unstable
 class SessionStateBuilder(
     session: SparkSession,
-    parentState: Option[SessionState] = None)
-  extends BaseSessionStateBuilder(session, parentState) {
-  override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _)
+    parentState: Option[SessionState],
+    options: Map[String, String])
+  extends BaseSessionStateBuilder(session, parentState, options) {
+  override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _, Map.empty)
 }
 
 /**
