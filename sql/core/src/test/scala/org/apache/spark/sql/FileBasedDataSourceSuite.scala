@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils.{negativeInt, positiveInt}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.execution.SimpleMode
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileScan}
@@ -965,6 +966,28 @@ class FileBasedDataSourceSuite extends QueryTest
             sources.GreaterThan("id", 30)))
           checkPushedFilters(format, df.where(lit(100) >= 'id), Array(sources.IsNotNull("id"),
             sources.LessThanOrEqual("id", 100)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-32827: Set max metadata string length") {
+    withTempDir { dir =>
+      val tableName = "t"
+      val path = s"${dir.getCanonicalPath}/$tableName"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName(c INT) USING PARQUET LOCATION '$path'")
+        withSQLConf(SQLConf.MAX_METADATA_STRING_LENGTH.key -> "5") {
+          val explain = spark.table(tableName).queryExecution.explainString(SimpleMode)
+          assert(!explain.contains(path))
+          // metadata has abbreviated by ...
+          assert(explain.contains("..."))
+        }
+
+        withSQLConf(SQLConf.MAX_METADATA_STRING_LENGTH.key -> "1000") {
+          val explain = spark.table(tableName).queryExecution.explainString(SimpleMode)
+          assert(explain.contains(path))
+          assert(!explain.contains("..."))
         }
       }
     }
