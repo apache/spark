@@ -480,7 +480,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * Define a Streaming DataFrame on a Table. The DataSource corresponding to the table should
    * support streaming mode.
    * @param tableName The name of the table
-   * @since 2.4.0
+   * @since 3.1.0
    */
   def table(tableName: String): DataFrame = {
     require(tableName != null, "The table name can't be null")

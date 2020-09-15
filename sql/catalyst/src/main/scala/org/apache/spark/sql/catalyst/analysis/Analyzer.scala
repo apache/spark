@@ -973,9 +973,8 @@ class Analyzer(
     // 3) If a v1 table is found, create a v1 relation. Otherwise, pass the table to
     //    UnresolvedStreamingRelation.
     private def lookupStreamingRelation(
-      identifier: Seq[String],
-      extraOptions: CaseInsensitiveStringMap): Option[LogicalPlan] = {
-
+        identifier: Seq[String],
+        extraOptions: CaseInsensitiveStringMap): Option[LogicalPlan] = {
       expandRelationName(identifier) match {
         case SessionCatalogAndIdentifier(catalog, ident) =>
           lazy val loaded = CatalogV2Util.loadTable(catalog, ident).map {
