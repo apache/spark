@@ -18,12 +18,13 @@
 package org.apache.spark.sql.types
 
 import java.lang.{Long => JLong}
-import java.math.{BigInteger, MathContext, RoundingMode}
+import java.math.{BigDecimal => JavaBigDecimal, BigInteger, MathContext, RoundingMode}
 
 import scala.util.Try
 
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A mutable implementation of BigDecimal that can hold a Long if values are small enough.
@@ -583,6 +584,50 @@ object Decimal {
       case k: scala.math.BigInt => apply(k)
       case l: java.math.BigInteger => apply(l)
       case d: Decimal => d
+    }
+  }
+
+  private def stringToJavaBigDecimal(str: UTF8String): (JavaBigDecimal, Int) = {
+    // According the benchmark test,  `s.toString.trim` is much faster than `s.trim.toString`.
+    // Please refer to https://github.com/apache/spark/pull/26640
+    val bigDecimal = new JavaBigDecimal(str.toString.trim)
+    val precision = if (bigDecimal.scale < 0) {
+      bigDecimal.precision - bigDecimal.scale
+    } else {
+      bigDecimal.precision
+    }
+    (bigDecimal, precision)
+  }
+
+  def fromString(str: UTF8String): Decimal = {
+    try {
+      val (bigDecimal, precision) = stringToJavaBigDecimal(str)
+      // We fast fail because constructing a very large JavaBigDecimal to Decimal very slow.
+      // For example: Decimal("6.0790316E+25569151")
+      if (precision > DecimalType.MAX_PRECISION) {
+        null
+      } else {
+        Decimal(bigDecimal)
+      }
+    } catch {
+      case _: NumberFormatException =>
+        null
+    }
+  }
+
+  def fromStringANSI(str: UTF8String): Decimal = {
+    try {
+      val (bigDecimal, precision) = stringToJavaBigDecimal(str)
+      // We fast fail because constructing a very large JavaBigDecimal to Decimal very slow.
+      // For example: Decimal("6.0790316E+25569151")
+      if (precision > DecimalType.MAX_PRECISION) {
+        throw new ArithmeticException(s"out of decimal type range: $str")
+      } else {
+        Decimal(bigDecimal)
+      }
+    } catch {
+      case _: NumberFormatException =>
+        throw new NumberFormatException(s"invalid input syntax for type numeric: $str")
     }
   }
 

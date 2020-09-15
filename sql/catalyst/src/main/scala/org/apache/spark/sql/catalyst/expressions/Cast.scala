@@ -646,7 +646,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
    * NOTE: this modifies `value` in-place, so don't call it on external data.
    */
   private[this] def changePrecision(value: Decimal, decimalType: DecimalType): Decimal = {
-    if (value.changePrecision(decimalType.precision, decimalType.scale)) {
+    if (value != null && value.changePrecision(decimalType.precision, decimalType.scale)) {
       value
     } else {
       if (!ansiEnabled) {
@@ -655,41 +655,6 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         throw new ArithmeticException(s"${value.toDebugString} cannot be represented as " +
           s"Decimal(${decimalType.precision}, ${decimalType.scale}).")
       }
-    }
-  }
-
-  private[this] def stringToDecimal(str: UTF8String, decimalType: DecimalType): Decimal = {
-    val bigDecimal = try {
-      // According the benchmark test,  `s.toString.trim` is much faster than `s.trim.toString`.
-      // Please refer to https://github.com/apache/spark/pull/26640
-      new JavaBigDecimal(str.toString.trim)
-    } catch {
-      case _: NumberFormatException =>
-        if (ansiEnabled) {
-          throw new NumberFormatException(s"invalid input syntax for type numeric: $str")
-        } else {
-          null
-        }
-    }
-
-    if (bigDecimal != null) {
-      val precision = if (bigDecimal.scale < 0) {
-        bigDecimal.precision - bigDecimal.scale
-      } else {
-        bigDecimal.precision
-      }
-
-      if (precision > DecimalType.MAX_PRECISION) {
-        if (ansiEnabled) {
-          throw new ArithmeticException(s"out of decimal type range: $str")
-        } else {
-          null
-        }
-      } else {
-        changePrecision(Decimal(bigDecimal), decimalType)
-      }
-    } else {
-      null
     }
   }
 
@@ -704,8 +669,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
 
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
-    case StringType =>
-      buildCast[UTF8String](_, s => stringToDecimal(s, target))
+    case StringType if !ansiEnabled =>
+      buildCast[UTF8String](_, s => changePrecision(Decimal.fromString(s), target))
+    case StringType if ansiEnabled =>
+      buildCast[UTF8String](_, s => changePrecision(Decimal.fromStringANSI(s), target))
     case BooleanType =>
       buildCast[Boolean](_, b => toPrecision(if (b) Decimal.ONE else Decimal.ZERO, target))
     case DateType =>
@@ -1193,7 +1160,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
          """.stripMargin
       }
       code"""
-         |if ($d.changePrecision(${decimalType.precision}, ${decimalType.scale})) {
+         |if ($d != null && $d.changePrecision(${decimalType.precision}, ${decimalType.scale})) {
          |  $evPrim = $d;
          |} else {
          |  $overflowCode
@@ -1206,46 +1173,20 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       from: DataType,
       target: DecimalType,
       ctx: CodegenContext): CastFunction = {
-    val tmpBigDecimal = ctx.freshVariable("tmpBigDecimal", classOf[java.math.BigDecimal])
-    val tmpPrecision = ctx.freshVariable("tmpPrecision", classOf[Integer])
     val tmp = ctx.freshVariable("tmpDecimal", classOf[Decimal])
     val canNullSafeCast = Cast.canNullSafeCastToDecimal(from, target)
     from match {
-      case StringType =>
+      case StringType if !ansiEnabled =>
         (c, evPrim, evNull) =>
-          val handleException = if (ansiEnabled) {
-            s"""throw new NumberFormatException("invalid input syntax for type numeric: " + $c);"""
-          } else {
-            s"$evNull =true;"
-          }
-          val outOfDecimalCode = if (!ansiEnabled) {
-            s"$evNull = true;"
-          } else {
-            s"""throw new ArithmeticException("out of decimal type range: " + $c);"""
-          }
           code"""
-            java.math.BigDecimal $tmpBigDecimal = null;
-            try {
-              $tmpBigDecimal = new java.math.BigDecimal($c.toString().trim());
-            } catch (java.lang.NumberFormatException e) {
-              $handleException
-            }
-
-            if ($tmpBigDecimal != null) {
-              int $tmpPrecision = 0;
-              if ($tmpBigDecimal.scale() < 0) {
-                $tmpPrecision = $tmpBigDecimal.precision() - $tmpBigDecimal.scale();
-              } else {
-                $tmpPrecision = $tmpBigDecimal.precision();
-              }
-
-              if ($tmpPrecision > ${DecimalType.MAX_PRECISION}) {
-                $outOfDecimalCode
-              } else {
-                Decimal $tmp = Decimal.apply($tmpBigDecimal);
-                ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
-              }
-            }
+              Decimal $tmp = Decimal.fromString($c);
+              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+          """
+      case StringType if ansiEnabled =>
+        (c, evPrim, evNull) =>
+          code"""
+              Decimal $tmp = Decimal.fromStringANSI($c);
+              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
           """
       case BooleanType =>
         (c, evPrim, evNull) =>

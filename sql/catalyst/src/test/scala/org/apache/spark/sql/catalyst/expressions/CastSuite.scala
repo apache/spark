@@ -1362,6 +1362,8 @@ class CastSuite extends CastSuiteBase {
       Decimal("0"))
     checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
       Decimal("0E-18"))
+    checkEvaluation(cast("6E-120", DecimalType(38, 0)),
+      Decimal("0"))
 
     checkEvaluation(cast("6E+37", DecimalType(38, 0)),
       Decimal("60000000000000000000000000000000000000"))
@@ -1443,6 +1445,8 @@ class AnsiCastSuite extends CastSuiteBase {
       Decimal("0"))
     checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
       Decimal("0E-18"))
+    checkEvaluation(cast("6E-120", DecimalType(38, 0)),
+      Decimal("0"))
 
     checkEvaluation(cast("6E+37", DecimalType(38, 0)),
       Decimal("60000000000000000000000000000000000000"))
