@@ -192,20 +192,20 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
   test("SPARK-32867: When explain, HiveTableRelation show limited message") {
     withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "false",
       "hive.exec.dynamic.partition.mode" -> "nonstrict") {
-      withTable("df1", "df2") {
+      withTable("df") {
         spark.range(1000)
           .select(col("id"), col("id").as("k"))
           .write
           .partitionBy("k")
           .format("hive")
           .mode("overwrite")
-          .saveAsTable("df1")
+          .saveAsTable("df")
 
-        val scan1 = getHiveTableScanExec("SELECT * FROM df1 WHERE df1.k < 3")
+        val scan1 = getHiveTableScanExec("SELECT * FROM df WHERE df.k < 3")
         assert(scan1.simpleString(100).replaceAll("#\\d\\dL", "") ==
-          "Scan hive default.df1 [id, k]," +
+          "Scan hive default.df [id, k]," +
             " HiveTableRelation [" +
-            "`default`.`df1`," +
+            "`default`.`df`," +
             " org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe," +
             " Data Cols: [id]," +
             " Partition Cols: [k]," +
@@ -213,11 +213,11 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
             " Statistic: sizeInBytes=8.0 EiB" +
             "]," +
             " [isnotnull(k), (k < 3)]")
-        val scan2 = getHiveTableScanExec("SELECT * FROM df1 WHERE df1.k < 100")
+        val scan2 = getHiveTableScanExec("SELECT * FROM df WHERE df.k < 100")
         assert(scan2.simpleString(100).replaceAll("#\\d\\dL", "") ==
-          "Scan hive default.df1 [id, k]," +
+          "Scan hive default.df [id, k]," +
             " HiveTableRelation [" +
-            "`default`.`df1`," +
+            "`default`.`df`," +
             " org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe," +
             " Data Cols: [id]," +
             " Partition Cols: [k]," +
