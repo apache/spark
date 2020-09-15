@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import org.apache.spark._
 
-class BarrierExecutionSuite extends DAGSchedulerTestHelper {
+class BarrierExecutionSuite extends DAGSchedulerTestBase {
 
   test("Retry all the tasks on a resubmitted attempt of a barrier stage caused by FetchFailure") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil).barrier().mapPartitions(iter => iter)
@@ -34,7 +34,7 @@ class BarrierExecutionSuite extends DAGSchedulerTestHelper {
     runEvent(makeCompletionEvent(
       taskSets(1).tasks(0),
       FetchFailed(
-        DAGSchedulerTestHelper.makeBlockManagerId("hostA"), shuffleId, 0L, 0, 0, "ignored"),
+        DAGSchedulerTestBase.makeBlockManagerId("hostA"), shuffleId, 0L, 0, 0, "ignored"),
       null))
     assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq(0, 1)))
 
@@ -56,7 +56,7 @@ class BarrierExecutionSuite extends DAGSchedulerTestHelper {
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0, 1))
     complete(taskSets(0), Seq(
-      (Success, DAGSchedulerTestHelper.makeMapStatus("hostA", reduceRdd.partitions.length))))
+      (Success, DAGSchedulerTestBase.makeMapStatus("hostA", reduceRdd.partitions.length))))
     assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq(1)))
 
     // The second map task fails with TaskKilled.

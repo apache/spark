@@ -18,11 +18,9 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
-import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
-import scala.util.control.NonFatal
 
 import org.mockito.Mockito.spy
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
@@ -34,40 +32,6 @@ import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.{AccumulatorV2, CallSite}
-
-class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
-  extends DAGSchedulerEventProcessLoop(dagScheduler) {
-
-  override def post(event: DAGSchedulerEvent): Unit = {
-    try {
-      // Forward event to `onReceive` directly to avoid processing event asynchronously.
-      onReceive(event)
-    } catch {
-      case NonFatal(e) => onError(e)
-    }
-  }
-
-  override def onError(e: Throwable): Unit = {
-    logError("Error in DAGSchedulerEventLoop: ", e)
-    dagScheduler.stop()
-    throw e
-  }
-
-}
-
-class MyCheckpointRDD(
-    sc: SparkContext,
-    numPartitions: Int,
-    dependencies: List[Dependency[_]],
-    locations: Seq[Seq[String]] = Nil,
-    @(transient @param) tracker: MapOutputTrackerMaster = null,
-    indeterminate: Boolean = false)
-  extends MyRDD(sc, numPartitions, dependencies, locations, tracker, indeterminate) {
-
-  // Allow doCheckpoint() on this RDD.
-  override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
-    Iterator.empty
-}
 
 /**
  * An RDD for passing to DAGScheduler. These RDDs will use the dependencies and
@@ -114,11 +78,9 @@ class MyRDD(
   override def toString: String = "DAGSchedulerSuiteRDD " + id
 }
 
-class DAGSchedulerSuiteDummyException extends Exception
+class DAGSchedulerTestBase extends SparkFunSuite with TempLocalSparkContext with TimeLimits {
 
-class DAGSchedulerTestHelper extends SparkFunSuite with TempLocalSparkContext with TimeLimits {
-
-  import DAGSchedulerTestHelper._
+  import DAGSchedulerTestBase._
 
   // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
   implicit val defaultSignaler: Signaler = ThreadSignaler
@@ -268,14 +230,6 @@ class DAGSchedulerTestHelper extends SparkFunSuite with TempLocalSparkContext wi
     override def jobFailed(exception: Exception) = { failure = exception }
   }
 
-  /** A simple helper class for creating custom JobListeners */
-  class SimpleListener extends JobListener {
-    val results = new HashMap[Int, Any]
-    var failure: Exception = null
-    override def taskSucceeded(index: Int, result: Any): Unit = results.put(index, result)
-    override def jobFailed(exception: Exception): Unit = { failure = exception }
-  }
-
   class MyMapOutputTrackerMaster(
       conf: SparkConf,
       broadcastManager: BroadcastManager)
@@ -375,22 +329,6 @@ class DAGSchedulerTestHelper extends SparkFunSuite with TempLocalSparkContext wi
     }
   }
 
-  protected def completeWithAccumulator(
-      accumId: Long,
-      taskSet: TaskSet,
-      results: Seq[(TaskEndReason, Any)]): Unit = {
-    assert(taskSet.tasks.size >= results.size)
-    for ((result, i) <- results.zipWithIndex) {
-      if (i < taskSet.tasks.size) {
-        runEvent(makeCompletionEvent(
-          taskSet.tasks(i),
-          result._1,
-          result._2,
-          Seq(AccumulatorSuite.createLongAccum("", initValue = 1, id = accumId))))
-      }
-    }
-  }
-
   /** Submits a job to the scheduler and returns the job id. */
   protected def submit(
       rdd: RDD[_],
@@ -400,15 +338,6 @@ class DAGSchedulerTestHelper extends SparkFunSuite with TempLocalSparkContext wi
       properties: Properties = null): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
     runEvent(JobSubmitted(jobId, rdd, func, partitions, CallSite("", ""), listener, properties))
-    jobId
-  }
-
-  /** Submits a map stage to the scheduler and returns the job id. */
-  protected def submitMapStage(
-      shuffleDep: ShuffleDependency[_, _, _],
-      listener: JobListener = jobListener): Int = {
-    val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(MapStageSubmitted(jobId, shuffleDep, CallSite("", ""), listener))
     jobId
   }
 
@@ -422,26 +351,10 @@ class DAGSchedulerTestHelper extends SparkFunSuite with TempLocalSparkContext wi
     runEvent(JobCancelled(jobId, None))
   }
 
-  /** Make some tasks in task set success and check results. */
-  protected def completeAndCheckAnswer(
-      taskSet: TaskSet,
-      taskEndInfos: Seq[(TaskEndReason, Any)],
-      expected: Map[Int, Any]): Unit = {
-    complete(taskSet, taskEndInfos)
-    assert(this.results === expected)
-  }
-
   // Helper function to validate state when creating tests for task failures
   private def checkStageId(stageId: Int, attempt: Int, stageAttempt: TaskSet): Unit = {
     assert(stageAttempt.stageId === stageId)
     assert(stageAttempt.stageAttemptId == attempt)
-  }
-
-  // Helper functions to extract commonly used code in Fetch Failure test cases
-  protected def setupStageAbortTest(sc: SparkContext): Unit = {
-    sc.listenerBus.addToSharedQueue(new EndListener())
-    ended = false
-    jobResult = null
   }
 
   // Create a new Listener to confirm that the listenerBus sees the JobEnd message
@@ -449,13 +362,6 @@ class DAGSchedulerTestHelper extends SparkFunSuite with TempLocalSparkContext wi
   // so this will propagate up to the user.
   var ended = false
   var jobResult : JobResult = null
-
-  class EndListener extends SparkListener {
-    override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-      jobResult = jobEnd.jobResult
-      ended = true
-    }
-  }
 
   /**
    * Common code to get the next stage attempt, confirm it's the one we expect, and complete it
@@ -530,14 +436,8 @@ class DAGSchedulerTestHelper extends SparkFunSuite with TempLocalSparkContext wi
 
   // Nothing in this test should break if the task info's fields are null, but
   // OutputCommitCoordinator requires the task info itself to not be null.
-  protected def createFakeTaskInfo(): TaskInfo = {
+  private def createFakeTaskInfo(): TaskInfo = {
     val info = new TaskInfo(0, 0, 0, 0L, "", "", TaskLocality.ANY, false)
-    info.finishTime = 1
-    info
-  }
-
-  protected def createFakeTaskInfoWithId(taskId: Long): TaskInfo = {
-    val info = new TaskInfo(taskId, 0, 0, 0L, "", "", TaskLocality.ANY, false)
     info.finishTime = 1
     info
   }
@@ -600,15 +500,11 @@ class DAGSchedulerTestHelper extends SparkFunSuite with TempLocalSparkContext wi
   }
 }
 
-object DAGSchedulerTestHelper {
+object DAGSchedulerTestBase {
   def makeMapStatus(host: String, reduces: Int, sizes: Byte = 2, mapTaskId: Long = -1): MapStatus =
     MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes), mapTaskId)
 
   def makeBlockManagerId(host: String): BlockManagerId = {
     BlockManagerId(host + "-exec", host, 12345)
   }
-}
-
-object FailThisAttempt {
-  val _fail = new AtomicBoolean(true)
 }

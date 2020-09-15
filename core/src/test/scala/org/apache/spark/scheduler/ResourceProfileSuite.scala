@@ -23,7 +23,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 
-class ResourceProfileSuite extends DAGSchedulerTestHelper {
+class ResourceProfileSuite extends DAGSchedulerTestBase {
 
   test("test default resource profile") {
     val rdd = sc.parallelize(1 to 10).map(x => (x, x))

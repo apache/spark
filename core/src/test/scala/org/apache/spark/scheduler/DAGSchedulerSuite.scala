@@ -19,9 +19,11 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 import java.util.concurrent.{CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 
-import scala.collection.mutable.{HashSet, Map}
+import scala.annotation.meta.param
+import scala.collection.mutable.{HashMap, HashSet, Map}
+import scala.util.control.NonFatal
 
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
@@ -32,13 +34,57 @@ import org.apache.spark._
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
-import org.apache.spark.scheduler.DAGSchedulerTestHelper.{makeBlockManagerId, makeMapStatus}
+import org.apache.spark.scheduler.DAGSchedulerTestBase.{makeBlockManagerId, makeMapStatus}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util._
 
-class DAGSchedulerSuite extends DAGSchedulerTestHelper {
+class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
+  extends DAGSchedulerEventProcessLoop(dagScheduler) {
+
+  override def post(event: DAGSchedulerEvent): Unit = {
+    try {
+      // Forward event to `onReceive` directly to avoid processing event asynchronously.
+      onReceive(event)
+    } catch {
+      case NonFatal(e) => onError(e)
+    }
+  }
+
+  override def onError(e: Throwable): Unit = {
+    logError("Error in DAGSchedulerEventLoop: ", e)
+    dagScheduler.stop()
+    throw e
+  }
+
+}
+
+class MyCheckpointRDD(
+    sc: SparkContext,
+    numPartitions: Int,
+    dependencies: List[Dependency[_]],
+    locations: Seq[Seq[String]] = Nil,
+    @(transient @param) tracker: MapOutputTrackerMaster = null,
+    indeterminate: Boolean = false)
+  extends MyRDD(sc, numPartitions, dependencies, locations, tracker, indeterminate) {
+
+  // Allow doCheckpoint() on this RDD.
+  override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
+    Iterator.empty
+}
+
+class DAGSchedulerSuiteDummyException extends Exception
+
+class DAGSchedulerSuite extends DAGSchedulerTestBase {
+
+  /** A simple helper class for creating custom JobListeners */
+  class SimpleListener extends JobListener {
+    val results = new HashMap[Int, Any]
+    var failure: Exception = null
+    override def taskSucceeded(index: Int, result: Any): Unit = results.put(index, result)
+    override def jobFailed(exception: Exception): Unit = { failure = exception }
+  }
 
   test("[SPARK-3353] parent stage should have lower stage id") {
     sc.parallelize(1 to 10).map(x => (x, x)).reduceByKey(_ + _, 4).count()
@@ -351,6 +397,15 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
     assertDataStructuresEmpty()
   }
 
+  /** Make some tasks in task set success and check results. */
+  private def completeAndCheckAnswer(
+      taskSet: TaskSet,
+      taskEndInfos: Seq[(TaskEndReason, Any)],
+      expected: Map[Int, Any]): Unit = {
+    complete(taskSet, taskEndInfos)
+    assert(this.results === expected)
+  }
+
   test("job cancellation no-kill backend") {
     // make sure that the DAGScheduler doesn't crash when the TaskScheduler
     // doesn't implement killTask()
@@ -528,6 +583,20 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
       resultHandler, properties)
     sc.listenerBus.waitUntilEmpty()
     assert(assertionError.get() === null)
+  }
+
+  class EndListener extends SparkListener {
+    override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+      jobResult = jobEnd.jobResult
+      ended = true
+    }
+  }
+
+  // Helper functions to extract commonly used code in Fetch Failure test cases
+  private def setupStageAbortTest(sc: SparkContext): Unit = {
+    sc.listenerBus.addToSharedQueue(new EndListener())
+    ended = false
+    jobResult = null
   }
 
   /**
@@ -860,6 +929,12 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
 
     // The FetchFailed from the original reduce stage should be ignored.
     assert(countSubmittedMapStageAttempts() === 2)
+  }
+
+  private def createFakeTaskInfoWithId(taskId: Long): TaskInfo = {
+    val info = new TaskInfo(taskId, 0, 0, 0L, "", "", TaskLocality.ANY, false)
+    info.finishTime = 1
+    info
   }
 
   test("task events always posted in speculation / when stage is killed") {
@@ -1567,6 +1642,22 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
     assert(sc.parallelize(1 to 10, 2).count() === 10)
   }
 
+  private def completeWithAccumulator(
+      accumId: Long,
+      taskSet: TaskSet,
+      results: Seq[(TaskEndReason, Any)]): Unit = {
+    assert(taskSet.tasks.size >= results.size)
+    for ((result, i) <- results.zipWithIndex) {
+      if (i < taskSet.tasks.size) {
+        runEvent(makeCompletionEvent(
+          taskSet.tasks(i),
+          result._1,
+          result._2,
+          Seq(AccumulatorSuite.createLongAccum("", initValue = 1, id = accumId))))
+      }
+    }
+  }
+
   test("accumulator not calculated for resubmitted result stage") {
     // just for register
     val accum = AccumulatorSuite.createLongAccum("a")
@@ -1726,6 +1817,15 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
       complete(taskSets(0), Seq(
         (null, makeMapStatus("hostA", 1))))
     }
+  }
+
+  /** Submits a map stage to the scheduler and returns the job id. */
+  protected def submitMapStage(
+      shuffleDep: ShuffleDependency[_, _, _],
+      listener: JobListener = jobListener): Int = {
+    val jobId = scheduler.nextJobId.getAndIncrement()
+    runEvent(MapStageSubmitted(jobId, shuffleDep, CallSite("", ""), listener))
+    jobId
   }
 
   test("simple map stage submission") {
@@ -2486,4 +2586,8 @@ class DAGSchedulerSuite extends DAGSchedulerTestHelper {
       assert(taskLocs.map(_.host).toSet === expectedLocs.toSet)
     }
   }
+}
+
+object FailThisAttempt {
+  val _fail = new AtomicBoolean(true)
 }

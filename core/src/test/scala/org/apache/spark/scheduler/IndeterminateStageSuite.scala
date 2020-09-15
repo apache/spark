@@ -23,9 +23,9 @@ import scala.collection.mutable.Map
 
 import org.apache.spark._
 import org.apache.spark.internal.config
-import org.apache.spark.scheduler.DAGSchedulerTestHelper.makeBlockManagerId
+import org.apache.spark.scheduler.DAGSchedulerTestBase.makeBlockManagerId
 
-class IndeterminateStageSuite extends DAGSchedulerTestHelper {
+class IndeterminateStageSuite extends DAGSchedulerTestBase {
 
   test("SPARK-25341: abort stage while using old fetch protocol") {
     conf.set(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL.key, "true")
@@ -74,9 +74,9 @@ class IndeterminateStageSuite extends DAGSchedulerTestHelper {
     scheduler.resubmitFailedStages()
 
     def checkAndCompleteRetryStage(
-                                    taskSetIndex: Int,
-                                    stageId: Int,
-                                    shuffleId: Int): Unit = {
+        taskSetIndex: Int,
+        stageId: Int,
+        shuffleId: Int): Unit = {
       assert(taskSets(taskSetIndex).stageId == stageId)
       assert(taskSets(taskSetIndex).stageAttemptId == 1)
       assert(taskSets(taskSetIndex).tasks.length == 2)
