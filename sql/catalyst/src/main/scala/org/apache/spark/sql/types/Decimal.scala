@@ -587,24 +587,26 @@ object Decimal {
     }
   }
 
-  private def stringToJavaBigDecimal(str: UTF8String): (JavaBigDecimal, Int) = {
-    // According the benchmark test,  `s.toString.trim` is much faster than `s.trim.toString`.
-    // Please refer to https://github.com/apache/spark/pull/26640
-    val bigDecimal = new JavaBigDecimal(str.toString.trim)
-    val precision = if (bigDecimal.scale < 0) {
+  private def calculatePrecision(bigDecimal: JavaBigDecimal): Int = {
+    if (bigDecimal.scale < 0) {
       bigDecimal.precision - bigDecimal.scale
     } else {
       bigDecimal.precision
     }
-    (bigDecimal, precision)
+  }
+
+  private def stringToJavaBigDecimal(str: UTF8String): JavaBigDecimal = {
+    // According the benchmark test,  `s.toString.trim` is much faster than `s.trim.toString`.
+    // Please refer to https://github.com/apache/spark/pull/26640
+    new JavaBigDecimal(str.toString.trim)
   }
 
   def fromString(str: UTF8String): Decimal = {
     try {
-      val (bigDecimal, precision) = stringToJavaBigDecimal(str)
-      // We fast fail because constructing a very large JavaBigDecimal to Decimal very slow.
+      val bigDecimal = stringToJavaBigDecimal(str)
+      // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
       // For example: Decimal("6.0790316E+25569151")
-      if (precision > DecimalType.MAX_PRECISION) {
+      if (calculatePrecision(bigDecimal) > DecimalType.MAX_PRECISION) {
         null
       } else {
         Decimal(bigDecimal)
@@ -617,10 +619,10 @@ object Decimal {
 
   def fromStringANSI(str: UTF8String): Decimal = {
     try {
-      val (bigDecimal, precision) = stringToJavaBigDecimal(str)
-      // We fast fail because constructing a very large JavaBigDecimal to Decimal very slow.
+      val bigDecimal = stringToJavaBigDecimal(str)
+      // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
       // For example: Decimal("6.0790316E+25569151")
-      if (precision > DecimalType.MAX_PRECISION) {
+      if (calculatePrecision(bigDecimal) > DecimalType.MAX_PRECISION) {
         throw new ArithmeticException(s"out of decimal type range: $str")
       } else {
         Decimal(bigDecimal)
