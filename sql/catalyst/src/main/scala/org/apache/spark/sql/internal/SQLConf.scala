@@ -2358,13 +2358,6 @@ object SQLConf {
     .intConf
     .createWithDefault(25)
 
-  val MAX_METADATA_VALUE_LENGTH = buildConf("spark.sql.debug.maxMetadataValueLength")
-    .doc("Maximum length of metadata field can been shown. If more than setting value. " +
-      "Will be striped and end with `...` ")
-    .version("3.1.0")
-    .intConf
-    .createWithDefault(100)
-
   val MAX_PLAN_STRING_LENGTH = buildConf("spark.sql.maxPlanStringLength")
     .doc("Maximum number of characters to output for a plan string.  If the plan is " +
       "longer, further output will be truncated.  The default setting always generates a full " +
@@ -3336,8 +3329,6 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE)
 
   def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
-
-  def maxMetadataValueLength: Int = getConf(SQLConf.MAX_METADATA_VALUE_LENGTH)
 
   def maxPlanStringLength: Int = getConf(SQLConf.MAX_PLAN_STRING_LENGTH).toInt
 

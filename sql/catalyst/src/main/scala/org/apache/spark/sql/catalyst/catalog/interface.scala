@@ -692,7 +692,6 @@ case class HiveTableRelation(
     dataCols = dataCols.map(_.newInstance()),
     partitionCols = partitionCols.map(_.newInstance()))
 
-
   override def simpleString(maxFields: Int): String = {
     val catalogTable = tableMeta.storage.serde match {
       case Some(serde) => tableMeta.identifier :: serde :: Nil
@@ -711,8 +710,9 @@ case class HiveTableRelation(
     ).filter(_._2.length > 0).toSeq.sorted.map {
       case (key, value) if key == "CatalogTable" => value
       case (key, value) =>
-        key + ": " + StringUtils.abbreviate(value, SQLConf.get.maxMetadataValueLength)
+        key + ": " + StringUtils.abbreviate(value, 100)
     }
+
     val metadataStr = truncatedString(metadataEntries, "[", ", ", "]", maxFields)
     s"$nodeName $metadataStr"
   }
