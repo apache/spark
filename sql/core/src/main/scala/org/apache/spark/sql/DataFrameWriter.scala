@@ -321,8 +321,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         extraOptions + ("path" -> path.get)
       }
 
-      val finalOptions =
-        sessionOptions.filterKeys(!optionsWithPath.contains(_)) ++ optionsWithPath.originalMap
+      val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
+        optionsWithPath.originalMap
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
 
       def getTable: Table = {
