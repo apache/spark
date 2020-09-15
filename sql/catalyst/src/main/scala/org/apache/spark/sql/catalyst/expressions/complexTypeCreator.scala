@@ -547,8 +547,7 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 case class WithFields(
     structExpr: Expression,
     names: Seq[String],
-    valExprs: Seq[Expression],
-    sortOutputColumns: Boolean = false) extends Unevaluable {
+    valExprs: Seq[Expression]) extends Unevaluable {
 
   assert(names.length == valExprs.length)
 
@@ -587,15 +586,9 @@ case class WithFields(
         } else {
           resultExprs :+ newExpr
         }
-    }
+    }.flatMap { case (name, expr) => Seq(Literal(name), expr) }
 
-    val finalExprs = if (sortOutputColumns) {
-      newExprs.sortBy(_._1).flatMap { case (name, expr) => Seq(Literal(name), expr) }
-    } else {
-      newExprs.flatMap { case (name, expr) => Seq(Literal(name), expr) }
-    }
-
-    val expr = CreateNamedStruct(finalExprs)
+    val expr = CreateNamedStruct(newExprs)
     if (structExpr.nullable) {
       If(IsNull(structExpr), Literal(null, expr.dataType), expr)
     } else {
@@ -609,31 +602,22 @@ object WithFields {
    * Adds/replaces field in `StructType` into `col` expression by name.
    */
   def apply(col: Expression, fieldName: String, expr: Expression): Expression = {
-    WithFields(col, fieldName, expr, sortOutputColumns = false)
-  }
-
-  def apply(
-      col: Expression,
-      fieldName: String,
-      expr: Expression,
-      sortOutputColumns: Boolean): Expression = {
     val nameParts = if (fieldName.isEmpty) {
       fieldName :: Nil
     } else {
       CatalystSqlParser.parseMultipartIdentifier(fieldName)
     }
-    withFieldHelper(col, nameParts, Nil, expr, sortOutputColumns)
+    withFieldHelper(col, nameParts, Nil, expr)
   }
 
   private def withFieldHelper(
       struct: Expression,
       namePartsRemaining: Seq[String],
       namePartsDone: Seq[String],
-      value: Expression,
-      sortOutputColumns: Boolean) : WithFields = {
+      value: Expression) : WithFields = {
     val name = namePartsRemaining.head
     if (namePartsRemaining.length == 1) {
-      WithFields(struct, name :: Nil, value :: Nil, sortOutputColumns)
+      WithFields(struct, name :: Nil, value :: Nil)
     } else {
       val newNamesRemaining = namePartsRemaining.tail
       val newNamesDone = namePartsDone :+ name
@@ -649,9 +633,8 @@ object WithFields {
         struct = newStruct,
         namePartsRemaining = newNamesRemaining,
         namePartsDone = newNamesDone,
-        value = value,
-        sortOutputColumns = sortOutputColumns)
-      WithFields(struct, name :: Nil, newValue :: Nil, sortOutputColumns)
+        value = value)
+      WithFields(struct, name :: Nil, newValue :: Nil)
     }
   }
 }

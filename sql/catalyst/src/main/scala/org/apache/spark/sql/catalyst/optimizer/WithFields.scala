@@ -27,9 +27,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
  */
 object CombineWithFields extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case WithFields(WithFields(struct, names1, valExprs1, sort1), names2, valExprs2, sort2)
-        if sort1 == sort2 =>
-      WithFields(struct, names1 ++ names2, valExprs1 ++ valExprs2, sort1)
+    case WithFields(WithFields(struct, names1, valExprs1), names2, valExprs2) =>
+      WithFields(struct, names1 ++ names2, valExprs1 ++ valExprs2)
   }
 }
 

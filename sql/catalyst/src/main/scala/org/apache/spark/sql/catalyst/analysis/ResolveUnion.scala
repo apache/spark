@@ -20,18 +20,47 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, Literal, NamedExpression, WithFields}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateNamedStruct, Expression, GetStructField, If, IsNull, KnownNotNull, Literal, NamedExpression, WithFields}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Resolves different children of Union to a common set of columns.
  */
 object ResolveUnion extends Rule[LogicalPlan] {
+  private def sortStructFields(fieldExprs: Seq[Expression]): Seq[Expression] = {
+    fieldExprs.grouped(2).map { e =>
+      Seq(e.head, e.last)
+    }.toSeq.sortBy { pair =>
+      assert(pair(0).isInstanceOf[Literal])
+      pair(0).eval().asInstanceOf[UTF8String].toString
+    }.flatten
+  }
+
+  /**
+   * This helper method sorts fields in a `WithFields` expression by field name.
+   */
+  private def sortStructFieldsInWithFields(expr: Expression): Expression = expr transformUp {
+    case w: WithFields if w.resolved =>
+      w.evalExpr match {
+        case i @ If(IsNull(_), _, CreateNamedStruct(fieldExprs)) =>
+          val sorted = sortStructFields(fieldExprs)
+          val newStruct = CreateNamedStruct(sorted)
+          i.copy(trueValue = Literal(null, newStruct.dataType), falseValue = newStruct)
+        case CreateNamedStruct(fieldExprs) =>
+          val sorted = sortStructFields(fieldExprs)
+          val newStruct = CreateNamedStruct(sorted)
+          newStruct
+        case other =>
+          throw new AnalysisException(s"`WithFields` has incorrect eval expression: $other")
+      }
+  }
+
   /**
    * Adds missing fields recursively into given `col` expression, based on the target `StructType`.
    * This is called by `compareAndAddFields` when we find two struct columns with same name but
@@ -48,7 +77,14 @@ object ResolveUnion extends Rule[LogicalPlan] {
     if (missingFields.isEmpty) {
       None
     } else {
-      missingFields.map(s => addFieldsInto(col, "", s.fields))
+      missingFields.map { s =>
+        val struct = addFieldsInto(col, "", s.fields)
+        // We need to sort columns in result, because we might add another column in other side.
+        // E.g., we want to union two structs "a int, b long" and "a int, c string".
+        // If we don't sort, we will have "a int, b long, c string" and
+        // "a int, c string, b long", which are not compatible.
+        sortStructFieldsInWithFields(struct)
+      }
     }
   }
 
@@ -71,18 +107,12 @@ object ResolveUnion extends Rule[LogicalPlan] {
             .find(f => resolver(f.name, field.name))
           if (colField.isEmpty) {
             // The whole struct is missing. Add a null.
-            WithFields(currCol, s"$base${field.name}", Literal(null, st),
-              sortOutputColumns = true)
+            WithFields(currCol, s"$base${field.name}", Literal(null, st))
           } else {
             addFieldsInto(currCol, s"$base${field.name}.", st.fields)
           }
         case dt =>
-          // We need to sort columns in result, because we might add another column in other side.
-          // E.g., we want to union two structs "a int, b long" and "a int, c string".
-          // If we don't sort, we will have "a int, b long, c string" and "a int, c string, b long",
-          // which are not compatible.
-          WithFields(currCol, s"$base${field.name}", Literal(null, dt),
-            sortOutputColumns = true)
+          WithFields(currCol, s"$base${field.name}", Literal(null, dt))
       }
     }
   }
