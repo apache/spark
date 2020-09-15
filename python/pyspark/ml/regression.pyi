@@ -167,8 +167,6 @@ class LinearRegressionModel(
     def intercept(self) -> float: ...
     @property
     def summary(self) -> LinearRegressionTrainingSummary: ...
-    @property
-    def hasSummary(self) -> bool: ...
     def evaluate(self, dataset: DataFrame) -> LinearRegressionSummary: ...
 
 class LinearRegressionSummary(JavaWrapper):
@@ -372,6 +370,7 @@ class RandomForestRegressor(
         seed: Optional[int] = ...,
         numTrees: int = ...,
         featureSubsetStrategy: str = ...,
+        leafCol: str = ...,
         minWeightFractionPerNode: float = ...,
         weightCol: Optional[str] = ...,
         bootstrap: Optional[bool] = ...
@@ -394,6 +393,7 @@ class RandomForestRegressor(
         seed: Optional[int] = ...,
         numTrees: int = ...,
         featureSubsetStrategy: str = ...,
+        leafCol: str = ...,
         minWeightFractionPerNode: float = ...,
         weightCol: Optional[str] = ...,
         bootstrap: Optional[bool] = ...
@@ -700,8 +700,6 @@ class GeneralizedLinearRegressionModel(
     def intercept(self) -> float: ...
     @property
     def summary(self) -> GeneralizedLinearRegressionTrainingSummary: ...
-    @property
-    def hasSummary(self) -> bool: ...
     def evaluate(self, dataset: DataFrame) -> GeneralizedLinearRegressionSummary: ...
 
 class GeneralizedLinearRegressionSummary(JavaWrapper):
