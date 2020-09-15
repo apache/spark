@@ -122,7 +122,7 @@ private[spark] object CoarseGrainedClusterMessages {
       resourceProfileToTotalExecs: Map[ResourceProfile, Int],
       numLocalityAwareTasksPerResourceProfileId: Map[Int, Int],
       hostToLocalTaskCount: Map[Int, Map[String, Int]],
-      nodeBlacklist: Set[String])
+      nodeBlocklist: Set[String])
     extends CoarseGrainedClusterMessage
 
   // Check if an executor was force-killed but for a reason unrelated to the running tasks.

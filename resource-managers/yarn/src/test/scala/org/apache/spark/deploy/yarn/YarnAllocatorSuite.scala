@@ -600,7 +600,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       maxExecutors,
       rmClientSpy,
       Map(
-        YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED.key -> "true",
+        YARN_EXECUTOR_LAUNCH_BLOCKLIST_ENABLED.key -> "true",
         MAX_FAILED_EXEC_PER_NODE.key -> "0"))
     handler.updateResourceRequests()
 

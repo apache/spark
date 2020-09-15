@@ -46,7 +46,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
   private class TestTaskSchedulerImpl(sc: SparkContext) extends TaskSchedulerImpl(sc) {
     val blacklistedNodes = new AtomicReference[Set[String]]()
     def setNodeBlacklist(nodeBlacklist: Set[String]): Unit = blacklistedNodes.set(nodeBlacklist)
-    override def nodeBlacklist(): Set[String] = blacklistedNodes.get()
+    override def blockedNodes(): Set[String] = blacklistedNodes.get()
   }
 
   private class TestYarnSchedulerBackend(scheduler: TaskSchedulerImpl, sc: SparkContext)
@@ -77,7 +77,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
       val request = Map(defaultResourceProf -> numRequested)
       val req = yarnSchedulerBackendExtended.prepareRequestExecutors(request)
       assert(req.resourceProfileToTotalExecs(defaultResourceProf) === numRequested)
-      assert(req.nodeBlacklist === blacklist)
+      assert(req.nodeBlocklist === blacklist)
       val hosts =
         req.hostToLocalTaskCount(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID).keySet
       assert(hosts.intersect(blacklist).isEmpty)

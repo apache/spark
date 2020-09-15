@@ -55,7 +55,7 @@ private[spark] class TaskSetManager(
     sched: TaskSchedulerImpl,
     val taskSet: TaskSet,
     val maxTaskFailures: Int,
-    blacklistTracker: Option[BlacklistTracker] = None,
+    blacklistTracker: Option[HealthTracker] = None,
     clock: Clock = new SystemClock()) extends Schedulable with Logging {
 
   private val conf = sched.sc.conf
@@ -130,9 +130,9 @@ private[spark] class TaskSetManager(
   private var totalResultSize = 0L
   private var calculatedTasks = 0
 
-  private[scheduler] val taskSetBlacklistHelperOpt: Option[TaskSetBlacklist] = {
+  private[scheduler] val taskSetBlacklistHelperOpt: Option[TaskSetExcludelist] = {
     blacklistTracker.map { _ =>
-      new TaskSetBlacklist(sched.sc.listenerBus, conf, stageId, taskSet.stageAttemptId, clock)
+      new TaskSetExcludelist(sched.sc.listenerBus, conf, stageId, taskSet.stageAttemptId, clock)
     }
   }
 
@@ -319,8 +319,8 @@ private[spark] class TaskSetManager(
 
   private def isTaskBlacklistedOnExecOrNode(index: Int, execId: String, host: String): Boolean = {
     taskSetBlacklistHelperOpt.exists { blacklist =>
-      blacklist.isNodeBlacklistedForTask(host, index) ||
-        blacklist.isExecutorBlacklistedForTask(execId, index)
+      blacklist.isNodeExcludedForTask(host, index) ||
+        blacklist.isExecutorExcludedForTask(execId, index)
     }
   }
 
@@ -422,8 +422,8 @@ private[spark] class TaskSetManager(
     : (Option[TaskDescription], Boolean) =
   {
     val offerBlacklisted = taskSetBlacklistHelperOpt.exists { blacklist =>
-      blacklist.isNodeBlacklistedForTaskSet(host) ||
-        blacklist.isExecutorBlacklistedForTaskSet(execId)
+      blacklist.isNodeExcludedForTaskSet(host) ||
+        blacklist.isExecutorExcludedForTaskSet(execId)
     }
     if (!isZombie && !offerBlacklisted) {
       val curTime = clock.getTimeMillis()
@@ -518,7 +518,7 @@ private[spark] class TaskSetManager(
     if (isZombie && runningTasks == 0) {
       sched.taskSetFinished(this)
       if (tasksSuccessful == numTasks) {
-        blacklistTracker.foreach(_.updateBlacklistForSuccessfulTaskSet(
+        blacklistTracker.foreach(_.updateExcludedForSuccessfulTaskSet(
           taskSet.stageId,
           taskSet.stageAttemptId,
           taskSetBlacklistHelperOpt.get.execToFailures))
@@ -652,17 +652,17 @@ private[spark] class TaskSetManager(
           hostToExecutors.forall { case (host, execsOnHost) =>
             // Check if the task can run on the node
             val nodeBlacklisted =
-              appBlacklist.isNodeBlacklisted(host) ||
-                taskSetBlacklist.isNodeBlacklistedForTaskSet(host) ||
-                taskSetBlacklist.isNodeBlacklistedForTask(host, indexInTaskSet)
+              appBlacklist.isNodeExcluded(host) ||
+                taskSetBlacklist.isNodeExcludedForTaskSet(host) ||
+                taskSetBlacklist.isNodeExcludedForTask(host, indexInTaskSet)
             if (nodeBlacklisted) {
               true
             } else {
               // Check if the task can run on any of the executors
               execsOnHost.forall { exec =>
-                appBlacklist.isExecutorBlacklisted(exec) ||
-                  taskSetBlacklist.isExecutorBlacklistedForTaskSet(exec) ||
-                  taskSetBlacklist.isExecutorBlacklistedForTask(exec, indexInTaskSet)
+                appBlacklist.isExecutorExcluded(exec) ||
+                  taskSetBlacklist.isExecutorExcludedForTaskSet(exec) ||
+                  taskSetBlacklist.isExecutorExcludedForTask(exec, indexInTaskSet)
               }
             }
           }
@@ -821,7 +821,7 @@ private[spark] class TaskSetManager(
         isZombie = true
 
         if (fetchFailed.bmAddress != null) {
-          blacklistTracker.foreach(_.updateBlacklistForFetchFailure(
+          blacklistTracker.foreach(_.updateExcludedForFetchFailure(
             fetchFailed.bmAddress.host, fetchFailed.bmAddress.executorId))
         }
 
@@ -899,7 +899,7 @@ private[spark] class TaskSetManager(
 
     if (!isZombie && reason.countTowardsTaskFailures) {
       assert (null != failureReason)
-      taskSetBlacklistHelperOpt.foreach(_.updateBlacklistForFailedTask(
+      taskSetBlacklistHelperOpt.foreach(_.updateExcludedForFailedTask(
         info.host, info.executorId, index, failureReason))
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {

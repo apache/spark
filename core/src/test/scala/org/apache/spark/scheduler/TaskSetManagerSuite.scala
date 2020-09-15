@@ -384,9 +384,9 @@ class TaskSetManagerSuite
 
     // offers not accepted due to blacklisting are not delay schedule rejects
     val tsmSpy = spy(manager)
-    val blacklist = mock(classOf[TaskSetBlacklist])
+    val blacklist = mock(classOf[TaskSetExcludelist])
     when(tsmSpy.taskSetBlacklistHelperOpt).thenReturn(Some(blacklist))
-    when(blacklist.isNodeBlacklistedForTaskSet(any())).thenReturn(true)
+    when(blacklist.isNodeExcludedForTaskSet(any())).thenReturn(true)
     val (blacklistTask, blackListReject) = tsmSpy.resourceOffer("exec2", "host2", ANY)
     assert(blacklistTask.isEmpty)
     assert(blackListReject === false)
@@ -483,7 +483,7 @@ class TaskSetManagerSuite
     val rescheduleDelay = 300L
     val conf = new SparkConf().
       set(config.BLACKLIST_ENABLED, true).
-      set(config.BLACKLIST_TIMEOUT_CONF, rescheduleDelay).
+      set(config.EXCLUDE_ON_FAILURE_TIMEOUT_CONF, rescheduleDelay).
       // don't wait to jump locality levels in this test
       set(config.LOCALITY_WAIT.key, "0")
 
@@ -498,7 +498,7 @@ class TaskSetManagerSuite
     // We don't directly use the application blacklist, but its presence triggers blacklisting
     // within the taskset.
     val mockListenerBus = mock(classOf[LiveListenerBus])
-    val blacklistTrackerOpt = Some(new BlacklistTracker(mockListenerBus, conf, None, clock))
+    val blacklistTrackerOpt = Some(new HealthTracker(mockListenerBus, conf, None, clock))
     val manager = new TaskSetManager(sched, taskSet, 4, blacklistTrackerOpt, clock)
 
     {
@@ -1370,7 +1370,7 @@ class TaskSetManagerSuite
     val tsm = new TaskSetManager(sched, taskSet, 4)
     // we need a spy so we can attach our mock blacklist
     val tsmSpy = spy(tsm)
-    val blacklist = mock(classOf[TaskSetBlacklist])
+    val blacklist = mock(classOf[TaskSetExcludelist])
     when(tsmSpy.taskSetBlacklistHelperOpt).thenReturn(Some(blacklist))
 
     // make some offers to our taskset, to get tasks we will fail
@@ -1395,7 +1395,7 @@ class TaskSetManagerSuite
     // Make sure that the blacklist ignored all of the task failures above, since they aren't
     // the fault of the executor where the task was running.
     verify(blacklist, never())
-      .updateBlacklistForFailedTask(anyString(), anyString(), anyInt(), anyString())
+      .updateExcludedForFailedTask(anyString(), anyString(), anyInt(), anyString())
   }
 
   test("update application blacklist for shuffle-fetch") {
@@ -1403,11 +1403,11 @@ class TaskSetManagerSuite
     val conf = new SparkConf()
       .set(config.BLACKLIST_ENABLED, true)
       .set(config.SHUFFLE_SERVICE_ENABLED, true)
-      .set(config.BLACKLIST_FETCH_FAILURE_ENABLED, true)
+      .set(config.EXCLUDE_ON_FAILURE_FETCH_FAILURE_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(4)
-    val blacklistTracker = new BlacklistTracker(sc, None)
+    val blacklistTracker = new HealthTracker(sc, None)
     val tsm = new TaskSetManager(sched, taskSet, 4, Some(blacklistTracker))
 
     // make some offers to our taskset, to get tasks we will fail
@@ -1420,14 +1420,14 @@ class TaskSetManagerSuite
     }
     assert(taskDescs.size === 4)
 
-    assert(!blacklistTracker.isExecutorBlacklisted(taskDescs(0).executorId))
-    assert(!blacklistTracker.isNodeBlacklisted("host1"))
+    assert(!blacklistTracker.isExecutorExcluded(taskDescs(0).executorId))
+    assert(!blacklistTracker.isNodeExcluded("host1"))
 
     // Fail the task with fetch failure
     tsm.handleFailedTask(taskDescs(0).taskId, TaskState.FAILED,
       FetchFailed(BlockManagerId(taskDescs(0).executorId, "host1", 12345), 0, 0L, 0, 0, "ignored"))
 
-    assert(blacklistTracker.isNodeBlacklisted("host1"))
+    assert(blacklistTracker.isNodeExcluded("host1"))
   }
 
   test("update blacklist before adding pending task to avoid race condition") {
@@ -1448,7 +1448,7 @@ class TaskSetManagerSuite
 
     val clock = new ManualClock
     val mockListenerBus = mock(classOf[LiveListenerBus])
-    val blacklistTracker = new BlacklistTracker(mockListenerBus, conf, None, clock)
+    val blacklistTracker = new HealthTracker(mockListenerBus, conf, None, clock)
     val taskSetManager = new TaskSetManager(sched, taskSet, 1, Some(blacklistTracker))
     val taskSetManagerSpy = spy(taskSetManager)
 
@@ -1459,7 +1459,7 @@ class TaskSetManagerSuite
       (invocationOnMock: InvocationOnMock) => {
         val task: Int = invocationOnMock.getArgument(0)
         assert(taskSetManager.taskSetBlacklistHelperOpt.get.
-          isExecutorBlacklistedForTask(exec, task))
+          isExecutorExcludedForTask(exec, task))
       }
     )
 

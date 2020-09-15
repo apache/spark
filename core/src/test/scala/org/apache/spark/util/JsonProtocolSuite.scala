@@ -94,12 +94,12 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
-    val executorBlacklisted = SparkListenerExecutorBlacklisted(executorBlacklistedTime, "exec1", 22)
+    val executorBlacklisted = SparkListenerExecutorExcluded(executorBlacklistedTime, "exec1", 22)
     val executorUnblacklisted =
-      SparkListenerExecutorUnblacklisted(executorUnblacklistedTime, "exec1")
-    val nodeBlacklisted = SparkListenerNodeBlacklisted(nodeBlacklistedTime, "node1", 33)
+      SparkListenerExecutorUnexcluded(executorUnblacklistedTime, "exec1")
+    val nodeBlacklisted = SparkListenerNodeExcluded(nodeBlacklistedTime, "node1", 33)
     val nodeUnblacklisted =
-      SparkListenerNodeUnblacklisted(nodeUnblacklistedTime, "node1")
+      SparkListenerNodeUnexcluded(nodeUnblacklistedTime, "node1")
     val executorMetricsUpdate = {
       // Use custom accum ID for determinism
       val accumUpdates =

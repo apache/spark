@@ -20,7 +20,7 @@ import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests._
 
-class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorMockBackend]{
+class HealthTrackerIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorMockBackend]{
 
   val badHost = "host-0"
 
@@ -42,7 +42,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   // according to locality preferences, and so the job fails
   testScheduler("If preferred node is bad, without blacklist job will fail",
     extraConfs = Seq(
-      config.BLACKLIST_ENABLED.key -> "false"
+      config.EXCLUDE_ON_FAILURE_ENABLED.key -> "false"
   )) {
     val rdd = new MockRDDWithLocalityPrefs(sc, 10, Nil, badHost)
     withBackend(badHostBackend _) {
@@ -55,7 +55,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   testScheduler(
     "With default settings, job can succeed despite multiple bad executors on node",
     extraConfs = Seq(
-      config.BLACKLIST_ENABLED.key -> "true",
+      config.EXCLUDE_ON_FAILURE_ENABLED.key -> "true",
       config.TASK_MAX_FAILURES.key -> "4",
       TEST_N_HOSTS.key -> "2",
       TEST_N_EXECUTORS_HOST.key -> "5",
@@ -81,7 +81,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   testScheduler(
     "Bad node with multiple executors, job will still succeed with the right confs",
     extraConfs = Seq(
-       config.BLACKLIST_ENABLED.key -> "true",
+       config.EXCLUDE_ON_FAILURE_ENABLED.key -> "true",
       // just to avoid this test taking too long
       config.LOCALITY_WAIT.key -> "10ms"
     )
@@ -100,7 +100,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   testScheduler(
     "SPARK-15865 Progress with fewer executors than maxTaskFailures",
     extraConfs = Seq(
-      config.BLACKLIST_ENABLED.key -> "true",
+      config.EXCLUDE_ON_FAILURE_ENABLED.key -> "true",
       TEST_N_HOSTS.key -> "2",
       TEST_N_EXECUTORS_HOST.key -> "1",
       TEST_N_CORES_EXECUTOR.key -> "1",

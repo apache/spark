@@ -91,9 +91,9 @@ private[spark] class TaskSchedulerImpl(
     this(sc, sc.conf.get(config.TASK_MAX_FAILURES))
   }
 
-  // Lazily initializing blacklistTrackerOpt to avoid getting empty ExecutorAllocationClient,
+  // Lazily initializing healthTrackerOpt to avoid getting empty ExecutorAllocationClient,
   // because ExecutorAllocationClient is created after this TaskSchedulerImpl.
-  private[scheduler] lazy val blacklistTrackerOpt = maybeCreateBlacklistTracker(sc)
+  private[scheduler] lazy val healthTrackerOpt = maybeCreateHealthTracker(sc)
 
   val conf = sc.conf
 
@@ -281,7 +281,7 @@ private[spark] class TaskSchedulerImpl(
   private[scheduler] def createTaskSetManager(
       taskSet: TaskSet,
       maxTaskFailures: Int): TaskSetManager = {
-    new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt, clock)
+    new TaskSetManager(this, taskSet, maxTaskFailures, healthTrackerOpt, clock)
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
@@ -381,7 +381,7 @@ private[spark] class TaskSchedulerImpl(
     : (Boolean, Option[TaskLocality]) = {
     var noDelayScheduleRejects = true
     var minLaunchedLocality: Option[TaskLocality] = None
-    // nodes and executors that are blacklisted for the entire application have already been
+    // nodes and executors that are blocked for the entire application have already been
     // filtered out by this point
     for (i <- 0 until shuffledOffers.size) {
       val execId = shuffledOffers(i).executorId
@@ -515,15 +515,15 @@ private[spark] class TaskSchedulerImpl(
       hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += host
     }
 
-    // Before making any offers, remove any nodes from the blacklist whose blacklist has expired. Do
+    // Before making any offers, remove any nodes from the blocklist whose blocklist has expired. Do
     // this here to avoid a separate thread and added synchronization overhead, and also because
-    // updating the blacklist is only relevant when task offers are being made.
-    blacklistTrackerOpt.foreach(_.applyBlacklistTimeout())
+    // updating the blocklist is only relevant when task offers are being made.
+    healthTrackerOpt.foreach(_.applyBlocklistTimeout())
 
-    val filteredOffers = blacklistTrackerOpt.map { blacklistTracker =>
+    val filteredOffers = healthTrackerOpt.map { healthTracker =>
       offers.filter { offer =>
-        !blacklistTracker.isNodeBlacklisted(offer.host) &&
-          !blacklistTracker.isExecutorBlacklisted(offer.executorId)
+        !healthTracker.isNodeExcluded(offer.host) &&
+          !healthTracker.isExecutorExcluded(offer.executorId)
       }
     }.getOrElse(offers)
 
@@ -621,7 +621,7 @@ private[spark] class TaskSchedulerImpl(
               executorIdToRunningTaskIds.find(x => !isExecutorBusy(x._1)) match {
                 case Some ((executorId, _)) =>
                   if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
-                    blacklistTrackerOpt.foreach(blt => blt.killBlacklistedIdleExecutor(executorId))
+                    healthTrackerOpt.foreach(blt => blt.killExcludedIdleExecutor(executorId))
                     updateUnschedulableTaskSetTimeoutAndStartAbortTimer(taskSet, taskIndex)
                   }
                 case None =>
@@ -1019,7 +1019,7 @@ private[spark] class TaskSchedulerImpl(
       executorIdToHost -= executorId
       rootPool.executorLost(executorId, host, reason)
     }
-    blacklistTrackerOpt.foreach(_.handleRemovedExecutor(executorId))
+    healthTrackerOpt.foreach(_.handleRemovedExecutor(executorId))
   }
 
   def executorAdded(execId: String, host: String): Unit = {
@@ -1060,11 +1060,11 @@ private[spark] class TaskSchedulerImpl(
   }
 
   /**
-   * Get a snapshot of the currently blacklisted nodes for the entire application.  This is
+   * Get a snapshot of the currently blocked nodes for the entire application. This is
    * thread-safe -- it can be called without a lock on the TaskScheduler.
    */
-  def nodeBlacklist(): Set[String] = {
-    blacklistTrackerOpt.map(_.nodeBlacklist()).getOrElse(Set.empty)
+  def blockedNodes(): Set[String] = {
+    healthTrackerOpt.map(_.excludedNodeList()).getOrElse(Set.empty)
   }
 
   /**
@@ -1223,13 +1223,13 @@ private[spark] object TaskSchedulerImpl {
     retval.toList
   }
 
-  private def maybeCreateBlacklistTracker(sc: SparkContext): Option[BlacklistTracker] = {
-    if (BlacklistTracker.isBlacklistEnabled(sc.conf)) {
+  private def maybeCreateHealthTracker(sc: SparkContext): Option[HealthTracker] = {
+    if (HealthTracker.isExluceOnFailureEnabled(sc.conf)) {
       val executorAllocClient: Option[ExecutorAllocationClient] = sc.schedulerBackend match {
         case b: ExecutorAllocationClient => Some(b)
         case _ => None
       }
-      Some(new BlacklistTracker(sc, executorAllocClient))
+      Some(new HealthTracker(sc, executorAllocClient))
     } else {
       None
     }

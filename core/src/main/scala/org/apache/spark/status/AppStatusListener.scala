@@ -283,12 +283,12 @@ private[spark] class AppStatusListener(
     }
   }
 
-  override def onExecutorBlacklisted(event: SparkListenerExecutorBlacklisted): Unit = {
+  override def onExecutorExcluded(event: SparkListenerExecutorExcluded): Unit = {
     updateBlackListStatus(event.executorId, true)
   }
 
-  override def onExecutorBlacklistedForStage(
-      event: SparkListenerExecutorBlacklistedForStage): Unit = {
+  override def onExecutorExcludedForStage(
+      event: SparkListenerExecutorExcludedForStage): Unit = {
     val now = System.nanoTime()
 
     Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
@@ -299,7 +299,7 @@ private[spark] class AppStatusListener(
     }
   }
 
-  override def onNodeBlacklistedForStage(event: SparkListenerNodeBlacklistedForStage): Unit = {
+  override def onNodeExcludedForStage(event: SparkListenerNodeExcludedForStage): Unit = {
     val now = System.nanoTime()
 
     // Implicitly blacklist every available executor for the stage associated with this node
@@ -327,15 +327,15 @@ private[spark] class AppStatusListener(
     maybeUpdate(stage, now)
   }
 
-  override def onExecutorUnblacklisted(event: SparkListenerExecutorUnblacklisted): Unit = {
+  override def onExecutorUnexcluded(event: SparkListenerExecutorUnexcluded): Unit = {
     updateBlackListStatus(event.executorId, false)
   }
 
-  override def onNodeBlacklisted(event: SparkListenerNodeBlacklisted): Unit = {
+  override def onNodeExcluded(event: SparkListenerNodeExcluded): Unit = {
     updateNodeBlackList(event.hostId, true)
   }
 
-  override def onNodeUnblacklisted(event: SparkListenerNodeUnblacklisted): Unit = {
+  override def onNodeUnexcluded(event: SparkListenerNodeUnexcluded): Unit = {
     updateNodeBlackList(event.hostId, false)
   }
 

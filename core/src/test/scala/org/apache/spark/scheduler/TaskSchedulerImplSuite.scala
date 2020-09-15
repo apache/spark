@@ -51,11 +51,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   var failedTaskSetReason: String = null
   var failedTaskSet = false
 
-  var blacklist: BlacklistTracker = null
+  var blacklist: HealthTracker = null
   var taskScheduler: TaskSchedulerImpl = null
   var dagScheduler: DAGScheduler = null
 
-  val stageToMockTaskSetBlacklist = new HashMap[Int, TaskSetBlacklist]()
+  val stageToMockTaskSetBlacklist = new HashMap[Int, TaskSetExcludelist]()
   val stageToMockTaskSetManager = new HashMap[Int, TaskSetManager]()
 
   override def beforeEach(): Unit = {
@@ -96,7 +96,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   def setupSchedulerWithMockTaskSetBlacklist(confs: (String, String)*): TaskSchedulerImpl = {
-    blacklist = mock[BlacklistTracker]
+    blacklist = mock[HealthTracker]
     val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
     conf.set(config.BLACKLIST_ENABLED, true)
     confs.foreach { case (k, v) => conf.set(k, v) }
@@ -108,14 +108,14 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
           val tsm = super.createTaskSetManager(taskSet, maxFailures)
           // we need to create a spied tsm just so we can set the TaskSetBlacklist
           val tsmSpy = spy(tsm)
-          val taskSetBlacklist = mock[TaskSetBlacklist]
+          val taskSetBlacklist = mock[TaskSetExcludelist]
           when(tsmSpy.taskSetBlacklistHelperOpt).thenReturn(Some(taskSetBlacklist))
           stageToMockTaskSetManager(taskSet.stageId) = tsmSpy
           stageToMockTaskSetBlacklist(taskSet.stageId) = taskSetBlacklist
           tsmSpy
         }
 
-        override private[scheduler] lazy val blacklistTrackerOpt = Some(blacklist)
+        override private[scheduler] lazy val healthTrackerOpt = Some(blacklist)
       }
     setupHelper()
   }
@@ -230,7 +230,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       sc.conf.get(config.TASK_MAX_FAILURES),
       clock = clock) {
       override def createTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
-        new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt, clock)
+        new TaskSetManager(this, taskSet, maxTaskFailures, healthTrackerOpt, clock)
       }
       override def shuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
         // Don't shuffle the offers around for this test.  Instead, we'll just pass in all
@@ -690,10 +690,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // * stage 1 is blacklisted on executor "executor3"
     // * stage 0, partition 0 is blacklisted on executor 0
     // (mocked methods default to returning false, ie. no blacklisting)
-    when(stageToMockTaskSetBlacklist(0).isNodeBlacklistedForTaskSet("host1")).thenReturn(true)
-    when(stageToMockTaskSetBlacklist(1).isExecutorBlacklistedForTaskSet("executor3"))
+    when(stageToMockTaskSetBlacklist(0).isNodeExcludedForTaskSet("host1")).thenReturn(true)
+    when(stageToMockTaskSetBlacklist(1).isExecutorExcludedForTaskSet("executor3"))
       .thenReturn(true)
-    when(stageToMockTaskSetBlacklist(0).isExecutorBlacklistedForTask("executor0", 0))
+    when(stageToMockTaskSetBlacklist(0).isExecutorExcludedForTask("executor0", 0))
       .thenReturn(true)
 
     val offers = IndexedSeq(
@@ -709,9 +709,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // doesn't check exactly what checks are made because the offers get shuffled.)
     (0 to 2).foreach { stageId =>
       verify(stageToMockTaskSetBlacklist(stageId), atLeast(1))
-        .isNodeBlacklistedForTaskSet(anyString())
+        .isNodeExcludedForTaskSet(anyString())
       verify(stageToMockTaskSetBlacklist(stageId), atLeast(1))
-        .isExecutorBlacklistedForTaskSet(anyString())
+        .isExecutorExcludedForTaskSet(anyString())
     }
 
     def tasksForStage(stageId: Int): Seq[TaskDescription] = {
@@ -770,16 +770,16 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
 
     // the tasksSets complete, so the tracker should be notified of the successful ones
-    verify(blacklist, times(1)).updateBlacklistForSuccessfulTaskSet(
+    verify(blacklist, times(1)).updateExcludedForSuccessfulTaskSet(
       stageId = 0,
       stageAttemptId = 0,
       failuresByExec = stageToMockTaskSetBlacklist(0).execToFailures)
-    verify(blacklist, times(1)).updateBlacklistForSuccessfulTaskSet(
+    verify(blacklist, times(1)).updateExcludedForSuccessfulTaskSet(
       stageId = 1,
       stageAttemptId = 0,
       failuresByExec = stageToMockTaskSetBlacklist(1).execToFailures)
     // but we shouldn't update for the failed taskset
-    verify(blacklist, never).updateBlacklistForSuccessfulTaskSet(
+    verify(blacklist, never).updateExcludedForSuccessfulTaskSet(
       stageId = meq(2),
       stageAttemptId = anyInt(),
       failuresByExec = any())
@@ -804,9 +804,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // host1, executor0 & executor3 are completely blacklisted
     // This covers everything *except* one core on executor4 / host3, so that everything is still
     // schedulable.
-    when(blacklist.isNodeBlacklisted("host1")).thenReturn(true)
-    when(blacklist.isExecutorBlacklisted("executor0")).thenReturn(true)
-    when(blacklist.isExecutorBlacklisted("executor3")).thenReturn(true)
+    when(blacklist.isNodeExcluded("host1")).thenReturn(true)
+    when(blacklist.isExecutorExcluded("executor0")).thenReturn(true)
+    when(blacklist.isExecutorExcluded("executor3")).thenReturn(true)
 
     val stageToTsm = (0 to 2).map { stageId =>
       val tsm = taskScheduler.taskSetManagerForAttempt(stageId, 0).get
@@ -818,7 +818,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(firstTaskAttempts.size === 1)
     assert(firstTaskAttempts.head.executorId === "executor4")
     ('0' until '2').foreach { hostNum =>
-      verify(blacklist, atLeast(1)).isNodeBlacklisted("host" + hostNum)
+      verify(blacklist, atLeast(1)).isNodeExcluded("host" + hostNum)
     }
   }
 
@@ -837,8 +837,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     ))
 
     // now say our blacklist updates to blacklist a bunch of resources, but *not* everything
-    when(blacklist.isNodeBlacklisted("host1")).thenReturn(true)
-    when(blacklist.isExecutorBlacklisted("executor0")).thenReturn(true)
+    when(blacklist.isNodeExcluded("host1")).thenReturn(true)
+    when(blacklist.isExecutorExcluded("executor0")).thenReturn(true)
 
     // make an offer on the blacklisted resources.  We won't schedule anything, but also won't
     // abort yet, since we know of other resources that work
@@ -849,8 +849,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!tsm.isZombie)
 
     // now update the blacklist so that everything really is blacklisted
-    when(blacklist.isExecutorBlacklisted("executor1")).thenReturn(true)
-    when(blacklist.isExecutorBlacklisted("executor2")).thenReturn(true)
+    when(blacklist.isExecutorExcluded("executor1")).thenReturn(true)
+    when(blacklist.isExecutorExcluded("executor2")).thenReturn(true)
     assert(taskScheduler.resourceOffers(IndexedSeq(
       WorkerOffer("executor0", "host0", 2),
       WorkerOffer("executor3", "host1", 2)
@@ -878,7 +878,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Fail the running task
     val failedTask = firstTaskAttempts.find(_.executorId == "executor0").get
     failTask(failedTask.taskId, TaskState.FAILED, UnknownReason, tsm)
-    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
+    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorExcludedForTask(
       "executor0", failedTask.index)).thenReturn(true)
 
     // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
@@ -910,7 +910,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Fail the running task
     val failedTask = firstTaskAttempts.head
     failTask(failedTask.taskId, TaskState.FAILED, UnknownReason, tsm)
-    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
+    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorExcludedForTask(
       "executor0", failedTask.index)).thenReturn(true)
 
     // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
@@ -952,7 +952,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Fail the running task
     val failedTask = firstTaskAttempts.head
     failTask(failedTask.taskId, TaskState.FAILED, UnknownReason, tsm)
-    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
+    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorExcludedForTask(
       "executor0", failedTask.index)).thenReturn(true)
 
     // make an offer. We will schedule the task from the second taskSet. Since a task was scheduled
@@ -966,7 +966,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val tsm2 = stageToMockTaskSetManager(1)
     val failedTask2 = secondTaskAttempts.head
     failTask(failedTask2.taskId, TaskState.FAILED, UnknownReason, tsm2)
-    when(tsm2.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
+    when(tsm2.taskSetBlacklistHelperOpt.get.isExecutorExcludedForTask(
       "executor0", failedTask2.index)).thenReturn(true)
 
     // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
@@ -1014,7 +1014,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Fail the running task
     val failedTask = taskAttempts.head
     failTask(failedTask.taskId, TaskState.FAILED, UnknownReason, tsm)
-    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
+    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorExcludedForTask(
       "executor0", failedTask.index)).thenReturn(true)
 
     // make an offer but we won't schedule anything yet as scheduler locality is still PROCESS_LOCAL
@@ -1044,7 +1044,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     // Fail the running task
     failTask(0, TaskState.FAILED, UnknownReason, tsm)
-    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
+    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorExcludedForTask(
       "executor0", 0)).thenReturn(true)
 
     // If the executor is busy, then dynamic allocation should kick in and try
@@ -1110,10 +1110,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
         // Setup the blacklist
         nodeBlacklist.foreach { node =>
-          when(stageToMockTaskSetBlacklist(0).isNodeBlacklistedForTaskSet(node)).thenReturn(true)
+          when(stageToMockTaskSetBlacklist(0).isNodeExcludedForTaskSet(node)).thenReturn(true)
         }
         execBlacklist.foreach { exec =>
-          when(stageToMockTaskSetBlacklist(0).isExecutorBlacklistedForTaskSet(exec))
+          when(stageToMockTaskSetBlacklist(0).isExecutorExcludedForTaskSet(exec))
             .thenReturn(true)
         }
 
@@ -1140,13 +1140,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
         // We should be checking our node blacklist, but it should be within the bound we defined
         // above.
         verify(stageToMockTaskSetBlacklist(0), atMost(maxBlacklistChecks))
-          .isNodeBlacklistedForTaskSet(anyString())
+          .isNodeExcludedForTaskSet(anyString())
         // We shouldn't ever consult the per-task blacklist for the nodes that have been blacklisted
         // for the entire taskset, since the taskset level blacklisting should prevent scheduling
         // from ever looking at specific tasks.
         nodesWithAnyBlacklisting.foreach { node =>
           verify(stageToMockTaskSetBlacklist(0), never)
-            .isNodeBlacklistedForTask(meq(node), anyInt())
+            .isNodeExcludedForTask(meq(node), anyInt())
         }
         executorsWithAnyBlacklisting.foreach { exec =>
           // We should be checking our executor blacklist, but it should be within the bound defined
@@ -1154,12 +1154,12 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
           // there is also a node-blacklist which takes effect first.  But this assert is all we
           // need to avoid an O(numPendingTask) slowdown.
           verify(stageToMockTaskSetBlacklist(0), atMost(maxBlacklistChecks))
-            .isExecutorBlacklistedForTaskSet(exec)
+            .isExecutorExcludedForTaskSet(exec)
           // We shouldn't ever consult the per-task blacklist for executors that have been
           // blacklisted for the entire taskset, since the taskset level blacklisting should prevent
           // scheduling from ever looking at specific tasks.
           verify(stageToMockTaskSetBlacklist(0), never)
-            .isExecutorBlacklistedForTask(meq(exec), anyInt())
+            .isExecutorExcludedForTask(meq(exec), anyInt())
         }
       }
     }
@@ -1314,7 +1314,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       new WorkerOffer("executor0", "host0", 1)
     )).flatten
 
-    verify(blacklist).applyBlacklistTimeout()
+    verify(blacklist).applyBlocklistTimeout()
   }
 
   test("if an executor is lost then the state for its running tasks is cleaned up (SPARK-18553)") {
@@ -1400,7 +1400,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
         offers
       }
       override def createTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
-        new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt, clock)
+        new TaskSetManager(this, taskSet, maxTaskFailures, healthTrackerOpt, clock)
       }
     }
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
@@ -1440,7 +1440,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val clock = new ManualClock()
     val taskScheduler = new TaskSchedulerImpl(sc) {
       override def createTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
-        new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt, clock)
+        new TaskSetManager(this, taskSet, maxTaskFailures, healthTrackerOpt, clock)
       }
     }
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
