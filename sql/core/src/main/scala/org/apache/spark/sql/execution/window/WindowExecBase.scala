@@ -136,6 +136,10 @@ trait WindowExecBase extends UnaryExecNode {
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
             case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
+            case f: AggregateWindowFunction if f.isInstanceOf[NthValue] => frame.lower match {
+              case UnboundedPreceding => collect("AGGREGATE2", frame, e, f)
+              case _ => collect("AGGREGATE", frame, e, f)
+            }
             case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
             case f: OffsetWindowFunction => collect("OFFSET", frame, e, f)
             case f: PythonUDF => collect("AGGREGATE", frame, e, f)
@@ -174,7 +178,7 @@ trait WindowExecBase extends UnaryExecNode {
           // Offset Frame
           case ("OFFSET", _, IntegerLiteral(offset), _) =>
             target: InternalRow =>
-              new OffsetWindowFunctionFrame(
+              new RelativeOffsetWindowFunctionFrame(
                 target,
                 ordinal,
                 // OFFSET frame functions are guaranteed be OffsetWindowFunctions.
@@ -188,6 +192,38 @@ trait WindowExecBase extends UnaryExecNode {
           case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing) =>
             target: InternalRow => {
               new UnboundedWindowFunctionFrame(target, processor)
+            }
+          case ("AGGREGATE2", _, UnboundedPreceding, upper) =>
+            target: InternalRow => {
+              val offset =
+                functions.head.asInstanceOf[NthValue].offsetExpr.eval().asInstanceOf[Int] - 1
+              val newFunctions = functions.map { f =>
+                val nth = f.asInstanceOf[NthValue]
+                Lead(nth.input, nth.offsetExpr, Literal(null))
+              }
+
+              upper match {
+                case UnboundedFollowing =>
+                  new UnboundedOffsetWindowFunctionFrame(
+                    target,
+                    ordinal,
+                    // OFFSET frame functions are guaranteed be OffsetWindowFunctions.
+                    newFunctions.map(_.asInstanceOf[OffsetWindowFunction]),
+                    child.output,
+                    (expressions, schema) =>
+                      MutableProjection.create(expressions, schema),
+                    offset)
+                case _ =>
+                  new UnboundedPrecedingOffsetWindowFunctionFrame(
+                    target,
+                    ordinal,
+                    // OFFSET frame functions are guaranteed be OffsetWindowFunctions.
+                    newFunctions.map(_.asInstanceOf[OffsetWindowFunction]),
+                    child.output,
+                    (expressions, schema) =>
+                      MutableProjection.create(expressions, schema),
+                    offset)
+              }
             }
 
           // Growing Frame.

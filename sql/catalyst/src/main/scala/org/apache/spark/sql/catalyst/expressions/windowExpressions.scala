@@ -605,7 +605,7 @@ case class NthValue(input: Expression, offsetExpr: Expression, ignoreNulls: Bool
     }
   }
 
-  private lazy val offset = offsetExpr.eval().asInstanceOf[Int].toLong
+  lazy val offset = offsetExpr.eval().asInstanceOf[Int].toLong
   private lazy val result = AttributeReference("result", input.dataType)()
   private lazy val count = AttributeReference("count", LongType)()
   private lazy val valueSet = AttributeReference("valueSet", BooleanType)()

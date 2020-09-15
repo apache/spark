@@ -77,7 +77,7 @@ object WindowFunctionFrame {
  * @param newMutableProjection function used to create the projection.
  * @param offset by which rows get moved within a partition.
  */
-final class OffsetWindowFunctionFrame(
+abstract class OffsetWindowFunctionFrameBase(
     target: InternalRow,
     ordinal: Int,
     expressions: Array[OffsetWindowFunction],
@@ -87,21 +87,21 @@ final class OffsetWindowFunctionFrame(
   extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
-  private[this] var input: ExternalAppendOnlyUnsafeRowArray = null
+  protected var input: ExternalAppendOnlyUnsafeRowArray = null
 
   /**
    * An iterator over the [[input]]
    */
-  private[this] var inputIterator: Iterator[UnsafeRow] = _
+  protected var inputIterator: Iterator[UnsafeRow] = _
 
   /** Index of the input row currently used for output. */
-  private[this] var inputIndex = 0
+  protected var inputIndex = 0
 
   /**
    * Create the projection used when the offset row exists.
    * Please note that this project always respect null input values (like PostgreSQL).
    */
-  private[this] val projection = {
+  protected val projection = {
     // Collect the expressions and bind them.
     val inputAttrs = inputSchema.map(_.withNullability(true))
     val boundExpressions = Seq.fill(ordinal)(NoOp) ++ bindReferences(
@@ -112,7 +112,7 @@ final class OffsetWindowFunctionFrame(
   }
 
   /** Create the projection used when the offset row DOES NOT exists. */
-  private[this] val fillDefaultValue = {
+  protected val fillDefaultValue = {
     // Collect the expressions and bind them.
     val inputAttrs: AttributeSeq = inputSchema.map(_.withNullability(true))
     val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toSeq.map { e =>
@@ -141,6 +141,24 @@ final class OffsetWindowFunctionFrame(
     inputIndex = offset
   }
 
+  override def currentLowerBound(): Int = throw new UnsupportedOperationException()
+
+  override def currentUpperBound(): Int = throw new UnsupportedOperationException()
+}
+
+/**
+ * The relative offset window frame calculates frames containing LEAD/LAG statements.
+ */
+class RelativeOffsetWindowFunctionFrame(
+    target: InternalRow,
+    ordinal: Int,
+    expressions: Array[OffsetWindowFunction],
+    inputSchema: Seq[Attribute],
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
+    offset: Int)
+  extends OffsetWindowFunctionFrameBase(
+    target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
+
   override def write(index: Int, current: InternalRow): Unit = {
     if (inputIndex >= 0 && inputIndex < input.length) {
       val r = WindowFunctionFrame.getNextOrNull(inputIterator)
@@ -151,10 +169,69 @@ final class OffsetWindowFunctionFrame(
     }
     inputIndex += 1
   }
+}
 
-  override def currentLowerBound(): Int = throw new UnsupportedOperationException()
+/**
+ * The unbounded offset window frame calculates frames containing NTH_VALUE statements.
+ * The unbounded offset window frame return the same value for all rows in the window partition.
+ */
+class UnboundedOffsetWindowFunctionFrame(
+    target: InternalRow,
+    ordinal: Int,
+    expressions: Array[OffsetWindowFunction],
+    inputSchema: Seq[Attribute],
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
+    offset: Int)
+  extends OffsetWindowFunctionFrameBase(
+    target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
 
-  override def currentUpperBound(): Int = throw new UnsupportedOperationException()
+  override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    super.prepare(rows)
+    if (inputIndex >= 0 && inputIndex < input.length) {
+      val r = WindowFunctionFrame.getNextOrNull(inputIterator)
+      projection(r)
+    } else {
+      fillDefaultValue(EmptyRow)
+    }
+  }
+
+  override def write(index: Int, current: InternalRow): Unit = {
+    // The results are the same for each row in the partition, and have been evaluated in prepare.
+    // Don't need to recalculate here.
+  }
+}
+
+/**
+ * The unbounded preceding offset window frame calculates frames containing NTH_VALUE statements.
+ * The unbounded preceding offset window frame return the same value for rows which index
+ * (starting from 1) equal to or greater than offset in the window partition.
+ */
+class UnboundedPrecedingOffsetWindowFunctionFrame(
+    target: InternalRow,
+    ordinal: Int,
+    expressions: Array[OffsetWindowFunction],
+    inputSchema: Seq[Attribute],
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
+    offset: Int)
+  extends OffsetWindowFunctionFrameBase(
+    target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
+
+  var selectedRow: UnsafeRow = null
+
+  override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    super.prepare(rows)
+    if (inputIndex >= 0 && inputIndex < input.length) {
+      selectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
+    }
+  }
+
+  override def write(index: Int, current: InternalRow): Unit = {
+    if (index >= inputIndex && inputIndex < input.length && selectedRow != null) {
+      projection(selectedRow)
+    } else {
+      fillDefaultValue(EmptyRow)
+    }
+  }
 }
 
 /**
