@@ -77,6 +77,12 @@ private[deploy] object DeployMessages {
   object DecommissionWorker extends DeployMessage
 
   /**
+   * A message that sent to the Worker itself when it receives PWR signal,
+   * indicating the Worker starts to decommission.
+   */
+  object WorkerSigPWRReceived extends DeployMessage
+
+  /**
    * A message sent from Worker to Master to tell Master that the Worker has started
    * decommissioning. It's used for the case where decommission is triggered at Worker.
    *

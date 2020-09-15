@@ -86,13 +86,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       logInfo("Registering PWR handler to trigger decommissioning.")
       SignalUtils.register("PWR", "Failed to register SIGPWR handler - " +
       "disabling executor decommission feature.") {
-        self.send(DecommissionExecutor)
-        if (driver.nonEmpty) {
-          // Tell driver we starts decommissioning so it stops trying to schedule us
-          driver.get.askSync[Boolean](ExecutorDecommissioning(executorId))
-        } else {
-          logError("No driver to message decommissioning.")
-        }
+        self.send(ExecutorSigPWRReceived)
         true
       }
     }
@@ -215,6 +209,15 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     case DecommissionExecutor =>
       decommissionSelf()
+
+    case ExecutorSigPWRReceived =>
+      decommissionSelf()
+      if (driver.nonEmpty) {
+        // Tell driver we starts decommissioning so it stops trying to schedule us
+        driver.get.askSync[Boolean](ExecutorDecommissioning(executorId))
+      } else {
+        logError("No driver to message decommissioning.")
+      }
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {

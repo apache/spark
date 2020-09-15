@@ -22,7 +22,6 @@ import java.text.SimpleDateFormat
 import java.util.{Date, Locale, UUID}
 import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.function.Supplier
 
 import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
@@ -72,9 +71,7 @@ private[deploy] class Worker(
     logInfo("Registering SIGPWR handler to trigger decommissioning.")
     SignalUtils.register("PWR", "Failed to register SIGPWR handler - " +
       "disabling worker decommission feature.") {
-       self.send(DecommissionWorker)
-       // Tell master we starts decommissioning so it stops trying to launch executor/driver on us
-       sendToMaster(WorkerDecommissioning(workerId, self))
+       self.send(WorkerSigPWRReceived)
        true
     }
   } else {
@@ -677,6 +674,11 @@ private[deploy] class Worker(
 
     case DecommissionWorker =>
       decommissionSelf()
+
+    case WorkerSigPWRReceived =>
+      decommissionSelf()
+      // Tell master we starts decommissioning so it stops trying to launch executor/driver on us
+      sendToMaster(WorkerDecommissioning(workerId, self))
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
