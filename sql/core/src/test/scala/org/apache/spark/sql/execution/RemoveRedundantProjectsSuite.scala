@@ -145,7 +145,8 @@ abstract class RemoveRedundantProjectsSuiteBase
       val newExecutedPlan = rule.apply(newPlan)
       // The manually added ProjectExec node shouldn't be removed.
       assert(collectWithSubqueries(newExecutedPlan) {
-        case p: ProjectExec => p }.size == numProjects + 1)
+        case p: ProjectExec => p
+      }.size == numProjects + 1)
 
       // Check the original plan's output and the new plan's output are the same.
       val expectedRows = plan.executeCollect()
