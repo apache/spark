@@ -53,7 +53,7 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
       var getPathForJobEntry = function(baseElem) {
         var jobIdText = $($(baseElem).find(".application-timeline-content")[0]).text();
         var jobId = jobIdText.match("\\(Job (\\d+)\\)$")[1];
-        return window.location.pathname.replace(/\/$/, '') + "/job/?id=" + jobId;
+        return "job/?id=" + jobId;
       };
 
       $(this).click(function() {
