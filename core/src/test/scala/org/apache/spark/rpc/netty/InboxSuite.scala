@@ -152,8 +152,9 @@ class InboxSuite extends SparkFunSuite {
     val endpoint = mock(classOf[TestRpcEndpoint])
     when(endpoint.receive).thenThrow(new OutOfMemoryError())
 
+    val endpointRef = mock(classOf[NettyRpcEndpointRef])
     val dispatcher = mock(classOf[Dispatcher])
-    val inbox = new Inbox("name", endpoint)
+    val inbox = new Inbox(endpointRef, endpoint)
     inbox.post(OneWayMessage(null, "hi"))
     intercept[OutOfMemoryError] {
       inbox.process(dispatcher)

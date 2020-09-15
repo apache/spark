@@ -208,7 +208,7 @@ private[netty] class Inbox(
         // Should reduce the number of active threads before throw the error.
         numActiveThreads -= 1
       }
-      logError(s"An error happened while processing message in the inbox for $endpointName", fatal)
+      logError(s"An error happened while processing message in the inbox for $endpointRef", fatal)
       throw fatal
     }
 
