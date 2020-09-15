@@ -50,9 +50,18 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
        return "#job-" + jobId;
       };
 
+      var getPathForJobEntry = function(baseElem) {
+        var jobIdText = $($(baseElem).find(".application-timeline-content")[0]).text();
+        var jobId = jobIdText.match("\\(Job (\\d+)\\)$")[1];
+        return window.location.pathname.replace(/\/$/, '') + "/job/?id=" + jobId;
+      };
+
       $(this).click(function() {
         var jobPagePath = $(getSelectorForJobEntry(this)).find("a.name-link").attr("href");
-          window.location.href = jobPagePath
+        if (jobPagePath == undefined) {
+          jobPagePath = getPathForJobEntry(this)
+        }
+        window.location.href = jobPagePath
       });
 
       $(this).hover(
