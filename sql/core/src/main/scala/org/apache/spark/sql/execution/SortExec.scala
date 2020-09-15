@@ -49,12 +49,6 @@ case class SortExec(
     child,
     testSpillFrequency) {
 
-  /**
-   * This method gets invoked only once for each SortExec instance to initialize an
-   * UnsafeExternalRowSorter, both `plan.execute` and code generation are using it.
-   * In the code generation code path, we need to call this function outside the class so we
-   * should make it public.
-   */
   def createSorter(): UnsafeExternalRowSorter = {
     rowSorter = UnsafeExternalRowSorter.create(
       schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
@@ -70,26 +64,33 @@ case class SortExec(
   }
 }
 
+/**
+ * Performs (external) sorting for multiple windows.
+ *
+ * @param partitionSpec a sequence of expressions that defines a partition key
+ * @param sortOrderInWindow a sequence of sort orders for sorting rows inside a window
+ * @param sortOrderAcrossWindows a sequence of sort orders for sorting rows across
+ *                               different windows on a Spark physical partition.
+ *                               This sequence of sort orders is obtained from a partition
+ *                               key plus a sequence of sort orders inside a window
+ * @param global when true performs a global sort of all partitions by shuffling the data first
+ *               if necessary.
+ * @param testSpillFrequency Method for configuring periodic spilling in unit tests. If set, will
+ *                           spill every `frequency` records.
+ */
 case class WindowSortExec(
     partitionSpec: Seq[Expression],
     sortOrderInWindow: Seq[SortOrder],
-    sortOrder: Seq[SortOrder],
+    sortOrderAcrossWindows: Seq[SortOrder],
     global: Boolean,
     child: SparkPlan,
-    testSpillFrequency: Int = 0,
-    rankLimit: Int = -1)
+    testSpillFrequency: Int = 0)
   extends SortExecBase(
-    sortOrder,
+    sortOrderAcrossWindows,
     global,
     child,
     testSpillFrequency) {
 
-  /**
-   * This method gets invoked only once for each WindowSortExec instance to initialize an
-   * UnsafeExternalRowWindowSorter, both `plan.execute` and code generation are using it.
-   * In the code generation code path, we need to call this function outside the class so we
-   * should make it public.
-   */
   def createSorter(): UnsafeExternalRowWindowSorter = {
     val partitionSpecGrouping = UnsafeProjection.create(partitionSpec, output)
 
@@ -100,7 +101,7 @@ case class WindowSortExec(
 
     // Generate the ordering of partition key
     val orderingOfPartitionKey = RowOrdering.create(
-      sortOrder diff sortOrderInWindow,
+      sortOrderAcrossWindows diff sortOrderInWindow,
       partitionKeySchema)
 
     // No prefix comparator
@@ -121,8 +122,7 @@ case class WindowSortExec(
         prefixComputer,
         false,
         canUseRadixSort,
-        pageSize,
-        -1)
+        pageSize)
     } else {
       // Generate the bound expression in a window
       val boundSortExpressionInWindow = BindReferences.bindReference(
@@ -157,8 +157,7 @@ case class WindowSortExec(
         prefixComputer,
         canUseRadixSortInWindow,
         canUseRadixSort,
-        pageSize,
-        -1)
+        pageSize)
     }
 
     if (testSpillFrequency > 0) {
@@ -212,9 +211,15 @@ abstract class SortExecBase(
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
-  private[sql] var rowSorter: UnsafeExternalRowSorterBase = _
+  private[sql] var rowSorter: AbstractUnsafeExternalRowSorter = _
 
-  def createSorter(): UnsafeExternalRowSorterBase
+  /**
+   * This method gets invoked only once for each SortExecBase instance to initialize an
+   * AbstractUnsafeExternalRowSorter, both `plan.execute` and code generation are using it.
+   * In the code generation code path, we need to call this function outside the class so we
+   * should make it public.
+   */
+  def createSorter(): AbstractUnsafeExternalRowSorter
 
   protected def createPrefixComputer(prefixExpr: SortPrefix):
       UnsafeExternalRowSorter.PrefixComputer = {

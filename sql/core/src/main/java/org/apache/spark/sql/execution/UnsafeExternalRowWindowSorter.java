@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator;
 import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
 
-public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorterBase {
+public final class UnsafeExternalRowWindowSorter extends AbstractUnsafeExternalRowSorter {
 
   private static final Logger logger = LoggerFactory.getLogger(UnsafeExternalRowWindowSorter.class);
 
@@ -54,9 +54,8 @@ public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorter
   private final UnsafeExternalRowSorter.PrefixComputer prefixComputerInWindow;
   private final boolean canUseRadixSortInWindow;
   private final long pageSizeBytes;
-  private final int rankLimit;
   private final int windowSorterMapMaxSize = 16;
-  private final HashMap<UnsafeRow, UnsafeExternalRowSorterBase> windowSorterMap;
+  private final HashMap<UnsafeRow,AbstractUnsafeExternalRowSorter> windowSorterMap;
   private final UnsafeExternalRowSorter mainSorter;
   private final RowComparator partitionKeyComparator;
 
@@ -89,6 +88,32 @@ public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorter
     return sorter;
   }
 
+  /**
+  * Returns an UnsafeExternalRowWindowSorter object.
+  * @param  schema  The schema of each input row
+  * @param  partitionSpecProjection an UnsafeProjection object created from
+  *                                 a sequence of partition expressions
+  * @param  orderingOfPartitionKey an ordering of internal rows that compares
+  *                                internal rows based on a partition key
+  * @param orderingInWindow an ordering of internal rows inside a window
+  * @param orderingAcrossWindows an ordering of internal rows across different
+  *                              windows on a Spark physical partition. This
+  *                              ordering is obtained from a partition key plus
+  *                              an ordering inside a window
+  * @param prefixComparatorInWindow a prefix comparator for sorting rows in a window
+  * @param prefixComparatorAcrossWindows a prefix comparator for sorting rows across
+  *                                      different windows on a Spark physical partition
+  * @param prefixComputerInWindow a prefix computer to calculate the prefix of a row
+  *                               based on the sort order inside a window
+  * @param prefixComputerAcrossWindows a prefix computer to calculate the prefix of a row
+  *                                    based on the sort order across different windows on
+  *                                    a Spark physical partition
+  * @param canUseRadixSortInWindow whether to use radix sort to sort the rows inside
+  *                                a window
+  * @param canUseRadixSortAcrossWindows whether to use radix sort to sort the rows across
+  *                                     different windows on a Spark physical partition
+  * @param pageSizeBytes the size of a page in bytes
+  */
   public static UnsafeExternalRowWindowSorter create(
       StructType schema,
       UnsafeProjection partitionSpecProjection,
@@ -101,21 +126,14 @@ public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorter
       UnsafeExternalRowSorter.PrefixComputer prefixComputerAcrossWindows,
       boolean canUseRadixSortInWindow,
       boolean canUseRadixSortAcrossWindows,
-      long pageSizeBytes,
-      int rankLimit) throws IOException {
-    UnsafeExternalRowSorter mainSorter = null;
-    if (rankLimit < 0) { // When rankLimit == -1, we do a complete sort
-      mainSorter = UnsafeExternalRowSorter.create(
-        schema,
-        orderingAcrossWindows,
-        prefixComparatorAcrossWindows,
-        prefixComputerAcrossWindows,
-        pageSizeBytes,
-        canUseRadixSortAcrossWindows);
-    } else { // When rankLimit >= 0, we do a top-${rankLimit} sort
-      // TODO: add top-N sort for UnsafeExternalRowWindowSorter
-      throw new IOException("UnsafeExternalRowWindowSorter does not support top-N sort yet.");
-    }
+      long pageSizeBytes) throws IOException {
+    UnsafeExternalRowSorter mainSorter = UnsafeExternalRowSorter.create(
+      schema,
+      orderingAcrossWindows,
+      prefixComparatorAcrossWindows,
+      prefixComputerAcrossWindows,
+      pageSizeBytes,
+      canUseRadixSortAcrossWindows);
 
     return new UnsafeExternalRowWindowSorter(
       mainSorter,
@@ -127,8 +145,7 @@ public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorter
       prefixComparatorInWindow,
       prefixComputerInWindow,
       canUseRadixSortInWindow,
-      pageSizeBytes,
-      rankLimit);
+      pageSizeBytes);
   }
 
   private UnsafeExternalRowWindowSorter(
@@ -141,8 +158,7 @@ public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorter
       PrefixComparator prefixComparatorInWindow,
       UnsafeExternalRowSorter.PrefixComputer prefixComputerInWindow,
       boolean canUseRadixSortInWindow,
-      long pageSizeBytes,
-      int rankLimit) {
+      long pageSizeBytes) {
     this.mainSorter = mainSorter;
     this.schema = schema;
     this.partitionSpecProjection = partitionSpecProjection;
@@ -153,8 +169,7 @@ public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorter
     this.prefixComputerInWindow = prefixComputerInWindow;
     this.canUseRadixSortInWindow = canUseRadixSortInWindow;
     this.pageSizeBytes = pageSizeBytes;
-    this.rankLimit = rankLimit;
-    this.windowSorterMap = new HashMap<UnsafeRow,UnsafeExternalRowSorterBase>(
+    this.windowSorterMap = new HashMap<UnsafeRow,AbstractUnsafeExternalRowSorter>(
       windowSorterMapMaxSize);
     this.partitionKeyComparator = new RowComparator(orderingOfPartitionKey);
   }
@@ -176,13 +191,7 @@ public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorter
     } else if (this.windowSorterMap.size() == this.windowSorterMapMaxSize) {
       this.mainSorter.insertRow(row);
     } else {
-      UnsafeExternalRowSorterBase sorter = null;
-      if (this.rankLimit < 0) {
-        sorter = createUnsafeExternalRowSorterForWindow();
-      } else { // When rankLimit >= 0, we create a top-${rankLimit} sorter here
-        // TODO: add top-N sort for UnsafeExternalRowWindowSorter
-        throw new IOException("UnsafeExternalRowWindowSorter does not support top-N sort yet.");
-      }
+      AbstractUnsafeExternalRowSorter sorter = createUnsafeExternalRowSorterForWindow();
 
       if (sorter == null) {
         this.mainSorter.spill();
@@ -206,9 +215,15 @@ public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorter
     } else {
       final SortBasedMergerIterator mergeIterator = new SortBasedMergerIterator(
         RowIterator.fromScala(getSortedIteratorFromSorterMap()),
-        RowIterator.fromScala(getSortedIteratorFromMainSorter()));
+        RowIterator.fromScala(getSortedIteratorFromMainSorter()),
+        orderingAcrossWindows);
       return mergeIterator.toScala();
     }
+  }
+
+  @Override
+  public Iterator<InternalRow> getIterator() throws IOException {
+    throw new IOException("This method is not supported.");
   }
 
   @Override
@@ -226,7 +241,7 @@ public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorter
   @VisibleForTesting
   void setTestSpillFrequency(int frequency) {
     this.mainSorter.setTestSpillFrequency(frequency);
-    for (Entry<UnsafeRow,UnsafeExternalRowSorterBase> entry: this.windowSorterMap.entrySet()) {
+    for (Entry<UnsafeRow,AbstractUnsafeExternalRowSorter> entry: this.windowSorterMap.entrySet()) {
       entry.getValue().setTestSpillFrequency(frequency);
     }
   }
@@ -237,7 +252,7 @@ public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorter
   @Override
   public long getSortTimeNanos() {
     long sortTimeNanos = this.mainSorter.getSortTimeNanos();
-    for (Entry<UnsafeRow,UnsafeExternalRowSorterBase> entry: this.windowSorterMap.entrySet()) {
+    for (Entry<UnsafeRow,AbstractUnsafeExternalRowSorter> entry: this.windowSorterMap.entrySet()) {
       sortTimeNanos = sortTimeNanos + entry.getValue().getSortTimeNanos();
     }
     return sortTimeNanos;
@@ -249,7 +264,7 @@ public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorter
   @Override
   public long getPeakMemoryUsage() {
     long peakMemoryUsage = this.mainSorter.getPeakMemoryUsage();
-    for (Entry<UnsafeRow,UnsafeExternalRowSorterBase> entry: this.windowSorterMap.entrySet()) {
+    for (Entry<UnsafeRow,AbstractUnsafeExternalRowSorter> entry: this.windowSorterMap.entrySet()) {
       peakMemoryUsage = peakMemoryUsage + entry.getValue().getPeakMemoryUsage();
     }
     return peakMemoryUsage;
@@ -257,7 +272,7 @@ public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorter
 
   @Override
   public void cleanupResources() {
-    for (Entry<UnsafeRow, UnsafeExternalRowSorterBase> entry: this.windowSorterMap.entrySet()) {
+    for (Entry<UnsafeRow,AbstractUnsafeExternalRowSorter> entry: this.windowSorterMap.entrySet()) {
       entry.getValue().cleanupResources();
     }
     this.mainSorter.cleanupResources();
@@ -269,12 +284,12 @@ public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorter
 
   private Iterator<InternalRow> getSortedIteratorFromSorterMap() throws IOException {
 
-    TreeMap<UnsafeRow, UnsafeExternalRowSorterBase> partitionKeySortedSorterMap =
-      new TreeMap<UnsafeRow, UnsafeExternalRowSorterBase>(this.partitionKeyComparator);
+    TreeMap<UnsafeRow,AbstractUnsafeExternalRowSorter> partitionKeySortedSorterMap =
+      new TreeMap<UnsafeRow,AbstractUnsafeExternalRowSorter>(this.partitionKeyComparator);
 
     partitionKeySortedSorterMap.putAll(this.windowSorterMap);
     Queue<RowIterator> queue = new LinkedList<>();
-    for (Entry<UnsafeRow,UnsafeExternalRowSorterBase> entry:
+    for (Entry<UnsafeRow,AbstractUnsafeExternalRowSorter> entry:
         partitionKeySortedSorterMap.entrySet()) {
       if (orderingInWindow != null) {
         queue.add(RowIterator.fromScala(entry.getValue().sort()));
@@ -302,18 +317,16 @@ public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorter
   /**
    * Chain multiple UnsafeSorterIterators from windowSorterMap together as single one.
    */
-  class ChainedIterator extends RowIterator {
-
+  private static final class ChainedIterator extends RowIterator {
     private final Queue<RowIterator> iterators;
     private RowIterator current;
-    private final int numFields = schema.length();
     private UnsafeRow row;
 
     ChainedIterator(Queue<RowIterator> iterators) {
       assert iterators.size() > 0;
       this.iterators = iterators;
       this.current = iterators.remove();
-      UnsafeRow row = new UnsafeRow(numFields);
+      UnsafeRow row = new UnsafeRow(0);
     }
 
     @Override
@@ -341,7 +354,8 @@ public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorter
    * This iterator merges two sorted iterators. While it contains two sorted iterators, it always
    * returns the result of the sorted iterator that points to the row with smaller order.
    */
-  class SortBasedMergerIterator extends RowIterator {
+  private static final class SortBasedMergerIterator extends RowIterator {
+    private final Ordering<InternalRow> ordering;
 
     private final RowIterator sortedIterator1;
     private UnsafeRow row1;
@@ -353,9 +367,11 @@ public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorter
 
     SortBasedMergerIterator(
         RowIterator sortedIterator1,
-        RowIterator sortedIterator2) {
+        RowIterator sortedIterator2,
+        Ordering<InternalRow> ordering) {
       this.sortedIterator1 = sortedIterator1;
       this.sortedIterator2 = sortedIterator2;
+      this.ordering = ordering;
       row1 = new UnsafeRow(0);
       row2 = new UnsafeRow(0);
     }
@@ -363,7 +379,7 @@ public final class UnsafeExternalRowWindowSorter extends UnsafeExternalRowSorter
     private int compare(UnsafeRow row1, UnsafeRow row2) {
       assert row1 != null;
       assert row2 != null;
-      return orderingAcrossWindows.compare(row1, row2);
+      return ordering.compare(row1, row2);
     }
 
     @Override

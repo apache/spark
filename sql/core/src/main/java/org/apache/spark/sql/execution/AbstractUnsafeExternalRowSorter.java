@@ -25,16 +25,13 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 
 // Base class for UnsafeExternalRowSorter and UnsafeExternalRowWindowSorter
-public abstract class UnsafeExternalRowSorterBase {
+public abstract class AbstractUnsafeExternalRowSorter {
   public abstract void insertRow(UnsafeRow row) throws IOException;
   public abstract Iterator<InternalRow> sort() throws IOException;
   public abstract Iterator<InternalRow> sort(Iterator<UnsafeRow> inputIterator) throws IOException;
+  public abstract Iterator<InternalRow> getIterator() throws IOException;
   public abstract long getPeakMemoryUsage();
   public abstract long getSortTimeNanos();
   public abstract void cleanupResources();
   abstract void setTestSpillFrequency(int frequency);
-
-  public Iterator<InternalRow> getIterator() throws IOException {
-    throw new IOException("This method is not implmented.");
-  }
 }

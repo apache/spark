@@ -37,7 +37,7 @@ import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterIterator;
 
-public final class UnsafeExternalRowSorter extends UnsafeExternalRowSorterBase {
+public final class UnsafeExternalRowSorter extends AbstractUnsafeExternalRowSorter {
 
   /**
    * If positive, forces records to be spilled to disk at the given frequency (measured in numbers
