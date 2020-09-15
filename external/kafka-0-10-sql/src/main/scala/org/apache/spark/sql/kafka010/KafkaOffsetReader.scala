@@ -80,6 +80,11 @@ private[kafka010] class KafkaOffsetReader(
 
   private lazy val listOffsetsOptions = new ListOffsetsOptions(isolationLevel)
 
+  private def listOffsets(admin: Admin, listOffsetsParams: ju.Map[TopicPartition, OffsetSpec]) = {
+    admin.listOffsets(listOffsetsParams, listOffsetsOptions).all().get().asScala
+      .map(result => result._1 -> result._2.offset()).toMap
+  }
+
   private[kafka010] val maxOffsetFetchAttempts =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, "3").toInt
 
@@ -229,9 +234,7 @@ private[kafka010] class KafkaOffsetReader(
               tp -> OffsetSpec.earliest()
           }
         }
-        val resolvedPartitionOffsets = admin.listOffsets(listOffsetsParams.asJava,
-          listOffsetsOptions).all().get().asScala.map(result => result._1 -> result._2.offset())
-          .toMap
+        val resolvedPartitionOffsets = listOffsets(admin, listOffsetsParams.asJava)
 
         partitionOffsets.map { case (tp, off) =>
           off match {
@@ -256,8 +259,7 @@ private[kafka010] class KafkaOffsetReader(
   def fetchEarliestOffsets(): Map[TopicPartition, Long] = partitionsAssignedToConsumer(
     partitions => {
       val listOffsetsParams = partitions.asScala.map(p => p -> OffsetSpec.earliest()).toMap.asJava
-      val partitionOffsets = admin.listOffsets(listOffsetsParams, listOffsetsOptions).all().get()
-        .asScala.map(result => result._1 -> result._2.offset()).toMap
+      val partitionOffsets = listOffsets(admin, listOffsetsParams)
       logDebug(s"Got earliest offsets for partitions: $partitionOffsets")
       partitionOffsets
     })
@@ -279,10 +281,9 @@ private[kafka010] class KafkaOffsetReader(
   def fetchLatestOffsets(
       knownOffsets: Option[PartitionOffsetMap]): PartitionOffsetMap =
     partitionsAssignedToConsumer { partitions => {
+      val listOffsetsParams = partitions.asScala.map(_ -> OffsetSpec.latest()).toMap.asJava
       if (knownOffsets.isEmpty) {
-        val listOffsetsParams = partitions.asScala.map(_ -> OffsetSpec.latest()).toMap.asJava
-        val partitionOffsets = admin.listOffsets(listOffsetsParams, listOffsetsOptions).all()
-          .get().asScala.map(result => result._1 -> result._2.offset()).toMap
+        val partitionOffsets = listOffsets(admin, listOffsetsParams)
         logDebug(s"Got latest offsets for partitions: $partitionOffsets")
         partitionOffsets
       } else {
@@ -314,9 +315,7 @@ private[kafka010] class KafkaOffsetReader(
         var incorrectOffsets: Seq[(TopicPartition, Long, Long)] = Nil
         var attempt = 0
         do {
-          val listOffsetsParams = partitions.asScala.map(_ -> OffsetSpec.latest()).toMap.asJava
-          partitionOffsets = admin.listOffsets(listOffsetsParams, listOffsetsOptions).all().get()
-            .asScala.map(result => result._1 -> result._2.offset()).toMap
+          partitionOffsets = listOffsets(admin, listOffsetsParams)
           attempt += 1
 
           incorrectOffsets = findIncorrectOffsets()
@@ -352,8 +351,7 @@ private[kafka010] class KafkaOffsetReader(
           // `partitions`. So we need to ignore them
           partitions.contains(newPartition)
         }.map(partition => partition -> OffsetSpec.earliest()).toMap.asJava
-        val partitionOffsets = admin.listOffsets(listOffsetsParams, listOffsetsOptions).all()
-          .get().asScala.map(result => result._1 -> result._2.offset()).toMap
+        val partitionOffsets = listOffsets(admin, listOffsetsParams)
         logDebug(s"Got earliest offsets for new partitions: $partitionOffsets")
         partitionOffsets
       })
