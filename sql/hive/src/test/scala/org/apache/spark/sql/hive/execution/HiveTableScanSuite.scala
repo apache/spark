@@ -18,6 +18,8 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -184,6 +186,47 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
       val scan1 = getHiveTableScanExec(s"SELECT * FROM $table WHERE a = 1 AND b = 2")
       val scan2 = getHiveTableScanExec(s"SELECT * FROM $table WHERE b = 2 AND a = 1")
       assert(scan1.sameResult(scan2))
+    }
+  }
+
+  test("SPARK-32867: When explain, HiveTableRelation show limited message") {
+    withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "false",
+      "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withTable("df1", "df2") {
+        spark.range(1000)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format("hive")
+          .mode("overwrite")
+          .saveAsTable("df1")
+
+        val scan1 = getHiveTableScanExec("SELECT * FROM df1 WHERE df1.k < 3")
+        assert(scan1.simpleString(100).replaceAll("#\\d\\dL", "") ==
+          "Scan hive default.df1 [id, k]," +
+            " HiveTableRelation [" +
+            "`default`.`df1`," +
+            " org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe," +
+            " Data Cols: [id]," +
+            " Partition Cols: [k]," +
+            " Pruned Partitions: [k=0, k=1, k=2]," +
+            " Statistic: sizeInBytes=8.0 EiB" +
+            "]," +
+            " [isnotnull(k), (k < 3)]")
+        val scan2 = getHiveTableScanExec("SELECT * FROM df1 WHERE df1.k < 100")
+        assert(scan2.simpleString(100).replaceAll("#\\d\\dL", "") ==
+          "Scan hive default.df1 [id, k]," +
+            " HiveTableRelation [" +
+            "`default`.`df1`," +
+            " org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe," +
+            " Data Cols: [id]," +
+            " Partition Cols: [k]," +
+            " Pruned Partitions: [k=0, k=1, k=10, k=11, k=12, k=13, k=14, k=15, k=16," +
+            " k=17, k=18, k=19, k=2, k=20, k=21, k=22, k=2...," +
+            " Statistic: sizeInBytes=8.0 EiB" +
+            "]," +
+            " [isnotnull(k), (k < 100)]")
+      }
     }
   }
 
