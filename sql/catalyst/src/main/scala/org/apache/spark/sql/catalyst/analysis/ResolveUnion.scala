@@ -33,6 +33,24 @@ import org.apache.spark.unsafe.types.UTF8String
  * Resolves different children of Union to a common set of columns.
  */
 object ResolveUnion extends Rule[LogicalPlan] {
+  /**
+   * This method sorts columns in a struct expression based on column names.
+   */
+  private def sortStructFields(expr: Expression): Expression = {
+    assert(expr.dataType.isInstanceOf[StructType])
+
+    val existingExprs = expr.dataType.asInstanceOf[StructType].fieldNames.zipWithIndex.map {
+      case (name, i) => (name, GetStructField(KnownNotNull(expr), i).asInstanceOf[Expression])
+    }.sortBy(_._1).flatMap(pair => Seq(Literal(pair._1), pair._2))
+
+    val newExpr = CreateNamedStruct(existingExprs)
+    if (expr.nullable) {
+      If(IsNull(expr), Literal(null, newExpr.dataType), newExpr)
+    } else {
+      newExpr
+    }
+  }
+
   private def sortStructFields(fieldExprs: Seq[Expression]): Seq[Expression] = {
     fieldExprs.grouped(2).map { e =>
       Seq(e.head, e.last)
@@ -68,14 +86,14 @@ object ResolveUnion extends Rule[LogicalPlan] {
    * `target` struct and add these missing nested fields. Currently we don't support finding out
    * missing nested fields of struct nested in array or struct nested in map.
    */
-  private def addFields(col: NamedExpression, target: StructType): Option[Expression] = {
+  private def addFields(col: NamedExpression, target: StructType): Expression = {
     assert(col.dataType.isInstanceOf[StructType], "Only support StructType.")
 
     val resolver = SQLConf.get.resolver
     val missingFields =
       StructType.findMissingFields(col.dataType.asInstanceOf[StructType], target, resolver)
     if (missingFields.isEmpty) {
-      None
+      sortStructFields(col)
     } else {
       missingFields.map { s =>
         val struct = addFieldsInto(col, "", s.fields)
@@ -84,7 +102,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
         // If we don't sort, we will have "a int, b long, c string" and
         // "a int, c string, b long", which are not compatible.
         sortStructFieldsInWithFields(struct)
-      }
+      }.get
     }
   }
 
@@ -146,11 +164,10 @@ object ResolveUnion extends Rule[LogicalPlan] {
             // Having an output with same name, but different struct type.
             // We need to add missing fields. Note that if there are deeply nested structs such as
             // nested struct of array in struct, we don't support to add missing deeply nested field
-            // like that. For such case, simply use original attribute.
-            addFields(foundAttr, target).map { added =>
-              aliased += foundAttr
-              Alias(added, foundAttr.name)()
-            }.getOrElse(foundAttr)
+            // like that. We will sort columns in the struct expression to make sure two sides of
+            // union have consistent schema.
+            aliased += foundAttr
+            Alias(addFields(foundAttr, target), foundAttr.name)()
           case _ =>
             // We don't need/try to add missing fields if:
             // 1. The attributes of left and right side are the same struct type

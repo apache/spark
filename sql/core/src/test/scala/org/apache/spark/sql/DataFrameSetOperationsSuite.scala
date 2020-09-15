@@ -638,6 +638,31 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - edge case") {
+    withSQLConf(SQLConf.UNION_BYNAME_STRUCT_SUPPORT_ENABLED.key -> "true") {
+      val nestedStructType1 = StructType(Seq(
+        StructField("b", StringType)))
+      val nestedStructValues1 = Row("b")
+
+      val nestedStructType2 = StructType(Seq(
+        StructField("b", StringType),
+        StructField("a", StringType)))
+      val nestedStructValues2 = Row("b", "a")
+
+      val df1: DataFrame = spark.createDataFrame(
+        sparkContext.parallelize(Row(nestedStructValues1) :: Nil),
+        StructType(Seq(StructField("topLevelCol", nestedStructType1))))
+
+      val df2: DataFrame = spark.createDataFrame(
+        sparkContext.parallelize(Row(nestedStructValues2) :: Nil),
+        StructType(Seq(StructField("topLevelCol", nestedStructType2))))
+
+      val union = df1.unionByName(df2, allowMissingColumns = true)
+      checkAnswer(union, Row(Row(null, "b")) :: Row(Row("a", "b")) :: Nil)
+      assert(union.schema.toDDL == "`topLevelCol` STRUCT<`a`: STRING, `b`: STRING>")
+    }
+  }
+
   test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - disable") {
     withSQLConf(SQLConf.UNION_BYNAME_STRUCT_SUPPORT_ENABLED.key -> "false") {
       val df1 = Seq(((1, 2, 3), 0), ((2, 3, 4), 1), ((3, 4, 5), 2)).toDF("a", "idx")
