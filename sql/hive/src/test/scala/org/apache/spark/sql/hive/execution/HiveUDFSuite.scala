@@ -668,7 +668,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       val msg = intercept[AnalysisException] {
         sql("SELECT testArraySum(1)")
       }.getMessage
-      assert(msg.contains("cannot resolve 'default.testArraySum(1)' due to data type mismatch"))
+      assert(msg.contains(s"No handler for UDF/UDAF/UDTF '${classOf[ArraySumUDF].getName}'"))
 
       val msg2 = intercept[AnalysisException] {
         sql("SELECT testArraySum(1, 2)")
