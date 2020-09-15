@@ -28,6 +28,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
@@ -118,7 +119,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def option(key: String, value: String): DataFrameReader = {
-    this.extraOptions += (key -> value)
+    this.extraOptions = this.extraOptions + (key -> value)
     this
   }
 
@@ -259,25 +260,22 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
     }
 
-    val updatedPaths = if (!legacyPathOptionBehavior && paths.length == 1) {
-      option("path", paths.head)
-      Seq.empty
-    } else {
-      paths
-    }
-
     DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).map { provider =>
       val catalogManager = sparkSession.sessionState.catalogManager
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         source = provider, conf = sparkSession.sessionState.conf)
-      val pathsOption = if (updatedPaths.isEmpty) {
-        None
+
+      val optionsWithPath = if (paths.isEmpty) {
+        extraOptions
+      } else if (paths.length == 1) {
+        extraOptions + ("path" -> paths.head)
       } else {
         val objectMapper = new ObjectMapper()
-        Some("paths" -> objectMapper.writeValueAsString(updatedPaths.toArray))
+        extraOptions + ("paths" -> objectMapper.writeValueAsString(paths.toArray))
       }
 
-      val finalOptions = sessionOptions ++ extraOptions.originalMap ++ pathsOption
+      val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
+        optionsWithPath.originalMap
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
       val (table, catalog, ident) = provider match {
         case _: SupportsCatalogOptions if userSpecifiedSchema.nonEmpty =>
@@ -302,20 +300,27 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
             sparkSession,
             DataSourceV2Relation.create(table, catalog, ident, dsOptions))
 
-        case _ => loadV1Source(updatedPaths: _*)
+        case _ => loadV1Source(paths: _*)
       }
-    }.getOrElse(loadV1Source(updatedPaths: _*))
+    }.getOrElse(loadV1Source(paths: _*))
   }
 
   private def loadV1Source(paths: String*) = {
+    val legacyPathOptionBehavior = sparkSession.sessionState.conf.legacyPathOptionBehavior
+    val (finalPaths, finalOptions) = if (!legacyPathOptionBehavior && paths.length == 1) {
+      (Nil, extraOptions + ("path" -> paths.head))
+    } else {
+      (paths, extraOptions)
+    }
+
     // Code path for data source v1.
     sparkSession.baseRelationToDataFrame(
       DataSource.apply(
         sparkSession,
-        paths = paths,
+        paths = finalPaths,
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
-        options = extraOptions.originalMap).resolveRelation())
+        options = finalOptions.originalMap).resolveRelation())
   }
 
   /**
@@ -823,7 +828,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def table(tableName: String): DataFrame = {
     assertNoSpecifiedSchema("table")
-    sparkSession.table(tableName)
+    val multipartIdentifier =
+      sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    Dataset.ofRows(sparkSession, UnresolvedRelation(multipartIdentifier,
+      new CaseInsensitiveStringMap(extraOptions.toMap.asJava)))
   }
 
   /**

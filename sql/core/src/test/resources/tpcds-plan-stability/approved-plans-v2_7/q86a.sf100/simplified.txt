@@ -1,47 +1,47 @@
-TakeOrderedAndProject [i_category,i_class,lochierarchy,rank_within_parent,total_sum]
+TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,total_sum,i_class]
   WholeStageCodegen (20)
-    Project [i_category,i_class,lochierarchy,rank_within_parent,total_sum]
+    Project [total_sum,i_category,i_class,lochierarchy,rank_within_parent]
       InputAdapter
-        Window [_w0,lochierarchy,total_sum]
+        Window [total_sum,lochierarchy,_w0]
           WholeStageCodegen (19)
-            Sort [_w0,lochierarchy,total_sum]
+            Sort [lochierarchy,_w0,total_sum]
               InputAdapter
-                Exchange [_w0,lochierarchy] #1
+                Exchange [lochierarchy,_w0] #1
                   WholeStageCodegen (18)
-                    HashAggregate [g_category,g_class,i_category,i_class,lochierarchy,total_sum] [_w0]
+                    HashAggregate [total_sum,i_category,i_class,g_category,g_class,lochierarchy] [_w0]
                       InputAdapter
-                        Exchange [g_category,g_class,i_category,i_class,lochierarchy,total_sum] #2
+                        Exchange [total_sum,i_category,i_class,g_category,g_class,lochierarchy] #2
                           WholeStageCodegen (17)
-                            HashAggregate [g_category,g_class,i_category,i_class,lochierarchy,total_sum]
+                            HashAggregate [total_sum,i_category,i_class,g_category,g_class,lochierarchy]
                               InputAdapter
                                 Union
                                   WholeStageCodegen (11)
-                                    HashAggregate [g_category,g_class,i_category,i_class,lochierarchy,total_sum]
+                                    HashAggregate [total_sum,i_category,i_class,g_category,g_class,lochierarchy]
                                       InputAdapter
-                                        Exchange [g_category,g_class,i_category,i_class,lochierarchy,total_sum] #3
+                                        Exchange [total_sum,i_category,i_class,g_category,g_class,lochierarchy] #3
                                           WholeStageCodegen (10)
-                                            HashAggregate [g_category,g_class,i_category,i_class,lochierarchy,total_sum]
+                                            HashAggregate [total_sum,i_category,i_class,g_category,g_class,lochierarchy]
                                               InputAdapter
                                                 Union
                                                   WholeStageCodegen (4)
-                                                    HashAggregate [i_category,i_class,sum] [g_category,g_class,lochierarchy,sum,sum(UnscaledValue(ws_net_paid)),total_sum]
+                                                    HashAggregate [i_category,i_class,sum] [sum(UnscaledValue(ws_net_paid)),total_sum,g_category,g_class,lochierarchy,sum]
                                                       InputAdapter
                                                         Exchange [i_category,i_class] #4
                                                           WholeStageCodegen (3)
                                                             HashAggregate [i_category,i_class,ws_net_paid] [sum,sum]
-                                                              Project [i_category,i_class,ws_net_paid]
-                                                                BroadcastHashJoin [i_item_sk,ws_item_sk]
+                                                              Project [ws_net_paid,i_class,i_category]
+                                                                BroadcastHashJoin [ws_item_sk,i_item_sk]
                                                                   Project [ws_item_sk,ws_net_paid]
-                                                                    BroadcastHashJoin [d_date_sk,ws_sold_date_sk]
-                                                                      Filter [ws_item_sk,ws_sold_date_sk]
+                                                                    BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
+                                                                      Filter [ws_sold_date_sk,ws_item_sk]
                                                                         ColumnarToRow
                                                                           InputAdapter
-                                                                            Scan parquet default.web_sales [ws_item_sk,ws_net_paid,ws_sold_date_sk]
+                                                                            Scan parquet default.web_sales [ws_sold_date_sk,ws_item_sk,ws_net_paid]
                                                                       InputAdapter
                                                                         BroadcastExchange #5
                                                                           WholeStageCodegen (1)
                                                                             Project [d_date_sk]
-                                                                              Filter [d_date_sk,d_month_seq]
+                                                                              Filter [d_month_seq,d_date_sk]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
                                                                                     Scan parquet default.date_dim [d_date_sk,d_month_seq]
@@ -51,22 +51,22 @@ TakeOrderedAndProject [i_category,i_class,lochierarchy,rank_within_parent,total_
                                                                         Filter [i_item_sk]
                                                                           ColumnarToRow
                                                                             InputAdapter
-                                                                              Scan parquet default.item [i_category,i_class,i_item_sk]
+                                                                              Scan parquet default.item [i_item_sk,i_class,i_category]
                                                   WholeStageCodegen (9)
-                                                    HashAggregate [i_category,isEmpty,sum] [g_category,g_class,i_class,isEmpty,lochierarchy,sum,sum(total_sum),total_sum]
+                                                    HashAggregate [i_category,sum,isEmpty] [sum(total_sum),total_sum,i_class,g_category,g_class,lochierarchy,sum,isEmpty]
                                                       InputAdapter
                                                         Exchange [i_category] #7
                                                           WholeStageCodegen (8)
-                                                            HashAggregate [i_category,total_sum] [isEmpty,isEmpty,sum,sum]
-                                                              HashAggregate [i_category,i_class,sum] [sum,sum(UnscaledValue(ws_net_paid)),total_sum]
+                                                            HashAggregate [i_category,total_sum] [sum,isEmpty,sum,isEmpty]
+                                                              HashAggregate [i_category,i_class,sum] [sum(UnscaledValue(ws_net_paid)),total_sum,sum]
                                                                 InputAdapter
                                                                   ReusedExchange [i_category,i_class,sum] #4
                                   WholeStageCodegen (16)
-                                    HashAggregate [isEmpty,sum] [g_category,g_class,i_category,i_class,isEmpty,lochierarchy,sum,sum(total_sum),total_sum]
+                                    HashAggregate [sum,isEmpty] [sum(total_sum),total_sum,i_category,i_class,g_category,g_class,lochierarchy,sum,isEmpty]
                                       InputAdapter
                                         Exchange #8
                                           WholeStageCodegen (15)
-                                            HashAggregate [total_sum] [isEmpty,isEmpty,sum,sum]
-                                              HashAggregate [i_category,i_class,sum] [sum,sum(UnscaledValue(ws_net_paid)),total_sum]
+                                            HashAggregate [total_sum] [sum,isEmpty,sum,isEmpty]
+                                              HashAggregate [i_category,i_class,sum] [sum(UnscaledValue(ws_net_paid)),total_sum,sum]
                                                 InputAdapter
                                                   ReusedExchange [i_category,i_class,sum] #4

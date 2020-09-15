@@ -22,7 +22,7 @@ import time
 
 from pyspark.sql import Row
 from pyspark.sql.functions import lit
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StructField, DecimalType, BinaryType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, UTCOffsetTimezone
 
 

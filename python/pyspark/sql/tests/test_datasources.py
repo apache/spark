@@ -19,7 +19,7 @@ import shutil
 import tempfile
 
 from pyspark.sql import Row
-from pyspark.sql.types import *
+from pyspark.sql.types import IntegerType, StructField, StructType, LongType, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

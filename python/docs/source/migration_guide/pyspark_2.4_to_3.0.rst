@@ -28,13 +28,13 @@ Upgrading from PySpark 2.4 to 3.0
 
 * In PySpark, when Arrow optimization is enabled, if Arrow version is higher than 0.11.0, Arrow can perform safe type conversion when converting pandas.Series to an Arrow array during serialization. Arrow raises errors when detecting unsafe type conversions like overflow. You enable it by setting ``spark.sql.execution.pandas.convertToArrowArraySafely`` to true. The default setting is false. PySpark behavior for Arrow versions is illustrated in the following table:
 
-=======================================  ================  =========================
-PyArrow version                          Integer overflow  Floating point truncation
-=======================================  ================  =========================
-0.11.0 and below                         Raise error       Silently allows
-> 0.11.0, arrowSafeTypeConversion=false  Silent overflow   Silently allows
-> 0.11.0, arrowSafeTypeConversion=true   Raise error       Raise error
-=======================================  ================  =========================
+    =======================================  ================  =========================
+    PyArrow version                          Integer overflow  Floating point truncation
+    =======================================  ================  =========================
+    0.11.0 and below                         Raise error       Silently allows
+    > 0.11.0, arrowSafeTypeConversion=false  Silent overflow   Silently allows
+    > 0.11.0, arrowSafeTypeConversion=true   Raise error       Raise error
+    =======================================  ================  =========================
 
 * In Spark 3.0, ``createDataFrame(..., verifySchema=True)`` validates LongType as well in PySpark. Previously, LongType was not verified and resulted in None in case the value overflows. To restore this behavior, verifySchema can be set to False to disable the validation.
 

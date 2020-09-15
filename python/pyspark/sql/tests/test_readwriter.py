@@ -21,7 +21,7 @@ import tempfile
 
 from pyspark.sql.functions import col
 from pyspark.sql.readwriter import DataFrameWriterV2
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StructField, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

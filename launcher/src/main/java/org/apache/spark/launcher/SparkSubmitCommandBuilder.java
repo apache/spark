@@ -139,7 +139,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
         case RUN_EXAMPLE:
           isExample = true;
-          appResource = SparkLauncher.NO_RESOURCE;
+          appResource = findExamplesAppJar();
           submitArgs = args.subList(1, args.size());
       }
 
@@ -241,9 +241,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
 
     args.addAll(parsedArgs);
+
     if (appResource != null) {
       args.add(appResource);
     }
+
     args.addAll(appArgs);
 
     return args;
@@ -401,6 +403,15 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       mainClass.equals("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"));
   }
 
+  private String findExamplesAppJar() {
+    for (String exampleJar : findExamplesJars()) {
+      if (new File(exampleJar).getName().startsWith("spark-examples")) {
+        return exampleJar;
+      }
+    }
+    throw new IllegalStateException("Failed to find examples' main app jar.");
+  }
+
   private List<String> findExamplesJars() {
     boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
     List<String> examplesJars = new ArrayList<>();
@@ -513,7 +524,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           className = EXAMPLE_CLASS_PREFIX + className;
         }
         mainClass = className;
-        appResource = SparkLauncher.NO_RESOURCE;
+        appResource = findExamplesAppJar();
         return false;
       } else if (errorOnUnknownArgs) {
         checkArgument(!opt.startsWith("-"), "Unrecognized option: %s", opt);

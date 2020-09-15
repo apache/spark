@@ -23,7 +23,8 @@ import time
 import unittest
 
 from pyspark.sql import SparkSession, Row
-from pyspark.sql.types import *
+from pyspark.sql.types import StringType, IntegerType, DoubleType, StructType, StructField, \
+    BooleanType, DateType, TimestampType, FloatType
 from pyspark.sql.utils import AnalysisException, IllegalArgumentException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils, have_pyarrow, have_pandas, \
     pandas_requirement_message, pyarrow_requirement_message
@@ -903,7 +904,7 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_dataframe import *
+    from pyspark.sql.tests.test_dataframe import *  # noqa: F401
 
     try:
         import xmlrunner

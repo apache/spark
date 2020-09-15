@@ -1235,7 +1235,8 @@ setMethod("collect",
                   doServerAuth(conn, authSecret)
                   arrowTable <- arrow::read_ipc_stream(readRaw(conn))
                   as.data.frame(arrowTable, stringsAsFactors = stringsAsFactors)
-                }, finally = {
+                },
+                finally = {
                   close(conn)
                 })
                 return(output)

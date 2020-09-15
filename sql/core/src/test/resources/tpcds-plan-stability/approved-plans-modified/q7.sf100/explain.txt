@@ -115,7 +115,7 @@ Input [8]: [ss_item_sk#5, ss_cdemo_sk#6, ss_promo_sk#7, ss_quantity#8, ss_list_p
 Output [4]: [cd_demo_sk#16, cd_gender#17, cd_marital_status#18, cd_education_status#19]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
-PushedFilters: [IsNotNull(cd_education_status), IsNotNull(cd_gender), IsNotNull(cd_marital_status), EqualTo(cd_gender,F), EqualTo(cd_marital_status,W), EqualTo(cd_education_status,Primary), IsNotNull(cd_demo_sk)]
+PushedFilters: [IsNotNull(cd_gender), IsNotNull(cd_marital_status), IsNotNull(cd_education_status), EqualTo(cd_gender,F), EqualTo(cd_marital_status,W), EqualTo(cd_education_status,Primary), IsNotNull(cd_demo_sk)]
 ReadSchema: struct<cd_demo_sk:int,cd_gender:string,cd_marital_status:string,cd_education_status:string>
 
 (19) ColumnarToRow [codegen id : 3]
@@ -123,7 +123,7 @@ Input [4]: [cd_demo_sk#16, cd_gender#17, cd_marital_status#18, cd_education_stat
 
 (20) Filter [codegen id : 3]
 Input [4]: [cd_demo_sk#16, cd_gender#17, cd_marital_status#18, cd_education_status#19]
-Condition : ((((((isnotnull(cd_education_status#19) AND isnotnull(cd_gender#17)) AND isnotnull(cd_marital_status#18)) AND (cd_gender#17 = F)) AND (cd_marital_status#18 = W)) AND (cd_education_status#19 = Primary)) AND isnotnull(cd_demo_sk#16))
+Condition : ((((((isnotnull(cd_gender#17) AND isnotnull(cd_marital_status#18)) AND isnotnull(cd_education_status#19)) AND (cd_gender#17 = F)) AND (cd_marital_status#18 = W)) AND (cd_education_status#19 = Primary)) AND isnotnull(cd_demo_sk#16))
 
 (21) Project [codegen id : 3]
 Output [1]: [cd_demo_sk#16]

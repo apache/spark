@@ -39,6 +39,7 @@ private[spark] trait Schedulable {
   def stageId: Int
   def name: String
 
+  def isSchedulable: Boolean
   def addSchedulable(schedulable: Schedulable): Unit
   def removeSchedulable(schedulable: Schedulable): Unit
   def getSchedulableByName(name: String): Schedulable
