@@ -219,7 +219,7 @@ class QueryExecutionSuite extends SharedSparkSession {
         spark.range(1).groupBy("id").count().queryExecution.executedPlan
       }
     }
-    Seq("=== Applying Rule org.apache.spark.sql.execution.CollapseCodegenStages ===",
+    Seq("=== Applying Rule org.apache.spark.sql.execution",
         "=== Result of Batch Preparations ===").foreach { expectedMsg =>
       assert(testAppender.loggingEvents.exists(_.getRenderedMessage.contains(expectedMsg)))
     }
