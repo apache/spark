@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateNamedStruct, Expression, GetStructField, If, IsNull, KnownNotNull, Literal, NamedExpression, WithFields}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -37,10 +37,8 @@ object ResolveUnion extends Rule[LogicalPlan] {
    * This method sorts columns in a struct expression based on column names.
    */
   private def sortStructFields(expr: Expression): Expression = {
-    assert(expr.dataType.isInstanceOf[StructType])
-
     val existingExprs = expr.dataType.asInstanceOf[StructType].fieldNames.zipWithIndex.map {
-      case (name, i) => (name, GetStructField(KnownNotNull(expr), i).asInstanceOf[Expression])
+      case (name, i) => (name, GetStructField(KnownNotNull(expr), i))
     }.sortBy(_._1).flatMap(pair => Seq(Literal(pair._1), pair._2))
 
     val newExpr = CreateNamedStruct(existingExprs)
@@ -51,12 +49,16 @@ object ResolveUnion extends Rule[LogicalPlan] {
     }
   }
 
-  private def sortStructFields(fieldExprs: Seq[Expression]): Seq[Expression] = {
+  /**
+   * Assumes input expressions are field expression of `CreateNamedStruct`. This method
+   * sorts the expressions based on field names.
+   */
+  private def sortFieldExprs(fieldExprs: Seq[Expression]): Seq[Expression] = {
     fieldExprs.grouped(2).map { e =>
       Seq(e.head, e.last)
     }.toSeq.sortBy { pair =>
-      assert(pair(0).isInstanceOf[Literal])
-      pair(0).eval().asInstanceOf[UTF8String].toString
+      assert(pair.head.isInstanceOf[Literal])
+      pair.head.eval().asInstanceOf[UTF8String].toString
     }.flatten
   }
 
@@ -67,11 +69,11 @@ object ResolveUnion extends Rule[LogicalPlan] {
     case w: WithFields if w.resolved =>
       w.evalExpr match {
         case i @ If(IsNull(_), _, CreateNamedStruct(fieldExprs)) =>
-          val sorted = sortStructFields(fieldExprs)
+          val sorted = sortFieldExprs(fieldExprs)
           val newStruct = CreateNamedStruct(sorted)
           i.copy(trueValue = Literal(null, newStruct.dataType), falseValue = newStruct)
         case CreateNamedStruct(fieldExprs) =>
-          val sorted = sortStructFields(fieldExprs)
+          val sorted = sortFieldExprs(fieldExprs)
           val newStruct = CreateNamedStruct(sorted)
           newStruct
         case other =>
