@@ -32,7 +32,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
-import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
@@ -109,7 +109,8 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val costEvaluator = SimpleCostEvaluator
 
-  @transient private val initialPlan = applyPhysicalRules(inputPlan, queryStagePreparationRules)
+  @transient private val initialPlan = applyPhysicalRules(
+    "AQE Preparations", inputPlan, queryStagePreparationRules)
 
   @volatile private var currentPhysicalPlan = initialPlan
 
@@ -231,7 +232,9 @@ case class AdaptiveSparkPlanExec(
 
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(
-        result.newPlan, queryStageOptimizerRules ++ postStageCreationRules)
+        "AQE Physical Plan Optimization",
+        result.newPlan,
+        queryStageOptimizerRules ++ postStageCreationRules)
       isFinalPlan = true
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
       currentPhysicalPlan
@@ -413,11 +416,14 @@ case class AdaptiveSparkPlanExec(
   }
 
   private def newQueryStage(e: Exchange): QueryStageExec = {
-    val optimizedPlan = applyPhysicalRules(e.child, queryStageOptimizerRules)
+    val optimizedPlan = applyPhysicalRules(
+      "AQE Physical Plan Optimization", e.child, queryStageOptimizerRules)
     val queryStage = e match {
       case s: ShuffleExchangeLike =>
         val newShuffle = applyPhysicalRules(
-          s.withNewChildren(Seq(optimizedPlan)), postStageCreationRules)
+          "AQE Post Stage Creation",
+          s.withNewChildren(Seq(optimizedPlan)),
+          postStageCreationRules)
         if (!newShuffle.isInstanceOf[ShuffleExchangeLike]) {
           throw new IllegalStateException(
             "Custom columnar rules cannot transform shuffle node to something else.")
@@ -425,7 +431,9 @@ case class AdaptiveSparkPlanExec(
         ShuffleQueryStageExec(currentStageId, newShuffle)
       case b: BroadcastExchangeLike =>
         val newBroadcast = applyPhysicalRules(
-          b.withNewChildren(Seq(optimizedPlan)), postStageCreationRules)
+          "AQE Post Stage Creation",
+          b.withNewChildren(Seq(optimizedPlan)),
+          postStageCreationRules)
         if (!newBroadcast.isInstanceOf[BroadcastExchangeLike]) {
           throw new IllegalStateException(
             "Custom columnar rules cannot transform broadcast node to something else.")
@@ -534,7 +542,8 @@ case class AdaptiveSparkPlanExec(
     logicalPlan.invalidateStatsCache()
     val optimized = optimizer.execute(logicalPlan)
     val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
-    val newPlan = applyPhysicalRules(sparkPlan, preprocessingRules ++ queryStagePreparationRules)
+    val newPlan = applyPhysicalRules(
+      "AQE Preparations", sparkPlan, preprocessingRules ++ queryStagePreparationRules)
     (newPlan, optimized)
   }
 
@@ -630,8 +639,18 @@ object AdaptiveSparkPlanExec {
   /**
    * Apply a list of physical operator rules on a [[SparkPlan]].
    */
-  def applyPhysicalRules(plan: SparkPlan, rules: Seq[Rule[SparkPlan]]): SparkPlan = {
-    rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
+  def applyPhysicalRules(
+      batchName: String,
+      plan: SparkPlan,
+      rules: Seq[Rule[SparkPlan]]): SparkPlan = {
+    val planChangeLogger = new PlanChangeLogger[SparkPlan]()
+    val newPlan = rules.foldLeft(plan) { case (sp, rule) =>
+      val result = rule.apply(sp)
+      planChangeLogger.logRule(rule.ruleName, sp, result)
+      result
+    }
+    planChangeLogger.logBatch(batchName, plan, newPlan)
+    newPlan
   }
 }
 
