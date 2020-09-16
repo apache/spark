@@ -713,7 +713,7 @@ case class HiveTableRelation(
     ).filter(_._2.length > 0).toSeq.sorted.map {
       case (key, value) if key == "CatalogTable" => value
       case (key, value) =>
-        key + ": " + StringUtils.abbreviate(value, 100)
+        key + ": " + StringUtils.abbreviate(value, SQLConf.get.maxMetadataStringLength)
     }
 
     val metadataStr = truncatedString(metadataEntries, "[", ", ", "]", maxFields)
