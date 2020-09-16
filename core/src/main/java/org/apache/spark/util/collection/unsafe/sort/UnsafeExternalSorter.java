@@ -527,7 +527,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     public long spill() throws IOException {
       synchronized (this) {
-        if (inMemSorter != null || numRecords > 0) {
+        if (inMemSorter != null || numRecords <= 0) {
           return 0L;
         }
 
