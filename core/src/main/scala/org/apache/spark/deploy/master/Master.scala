@@ -254,6 +254,9 @@ private[deploy] class Master(
       }
 
     case DecommissionWorkers(ids) =>
+      // The caller has already checked the state when handling DecommissionWorkersOnHosts,
+      // so it should not be the STANDBY
+      assert(state != RecoveryState.STANDBY)
       ids.foreach ( id =>
         // We use foreach since get gives us an option and we can skip the failures.
         idToWorker.get(id).foreach { w =>
