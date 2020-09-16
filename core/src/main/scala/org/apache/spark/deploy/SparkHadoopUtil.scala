@@ -36,7 +36,7 @@ import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.util.Utils
@@ -58,6 +58,8 @@ private[spark] class SparkHadoopUtil extends Logging {
    * do a FileSystem.closeAllForUGI in order to avoid leaking Filesystems
    */
   def runAsSparkUser(func: () => Unit): Unit = {
+    val ugi = createSparkUser()
+    SparkEnv.setUGI(ugi)
     createSparkUser().doAs(new PrivilegedExceptionAction[Unit] {
       def run: Unit = func()
     })
@@ -155,8 +157,13 @@ private[spark] class SparkHadoopUtil extends Logging {
     UserGroupInformation.setConfiguration(newConfiguration(sparkConf))
     val creds = deserialize(tokens)
     logInfo("Updating delegation tokens for current user.")
+    logInfo(s"Adding/updating delegation tokens ${dumpTokens(creds)}")
     logDebug(s"Adding/updating delegation tokens ${dumpTokens(creds)}")
     addCurrentUserCredentials(creds)
+    val user = UserGroupInformation.getCurrentUser
+    logInfo(s"Spark user hashcode : ${user.hashCode()}")
+    user.getTokens
+      .asScala.map(tokenToString).foreach(token => logInfo(token))
   }
 
   /**

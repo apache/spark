@@ -28,6 +28,7 @@ import scala.util.Properties
 
 import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
@@ -146,12 +147,22 @@ class SparkEnv (
 
 object SparkEnv extends Logging {
   @volatile private var env: SparkEnv = _
+  var cachedUGI: UserGroupInformation = _
 
   private[spark] val driverSystemName = "sparkDriver"
   private[spark] val executorSystemName = "sparkExecutor"
 
   def set(e: SparkEnv): Unit = {
     env = e
+  }
+
+  def getUGI(): UserGroupInformation = {
+    cachedUGI
+  }
+
+  def setUGI(ugi: UserGroupInformation): Unit = {
+    cachedUGI = ugi
+    logInfo(s"Set UGI $ugi")
   }
 
   /**
