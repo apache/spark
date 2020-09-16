@@ -549,24 +549,18 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   override def prettyName: String = "cume_dist"
 }
 
-/**
- * The NthValue function returns the value of `input` at the `offset`th row from beginning of the
- * window frame. Offset starts at 1. When the value of `input` is null at the `offset`th row or
- * there is no such an `offset`th row, null is returned.
- */
 @ExpressionDescription(
   usage = """
     _FUNC_(input[, offset]) - Returns the value of `input` at the row that is the `offset`th row
-      from beginning of the window frame. Offsets start at 1. If the value of `input` at the
-      `offset`th row is null, null is returned. If there is no such an offset row (e.g., when the
-      offset is 10, size of the window frame less than 10), null is returned.
+      from beginning of the window frame. Offsets start at 1. If ignoreNulls=true, we will skip
+      nulls when finding the `offset`th row. Otherwise, every row counts for the `offset`. If
+      there is no such an offset row (e.g., when the offset is 10, size of the window frame less
+      than 10), null is returned.
   """,
   arguments = """
     Arguments:
       * input - the target column or expression that the function operates on.
-      * offset - an int expression which determines the row number relative to the first row in
-          the window for which to return the expression. The offset can be a constant or an
-          expression and must be a positive integer that is greater than 0.
+      * offset - a positive int literal to indicate the offset in the window frame. It starts with 1.
       * ignoreNulls - an optional specification that indicates the NthValue should skip null
           values in the determination of which row to use.
   """,
@@ -608,28 +602,23 @@ case class NthValue(input: Expression, offsetExpr: Expression, ignoreNulls: Bool
   lazy val offset = offsetExpr.eval().asInstanceOf[Int].toLong
   private lazy val result = AttributeReference("result", input.dataType)()
   private lazy val count = AttributeReference("count", LongType)()
-  private lazy val valueSet = AttributeReference("valueSet", BooleanType)()
-  override lazy val aggBufferAttributes: Seq[AttributeReference] =
-    result :: count :: valueSet :: Nil
+  override lazy val aggBufferAttributes: Seq[AttributeReference] = result :: count :: Nil
 
   override lazy val initialValues: Seq[Literal] = Seq(
     /* result = */ Literal.create(null, input.dataType),
-    /* count = */ Literal(1L),
-    /* valueSet = */ Literal.create(false, BooleanType)
+    /* count = */ Literal(1L)
   )
 
   override lazy val updateExpressions: Seq[Expression] = {
     if (ignoreNulls) {
       Seq(
-        /* result = */ If(valueSet || input.isNull || count < offset, result, input),
-        /* count = */ If(input.isNull, count, count + 1L),
-        /* valueSet = */ valueSet || (input.isNotNull && count >= offset)
+        /* result = */ If(count === offset && input.isNotNull, input, result),
+        /* count = */ If(input.isNull, count, count + 1L)
       )
     } else {
       Seq(
-        /* result = */ If(valueSet || count < offset, result, input),
-        /* count = */ count + 1L,
-        /* valueSet = */ valueSet || count >= offset
+        /* result = */ If(count === offset, input, result),
+        /* count = */ count + 1L
       )
     }
   }

@@ -156,6 +156,56 @@ FROM
 ORDER BY salary DESC;
 
 SELECT
+    employee_name,
+    salary,
+    nth_value(employee_name, 2) OVER (
+      ORDER BY salary DESC
+      RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) second_highest_salary
+FROM
+    basic_pays
+ORDER BY salary DESC;
+
+SELECT
+    employee_name,
+    salary,
+    nth_value(employee_name, 2) OVER (
+      ORDER BY salary
+      RANGE BETWEEN 2000 PRECEDING AND 1000 FOLLOWING) second_highest_salary
+FROM
+    basic_pays
+ORDER BY salary;
+
+SELECT
+    employee_name,
+    salary,
+    nth_value(employee_name, 2) OVER (
+      ORDER BY salary DESC
+      ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING) second_highest_salary
+FROM
+    basic_pays
+ORDER BY salary DESC;
+
+SELECT
+    employee_name,
+    salary,
+    nth_value(employee_name, 2) OVER (
+      ORDER BY salary DESC
+      RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) second_highest_salary
+FROM
+    basic_pays
+ORDER BY salary DESC;
+
+SELECT
+    employee_name,
+    salary,
+    nth_value(employee_name, 2) OVER (
+      ORDER BY salary DESC
+      RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) second_highest_salary
+FROM
+    basic_pays
+ORDER BY salary DESC;
+
+SELECT
 	employee_name,
 	department,
 	salary,
