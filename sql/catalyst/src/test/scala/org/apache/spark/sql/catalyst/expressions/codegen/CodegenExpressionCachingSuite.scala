@@ -85,12 +85,12 @@ class CodegenExpressionCachingSuite extends SparkFunSuite {
     assert(instance2.eval(null))
   }
 
-  test("GeneratePredicate should eliminate sub-expressions") {
+  test("SPARK-32903: GeneratePredicate should eliminate sub-expressions") {
     Seq(true, false).foreach { enabled =>
-      val leaf1 = MutableExpression2()
-      val leaf2 = MutableExpression2()
-      val leaf3 = MutableExpression2()
-      val leaf4 = MutableExpression2()
+      val leaf1 = ExprWithEvaluatedState()
+      val leaf2 = ExprWithEvaluatedState()
+      val leaf3 = ExprWithEvaluatedState()
+      val leaf4 = ExprWithEvaluatedState()
 
       val expr1 = And(leaf1, leaf2)
       val expr2 = And(leaf3, leaf4)
@@ -143,7 +143,7 @@ case class MutableExpression() extends LeafExpression with CodegenFallback {
 /**
  * An expression with evaluated state so we can know whether it is evaluated.
  */
-case class MutableExpression2() extends LeafExpression with CodegenFallback {
+case class ExprWithEvaluatedState() extends LeafExpression with CodegenFallback {
   var evaluated: Boolean = false
   override def eval(input: InternalRow): Any = {
     evaluated = true
