@@ -320,17 +320,26 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
 
   test("SPARK-32864: Support ORC forced positional evolution") {
     Seq("native", "hive").foreach { orcImpl =>
-      withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl,
-        OrcConf.FORCE_POSITIONAL_EVOLUTION.getAttribute -> "true") {
-        withTempPath { f =>
-          val path = f.getCanonicalPath
-          Seq(1 -> 2).toDF("c1", "c2").write.orc(path)
-          checkAnswer(spark.read.orc(path), Row(1, 2))
+      Seq(true, false).foreach { forcePositionalEvolution =>
+        withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl,
+          OrcConf.FORCE_POSITIONAL_EVOLUTION.getAttribute -> forcePositionalEvolution.toString) {
+          withTempPath { f =>
+            val path = f.getCanonicalPath
+            Seq(1 -> 2).toDF("c1", "c2").write.orc(path)
+            checkAnswer(spark.read.orc(path), Row(1, 2))
 
-          withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") { // default since 2.3.0
-            withTable("t") {
-              sql(s"CREATE EXTERNAL TABLE t(c3 INT, c4 INT) STORED AS ORC LOCATION '$path'")
-              checkAnswer(spark.table("t"), Row(1, 2))
+            withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
+              withTable("t") {
+                sql(s"CREATE EXTERNAL TABLE t(c3 INT, c4 INT) STORED AS ORC LOCATION '$path'")
+
+                val expected = if (forcePositionalEvolution) {
+                  Row(1, 2)
+                } else {
+                  Row(null, null)
+                }
+
+                checkAnswer(spark.table("t"), expected)
+              }
             }
           }
         }
