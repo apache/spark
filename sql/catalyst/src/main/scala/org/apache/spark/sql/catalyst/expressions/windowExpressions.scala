@@ -476,7 +476,7 @@ case class Lag(input: Expression, offset: Expression, default: Expression)
 
 abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowFunction {
   self: Product =>
-  override def frame: WindowFrame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
+  override val frame: WindowFrame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override lazy val mergeExpressions =
@@ -560,7 +560,8 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   arguments = """
     Arguments:
       * input - the target column or expression that the function operates on.
-      * offset - a positive int literal to indicate the offset in the window frame. It starts with 1.
+      * offset - a positive int literal to indicate the offset in the window frame. It starts
+          with 1.
       * ignoreNulls - an optional specification that indicates the NthValue should skip null
           values in the determination of which row to use.
   """,
@@ -571,13 +572,13 @@ case class NthValue(input: Expression, offsetExpr: Expression, ignoreNulls: Bool
 
   def this(child: Expression, offset: Expression) = this(child, offset, false)
 
-  override def children: Seq[Expression] = input :: Nil
+  override def children: Seq[Expression] = input :: offsetExpr :: Nil
 
-  override def frame: WindowFrame = UnspecifiedFrame
+  override val frame: WindowFrame = UnspecifiedFrame
 
   override def dataType: DataType = input.dataType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegerType, BooleanType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegerType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val check = super.checkInputDataTypes()
@@ -586,15 +587,10 @@ case class NthValue(input: Expression, offsetExpr: Expression, ignoreNulls: Bool
     } else if (!offsetExpr.foldable) {
       TypeCheckFailure(s"Offset expression '$offsetExpr' must be a literal.")
     } else {
-      offsetExpr.dataType match {
-        case IntegerType | ShortType | ByteType =>
-          offsetExpr.eval().asInstanceOf[Int] match {
-            case i: Int if i <= 0 => TypeCheckFailure(
-              s"The 'offset' argument of nth_value must be greater than zero but it is $i.")
-            case _ => TypeCheckSuccess
-          }
-        case _ => TypeCheckFailure(
-          s"The 'offset' parameter must be a int literal but it is ${offsetExpr.dataType}.")
+      offsetExpr.eval().asInstanceOf[Int] match {
+        case i: Int if i <= 0 => TypeCheckFailure(
+          s"The 'offset' argument of nth_value must be greater than zero but it is $i.")
+        case _ => TypeCheckSuccess
       }
     }
   }
