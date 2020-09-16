@@ -26,14 +26,14 @@ import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{BooleanType, ByteType, DoubleType, IntegerType}
+import org.apache.spark.sql.types._
 
 class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches: List[Batch] =
       Batch("Unwrap casts in binary comparison", FixedPoint(10),
-        NullPropagation, ConstantFolding, UnwrapCastInBinaryComparison) :: Nil
+        NullPropagation, UnwrapCastInBinaryComparison) :: Nil
   }
 
   val testRelation: LocalRelation = LocalRelation('a.short, 'b.float)
@@ -80,12 +80,12 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
   test("unwrap casts when literal is within range (min, max)") {
-    assertEquivalent(castInt(f) > 300, f > 300.toShort)
-    assertEquivalent(castInt(f) >= 500, f >= 500.toShort)
-    assertEquivalent(castInt(f) === 32766, f === 32766.toShort)
-    assertEquivalent(castInt(f) <=> 32766, f <=> 32766.toShort)
-    assertEquivalent(castInt(f) <= -6000, f <= -6000.toShort)
-    assertEquivalent(castInt(f) < -32767, f < -32767.toShort)
+    assertEquivalent(castInt(f) > 300, f > castShort(300))
+    assertEquivalent(castInt(f) >= 500, f >= castShort(500))
+    assertEquivalent(castInt(f) === 32766, f === castShort(32766))
+    assertEquivalent(castInt(f) <=> 32766, f <=> castShort(32766))
+    assertEquivalent(castInt(f) <= -6000, f <= castShort(-6000))
+    assertEquivalent(castInt(f) < -32767, f < castShort(-32767))
   }
 
   test("unwrap casts when cast is on rhs") {
@@ -97,7 +97,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     assertEquivalent(Literal(v.toInt) >= castInt(f), trueIfNotNull(f))
     assertEquivalent(Literal(v.toInt) > castInt(f), f =!= v)
 
-    assertEquivalent(Literal(30) <= castInt(f), Literal(30.toShort) <= f)
+    assertEquivalent(Literal(30) <= castInt(f), Cast(Literal(30), ShortType) <= f)
   }
 
   test("unwrap cast should have no effect when input is not integral type") {
@@ -119,10 +119,12 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     )
   }
 
-  test("unwrap cast should skip when expression is non-deterministic") {
+  test("unwrap cast should skip when expression is non-deterministic or foldable") {
     Seq(positiveInt, negativeInt).foreach (v => {
       val e = Cast(First(f, ignoreNulls = true), IntegerType) <=> v
       assertEquivalent(e, e, evaluate = false)
+      val e2 = Cast(Literal(30.toShort), IntegerType) >= v
+      assertEquivalent(e2, e2, evaluate = false)
     })
   }
 
@@ -142,6 +144,8 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
   private def castInt(e: Expression): Expression = Cast(e, IntegerType)
+
+  private def castShort(e: Expression): Expression = Cast(e, ShortType)
 
   private def castDouble(e: Expression): Expression = Cast(e, DoubleType)
 
