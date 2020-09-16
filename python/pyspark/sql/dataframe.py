@@ -678,13 +678,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return self
 
     @since(1.3)
-    def persist(self, storageLevel=StorageLevel.MEMORY_AND_DISK):
+    def persist(self, storageLevel=StorageLevel.MEMORY_AND_DISK_DESER):
         """Sets the storage level to persist the contents of the :class:`DataFrame` across
         operations after the first time it is computed. This can only be used to assign
         a new storage level if the :class:`DataFrame` does not have a storage level set yet.
-        If no storage level is specified defaults to (`MEMORY_AND_DISK`).
+        If no storage level is specified defaults to (`MEMORY_AND_DISK_DESER`)
 
-        .. note:: The default storage level has changed to `MEMORY_AND_DISK` to match Scala in 2.0.
+        .. note:: The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala
+            in 3.0.
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
