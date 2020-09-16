@@ -26,6 +26,8 @@ object AttributeMap {
   def apply[A](kvs: Seq[(Attribute, A)]): AttributeMap[A] = {
     new AttributeMap(kvs.map(kv => (kv._1.exprId, kv)).toMap)
   }
+
+  def empty[A]: AttributeMap[A] = new AttributeMap(Map.empty)
 }
 
 class AttributeMap[A](val baseMap: Map[ExprId, (Attribute, A)])
