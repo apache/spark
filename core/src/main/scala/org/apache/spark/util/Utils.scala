@@ -223,6 +223,13 @@ private[spark] object Utils extends Logging {
     // scalastyle:on classforname
   }
 
+  // scalastyle:off classforname
+  /** Preferred alternative to Class.forName(className) */
+  def classForName(className: String): Class[_] = {
+    Class.forName(className, true, getContextOrSparkClassLoader)
+    // scalastyle:on classforname
+  }
+
   /**
    * Run a segment of code using a different context class loader in the current thread
    */
