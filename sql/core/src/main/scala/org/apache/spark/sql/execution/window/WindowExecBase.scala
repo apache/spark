@@ -136,8 +136,10 @@ trait WindowExecBase extends UnaryExecNode {
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
             case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
-            case f: AggregateWindowFunction if f.isInstanceOf[NthValue] => frame.lower match {
-              case UnboundedPreceding => collect("AGGREGATE2", frame, e, f)
+            case f: AggregateWindowFunction if f.isInstanceOf[NthValue] =>
+              val ignoreNulls = f.asInstanceOf[NthValue].ignoreNulls
+              (ignoreNulls, frame.lower) match {
+              case (false, UnboundedPreceding) => collect("AGGREGATE2", frame, e, f)
               case _ => collect("AGGREGATE", frame, e, f)
             }
             case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
