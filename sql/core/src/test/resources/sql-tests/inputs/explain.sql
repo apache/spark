@@ -1,5 +1,6 @@
 --SET spark.sql.codegen.wholeStage = true
 --SET spark.sql.adaptive.enabled = false
+--SET spark.sql.maxMetadataStringLength = 500
 
 -- Test tables
 CREATE table  explain_temp1 (key int, val int) USING PARQUET;
