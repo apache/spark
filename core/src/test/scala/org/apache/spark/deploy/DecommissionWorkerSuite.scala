@@ -28,7 +28,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
-import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState, WorkerDecommission}
+import org.apache.spark.deploy.DeployMessages.{DecommissionWorkers, MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master.{ApplicationInfo, Master, WorkerInfo}
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.internal.{config, Logging}
@@ -414,7 +414,7 @@ class DecommissionWorkerSuite
 
   def decommissionWorkerOnMaster(workerInfo: WorkerInfo, reason: String): Unit = {
     logInfo(s"Trying to decommission worker ${workerInfo.id} for reason `$reason`")
-    master.self.send(WorkerDecommission(workerInfo.id, workerInfo.endpoint))
+    master.self.send(DecommissionWorkers(Seq(workerInfo.id)))
   }
 
   def killWorkerAfterTimeout(workerInfo: WorkerInfo, secondsToWait: Int): Unit = {

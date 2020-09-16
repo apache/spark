@@ -245,14 +245,26 @@ private[deploy] class Master(
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
 
-    case WorkerDecommission(id, workerRef) =>
-      logInfo("Recording worker %s decommissioning".format(id))
+    case WorkerDecommissioning(id, workerRef) =>
       if (state == RecoveryState.STANDBY) {
         workerRef.send(MasterInStandby)
       } else {
         // We use foreach since get gives us an option and we can skip the failures.
-        idToWorker.get(id).foreach(decommissionWorker)
+        idToWorker.get(id).foreach(w => decommissionWorker(w))
       }
+
+    case DecommissionWorkers(ids) =>
+      // The caller has already checked the state when handling DecommissionWorkersOnHosts,
+      // so it should not be the STANDBY
+      assert(state != RecoveryState.STANDBY)
+      ids.foreach ( id =>
+        // We use foreach since get gives us an option and we can skip the failures.
+        idToWorker.get(id).foreach { w =>
+          decommissionWorker(w)
+          // Also send a message to the worker node to notify.
+          w.endpoint.send(DecommissionWorker)
+        }
+      )
 
     case RegisterWorker(
       id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl,
@@ -891,10 +903,7 @@ private[deploy] class Master(
     logInfo(s"Decommissioning the workers with host:ports ${workersToRemoveHostPorts}")
 
     // The workers are removed async to avoid blocking the receive loop for the entire batch
-    workersToRemove.foreach(wi => {
-      logInfo(s"Sending the worker decommission to ${wi.id} and ${wi.endpoint}")
-      self.send(WorkerDecommission(wi.id, wi.endpoint))
-    })
+    self.send(DecommissionWorkers(workersToRemove.map(_.id).toSeq))
 
     // Return the count of workers actually removed
     workersToRemove.size

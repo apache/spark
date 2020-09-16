@@ -95,8 +95,17 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RemoveExecutor(executorId: String, reason: ExecutorLossReason)
     extends CoarseGrainedClusterMessage
 
-  case class DecommissionExecutor(executorId: String, decommissionInfo: ExecutorDecommissionInfo)
-    extends CoarseGrainedClusterMessage
+  // A message that sent from executor to driver to tell driver that the executor has started
+  // decommissioning. It's used for the case where decommission is triggered at executor (e.g., K8S)
+  case class ExecutorDecommissioning(executorId: String) extends CoarseGrainedClusterMessage
+
+  // A message that sent from driver to executor to decommission that executor.
+  // It's used for Standalone's cases, where decommission is triggered at MasterWebUI or Worker.
+  object DecommissionExecutor extends CoarseGrainedClusterMessage
+
+  // A message that sent to the executor itself when it receives PWR signal,
+  // indicating the executor starts to decommission.
+  object ExecutorSigPWRReceived extends CoarseGrainedClusterMessage
 
   case class RemoveWorker(workerId: String, host: String, message: String)
     extends CoarseGrainedClusterMessage
@@ -136,7 +145,4 @@ private[spark] object CoarseGrainedClusterMessages {
 
   // The message to check if `CoarseGrainedSchedulerBackend` thinks the executor is alive or not.
   case class IsExecutorAlive(executorId: String) extends CoarseGrainedClusterMessage
-
-  // Used to ask an executor to decommission itself. (Can be an internal message)
-  case object DecommissionSelf extends CoarseGrainedClusterMessage
 }

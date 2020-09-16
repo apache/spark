@@ -581,7 +581,10 @@ private[spark] class ExecutorAllocationManager(
       if (decommissionEnabled) {
         val executorIdsWithoutHostLoss = executorIdsToBeRemoved.toSeq.map(
           id => (id, ExecutorDecommissionInfo("spark scale down"))).toArray
-        client.decommissionExecutors(executorIdsWithoutHostLoss, adjustTargetNumExecutors = false)
+        client.decommissionExecutors(
+          executorIdsWithoutHostLoss,
+          adjustTargetNumExecutors = false,
+          triggeredByExecutor = false)
       } else {
         client.killExecutors(executorIdsToBeRemoved.toSeq, adjustTargetNumExecutors = false,
           countFailures = false, force = false)
