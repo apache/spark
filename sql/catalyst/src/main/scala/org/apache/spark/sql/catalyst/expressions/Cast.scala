@@ -646,7 +646,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
    * NOTE: this modifies `value` in-place, so don't call it on external data.
    */
   private[this] def changePrecision(value: Decimal, decimalType: DecimalType): Decimal = {
-    if (value != null && value.changePrecision(decimalType.precision, decimalType.scale)) {
+    if (value.changePrecision(decimalType.precision, decimalType.scale)) {
       value
     } else {
       if (!ansiEnabled) {
@@ -670,7 +670,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
     case StringType if !ansiEnabled =>
-      buildCast[UTF8String](_, s => changePrecision(Decimal.fromString(s), target))
+      buildCast[UTF8String](_, s => {
+        val d = Decimal.fromString(s)
+        if (d == null) null else changePrecision(d, target)
+      })
     case StringType if ansiEnabled =>
       buildCast[UTF8String](_, s => changePrecision(Decimal.fromStringANSI(s), target))
     case BooleanType =>
@@ -1160,7 +1163,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
          """.stripMargin
       }
       code"""
-         |if ($d != null && $d.changePrecision(${decimalType.precision}, ${decimalType.scale})) {
+         |if ($d.changePrecision(${decimalType.precision}, ${decimalType.scale})) {
          |  $evPrim = $d;
          |} else {
          |  $overflowCode
@@ -1180,7 +1183,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         (c, evPrim, evNull) =>
           code"""
               Decimal $tmp = Decimal.fromString($c);
-              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+              if ($tmp == null) {
+                $evNull = true;
+              } else {
+                ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+              }
           """
       case StringType if ansiEnabled =>
         (c, evPrim, evNull) =>
