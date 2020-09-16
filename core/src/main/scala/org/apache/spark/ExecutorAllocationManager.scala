@@ -247,7 +247,13 @@ private[spark] class ExecutorAllocationManager(
         }
       }
     }
-    executor.scheduleWithFixedDelay(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
+
+    // SPARK-32287: Avoid the immediate schedule() after ExecutorAllocationManager started in test
+    // so that we won't hit the race condition between thread "spark-dynamic-executor-allocation"
+    // and thread "pool-1-thread-1-ScalaTest-running".
+    val initialDelay = if (testing) conf.get(TEST_SCHEDULE_INTERVAL) else 0
+    executor.scheduleWithFixedDelay(
+      scheduleTask, initialDelay, intervalMillis, TimeUnit.MILLISECONDS)
 
     // copy the maps inside synchonize to ensure not being modified
     val (numExecutorsTarget, numLocalityAware) = synchronized {
