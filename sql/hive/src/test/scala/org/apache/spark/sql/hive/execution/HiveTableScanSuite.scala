@@ -202,7 +202,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
           .saveAsTable("df")
 
         val scan1 = getHiveTableScanExec("SELECT * FROM df WHERE df.k < 3")
-        assert(scan1.simpleString(100).replaceAll("#\\d\\dL", "") ==
+        assert(scan1.simpleString(100).replaceAll("#\\d+L", "") ==
           "Scan hive default.df [id, k]," +
             " HiveTableRelation [" +
             "`default`.`df`," +
@@ -214,7 +214,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
             "]," +
             " [isnotnull(k), (k < 3)]")
         val scan2 = getHiveTableScanExec("SELECT * FROM df WHERE df.k < 100")
-        assert(scan2.simpleString(100).replaceAll("#\\d\\dL", "") ==
+        assert(scan2.simpleString(100).replaceAll("#\\d+L", "") ==
           "Scan hive default.df [id, k]," +
             " HiveTableRelation [" +
             "`default`.`df`," +
