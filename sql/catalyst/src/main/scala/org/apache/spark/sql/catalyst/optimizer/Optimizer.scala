@@ -1855,7 +1855,9 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
  */
 object InferFiltersFromGenerate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case g @ Generate(e: ExplodeBase, _, false, _, _, child) =>
+    case g @ Generate(e: ExplodeBase, _, false, _, _, child)
+      if e.deterministic && !e.child.foldable =>
+
       // Exclude child's constraints to guarantee idempotency
       val inferredFilters = ExpressionSet(
         Seq(GreaterThan(Size(e.child), Literal(0)), IsNotNull(e.child))

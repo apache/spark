@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Explode, IsNotNull, PosExplode, Size}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -33,9 +33,10 @@ class InferFiltersFromGenerateSuite extends PlanTest {
   val testRelation = LocalRelation('a.array(IntegerType))
 
   Seq(
-    Explode('a),
-    PosExplode('a)
-  ).foreach(explode => {
+    (e: Expression) => Explode(e),
+    (e: Expression) => PosExplode(e)
+  ).foreach(f => {
+    val explode = f('a)
     test("Infer filters from " + explode) {
       val originalQuery = testRelation.generate(explode).analyze
       val correctAnswer = testRelation
@@ -48,6 +49,13 @@ class InferFiltersFromGenerateSuite extends PlanTest {
 
     test("Don't infer filters from outer " + explode) {
       val originalQuery = testRelation.generate(explode, outer = true).analyze
+      val optimized = Optimize.execute(originalQuery)
+      comparePlans(optimized, originalQuery)
+    }
+
+    val foldableExplode = f(CreateArray(Seq(Literal(0), Literal(1))))
+    test("Don't infer filters from " + foldableExplode) {
+      val originalQuery = testRelation.generate(foldableExplode).analyze
       val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)
     }
