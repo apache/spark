@@ -430,7 +430,6 @@ class DataFrameReader(OptionUtils):
                         character. By default (None), it is disabled.
         :param header: uses the first line as names of columns. If None is set, it uses the
                        default value, ``false``.
-
                        .. note:: if the given path is a RDD of Strings, this header
                        option will remove all lines same with the header if exists.
 
