@@ -85,6 +85,36 @@ class CodegenExpressionCachingSuite extends SparkFunSuite {
     assert(instance2.eval(null))
   }
 
+  test("GeneratePredicate should eliminate sub-expressions") {
+    Seq(true, false).foreach { enabled =>
+      val leaf1 = MutableExpression2()
+      val leaf2 = MutableExpression2()
+      val leaf3 = MutableExpression2()
+      val leaf4 = MutableExpression2()
+
+      val expr1 = And(leaf1, leaf2)
+      val expr2 = And(leaf3, leaf4)
+      val cond = Or(expr1, expr2)
+      val instance = GeneratePredicate.generate(cond, useSubexprElimination = enabled)
+      instance.initialize(0)
+      assert(instance.eval(null) === false)
+
+      if (enabled) {
+        // When we do sub-expression elimination, Spark thought `expr1` and `expr2` are
+        // the same, so when it wants to evaluate `expr2`, it gets previous evaluation of `expr1`.
+        assert(leaf1.evaluated == true)
+        assert(leaf2.evaluated == false)
+        assert(leaf3.evaluated == false)
+        assert(leaf4.evaluated == false)
+      } else {
+        assert(leaf1.evaluated == true)
+        assert(leaf2.evaluated == false)
+        assert(leaf3.evaluated == true)
+        assert(leaf4.evaluated == false)
+      }
+    }
+  }
+
 }
 
 /**
@@ -105,6 +135,20 @@ case class NondeterministicExpression()
 case class MutableExpression() extends LeafExpression with CodegenFallback {
   var mutableState: Boolean = false
   override def eval(input: InternalRow): Any = mutableState
+
+  override def nullable: Boolean = false
+  override def dataType: DataType = BooleanType
+}
+
+/**
+ * An expression with evaluated state so we can know whether it is evaluated.
+ */
+case class MutableExpression2() extends LeafExpression with CodegenFallback {
+  var evaluated: Boolean = false
+  override def eval(input: InternalRow): Any = {
+    evaluated = true
+    false
+  }
 
   override def nullable: Boolean = false
   override def dataType: DataType = BooleanType
