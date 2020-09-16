@@ -17,7 +17,7 @@
 # under the License.
 
 import abc
-from typing import Optional, Type
+from typing import Optional
 from pyspark.ml._typing import (
     ParamMap,
     BinaryClassificationEvaluatorMetricType,

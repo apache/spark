@@ -24,7 +24,6 @@ from typing import (
     List,
     Optional,
     Tuple,
-    Type,
 )
 from pyspark.ml._typing import M, P, T, ParamMap
 

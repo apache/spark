@@ -17,7 +17,7 @@
 # under the License.
 
 import abc
-from typing import Any, Optional, Type
+from typing import Any, Optional
 from pyspark.ml._typing import P, T, JM, ParamMap
 
 from pyspark.ml import Estimator, Predictor, PredictionModel, Transformer, Model

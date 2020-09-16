@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Any, List, Optional, Type
+from typing import Any, List, Optional
 from pyspark.ml._typing import JM, M, P, T, ParamMap
 
 import abc
