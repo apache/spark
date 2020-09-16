@@ -120,6 +120,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       Batch("Operator Optimization before Inferring Filters", fixedPoint,
         rulesWithoutInferFiltersFromConstraints: _*) ::
       Batch("Infer Filters", Once,
+        InferFiltersFromGenerate,
         InferFiltersFromConstraints) ::
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
         rulesWithoutInferFiltersFromConstraints: _*) ::
@@ -1845,5 +1846,25 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
     // Replace Local Limit 0 nodes with empty Local Relation
     case ll @ LocalLimit(IntegerLiteral(0), _) =>
       empty(ll)
+  }
+}
+
+/**
+ * Generates filters for exploded expression, such that rows that would have been removed
+ * by this [[Generate]] can be removed earlier - before joins and in data sources.
+ */
+object InferFiltersFromGenerate extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case g @ Generate(e: ExplodeBase, _, false, _, _, child) =>
+      // Exclude child's constraints to guarantee idempotency
+      val inferredFilters = ExpressionSet(
+        Seq(GreaterThan(Size(e.child), Literal(0)), IsNotNull(e.child))
+      ) -- child.constraints
+
+      if (inferredFilters.nonEmpty) {
+        g.copy(child = Filter(inferredFilters.reduce(And), child))
+      } else {
+        g
+      }
   }
 }
