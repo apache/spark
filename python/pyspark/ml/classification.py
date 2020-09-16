@@ -73,13 +73,11 @@ class _ClassifierParams(HasRawPredictionCol, _PredictorParams):
 
 
 @inherit_doc
-class Classifier(Predictor, _ClassifierParams):
+class Classifier(Predictor, _ClassifierParams, metaclass=ABCMeta):
     """
     Classifier for classification tasks.
     Classes are indexed {0, 1, ..., numClasses - 1}.
     """
-
-    __metaclass__ = ABCMeta
 
     @since("3.0.0")
     def setRawPredictionCol(self, value):
@@ -90,13 +88,11 @@ class Classifier(Predictor, _ClassifierParams):
 
 
 @inherit_doc
-class ClassificationModel(PredictionModel, _ClassifierParams):
+class ClassificationModel(PredictionModel, _ClassifierParams, metaclass=ABCMeta):
     """
     Model produced by a ``Classifier``.
     Classes are indexed {0, 1, ..., numClasses - 1}.
     """
-
-    __metaclass__ = ABCMeta
 
     @since("3.0.0")
     def setRawPredictionCol(self, value):
@@ -133,12 +129,11 @@ class _ProbabilisticClassifierParams(HasProbabilityCol, HasThresholds, _Classifi
 
 
 @inherit_doc
-class ProbabilisticClassifier(Classifier, _ProbabilisticClassifierParams):
+class ProbabilisticClassifier(Classifier, _ProbabilisticClassifierParams,
+                              metaclass=ABCMeta):
     """
     Probabilistic Classifier for classification tasks.
     """
-
-    __metaclass__ = ABCMeta
 
     @since("3.0.0")
     def setProbabilityCol(self, value):
@@ -157,12 +152,11 @@ class ProbabilisticClassifier(Classifier, _ProbabilisticClassifierParams):
 
 @inherit_doc
 class ProbabilisticClassificationModel(ClassificationModel,
-                                       _ProbabilisticClassifierParams):
+                                       _ProbabilisticClassifierParams,
+                                       metaclass=ABCMeta):
     """
     Model produced by a ``ProbabilisticClassifier``.
     """
-
-    __metaclass__ = ABCMeta
 
     @since("3.0.0")
     def setProbabilityCol(self, value):
@@ -188,13 +182,11 @@ class ProbabilisticClassificationModel(ClassificationModel,
 
 
 @inherit_doc
-class _JavaClassifier(Classifier, JavaPredictor):
+class _JavaClassifier(Classifier, JavaPredictor, metaclass=ABCMeta):
     """
     Java Classifier for classification tasks.
     Classes are indexed {0, 1, ..., numClasses - 1}.
     """
-
-    __metaclass__ = ABCMeta
 
     @since("3.0.0")
     def setRawPredictionCol(self, value):
@@ -229,12 +221,12 @@ class _JavaClassificationModel(ClassificationModel, JavaPredictionModel):
 
 
 @inherit_doc
-class _JavaProbabilisticClassifier(ProbabilisticClassifier, _JavaClassifier):
+class _JavaProbabilisticClassifier(ProbabilisticClassifier, _JavaClassifier,
+                                   metaclass=ABCMeta):
     """
     Java Probabilistic Classifier for classification tasks.
     """
-
-    __metaclass__ = ABCMeta
+    pass
 
 
 @inherit_doc
