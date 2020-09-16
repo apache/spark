@@ -64,8 +64,7 @@ class TypeConverters:
     @staticmethod
     def toBoolean(value: Any) -> bool: ...
 
-class Params(pyspark.ml.util.Identifiable):
-    __metaclass__: Type[abc.ABCMeta]
+class Params(pyspark.ml.util.Identifiable, metaclass=abc.ABCMeta):
     def __init__(self) -> None: ...
     @property
     def params(self) -> List[Param]: ...

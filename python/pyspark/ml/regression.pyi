@@ -67,17 +67,12 @@ from pyspark.ml.linalg import Matrix, Vector
 from pyspark.ml.param import Param
 from pyspark.sql.dataframe import DataFrame
 
-class Regressor(Predictor[M], _PredictorParams, metaclass=abc.ABCMeta):
-    __metaclass__: Type[abc.ABCMeta]
-
-class RegressionModel(PredictionModel[T], _PredictorParams, metaclass=abc.ABCMeta):
-    __metaclass__: Type[abc.ABCMeta]
-
-class _JavaRegressor(Regressor, JavaPredictor[JM], metaclass=abc.ABCMeta):
-    __metaclass__: Type[abc.ABCMeta]
-
-class _JavaRegressionModel(RegressionModel, JavaPredictionModel[T]):
-    __metaclass__: Type[abc.ABCMeta]
+class Regressor(Predictor[M], _PredictorParams, metaclass=abc.ABCMeta): ...
+class RegressionModel(PredictionModel[T], _PredictorParams, metaclass=abc.ABCMeta): ...
+class _JavaRegressor(Regressor, JavaPredictor[JM], metaclass=abc.ABCMeta): ...
+class _JavaRegressionModel(
+    RegressionModel, JavaPredictionModel[T], metaclass=abc.ABCMeta
+): ...
 
 class _LinearRegressionParams(
     _PredictorParams,

@@ -40,13 +40,11 @@ from pyspark.ml.param.shared import (
 )
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 
-class Evaluator(Params):
-    __metaclass__: Type[abc.ABCMeta]
+class Evaluator(Params, metaclass=abc.ABCMeta):
     def evaluate(self, dataset, params: Optional[ParamMap] = ...) -> float: ...
     def isLargerBetter(self) -> bool: ...
 
-class JavaEvaluator(JavaParams, Evaluator):
-    __metaclass__: Type[abc.ABCMeta]
+class JavaEvaluator(JavaParams, Evaluator, metaclass=abc.ABCMeta):
     def isLargerBetter(self) -> bool: ...
 
 class BinaryClassificationEvaluator(

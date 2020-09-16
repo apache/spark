@@ -28,25 +28,19 @@ class JavaWrapper:
     def __init__(self, java_obj: Optional[Any] = ...) -> None: ...
     def __del__(self) -> None: ...
 
-class JavaParams(JavaWrapper, Params):
-    __metaclass__: Type[abc.ABCMeta]
+class JavaParams(JavaWrapper, Params, metaclass=abc.ABCMeta):
     def copy(self: P, extra: Optional[ParamMap] = ...) -> P: ...
     def clear(self, param: Param) -> None: ...
 
-class JavaEstimator(JavaParams, Estimator[JM], metaclass=abc.ABCMeta):
-    __metaclass__: Type[abc.ABCMeta]
+class JavaEstimator(JavaParams, Estimator[JM], metaclass=abc.ABCMeta): ...
+class JavaTransformer(JavaParams, Transformer, metaclass=abc.ABCMeta): ...
 
-class JavaTransformer(JavaParams, Transformer):
-    __metaclass__: Type[abc.ABCMeta]
-
-class JavaModel(JavaTransformer, Model):
-    __metaclass__: Type[abc.ABCMeta]
+class JavaModel(JavaTransformer, Model, metaclass=abc.ABCMeta):
     def __init__(self, java_model: Optional[Any] = ...) -> None: ...
 
 class JavaPredictor(
     Predictor[JM], JavaEstimator, _PredictorParams, metaclass=abc.ABCMeta
-):
-    __metaclass__: Type[abc.ABCMeta]
+): ...
 
 class JavaPredictionModel(PredictionModel[T], JavaModel, _PredictorParams):
     @property

@@ -62,12 +62,10 @@ from pyspark.sql.dataframe import DataFrame
 
 class _ClassifierParams(HasRawPredictionCol, _PredictorParams): ...
 
-class Classifier(Predictor, _ClassifierParams):
-    __metaclass__: Type[abc.ABCMeta]
+class Classifier(Predictor, _ClassifierParams, metaclass=abc.ABCMeta):
     def setRawPredictionCol(self: P, value: str) -> P: ...
 
 class ClassificationModel(PredictionModel, _ClassifierParams, metaclass=abc.ABCMeta):
-    __metaclass__: Type[abc.ABCMeta]
     def setRawPredictionCol(self: P, value: str) -> P: ...
     @property
     @abc.abstractmethod
@@ -79,22 +77,21 @@ class _ProbabilisticClassifierParams(
     HasProbabilityCol, HasThresholds, _ClassifierParams
 ): ...
 
-class ProbabilisticClassifier(Classifier, _ProbabilisticClassifierParams):
-    __metaclass__: Type[abc.ABCMeta]
+class ProbabilisticClassifier(
+    Classifier, _ProbabilisticClassifierParams, metaclass=abc.ABCMeta
+):
     def setProbabilityCol(self: P, value: str) -> P: ...
     def setThresholds(self: P, value: List[float]) -> P: ...
 
 class ProbabilisticClassificationModel(
     ClassificationModel, _ProbabilisticClassifierParams, metaclass=abc.ABCMeta
 ):
-    __metaclass__: Type[abc.ABCMeta]
     def setProbabilityCol(self: M, value: str) -> M: ...
     def setThresholds(self: M, value: List[float]) -> M: ...
     @abstractmethod
     def predictProbability(self, value: Vector) -> Vector: ...
 
-class _JavaClassifier(Classifier, JavaPredictor[JM]):
-    __metaclass__: Type[abc.ABCMeta]
+class _JavaClassifier(Classifier, JavaPredictor[JM], metaclass=abc.ABCMeta):
     def setRawPredictionCol(self: P, value: str) -> P: ...
 
 class _JavaClassificationModel(ClassificationModel, JavaPredictionModel[T]):
@@ -102,8 +99,9 @@ class _JavaClassificationModel(ClassificationModel, JavaPredictionModel[T]):
     def numClasses(self) -> int: ...
     def predictRaw(self, value: Vector) -> Vector: ...
 
-class _JavaProbabilisticClassifier(ProbabilisticClassifier, _JavaClassifier[JM]):
-    __metaclass__: Type[abc.ABCMeta]
+class _JavaProbabilisticClassifier(
+    ProbabilisticClassifier, _JavaClassifier[JM], metaclass=abc.ABCMeta
+): ...
 
 class _JavaProbabilisticClassificationModel(
     ProbabilisticClassificationModel, _JavaClassificationModel[T]
