@@ -47,7 +47,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.scheduler.{DummySchedulerBackend, DummyTaskScheduler}
 import org.apache.spark.util.{CommandLineUtils, DependencyUtils, ResetSystemProperties, Utils}
+
 
 trait TestPrematureExit {
   suite: SparkFunSuite =>
@@ -1525,6 +1527,16 @@ class SparkSubmitSuite
       conf.get(k) should be (v)
     }
   }
+
+  test("spark submit with user defined ExternalClusterManager") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", ExternalClusterManagerApplicationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--master", "myclusterManager",
+      unusedJar.toString)
+    runSparkSubmit(args)
+  }
 }
 
 object SparkSubmitSuite extends SparkFunSuite with TimeLimits {
@@ -1602,6 +1614,21 @@ object SimpleApplicationTest {
         throw new SparkException(
           s"Master had $config=$masterValue but executor had $config=$executorValue")
       }
+    }
+    sc.stop()
+  }
+}
+
+object ExternalClusterManagerApplicationTest {
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf()
+    val sc = new SparkContext(conf)
+    if (!sc.schedulerBackend.isInstanceOf[DummySchedulerBackend]) {
+      throw new SparkException(s"wrong scheduler backend: ${sc.schedulerBackend}")
+    }
+
+    if (!sc.taskScheduler.isInstanceOf[DummyTaskScheduler]) {
+      throw new SparkException(s"wrong task scheduler: ${sc.taskScheduler}")
     }
     sc.stop()
   }

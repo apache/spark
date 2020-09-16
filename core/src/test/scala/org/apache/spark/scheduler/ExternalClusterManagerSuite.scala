@@ -48,7 +48,7 @@ class ExternalClusterManagerSuite extends SparkFunSuite with LocalSparkContext {
  * Note that if you want a special ClusterManager for tests, you are probably much more interested
  * in [[MockExternalClusterManager]] and the corresponding [[SchedulerIntegrationSuite]]
  */
-private class DummyExternalClusterManager extends ExternalClusterManager {
+class DummyExternalClusterManager extends ExternalClusterManager {
 
   def canCreate(masterURL: String): Boolean = masterURL == "myclusterManager"
 
@@ -66,7 +66,7 @@ private class DummyExternalClusterManager extends ExternalClusterManager {
 
 }
 
-private class DummySchedulerBackend extends SchedulerBackend {
+class DummySchedulerBackend extends SchedulerBackend {
   var initialized = false
   def start(): Unit = {}
   def stop(): Unit = {}
@@ -75,7 +75,7 @@ private class DummySchedulerBackend extends SchedulerBackend {
   def maxNumConcurrentTasks(rp: ResourceProfile): Int = 0
 }
 
-private class DummyTaskScheduler extends TaskScheduler {
+class DummyTaskScheduler extends TaskScheduler {
   var initialized = false
   override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
   override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
