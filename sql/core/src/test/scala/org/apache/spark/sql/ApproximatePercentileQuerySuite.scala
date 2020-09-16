@@ -292,4 +292,21 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
     buffer.quantileSummaries
     assert(buffer.isCompressed)
   }
+
+  test("SPARK-XXXXX: ") {
+    withTempView(table) {
+      val df = spark.read.option("header", "true")
+        .option("inferSchema", "true")
+        .csv("/Users/maximgekk/tmp/tr_rat_resampling_score.csv")
+        .repartition(1)
+      df.createOrReplaceTempView(table)
+      checkAnswer(
+        spark.sql(
+          s"""SELECT
+             |  percentile_approx(tr_rat_resampling_score, 0.77, 100000)
+             |FROM $table
+           """.stripMargin),
+        Row(17))
+    }
+  }
 }
