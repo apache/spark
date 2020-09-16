@@ -366,7 +366,8 @@ public class UnsafeExternalSorterSuite {
     final int recordSize = record.length * 8;
     final int n = (int) pageSizeBytes / recordSize * 3;
     for (int i = 0; i < n; i++) {
-      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0, true);
+      boolean isNull = i % 2 == 0;
+      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0, isNull);
     }
     assertTrue(sorter.getNumberOfAllocatedPages() >= 2);
 
