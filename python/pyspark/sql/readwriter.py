@@ -430,6 +430,9 @@ class DataFrameReader(OptionUtils):
                         character. By default (None), it is disabled.
         :param header: uses the first line as names of columns. If None is set, it uses the
                        default value, ``false``.
+                       .. note:: if the given path is a RDD of Strings, this header
+                       option will remove all lines same with the header if exists.
+
         :param inferSchema: infers the input schema automatically from data. It requires one extra
                        pass over the data. If None is set, it uses the default value, ``false``.
         :param enforceSchema: If it is set to ``true``, the specified or inferred schema will be
