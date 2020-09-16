@@ -146,10 +146,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       //  - keys stored in the data only - optionally used to skip groups of data in files
       //  - filters that need to be evaluated again after the scan
       val filterSet = ExpressionSet(filters)
-
       val normalizedFilters = DataSourceStrategy.normalizeExprs(
         filters.filter(_.deterministic), l.output)
-
       val partitionColumns =
         l.resolve(
           fsRelation.partitionSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
@@ -158,11 +156,11 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         ExpressionSet(Nil)
       } else {
         val predicates = ExpressionSet(normalizedFilters
+          .flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
           .filter(_.references.subsetOf(partitionSet)))
         logInfo(s"Pruning directories with: ${predicates.mkString(",")}")
         predicates
       }
-
 
       // subquery expressions are filtered out because they can't be used to prune buckets or pushed
       // down as data filters, yet they would be executed

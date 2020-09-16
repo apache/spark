@@ -47,6 +47,7 @@ abstract class PrunePartitionSuiteBase extends QueryTest with SQLTestUtils with 
 
         assertPrunedPartitions(
           "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)", 2)
+
         assertPrunedPartitions(
           "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (i = 1 OR p = '2')", 4)
         assertPrunedPartitions(

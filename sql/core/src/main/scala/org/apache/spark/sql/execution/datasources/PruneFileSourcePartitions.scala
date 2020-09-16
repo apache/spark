@@ -95,6 +95,8 @@ private[sql] object PruneFileSourcePartitions
         logicalRelation.output)
 
       if (partitionKeyFilters.nonEmpty) {
+        // scalastyle:off
+        println("here")
         val prunedFileIndex = catalogFileIndex.filterPartitions(partitionKeyFilters.toSeq)
         val prunedFsRelation =
           fsRelation.copy(location = prunedFileIndex)(fsRelation.sparkSession)
