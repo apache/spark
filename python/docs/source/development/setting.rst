@@ -34,7 +34,7 @@ SBT build is generally much faster than others. More details about the build are
 
 .. code-block:: bash
 
-    $ cd spark; ./build/sbt package
+    $ ./build/sbt package
 
 After building is finished, run PyCharm and select the path ``spark/python``.
 
