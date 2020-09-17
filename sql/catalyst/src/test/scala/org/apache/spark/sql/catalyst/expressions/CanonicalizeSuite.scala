@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.TimeZone
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
@@ -94,5 +95,20 @@ class CanonicalizeSuite extends SparkFunSuite {
     val cast = Cast(literal, LongType)
     val castWithTimeZoneId = Cast(literal, LongType, Some(TimeZone.getDefault.getID))
     assert(castWithTimeZoneId.semanticEquals(cast))
+  }
+
+  test("SPARK-32927: Bitwise operations are commutative") {
+    Seq(
+      (l: Expression, r: Expression) => BitwiseOr(l, r),
+      (l: Expression, r: Expression) => BitwiseAnd(l, r),
+      (l: Expression, r: Expression) => BitwiseXor(l, r)
+    ).foreach(f => {
+      val e1 = f('a, f('b, 'c))
+      val e2 = f(f('a, 'b), 'c)
+      val e3 = f('a, f('b, 'a))
+
+      assert(e1.canonicalized == e2.canonicalized)
+      assert(e1.canonicalized != e3.canonicalized)
+    })
   }
 }
