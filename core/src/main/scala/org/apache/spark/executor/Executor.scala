@@ -400,7 +400,10 @@ private[spark] class Executor(
       // Report executor runtime and JVM gc time
       Option(task).foreach(t => {
         t.metrics.setExecutorRunTime(TimeUnit.NANOSECONDS.toMillis(
-          System.nanoTime() - taskStartTimeNs))
+          // SPARK-32898: it's possible that a task be killed before it reaches
+          // "taskStartTimeNs = System.nanoTime()". In this case, the executorRunTime
+          // should be considered as 0.
+          if (taskStartTimeNs > 0) System.nanoTime() - taskStartTimeNs else 0))
         t.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
       })
 
