@@ -665,8 +665,8 @@ object FoldablePropagation extends Rule[LogicalPlan] {
       // of outer join.
       case j: Join =>
         val (newChildren, foldableMaps) = j.children.map(propagateFoldables).unzip
-        val foldableMap = AttributeMap[Alias](
-          foldableMaps.foldLeft(Seq.empty[(Attribute, Alias)])(_ ++ _.baseMap.values.toSeq))
+        val foldableMap = AttributeMap(
+          foldableMaps.foldLeft(Iterable.empty[(Attribute, Alias)])(_ ++ _.baseMap.values).toSeq)
         val newJoin =
           replaceFoldable(j.withNewChildren(newChildren).asInstanceOf[Join], foldableMap)
         val missDerivedAttrsSet: AttributeSet = AttributeSet(newJoin.joinType match {
