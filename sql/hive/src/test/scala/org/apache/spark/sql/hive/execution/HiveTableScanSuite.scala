@@ -211,6 +211,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
             " Pruned Partitions: [(k=0), (k=1), (k=2)]" +
             "]," +
             " [isnotnull(k), (k < 3)]")
+
         val scan2 = getHiveTableScanExec("SELECT * FROM df WHERE df.k < 30")
         assert(scan2.simpleString(100).replaceAll("#\\d+L", "") ==
           "Scan hive default.df [id, k]," +
@@ -229,6 +230,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
             |ALTER TABLE df PARTITION (k=10) SET SERDE
             |'org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe';
           """.stripMargin)
+        
         val scan3 = getHiveTableScanExec("SELECT * FROM df WHERE df.k < 30")
         assert(scan3.simpleString(100).replaceAll("#\\d+L", "") ==
           "Scan hive default.df [id, k]," +
