@@ -30,7 +30,7 @@ private[spark] object Tests {
     ConfigBuilder("spark.testing.dynamicAllocation.schedule.enabled")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val IS_TESTING = ConfigBuilder("spark.testing")
     .version("1.0.1")

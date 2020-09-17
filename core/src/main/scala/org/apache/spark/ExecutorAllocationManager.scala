@@ -244,9 +244,6 @@ private[spark] class ExecutorAllocationManager(
       }
     }
 
-    // SPARK-22864/SPARK-32287: effectively disable the allocation schedule for the tests so that
-    // we won't result in the race condition between thread "spark-dynamic-executor-allocation"
-    // and thread "pool-1-thread-1-ScalaTest-running".
     if (!testing || conf.get(TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED)) {
       executor.scheduleWithFixedDelay(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
     }
