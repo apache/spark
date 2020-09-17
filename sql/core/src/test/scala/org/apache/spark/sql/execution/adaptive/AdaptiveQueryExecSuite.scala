@@ -1251,7 +1251,9 @@ class AdaptiveQueryExecSuite
       }
       Seq("=== Result of Batch AQE Preparations ===",
           "=== Result of Batch AQE Post Stage Creation ===",
-          "=== Result of Batch AQE Physical Plan Optimization ===").foreach { expectedMsg =>
+          "=== Result of Batch AQE Replanning ===",
+          "=== Result of Batch AQE Query Stage Optimization ===",
+          "=== Result of Batch AQE Final Query Stage Optimization ===").foreach { expectedMsg =>
         assert(testAppender.loggingEvents.exists(_.getRenderedMessage.contains(expectedMsg)))
       }
     }

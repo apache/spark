@@ -75,6 +75,8 @@ case class AdaptiveSparkPlanExec(
     case _ => logDebug(_)
   }
 
+  @transient private val planChangeLogger = new PlanChangeLogger[SparkPlan]()
+
   // The logical plan optimizer for re-optimizing the current logical plan.
   @transient private val optimizer = new AQEOptimizer(conf)
 
@@ -110,7 +112,7 @@ case class AdaptiveSparkPlanExec(
   @transient private val costEvaluator = SimpleCostEvaluator
 
   @transient private val initialPlan = applyPhysicalRules(
-    "AQE Preparations", inputPlan, queryStagePreparationRules)
+    inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
 
   @volatile private var currentPhysicalPlan = initialPlan
 
@@ -232,9 +234,9 @@ case class AdaptiveSparkPlanExec(
 
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(
-        "AQE Physical Plan Optimization",
         result.newPlan,
-        queryStageOptimizerRules ++ postStageCreationRules)
+        queryStageOptimizerRules ++ postStageCreationRules,
+        Some((planChangeLogger, "AQE Final Query Stage Optimization")))
       isFinalPlan = true
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
       currentPhysicalPlan
@@ -417,13 +419,13 @@ case class AdaptiveSparkPlanExec(
 
   private def newQueryStage(e: Exchange): QueryStageExec = {
     val optimizedPlan = applyPhysicalRules(
-      "AQE Physical Plan Optimization", e.child, queryStageOptimizerRules)
+      e.child, queryStageOptimizerRules, Some((planChangeLogger, "AQE Query Stage Optimization")))
     val queryStage = e match {
       case s: ShuffleExchangeLike =>
         val newShuffle = applyPhysicalRules(
-          "AQE Post Stage Creation",
           s.withNewChildren(Seq(optimizedPlan)),
-          postStageCreationRules)
+          postStageCreationRules,
+          Some((planChangeLogger, "AQE Post Stage Creation")))
         if (!newShuffle.isInstanceOf[ShuffleExchangeLike]) {
           throw new IllegalStateException(
             "Custom columnar rules cannot transform shuffle node to something else.")
@@ -431,9 +433,9 @@ case class AdaptiveSparkPlanExec(
         ShuffleQueryStageExec(currentStageId, newShuffle)
       case b: BroadcastExchangeLike =>
         val newBroadcast = applyPhysicalRules(
-          "AQE Post Stage Creation",
           b.withNewChildren(Seq(optimizedPlan)),
-          postStageCreationRules)
+          postStageCreationRules,
+          Some((planChangeLogger, "AQE Post Stage Creation")))
         if (!newBroadcast.isInstanceOf[BroadcastExchangeLike]) {
           throw new IllegalStateException(
             "Custom columnar rules cannot transform broadcast node to something else.")
@@ -543,7 +545,9 @@ case class AdaptiveSparkPlanExec(
     val optimized = optimizer.execute(logicalPlan)
     val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
     val newPlan = applyPhysicalRules(
-      "AQE Preparations", sparkPlan, preprocessingRules ++ queryStagePreparationRules)
+      sparkPlan,
+      preprocessingRules ++ queryStagePreparationRules,
+      Some((planChangeLogger, "AQE Replanning")))
     (newPlan, optimized)
   }
 
@@ -640,17 +644,21 @@ object AdaptiveSparkPlanExec {
    * Apply a list of physical operator rules on a [[SparkPlan]].
    */
   def applyPhysicalRules(
-      batchName: String,
       plan: SparkPlan,
-      rules: Seq[Rule[SparkPlan]]): SparkPlan = {
-    val planChangeLogger = new PlanChangeLogger[SparkPlan]()
-    val newPlan = rules.foldLeft(plan) { case (sp, rule) =>
-      val result = rule.apply(sp)
-      planChangeLogger.logRule(rule.ruleName, sp, result)
-      result
+      rules: Seq[Rule[SparkPlan]],
+      loggerAndBatchName: Option[(PlanChangeLogger[SparkPlan], String)] = None): SparkPlan = {
+    if (loggerAndBatchName.isEmpty) {
+      rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
+    } else {
+      val (logger, batchName) = loggerAndBatchName.get
+      val newPlan = rules.foldLeft(plan) { case (sp, rule) =>
+        val result = rule.apply(sp)
+        logger.logRule(rule.ruleName, sp, result)
+        result
+      }
+      logger.logBatch(batchName, plan, newPlan)
+      newPlan
     }
-    planChangeLogger.logBatch(batchName, plan, newPlan)
-    newPlan
   }
 }
 
