@@ -342,6 +342,11 @@ public final class UnsafeInMemorySorter {
    * {@code next()} will return the same mutable object.
    */
   public UnsafeSorterIterator getSortedIterator() {
+    if (numRecords() == 0) {
+      // `array` might be null, so make sure that it is not accessed by returning early.
+      return new SortedIterator(0, 0);
+    }
+
     int offset = 0;
     long start = System.nanoTime();
     if (sortComparator != null) {

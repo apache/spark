@@ -205,7 +205,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     if (inMemSorter == null || inMemSorter.numRecords() <= 0) {
       // There could still be some memory allocated when there are no records in the in-memory
       // sorter. We will not spill it however, to ensure that we can always process at least one
-      // record before spilling.
+      // record before spilling. See the comments in `allocateMemoryForRecordIfNecessary` for why
+      // this is necessary.
       return 0L;
     }
 
@@ -383,13 +384,12 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   }
 
   /**
-   * Allocates more memory in order to insert an additional record. This will request additional
-   * memory from the memory manager and spill if the requested memory can not be obtained.
+   * Allocates an additional page in order to insert an additional record. This will request
+   * additional memory from the memory manager and spill if the requested memory can not be
+   * obtained.
    *
    * @param required the required space in the data page, in bytes, including space for storing
-   *                      the record size. This must be less than or equal to the page size (records
-   *                      that exceed the page size are handled via a different code path which uses
-   *                      special overflow pages).
+   *                 the record size.
    */
   private void acquireNewPageIfNecessary(int required) {
     if (currentPage == null ||
@@ -399,6 +399,28 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       pageCursor = currentPage.getBaseOffset();
       allocatedPages.add(currentPage);
     }
+  }
+
+  /**
+   * Allocates more memory in order to insert an additional record. This will request additional
+   * memory from the memory manager and spill if the requested memory can not be obtained.
+   *
+   * @param required the required space in the data page, in bytes, including space for storing
+   *                 the record size.
+   */
+  private void allocateMemoryForRecordIfNecessary(int required) throws IOException {
+    // 1. Ensure that the pointer array has space for another record. This may cause a spill.
+    growPointerArrayIfNecessary();
+    // 2. Ensure that the last page has space for another record. This may cause a spill.
+    acquireNewPageIfNecessary(required);
+    // 3. The allocation in step 2 could have caused a spill, which would have freed the pointer
+    //    array allocated in step 1. Therefore we need to check again whether we have to allocate
+    //    a new pointer array.
+    //    Note that if the allocation in this step causes a spill event then it won't cause the page
+    //    allocated in the previous step to be freed. This step will only allocate memory if we
+    //    have spilled in the previous step, and spill() will only free memory if a record has been
+    //    inserted in the sorter (which is not the case after spilling).
+    growPointerArrayIfNecessary();
   }
 
   /**
@@ -415,14 +437,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       spill();
     }
 
-    // Check if a new pointer array has to be allocated both before and after a new page allocated,
-    // to make sure there is a pointer array even if spilling is triggered.
-    growPointerArrayIfNecessary();
-    int uaoSize = UnsafeAlignedOffset.getUaoSize();
+    final int uaoSize = UnsafeAlignedOffset.getUaoSize();
     // Need 4 or 8 bytes to store the record length.
     final int required = length + uaoSize;
-    acquireNewPageIfNecessary(required);
-    growPointerArrayIfNecessary();
+    allocateMemoryForRecordIfNecessary(required);
 
     final Object base = currentPage.getBaseObject();
     final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
@@ -445,13 +463,9 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       Object valueBase, long valueOffset, int valueLen, long prefix, boolean prefixIsNull)
     throws IOException {
 
-    // Check if a new pointer array has to be allocated both before and after a new page allocated,
-    // to make sure there is a pointer array even if spilling is triggered.
-    growPointerArrayIfNecessary();
-    int uaoSize = UnsafeAlignedOffset.getUaoSize();
+    final int uaoSize = UnsafeAlignedOffset.getUaoSize();
     final int required = keyLen + valueLen + (2 * uaoSize);
-    acquireNewPageIfNecessary(required);
-    growPointerArrayIfNecessary();
+    allocateMemoryForRecordIfNecessary(required);
 
     final Object base = currentPage.getBaseObject();
     final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
