@@ -28,7 +28,7 @@ import org.scalatest.PrivateMethodTester
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
-import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
+import org.apache.spark.internal.config.Tests.TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
@@ -1665,9 +1665,10 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       .set(config.DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, s"${executorIdleTimeout.toString}s")
       .set(config.SHUFFLE_SERVICE_ENABLED, true)
       .set(config.DYN_ALLOCATION_TESTING, true)
-      // SPARK-22864: effectively disable the allocation schedule by setting the period to a
-      // really long value.
-      .set(TEST_SCHEDULE_INTERVAL, 30000L)
+      // SPARK-22864/SPARK-32287: effectively disable the allocation schedule for the tests so that
+      // we won't result in the race condition between thread "spark-dynamic-executor-allocation"
+      // and thread "pool-1-thread-1-ScalaTest-running".
+      .set(TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED, false)
       .set(DECOMMISSION_ENABLED, decommissioningEnabled)
     sparkConf
   }
