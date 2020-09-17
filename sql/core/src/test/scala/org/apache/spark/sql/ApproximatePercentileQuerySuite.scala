@@ -297,7 +297,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
     withTempView(table) {
       spark.read
         .schema("col int")
-        .csv(testFile("percentile_approx-input.csv.bz2"))
+        .csv(testFile("test-data/percentile_approx-input.csv.bz2"))
         .repartition(1)
         .createOrReplaceTempView(table)
       checkAnswer(
