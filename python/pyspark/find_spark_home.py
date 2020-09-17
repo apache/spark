@@ -43,7 +43,7 @@ def _find_spark_home():
     from importlib.util import find_spec
     try:
         # Spark distribution can be downloaded when HADOOP_VERSION environment variable is set.
-        # We should look up this directory first.
+        # We should look up this directory first, see also SPARK-32017.
         spark_dist_dir = "spark-distribution"
         module_home = os.path.dirname(find_spec("pyspark").origin)
         paths.append(os.path.join(module_home, spark_dist_dir))

@@ -127,8 +127,9 @@ class InstallCommand(install):
                 os.environ.get("HADOOP_VERSION", install_module.DEFAULT_HADOOP).lower(),
                 os.environ.get("HIVE_VERSION", install_module.DEFAULT_HIVE).lower())
 
-            if ((install_module.DEFAULT_HADOOP, install_module.DEFAULT_HIVE) ==
-                    (hadoop_version, hive_version)):
+            if ("SPARK_VERSION" not in os.environ and
+                ((install_module.DEFAULT_HADOOP, install_module.DEFAULT_HIVE) ==
+                    (hadoop_version, hive_version))):
                 # Do not download and install if they are same as default.
                 return
 

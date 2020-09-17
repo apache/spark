@@ -51,6 +51,7 @@ If you want to install extra dependencies for a specific componenet, you can ins
 For PySpark with different Hadoop and/or Hive, you can install it by using ``HIVE_VERSION`` and ``HADOOP_VERSION`` environment variables as below:
 
 .. code-block:: bash
+
     HIVE_VERSION=2.3 pip install pyspark
     HADOOP_VERSION=2.7 pip install pyspark
     HIVE_VERSION=1.2 HADOOP_VERSION=2.7 pip install pyspark
@@ -60,6 +61,7 @@ downloads a different version and use it in PySpark. Downloading it can take a w
 It is recommended to use `-v` option in `pip` to track the installation and download status.
 
 .. code-block:: bash
+
     HADOOP_VERSION=2.7 pip install pyspark -v
 
 Supported versions are as below:

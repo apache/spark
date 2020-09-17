@@ -25,12 +25,11 @@ from pyspark.install import install_spark, DEFAULT_HADOOP, DEFAULT_HIVE, \
 class SparkInstallationTestCase(unittest.TestCase):
 
     def test_install_spark(self):
-        # Just pick one combination to test.
+        # Test only one case. Testing this is expensive because it needs to download
+        # the Spark distribution.
         spark_version, hadoop_version, hive_version = checked_versions("3.0.1", "3.2", "2.3")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # Test only default case. Testing this is expensive because it needs to download
-            # the Spark distribution.
             install_spark(
                 dest=tmp_dir,
                 spark_version=spark_version,
