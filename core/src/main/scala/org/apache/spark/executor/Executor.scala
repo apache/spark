@@ -136,7 +136,10 @@ private[spark] class Executor(
     executorMetricsSource.foreach(_.register(env.metricsSystem))
     env.metricsSystem.registerSource(env.blockManager.shuffleMetricsSource)
   } else {
-    Executor.executorSource = executorSource
+    // This enable the registration of the executor source in local mode.
+    // The actual registration happens in SparkContext,
+    // it cannot be done here as the appId is not available yet
+    Executor.executorSourceLocalModeOnly = executorSource
   }
 
   // Whether to load classes in user jars before those in Spark jars
@@ -983,5 +986,5 @@ private[spark] object Executor {
   val taskDeserializationProps: ThreadLocal[Properties] = new ThreadLocal[Properties]
 
   // Used to store executorSource, for local mode only
-  var executorSource: ExecutorSource = null
+  var executorSourceLocalModeOnly: ExecutorSource = null
 }

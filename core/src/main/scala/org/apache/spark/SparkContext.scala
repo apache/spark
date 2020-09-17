@@ -624,7 +624,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // Post init
     _taskScheduler.postStartHook()
     if (isLocal) {
-      _env.metricsSystem.registerSource(Executor.executorSource)
+      _env.metricsSystem.registerSource(Executor.executorSourceLocalModeOnly)
     }
     _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
     _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
