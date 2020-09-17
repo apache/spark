@@ -707,6 +707,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
    * List of all [[UnaryNode]]s which allow foldable propagation.
    */
   private def canPropagateFoldables(u: UnaryNode): Boolean = u match {
+    // Handling `Project` is moved to `propagateFoldables`.
     case _: Filter => true
     case _: SubqueryAlias => true
     case _: Aggregate => true
