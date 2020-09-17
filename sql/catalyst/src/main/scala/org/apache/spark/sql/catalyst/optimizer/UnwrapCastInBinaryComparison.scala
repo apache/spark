@@ -103,9 +103,9 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // In case both sides have integral type, optimize the comparison by removing casts or
     // moving cast to the literal side.
     case be @ BinaryComparison(
-      Cast(fromExp, toType: IntegralType, tz), Literal(value, literalType))
+      Cast(fromExp, toType: IntegralType, _), Literal(value, literalType))
         if canImplicitlyCast(fromExp, toType, literalType) =>
-      simplifyIntegralComparison(be, fromExp, toType, value, tz)
+      simplifyIntegralComparison(be, fromExp, toType, value)
 
     case _ => exp
   }
@@ -120,8 +120,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       exp: BinaryComparison,
       fromExp: Expression,
       toType: IntegralType,
-      value: Any,
-      tz: Option[String]): Expression = {
+      value: Any): Expression = {
 
     val fromType = fromExp.dataType
     val (min, max) = getRange(fromType)
@@ -185,7 +184,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     } else {
       // This means `value` is within range `(min, max)`. Optimize this by moving the cast to the
       // literal side.
-      val lit = Cast(Literal(value), fromType, tz)
+      val lit = Literal(Cast(Literal(value), fromType).eval(), fromType)
       exp match {
         case GreaterThan(_, _) => GreaterThan(fromExp, lit)
         case GreaterThanOrEqual(_, _) => GreaterThanOrEqual(fromExp, lit)

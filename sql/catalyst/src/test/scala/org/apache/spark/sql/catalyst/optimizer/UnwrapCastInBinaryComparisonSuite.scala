@@ -80,12 +80,12 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
   test("unwrap casts when literal is within range (min, max)") {
-    assertEquivalent(castInt(f) > 300, f > castShort(300))
-    assertEquivalent(castInt(f) >= 500, f >= castShort(500))
-    assertEquivalent(castInt(f) === 32766, f === castShort(32766))
-    assertEquivalent(castInt(f) <=> 32766, f <=> castShort(32766))
-    assertEquivalent(castInt(f) <= -6000, f <= castShort(-6000))
-    assertEquivalent(castInt(f) < -32767, f < castShort(-32767))
+    assertEquivalent(castInt(f) > 300, f > 300.toShort)
+    assertEquivalent(castInt(f) >= 500, f >= 500.toShort)
+    assertEquivalent(castInt(f) === 32766, f === 32766.toShort)
+    assertEquivalent(castInt(f) <=> 32766, f <=> 32766.toShort)
+    assertEquivalent(castInt(f) <= -6000, f <= -6000.toShort)
+    assertEquivalent(castInt(f) < -32767, f < -32767.toShort)
   }
 
   test("unwrap casts when cast is on rhs") {
@@ -97,7 +97,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     assertEquivalent(Literal(v.toInt) >= castInt(f), trueIfNotNull(f))
     assertEquivalent(Literal(v.toInt) > castInt(f), f =!= v)
 
-    assertEquivalent(Literal(30) <= castInt(f), Cast(Literal(30), ShortType) <= f)
+    assertEquivalent(Literal(30) <= castInt(f), Literal(30.toShort, ShortType) <= f)
   }
 
   test("unwrap cast should have no effect when input is not integral type") {
@@ -144,8 +144,6 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
   private def castInt(e: Expression): Expression = Cast(e, IntegerType)
-
-  private def castShort(e: Expression): Expression = Cast(e, ShortType)
 
   private def castDouble(e: Expression): Expression = Cast(e, DoubleType)
 
