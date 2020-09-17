@@ -109,7 +109,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
           // we need to create a spied tsm just so we can set the TaskSetBlacklist
           val tsmSpy = spy(tsm)
           val taskSetBlacklist = mock[TaskSetExcludelist]
-          when(tsmSpy.taskSetBlacklistHelperOpt).thenReturn(Some(taskSetBlacklist))
+          when(tsmSpy.taskSetExcludelistHelperOpt).thenReturn(Some(taskSetBlacklist))
           stageToMockTaskSetManager(taskSet.stageId) = tsmSpy
           stageToMockTaskSetBlacklist(taskSet.stageId) = taskSetBlacklist
           tsmSpy
@@ -878,7 +878,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Fail the running task
     val failedTask = firstTaskAttempts.find(_.executorId == "executor0").get
     failTask(failedTask.taskId, TaskState.FAILED, UnknownReason, tsm)
-    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorExcludedForTask(
+    when(tsm.taskSetExcludelistHelperOpt.get.isExecutorExcludedForTask(
       "executor0", failedTask.index)).thenReturn(true)
 
     // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
@@ -910,7 +910,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Fail the running task
     val failedTask = firstTaskAttempts.head
     failTask(failedTask.taskId, TaskState.FAILED, UnknownReason, tsm)
-    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorExcludedForTask(
+    when(tsm.taskSetExcludelistHelperOpt.get.isExecutorExcludedForTask(
       "executor0", failedTask.index)).thenReturn(true)
 
     // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
@@ -952,7 +952,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Fail the running task
     val failedTask = firstTaskAttempts.head
     failTask(failedTask.taskId, TaskState.FAILED, UnknownReason, tsm)
-    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorExcludedForTask(
+    when(tsm.taskSetExcludelistHelperOpt.get.isExecutorExcludedForTask(
       "executor0", failedTask.index)).thenReturn(true)
 
     // make an offer. We will schedule the task from the second taskSet. Since a task was scheduled
@@ -966,7 +966,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val tsm2 = stageToMockTaskSetManager(1)
     val failedTask2 = secondTaskAttempts.head
     failTask(failedTask2.taskId, TaskState.FAILED, UnknownReason, tsm2)
-    when(tsm2.taskSetBlacklistHelperOpt.get.isExecutorExcludedForTask(
+    when(tsm2.taskSetExcludelistHelperOpt.get.isExecutorExcludedForTask(
       "executor0", failedTask2.index)).thenReturn(true)
 
     // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
@@ -1014,7 +1014,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Fail the running task
     val failedTask = taskAttempts.head
     failTask(failedTask.taskId, TaskState.FAILED, UnknownReason, tsm)
-    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorExcludedForTask(
+    when(tsm.taskSetExcludelistHelperOpt.get.isExecutorExcludedForTask(
       "executor0", failedTask.index)).thenReturn(true)
 
     // make an offer but we won't schedule anything yet as scheduler locality is still PROCESS_LOCAL
@@ -1044,7 +1044,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     // Fail the running task
     failTask(0, TaskState.FAILED, UnknownReason, tsm)
-    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorExcludedForTask(
+    when(tsm.taskSetExcludelistHelperOpt.get.isExecutorExcludedForTask(
       "executor0", 0)).thenReturn(true)
 
     // If the executor is busy, then dynamic allocation should kick in and try

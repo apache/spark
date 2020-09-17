@@ -313,7 +313,7 @@ private[spark] class AppStatusListener(
   }
 
   private def addBlackListedStageTo(exec: LiveExecutor, stageId: Int, now: Long): Unit = {
-    exec.blacklistedInStages += stageId
+    exec.excludedInStages += stageId
     liveUpdate(exec, now)
   }
 
@@ -323,7 +323,7 @@ private[spark] class AppStatusListener(
       executorStageSummary.isBlacklisted = true
       maybeUpdate(executorStageSummary, now)
     }
-    stage.blackListedExecutors ++= executorIds
+    stage.excludedExecutors ++= executorIds
     maybeUpdate(stage, now)
   }
 
@@ -341,7 +341,7 @@ private[spark] class AppStatusListener(
 
   private def updateBlackListStatus(execId: String, blacklisted: Boolean): Unit = {
     liveExecutors.get(execId).foreach { exec =>
-      exec.isBlacklisted = blacklisted
+      exec.isExcluded = blacklisted
       if (blacklisted) {
         appStatusSource.foreach(_.BLACKLISTED_EXECUTORS.inc())
       } else {
@@ -357,7 +357,7 @@ private[spark] class AppStatusListener(
     // Implicitly (un)blacklist every executor associated with the node.
     liveExecutors.values.foreach { exec =>
       if (exec.hostname == host) {
-        exec.isBlacklisted = blacklisted
+        exec.isExcluded = blacklisted
         liveUpdate(exec, now)
       }
     }
@@ -759,7 +759,7 @@ private[spark] class AppStatusListener(
         update(pool, now)
       }
 
-      val executorIdsForStage = stage.blackListedExecutors
+      val executorIdsForStage = stage.excludedExecutors
       executorIdsForStage.foreach { executorId =>
         liveExecutors.get(executorId).foreach { exec =>
           removeBlackListedStageFrom(exec, event.stageInfo.stageId, now)
@@ -783,7 +783,7 @@ private[spark] class AppStatusListener(
   }
 
   private def removeBlackListedStageFrom(exec: LiveExecutor, stageId: Int, now: Long) = {
-    exec.blacklistedInStages -= stageId
+    exec.excludedInStages -= stageId
     liveUpdate(exec, now)
   }
 

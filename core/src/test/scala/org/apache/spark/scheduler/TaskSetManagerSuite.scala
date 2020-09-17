@@ -385,7 +385,7 @@ class TaskSetManagerSuite
     // offers not accepted due to blacklisting are not delay schedule rejects
     val tsmSpy = spy(manager)
     val blacklist = mock(classOf[TaskSetExcludelist])
-    when(tsmSpy.taskSetBlacklistHelperOpt).thenReturn(Some(blacklist))
+    when(tsmSpy.taskSetExcludelistHelperOpt).thenReturn(Some(blacklist))
     when(blacklist.isNodeExcludedForTaskSet(any())).thenReturn(true)
     val (blacklistTask, blackListReject) = tsmSpy.resourceOffer("exec2", "host2", ANY)
     assert(blacklistTask.isEmpty)
@@ -1371,7 +1371,7 @@ class TaskSetManagerSuite
     // we need a spy so we can attach our mock blacklist
     val tsmSpy = spy(tsm)
     val blacklist = mock(classOf[TaskSetExcludelist])
-    when(tsmSpy.taskSetBlacklistHelperOpt).thenReturn(Some(blacklist))
+    when(tsmSpy.taskSetExcludelistHelperOpt).thenReturn(Some(blacklist))
 
     // make some offers to our taskset, to get tasks we will fail
     val taskDescs = Seq(
@@ -1458,7 +1458,7 @@ class TaskSetManagerSuite
     when(taskSetManagerSpy.addPendingTask(anyInt(), anyBoolean(), anyBoolean())).thenAnswer(
       (invocationOnMock: InvocationOnMock) => {
         val task: Int = invocationOnMock.getArgument(0)
-        assert(taskSetManager.taskSetBlacklistHelperOpt.get.
+        assert(taskSetManager.taskSetExcludelistHelperOpt.get.
           isExecutorExcludedForTask(exec, task))
       }
     )

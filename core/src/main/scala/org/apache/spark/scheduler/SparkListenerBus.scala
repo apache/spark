@@ -63,18 +63,18 @@ private[spark] trait SparkListenerBus
         listener.onExecutorAdded(executorAdded)
       case executorRemoved: SparkListenerExecutorRemoved =>
         listener.onExecutorRemoved(executorRemoved)
-      case executorBlacklistedForStage: SparkListenerExecutorExcludedForStage =>
-        listener.onExecutorExcludedForStage(executorBlacklistedForStage)
-      case nodeBlacklistedForStage: SparkListenerNodeExcludedForStage =>
-        listener.onNodeExcludedForStage(nodeBlacklistedForStage)
-      case executorBlacklisted: SparkListenerExecutorExcluded =>
-        listener.onExecutorExcluded(executorBlacklisted)
-      case executorUnblacklisted: SparkListenerExecutorUnexcluded =>
-        listener.onExecutorUnexcluded(executorUnblacklisted)
-      case nodeBlacklisted: SparkListenerNodeExcluded =>
-        listener.onNodeExcluded(nodeBlacklisted)
-      case nodeUnblacklisted: SparkListenerNodeUnexcluded =>
-        listener.onNodeUnexcluded(nodeUnblacklisted)
+      case executorExcludedForStage: SparkListenerExecutorExcludedForStage =>
+        listener.onExecutorExcludedForStage(executorExcludedForStage)
+      case nodeExcludedForStage: SparkListenerNodeExcludedForStage =>
+        listener.onNodeExcludedForStage(nodeExcludedForStage)
+      case executorExcluded: SparkListenerExecutorExcluded =>
+        listener.onExecutorExcluded(executorExcluded)
+      case executorUnexcluded: SparkListenerExecutorUnexcluded =>
+        listener.onExecutorUnexcluded(executorUnexcluded)
+      case nodeExcluded: SparkListenerNodeExcluded =>
+        listener.onNodeExcluded(nodeExcluded)
+      case nodeUnexcluded: SparkListenerNodeUnexcluded =>
+        listener.onNodeUnexcluded(nodeUnexcluded)
       case blockUpdated: SparkListenerBlockUpdated =>
         listener.onBlockUpdated(blockUpdated)
       case speculativeTaskSubmitted: SparkListenerSpeculativeTaskSubmitted =>

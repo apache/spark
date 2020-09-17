@@ -602,15 +602,15 @@ private[spark] class TaskSchedulerImpl(
         }
 
         if (!launchedAnyTask) {
-          taskSet.getCompletelyBlacklistedTaskIfAny(hostToExecutors).foreach { taskIndex =>
-              // If the taskSet is unschedulable we try to find an existing idle blacklisted
+          taskSet.getCompletelyExcludedTaskIfAny(hostToExecutors).foreach { taskIndex =>
+              // If the taskSet is unschedulable we try to find an existing idle excluded
               // executor and kill the idle executor and kick off an abortTimer which if it doesn't
               // schedule a task within the the timeout will abort the taskSet if we were unable to
               // schedule any task from the taskSet.
               // Note 1: We keep track of schedulability on a per taskSet basis rather than on a per
               // task basis.
               // Note 2: The taskSet can still be aborted when there are more than one idle
-              // blacklisted executors and dynamic allocation is on. This can happen when a killed
+              // excluded executors and dynamic allocation is on. This can happen when a killed
               // idle executor isn't replaced in time by ExecutorAllocationManager as it relies on
               // pending tasks and doesn't kill executors on idle timeouts, resulting in the abort
               // timer to expire and abort the taskSet.
@@ -638,18 +638,19 @@ private[spark] class TaskSchedulerImpl(
                     }
                   } else {
                     // Abort Immediately
-                    logInfo("Cannot schedule any task because of complete blacklisting. No idle" +
-                      s" executors can be found to kill. Aborting stage ${taskSet.stageId}.")
-                    taskSet.abortSinceCompletelyBlacklisted(taskIndex)
+                    logInfo("Cannot schedule any task because all executor excluded from " +
+                      "failures. No idle executors can be found to kill. Aborting stage " +
+                      s"${taskSet.stageId}.")
+                    taskSet.abortSinceCompletelyExcludedOnFailure(taskIndex)
                   }
               }
           }
         } else {
-          // We want to defer killing any taskSets as long as we have a non blacklisted executor
+          // We want to defer killing any taskSets as long as we have a non excluded executor
           // which can be used to schedule a task from any active taskSets. This ensures that the
           // job can make progress.
           // Note: It is theoretically possible that a taskSet never gets scheduled on a
-          // non-blacklisted executor and the abort timer doesn't kick in because of a constant
+          // non-excluded executor and the abort timer doesn't kick in because of a constant
           // submission of new TaskSets. See the PR for more details.
           if (unschedulableTaskSetToExpiryTime.nonEmpty) {
             logInfo("Clearing the expiry times for all unschedulable taskSets as a task was " +
@@ -710,7 +711,7 @@ private[spark] class TaskSchedulerImpl(
     val timeout = conf.get(config.UNSCHEDULABLE_TASKSET_TIMEOUT) * 1000
     unschedulableTaskSetToExpiryTime(taskSet) = clock.getTimeMillis() + timeout
     logInfo(s"Waiting for $timeout ms for completely " +
-      s"blacklisted task to be schedulable again before aborting stage ${taskSet.stageId}.")
+      s"excluded task to be schedulable again before aborting stage ${taskSet.stageId}.")
     abortTimer.schedule(
       createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout)
   }
@@ -722,9 +723,9 @@ private[spark] class TaskSchedulerImpl(
       override def run(): Unit = TaskSchedulerImpl.this.synchronized {
         if (unschedulableTaskSetToExpiryTime.contains(taskSet) &&
             unschedulableTaskSetToExpiryTime(taskSet) <= clock.getTimeMillis()) {
-          logInfo("Cannot schedule any task because of complete blacklisting. " +
+          logInfo("Cannot schedule any task because all executors excluded due to failures. " +
             s"Wait time for scheduling expired. Aborting stage ${taskSet.stageId}.")
-          taskSet.abortSinceCompletelyBlacklisted(taskIndex)
+          taskSet.abortSinceCompletelyExcludedOnFailure(taskIndex)
         } else {
           this.cancel()
         }

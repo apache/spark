@@ -33,7 +33,7 @@ import org.apache.spark.util.ManualClock
 class YarnAllocatorHealthTrackerSuite extends SparkFunSuite with Matchers
   with BeforeAndAfterEach {
 
-  val BLACKLIST_TIMEOUT = 100L
+  val EXCLUDE_TIMEOUT = 100L
   val MAX_FAILED_EXEC_PER_NODE_VALUE = 2
 
   var sparkConf: SparkConf = _
@@ -42,7 +42,7 @@ class YarnAllocatorHealthTrackerSuite extends SparkFunSuite with Matchers
 
   override def beforeEach(): Unit = {
     sparkConf = new SparkConf()
-    sparkConf.set(EXCLUDE_ON_FAILURE_TIMEOUT_CONF, BLACKLIST_TIMEOUT)
+    sparkConf.set(EXCLUDE_ON_FAILURE_TIMEOUT_CONF, EXCLUDE_TIMEOUT)
     sparkConf.set(YARN_EXECUTOR_LAUNCH_EXCLUDE_ON_FAILURE_ENABLED, true)
     sparkConf.set(MAX_FAILED_EXEC_PER_NODE, MAX_FAILED_EXEC_PER_NODE_VALUE)
     clock = new ManualClock()
@@ -74,7 +74,7 @@ class YarnAllocatorHealthTrackerSuite extends SparkFunSuite with Matchers
     // the third failure on the host triggers the exclusion
     verify(amClientMock).updateBlacklist(Arrays.asList("host"), Collections.emptyList())
 
-    clock.advance(BLACKLIST_TIMEOUT)
+    clock.advance(EXCLUDE_TIMEOUT)
 
     // trigger synchronisation of excluded nodes with YARN
     yarnHealthTracker.setSchedulerExcludedNodes(Set())

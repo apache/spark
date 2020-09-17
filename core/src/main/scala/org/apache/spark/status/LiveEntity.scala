@@ -286,8 +286,8 @@ private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extend
   var totalInputBytes = 0L
   var totalShuffleRead = 0L
   var totalShuffleWrite = 0L
-  var isBlacklisted = false
-  var blacklistedInStages: Set[Int] = TreeSet()
+  var isExcluded = false
+  var excludedInStages: Set[Int] = TreeSet()
 
   var executorLogs = Map[String, String]()
   var attributes = Map[String, String]()
@@ -334,14 +334,14 @@ private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extend
       totalInputBytes,
       totalShuffleRead,
       totalShuffleWrite,
-      isBlacklisted,
+      isExcluded,
       maxMemory,
       addTime,
       Option(removeTime),
       Option(removeReason),
       executorLogs,
       memoryMetrics,
-      blacklistedInStages,
+      excludedInStages,
       Some(peakExecutorMetrics).filter(_.isSet),
       attributes,
       resources,
@@ -361,7 +361,7 @@ private class LiveExecutorStageSummary(
   var succeededTasks = 0
   var failedTasks = 0
   var killedTasks = 0
-  var isBlacklisted = false
+  var isExcluded = false
 
   var metrics = createMetrics(default = 0L)
 
@@ -383,7 +383,7 @@ private class LiveExecutorStageSummary(
       metrics.shuffleWriteMetrics.recordsWritten,
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled,
-      isBlacklisted,
+      isExcluded,
       Some(peakExecutorMetrics).filter(_.isSet))
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
   }
@@ -421,7 +421,7 @@ private class LiveStage extends LiveEntity {
 
   val activeTasksPerExecutor = new HashMap[String, Int]().withDefaultValue(0)
 
-  var blackListedExecutors = new HashSet[String]()
+  var excludedExecutors = new HashSet[String]()
 
   val peakExecutorMetrics = new ExecutorMetrics()
 
