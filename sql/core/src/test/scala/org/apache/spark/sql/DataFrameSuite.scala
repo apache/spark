@@ -2556,7 +2556,7 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df.select($"pos" > $"neg"), Row(false))
   }
 
-  test("SPARK-32635: Fix foldable propagation") {
+  test("SPARK-32635: Replace references with foldables coming only from the node's children") {
     val a = Seq("1").toDF("col1").withColumn("col2", lit("1"))
     val b = Seq("2").toDF("col1").withColumn("col2", lit("2"))
     val aub = a.union(b)
