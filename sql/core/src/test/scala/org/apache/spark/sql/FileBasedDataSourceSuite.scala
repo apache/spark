@@ -233,15 +233,16 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
-  test("column name supports special characters using orc") {
-    val format = "orc"
-    Seq("$", " ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
-      withTempDir { dir =>
-        val dataDir = new File(dir, "file").getCanonicalPath
-        Seq(1).toDF(name).write.orc(dataDir)
-        val schema = spark.read.orc(dataDir).schema
-        assert(schema.size == 1)
-        assertResult(name)(schema(0).name)
+  Seq("json", "orc").foreach { format =>
+    test(s"SPARK-32889: column name supports special characters using $format") {
+      Seq("$", " ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
+        withTempDir { dir =>
+          val dataDir = new File(dir, "file").getCanonicalPath
+          Seq(1).toDF(name).write.format(format).save(dataDir)
+          val schema = spark.read.format(format).load(dataDir).schema
+          assert(schema.size == 1)
+          assertResult(name)(schema.head.name)
+        }
       }
     }
   }

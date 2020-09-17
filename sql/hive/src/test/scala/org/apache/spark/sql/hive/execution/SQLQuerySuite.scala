@@ -2241,7 +2241,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  test("SPARK-32889 ORC table column name supports special characters like $ eg.") {
+  test("SPARK-32889: ORC table column name supports special characters") {
     // " " "," is not allowed.
     Seq("$", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
       val source = "ORC"
