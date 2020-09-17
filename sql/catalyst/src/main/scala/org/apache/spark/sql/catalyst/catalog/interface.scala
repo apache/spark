@@ -701,16 +701,27 @@ case class HiveTableRelation(
       case _ => tableMeta.identifier :: Nil
     }
 
-    val metadataEntries = Map(
+    var metadata = Map(
       "CatalogTable" -> catalogTable.mkString(", "),
       "Data Cols" -> truncatedString(dataCols, "[", ", ", "]", maxFields),
-      "Partition Cols" -> truncatedString(partitionCols, "[", ", ", "]", maxFields),
-      "Statistic" -> tableStats.map(_.simpleString).getOrElse(""),
-      "Pruned Partitions" -> prunedPartitions.map { partitions =>
-        val specs = partitions.map(_.spec.map { case (k, v) => s"$k=$v" }.mkString(", "))
-        truncatedString(specs, "[", ", ", "]", maxFields)
-      }.getOrElse("")
-    ).filter(_._2.length > 0).toSeq.sorted.map {
+      "Partition Cols" -> truncatedString(partitionCols, "[", ", ", "]", maxFields)
+    )
+
+    if (prunedPartitions.nonEmpty) {
+      metadata += ("Pruned Partitions" -> {
+        val parts = prunedPartitions.get.map { part =>
+          val spec = part.spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
+          if (part.storage.serde.nonEmpty && part.storage.serde != tableMeta.storage.serde) {
+            s"($spec, ${part.storage.serde.get})"
+          } else {
+            s"($spec)"
+          }
+        }
+        truncatedString(parts, "[", ", ", "]", maxFields)
+      })
+    }
+
+    val metadataEntries = metadata.toSeq.map {
       case (key, value) if key == "CatalogTable" => value
       case (key, value) =>
         key + ": " + StringUtils.abbreviate(value, SQLConf.get.maxMetadataStringLength)

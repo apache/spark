@@ -190,10 +190,9 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
   }
 
   test("SPARK-32867: When explain, HiveTableRelation show limited message") {
-    withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "false",
-      "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
       withTable("df") {
-        spark.range(1000)
+        spark.range(30)
           .select(col("id"), col("id").as("k"))
           .write
           .partitionBy("k")
@@ -209,11 +208,10 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
             " org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe," +
             " Data Cols: [id]," +
             " Partition Cols: [k]," +
-            " Pruned Partitions: [k=0, k=1, k=2]," +
-            " Statistic: sizeInBytes=8.0 EiB" +
+            " Pruned Partitions: [(k=0), (k=1), (k=2)]" +
             "]," +
             " [isnotnull(k), (k < 3)]")
-        val scan2 = getHiveTableScanExec("SELECT * FROM df WHERE df.k < 100")
+        val scan2 = getHiveTableScanExec("SELECT * FROM df WHERE df.k < 30")
         assert(scan2.simpleString(100).replaceAll("#\\d+L", "") ==
           "Scan hive default.df [id, k]," +
             " HiveTableRelation [" +
@@ -221,11 +219,29 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
             " org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe," +
             " Data Cols: [id]," +
             " Partition Cols: [k]," +
-            " Pruned Partitions: [k=0, k=1, k=10, k=11, k=12, k=13, k=14, k=15, k=16," +
-            " k=17, k=18, k=19, k=2, k=20, k=21, k=22, k=2...," +
-            " Statistic: sizeInBytes=8.0 EiB" +
+            " Pruned Partitions: [(k=0), (k=1), (k=10), (k=11), (k=12), (k=13), (k=14), (k=15)," +
+            " (k=16), (k=17), (k=18), (k=19), (k..." +
             "]," +
-            " [isnotnull(k), (k < 100)]")
+            " [isnotnull(k), (k < 30)]")
+
+        sql(
+          """
+            |ALTER TABLE df PARTITION (k=10) SET SERDE
+            |'org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe';
+          """.stripMargin)
+        val scan3 = getHiveTableScanExec("SELECT * FROM df WHERE df.k < 30")
+        assert(scan3.simpleString(100).replaceAll("#\\d+L", "") ==
+          "Scan hive default.df [id, k]," +
+            " HiveTableRelation [" +
+            "`default`.`df`," +
+            " org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe," +
+            " Data Cols: [id]," +
+            " Partition Cols: [k]," +
+            " Pruned Partitions: [(k=0), (k=1)," +
+            " (k=10, org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe)," +
+            " (k=11), (k=12), (k=1..." +
+            "]," +
+            " [isnotnull(k), (k < 30)]")
       }
     }
   }
