@@ -476,16 +476,6 @@ class SessionCatalog(
   }
 
   /**
-   * Retrieve the metadata of a catalog identifier.
-   */
-  def getTableMetadata(ident: Identifier): CatalogTable = {
-    assert(ident.namespace.length == 1)
-    val db = formatDatabaseName(ident.namespace.head)
-    val table = formatTableName(ident.name)
-    externalCatalog.getTable(db, table)
-  }
-
-  /**
    * Retrieve all metadata of existing permanent tables/views. If no database is specified,
    * assume the table/view is in the current database.
    * Only the tables/views belong to the same database that can be retrieved are returned.

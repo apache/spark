@@ -220,7 +220,6 @@ class Analyzer(
       ResolveInsertInto ::
       ResolveRelations ::
       ResolveTables ::
-      ResolveStreamingRelation ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
       ResolveDeserializer ::
@@ -896,11 +895,13 @@ class Analyzer(
    */
   object ResolveTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
-      case u @ UnresolvedRelation(_, _, false) =>
-        lookupV2Relation(u.multipartIdentifier, u.options)
-          .map { rel =>
-            val ident = rel.identifier.get
-            SubqueryAlias(rel.catalog.get.name +: ident.namespace :+ ident.name, rel)
+      case u: UnresolvedRelation =>
+        lookupV2Relation(u.multipartIdentifier, u.options, u.isStreaming)
+          .map {
+            case rel: DataSourceV2Relation =>
+              val ident = rel.identifier.get
+              SubqueryAlias(rel.catalog.get.name +: ident.namespace :+ ident.name, rel)
+            case o => o
           }.getOrElse(u)
 
       case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident)) =>
@@ -913,8 +914,9 @@ class Analyzer(
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
-      case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
-        lookupV2Relation(u.multipartIdentifier, u.options)
+      case i @ InsertIntoStatement(u @ UnresolvedRelation(_, _, false), _, _, _, _)
+          if i.query.resolved =>
+        lookupV2Relation(u.multipartIdentifier, u.options, false)
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
 
@@ -925,19 +927,6 @@ class Analyzer(
 
       case u: UnresolvedV2Relation =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
-
-      case u @ UnresolvedRelation(_, extraOptions, true) =>
-        val r = expandRelationName(u.multipartIdentifier) match {
-          case NonSessionCatalogAndIdentifier(catalog, ident) =>
-            CatalogV2Util.loadTable(catalog, ident) match {
-              case Some(table) =>
-                Some(StreamingRelationV2(
-                  None, table.name, table, extraOptions, table.schema.toAttributes, None))
-              case None => None
-            }
-          case _ => None
-        }
-        r.getOrElse(u)
     }
 
     /**
@@ -945,57 +934,22 @@ class Analyzer(
      */
     private def lookupV2Relation(
         identifier: Seq[String],
-        options: CaseInsensitiveStringMap): Option[DataSourceV2Relation] =
+        options: CaseInsensitiveStringMap,
+        isStreaming: Boolean): Option[LogicalPlan] =
       expandRelationName(identifier) match {
         case NonSessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident) match {
             case Some(table) =>
-              Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), options))
+              if (isStreaming) {
+                Some(StreamingRelationV2(
+                  None, table.name, table, options, table.schema.toAttributes, None))
+              } else {
+                Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), options))
+              }
             case None => None
           }
         case _ => None
       }
-  }
-
-  /**
-   * Replace [[UnresolvedRelation]] with concrete streaming logical plans.
-   */
-  object ResolveStreamingRelation extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case u: UnresolvedRelation if u.isStreaming =>
-        val res = lookupStreamingRelation(u.multipartIdentifier, u.options)
-        res.getOrElse(u)
-    }
-
-    // Look up a relation from the session catalog with the following logic:
-    // 1) If the resolved catalog is not session catalog, return None.
-    // 2) If a relation is not found in the catalog, return None.
-    // 3) If a v1 table is found, create a v1 relation. Otherwise, pass the table to
-    //    UnresolvedStreamingRelation.
-    private def lookupStreamingRelation(
-        identifier: Seq[String],
-        extraOptions: CaseInsensitiveStringMap): Option[LogicalPlan] = {
-      expandRelationName(identifier) match {
-        case SessionCatalogAndIdentifier(catalog, ident) =>
-          lazy val loaded = CatalogV2Util.loadTable(catalog, ident).map {
-            case v1Table: V1Table =>
-              UnresolvedCatalogRelation(v1Table.v1Table, extraOptions, isStreaming = true)
-            case table =>
-              val tableMeta = v1SessionCatalog.getTableMetadata(ident)
-              StreamingRelationV2(
-                None, table.name, table, extraOptions, table.schema.toAttributes,
-                Some(UnresolvedCatalogRelation(tableMeta, isStreaming = true)))
-          }
-          val key = catalog.name +: ident.namespace :+ ident.name
-          AnalysisContext.get.relationCache.get(key).map(_.transform {
-            case multi: MultiInstanceRelation => multi.newInstance()
-          }).orElse {
-            loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
-            loaded
-          }
-        case _ => None
-      }
-    }
   }
 
   /**
@@ -1033,7 +987,7 @@ class Analyzer(
       case i @ InsertIntoStatement(table, _, _, _, _) if i.query.resolved =>
         val relation = table match {
           case u @ UnresolvedRelation(_, _, false) =>
-            lookupRelation(u.multipartIdentifier, u.options).getOrElse(u)
+            lookupRelation(u.multipartIdentifier, u.options, false).getOrElse(u)
           case other => other
         }
 
@@ -1043,8 +997,9 @@ class Analyzer(
           case other => i.copy(table = other)
         }
 
-      case u @ UnresolvedRelation(_, _, false) =>
-        lookupRelation(u.multipartIdentifier, u.options).map(resolveViews).getOrElse(u)
+      case u: UnresolvedRelation =>
+        lookupRelation(u.multipartIdentifier, u.options, u.isStreaming)
+          .map(resolveViews).getOrElse(u)
 
       case u @ UnresolvedTable(identifier) =>
         lookupTableOrView(identifier).map {
@@ -1076,16 +1031,28 @@ class Analyzer(
     // 3) If a v1 table is found, create a v1 relation. Otherwise, create a v2 relation.
     private def lookupRelation(
         identifier: Seq[String],
-        options: CaseInsensitiveStringMap): Option[LogicalPlan] = {
+        options: CaseInsensitiveStringMap,
+        isStreaming: Boolean): Option[LogicalPlan] = {
       expandRelationName(identifier) match {
         case SessionCatalogAndIdentifier(catalog, ident) =>
           lazy val loaded = CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table =>
-              v1SessionCatalog.getRelation(v1Table.v1Table, options)
+              if (isStreaming) {
+                UnresolvedCatalogRelation(v1Table.v1Table, options, isStreaming = true)
+              } else {
+                v1SessionCatalog.getRelation(v1Table.v1Table, options)
+              }
             case table =>
-              SubqueryAlias(
-                catalog.name +: ident.asMultipartIdentifier,
-                DataSourceV2Relation.create(table, Some(catalog), Some(ident), options))
+              if (isStreaming) {
+                val tableMeta = v1SessionCatalog.getTableMetadata(ident.asTableIdentifier)
+                StreamingRelationV2(
+                  None, table.name, table, options, table.schema.toAttributes,
+                  Some(UnresolvedCatalogRelation(tableMeta, isStreaming = true)))
+              } else {
+                SubqueryAlias(
+                  catalog.name +: ident.asMultipartIdentifier,
+                  DataSourceV2Relation.create(table, Some(catalog), Some(ident), options))
+              }
           }
           val key = catalog.name +: ident.namespace :+ ident.name
           AnalysisContext.get.relationCache.get(key).map(_.transform {
