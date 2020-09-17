@@ -95,8 +95,8 @@ However, note that `PySpark at Conda <https://anaconda.org/conda-forge/pyspark>`
 synced with PySpark release cycle because it is maintained by the community separately.
 
 
-Manual Downloading
-------------------
+Manually Downloading
+--------------------
 
 PySpark is included in the distributions available at the `Apache Spark website <https://spark.apache.org/downloads.html>`_.
 You can download a distribution you want from the site. After that, uncompress the tar file into the directoy where you want
