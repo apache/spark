@@ -20,8 +20,8 @@ import warnings
 
 from pyspark import since, keyword_only
 from pyspark.ml.param.shared import HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol, \
-    HasAggregationDepth, HasWeightCol, HasTol, HasProbabilityCol, HasBlockSize, \
-    HasDistanceMeasure, HasCheckpointInterval, Param, Params, TypeConverters
+    HasAggregationDepth, HasWeightCol, HasTol, HasProbabilityCol, HasDistanceMeasure, \
+    HasCheckpointInterval, Param, Params, TypeConverters
 from pyspark.ml.util import JavaMLWritable, JavaMLReadable, GeneralJavaMLWritable, \
     HasTrainingSummary, SparkContext
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaWrapper
