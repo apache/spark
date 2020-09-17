@@ -631,7 +631,8 @@ object FoldablePropagation extends Rule[LogicalPlan] {
     plan match {
       case p: Project =>
         val (newChild, foldableMap) = propagateFoldables(p.child)
-        val newProject = replaceFoldable(p.copy(child = newChild), foldableMap)
+        val newProject =
+          replaceFoldable(p.withNewChildren(Seq(newChild)).asInstanceOf[Project], foldableMap)
         val newFoldableMap = AttributeMap(newProject.projectList.collect {
           case a: Alias if a.child.foldable => (a.toAttribute, a)
         })
@@ -641,14 +642,18 @@ object FoldablePropagation extends Rule[LogicalPlan] {
       // operators that have the `output` field, we should put them here too.
       case e: Expand =>
         val (newChild, foldableMap) = propagateFoldables(e.child)
+        val expandWithNewChildren = e.withNewChildren(Seq(newChild)).asInstanceOf[Expand]
         val newExpand = if (foldableMap.isEmpty) {
-          e.copy(child = newChild)
+          expandWithNewChildren
         } else {
-          e.copy(child = newChild, projections = e.projections.map(_.map {
-            _.transform {
-              case a: AttributeReference if foldableMap.contains(a) => foldableMap(a)
-            }
+          val newProjections = expandWithNewChildren.projections.map(_.map(_.transform {
+            case a: AttributeReference if foldableMap.contains(a) => foldableMap(a)
           }))
+          if (newProjections == expandWithNewChildren.projections) {
+            expandWithNewChildren
+          } else {
+            expandWithNewChildren.copy(projections = newProjections)
+          }
         }
         (newExpand, foldableMap)
 
