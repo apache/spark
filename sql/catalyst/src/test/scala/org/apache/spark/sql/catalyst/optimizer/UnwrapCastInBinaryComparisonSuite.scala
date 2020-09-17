@@ -225,7 +225,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
       Seq(
         (100.toShort, 3.1415926.toFloat, decimal2(100)),
         (-300.toShort, 3.1415927.toFloat, decimal2(-3000.50)),
-        (null, Float.NaN, decimal2(-3.14)),
+        (null, Float.NaN, decimal2(12345.6789)),
         (null, null, null),
         (Short.MaxValue, Float.PositiveInfinity, decimal2(Short.MaxValue)),
         (Short.MinValue, Float.NegativeInfinity, decimal2(Short.MinValue)),
