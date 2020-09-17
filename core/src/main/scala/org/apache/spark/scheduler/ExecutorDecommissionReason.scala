@@ -22,16 +22,25 @@ private[spark] sealed trait ExecutorDecommissionReason {
   override def toString: String = reason
 }
 
+/**
+ * For the case where decommission is trigger because of executor dynamic allocation
+ */
 case class DynamicAllocationDecommission() extends ExecutorDecommissionReason {
   override val reason: String = "decommissioned by dynamic allocation"
 }
 
+/**
+ * For the case where decommission is triggered at executor fist.
+ */
 class ExecutorTriggeredDecommission extends ExecutorDecommissionReason
 
+/**
+ * For the Kubernetes workloads
+ */
 case class K8SDecommission() extends ExecutorTriggeredDecommission
 
 /**
- *
+ * For the Standalone workloads.
  * @param workerHost When workerHost is defined, it means the worker has been decommissioned too.
  *                   Used to infer if the shuffle data might be lost even if the external shuffle
  *                   service is enabled.
@@ -45,6 +54,9 @@ case class StandaloneDecommission(workerHost: Option[String] = None)
   }
 }
 
+/**
+ * For test only.
+ */
 case class TestExecutorDecommission(host: Option[String] = None)
   extends ExecutorDecommissionReason {
   override val reason: String = if (host.isDefined) {
