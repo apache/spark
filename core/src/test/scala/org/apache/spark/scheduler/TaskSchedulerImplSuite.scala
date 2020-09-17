@@ -158,8 +158,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       .exists(s => s.contains(exec0) && s.contains(exec1)))
     assert(scheduler.getExecutorsAliveOnHost(host1).exists(_.contains(exec2)))
 
-    scheduler.executorDecommission(exec1, ExecutorDecommissionInfo("test", None))
-    scheduler.executorDecommission(exec2, ExecutorDecommissionInfo("test", Some(host1)))
+    scheduler.executorDecommission(exec1, TestExecutorDecommission())
+    scheduler.executorDecommission(exec2, TestExecutorDecommission(Some(host1)))
 
     assert(scheduler.isExecutorAlive(exec0))
     assert(!Seq(exec1, exec2).exists(scheduler.isExecutorAlive))
@@ -1865,13 +1865,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val clock = new ManualClock(10000L)
     val scheduler = setupSchedulerForDecommissionTests(clock, 2)
     val decomTime = clock.getTimeMillis()
-    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("0", None))
-    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1", Some("host1")))
+    scheduler.executorDecommission("executor0", TestExecutorDecommission())
+    scheduler.executorDecommission("executor1", TestExecutorDecommission(Some("host1")))
 
     assert(scheduler.getExecutorDecommissionState("executor0")
-      === Some(ExecutorDecommissionState(decomTime, None)))
+      === Some(ExecutorDecommissionState(decomTime, TestExecutorDecommission())))
     assert(scheduler.getExecutorDecommissionState("executor1")
-      === Some(ExecutorDecommissionState(decomTime, Some("host1"))))
+      === Some(ExecutorDecommissionState(decomTime, TestExecutorDecommission(Some("host1")))))
     assert(scheduler.getExecutorDecommissionState("executor2").isEmpty)
   }
 
@@ -1886,7 +1886,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(scheduler.getExecutorDecommissionState("executor0").isEmpty)
     scheduler.executorLost("executor0", ExecutorExited(0, false, "normal"))
     assert(scheduler.getExecutorDecommissionState("executor0").isEmpty)
-    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("", None))
+    scheduler.executorDecommission("executor0", TestExecutorDecommission())
     assert(scheduler.getExecutorDecommissionState("executor0").isEmpty)
 
     // 0th task just died above
@@ -1899,7 +1899,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(scheduler.getExecutorDecommissionState("executor1").isEmpty)
 
     // executor 1 is decommissioned before loosing
-    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("", None))
+    scheduler.executorDecommission("executor1", TestExecutorDecommission())
     assert(scheduler.getExecutorDecommissionState("executor1").isDefined)
     clock.advance(2000)
 

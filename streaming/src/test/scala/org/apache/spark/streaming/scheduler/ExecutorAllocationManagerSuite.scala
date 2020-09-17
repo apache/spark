@@ -28,7 +28,7 @@ import org.apache.spark.{ExecutorAllocationClient, SparkConf}
 import org.apache.spark.internal.config.{DECOMMISSION_ENABLED, DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
 import org.apache.spark.internal.config.Streaming._
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.scheduler.ExecutorDecommissionInfo
+import org.apache.spark.scheduler.DynamicAllocationDecommission
 import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext, TestSuiteBase}
 import org.apache.spark.util.{ManualClock, Utils}
 
@@ -98,15 +98,15 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
       /** Verify that a particular executor was scaled down. */
       def verifyScaledDownExec(expectedExec: Option[String]): Unit = {
         if (expectedExec.nonEmpty) {
-          val decomInfo = ExecutorDecommissionInfo("spark scale down", None)
+          val decomReason = DynamicAllocationDecommission()
           if (decommissioning) {
             verify(allocationClient, times(1)).decommissionExecutor(
-              meq(expectedExec.get), meq(decomInfo), meq(true), any())
+              meq(expectedExec.get), meq(decomReason), meq(true))
             verify(allocationClient, never).killExecutor(meq(expectedExec.get))
           } else {
             verify(allocationClient, times(1)).killExecutor(meq(expectedExec.get))
             verify(allocationClient, never).decommissionExecutor(
-              meq(expectedExec.get), meq(decomInfo), meq(true), any())
+              meq(expectedExec.get), meq(decomReason), meq(true))
           }
         } else {
           if (decommissioning) {

@@ -101,7 +101,7 @@ private[spark] trait TaskScheduler {
   /**
    * Process a decommissioning executor.
    */
-  def executorDecommission(executorId: String, decommissionInfo: ExecutorDecommissionInfo): Unit
+  def executorDecommission(executorId: String, reason: ExecutorDecommissionReason): Unit
 
   /**
    * If an executor is decommissioned, return its corresponding decommission info

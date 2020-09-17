@@ -991,7 +991,7 @@ private[spark] class TaskSetManager(
     for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
       val exitCausedByApp: Boolean = reason match {
         case exited: ExecutorExited => exited.exitCausedByApp
-        case ExecutorKilled | ExecutorDecommission(_) => false
+        case ExecutorKilled | ExecutorDecommission(_, _) => false
         case ExecutorProcessLost(_, _, false) => false
         case _ => true
       }

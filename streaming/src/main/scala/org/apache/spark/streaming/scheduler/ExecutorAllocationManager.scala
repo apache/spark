@@ -25,7 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.internal.config.Streaming._
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.scheduler.ExecutorDecommissionInfo
+import org.apache.spark.scheduler.DynamicAllocationDecommission
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, Utils}
 
@@ -137,7 +137,7 @@ private[streaming] class ExecutorAllocationManager(
         val execIdToRemove = removableExecIds(Random.nextInt(removableExecIds.size))
         if (conf.get(DECOMMISSION_ENABLED)) {
           client.decommissionExecutor(execIdToRemove,
-            ExecutorDecommissionInfo("spark scale down", None),
+            DynamicAllocationDecommission(),
             adjustTargetNumExecutors = true)
         } else {
           client.killExecutor(execIdToRemove)

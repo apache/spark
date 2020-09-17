@@ -100,7 +100,7 @@ private class DummyTaskScheduler extends TaskScheduler {
       executorMetrics: Map[(Int, Int), ExecutorMetrics]): Boolean = true
   override def executorDecommission(
     executorId: String,
-    decommissionInfo: ExecutorDecommissionInfo): Unit = {}
+    reason: ExecutorDecommissionReason): Unit = {}
   override def getExecutorDecommissionState(
     executorId: String): Option[ExecutorDecommissionState] = None
 }

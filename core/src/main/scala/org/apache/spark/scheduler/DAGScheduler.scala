@@ -1826,7 +1826,7 @@ private[spark] class DAGScheduler(
             val externalShuffleServiceEnabled = env.blockManager.externalShuffleServiceEnabled
             val isHostDecommissioned = taskScheduler
               .getExecutorDecommissionState(bmAddress.executorId)
-              .exists(_.workerHost.isDefined)
+              .exists(_.isHostDecommissioned)
 
             // Shuffle output of all executors on host `bmAddress.host` may be lost if:
             // - External shuffle service is enabled, so we assume that all shuffle data on node is
@@ -2368,7 +2368,7 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case ExecutorLost(execId, reason) =>
       val workerHost = reason match {
         case ExecutorProcessLost(_, workerHost, _) => workerHost
-        case ExecutorDecommission(workerHost) => workerHost
+        case ExecutorDecommission(_, host) => host
         case _ => None
       }
       dagScheduler.handleExecutorLost(execId, workerHost)

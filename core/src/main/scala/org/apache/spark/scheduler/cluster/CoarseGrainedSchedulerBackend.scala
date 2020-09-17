@@ -92,8 +92,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Executors that have been lost, but for which we don't yet know the real exit reason.
   private val executorsPendingLossReason = new HashSet[String]
 
-  // Executors which are being decommissioned. Maps from executorId to workerHost.
-  protected val executorsPendingDecommission = new HashMap[String, Option[String]]
+  // Executors which are being decommissioned.
+  protected val executorsPendingDecommission = new HashSet[String]
 
   // A map of ResourceProfile id to map of hostname with its possible task number running on it
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
@@ -273,9 +273,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         context.reply(
           decommissionExecutor(
             executorId,
-            ExecutorDecommissionInfo(s"Executor $executorId is decommissioned."),
-            adjustTargetNumExecutors = false,
-            triggeredByExecutor = true))
+            new ExecutorTriggeredDecommission(),
+            adjustTargetNumExecutors = false))
 
       case RetrieveSparkAppConfig(resourceProfileId) =>
         val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(resourceProfileId)
@@ -390,16 +389,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         case Some(executorInfo) =>
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
-          val lossReason = CoarseGrainedSchedulerBackend.this.synchronized {
+          val lossReason = withLock {
             addressToExecutorId -= executorInfo.executorAddress
             executorDataMap -= executorId
             executorsPendingLossReason -= executorId
             val killedByDriver = executorsPendingToRemove.remove(executorId).getOrElse(false)
-            val workerHostOpt = executorsPendingDecommission.remove(executorId)
+            val decommissioned = executorsPendingDecommission.remove(executorId)
             if (killedByDriver) {
               ExecutorKilled
-            } else if (workerHostOpt.isDefined) {
-              ExecutorDecommission(workerHostOpt.get)
+            } else if (decommissioned) {
+              val decomState = scheduler.getExecutorDecommissionState(executorId)
+              assert(decomState.isDefined, s"DecommissionState is missing of executor $executorId")
+              ExecutorDecommission(decomState.get.reason.toString, decomState.get.host)
             } else {
               reason
             }
@@ -460,25 +461,24 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   /**
    * Request that the cluster manager decommission the specified executors.
    *
-   * @param executorsAndDecomInfo Identifiers of executors & decommission info.
+   * @param executorsAndDecomReason Identifiers of executors & decommission reason.
    * @param adjustTargetNumExecutors whether the target number of executors will be adjusted down
    *                                 after these executors have been decommissioned.
-   * @param triggeredByExecutor whether the decommission is triggered at executor.
    * @return the ids of the executors acknowledged by the cluster manager to be removed.
    */
   override def decommissionExecutors(
-      executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
-      adjustTargetNumExecutors: Boolean,
-      triggeredByExecutor: Boolean): Seq[String] = withLock {
-    val executorsToDecommission = executorsAndDecomInfo.flatMap { case (executorId, decomInfo) =>
-      // Only bother decommissioning executors which are alive.
-      if (isExecutorActive(executorId)) {
-        scheduler.executorDecommission(executorId, decomInfo)
-        executorsPendingDecommission(executorId) = decomInfo.workerHost
-        Some(executorId)
-      } else {
-        None
-      }
+      executorsAndDecomReason: Array[(String, ExecutorDecommissionReason)],
+      adjustTargetNumExecutors: Boolean): Seq[String] = withLock {
+    val executorsToDecommission = executorsAndDecomReason.flatMap {
+      case (executorId, decomReason) =>
+        // Only bother decommissioning executors which are alive.
+        if (isExecutorActive(executorId)) {
+          scheduler.executorDecommission(executorId, decomReason)
+          executorsPendingDecommission.add(executorId)
+          Some(executorId)
+        } else {
+          None
+        }
     }
 
     // If we don't want to replace the executors we are decommissioning
@@ -494,10 +494,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       scheduler.sc.env.blockManager.master.decommissionBlockManagers(executorsToDecommission)
     }
 
-    if (!triggeredByExecutor) {
-      executorsToDecommission.foreach { executorId =>
-        logInfo(s"Asking executor $executorId to decommissioning.")
-        executorDataMap(executorId).executorEndpoint.send(DecommissionExecutor)
+    // the caller should ensure that there's only one distinct decommission reason
+    executorsAndDecomReason.headOption.foreach { case (_, reason) =>
+      reason match {
+        case _: ExecutorTriggeredDecommission =>
+          // Driver doesn't need to notify the executor since decommission notification
+          // already comes from the executor
+        case _ =>
+          executorsToDecommission.foreach { executorId =>
+            logInfo(s"Asking executor $executorId to decommissioning.")
+            executorDataMap(executorId).executorEndpoint.send(DecommissionExecutor)
+          }
       }
     }
 

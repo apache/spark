@@ -906,12 +906,12 @@ private[spark] class TaskSchedulerImpl(
   }
 
   override def executorDecommission(
-      executorId: String, decommissionInfo: ExecutorDecommissionInfo): Unit = {
+      executorId: String, reason: ExecutorDecommissionReason): Unit = {
     synchronized {
       // Don't bother noting decommissioning for executors that we don't know about
       if (executorIdToHost.contains(executorId)) {
         executorsPendingDecommission(executorId) =
-          ExecutorDecommissionState(clock.getTimeMillis(), decommissionInfo.workerHost)
+          ExecutorDecommissionState(clock.getTimeMillis(), reason)
       }
     }
     rootPool.executorDecommission(executorId)
@@ -970,6 +970,9 @@ private[spark] class TaskSchedulerImpl(
       logDebug(s"Executor $executorId on $hostPort lost, but reason not yet known.")
     case ExecutorKilled =>
       logInfo(s"Executor $executorId on $hostPort killed by driver.")
+    case ExecutorDecommission(reason, _) =>
+      // use logInfo instead of logError as the loss of decommissioned executor is what we expect
+      logInfo(s"Decommissioned executor $executorId on $hostPort shutdown: $reason")
     case _ =>
       logError(s"Lost executor $executorId on $hostPort: $reason")
   }
@@ -1055,7 +1058,7 @@ private[spark] class TaskSchedulerImpl(
   // exposed for test
   protected final def isHostDecommissioned(host: String): Boolean = {
     hostToExecutors.get(host).exists { executors =>
-      executors.exists(e => getExecutorDecommissionState(e).exists(_.workerHost.isDefined))
+      executors.exists(e => getExecutorDecommissionState(e).exists(_.isHostDecommissioned))
     }
   }
 

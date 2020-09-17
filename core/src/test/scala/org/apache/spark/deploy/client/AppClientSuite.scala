@@ -32,7 +32,7 @@ import org.apache.spark.deploy.master.{ApplicationInfo, Master}
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.scheduler.ExecutorDecommissionInfo
+import org.apache.spark.scheduler.{ExecutorDecommissionReason, StandaloneDecommission}
 import org.apache.spark.util.Utils
 
 /**
@@ -131,8 +131,9 @@ class AppClientSuite
       eventually(timeout(1.seconds), interval(10.millis)) {
         // We only record decommissioning for the executor we've requested
         assert(ci.listener.execDecommissionedMap.size === 1)
-        val decommissionInfo = ci.listener.execDecommissionedMap.get(executorId)
-        assert(decommissionInfo != null && decommissionInfo.workerHost.isDefined,
+        val decomReason = ci.listener.execDecommissionedMap.get(executorId)
+          .asInstanceOf[StandaloneDecommission]
+        assert(decomReason != null && decomReason.workerHost.isDefined,
           s"$executorId should have been decommissioned along with its worker")
       }
 
@@ -222,7 +223,7 @@ class AppClientSuite
     val deadReasonList = new ConcurrentLinkedQueue[String]()
     val execAddedList = new ConcurrentLinkedQueue[String]()
     val execRemovedList = new ConcurrentLinkedQueue[String]()
-    val execDecommissionedMap = new ConcurrentHashMap[String, ExecutorDecommissionInfo]()
+    val execDecommissionedMap = new ConcurrentHashMap[String, ExecutorDecommissionReason]()
 
     def connected(id: String): Unit = {
       connectedIdList.add(id)
@@ -252,9 +253,10 @@ class AppClientSuite
       execRemovedList.add(id)
     }
 
-    def executorDecommissioned(id: String, decommissionInfo: ExecutorDecommissionInfo): Unit = {
-      val previousDecommissionInfo = execDecommissionedMap.putIfAbsent(id, decommissionInfo)
-      assert(previousDecommissionInfo === null, s"Expected no previous decommission info for $id")
+    def executorDecommissioned(id: String, decomReason: ExecutorDecommissionReason): Unit = {
+      val previousDecomReason = execDecommissionedMap.putIfAbsent(id, decomReason)
+      assert(previousDecomReason === null,
+        s"Expected no previous decommission reason for executor $id")
     }
 
     def workerRemoved(workerId: String, host: String, message: String): Unit = {}

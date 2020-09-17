@@ -22,15 +22,16 @@ import scala.concurrent.Future
 
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.rpc.RpcAddress
-import org.apache.spark.scheduler.{ExecutorKilled, ExecutorLossReason, TaskSchedulerImpl}
+import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
+import org.apache.spark.scheduler.{ExecutorKilled, ExecutorLossReason, K8SDecommission, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.ExecutorDecommissioning
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark] class KubernetesClusterSchedulerBackend(
@@ -190,6 +191,18 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   private class KubernetesDriverEndpoint extends DriverEndpoint {
+
+    override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+      case ExecutorDecommissioning(executorId) =>
+        context.reply(
+          decommissionExecutor(
+            executorId,
+            K8SDecommission(),
+            adjustTargetNumExecutors = false))
+      case message => super.receiveAndReply(context).applyOrElse(message,
+        throw new SparkException(s"Unsupported message $message")
+      )
+    }
 
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       // Don't do anything besides disabling the executor - allow the Kubernetes API events to

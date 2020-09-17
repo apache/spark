@@ -177,14 +177,11 @@ private[spark] class StandaloneSchedulerBackend(
     removeExecutor(fullId.split("/")(1), reason)
   }
 
-  override def executorDecommissioned(fullId: String, decommissionInfo: ExecutorDecommissionInfo) {
+  override def executorDecommissioned(fullId: String, decomReason: ExecutorDecommissionReason) {
     logInfo(s"Asked to decommission executor $fullId")
     val execId = fullId.split("/")(1)
-    decommissionExecutors(
-      Array((execId, decommissionInfo)),
-      adjustTargetNumExecutors = false,
-      triggeredByExecutor = false)
-    logInfo("Executor %s decommissioned: %s".format(fullId, decommissionInfo))
+    decommissionExecutors(Array((execId, decomReason)), adjustTargetNumExecutors = false)
+    logInfo("Executor %s decommissioned: %s".format(fullId, decomReason))
   }
 
   override def workerRemoved(workerId: String, host: String, message: String): Unit = {

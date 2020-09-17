@@ -177,7 +177,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     override def applicationAttemptId(): Option[String] = None
     override def executorDecommission(
       executorId: String,
-      decommissionInfo: ExecutorDecommissionInfo): Unit = {}
+      reason: ExecutorDecommissionReason): Unit = {}
     override def getExecutorDecommissionState(
       executorId: String): Option[ExecutorDecommissionState] = None
   }
@@ -788,7 +788,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       override def applicationAttemptId(): Option[String] = None
       override def executorDecommission(
         executorId: String,
-        decommissionInfo: ExecutorDecommissionInfo): Unit = {}
+        reason: ExecutorDecommissionReason): Unit = {}
       override def getExecutorDecommissionState(
         executorId: String): Option[ExecutorDecommissionState] = None
     }
