@@ -297,20 +297,22 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
     assert(buffer.isCompressed)
   }
 
-  test("SPARK-XXXXX: ") {
+  test("SPARK-32908: maximum target error in percentile_approx") {
     withTempView(table) {
-      val df = spark.read.option("header", "true")
-        .option("inferSchema", "true")
-        .csv("/Users/maximgekk/tmp/tr_rat_resampling_score.csv")
+      spark.read
+        .schema("col int")
+        .csv(testFile("percentile_approx-input.csv.bz2"))
         .repartition(1)
-      df.createOrReplaceTempView(table)
+        .createOrReplaceTempView(table)
       checkAnswer(
         spark.sql(
           s"""SELECT
-             |  percentile_approx(tr_rat_resampling_score, 0.77, 100000)
-             |FROM $table
-           """.stripMargin),
-        Row(17))
+             |  percentile_approx(col, 0.77, 1000),
+             |  percentile_approx(col, 0.77, 10000),
+             |  percentile_approx(col, 0.77, 100000),
+             |  percentile_approx(col, 0.77, 1000000)
+             |FROM $table""".stripMargin),
+        Row(18, 17, 17, 17))
     }
   }
 }
