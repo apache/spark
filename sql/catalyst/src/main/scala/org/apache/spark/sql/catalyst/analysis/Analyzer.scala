@@ -2623,13 +2623,13 @@ class Analyzer(
         case ne: NamedExpression =>
           // If a named expression is not in regularExpressions, add it to
           // extractedExprBuffer and replace it with an AttributeReference.
-          val attr = ne.toAttribute
           val missingExpr =
-            AttributeSet(Seq(attr)) -- (regularExpressions ++ extractedExprBuffer)
+            AttributeSet(Seq(expr)) -- (regularExpressions ++ extractedExprBuffer)
           if (missingExpr.nonEmpty) {
             extractedExprBuffer += ne
           }
-          attr
+          // alias will be cleaned in the rule CleanupAliases
+          ne
         case e: Expression if e.foldable =>
           e // No need to create an attribute reference if it will be evaluated as a Literal.
         case e: Expression =>
