@@ -148,10 +148,10 @@ object OrcUtils extends Logging {
       None
     } else {
       if (forcePositionalEvolution || orcFieldNames.forall(_.startsWith("_col"))) {
-        // This is either an ORC file written by an old versions of Hive and there are no field
-        // names in the physical schema, or a file written by a newer versions of Hive where
-        // `orc.force.positional.evolution=true` and columns were renamed so the physical schema
-        // doesn't match the data schema.
+        // This is either an ORC file written by an old version of Hive and there are no field
+        // names in the physical schema, or a file written by a newer version of Hive where
+        // `orc.force.positional.evolution=true` (possibly because columns were renamed so the
+        // physical schema doesn't match the data schema).
         // In these cases we map the physical schema to the data schema by index.
         assert(orcFieldNames.length <= dataSchema.length, "The given data schema " +
           s"${dataSchema.catalogString} has less fields than the actual ORC physical schema, " +
