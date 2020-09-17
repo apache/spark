@@ -233,6 +233,20 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
+  Seq("json", "orc").foreach { format =>
+    test(s"SPARK-32889: column name supports special characters using $format") {
+      Seq("$", " ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
+        withTempDir { dir =>
+          val dataDir = new File(dir, "file").getCanonicalPath
+          Seq(1).toDF(name).write.format(format).save(dataDir)
+          val schema = spark.read.format(format).load(dataDir).schema
+          assert(schema.size == 1)
+          assertResult(name)(schema.head.name)
+        }
+      }
+    }
+  }
+
   // Text file format only supports string type
   test("SPARK-24691 error handling for unsupported types - text") {
     withTempDir { dir =>
