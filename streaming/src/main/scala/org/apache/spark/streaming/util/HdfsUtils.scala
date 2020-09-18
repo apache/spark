@@ -30,7 +30,7 @@ private[streaming] object HdfsUtils {
     val dfs = getFileSystemForPath(dfsPath, conf)
     // If the file exists and we have append support, append instead of creating a new file
     val stream: FSDataOutputStream = {
-      if (dfs.isFile(dfsPath)) {
+      if (dfs.getFileStatus(dfsPath).isFile) {
         if (conf.getBoolean("dfs.support.append", true) ||
             conf.getBoolean("hdfs.append.support", false) ||
             dfs.isInstanceOf[RawLocalFileSystem]) {
@@ -58,7 +58,7 @@ private[streaming] object HdfsUtils {
         // If we are really unlucky, the file may be deleted as we're opening the stream.
         // This can happen as clean up is performed by daemon threads that may be left over from
         // previous runs.
-        if (!dfs.isFile(dfsPath)) null else throw e
+        if (!dfs.getFileStatus(dfsPath).isFile) null else throw e
     }
   }
 
@@ -92,6 +92,6 @@ private[streaming] object HdfsUtils {
   def checkFileExists(path: String, conf: Configuration): Boolean = {
     val hdpPath = new Path(path)
     val fs = getFileSystemForPath(hdpPath, conf)
-    fs.isFile(hdpPath)
+    fs.getFileStatus(hdpPath).isFile
   }
 }

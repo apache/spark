@@ -221,7 +221,7 @@ abstract class PartitioningAwareFileIndex(
     caseInsensitiveMap.get(BASE_PATH_PARAM).map(new Path(_)) match {
       case Some(userDefinedBasePath) =>
         val fs = userDefinedBasePath.getFileSystem(hadoopConf)
-        if (!fs.isDirectory(userDefinedBasePath)) {
+        if (!fs.getFileStatus(userDefinedBasePath).isDirectory) {
           throw new IllegalArgumentException(s"Option '$BASE_PATH_PARAM' must be a directory")
         }
         val qualifiedBasePath = fs.makeQualified(userDefinedBasePath)
