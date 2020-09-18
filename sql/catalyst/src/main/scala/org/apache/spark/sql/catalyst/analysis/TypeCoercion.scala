@@ -359,7 +359,8 @@ object TypeCoercion {
             s -> Nil
           } else {
             val attrMapping = s.children.head.output.zip(newChildren.head.output)
-            s.copy(children = newChildren) -> attrMapping
+            val newOutput = ResolveUnion.makeUnionOutput(newChildren)
+            s.copy(children = newChildren, unionOutput = newOutput) -> attrMapping
           }
       }
     }

@@ -18,17 +18,33 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Resolves different children of Union to a common set of columns.
  */
 object ResolveUnion extends Rule[LogicalPlan] {
+
+  private[catalyst] def makeUnionOutput(children: Seq[LogicalPlan]): Seq[Attribute] = {
+    children.map(_.output).transpose.map { attrs =>
+      val firstAttr = attrs.head
+      val nullable = attrs.exists(_.nullable)
+      val newDt = attrs.map(_.dataType).reduce(StructType.merge)
+      if (firstAttr.dataType == newDt) {
+        firstAttr.withNullability(nullable)
+      } else {
+        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+          NamedExpression.newExprId, firstAttr.qualifier)
+      }
+    }
+  }
+
   private def unionTwoSides(
       left: LogicalPlan,
       right: LogicalPlan,
@@ -68,7 +84,8 @@ object ResolveUnion extends Rule[LogicalPlan] {
     } else {
       left
     }
-    Union(leftChild, rightChild)
+    val unionOutput = makeUnionOutput(Seq(leftChild, rightChild))
+    Union(leftChild, rightChild, unionOutput)
   }
 
   // Check column name duplication
@@ -88,13 +105,17 @@ object ResolveUnion extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
-    case e if !e.childrenResolved => e
+    case p if !p.childrenResolved => p
 
-    case Union(children, byName, allowMissingCol) if byName =>
+    case Union(children, byName, allowMissingCol, _) if byName =>
       val union = children.reduceLeft { (left, right) =>
         checkColumnNames(left, right)
         unionTwoSides(left, right, allowMissingCol)
       }
       CombineUnions(union)
+
+    case u @ Union(children, _, _, unionOutput)
+        if u.allChildrenCompatible && unionOutput.isEmpty =>
+      u.copy(unionOutput = makeUnionOutput(children))
   }
 }

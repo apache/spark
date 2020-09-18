@@ -218,19 +218,18 @@ object LogicalPlanIntegrity {
 
   /**
    * Since some logical plans (e.g., `Union`) can build `AttributeReference`s in their `output`,
-   * this method checks if the same `ExprId` refers to a semantically-equal attribute
-   * in a plan output.
+   * this method checks if the same `ExprId` refers to attributes having the same data type
+   * in plan output.
    */
   def hasUniqueExprIdsForOutput(plan: LogicalPlan): Boolean = {
-    val allOutputAttrs = plan.collect { case p if canGetOutputAttrs(p) =>
+    val exprIds = plan.collect { case p if canGetOutputAttrs(p) =>
       // NOTE: we still need to filter resolved expressions here because the output of
       // some resolved logical plans can have unresolved references,
       // e.g., outer references in `ExistenceJoin`.
-      p.output.filter(_.resolved).map(_.canonicalized.asInstanceOf[Attribute])
-    }
-    val groupedAttrsByExprId = allOutputAttrs
-      .flatten.groupBy(_.exprId).values.map(_.distinct)
-    groupedAttrsByExprId.forall(_.length == 1)
+      p.output.filter(_.resolved).map { a => (a.exprId, a.dataType) }
+    }.flatten
+    val groupedDataTypesByExprId = exprIds.groupBy(_._1).values.map(_.distinct)
+    groupedDataTypesByExprId.forall(_.length == 1)
   }
 
   /**

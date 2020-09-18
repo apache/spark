@@ -634,21 +634,9 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
  * If we change how this is implemented physically, we'd need to update
  * [[org.apache.spark.sql.catalyst.plans.logical.Union.maxRowsPerPartition]].
  */
-case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
-  // updating nullability to make all the children consistent
-  override def output: Seq[Attribute] = {
-    children.map(_.output).transpose.map { attrs =>
-      val firstAttr = attrs.head
-      val nullable = attrs.exists(_.nullable)
-      val newDt = attrs.map(_.dataType).reduce(StructType.merge)
-      if (firstAttr.dataType == newDt) {
-        firstAttr.withNullability(nullable)
-      } else {
-        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
-          firstAttr.exprId, firstAttr.qualifier)
-      }
-    }
-  }
+case class UnionExec(children: Seq[SparkPlan], unionOutput: Seq[Attribute]) extends SparkPlan {
+
+  override def output: Seq[Attribute] = unionOutput
 
   protected override def doExecute(): RDD[InternalRow] =
     sparkContext.union(children.map(_.execute()))
