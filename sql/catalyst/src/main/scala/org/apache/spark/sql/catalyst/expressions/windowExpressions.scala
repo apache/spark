@@ -552,10 +552,10 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
 @ExpressionDescription(
   usage = """
     _FUNC_(input[, offset]) - Returns the value of `input` at the row that is the `offset`th row
-      from beginning of the window frame. Offsets start at 1. If ignoreNulls=true, we will skip
+      from beginning of the window frame. Offset starts at 1. If ignoreNulls=true, we will skip
       nulls when finding the `offset`th row. Otherwise, every row counts for the `offset`. If
-      there is no such an offset row (e.g., when the offset is 10, size of the window frame less
-      than 10), null is returned.
+      there is no such an `offset`th row (e.g., when the offset is 10, size of the window frame
+      is less than 10), null is returned.
   """,
   arguments = """
     Arguments:
@@ -586,12 +586,11 @@ case class NthValue(input: Expression, offsetExpr: Expression, ignoreNulls: Bool
       check
     } else if (!offsetExpr.foldable) {
       TypeCheckFailure(s"Offset expression '$offsetExpr' must be a literal.")
+    } else if (offset <= 0) {
+      TypeCheckFailure(
+        s"The 'offset' argument of nth_value must be greater than zero but it is $offset.")
     } else {
-      offsetExpr.eval().asInstanceOf[Int] match {
-        case i: Int if i <= 0 => TypeCheckFailure(
-          s"The 'offset' argument of nth_value must be greater than zero but it is $i.")
-        case _ => TypeCheckSuccess
-      }
+      TypeCheckSuccess
     }
   }
 
