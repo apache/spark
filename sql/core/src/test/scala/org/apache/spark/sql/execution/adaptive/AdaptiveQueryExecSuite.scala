@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.util.Utils
@@ -1255,6 +1256,27 @@ class AdaptiveQueryExecSuite
           "=== Result of Batch AQE Query Stage Optimization ===",
           "=== Result of Batch AQE Final Query Stage Optimization ===").foreach { expectedMsg =>
         assert(testAppender.loggingEvents.exists(_.getRenderedMessage.contains(expectedMsg)))
+      }
+    }
+  }
+
+  test("SPARK-32932: Do not use local shuffle reader at final stage on DataWritingCommand") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true") {
+      withTable("t") {
+        val data = for (
+          i <- 1 to 10;
+          j <- 1 to 3
+        ) yield (i, j)
+        data.toDF("a", "b")
+          .repartition($"b")
+          .write
+          .partitionBy("b")
+          .mode("overwrite")
+          .saveAsTable("t")
+        assert(spark.read.table("t").inputFiles.length == 3)
       }
     }
   }
