@@ -172,7 +172,7 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession with NestedDa
       dataFileWriter.flush()
       dataFileWriter.close()
       val df = spark.read.format("avro").load(s"$dir.avro")
-      assert(df.schema.fields === Array(StructField("field1", LongType, nullable = true)))
+      assert(df.schema.fields === Seq(StructField("field1", LongType, nullable = true)))
       assert(df.collect().toSet == Set(Row(1L), Row(2L)))
     }
   }
