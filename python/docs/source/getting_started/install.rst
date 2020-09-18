@@ -20,11 +20,11 @@ Installation
 ============
 
 PySpark is included in the official releases of Spark available in the `Apache Spark website <https://spark.apache.org/downloads.html>`_.
-For Python users, PySpark also provides ``pip`` installation from PyPI. This is usually for standalone
-locally or as a client to connect to a cluster instead of setting a cluster itself up.
+For Python users, PySpark also provides ``pip`` installation from PyPI. This is usually for local usage or as
+a client to connect to a cluster instead of setting up a cluster itself.
  
-This page includes the instructions for installing PySpark by using pip, Conda, downloading manually,
-and building it from the source.
+This page includes instructions for installing PySpark by using pip, Conda, downloading manually,
+and building from the source.
 
 
 Python Version Supported
@@ -49,7 +49,6 @@ If you want to install extra dependencies for a specific componenet, you can ins
     pip install pyspark[sql]
 
 
-
 Using Conda
 -----------
 
@@ -71,7 +70,7 @@ which can be seen using the following command:
 
     conda env list
 
-Now activate the the newly created environment by the following command:
+Now activate the newly created environment with the following command:
 
 .. code-block:: bash
 
