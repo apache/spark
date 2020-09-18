@@ -669,19 +669,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
 
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
-    case StringType =>
-      buildCast[UTF8String](_, s => try {
-        // According the benchmark test,  `s.toString.trim` is much faster than `s.trim.toString`.
-        // Please refer to https://github.com/apache/spark/pull/26640
-        changePrecision(Decimal(new JavaBigDecimal(s.toString.trim)), target)
-      } catch {
-        case _: NumberFormatException =>
-          if (ansiEnabled) {
-            throw new NumberFormatException(s"invalid input syntax for type numeric: $s")
-          } else {
-            null
-          }
+    case StringType if !ansiEnabled =>
+      buildCast[UTF8String](_, s => {
+        val d = Decimal.fromString(s)
+        if (d == null) null else changePrecision(d, target)
       })
+    case StringType if ansiEnabled =>
+      buildCast[UTF8String](_, s => changePrecision(Decimal.fromStringANSI(s), target))
     case BooleanType =>
       buildCast[Boolean](_, b => toPrecision(if (b) Decimal.ONE else Decimal.ZERO, target))
     case DateType =>
@@ -1185,20 +1179,21 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     val tmp = ctx.freshVariable("tmpDecimal", classOf[Decimal])
     val canNullSafeCast = Cast.canNullSafeCastToDecimal(from, target)
     from match {
-      case StringType =>
+      case StringType if !ansiEnabled =>
         (c, evPrim, evNull) =>
-          val handleException = if (ansiEnabled) {
-            s"""throw new NumberFormatException("invalid input syntax for type numeric: " + $c);"""
-          } else {
-            s"$evNull =true;"
-          }
           code"""
-            try {
-              Decimal $tmp = Decimal.apply(new java.math.BigDecimal($c.toString().trim()));
+              Decimal $tmp = Decimal.fromString($c);
+              if ($tmp == null) {
+                $evNull = true;
+              } else {
+                ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+              }
+          """
+      case StringType if ansiEnabled =>
+        (c, evPrim, evNull) =>
+          code"""
+              Decimal $tmp = Decimal.fromStringANSI($c);
               ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
-            } catch (java.lang.NumberFormatException e) {
-              $handleException
-            }
           """
       case BooleanType =>
         (c, evPrim, evNull) =>

@@ -163,8 +163,7 @@ class BlockManagerMasterEndpoint(
       context.reply(true)
 
     case DecommissionBlockManagers(executorIds) =>
-      val bmIds = executorIds.flatMap(blockManagerIdByExecutor.get)
-      decommissionBlockManagers(bmIds)
+      decommissioningBlockManagerSet ++= executorIds.flatMap(blockManagerIdByExecutor.get)
       context.reply(true)
 
     case GetReplicateInfoForRDDBlocks(blockManagerId) =>
@@ -357,21 +356,6 @@ class BlockManagerMasterEndpoint(
   private def removeExecutor(execId: String): Unit = {
     logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
-  }
-
-  /**
-   * Decommission the given Seq of blockmanagers
-   *    - Adds these block managers to decommissioningBlockManagerSet Set
-   *    - Sends the DecommissionBlockManager message to each of the [[BlockManagerReplicaEndpoint]]
-   */
-  def decommissionBlockManagers(blockManagerIds: Seq[BlockManagerId]): Future[Seq[Unit]] = {
-    val newBlockManagersToDecommission = blockManagerIds.toSet.diff(decommissioningBlockManagerSet)
-    val futures = newBlockManagersToDecommission.map { blockManagerId =>
-      decommissioningBlockManagerSet.add(blockManagerId)
-      val info = blockManagerInfo(blockManagerId)
-      info.storageEndpoint.ask[Unit](DecommissionBlockManager)
-    }
-    Future.sequence{ futures.toSeq }
   }
 
   /**

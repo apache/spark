@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -42,6 +43,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -237,11 +239,12 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
  * data source.
  */
 class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  private def readDataSourceTable(table: CatalogTable): LogicalPlan = {
+  private def readDataSourceTable(
+      table: CatalogTable, extraOptions: CaseInsensitiveStringMap): LogicalPlan = {
     val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
     val catalog = sparkSession.sessionState.catalog
+    val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
     catalog.getCachedPlan(qualifiedTableName, () => {
-      val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
       val dataSource =
         DataSource(
           sparkSession,
@@ -251,24 +254,24 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
           partitionColumns = table.partitionColumnNames,
           bucketSpec = table.bucketSpec,
           className = table.provider.get,
-          options = table.storage.properties ++ pathOption,
+          options = dsOptions,
           catalogTable = Some(table))
       LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
     })
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta), _, _, _, _)
+    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options), _, _, _, _)
         if DDLUtils.isDatasourceTable(tableMeta) =>
-      i.copy(table = readDataSourceTable(tableMeta))
+      i.copy(table = readDataSourceTable(tableMeta, options))
 
-    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta), _, _, _, _) =>
+    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _), _, _, _, _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
-    case UnresolvedCatalogRelation(tableMeta) if DDLUtils.isDatasourceTable(tableMeta) =>
-      readDataSourceTable(tableMeta)
+    case UnresolvedCatalogRelation(tableMeta, options) if DDLUtils.isDatasourceTable(tableMeta) =>
+      readDataSourceTable(tableMeta, options)
 
-    case UnresolvedCatalogRelation(tableMeta) =>
+    case UnresolvedCatalogRelation(tableMeta, _) =>
       DDLUtils.readHiveTable(tableMeta)
   }
 }

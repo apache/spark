@@ -139,6 +139,22 @@ class ColumnTests(ReusedSQLTestCase):
         result = df.select(functions.bitwiseNOT(df.b)).collect()[0].asDict()
         self.assertEqual(~75, result['~b'])
 
+    def test_with_field(self):
+        from pyspark.sql.functions import lit, col
+        df = self.spark.createDataFrame([Row(a=Row(b=1, c=2))])
+        self.assertIsInstance(df['a'].withField('b', lit(3)), Column)
+        self.assertIsInstance(df['a'].withField('d', lit(3)), Column)
+        result = df.withColumn('a', df['a'].withField('d', lit(3))).collect()[0].asDict()
+        self.assertEqual(3, result['a']['d'])
+        result = df.withColumn('a', df['a'].withField('b', lit(3))).collect()[0].asDict()
+        self.assertEqual(3, result['a']['b'])
+
+        self.assertRaisesRegex(TypeError,
+                               'col should be a Column',
+                               lambda: df['a'].withField('b', 3))
+        self.assertRaisesRegex(TypeError,
+                               'fieldName should be a string',
+                               lambda: df['a'].withField(col('b'), lit(3)))
 
 if __name__ == "__main__":
     import unittest
