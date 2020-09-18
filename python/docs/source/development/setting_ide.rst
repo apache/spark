@@ -19,6 +19,10 @@
 Setting up IDEs
 ===============
 
+
+PyCharm
+-------
+
 This section describes how to setup PySpark on PyCharm.
 It guides step by step to the process of downloading the source code from GitHub and running the test code successfully.
 
