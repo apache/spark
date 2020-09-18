@@ -542,6 +542,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           spillWriters.add(spillWriter);
           upstream = spillWriter.getReader(serializerManager);
         } else {
+          // Nothing to spill as all records have been read already, but do not return yet, as the
+          // memory still has to be freed.
           upstream = null;
         }
 
@@ -586,6 +588,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     @Override
     public void loadNext() throws IOException {
+      assert upstream != null;
       MemoryBlock pageToFree = null;
       try {
         synchronized (this) {
