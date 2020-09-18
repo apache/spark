@@ -98,17 +98,48 @@ class CanonicalizeSuite extends SparkFunSuite {
   }
 
   test("SPARK-32927: Bitwise operations are commutative") {
-    Seq(
-      (l: Expression, r: Expression) => BitwiseOr(l, r),
-      (l: Expression, r: Expression) => BitwiseAnd(l, r),
-      (l: Expression, r: Expression) => BitwiseXor(l, r)
-    ).foreach(f => {
+    Seq(BitwiseOr(_, _), BitwiseAnd(_, _), BitwiseXor(_, _)).foreach { f =>
       val e1 = f('a, f('b, 'c))
       val e2 = f(f('a, 'b), 'c)
       val e3 = f('a, f('b, 'a))
 
       assert(e1.canonicalized == e2.canonicalized)
       assert(e1.canonicalized != e3.canonicalized)
-    })
+    }
+  }
+
+  test("SPARK-32927: Bitwise operations are commutative for non-deterministic expressions") {
+    Seq(BitwiseOr(_, _), BitwiseAnd(_, _), BitwiseXor(_, _)).foreach { f =>
+      val e1 = f('a, f(rand(42), 'c))
+      val e2 = f(f('a, rand(42)), 'c)
+      val e3 = f('a, f(rand(42), 'a))
+
+      assert(e1.canonicalized == e2.canonicalized)
+      assert(e1.canonicalized != e3.canonicalized)
+    }
+  }
+
+  test("SPARK-32927: Bitwise operations are commutative for literal expressions") {
+    Seq(BitwiseOr(_, _), BitwiseAnd(_, _), BitwiseXor(_, _)).foreach { f =>
+      val e1 = f('a, f(42, 'c))
+      val e2 = f(f('a, 42), 'c)
+      val e3 = f('a, f(42, 'a))
+
+      assert(e1.canonicalized == e2.canonicalized)
+      assert(e1.canonicalized != e3.canonicalized)
+    }
+  }
+
+  test("SPARK-32927: Bitwise operations are commutative in a complex case") {
+    Seq(BitwiseOr(_, _), BitwiseAnd(_, _), BitwiseXor(_, _)).foreach { f1 =>
+      Seq(BitwiseOr(_, _), BitwiseAnd(_, _), BitwiseXor(_, _)).foreach { f2 =>
+        val e1 = f2(f1('a, f1('b, 'c)), 'a)
+        val e2 = f2(f1(f1('a, 'b), 'c), 'a)
+        val e3 = f2(f1('a, f1('b, 'a)), 'a)
+
+        assert(e1.canonicalized == e2.canonicalized)
+        assert(e1.canonicalized != e3.canonicalized)
+      }
+    }
   }
 }
