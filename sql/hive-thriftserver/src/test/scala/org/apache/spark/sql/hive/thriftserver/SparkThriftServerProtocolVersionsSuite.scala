@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.sql.{Date, Timestamp}
-import java.util.{Properties, List => JList}
+import java.util.{List => JList, Properties}
 
 import org.apache.hive.jdbc.{HiveConnection, HiveQueryResultSet}
 import org.apache.hive.service.auth.PlainSaslHelper
