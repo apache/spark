@@ -492,23 +492,23 @@ ORDER BY salary
 -- !query schema
 struct<employee_name:string,salary:int,second_highest_salary:string>
 -- !query output
-Leslie Thompson 5186  NULL
-Anthony Bow 6627  Anthony Bow
-Foon Yue Tseng  6660  Anthony Bow
-Gerard Hernandez  6949  Anthony Bow
-Leslie Jennings 8113  Foon Yue Tseng
-Diane Murphy  8435  Foon Yue Tseng
-William Patterson 8870  Leslie Jennings
-Jeff Firrelli 8992  Diane Murphy
-Julie Firrelli  9181  Diane Murphy
-Steve Patterson 9441  Diane Murphy
-Mary Patterson  9998  Diane Murphy
-Loui Bondur 10449 Jeff Firrelli
-George Vanauf 10563 Jeff Firrelli
-Barry Jones 10586 Jeff Firrelli
-Pamela Castillo 11303 Mary Patterson
-Gerard Bondur 11472 Loui Bondur
-Larry Bott  11798 Loui Bondur
+Leslie Thompson	5186	NULL
+Anthony Bow	6627	Anthony Bow
+Foon Yue Tseng	6660	Anthony Bow
+Gerard Hernandez	6949	Anthony Bow
+Leslie Jennings	8113	Foon Yue Tseng
+Diane Murphy	8435	Foon Yue Tseng
+William Patterson	8870	Leslie Jennings
+Jeff Firrelli	8992	Diane Murphy
+Julie Firrelli	9181	Diane Murphy
+Steve Patterson	9441	Diane Murphy
+Mary Patterson	9998	Diane Murphy
+Loui Bondur	10449	Jeff Firrelli
+George Vanauf	10563	Jeff Firrelli
+Barry Jones	10586	Jeff Firrelli
+Pamela Castillo	11303	Mary Patterson
+Gerard Bondur	11472	Loui Bondur
+Larry Bott	11798	Loui Bondur
 
 
 -- !query
@@ -524,23 +524,23 @@ ORDER BY salary DESC
 -- !query schema
 struct<employee_name:string,salary:int,second_highest_salary:string>
 -- !query output
-Larry Bott  11798 Gerard Bondur
-Gerard Bondur 11472 Gerard Bondur
-Pamela Castillo 11303 Gerard Bondur
-Barry Jones 10586 Pamela Castillo
-George Vanauf 10563 Barry Jones
-Loui Bondur 10449 George Vanauf
-Mary Patterson  9998  Loui Bondur
-Steve Patterson 9441  Mary Patterson
-Julie Firrelli  9181  Steve Patterson
-Jeff Firrelli 8992  Julie Firrelli
-William Patterson 8870  Jeff Firrelli
-Diane Murphy  8435  William Patterson
-Leslie Jennings 8113  Diane Murphy
-Gerard Hernandez  6949  Leslie Jennings
-Foon Yue Tseng  6660  Gerard Hernandez
-Anthony Bow 6627  Foon Yue Tseng
-Leslie Thompson 5186  Anthony Bow
+Larry Bott	11798	Gerard Bondur
+Gerard Bondur	11472	Gerard Bondur
+Pamela Castillo	11303	Gerard Bondur
+Barry Jones	10586	Pamela Castillo
+George Vanauf	10563	Barry Jones
+Loui Bondur	10449	George Vanauf
+Mary Patterson	9998	Loui Bondur
+Steve Patterson	9441	Mary Patterson
+Julie Firrelli	9181	Steve Patterson
+Jeff Firrelli	8992	Julie Firrelli
+William Patterson	8870	Jeff Firrelli
+Diane Murphy	8435	William Patterson
+Leslie Jennings	8113	Diane Murphy
+Gerard Hernandez	6949	Leslie Jennings
+Foon Yue Tseng	6660	Gerard Hernandez
+Anthony Bow	6627	Foon Yue Tseng
+Leslie Thompson	5186	Anthony Bow
 
 
 -- !query
