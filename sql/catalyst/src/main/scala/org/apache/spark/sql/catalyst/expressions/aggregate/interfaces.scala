@@ -133,7 +133,6 @@ case class AggregateExpression(
   override def children: Seq[Expression] = aggregateFunction +: filter.toSeq
 
   override def dataType: DataType = aggregateFunction.dataType
-  override def foldable: Boolean = false
   override def nullable: Boolean = aggregateFunction.nullable
 
   @transient
