@@ -129,10 +129,10 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       Coalesce(children.map(normalize))
 
     case _ if expr.dataType.isInstanceOf[StructType] =>
-      val fields = expr.dataType.asInstanceOf[StructType].fields.indices.map { i =>
-        normalize(GetStructField(expr, i))
+      val fields = expr.dataType.asInstanceOf[StructType].fieldNames.zipWithIndex.map {
+        case (name, i) => Seq(Literal(name), normalize(GetStructField(expr, i)))
       }
-      val struct = CreateStruct(fields)
+      val struct = CreateNamedStruct(fields.flatten.toSeq)
       KnownFloatingPointNormalized(If(IsNull(expr), Literal(null, struct.dataType), struct))
 
     case _ if expr.dataType.isInstanceOf[ArrayType] =>
