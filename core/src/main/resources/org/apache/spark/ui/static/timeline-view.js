@@ -46,18 +46,17 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
     var jobIdText = $($(baseElem).find(".application-timeline-content")[0]).text();
     var jobId = jobIdText.match("\\(Job (\\d+)\\)$")[1];
     return jobId;
-  };
+  }
 
   function getSelectorForJobEntry(jobId) {
     return "#job-" + jobId;
-  };
+  }
 
   function setupJobEventAction() {
     $(".vis-item.vis-range.job.application-timeline-object").each(function() {
       $(this).click(function() {
         var jobId = getIdForJobEntry(this);
-        // trim last '/' if exists and append '/job/' segment and id
-        var jobPagePath = window.location.pathname.replace(/\/$/, "/job/?id=" + jobId);
+        var jobPagePath = uiRoot + appBasePath + "/jobs/job/?id=" + jobId;
         window.location.href = jobPagePath;
       });
 
@@ -135,19 +134,18 @@ function drawJobTimeline(groupArray, eventObjArray, startTime, offset) {
     var stageIdText = $($(baseElem).find(".job-timeline-content")[0]).text();
     var stageIdAndAttempt = stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)$")[1].split(".");
     return stageIdAndAttempt;
-  };
+  }
 
   function getSelectorForStageEntry(stageIdAndAttempt) {
     return "#stage-" + stageIdAndAttempt[0] + "-" + stageIdAndAttempt[1];
-  };
+  }
 
   function setupStageEventAction() {
     $(".vis-item.vis-range.stage.job-timeline-object").each(function() {
       $(this).click(function() {
         var stageIdAndAttempt = getStageIdAndAttemptForStageEntry(this);
-        var stagePagePath = window.location.pathname.replace(
-          /\/jobs\/job(.*)/g,
-          "/stages/stage/?id=" + stageIdAndAttempt[0] + "&attempt=" + stageIdAndAttempt[1]);
+        var stagePagePath = uiRoot + appBasePath +
+          "/stages/stage/?id=" + stageIdAndAttempt[0] + "&attempt=" + stageIdAndAttempt[1];
         window.location.href = stagePagePath;
       });
 
