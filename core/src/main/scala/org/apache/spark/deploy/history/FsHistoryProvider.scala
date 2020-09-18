@@ -817,6 +817,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             }
           } catch {
             case _: NoSuchElementException =>
+            case _: FileNotFoundException =>
           }
         }
 

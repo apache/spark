@@ -30,7 +30,7 @@ private[streaming] object HdfsUtils {
     val dfs = getFileSystemForPath(dfsPath, conf)
     // If the file exists and we have append support, append instead of creating a new file
     val stream: FSDataOutputStream = {
-      if (dfs.getFileStatus(dfsPath).isFile) {
+      if (dfs.isFile(dfsPath)) {
         if (conf.getBoolean("dfs.support.append", true) ||
             conf.getBoolean("hdfs.append.support", false) ||
             dfs.isInstanceOf[RawLocalFileSystem]) {
@@ -92,6 +92,10 @@ private[streaming] object HdfsUtils {
   def checkFileExists(path: String, conf: Configuration): Boolean = {
     val hdpPath = new Path(path)
     val fs = getFileSystemForPath(hdpPath, conf)
-    fs.getFileStatus(hdpPath).isFile
+    try {
+      fs.getFileStatus(hdpPath).isFile
+    } catch {
+      case _: FileNotFoundException => false
+    }
   }
 }

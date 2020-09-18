@@ -783,7 +783,7 @@ private[spark] object Utils extends Logging {
       throw new IOException(s"Failed to create directory ${targetDir.getPath}")
     }
     val dest = new File(targetDir, filename.getOrElse(path.getName))
-    if (fs.getFileStatus(path).isFile) {
+    if (fs.isFile(path)) {
       val in = fs.open(path)
       try {
         downloadFile(path.toString, in, dest, fileOverwrite)
