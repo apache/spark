@@ -360,6 +360,39 @@ public class UnsafeExternalSorterSuite {
   }
 
   @Test
+  public void forcedSpillingNullsWithReadIterator() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    long[] record = new long[100];
+    final int recordSize = record.length * 8;
+    final int n = (int) pageSizeBytes / recordSize * 3;
+    for (int i = 0; i < n; i++) {
+      boolean isNull = i % 2 == 0;
+      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0, isNull);
+    }
+    assertTrue(sorter.getNumberOfAllocatedPages() >= 2);
+
+    UnsafeExternalSorter.SpillableIterator iter =
+            (UnsafeExternalSorter.SpillableIterator) sorter.getSortedIterator();
+    final int numRecordsToReadBeforeSpilling = n / 3;
+    for (int i = 0; i < numRecordsToReadBeforeSpilling; i++) {
+      assertTrue(iter.hasNext());
+      iter.loadNext();
+    }
+
+    assertTrue(iter.spill() > 0);
+    assertEquals(0, iter.spill());
+
+    for (int i = numRecordsToReadBeforeSpilling; i < n; i++) {
+      assertTrue(iter.hasNext());
+      iter.loadNext();
+    }
+    assertFalse(iter.hasNext());
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
   public void forcedSpillingWithNotReadIterator() throws Exception {
     final UnsafeExternalSorter sorter = newSorter();
     long[] record = new long[100];

@@ -2370,6 +2370,14 @@ object SQLConf {
       "(nonnegative and shorter than the maximum size).")
     .createWithDefaultString(s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}")
 
+  val MAX_METADATA_STRING_LENGTH = buildConf("spark.sql.maxMetadataStringLength")
+    .doc("Maximum number of characters to output for a metadata string. e.g. " +
+      "file location in `DataSourceScanExec`, every value will be abbreviated if exceed length.")
+    .version("3.1.0")
+    .intConf
+    .checkValue(_ > 3, "This value must be bigger than 3.")
+    .createWithDefault(100)
+
   val SET_COMMAND_REJECTS_SPARK_CORE_CONFS =
     buildConf("spark.sql.legacy.setCommandRejectsSparkCoreConfs")
       .internal()
@@ -2728,6 +2736,18 @@ object SQLConf {
         "DataFrameReader.load(), DataFrameWriter.save(), DataStreamReader.load(), or " +
         "DataStreamWriter.start(). Also, \"path\" option is added to the overall paths if " +
         "multiple path parameters are passed to DataFrameReader.load()")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_EXTRA_OPTIONS_BEHAVIOR =
+    buildConf("spark.sql.legacy.extraOptionsBehavior.enabled")
+      .internal()
+      .doc("When true, the extra options will be ignored for DataFrameReader.table(). If set it " +
+        "to false, which is the default, Spark will check if the extra options have the same " +
+        "key, but the value is different with the table serde properties. If the check passes, " +
+        "the extra options will be merged with the serde properties as the scan options. " +
+        "Otherwise, an exception will be thrown.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
@@ -3331,6 +3351,8 @@ class SQLConf extends Serializable with Logging {
   def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
 
   def maxPlanStringLength: Int = getConf(SQLConf.MAX_PLAN_STRING_LENGTH).toInt
+
+  def maxMetadataStringLength: Int = getConf(SQLConf.MAX_METADATA_STRING_LENGTH)
 
   def setCommandRejectsSparkCoreConfs: Boolean =
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)

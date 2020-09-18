@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 
 /**
@@ -639,7 +640,9 @@ object CatalogTypes {
  * A placeholder for a table relation, which will be replaced by concrete relation like
  * `LogicalRelation` or `HiveTableRelation`, during analysis.
  */
-case class UnresolvedCatalogRelation(tableMeta: CatalogTable) extends LeafNode {
+case class UnresolvedCatalogRelation(
+    tableMeta: CatalogTable,
+    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()) extends LeafNode {
   assert(tableMeta.identifier.database.isDefined)
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil

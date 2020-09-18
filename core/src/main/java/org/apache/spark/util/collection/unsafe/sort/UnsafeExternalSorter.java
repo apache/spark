@@ -501,10 +501,14 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    */
   class SpillableIterator extends UnsafeSorterIterator {
     private UnsafeSorterIterator upstream;
-    private UnsafeSorterIterator nextUpstream = null;
     private MemoryBlock lastPage = null;
     private boolean loaded = false;
     private int numRecords = 0;
+
+    private Object currentBaseObject;
+    private long currentBaseOffset;
+    private int currentRecordLength;
+    private long currentKeyPrefix;
 
     SpillableIterator(UnsafeSorterIterator inMemIterator) {
       this.upstream = inMemIterator;
@@ -516,23 +520,26 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       return numRecords;
     }
 
+    @Override
+    public long getCurrentPageNumber() {
+      throw new UnsupportedOperationException();
+    }
+
     public long spill() throws IOException {
       synchronized (this) {
-        if (!(upstream instanceof UnsafeInMemorySorter.SortedIterator && nextUpstream == null
-          && numRecords > 0)) {
+        if (inMemSorter == null || numRecords <= 0) {
           return 0L;
         }
 
-        UnsafeInMemorySorter.SortedIterator inMemIterator =
-          ((UnsafeInMemorySorter.SortedIterator) upstream).clone();
+        long currentPageNumber = upstream.getCurrentPageNumber();
 
-       ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
+        ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
         // Iterate over the records that have not been returned and spill them.
         final UnsafeSorterSpillWriter spillWriter =
           new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics, numRecords);
-        spillIterator(inMemIterator, spillWriter);
+        spillIterator(upstream, spillWriter);
         spillWriters.add(spillWriter);
-        nextUpstream = spillWriter.getReader(serializerManager);
+        upstream = spillWriter.getReader(serializerManager);
 
         long released = 0L;
         synchronized (UnsafeExternalSorter.this) {
@@ -540,8 +547,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           // is accessing the current record. We free this page in that caller's next loadNext()
           // call.
           for (MemoryBlock page : allocatedPages) {
-            if (!loaded || page.pageNumber !=
-                    ((UnsafeInMemorySorter.SortedIterator)upstream).getCurrentPageNumber()) {
+            if (!loaded || page.pageNumber != currentPageNumber) {
               released += page.size();
               freePage(page);
             } else {
@@ -575,22 +581,26 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       try {
         synchronized (this) {
           loaded = true;
-          if (nextUpstream != null) {
-            // Just consumed the last record from in memory iterator
-            if(lastPage != null) {
-              // Do not free the page here, while we are locking `SpillableIterator`. The `freePage`
-              // method locks the `TaskMemoryManager`, and it's a bad idea to lock 2 objects in
-              // sequence. We may hit dead lock if another thread locks `TaskMemoryManager` and
-              // `SpillableIterator` in sequence, which may happen in
-              // `TaskMemoryManager.acquireExecutionMemory`.
-              pageToFree = lastPage;
-              lastPage = null;
-            }
-            upstream = nextUpstream;
-            nextUpstream = null;
+          // Just consumed the last record from in memory iterator
+          if (lastPage != null) {
+            // Do not free the page here, while we are locking `SpillableIterator`. The `freePage`
+            // method locks the `TaskMemoryManager`, and it's a bad idea to lock 2 objects in
+            // sequence. We may hit dead lock if another thread locks `TaskMemoryManager` and
+            // `SpillableIterator` in sequence, which may happen in
+            // `TaskMemoryManager.acquireExecutionMemory`.
+            pageToFree = lastPage;
+            lastPage = null;
           }
           numRecords--;
           upstream.loadNext();
+
+          // Keep track of the current base object, base offset, record length, and key prefix,
+          // so that the current record can still be read in case a spill is triggered and we
+          // switch to the spill writer's iterator.
+          currentBaseObject = upstream.getBaseObject();
+          currentBaseOffset = upstream.getBaseOffset();
+          currentRecordLength = upstream.getRecordLength();
+          currentKeyPrefix = upstream.getKeyPrefix();
         }
       } finally {
         if (pageToFree != null) {
@@ -601,22 +611,22 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     @Override
     public Object getBaseObject() {
-      return upstream.getBaseObject();
+      return currentBaseObject;
     }
 
     @Override
     public long getBaseOffset() {
-      return upstream.getBaseOffset();
+      return currentBaseOffset;
     }
 
     @Override
     public int getRecordLength() {
-      return upstream.getRecordLength();
+      return currentRecordLength;
     }
 
     @Override
     public long getKeyPrefix() {
-      return upstream.getKeyPrefix();
+      return currentKeyPrefix;
     }
   }
 
@@ -691,6 +701,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     @Override
     public int getNumRecords() {
       return numRecords;
+    }
+
+    @Override
+    public long getCurrentPageNumber() {
+      return current.getCurrentPageNumber();
     }
 
     @Override

@@ -223,15 +223,13 @@ class TypeConverters(object):
             raise TypeError("Boolean Param requires value of type bool. Found %s." % type(value))
 
 
-class Params(Identifiable):
+class Params(Identifiable, metaclass=ABCMeta):
     """
     Components that take parameters. This also provides an internal
     param map to store parameter values attached to the instance.
 
     .. versionadded:: 1.3.0
     """
-
-    __metaclass__ = ABCMeta
 
     def __init__(self):
         super(Params, self).__init__()
