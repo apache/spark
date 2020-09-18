@@ -172,7 +172,7 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession with NestedDa
       dataFileWriter.flush()
       dataFileWriter.close()
       val df = spark.read.format("avro").load(s"$dir.avro")
-      assert(df.schema.fields === Seq(StructField("field1", LongType, nullable = true)))
+      assert(df.schema.fields === Array(StructField("field1", LongType, nullable = true)))
       assert(df.collect().toSet == Set(Row(1L), Row(2L)))
     }
   }
@@ -543,7 +543,8 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession with NestedDa
 
     val array_of_boolean =
       spark.read.format("avro").load(testAvro).select("array_of_boolean").collect()
-    assert(array_of_boolean.map(_(0).asInstanceOf[Seq[Boolean]].size).toSet == Set(3, 1, 0))
+    assert(array_of_boolean.map(_(0).asInstanceOf[scala.collection.Seq[Boolean]].size).toSet ==
+      Set(3, 1, 0))
 
     val bytes = spark.read.format("avro").load(testAvro).select("bytes").collect()
     assert(bytes.map(_(0).asInstanceOf[Array[Byte]].length).toSet == Set(3, 1, 0))
