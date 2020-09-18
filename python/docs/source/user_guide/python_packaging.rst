@@ -156,7 +156,7 @@ Invoking the pex file will by default invoke the Python interpreter. pyarrow, pa
   >>> import pyspark
   >>>
 
-This can also be done directly with the Python API. More infos on how to build PEX files `here <https://pex.readthedocs.io/en/stable/buildingpex.html>`_.
+This can also be done directly with the Python API. `More infos <https://pex.readthedocs.io/en/stable/buildingpex.html>`_ on how to build PEX files.
 
 Upload it to the Spark executors
 --------------------------------
