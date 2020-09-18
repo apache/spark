@@ -81,22 +81,24 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         .bucketBy(8, "j", "k")
         .saveAsTable("bucketed_table")
 
-      val bucketValue = Random.nextInt(maxI)
-      val table = spark.table("bucketed_table").filter($"i" === bucketValue)
-      val query = table.queryExecution
-      val output = query.analyzed.output
-      val rdd = query.toRdd
+      withSQLConf(SQLConf.DYNAMIC_DECIDE_BUCKETING_ENABLED.key -> "false") {
+        val bucketValue = Random.nextInt(maxI)
+        val table = spark.table("bucketed_table").filter($"i" === bucketValue)
+        val query = table.queryExecution
+        val output = query.analyzed.output
+        val rdd = query.toRdd
 
-      assert(rdd.partitions.length == 8)
+        assert(rdd.partitions.length == 8)
 
-      val attrs = table.select("j", "k").queryExecution.analyzed.output
-      val checkBucketId = rdd.mapPartitionsWithIndex((index, rows) => {
-        val getBucketId = UnsafeProjection.create(
-          HashPartitioning(attrs, 8).partitionIdExpression :: Nil,
-          output)
-        rows.map(row => getBucketId(row).getInt(0) -> index)
-      })
-      checkBucketId.collect().foreach(r => assert(r._1 == r._2))
+        val attrs = table.select("j", "k").queryExecution.analyzed.output
+        val checkBucketId = rdd.mapPartitionsWithIndex((index, rows) => {
+          val getBucketId = UnsafeProjection.create(
+            HashPartitioning(attrs, 8).partitionIdExpression :: Nil,
+            output)
+          rows.map(row => getBucketId(row).getInt(0) -> index)
+        })
+        checkBucketId.collect().foreach(r => assert(r._1 == r._2))
+      }
     }
   }
 
@@ -1009,6 +1011,40 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
           Some(4))
         // Coalescing is not applied when join expressions do not match with bucket columns.
         verify("SELECT * FROM t1 JOIN t2 ON t1.i = t2.i", 2, None)
+      }
+    }
+  }
+
+  test("SPARK-32859: decide bucketing dynamically based on query plan") {
+    withTable("t1", "t2") {
+      df1.write.format("parquet").bucketBy(8, "i").saveAsTable("t1")
+      df2.write.format("parquet").bucketBy(4, "i").saveAsTable("t2")
+
+      def checkNumBucketedScan(query: String, expectedNumBucketedScan: Int): Unit = {
+        val plan = sql(query).queryExecution.executedPlan
+        val bucketedScan = plan.collect { case s: FileSourceScanExec if s.bucketedScan => s }
+        assert(bucketedScan.length == expectedNumBucketedScan)
+      }
+
+      Seq(
+        ("SELECT * FROM t1 JOIN t2 ON t1.i = t2.i", 1, 2),
+        ("SELECT * FROM t1 JOIN t2 ON t1.i = t2.j", 1, 2),
+        ("SELECT * FROM t1 JOIN t2 ON t1.j = t2.j", 0, 2),
+        ("SELECT SUM(i) FROM t1 GROUP BY i", 1, 1),
+        ("SELECT SUM(i) FROM t1 GROUP BY j", 0, 1),
+        ("SELECT * FROM t1 WHERE i = 1", 1, 1),
+        ("SELECT * FROM t1 WHERE j = 1", 0, 1)
+      ).foreach { case (query, bucketedScan1, bucketedScan2) =>
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
+          SQLConf.DYNAMIC_DECIDE_BUCKETING_ENABLED.key -> "true") {
+          checkNumBucketedScan(query, bucketedScan1)
+          val result = sql(query).collect()
+
+          withSQLConf(SQLConf.DYNAMIC_DECIDE_BUCKETING_ENABLED.key -> "false") {
+            checkNumBucketedScan(query, bucketedScan2)
+            checkAnswer(sql(query), result)
+          }
+        }
       }
     }
   }

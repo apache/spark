@@ -2764,6 +2764,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val DYNAMIC_DECIDE_BUCKETING_ENABLED =
+    buildConf("spark.sql.sources.dynamic.decide.bucketing.enabled")
+      .doc("When true, dynamically decide whether to do bucketed scan on input tables " +
+        "based on query plan.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3385,6 +3393,8 @@ class SQLConf extends Serializable with Logging {
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
   def truncateTrashEnabled: Boolean = getConf(SQLConf.TRUNCATE_TRASH_ENABLED)
+
+  def dynamicDecideBucketingEnabled: Boolean = getConf(SQLConf.DYNAMIC_DECIDE_BUCKETING_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 
