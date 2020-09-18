@@ -338,7 +338,11 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
 object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
   /**
    * Extract all correlated scalar subqueries from an expression. The subqueries are collected using
-   * the given collector. The expression is rewritten and returned.
+   * the given collector. To avoid the reuse of `exprId`s, this method generates new `exprId`
+   * for the subqueries and rewrite references in the given `expression`.
+   * This method returns extracted subqueries and the corresponding `exprId`s and these values
+   * will be used later in `constructLeftJoins` for building the child plan that
+   * returns subquery output with the `exprId`s.
    */
   private def extractCorrelatedScalarSubqueries[E <: Expression](
       expression: E,
