@@ -71,19 +71,8 @@ private[hive] case class HiveSimpleUDF(
   }
 
   override def inputTypes: Seq[AbstractDataType] = {
-    val inTypes = children.map(_.dataType)
-    if (!inTypes.exists(_.existsRecursively(_.isInstanceOf[DecimalType]))) {
-      inTypes
-    } else {
-      val expectTypes = method.getGenericParameterTypes.map(javaTypeToDataType)
-      // check decimal
-      inTypes.zip(expectTypes).map { case (in, expect) =>
-        if (in.existsRecursively(_.isInstanceOf[DecimalType])) {
-          expect
-        } else {
-          in
-        }
-      }
+    method.getGenericParameterTypes.map(javaTypeToDataType).map { dt =>
+      if (dt.existsRecursively(_.isInstanceOf[NullType])) AnyDataType else dt
     }
   }
 
