@@ -36,7 +36,6 @@ import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException
-import org.apache.hadoop.yarn.server.webproxy.ProxyUriUtils
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark._
@@ -308,7 +307,7 @@ private[spark] class ApplicationMaster(
       // The client-mode AM doesn't listen for incoming connections, so report an invalid port.
       registerAM(Utils.localHostName, -1, sparkConf,
         sparkConf.getOption("spark.driver.appUIAddress"), appAttemptId)
-      addAmIpFilter(Some(driverRef), ProxyUriUtils.getPath(appAttemptId.getApplicationId))
+      addAmIpFilter(Some(driverRef), s"/proxy/$appAttemptId")
       createAllocator(driverRef, sparkConf, clientRpcEnv, appAttemptId, cachedResourcesConf)
       reporterThread.join()
     } catch {

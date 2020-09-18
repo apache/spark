@@ -81,7 +81,7 @@
     <!-- Not needed by the test code, but referenced by SparkSubmit which is used by the tests. -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client</artifactId>
+      <artifactId>hadoop-client-runtime</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

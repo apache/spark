@@ -88,6 +88,11 @@
       <version>${protobuf.version}</version>
     </dependency>
 -->
+
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client-runtime</artifactId>
+    </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-common</artifactId>
