@@ -91,7 +91,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client</artifactId>
+      <artifactId>hadoop-client-runtime</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>

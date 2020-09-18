@@ -65,7 +65,7 @@
     <!-- Provided dependencies -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client</artifactId>
+      <artifactId>hadoop-client-runtime</artifactId>
     </dependency>
     <dependency>
       <groupId>org.slf4j</groupId>
