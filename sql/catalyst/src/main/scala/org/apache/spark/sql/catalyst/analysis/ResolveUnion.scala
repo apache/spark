@@ -34,11 +34,17 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 object ResolveUnion extends Rule[LogicalPlan] {
   /**
-   * This method sorts columns in a struct expression based on column names.
+   * This method sorts recursively columns in a struct expression based on column names.
    */
   private def sortStructFields(expr: Expression): Expression = {
     val existingExprs = expr.dataType.asInstanceOf[StructType].fieldNames.zipWithIndex.map {
-      case (name, i) => (name, GetStructField(KnownNotNull(expr), i))
+      case (name, i) =>
+        val fieldExpr = GetStructField(KnownNotNull(expr), i)
+        if (fieldExpr.dataType.isInstanceOf[StructType]) {
+          (name, sortStructFields(fieldExpr))
+        } else {
+          (name, fieldExpr)
+        }
     }.sortBy(_._1).flatMap(pair => Seq(Literal(pair._1), pair._2))
 
     val newExpr = CreateNamedStruct(existingExprs)
@@ -81,6 +87,26 @@ object ResolveUnion extends Rule[LogicalPlan] {
       }
   }
 
+  def simplifyWithFields(expr: Expression): Expression = {
+    expr.transformUp {
+      case WithFields(structExpr, names, values) if names.distinct.length != names.length =>
+        val newNames = mutable.ArrayBuffer.empty[String]
+        val newValues = mutable.ArrayBuffer.empty[Expression]
+        names.zip(values).reverse.foreach { case (name, value) =>
+          if (!newNames.contains(name)) {
+            newNames += name
+            newValues += value
+          }
+        }
+        WithFields(structExpr, names = newNames.reverse, valExprs = newValues.reverse)
+      case WithFields(WithFields(struct, names1, valExprs1), names2, valExprs2) =>
+        WithFields(struct, names1 ++ names2, valExprs1 ++ valExprs2)
+      case g @ GetStructField(WithFields(_, names, values), _, _)
+        if names.contains(g.extractFieldName) =>
+        names.zip(values).reverse.filter(p => p._1 == g.extractFieldName).head._2
+    }
+  }
+
   /**
    * Adds missing fields recursively into given `col` expression, based on the target `StructType`.
    * This is called by `compareAndAddFields` when we find two struct columns with same name but
@@ -103,13 +129,11 @@ object ResolveUnion extends Rule[LogicalPlan] {
       sortStructFields(col)
     } else {
       missingFields.map { s =>
-        val struct = addFieldsInto(col, "", s.fields)
+        val struct = addFieldsInto(col, s.fields)
         // Combines `WithFields`s to reduce expression tree.
-        val reducedStruct = struct.transformUp {
-          case WithFields(WithFields(struct, names1, valExprs1), names2, valExprs2) =>
-            WithFields(struct, names1 ++ names2, valExprs1 ++ valExprs2)
-        }
-        sortStructFieldsInWithFields(reducedStruct)
+        val reducedStruct = simplifyWithFields(struct)
+        val sorted = sortStructFieldsInWithFields(reducedStruct)
+        sorted
       }.get
     }
   }
@@ -124,7 +148,9 @@ object ResolveUnion extends Rule[LogicalPlan] {
    * field names. So the data type of returned expression will be
    * "w string, x int, z struct<w:long, y:int, z:int>".
    */
-  private def addFieldsInto(col: Expression, base: String, fields: Seq[StructField]): Expression = {
+  private def addFieldsInto(
+      col: Expression,
+      fields: Seq[StructField]): Expression = {
     fields.foldLeft(col) { case (currCol, field) =>
       field.dataType match {
         case st: StructType =>
@@ -133,12 +159,13 @@ object ResolveUnion extends Rule[LogicalPlan] {
             .find(f => resolver(f.name, field.name))
           if (colField.isEmpty) {
             // The whole struct is missing. Add a null.
-            WithFields(currCol, s"$base${field.name}", Literal(null, st))
+            WithFields(currCol, field.name, Literal(null, st))
           } else {
-            addFieldsInto(currCol, s"$base${field.name}.", st.fields)
+            WithFields(currCol, field.name,
+              addFieldsInto(ExtractValue(currCol, Literal(field.name), resolver), st.fields))
           }
         case dt =>
-          WithFields(currCol, s"$base${field.name}", Literal(null, dt))
+          WithFields(currCol, field.name, Literal(null, dt))
       }
     }
   }

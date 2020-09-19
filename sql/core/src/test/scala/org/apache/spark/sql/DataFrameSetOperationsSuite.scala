@@ -676,6 +676,65 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
         "of the second table"))
     }
   }
+
+  test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - deep expr") {
+    def nestedDf(depth: Int, numColsAtEachDepth: Int): DataFrame = {
+      val initialNestedStructType = StructType(
+        (0 to numColsAtEachDepth).map(i =>
+          StructField(s"nested${depth}Col$i", IntegerType, nullable = false))
+      )
+      val initialNestedValues = Row(0 to numColsAtEachDepth: _*)
+
+      var depthCounter = depth - 1
+      var structType = initialNestedStructType
+      var struct = initialNestedValues
+      while (depthCounter != 0) {
+        struct = Row((struct +: (1 to numColsAtEachDepth)): _*)
+        structType = StructType(
+          StructField(s"nested${depthCounter}Col0", structType, nullable = false) +:
+            (1 to numColsAtEachDepth).map(i =>
+              StructField(s"nested${depthCounter}Col$i", IntegerType, nullable = false))
+        )
+        depthCounter -= 1
+      }
+
+      val df: DataFrame = spark.createDataFrame(
+        sparkContext.parallelize(Row(struct) :: Nil),
+        StructType(Seq(StructField("nested0Col0", structType))))
+
+      df
+    }
+    withSQLConf(SQLConf.UNION_BYNAME_STRUCT_SUPPORT_ENABLED.key -> "true") {
+      val df1 = nestedDf(depth = 10, numColsAtEachDepth = 1)
+      val df2 = nestedDf(depth = 10, numColsAtEachDepth = 20)
+      val union = df1.unionByName(df2, allowMissingColumns = true)
+      // scalastyle:off
+      val row1 = Row(Row(Row(Row(Row(Row(Row(Row(Row(Row(
+        Row(0, 1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null))
+      val row2 = Row(Row(Row(Row(Row(Row(Row(Row(Row(Row(
+        Row(0, 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9))
+      // scalastyle:on
+      checkAnswer(union, row1 :: row2 :: Nil)
+    }
+  }
 }
 
 case class UnionClass1a(a: Int, b: Long, nested: UnionClass2)
