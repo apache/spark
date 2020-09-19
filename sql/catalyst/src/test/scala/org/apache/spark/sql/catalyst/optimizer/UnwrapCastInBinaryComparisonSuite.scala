@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{BooleanType, ByteType, DoubleType, IntegerType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DoubleType, IntegerType, LongType}
 
 class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelper {
 
@@ -120,8 +120,8 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
   test("unwrap cast should skip when expression is non-deterministic") {
-    Seq(positiveInt, negativeInt).foreach (v => {
-      val e = Cast(First(f, ignoreNulls = true), IntegerType) <=> v
+    Seq(positiveLong, negativeLong).foreach (v => {
+      val e = Cast(SparkPartitionID(), LongType) <=> v
       assertEquivalent(e, e, evaluate = false)
     })
   }
