@@ -922,18 +922,6 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     assert(inSet.sql === "('a' IN ('a', 'b'))")
   }
 
-  def checkAnswerAndSchema(
-      df: => DataFrame,
-      expectedAnswer: Seq[Row],
-      expectedSchema: StructType): Unit = {
-
-    df.explain(true)
-    df.printSchema()
-    df.show(false)
-    checkAnswer(df, expectedAnswer)
-    assert(df.schema == expectedSchema)
-  }
-
   private lazy val structType = StructType(Seq(
     StructField("a", IntegerType, nullable = false),
     StructField("b", IntegerType, nullable = true),
@@ -968,15 +956,6 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         StructField("a", StructType(Seq(
           StructField("a", structType, nullable = false))),
           nullable = false))),
-        nullable = false))))
-
-  private lazy val nullStructLevel3: DataFrame = spark.createDataFrame(
-    sparkContext.parallelize(Row(Row(Row(Row(1, null, 3)))) :: Nil),
-    StructType(Seq(
-      StructField("a", StructType(Seq(
-        StructField("a", StructType(Seq(
-          StructField("a", structType, nullable = true))),
-          nullable = true))),
         nullable = false))))
 
   test("withField should throw an exception if called on a non-StructType column") {
@@ -1030,7 +1009,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should add field with no name") {
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", $"a".withField("", lit(4))),
       Row(Row(1, null, 3, 4)) :: Nil,
       StructType(Seq(
@@ -1043,7 +1022,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should add field to struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", 'a.withField("d", lit(4))),
       Row(Row(1, null, 3, 4)) :: Nil,
       StructType(Seq(
@@ -1056,7 +1035,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should add field to null struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       nullStructLevel1.withColumn("a", $"a".withField("d", lit(4))),
       Row(null) :: Nil,
       StructType(Seq(
@@ -1069,7 +1048,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should add field to nested null struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       nullStructLevel2.withColumn("a", $"a".withField("a.d", lit(4))),
       Row(Row(null)) :: Nil,
       StructType(
@@ -1084,7 +1063,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should add null field to struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", 'a.withField("d", lit(null).cast(IntegerType))),
       Row(Row(1, null, 3, null)) :: Nil,
       StructType(Seq(
@@ -1097,7 +1076,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should add multiple fields to struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", 'a.withField("d", lit(4)).withField("e", lit(5))),
       Row(Row(1, null, 3, 4, 5)) :: Nil,
       StructType(Seq(
@@ -1115,7 +1094,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       structLevel2.withColumn("a", 'a.withField("a.d", lit(4))),
       structLevel2.withColumn("a", 'a.withField("a", $"a.a".withField("d", lit(4))))
     ).foreach { df =>
-      checkAnswerAndSchema(
+      checkAnswer(
         df,
         Row(Row(Row(1, null, 3, 4))) :: Nil,
         StructType(
@@ -1131,7 +1110,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should add field to deeply nested struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel3.withColumn("a", 'a.withField("a.a.d", lit(4))),
       Row(Row(Row(Row(1, null, 3, 4)))) :: Nil,
       StructType(Seq(
@@ -1148,7 +1127,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should replace field in struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", 'a.withField("b", lit(2))),
       Row(Row(1, 2, 3)) :: Nil,
       StructType(Seq(
@@ -1160,7 +1139,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should replace field in null struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       nullStructLevel1.withColumn("a", 'a.withField("b", lit("foo"))),
       Row(null) :: Nil,
       StructType(Seq(
@@ -1172,7 +1151,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should replace field in nested null struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       nullStructLevel2.withColumn("a", $"a".withField("a.b", lit("foo"))),
       Row(Row(null)) :: Nil,
       StructType(
@@ -1186,7 +1165,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should replace field with null value in struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", 'a.withField("c", lit(null).cast(IntegerType))),
       Row(Row(1, null, null)) :: Nil,
       StructType(Seq(
@@ -1198,7 +1177,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should replace multiple fields in struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", 'a.withField("a", lit(10)).withField("b", lit(20))),
       Row(Row(10, 20, 3)) :: Nil,
       StructType(Seq(
@@ -1214,7 +1193,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       structLevel2.withColumn("a", $"a".withField("a.b", lit(2))),
       structLevel2.withColumn("a", 'a.withField("a", $"a.a".withField("b", lit(2))))
     ).foreach { df =>
-      checkAnswerAndSchema(
+      checkAnswer(
         df,
         Row(Row(Row(1, 2, 3))) :: Nil,
         StructType(Seq(
@@ -1229,7 +1208,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should replace field in deeply nested struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel3.withColumn("a", $"a".withField("a.a.b", lit(2))),
       Row(Row(Row(Row(1, 2, 3)))) :: Nil,
       StructType(Seq(
@@ -1254,7 +1233,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           StructField("b", IntegerType, nullable = false))),
           nullable = false))))
 
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", 'a.withField("b", lit(100))),
       Row(Row(1, 100, 100)) :: Nil,
       StructType(Seq(
@@ -1266,7 +1245,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should replace fields in struct in given order") {
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", 'a.withField("b", lit(2)).withField("b", lit(20))),
       Row(Row(1, 20, 3)) :: Nil,
       StructType(Seq(
@@ -1278,7 +1257,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should add field and then replace same field in struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", 'a.withField("d", lit(4)).withField("d", lit(5))),
       Row(Row(1, null, 3, 5)) :: Nil,
       StructType(Seq(
@@ -1302,7 +1281,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             nullable = false))),
           nullable = false))))
 
-    checkAnswerAndSchema(
+    checkAnswer(
       df.withColumn("a", 'a.withField("`a.b`.`e.f`", lit(2))),
       Row(Row(Row(1, 2, 3))) :: Nil,
       StructType(Seq(
@@ -1329,7 +1308,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("withField should replace field in struct even if casing is different") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      checkAnswerAndSchema(
+      checkAnswer(
         mixedCaseStructLevel1.withColumn("a", 'a.withField("A", lit(2))),
         Row(Row(2, 1)) :: Nil,
         StructType(Seq(
@@ -1338,7 +1317,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             StructField("B", IntegerType, nullable = false))),
             nullable = false))))
 
-      checkAnswerAndSchema(
+      checkAnswer(
         mixedCaseStructLevel1.withColumn("a", 'a.withField("b", lit(2))),
         Row(Row(1, 2)) :: Nil,
         StructType(Seq(
@@ -1351,7 +1330,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("withField should add field to struct because casing is different") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      checkAnswerAndSchema(
+      checkAnswer(
         mixedCaseStructLevel1.withColumn("a", 'a.withField("A", lit(2))),
         Row(Row(1, 1, 2)) :: Nil,
         StructType(Seq(
@@ -1361,7 +1340,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             StructField("A", IntegerType, nullable = false))),
             nullable = false))))
 
-      checkAnswerAndSchema(
+      checkAnswer(
         mixedCaseStructLevel1.withColumn("a", 'a.withField("b", lit(2))),
         Row(Row(1, 1, 2)) :: Nil,
         StructType(Seq(
@@ -1389,7 +1368,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("withField should replace nested field in struct even if casing is different") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      checkAnswerAndSchema(
+      checkAnswer(
         mixedCaseStructLevel2.withColumn("a", 'a.withField("A.a", lit(2))),
         Row(Row(Row(2, 1), Row(1, 1))) :: Nil,
         StructType(Seq(
@@ -1404,7 +1383,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
               nullable = false))),
             nullable = false))))
 
-      checkAnswerAndSchema(
+      checkAnswer(
         mixedCaseStructLevel2.withColumn("a", 'a.withField("b.a", lit(2))),
         Row(Row(Row(1, 1), Row(2, 1))) :: Nil,
         StructType(Seq(
@@ -1479,25 +1458,25 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   test("SPARK-32641: extracting field from non-null struct column after withField should return " +
     "field value") {
     // extract newly added field
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", $"a".withField("d", lit(4)).getField("d")),
       Row(4) :: Nil,
       StructType(Seq(StructField("a", IntegerType, nullable = false))))
 
     // extract newly replaced field
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", $"a".withField("a", lit(4)).getField("a")),
       Row(4) :: Nil,
       StructType(Seq(StructField("a", IntegerType, nullable = false))))
 
     // add new field, extract another field from original struct
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", $"a".withField("d", lit(4)).getField("c")),
       Row(3):: Nil,
       StructType(Seq(StructField("a", IntegerType, nullable = false))))
 
     // replace field, extract another field from original struct
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", $"a".withField("a", lit(4)).getField("c")),
       Row(3):: Nil,
       StructType(Seq(StructField("a", IntegerType, nullable = false))))
@@ -1506,25 +1485,25 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   test("SPARK-32641: extracting field from null struct column after withField should return " +
     "null if the original struct was null") {
     // extract newly added field
-    checkAnswerAndSchema(
+    checkAnswer(
       nullStructLevel1.withColumn("a", $"a".withField("d", lit(4)).getField("d")),
       Row(null) :: Nil,
       StructType(Seq(StructField("a", IntegerType, nullable = true))))
 
     // extract newly replaced field
-    checkAnswerAndSchema(
+    checkAnswer(
       nullStructLevel1.withColumn("a", $"a".withField("a", lit(4)).getField("a")),
       Row(null):: Nil,
       StructType(Seq(StructField("a", IntegerType, nullable = true))))
 
     // add new field, extract another field from original struct
-    checkAnswerAndSchema(
+    checkAnswer(
       nullStructLevel1.withColumn("a", $"a".withField("d", lit(4)).getField("c")),
       Row(null):: Nil,
       StructType(Seq(StructField("a", IntegerType, nullable = true))))
 
     // replace field, extract another field from original struct
-    checkAnswerAndSchema(
+    checkAnswer(
       nullStructLevel1.withColumn("a", $"a".withField("a", lit(4)).getField("c")),
       Row(null):: Nil,
       StructType(Seq(StructField("a", IntegerType, nullable = true))))
@@ -1537,25 +1516,25 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       StructType(Seq(StructField("a", structType, nullable = true))))
 
     // extract newly added field
-    checkAnswerAndSchema(
+    checkAnswer(
       df.withColumn("a", $"a".withField("d", lit(4)).getField("d")),
       Row(4) :: Row(null) :: Nil,
       StructType(Seq(StructField("a", IntegerType, nullable = true))))
 
     // extract newly replaced field
-    checkAnswerAndSchema(
+    checkAnswer(
       df.withColumn("a", $"a".withField("a", lit(4)).getField("a")),
       Row(4) :: Row(null):: Nil,
       StructType(Seq(StructField("a", IntegerType, nullable = true))))
 
     // add new field, extract another field from original struct
-    checkAnswerAndSchema(
+    checkAnswer(
       df.withColumn("a", $"a".withField("d", lit(4)).getField("c")),
       Row(3) :: Row(null):: Nil,
       StructType(Seq(StructField("a", IntegerType, nullable = true))))
 
     // replace field, extract another field from original struct
-    checkAnswerAndSchema(
+    checkAnswer(
       df.withColumn("a", $"a".withField("a", lit(4)).getField("c")),
       Row(3) :: Row(null):: Nil,
       StructType(Seq(StructField("a", IntegerType, nullable = true))))
@@ -1605,7 +1584,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("dropFields should drop field in struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", 'a.dropFields("b")),
       Row(Row(1, 3)) :: Nil,
       StructType(Seq(
@@ -1616,7 +1595,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("dropFields should drop field in null struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       nullStructLevel1.withColumn("a", $"a".dropFields("b")),
       Row(null) :: Nil,
       StructType(Seq(
@@ -1631,7 +1610,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       structLevel1.withColumn("a", $"a".dropFields("b", "c")),
       structLevel1.withColumn("a", 'a.dropFields("b").dropFields("c"))
     ).foreach { df =>
-      checkAnswerAndSchema(
+      checkAnswer(
         df,
         Row(Row(1)) :: Nil,
         StructType(Seq(
@@ -1648,7 +1627,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("dropFields should drop field in nested struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel2.withColumn("a", 'a.dropFields("a.b")),
       Row(Row(Row(1, 3))) :: Nil,
       StructType(
@@ -1661,7 +1640,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("dropFields should drop multiple fields in nested struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel2.withColumn("a", 'a.dropFields("a.b", "a.c")),
       Row(Row(Row(1))) :: Nil,
       StructType(
@@ -1673,7 +1652,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("dropFields should drop field in nested null struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       nullStructLevel2.withColumn("a", $"a".dropFields("a.b")),
       Row(Row(null)) :: Nil,
       StructType(
@@ -1686,7 +1665,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("dropFields should drop multiple fields in nested null struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       nullStructLevel2.withColumn("a", $"a".dropFields("a.b", "a.c")),
       Row(Row(null)) :: Nil,
       StructType(
@@ -1698,7 +1677,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("dropFields should drop field in deeply nested struct") {
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel3.withColumn("a", 'a.dropFields("a.a.b")),
       Row(Row(Row(Row(1, 3)))) :: Nil,
       StructType(Seq(
@@ -1722,7 +1701,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           StructField("b", IntegerType, nullable = false))),
           nullable = false))))
 
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", 'a.dropFields("b")),
       Row(Row(1)) :: Nil,
       StructType(Seq(
@@ -1733,7 +1712,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("dropFields should drop field in struct even if casing is different") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      checkAnswerAndSchema(
+      checkAnswer(
         mixedCaseStructLevel1.withColumn("a", 'a.dropFields("A")),
         Row(Row(1)) :: Nil,
         StructType(Seq(
@@ -1741,7 +1720,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             StructField("B", IntegerType, nullable = false))),
             nullable = false))))
 
-      checkAnswerAndSchema(
+      checkAnswer(
         mixedCaseStructLevel1.withColumn("a", 'a.dropFields("b")),
         Row(Row(1)) :: Nil,
         StructType(Seq(
@@ -1753,7 +1732,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("dropFields should not drop field in struct because casing is different") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      checkAnswerAndSchema(
+      checkAnswer(
         mixedCaseStructLevel1.withColumn("a", 'a.dropFields("A")),
         Row(Row(1, 1)) :: Nil,
         StructType(Seq(
@@ -1762,7 +1741,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             StructField("B", IntegerType, nullable = false))),
             nullable = false))))
 
-      checkAnswerAndSchema(
+      checkAnswer(
         mixedCaseStructLevel1.withColumn("a", 'a.dropFields("b")),
         Row(Row(1, 1)) :: Nil,
         StructType(Seq(
@@ -1775,7 +1754,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("dropFields should drop nested field in struct even if casing is different") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      checkAnswerAndSchema(
+      checkAnswer(
         mixedCaseStructLevel2.withColumn("a", 'a.dropFields("A.a")),
         Row(Row(Row(1), Row(1, 1))) :: Nil,
         StructType(Seq(
@@ -1789,7 +1768,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
               nullable = false))),
             nullable = false))))
 
-      checkAnswerAndSchema(
+      checkAnswer(
         mixedCaseStructLevel2.withColumn("a", 'a.dropFields("b.a")),
         Row(Row(Row(1, 1), Row(1))) :: Nil,
         StructType(Seq(
@@ -1818,7 +1797,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("dropFields should drop only fields that exist") {
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", 'a.dropFields("d")),
       Row(Row(1, null, 3)) :: Nil,
       StructType(Seq(
@@ -1828,7 +1807,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           StructField("c", IntegerType, nullable = false))),
           nullable = false))))
 
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.withColumn("a", 'a.dropFields("b", "d")),
       Row(Row(1, 3)) :: Nil,
       StructType(Seq(
@@ -1837,7 +1816,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           StructField("c", IntegerType, nullable = false))),
           nullable = false))))
 
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel2.withColumn("a", $"a".dropFields("a.b", "a.d")),
       Row(Row(Row(1, 3))) :: Nil,
       StructType(
@@ -1858,7 +1837,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           StructField("b", IntegerType, nullable = false))),
           nullable = false))))
 
-    checkAnswerAndSchema(
+    checkAnswer(
       df.withColumn("a", $"a".dropFields("a.b", "b")),
       Row(Row(Row(1, 3))) :: Nil,
       StructType(Seq(
@@ -1922,7 +1901,6 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("should correctly handle different dropField + withField + getField combinations") {
-    // TODO: maybe make another suite, where we run through these tests with and without optimizer
     val structType = StructType(Seq(
       StructField("a", IntegerType, nullable = false),
       StructField("b", IntegerType, nullable = false)))
@@ -1947,17 +1925,17 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       def query(df: DataFrame): DataFrame =
         df.select(fieldOps(col("a")).getField(getFieldName).as("res"))
 
-      checkAnswerAndSchema(
+      checkAnswer(
         query(structLevel1),
         Row(expectedValue.orNull) :: Nil,
         StructType(Seq(StructField("res", IntegerType, nullable = expectedValue.isEmpty))))
 
-      checkAnswerAndSchema(
+      checkAnswer(
         query(nullStructLevel1),
         Row(null) :: Nil,
         StructType(Seq(StructField("res", IntegerType, nullable = true))))
 
-      checkAnswerAndSchema(
+      checkAnswer(
         query(nullableStructLevel1),
         Row(expectedValue.orNull) :: Row(null) :: Nil,
         StructType(Seq(StructField("res", IntegerType, nullable = true))))
@@ -1975,10 +1953,13 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
     // replace attribute, extract an attribute from the original struct
     check(_.withField("b", lit(3)), "a", Some(1))
+    check(_.withField("a", lit(3)), "b", Some(2))
 
     // replace attribute, extract replaced attribute
     check(_.withField("b", lit(3)), "b", Some(3))
     check(_.withField("b", lit(null).cast(IntegerType)), "b", None)
+    check(_.withField("a", lit(3)), "a", Some(3))
+    check(_.withField("a", lit(null).cast(IntegerType)), "a", None)
 
     // drop attribute, extract an attribute from the original struct
     check(_.dropFields("b"), "a", Some(1))
@@ -1988,14 +1969,25 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     check(_.dropFields("b").withField("c", lit(3)), "a", Some(1))
     check(_.dropFields("a").withField("c", lit(3)), "b", Some(2))
 
+    // drop attribute, add another attribute, extract added attribute
+    check(_.dropFields("a").withField("c", lit(3)), "c", Some(3))
+    check(_.dropFields("b").withField("c", lit(3)), "c", Some(3))
+
     // add attribute, drop attribute, extract an attribute from the original struct
     check(_.withField("c", lit(3)).dropFields("a"), "b", Some(2))
     check(_.withField("c", lit(3)).dropFields("b"), "a", Some(1))
+
+    // add attribute, drop another attribute, extract added attribute
+    check(_.withField("c", lit(3)).dropFields("a"), "c", Some(3))
+    check(_.withField("c", lit(3)).dropFields("b"), "c", Some(3))
+
+    // replace attribute, drop same attribute, extract an attribute from the original struct
     check(_.withField("b", lit(3)).dropFields("b"), "a", Some(1))
     check(_.withField("a", lit(3)).dropFields("a"), "b", Some(2))
 
     // add attribute, drop same attribute, extract an attribute from the original struct
     check(_.withField("c", lit(3)).dropFields("c"), "a", Some(1))
+    check(_.withField("c", lit(3)).dropFields("c"), "b", Some(2))
 
     // add attribute, drop another attribute, extract added attribute
     check(_.withField("b", lit(3)).dropFields("a"), "b", Some(3))
@@ -2004,198 +1996,14 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     check(_.withField("a", lit(null).cast(IntegerType)).dropFields("b"), "a", None)
 
     // drop attribute, add same attribute, extract added attribute
-    check(_.dropFields("a").withField("c", lit(3)), "c", Some(3))
-    check(_.dropFields("b").withField("c", lit(3)), "c", Some(3))
     check(_.dropFields("b").withField("b", lit(3)), "b", Some(3))
     check(_.dropFields("a").withField("a", lit(3)), "a", Some(3))
     check(_.dropFields("b").withField("b", lit(null).cast(IntegerType)), "b", None)
     check(_.dropFields("a").withField("a", lit(null).cast(IntegerType)), "a", None)
     check(_.dropFields("c").withField("c", lit(3)), "c", Some(3))
+
+    // add attribute, drop same attribute, add same attribute again, extract added attribute
     check(_.withField("c", lit(3)).dropFields("c").withField("c", lit(4)), "c", Some(4))
-  }
-
-  test("non-nullable field from a struct being added to a non-nullable struct and then extracted") {
-    val df = spark.createDataFrame(
-      sparkContext.parallelize(Seq(Row(Row(1, 2, 3), Row(4, 5, 6)))),
-      StructType(Seq(
-        StructField("a1", structType, nullable = false),
-        StructField("a2", structType, nullable = false))))
-
-    // add field from the same struct (a1) and then extract it
-    checkAnswerAndSchema(
-      df.select($"a1".withField("d", $"a1.b").getField("d").as("res")),
-      Seq(Row(2)),
-      StructType(Seq(StructField("res", IntegerType, nullable = true))))
-
-    // add field from another struct (a2) and then extract it
-    checkAnswerAndSchema(
-      df.select($"a1".withField("d", $"a2.b").getField("d").as("res")),
-      Seq(Row(5)),
-      StructType(Seq(StructField("res", IntegerType, nullable = true))))
-  }
-
-  test("nullable field from a struct being added to a nullable struct and then extracted") {
-    val df = spark.createDataFrame(
-      sparkContext.parallelize(Seq(
-        Row(Row(1, 2, 3), Row(4, 5, 6)),
-        Row(null, Row(4, 5, 6)),
-        Row(Row(1, 2, 3), null),
-        Row(null, null))),
-      StructType(Seq(
-        StructField("a1", structType, nullable = true),
-        StructField("a2", structType, nullable = true))))
-
-    // TODO: This doesn't fit the test title?
-    // add field from the same struct (a1) and then extract it
-    checkAnswerAndSchema(
-      df.select($"a1".withField("d", $"a1.b").getField("d").as("res")),
-      Seq(
-        Row(2),
-        Row(null),
-        Row(2),
-        Row(null)),
-      StructType(Seq(StructField("res", IntegerType, nullable = true))))
-
-    // add field from another struct (a2) and then extract it
-    checkAnswerAndSchema(
-      df.select($"a1".withField("d", $"a2.b").getField("d").as("res")),
-      Seq(
-        Row(5),
-        Row(null),
-        Row(null),
-        Row(null)),
-      StructType(Seq(StructField("res", IntegerType, nullable = true))))
-  }
-
-  test("non-nullable field from a struct being added to a nullable struct and then extracted") {
-    val df = spark.createDataFrame(
-      sparkContext.parallelize(Seq(
-        Row(Row(1, 2, 3), Row(4, 5, 6)),
-        Row(null, Row(4, 5, 6)),
-        Row(Row(1, 2, 3), Row(4, 5, 6)),
-        Row(null, Row(4, 5, 6)))),
-      StructType(Seq(
-        StructField("a1", structType, nullable = true),
-        StructField("a2", structType, nullable = false))))
-
-    // add field from the same struct (a1) and then extract it
-    checkAnswerAndSchema(
-      df.select($"a1".withField("d", $"a1.b").getField("d").as("res")),
-      Seq(
-        Row(2),
-        Row(null),
-        Row(2),
-        Row(null)),
-      StructType(Seq(StructField("res", IntegerType, nullable = true))))
-
-    // add field from another struct (a2) and then extract it
-    checkAnswerAndSchema(
-      df.select($"a1".withField("d", $"a2.b").getField("d").as("res")),
-      Seq(
-        Row(5),
-        Row(5),
-        Row(null),
-        Row(null)),
-      StructType(Seq(StructField("res", IntegerType, nullable = true))))
-  }
-
-  test("nullable field from a struct being added to a non-nullable struct and then extracted") {
-    val df = spark.createDataFrame(
-      sparkContext.parallelize(Seq(
-        Row(Row(1, 2, 3), Row(4, 5, 6)),
-        Row(Row(1, 2, 3), Row(4, 5, 6)),
-        Row(Row(1, 2, 3), null),
-        Row(Row(1, 2, 3), null))),
-      StructType(Seq(
-        StructField("a1", structType, nullable = false),
-        StructField("a2", structType, nullable = true))))
-
-    // add field from the same struct (a1) and then extract it
-    checkAnswerAndSchema(
-      df.select($"a1".withField("d", $"a1.b").getField("d").as("res")),
-      Seq(
-        Row(2),
-        Row(2),
-        Row(2),
-        Row(2)),
-      StructType(Seq(StructField("res", IntegerType, nullable = true))))
-
-    // add field from another struct (a2) and then extract it
-    checkAnswerAndSchema(
-      df.select($"a1".withField("d", $"a2.b").getField("d").as("res")),
-      Seq(
-        Row(5),
-        Row(5),
-        Row(null),
-        Row(null)),
-      StructType(Seq(StructField("res", IntegerType, nullable = true))))
-  }
-
-  test("should add and drop many fields") {
-    // stress test withField and dropFields APIs
-
-    val nullableStructLevel2: DataFrame = spark.createDataFrame(
-      sparkContext.parallelize(Row(Row(null)) :: Row(Row(Row(0))) :: Nil),
-      StructType(Seq(
-        StructField("a1", StructType(Seq(
-          StructField("a2", StructType(Seq(
-            StructField("col0", IntegerType, nullable = false))),
-            nullable = true))),
-          nullable = false))))
-
-    val maxNum = 100
-
-    // add many nested fields
-    checkAnswerAndSchema(
-      nullableStructLevel2.select(col("a1").withField("a2", (1 to maxNum).foldLeft(col("a1.a2")) {
-        (column, num) => column.withField(s"col$num", lit(num))
-      }).as("a1")),
-      Row(Row(null)) :: Row(Row(Row(0 to maxNum: _*))) :: Nil,
-      StructType(Seq(
-        StructField("a1", StructType(Seq(
-          StructField("a2", StructType((0 to maxNum).map(num =>
-            StructField(s"col$num", IntegerType, nullable = false))),
-            nullable = true))),
-          nullable = false))))
-
-    /**
-     * You might be tempted to write the above query like so:
-     *
-     * {{{
-     * nullableStructLevel2.select((1 to maxNum).foldLeft(col("a1")) {
-     *   (column, num) => column.withField(s"a2.col$num", lit(num))
-     * }.as("a1")),
-     * }}}
-     *
-     * This query leverages Column.withField API's ability to add/replace nested columns directly.
-     * However this will likely stall at the analyzer phase with as little as `maxNum = 3`,
-     * depending on how deeply nested the Column is that you're adding/replacing.
-     * If you're going to add multiple nested columns, you are better off adding them at the level
-     * of nesting that you want to add them.
-     */
-
-    // add and drop many nested fields
-    checkAnswerAndSchema(
-      nullableStructLevel2.select(col("a1").withField("a2", (1 to maxNum).foldLeft(col("a1.a2")) {
-        (column, num) => column.withField(s"col$num", lit(num)).dropFields(s"col${num - 1}")
-      }).as("a1")),
-      Row(Row(null)) :: Row(Row(Row(100))) :: Nil,
-      StructType(Seq(
-        StructField("a1", StructType(Seq(
-          StructField("a2", StructType(Seq(
-            StructField("col100", IntegerType, nullable = false))),
-            nullable = true))),
-          nullable = false))))
-
-    // add and drop many fields and then extract one of the newly added fields
-    checkAnswerAndSchema(
-      nullableStructLevel2.select(col("a1").withField("a2", (1 to maxNum).foldLeft(col("a1.a2")) {
-        (column, num) => column.withField(s"col$num", lit(num)).dropFields(s"col${num - 1}")
-      }).getField("a2").getField(s"col$maxNum").as("res")),
-      Row(null) :: Row(100) :: Nil,
-      StructType(Seq(StructField("res", IntegerType, nullable = true))))
-
-    // TODO: add many fields at many different depths of nesting
   }
 
   test("should move field up one level of nesting") {
@@ -2207,7 +2015,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = true))))
 
     // move a field up one level
-    checkAnswerAndSchema(
+    checkAnswer(
       nullableStructLevel2.select(
         col("a").withField("b", col("a.a.b")).dropFields("a.b").as("res")),
       Row(Row(null, null)) ::  Row(Row(Row(1, 3), 2)) :: Nil,
@@ -2221,7 +2029,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = true))))
 
     // move a field up one level and then extract it
-    checkAnswerAndSchema(
+    checkAnswer(
       nullableStructLevel2.select(col("a").withField("b", col("a.a.b")).getField("b").as("res")),
       Row(null) :: Row(2) :: Nil,
       StructType(Seq(StructField("res", IntegerType, nullable = true))))
@@ -2232,7 +2040,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       structLevel1.select($"a".withField("d", lit(4)).withField("e", $"a.d" + 1).as("a"))
     }.getMessage should include("No such struct field d in a, b, c")
 
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1
         .select($"a".withField("d", lit(4)).as("a"))
         .select($"a".withField("e", $"a.d" + 1).as("a")),
@@ -2254,7 +2062,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         .select($"a".withField("d", lit(4)).as("a"))
         .select($"a".dropFields("d").as("a"))
     ).foreach { query =>
-      checkAnswerAndSchema(
+      checkAnswer(
         query,
         Row(Row(1, null, 3)) :: Nil,
         StructType(Seq(
@@ -2264,7 +2072,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("should still be able to refer to dropped column within the same select statement") {
     // we can still access the nested column even after dropping it within the select statement
-    checkAnswerAndSchema(
+    checkAnswer(
       structLevel1.select($"a".dropFields("c").withField("z", $"a.c").as("a")),
       Row(Row(1, null, 3)) :: Nil,
       StructType(Seq(
@@ -2274,8 +2082,8 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           StructField("z", IntegerType, nullable = false))),
           nullable = false))))
 
-    // we can't access the nested column in another select statement after dropping it in a previous
-    // select statement
+    // we can't access the nested column in subsequent select statement after dropping it in a
+    // previous select statement
     intercept[AnalysisException]{
       structLevel1
         .select($"a".dropFields("c").as("a"))

@@ -109,8 +109,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RemoveRedundantAliases,
         UnwrapCastInBinaryComparison,
         RemoveNoopOperators,
-        SimplifyExtractValueOps,
         CombineUpdateFields,
+        SimplifyExtractValueOps,
         CombineConcats) ++
         extendedOperatorOptimizationRules
 

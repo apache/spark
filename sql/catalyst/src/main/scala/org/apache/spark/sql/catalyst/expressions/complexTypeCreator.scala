@@ -594,7 +594,7 @@ case class DropField(name: String) extends StructFieldsOperation {
 }
 
 /**
- * Updates fields in struct by name.
+ * Updates fields in a struct.
  */
 case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperation])
   extends Unevaluable {
