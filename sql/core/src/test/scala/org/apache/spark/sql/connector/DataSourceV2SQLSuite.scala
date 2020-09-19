@@ -726,6 +726,18 @@ class DataSourceV2SQLSuite
     sql(s"DROP TABLE IF EXISTS testcat.db.notbl")
   }
 
+  test("DropTable: temporary view") {
+    val t = "testcat.ns.t"
+    withTable(t) {
+      sql(s"CREATE TABLE $t USING foo AS SELECT 1")
+      sql(s"CREATE TEMPORARY VIEW t AS SELECT 1")
+      sql("USE testcat.ns")
+      sql("SHOW TABLES").show
+      sql("DROP TABLE t")
+      sql("SHOW TABLES").show
+    }
+  }
+
   test("Relation: basic") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {

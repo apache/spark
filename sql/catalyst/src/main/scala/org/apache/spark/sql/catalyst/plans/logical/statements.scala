@@ -284,14 +284,6 @@ case class RenameTableStatement(
     isView: Boolean) extends ParsedStatement
 
 /**
- * A DROP TABLE statement, as parsed from SQL.
- */
-case class DropTableStatement(
-    tableName: Seq[String],
-    ifExists: Boolean,
-    purge: Boolean) extends ParsedStatement
-
-/**
  * A DROP VIEW statement, as parsed from SQL.
  */
 case class DropViewStatement(
@@ -299,7 +291,7 @@ case class DropViewStatement(
     ifExists: Boolean) extends ParsedStatement
 
 /**
- * A DESCRIBE TABLE tbl_name col_name statement, as parsed from SQL.
+ * PlanResolutionSuite.scala
  */
 case class DescribeColumnStatement(
     tableName: Seq[String],

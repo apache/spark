@@ -260,7 +260,7 @@ class ResolveSessionCatalog(
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
-    case DescribeRelation(ResolvedView(ident), partitionSpec, isExtended) =>
+    case DescribeRelation(ResolvedView(ident, _), partitionSpec, isExtended) =>
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
     case DescribeColumnStatement(tbl, colNameParts, isExtended) =>
@@ -362,9 +362,17 @@ class ResolveSessionCatalog(
           orCreate = c.orCreate)
       }
 
+    case DropTable(
+        r @ ResolvedTable(_, _, _: V1Table), ifExists, purge) if isSessionCatalog(r.catalog) =>
+      DropTableCommand(r.identifier.asTableIdentifier, ifExists, isView = false, purge = purge)
+
     // v1 DROP TABLE supports temp view.
-    case DropTableStatement(TempViewOrV1Table(name), ifExists, purge) =>
-      DropTableCommand(name.asTableIdentifier, ifExists, isView = false, purge = purge)
+    case DropTable(r: ResolvedView, ifExists, purge) =>
+      if (!r.isTempView) {
+        throw new AnalysisException(
+          "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
+      }
+      DropTableCommand(r.identifier.asTableIdentifier, ifExists, isView = true, purge = purge)
 
     // v1 DROP TABLE supports temp view.
     case DropViewStatement(TempViewOrV1Table(name), ifExists) =>

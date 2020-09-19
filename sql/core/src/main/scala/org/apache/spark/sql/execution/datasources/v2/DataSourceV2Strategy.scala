@@ -225,8 +225,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       DescribeTableExec(desc.output, r.table, isExtended) :: Nil
 
-    case DropTable(catalog, ident, ifExists) =>
-      DropTableExec(catalog, ident, ifExists) :: Nil
+    case DropTable(r: ResolvedTable, ifExists, _) =>
+      DropTableExec(r.catalog, r.identifier, ifExists) :: Nil
 
     case AlterTable(catalog, ident, _, changes) =>
       AlterTableExec(catalog, ident, changes) :: Nil
