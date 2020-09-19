@@ -600,6 +600,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * If the enforceSchema is set to `false`, only the CSV header in the first line is checked
    * to conform specified or inferred schema.
    *
+   * @note if `header` option is set to `true` when calling this API, all lines same with
+   * the header will be removed if exists.
+   *
    * @param csvDataset input Dataset with one CSV row per record
    * @since 2.2.0
    */

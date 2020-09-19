@@ -56,7 +56,7 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.{MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.shuffle.{ShuffleManager, ShuffleWriteMetricsReporter}
-import org.apache.spark.storage.BlockManagerMessages.ReplicateBlock
+import org.apache.spark.storage.BlockManagerMessages.{DecommissionBlockManager, ReplicateBlock}
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util._
@@ -1809,7 +1809,9 @@ private[spark] class BlockManager(
     blocksToRemove.size
   }
 
-  def decommissionBlockManager(): Unit = synchronized {
+  def decommissionBlockManager(): Unit = storageEndpoint.ask(DecommissionBlockManager)
+
+  private[spark] def decommissionSelf(): Unit = synchronized {
     decommissioner match {
       case None =>
         logInfo("Starting block manager decommissioning process...")

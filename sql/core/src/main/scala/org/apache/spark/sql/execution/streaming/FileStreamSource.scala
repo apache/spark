@@ -178,10 +178,16 @@ class FileStreamSource(
 
     if (batchFiles.nonEmpty) {
       metadataLogCurrentOffset += 1
-      metadataLog.add(metadataLogCurrentOffset, batchFiles.map { case (p, timestamp) =>
+
+      val fileEntries = batchFiles.map { case (p, timestamp) =>
         FileEntry(path = p, timestamp = timestamp, batchId = metadataLogCurrentOffset)
-      }.toArray)
-      logInfo(s"Log offset set to $metadataLogCurrentOffset with ${batchFiles.size} new files")
+      }.toArray
+      if (metadataLog.add(metadataLogCurrentOffset, fileEntries)) {
+        logInfo(s"Log offset set to $metadataLogCurrentOffset with ${batchFiles.size} new files")
+      } else {
+        throw new IllegalStateException("Concurrent update to the log. Multiple streaming jobs " +
+          s"detected for $metadataLogCurrentOffset")
+      }
     }
 
     FileStreamSourceOffset(metadataLogCurrentOffset)

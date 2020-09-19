@@ -184,7 +184,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     } else {
       // This means `value` is within range `(min, max)`. Optimize this by moving the cast to the
       // literal side.
-      val lit = Cast(Literal(value), fromType)
+      val lit = Literal(Cast(Literal(value), fromType).eval(), fromType)
       exp match {
         case GreaterThan(_, _) => GreaterThan(fromExp, lit)
         case GreaterThanOrEqual(_, _) => GreaterThanOrEqual(fromExp, lit)
@@ -202,9 +202,12 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
    * i.e., the conversion is injective. Note this only handles the case when both sides are of
    * integral type.
    */
-  private def canImplicitlyCast(fromExp: Expression, toType: DataType,
+  private def canImplicitlyCast(
+      fromExp: Expression,
+      toType: DataType,
       literalType: DataType): Boolean = {
     toType.sameType(literalType) &&
+      !fromExp.foldable &&
       fromExp.dataType.isInstanceOf[IntegralType] &&
       toType.isInstanceOf[IntegralType] &&
       Cast.canUpCast(fromExp.dataType, toType)
