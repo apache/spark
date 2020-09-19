@@ -293,8 +293,17 @@ abstract class Optimizer(catalogManager: CatalogManager)
    * if necessary, instead of this method.
    */
   final override def batches: Seq[Batch] = {
-    val excludedRulesConf =
-      SQLConf.get.optimizerExcludedRules.toSeq.flatMap(Utils.stringToSeq)
+    val excludedRulesConf = {
+      val excludedRulesConf = SQLConf.get.optimizerExcludedRules.toSeq.flatMap(Utils.stringToSeq)
+      if (excludedRulesConf.contains("*")) {
+        defaultBatches.flatMap { batch =>
+          batch.rules.map(_.ruleName)
+        }
+      } else {
+        excludedRulesConf
+      }
+    }
+
     val excludedRules = excludedRulesConf.filter { ruleName =>
       val nonExcludable = nonExcludableRules.contains(ruleName)
       if (nonExcludable) {
