@@ -43,10 +43,6 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 
   override def dataType: DataType = ArrayType(child.dataType, false)
 
-  // Both `CollectList` and `CollectSet` are non-deterministic since their results depend on the
-  // actual order of input rows.
-  override lazy val deterministic: Boolean = false
-
   protected def convertToBufferElement(value: Any): Any
 
   override def update(buffer: T, input: InternalRow): T = {
