@@ -246,8 +246,7 @@ trait StateStoreProvider {
    * Return an instance of [[ReadOnlyStateStore]] representing state data of the given version.
    * By default it will return the same instance as getStore(version) but wrapped to prevent
    * modification. Providers can override and return optimized version of [[ReadOnlyStateStore]]
-   * based on the fact the instance will be only used for reading - [[ReadOnlyStateStore]] is the
-   * good base class to extend when providers implement their own.
+   * based on the fact the instance will be only used for reading.
    */
   def getReadOnlyStore(version: Long): ReadOnlyStateStore =
     new WrappedReadOnlyStateStore(getStore(version))
