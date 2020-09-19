@@ -27,14 +27,14 @@ This section describes how to setup PySpark on PyCharm.
 It guides step by step to the process of downloading the source code from GitHub and running the test code successfully.
 
 Firstly, download the Spark source code from GitHub using git url. You can download the source code by simply using ``git clone`` command as shown below.
-If you want to download the code from any forked repository rather than spark original repository, please change the url properly.
+If you want to download the code from any forked repository rather than Spark original repository, please change the url properly.
 
 .. code-block:: bash
 
     git clone https://github.com/apache/spark.git
 
 When the download is completed, go to the ``spark`` directory and build the package.
-SBT build is generally much faster than others. More details about the build are documented `here <https://spark.apache.org/docs/latest/building-spark.html>`_.
+SBT build is generally much faster than Maven. More details about the build are documented `here <https://spark.apache.org/docs/latest/building-spark.html>`_.
 
 .. code-block:: bash
 
