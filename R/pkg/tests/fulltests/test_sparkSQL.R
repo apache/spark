@@ -2696,6 +2696,19 @@ test_that("union(), unionByName(), rbind(), except(), and intersect() on a DataF
   expect_error(rbind(df, df2, df3),
                "Names of input data frames are different.")
 
+
+  df4 <- unionByName(df2, select(df2, "age"), TRUE)
+
+  expect_equal(
+      sum(collect(
+          select(df4, alias(isNull(df4$name), "missing_name")
+      ))$missing_name),
+      3
+  )
+
+  testthat::expect_error(unionByName(df2, select(df2, "age"), FALSE))
+  testthat::expect_error(unionByName(df2, select(df2, "age")))
+
   excepted <- arrange(except(df, df2), desc(df$age))
   expect_is(unioned, "SparkDataFrame")
   expect_equal(count(excepted), 2)

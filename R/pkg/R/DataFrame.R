@@ -2863,11 +2863,19 @@ setMethod("unionAll",
 #' \code{UNION ALL} and \code{UNION DISTINCT} in SQL as column positions are not taken
 #' into account. Input SparkDataFrames can have different data types in the schema.
 #'
+#' When the parameter `allowMissingColumns` is `TRUE`, this function allows
+#' different set of column names between two `SparkDataFrames`.
+#' Missing columns at each side, will be filled with null values.
+#' The missing columns at left `SparkDataFrame` will be added at the end in the schema
+#' of the union result.
+#'
 #' Note: This does not remove duplicate rows across the two SparkDataFrames.
 #' This function resolves columns by name (not by position).
 #'
 #' @param x A SparkDataFrame
 #' @param y A SparkDataFrame
+#' @param allowMissingColumns logical
+#' @param ... further arguments to be passed to or from other methods.
 #' @return A SparkDataFrame containing the result of the union.
 #' @family SparkDataFrame functions
 #' @rdname unionByName
@@ -2880,12 +2888,15 @@ setMethod("unionAll",
 #' df1 <- select(createDataFrame(mtcars), "carb", "am", "gear")
 #' df2 <- select(createDataFrame(mtcars), "am", "gear", "carb")
 #' head(unionByName(df1, df2))
+#'
+#' df3 <- select(createDataFrame(mtcars), "carb")
+#' head(unionByName(df1, df3))
 #' }
 #' @note unionByName since 2.3.0
 setMethod("unionByName",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
-          function(x, y) {
-            unioned <- callJMethod(x@sdf, "unionByName", y@sdf)
+          function(x, y, allowMissingColumns=FALSE) {
+            unioned <- callJMethod(x@sdf, "unionByName", y@sdf, allowMissingColumns)
             dataFrame(unioned)
           })
 
