@@ -191,10 +191,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         executorDataMap.get(executorId).foreach(_.executorEndpoint.send(StopExecutor))
         removeExecutor(executorId, reason)
 
-      case DecommissionExecutor(executorId, decommissionInfo) =>
-        logError(s"Received decommission executor message ${executorId}: $decommissionInfo")
-        decommissionExecutor(executorId, decommissionInfo, adjustTargetNumExecutors = false)
-
       case RemoveWorker(workerId, host, message) =>
         removeWorker(workerId, host, message)
 
@@ -272,10 +268,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         removeWorker(workerId, host, message)
         context.reply(true)
 
-      case DecommissionExecutor(executorId, decommissionInfo) =>
-        logError(s"Received decommission executor message ${executorId}: ${decommissionInfo}.")
-        context.reply(decommissionExecutor(executorId, decommissionInfo,
-          adjustTargetNumExecutors = false))
+      case ExecutorDecommissioning(executorId) =>
+        logWarning(s"Received executor $executorId decommissioned message")
+        context.reply(
+          decommissionExecutor(
+            executorId,
+            ExecutorDecommissionInfo(s"Executor $executorId is decommissioned."),
+            adjustTargetNumExecutors = false,
+            triggeredByExecutor = true))
 
       case RetrieveSparkAppConfig(resourceProfileId) =>
         val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(resourceProfileId)
@@ -463,70 +463,46 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * @param executorsAndDecomInfo Identifiers of executors & decommission info.
    * @param adjustTargetNumExecutors whether the target number of executors will be adjusted down
    *                                 after these executors have been decommissioned.
+   * @param triggeredByExecutor whether the decommission is triggered at executor.
    * @return the ids of the executors acknowledged by the cluster manager to be removed.
    */
   override def decommissionExecutors(
       executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
-      adjustTargetNumExecutors: Boolean): Seq[String] = {
-
-    val executorsToDecommission = executorsAndDecomInfo.filter { case (executorId, decomInfo) =>
-      CoarseGrainedSchedulerBackend.this.synchronized {
-        // Only bother decommissioning executors which are alive.
-        if (isExecutorActive(executorId)) {
-          executorsPendingDecommission(executorId) = decomInfo.workerHost
-          true
-        } else {
-          false
-        }
+      adjustTargetNumExecutors: Boolean,
+      triggeredByExecutor: Boolean): Seq[String] = withLock {
+    val executorsToDecommission = executorsAndDecomInfo.flatMap { case (executorId, decomInfo) =>
+      // Only bother decommissioning executors which are alive.
+      if (isExecutorActive(executorId)) {
+        scheduler.executorDecommission(executorId, decomInfo)
+        executorsPendingDecommission(executorId) = decomInfo.workerHost
+        Some(executorId)
+      } else {
+        None
       }
     }
 
     // If we don't want to replace the executors we are decommissioning
     if (adjustTargetNumExecutors) {
-      adjustExecutors(executorsToDecommission.map(_._1))
+      adjustExecutors(executorsToDecommission)
     }
 
-    executorsToDecommission.filter { case (executorId, decomInfo) =>
-      doDecommission(executorId, decomInfo)
-    }.map(_._1)
-  }
-
-
-  private def doDecommission(executorId: String,
-      decomInfo: ExecutorDecommissionInfo): Boolean = {
-
-    logInfo(s"Asking executor $executorId to decommissioning.")
-    scheduler.executorDecommission(executorId, decomInfo)
-    // Send decommission message to the executor (it could have originated on the executor
-    // but not necessarily).
-    CoarseGrainedSchedulerBackend.this.synchronized {
-      executorDataMap.get(executorId) match {
-        case Some(executorInfo) =>
-          executorInfo.executorEndpoint.send(DecommissionSelf)
-        case None =>
-          // Ignoring the executor since it is not registered.
-          logWarning(s"Attempted to decommission unknown executor $executorId.")
-          return false
-      }
-    }
-    logInfo(s"Asked executor $executorId to decommission.")
-
+    // Mark those corresponding BlockManagers as decommissioned first before we sending
+    // decommission notification to executors. So, it's less likely to lead to the race
+    // condition where `getPeer` request from the decommissioned executor comes first
+    // before the BlockManagers are marked as decommissioned.
     if (conf.get(STORAGE_DECOMMISSION_ENABLED)) {
-      try {
-        logInfo(s"Asking block manager corresponding to executor $executorId to decommission.")
-        scheduler.sc.env.blockManager.master.decommissionBlockManagers(Seq(executorId))
-      } catch {
-        case e: Exception =>
-          logError("Unexpected error during block manager " +
-            s"decommissioning for executor $executorId: ${e.toString}", e)
-          return false
-      }
-      logInfo(s"Acknowledged decommissioning block manager corresponding to $executorId.")
+      scheduler.sc.env.blockManager.master.decommissionBlockManagers(executorsToDecommission)
     }
 
-    true
-  }
+    if (!triggeredByExecutor) {
+      executorsToDecommission.foreach { executorId =>
+        logInfo(s"Asking executor $executorId to decommissioning.")
+        executorDataMap(executorId).executorEndpoint.send(DecommissionExecutor)
+      }
+    }
 
+    executorsToDecommission
+  }
 
   override def start(): Unit = {
     if (UserGroupInformation.isSecurityEnabled()) {

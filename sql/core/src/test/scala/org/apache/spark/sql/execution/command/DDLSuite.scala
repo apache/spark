@@ -3122,6 +3122,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val fs = tablePath.getFileSystem(hadoopConf)
         val trashCurrent = new Path(fs.getHomeDirectory, ".Trash/Current")
         val trashPath = Path.mergePaths(trashCurrent, tablePath)
+        assume(
+          fs.mkdirs(trashPath) && fs.delete(trashPath, false),
+          "Trash directory could not be created, skipping.")
         assert(!fs.exists(trashPath))
         try {
           hadoopConf.set(trashIntervalKey, "5")

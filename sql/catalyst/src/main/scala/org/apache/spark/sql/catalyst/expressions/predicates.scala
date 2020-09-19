@@ -73,7 +73,7 @@ trait Predicate extends Expression {
 object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePredicate] {
 
   override protected def createCodeGeneratedObject(in: Expression): BasePredicate = {
-    GeneratePredicate.generate(in)
+    GeneratePredicate.generate(in, SQLConf.get.subexpressionEliminationEnabled)
   }
 
   override protected def createInterpretedObject(in: Expression): BasePredicate = {
