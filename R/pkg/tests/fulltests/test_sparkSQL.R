@@ -1803,6 +1803,19 @@ test_that("column functions", {
   )
 
   expect_equal(actual, expected)
+
+  # Test withField
+  lines <- c("{\"Person\": {\"name\":\"Bob\", \"age\":24}}")
+  jsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
+  writeLines(lines, jsonPath)
+  df <- read.df(jsonPath, "json")
+  result <- collect(
+      select(
+          select(df, alias(withField(df$Person, "dummy", lit(42)), "Person")),
+          "Person.dummy"
+      )
+  )
+  expect_equal(result, data.frame(dummy = 42))
 })
 
 test_that("column binary mathfunctions", {
