@@ -447,8 +447,7 @@ object StateStore extends Logging {
       indexOrdinal: Option[Int],
       version: Long,
       storeConf: StateStoreConf,
-      hadoopConf: Configuration,
-      readOnly: Boolean = false): StateStore = {
+      hadoopConf: Configuration): StateStore = {
     require(version >= 0)
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       indexOrdinal, storeConf, hadoopConf)

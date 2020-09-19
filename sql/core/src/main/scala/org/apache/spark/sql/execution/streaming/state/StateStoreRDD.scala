@@ -58,6 +58,11 @@ abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
   }
 }
 
+/**
+ * An RDD that allows computations to be executed against [[ReadOnlyStateStore]]s. It
+ * uses the [[StateStoreCoordinator]] to get the locations of loaded state stores
+ * and use that as the preferred locations.
+ */
 class ReadOnlyStateStoreRDD[T: ClassTag, U: ClassTag](
     dataRDD: RDD[T],
     storeReadFunction: (ReadOnlyStateStore, Iterator[T]) => Iterator[U],
