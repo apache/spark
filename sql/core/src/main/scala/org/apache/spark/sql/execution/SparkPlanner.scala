@@ -31,6 +31,12 @@ class SparkPlanner(
     val experimentalMethods: ExperimentalMethods)
   extends SparkStrategies {
 
+  private val EXPENSIVE_EXPR_PREFIX = "expensive_col_"
+
+  def extractExpensiveExprs(e: Expression): Seq[Expression] = e.collect {
+    case gjo: GetJsonObject => gjo
+  }
+
   def numPartitions: Int = conf.numShufflePartitions
 
   override def strategies: Seq[Strategy] =
@@ -97,15 +103,42 @@ class SparkPlanner(
     // avoided safely.
 
     if (AttributeSet(projectList.map(_.toAttribute)) == projectSet &&
-        filterSet.subsetOf(projectSet)) {
+      filterSet.subsetOf(projectSet)) {
       // When it is possible to just use column pruning to get the right projection and
       // when the columns of this projection are enough to evaluate all filter conditions,
       // just do a scan followed by a filter, with no extra project.
       val scan = scanBuilder(projectList.asInstanceOf[Seq[Attribute]])
       filterCondition.map(FilterExec(_, scan)).getOrElse(scan)
     } else {
-      val scan = scanBuilder((projectSet ++ filterSet).toSeq)
-      ProjectExec(projectList, filterCondition.map(FilterExec(_, scan)).getOrElse(scan))
+      val duplicatedExpensiveExpr =
+        filterCondition.map(extractExpensiveExprs(_)
+          .intersect(projectList.flatMap(extractExpensiveExprs)))
+          .getOrElse(Seq.empty[Expression])
+      if (duplicatedExpensiveExpr.isEmpty) {
+        val scan = scanBuilder((projectSet ++ filterSet).toSeq)
+        ProjectExec(projectList, filterCondition.map(FilterExec(_, scan)).getOrElse(scan))
+      } else {
+        val costExpr: Map[Expression, NamedExpression] =
+          duplicatedExpensiveExpr.toSet.map { e: Expression =>
+            val exprId = NamedExpression.newExprId
+            (e, AttributeReference(s"$EXPENSIVE_EXPR_PREFIX${exprId.id}",
+              e.dataType, e.nullable)(exprId))
+          }.toMap
+        val newProject = projectList.map(_.transformDown {
+          case e if costExpr.contains(e) => costExpr(e)
+        }.asInstanceOf[NamedExpression])
+        val newFilter: Option[Expression] = filterCondition.map(_.transformDown {
+          case e if costExpr.contains(e) => costExpr(e)
+        })
+
+        val scan = scanBuilder((projectSet ++ filterSet).toSeq)
+        val buildProjectList = scan.output ++ costExpr.map { case (e, attr) =>
+          Alias(e, attr.name)(attr.exprId)
+        }
+        ProjectExec(newProject,
+          newFilter.map(FilterExec(_, ProjectExec(buildProjectList, scan)))
+            .getOrElse(ProjectExec(buildProjectList, scan)))
+      }
     }
   }
 }
