@@ -44,7 +44,7 @@ abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
   protected val hadoopConfBroadcast = dataRDD.context.broadcast(
     new SerializableConfiguration(sessionState.newHadoopConf()))
 
-  override protected def getPartitions: Array[Partition] = dataRDD.partitions
+  override def getPartitions: Array[Partition] = dataRDD.partitions
 
   /**
    * Set the preferred location of each partition using the executor that has the related
