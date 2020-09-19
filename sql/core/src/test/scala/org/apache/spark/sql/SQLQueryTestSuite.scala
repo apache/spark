@@ -335,7 +335,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
       val configSets = configDims.values.foldLeft(Seq(Seq[(String, String)]())) { (res, dim) =>
         dim.flatMap { configSet => res.map(_ ++ configSet) }
-      } ++ Seq(Seq(("spark.sql.optimizer.excludedRules", "*")))
+      }
 
       configSets.foreach { configSet =>
         try {
