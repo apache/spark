@@ -589,6 +589,8 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   override def prettyName: String = "cume_dist"
 }
 
+// scalastyle:off line.size.limit line.contains.tab
+
 @ExpressionDescription(
   usage = """
     _FUNC_(input[, offset]) - Returns the value of `input` at the row that is the `offset`th row
@@ -596,6 +598,14 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
       nulls when finding the `offset`th row. Otherwise, every row counts for the `offset`. If
       there is no such an `offset`th row (e.g., when the offset is 10, size of the window frame
       is less than 10), null is returned.
+  """,
+  examples = """
+    Examples:
+      > SELECT a, b, _FUNC_(b, 2) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
+       A1	1	1
+       A1	1	1
+       A1	2	1
+       A2	3	NULL
   """,
   arguments = """
     Arguments:
@@ -607,6 +617,7 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   """,
   since = "3.1.0",
   group = "window_funcs")
+// scalastyle:on line.size.limit line.contains.tab
 case class NthValue(input: Expression, offsetExpr: Expression, ignoreNulls: Boolean)
     extends AggregateWindowFunction with ImplicitCastInputTypes {
 
