@@ -104,7 +104,12 @@ object ResolveUnion extends Rule[LogicalPlan] {
     } else {
       missingFields.map { s =>
         val struct = addFieldsInto(col, "", s.fields)
-        sortStructFieldsInWithFields(struct)
+        // Combines `WithFields`s to reduce expression tree.
+        val reducedStruct = struct.transformUp {
+          case WithFields(WithFields(struct, names1, valExprs1), names2, valExprs2) =>
+            WithFields(struct, names1 ++ names2, valExprs1 ++ valExprs2)
+        }
+        sortStructFieldsInWithFields(reducedStruct)
       }.get
     }
   }
