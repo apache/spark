@@ -252,9 +252,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
-      ReplaceWithFieldsExpression.ruleName ::
-      OptimizeSubqueries.ruleName ::
-      ConstantFolding.ruleName :: Nil
+      ReplaceWithFieldsExpression.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
@@ -300,8 +298,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       if (excludedRulesConf.contains("*")) {
         defaultBatches.flatMap { batch =>
           batch.rules.map(_.ruleName)
-        }.filter { ruleName =>
-          !nonExcludableRules.contains(ruleName)
         }
       } else {
         excludedRulesConf
@@ -315,8 +311,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
           s"because this rule is a non-excludable rule.")
       }
       !nonExcludable
-    }.toSet
-
+    }
     if (excludedRules.isEmpty) {
       defaultBatches
     } else {
