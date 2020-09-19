@@ -47,10 +47,7 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
       tables.get(ident)
     } else {
       // Table was created through the built-in catalog
-      val t = super.loadTable(ident)
-      val table = newTable(t.name(), t.schema(), t.partitioning(), t.properties())
-      tables.put(ident, table)
-      table
+      super.loadTable(ident)
     }
   }
 
