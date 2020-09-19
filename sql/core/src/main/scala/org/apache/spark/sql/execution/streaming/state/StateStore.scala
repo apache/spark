@@ -36,10 +36,14 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
- * Base trait for a versioned key-value store. Each instance of a `StateStore` represents a specific
- * version of state data, and such instances are created through a [[StateStoreProvider]].
+ * Base trait for a versioned key-value store on read-only. Each instance of a `StateStore`
+ * represents a specific version of state data, and such instances are created through a
+ * [[StateStoreProvider]].
+ *
+ * `abort` method will be called when the task is completed - please clean up the resources in
+ * the method.
  */
-trait StateStore {
+trait ReadOnlyStateStore {
 
   /** Unique identifier of the store */
   def id: StateStoreId
@@ -52,17 +56,6 @@ trait StateStore {
    * @return a non-null row if the key exists in the store, otherwise null.
    */
   def get(key: UnsafeRow): UnsafeRow
-
-  /**
-   * Put a new value for a non-null key. Implementations must be aware that the UnsafeRows in
-   * the params can be reused, and must make copies of the data as needed for persistence.
-   */
-  def put(key: UnsafeRow, value: UnsafeRow): Unit
-
-  /**
-   * Remove a single non-null key.
-   */
-  def remove(key: UnsafeRow): Unit
 
   /**
    * Get key value pairs with optional approximate `start` and `end` extents.
@@ -82,6 +75,42 @@ trait StateStore {
   }
 
   /**
+   * Return an iterator containing all the key-value pairs in the StateStore. Implementations must
+   * ensure that updates (puts, removes) can be made while iterating over this iterator.
+   */
+  def iterator(): Iterator[UnsafeRowPair]
+
+  /**
+   * Clean up the resource.
+   *
+   * The method name is to respect backward compatibility on [[StateStore]].
+   */
+  def abort(): Unit
+}
+
+/**
+ * Base trait for a versioned key-value store. Each instance of a `StateStore` represents a specific
+ * version of state data, and such instances are created through a [[StateStoreProvider]].
+ *
+ * Unlike [[ReadOnlyStateStore]], `abort` method may not be called if the `commit` method succeeds
+ * to commit the change. (`hasCommitted` returns `true`.) Otherwise, `abort` method will be called.
+ * Implementation should deal with resource cleanup in both methods, but also need to guard with
+ * double resource cleanup.
+ */
+trait StateStore extends ReadOnlyStateStore {
+
+  /**
+   * Put a new value for a non-null key. Implementations must be aware that the UnsafeRows in
+   * the params can be reused, and must make copies of the data as needed for persistence.
+   */
+  def put(key: UnsafeRow, value: UnsafeRow): Unit
+
+  /**
+   * Remove a single non-null key.
+   */
+  def remove(key: UnsafeRow): Unit
+
+  /**
    * Commit all the updates that have been made to the store, and return the new version.
    * Implementations should ensure that no more updates (puts, removes) can be after a commit in
    * order to avoid incorrect usage.
@@ -92,13 +121,7 @@ trait StateStore {
    * Abort all the updates that have been made to the store. Implementations should ensure that
    * no more updates (puts, removes) can be after an abort in order to avoid incorrect usage.
    */
-  def abort(): Unit
-
-  /**
-   * Return an iterator containing all the key-value pairs in the StateStore. Implementations must
-   * ensure that updates (puts, removes) can be made while iterating over this iterator.
-   */
-  def iterator(): Iterator[UnsafeRowPair]
+  override def abort(): Unit
 
   /** Current metrics of the state store */
   def metrics: StateStoreMetrics
@@ -109,29 +132,7 @@ trait StateStore {
   def hasCommitted: Boolean
 }
 
-/** A versioned key-value store which is same as [[StateStore]], but write-protected. */
-abstract class ReadOnlyStateStore extends StateStore {
-  /** Not expected to be called. Don't need to override this method. */
-  override def put(key: UnsafeRow, value: UnsafeRow): Unit = throwNotAllowed()
-
-  /** Not expected to be called. Don't need to override this method. */
-  override def remove(key: UnsafeRow): Unit = throwNotAllowed()
-
-  /** Not expected to be called. Don't need to override this method. */
-  override def commit(): Long = throwNotAllowed()
-
-  /** Not expected to be called. Don't need to override this method. */
-  override def metrics: StateStoreMetrics = throwNotAllowed()
-
-  /** Not expected to be called. Don't need to override this method. */
-  override def hasCommitted: Boolean = false
-
-  private def throwNotAllowed[T](): T = {
-    throw new UnsupportedOperationException("Modifying read-only state store is not allowed")
-  }
-}
-
-/** Wraps the instance of StateStore to make the instance write-protected. */
+/** Wraps the instance of StateStore to make the instance read-only. */
 class WrappedReadOnlyStateStore(store: StateStore) extends ReadOnlyStateStore {
   override def id: StateStoreId = store.id
 
@@ -139,9 +140,9 @@ class WrappedReadOnlyStateStore(store: StateStore) extends ReadOnlyStateStore {
 
   override def get(key: UnsafeRow): UnsafeRow = store.get(key)
 
-  override def abort(): Unit = store.abort()
-
   override def iterator(): Iterator[UnsafeRowPair] = store.iterator()
+
+  override def abort(): Unit = store.abort()
 }
 
 /**
@@ -242,13 +243,14 @@ trait StateStoreProvider {
   def getStore(version: Long): StateStore
 
   /**
-   * Return an instance of read-only [[StateStore]] representing state data of the given version.
+   * Return an instance of [[ReadOnlyStateStore]] representing state data of the given version.
    * By default it will return the same instance as getStore(version) but wrapped to prevent
-   * modification. Providers can override and return optimized version of [[StateStore]] based on
-   * the fact the instance will be only used for reading - [[ReadOnlyStateStore]] is the good base
-   * class to extend when providers implement their own.
+   * modification. Providers can override and return optimized version of [[ReadOnlyStateStore]]
+   * based on the fact the instance will be only used for reading - [[ReadOnlyStateStore]] is the
+   * good base class to extend when providers implement their own.
    */
-  def getReadOnlyStore(version: Long): StateStore = new WrappedReadOnlyStateStore(getStore(version))
+  def getReadOnlyStore(version: Long): ReadOnlyStateStore =
+    new WrappedReadOnlyStateStore(getStore(version))
 
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
   def doMaintenance(): Unit = { }
@@ -423,6 +425,21 @@ object StateStore extends Logging {
   @GuardedBy("loadedProviders")
   private var _coordRef: StateStoreCoordinatorRef = null
 
+  /** Get or create a read-only store associated with the id. */
+  def getReadOnly(
+      storeProviderId: StateStoreProviderId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      indexOrdinal: Option[Int],
+      version: Long,
+      storeConf: StateStoreConf,
+      hadoopConf: Configuration): ReadOnlyStateStore = {
+    require(version >= 0)
+    val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
+      indexOrdinal, storeConf, hadoopConf)
+    storeProvider.getReadOnlyStore(version)
+  }
+
   /** Get or create a store associated with the id. */
   def get(
       storeProviderId: StateStoreProviderId,
@@ -434,7 +451,19 @@ object StateStore extends Logging {
       hadoopConf: Configuration,
       readOnly: Boolean = false): StateStore = {
     require(version >= 0)
-    val storeProvider = loadedProviders.synchronized {
+    val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
+      indexOrdinal, storeConf, hadoopConf)
+    storeProvider.getStore(version)
+  }
+
+  private def getStateStoreProvider(
+      storeProviderId: StateStoreProviderId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      indexOrdinal: Option[Int],
+      storeConf: StateStoreConf,
+      hadoopConf: Configuration): StateStoreProvider = {
+    loadedProviders.synchronized {
       startMaintenanceIfNeeded()
       val provider = loadedProviders.getOrElseUpdate(
         storeProviderId,
@@ -443,11 +472,6 @@ object StateStore extends Logging {
       )
       reportActiveStoreInstance(storeProviderId)
       provider
-    }
-    if (readOnly) {
-      storeProvider.getReadOnlyStore(version)
-    } else {
-      storeProvider.getStore(version)
     }
   }
 

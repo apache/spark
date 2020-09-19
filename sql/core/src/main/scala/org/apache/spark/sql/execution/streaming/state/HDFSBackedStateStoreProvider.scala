@@ -85,14 +85,14 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
 
     override def get(key: UnsafeRow): UnsafeRow = map.get(key)
 
-    override def abort(): Unit = {}
-
     override def iterator(): Iterator[UnsafeRowPair] = {
       val unsafeRowPair = new UnsafeRowPair()
       map.entrySet.asScala.iterator.map { entry =>
         unsafeRowPair.withRows(entry.getKey, entry.getValue)
       }
     }
+
+    override def abort(): Unit = {}
   }
 
   /** Implementation of [[StateStore]] API which is backed by an HDFS-compatible file system */
@@ -212,24 +212,26 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   }
 
   /** Get the state store for making updates to create a new `version` of the store. */
-  override def getStore(version: Long): StateStore = getStore(version, readOnly = false)
+  override def getStore(version: Long): StateStore = {
+    val newMap = getLoadedMapForStore(version)
+    logInfo(s"Retrieved version $version of ${HDFSBackedStateStoreProvider.this} for update")
+    new HDFSBackedStateStore(version, newMap)
+  }
 
   /** Get the state store for reading to specific `version` of the store. */
-  override def getReadOnlyStore(version: Long): StateStore = getStore(version, readOnly = true)
+  override def getReadOnlyStore(version: Long): ReadOnlyStateStore = {
+    val newMap = getLoadedMapForStore(version)
+    logInfo(s"Retrieved version $version of ${HDFSBackedStateStoreProvider.this} for readonly")
+    new HDFSBackedReadOnlyStateStore(version, newMap)
+  }
 
-  private def getStore(version: Long, readOnly: Boolean): StateStore = synchronized {
+  private def getLoadedMapForStore(version: Long): MapType = synchronized {
     require(version >= 0, "Version cannot be less than 0")
     val newMap = new MapType()
     if (version > 0) {
       newMap.putAll(loadMap(version))
     }
-    if (readOnly) {
-      logInfo(s"Retrieved version $version of ${HDFSBackedStateStoreProvider.this} for readonly")
-      new HDFSBackedReadOnlyStateStore(version, newMap)
-    } else {
-      logInfo(s"Retrieved version $version of ${HDFSBackedStateStoreProvider.this} for update")
-      new HDFSBackedStateStore(version, newMap)
-    }
+    newMap
   }
 
   override def init(

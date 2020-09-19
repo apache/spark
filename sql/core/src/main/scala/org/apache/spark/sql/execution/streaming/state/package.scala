@@ -56,8 +56,7 @@ package object state {
         indexOrdinal: Option[Int],
         sessionState: SessionState,
         storeCoordinator: Option[StateStoreCoordinatorRef],
-        extraOptions: Map[String, String] = Map.empty,
-        readOnly: Boolean = false)(
+        extraOptions: Map[String, String] = Map.empty)(
         storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U]): StateStoreRDD[T, U] = {
 
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
@@ -81,8 +80,42 @@ package object state {
         indexOrdinal,
         sessionState,
         storeCoordinator,
-        extraOptions,
-        readOnly)
+        extraOptions)
+    }
+
+    /** Map each partition of an RDD along with data in a [[ReadOnlyStateStore]]. */
+    private[streaming] def mapPartitionsWithReadOnlyStateStore[U: ClassTag](
+        stateInfo: StatefulOperatorStateInfo,
+        keySchema: StructType,
+        valueSchema: StructType,
+        indexOrdinal: Option[Int],
+        sessionState: SessionState,
+        storeCoordinator: Option[StateStoreCoordinatorRef],
+        extraOptions: Map[String, String] = Map.empty)(
+        storeReadFn: (ReadOnlyStateStore, Iterator[T]) => Iterator[U])
+      : ReadOnlyStateStoreRDD[T, U] = {
+
+      val cleanedF = dataRDD.sparkContext.clean(storeReadFn)
+      val wrappedF = (store: ReadOnlyStateStore, iter: Iterator[T]) => {
+        // Clean up the state store.
+        TaskContext.get().addTaskCompletionListener[Unit](_ => {
+          store.abort()
+        })
+        cleanedF(store, iter)
+      }
+      new ReadOnlyStateStoreRDD(
+        dataRDD,
+        wrappedF,
+        stateInfo.checkpointLocation,
+        stateInfo.queryRunId,
+        stateInfo.operatorId,
+        stateInfo.storeVersion,
+        keySchema,
+        valueSchema,
+        indexOrdinal,
+        sessionState,
+        storeCoordinator,
+        extraOptions)
     }
   }
 }

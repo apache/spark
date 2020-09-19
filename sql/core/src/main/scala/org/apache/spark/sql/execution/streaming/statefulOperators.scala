@@ -247,14 +247,13 @@ case class StateStoreRestoreExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
-    child.execute().mapPartitionsWithStateStore(
+    child.execute().mapPartitionsWithReadOnlyStateStore(
       getStateInfo,
       keyExpressions.toStructType,
       stateManager.getStateValueSchema,
       indexOrdinal = None,
       sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator),
-      readOnly = true) { case (store, iter) =>
+      Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
         val hasInput = iter.hasNext
         if (!hasInput && keyExpressions.isEmpty) {
           // If our `keyExpressions` are empty, we're getting a global aggregation. In that case
