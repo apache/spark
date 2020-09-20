@@ -48,13 +48,13 @@ class ReadOnlyStateStoreRDD[T: ClassTag, U: ClassTag](
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
     extraOptions: Map[String, String] = Map.empty) extends RDD[U](dataRDD) {
 
-  protected val storeConf = new StateStoreConf(sessionState.conf, extraOptions)
+  private val storeConf = new StateStoreConf(sessionState.conf, extraOptions)
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
-  protected val hadoopConfBroadcast = dataRDD.context.broadcast(
+  private val hadoopConfBroadcast = dataRDD.context.broadcast(
     new SerializableConfiguration(sessionState.newHadoopConf()))
 
-  override def getPartitions: Array[Partition] = dataRDD.partitions
+  override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
   /**
    * Set the preferred location of each partition using the executor that has the related
@@ -99,13 +99,13 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
     extraOptions: Map[String, String] = Map.empty) extends RDD[U](dataRDD) {
 
-  protected val storeConf = new StateStoreConf(sessionState.conf, extraOptions)
+  private val storeConf = new StateStoreConf(sessionState.conf, extraOptions)
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
-  protected val hadoopConfBroadcast = dataRDD.context.broadcast(
+  private val hadoopConfBroadcast = dataRDD.context.broadcast(
     new SerializableConfiguration(sessionState.newHadoopConf()))
 
-  override def getPartitions: Array[Partition] = dataRDD.partitions
+  override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
   /**
    * Set the preferred location of each partition using the executor that has the related
