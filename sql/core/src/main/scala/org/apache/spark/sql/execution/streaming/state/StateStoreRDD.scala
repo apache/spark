@@ -29,11 +29,21 @@ import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
+/**
+ * An RDD that allows computations to be executed against [[ReadOnlyStateStore]]s. It
+ * uses the [[StateStoreCoordinator]] to get the locations of loaded state stores
+ * and use that as the preferred locations.
+ */
+class ReadOnlyStateStoreRDD[T: ClassTag, U: ClassTag](
     dataRDD: RDD[T],
+    storeReadFunction: (ReadOnlyStateStore, Iterator[T]) => Iterator[U],
     checkpointLocation: String,
     queryRunId: UUID,
     operatorId: Long,
+    storeVersion: Long,
+    keySchema: StructType,
+    valueSchema: StructType,
+    indexOrdinal: Option[Int],
     sessionState: SessionState,
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
     extraOptions: Map[String, String] = Map.empty) extends RDD[U](dataRDD) {
@@ -56,28 +66,6 @@ abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
       queryRunId)
     storeCoordinator.flatMap(_.getLocation(stateStoreProviderId)).toSeq
   }
-}
-
-/**
- * An RDD that allows computations to be executed against [[ReadOnlyStateStore]]s. It
- * uses the [[StateStoreCoordinator]] to get the locations of loaded state stores
- * and use that as the preferred locations.
- */
-class ReadOnlyStateStoreRDD[T: ClassTag, U: ClassTag](
-    dataRDD: RDD[T],
-    storeReadFunction: (ReadOnlyStateStore, Iterator[T]) => Iterator[U],
-    checkpointLocation: String,
-    queryRunId: UUID,
-    operatorId: Long,
-    storeVersion: Long,
-    keySchema: StructType,
-    valueSchema: StructType,
-    indexOrdinal: Option[Int],
-    sessionState: SessionState,
-    @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
-    extraOptions: Map[String, String] = Map.empty)
-  extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
-    sessionState, storeCoordinator, extraOptions) {
 
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
     val storeProviderId = StateStoreProviderId(
@@ -109,9 +97,26 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     indexOrdinal: Option[Int],
     sessionState: SessionState,
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
-    extraOptions: Map[String, String] = Map.empty)
-  extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
-    sessionState, storeCoordinator, extraOptions) {
+    extraOptions: Map[String, String] = Map.empty) extends RDD[U](dataRDD) {
+
+  protected val storeConf = new StateStoreConf(sessionState.conf, extraOptions)
+
+  // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
+  protected val hadoopConfBroadcast = dataRDD.context.broadcast(
+    new SerializableConfiguration(sessionState.newHadoopConf()))
+
+  override def getPartitions: Array[Partition] = dataRDD.partitions
+
+  /**
+   * Set the preferred location of each partition using the executor that has the related
+   * [[StateStoreProvider]] already loaded.
+   */
+  override def getPreferredLocations(partition: Partition): Seq[String] = {
+    val stateStoreProviderId = StateStoreProviderId(
+      StateStoreId(checkpointLocation, operatorId, partition.index),
+      queryRunId)
+    storeCoordinator.flatMap(_.getLocation(stateStoreProviderId)).toSeq
+  }
 
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
     val storeProviderId = StateStoreProviderId(
