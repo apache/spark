@@ -99,6 +99,7 @@ if (in_spark):
 # If you are changing the versions here, please also change ./python/pyspark/sql/pandas/utils.py
 # For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
+# Also don't forget to update python/docs/source/getting_started/install.rst.
 _minimum_pandas_version = "0.23.2"
 _minimum_pyarrow_version = "1.0.0"
 
@@ -203,6 +204,8 @@ try:
             'pyspark.examples.src.main.python': ['*.py', '*/*.py']},
         scripts=scripts,
         license='http://www.apache.org/licenses/LICENSE-2.0',
+        # Don't forget to update python/docs/source/getting_started/install.rst
+        # if you're updating the versions or dependencies.
         install_requires=['py4j==0.10.9'],
         extras_require={
             'ml': ['numpy>=1.7'],
