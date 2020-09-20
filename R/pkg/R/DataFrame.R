@@ -2863,11 +2863,10 @@ setMethod("unionAll",
 #' \code{UNION ALL} and \code{UNION DISTINCT} in SQL as column positions are not taken
 #' into account. Input SparkDataFrames can have different data types in the schema.
 #'
-#' When the parameter `allowMissingColumns` is `TRUE`, this function allows
-#' different set of column names between two `SparkDataFrames`.
-#' Missing columns at each side, will be filled with null values.
-#' The missing columns at left `SparkDataFrame` will be added at the end in the schema
-#' of the union result.
+#' When the parameter allowMissingColumns is `TRUE`, the set of column names
+#' in x and y can differ; missing columns will be filled as null.
+#' Further, the missing columns of x will be added at the end
+#' in the schema of the union result.
 #'
 #' Note: This does not remove duplicate rows across the two SparkDataFrames.
 #' This function resolves columns by name (not by position).
