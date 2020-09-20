@@ -31,12 +31,6 @@ class SparkPlanner(
     val experimentalMethods: ExperimentalMethods)
   extends SparkStrategies {
 
-  private val EXPENSIVE_EXPR_PREFIX = "expensive_col_"
-
-  def extractExpensiveExprs(e: Expression): Seq[Expression] = e.collect {
-    case gjo: GetJsonObject => gjo
-  }
-
   def numPartitions: Int = conf.numShufflePartitions
 
   override def strategies: Seq[Strategy] =
