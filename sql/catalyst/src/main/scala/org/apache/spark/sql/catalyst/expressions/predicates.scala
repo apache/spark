@@ -247,6 +247,10 @@ trait PredicateHelper extends Logging {
         None
       }
   }
+
+  def extractExpensiveExprs(e: Expression): Seq[Expression] = e.collect {
+    case gjo: GetJsonObject => gjo
+  }
 }
 
 @ExpressionDescription(

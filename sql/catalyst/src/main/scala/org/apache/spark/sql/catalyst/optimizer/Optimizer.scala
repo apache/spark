@@ -120,7 +120,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       Batch("Operator Optimization before Inferring Filters", fixedPoint,
         rulesWithoutInferFiltersFromConstraints: _*) ::
       Batch("Infer Filters", Once,
-        InferFiltersFromConstraints) ::
+        InferFiltersFromConstraints,
+        AvoidRecomputeExpensiveColumn) ::
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
         rulesWithoutInferFiltersFromConstraints: _*) ::
       // Set strategy to Once to avoid pushing filter every time because we do not change the
@@ -1127,8 +1128,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // state and all the input rows processed before. In another word, the order of input rows
     // matters for non-deterministic expressions, while pushing down predicates changes the order.
     // This also applies to Aggregate.
-    case Filter(condition, project @ Project(fields, grandChild))
-      if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
+    case f @ Filter(condition, project @ Project(fields, grandChild))
+      if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) &&
+        fields.flatMap(extractExpensiveExprs(_)).isEmpty =>
       val aliasMap = getAliasMap(project)
       project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
 
@@ -1845,5 +1847,40 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
     // Replace Local Limit 0 nodes with empty Local Relation
     case ll @ LocalLimit(IntegerLiteral(0), _) =>
       empty(ll)
+  }
+}
+
+object AvoidRecomputeExpensiveColumn extends Rule[LogicalPlan] with PredicateHelper {
+  private val EXPENSIVE_EXPR_PREFIX = "expensive_col_"
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case p@Project(projectList, Filter(condition, child)) =>
+      val duplicatedExpensiveExpr =
+        extractExpensiveExprs(condition)
+          .intersect(projectList.flatMap(extractExpensiveExprs))
+      if (duplicatedExpensiveExpr.isEmpty) {
+        p
+      } else {
+        val costExpr: Map[Expression, NamedExpression] =
+          duplicatedExpensiveExpr.toSet.map { e: Expression =>
+            val exprId = NamedExpression.newExprId
+            (e, AttributeReference(s"$EXPENSIVE_EXPR_PREFIX${exprId.id}",
+              e.dataType, e.nullable)(exprId))
+          }.toMap
+
+        val newProject = projectList.map(_.transformDown {
+          case e if costExpr.contains(e) => costExpr(e)
+        }.asInstanceOf[NamedExpression])
+
+        val newFilter: Expression = condition.transformDown {
+          case e if costExpr.contains(e) => costExpr(e)
+        }
+
+        val projectSet = AttributeSet(projectList.flatMap(_.references))
+        val filterSet = AttributeSet(condition.references).toSeq
+        val buildProjectList = (projectSet ++ filterSet ++ costExpr.map { case (e, attr) =>
+          Alias(e, attr.name)(attr.exprId)
+        }).toSet.toSeq
+        Project(newProject, Filter(newFilter, Project(buildProjectList, child)))
+      }
   }
 }

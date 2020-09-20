@@ -110,35 +110,8 @@ class SparkPlanner(
       val scan = scanBuilder(projectList.asInstanceOf[Seq[Attribute]])
       filterCondition.map(FilterExec(_, scan)).getOrElse(scan)
     } else {
-      val duplicatedExpensiveExpr =
-        filterCondition.map(extractExpensiveExprs(_)
-          .intersect(projectList.flatMap(extractExpensiveExprs)))
-          .getOrElse(Seq.empty[Expression])
-      if (duplicatedExpensiveExpr.isEmpty) {
-        val scan = scanBuilder((projectSet ++ filterSet).toSeq)
-        ProjectExec(projectList, filterCondition.map(FilterExec(_, scan)).getOrElse(scan))
-      } else {
-        val costExpr: Map[Expression, NamedExpression] =
-          duplicatedExpensiveExpr.toSet.map { e: Expression =>
-            val exprId = NamedExpression.newExprId
-            (e, AttributeReference(s"$EXPENSIVE_EXPR_PREFIX${exprId.id}",
-              e.dataType, e.nullable)(exprId))
-          }.toMap
-        val newProject = projectList.map(_.transformDown {
-          case e if costExpr.contains(e) => costExpr(e)
-        }.asInstanceOf[NamedExpression])
-        val newFilter: Option[Expression] = filterCondition.map(_.transformDown {
-          case e if costExpr.contains(e) => costExpr(e)
-        })
-
-        val scan = scanBuilder((projectSet ++ filterSet).toSeq)
-        val buildProjectList = scan.output ++ costExpr.map { case (e, attr) =>
-          Alias(e, attr.name)(attr.exprId)
-        }
-        ProjectExec(newProject,
-          newFilter.map(FilterExec(_, ProjectExec(buildProjectList, scan)))
-            .getOrElse(ProjectExec(buildProjectList, scan)))
-      }
+      val scan = scanBuilder((projectSet ++ filterSet).toSeq)
+      ProjectExec(projectList, filterCondition.map(FilterExec(_, scan)).getOrElse(scan))
     }
   }
 }

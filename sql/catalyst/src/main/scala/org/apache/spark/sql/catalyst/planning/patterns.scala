@@ -124,6 +124,15 @@ object ScanOperation extends OperationHelper with PredicateHelper {
     }.exists(!_.deterministic))
   }
 
+  private def hasExpensiveExprInCondition(
+      cond: Expression,
+      aliases: AttributeMap[Expression]): Boolean = {
+    cond.collect {
+      case a: AttributeReference if aliases.contains(a) &&
+        extractExpensiveExprs(aliases.get(a).get).nonEmpty => a
+    }.nonEmpty
+  }
+
   private def collectProjectsAndFilters(plan: LogicalPlan): ScanReturnType = {
     plan match {
       case Project(fields, child) =>
@@ -151,7 +160,8 @@ object ScanOperation extends OperationHelper with PredicateHelper {
             val substitutedCondition = substitute(aliases)(condition)
             val canCombineFilters = (filters.nonEmpty && filters.forall(_.deterministic) &&
               substitutedCondition.deterministic) || filters.isEmpty
-            if (canCombineFilters && !hasCommonNonDeterministic(Seq(condition), aliases)) {
+            if (canCombineFilters && !hasCommonNonDeterministic(Seq(condition), aliases) &&
+            !hasExpensiveExprInCondition(condition, aliases)) {
               Some((fields, filters ++ splitConjunctivePredicates(substitutedCondition),
                 other, aliases))
             } else {
