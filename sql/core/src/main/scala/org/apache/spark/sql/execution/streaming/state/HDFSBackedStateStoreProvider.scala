@@ -78,8 +78,8 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   //   java.util.ConcurrentModificationException
   type MapType = java.util.concurrent.ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
-  class HDFSBackedReadOnlyStateStore(val version: Long, map: MapType)
-    extends ReadOnlyStateStore {
+  class HDFSBackedReadStateStore(val version: Long, map: MapType)
+    extends ReadStateStore {
 
     override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
 
@@ -219,10 +219,10 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   }
 
   /** Get the state store for reading to specific `version` of the store. */
-  override def getReadOnlyStore(version: Long): ReadOnlyStateStore = {
+  override def getReadOnlyStore(version: Long): ReadStateStore = {
     val newMap = getLoadedMapForStore(version)
     logInfo(s"Retrieved version $version of ${HDFSBackedStateStoreProvider.this} for readonly")
-    new HDFSBackedReadOnlyStateStore(version, newMap)
+    new HDFSBackedReadStateStore(version, newMap)
   }
 
   private def getLoadedMapForStore(version: Long): MapType = synchronized {

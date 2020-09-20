@@ -36,14 +36,14 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
- * Base trait for a versioned key-value store on read-only. Each instance of a `StateStore`
- * represents a specific version of state data, and such instances are created through a
- * [[StateStoreProvider]].
+ * Base trait for a versioned key-value store which provides read operations. Each instance of a
+ * `StateStore` represents a specific version of state data, and such instances are created
+ * through a [[StateStoreProvider]].
  *
  * `abort` method will be called when the task is completed - please clean up the resources in
  * the method.
  */
-trait ReadOnlyStateStore {
+trait ReadStateStore {
 
   /** Unique identifier of the store */
   def id: StateStoreId
@@ -89,15 +89,16 @@ trait ReadOnlyStateStore {
 }
 
 /**
- * Base trait for a versioned key-value store. Each instance of a `StateStore` represents a specific
- * version of state data, and such instances are created through a [[StateStoreProvider]].
+ * Base trait for a versioned key-value store which provides both read and write operations. Each
+ * instance of a `StateStore` represents a specific version of state data, and such instances are
+ * created through a [[StateStoreProvider]].
  *
- * Unlike [[ReadOnlyStateStore]], `abort` method may not be called if the `commit` method succeeds
+ * Unlike [[ReadStateStore]], `abort` method may not be called if the `commit` method succeeds
  * to commit the change. (`hasCommitted` returns `true`.) Otherwise, `abort` method will be called.
- * Implementation should deal with resource cleanup in both methods, but also need to guard with
+ * Implementation should deal with resource cleanup in both methods, and also need to guard with
  * double resource cleanup.
  */
-trait StateStore extends ReadOnlyStateStore {
+trait StateStore extends ReadStateStore {
 
   /**
    * Put a new value for a non-null key. Implementations must be aware that the UnsafeRows in
@@ -133,7 +134,7 @@ trait StateStore extends ReadOnlyStateStore {
 }
 
 /** Wraps the instance of StateStore to make the instance read-only. */
-class WrappedReadOnlyStateStore(store: StateStore) extends ReadOnlyStateStore {
+class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
   override def id: StateStoreId = store.id
 
   override def version: Long = store.version
@@ -243,13 +244,13 @@ trait StateStoreProvider {
   def getStore(version: Long): StateStore
 
   /**
-   * Return an instance of [[ReadOnlyStateStore]] representing state data of the given version.
+   * Return an instance of [[ReadStateStore]] representing state data of the given version.
    * By default it will return the same instance as getStore(version) but wrapped to prevent
-   * modification. Providers can override and return optimized version of [[ReadOnlyStateStore]]
+   * modification. Providers can override and return optimized version of [[ReadStateStore]]
    * based on the fact the instance will be only used for reading.
    */
-  def getReadOnlyStore(version: Long): ReadOnlyStateStore =
-    new WrappedReadOnlyStateStore(getStore(version))
+  def getReadOnlyStore(version: Long): ReadStateStore =
+    new WrappedReadStateStore(getStore(version))
 
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
   def doMaintenance(): Unit = { }
@@ -432,7 +433,7 @@ object StateStore extends Logging {
       indexOrdinal: Option[Int],
       version: Long,
       storeConf: StateStoreConf,
-      hadoopConf: Configuration): ReadOnlyStateStore = {
+      hadoopConf: Configuration): ReadStateStore = {
     require(version >= 0)
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       indexOrdinal, storeConf, hadoopConf)

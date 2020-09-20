@@ -1033,7 +1033,7 @@ object StateStoreTestsHelper {
     store.put(stringToRow(key), intToRow(value))
   }
 
-  def get(store: ReadOnlyStateStore, key: String): Option[Int] = {
+  def get(store: ReadStateStore, key: String): Option[Int] = {
     Option(store.get(stringToRow(key))).map(rowToInt)
   }
 

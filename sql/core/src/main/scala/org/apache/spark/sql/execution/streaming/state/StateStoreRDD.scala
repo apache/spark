@@ -30,13 +30,13 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
 /**
- * An RDD that allows computations to be executed against [[ReadOnlyStateStore]]s. It
+ * An RDD that allows computations to be executed against [[ReadStateStore]]s. It
  * uses the [[StateStoreCoordinator]] to get the locations of loaded state stores
  * and use that as the preferred locations.
  */
 class ReadOnlyStateStoreRDD[T: ClassTag, U: ClassTag](
     dataRDD: RDD[T],
-    storeReadFunction: (ReadOnlyStateStore, Iterator[T]) => Iterator[U],
+    storeReadFunction: (ReadStateStore, Iterator[T]) => Iterator[U],
     checkpointLocation: String,
     queryRunId: UUID,
     operatorId: Long,
