@@ -90,8 +90,8 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
        [1,2,1]
   """,
   note = """
-    The function is non-deterministic because the order of collected results depends
-    on the order of the rows which may be non-deterministic after a shuffle.
+    The function can be non-deterministic because its results depend on the order of input rows
+    which are usually non-deterministic after a shuffle.
   """,
   group = "agg_funcs",
   since = "2.0.0")
@@ -132,8 +132,8 @@ case class CollectList(
        [1,2]
   """,
   note = """
-    The function is non-deterministic because the order of collected results depends
-    on the order of the rows which may be non-deterministic after a shuffle.
+    The function can be non-deterministic because its results depend on the order of input rows
+    which are usually non-deterministic after a shuffle.
   """,
   group = "agg_funcs",
   since = "2.0.0")
