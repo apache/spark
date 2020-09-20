@@ -17,16 +17,29 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.WithFields
+import scala.collection.mutable
+
+import org.apache.spark.sql.catalyst.expressions.{Expression, GetStructField, WithFields}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 
 
 /**
- * Combines all adjacent [[WithFields]] expression into a single [[WithFields]] expression.
+ * Optimizes [[WithFields]] expression chains.
  */
-object CombineWithFields extends Rule[LogicalPlan] {
+object OptimizeWithFields extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case WithFields(structExpr, names, values) if names.distinct.length != names.length =>
+      val newNames = mutable.ArrayBuffer.empty[String]
+      val newValues = mutable.ArrayBuffer.empty[Expression]
+      names.zip(values).reverse.foreach { case (name, value) =>
+        if (!newNames.contains(name)) {
+          newNames += name
+          newValues += value
+        }
+      }
+      WithFields(structExpr, names = newNames.reverse.toSeq, valExprs = newValues.reverse.toSeq)
+
     case WithFields(WithFields(struct, names1, valExprs1), names2, valExprs2) =>
       WithFields(struct, names1 ++ names2, valExprs1 ++ valExprs2)
   }

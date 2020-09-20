@@ -48,7 +48,11 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
           // `$"struct_col".withField("b", lit(1)).withField("b", lit(2)).getField("b")`
           // we want to return `lit(2)` (and not `lit(1)`).
           val expr = matches.last._2
-          If(IsNull(struct), Literal(null, expr.dataType), expr)
+          if (struct.nullable) {
+            If(IsNull(struct), Literal(null, expr.dataType), expr)
+          } else {
+            expr
+          }
         } else {
           GetStructField(struct, ordinal, maybeName)
         }
