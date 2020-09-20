@@ -2890,7 +2890,7 @@ setMethod("unionAll",
 #' head(unionByName(df1, df2))
 #'
 #' df3 <- select(createDataFrame(mtcars), "carb")
-#' head(unionByName(df1, df3))
+#' head(unionByName(df1, df3, allowMissingColumns = TRUE))
 #' }
 #' @note unionByName since 2.3.0
 setMethod("unionByName",
