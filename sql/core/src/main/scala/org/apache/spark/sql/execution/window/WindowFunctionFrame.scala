@@ -80,7 +80,7 @@ object WindowFunctionFrame {
 abstract class OffsetWindowFunctionFrameBase(
     target: InternalRow,
     ordinal: Int,
-    expressions: Array[OffsetWindowFunction],
+    expressions: Array[OffsetWindowSpec],
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     offset: Int)
@@ -152,7 +152,7 @@ abstract class OffsetWindowFunctionFrameBase(
 class RelativeOffsetWindowFunctionFrame(
     target: InternalRow,
     ordinal: Int,
-    expressions: Array[OffsetWindowFunction],
+    expressions: Array[OffsetWindowSpec],
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     offset: Int)
@@ -178,7 +178,7 @@ class RelativeOffsetWindowFunctionFrame(
 class UnboundedOffsetWindowFunctionFrame(
     target: InternalRow,
     ordinal: Int,
-    expressions: Array[OffsetWindowFunction],
+    expressions: Array[OffsetWindowSpec],
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     offset: Int)
@@ -209,7 +209,7 @@ class UnboundedOffsetWindowFunctionFrame(
 class UnboundedPrecedingOffsetWindowFunctionFrame(
     target: InternalRow,
     ordinal: Int,
-    expressions: Array[OffsetWindowFunction],
+    expressions: Array[OffsetWindowSpec],
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     offset: Int)

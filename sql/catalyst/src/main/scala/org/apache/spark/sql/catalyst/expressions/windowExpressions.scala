@@ -332,6 +332,49 @@ object WindowFunctionType {
   }
 }
 
+trait OffsetWindowSpec extends Expression {
+  /**
+    * Input expression to evaluate against a row which a number of rows below or above (depending on
+    * the value and sign of the offset) the current row.
+    */
+  val input: Expression
+
+  /**
+    * Default result value for the function when the `offset`th row does not exist.
+    */
+  val default: Expression
+
+  /**
+    * (Foldable) expression that contains the number of rows between the current row and the row
+    * where the input expression is evaluated.
+    */
+  val offsetExpr: Expression
+
+  /**
+    * Direction of the number of rows between the current row and the row where the input expression
+    * is evaluated.
+    */
+  val direction: SortDirection
+
+  val ignoreNulls: Boolean
+
+  /**
+   * Whether the offset is starts with the current row. If `isRelative` is true, `offset` means
+   * the offset is start with the current row. otherwise, the offset is start with the first
+   * row of the entire window frame.
+   */
+  val isRelative: Boolean = true
+
+  lazy val boundary = direction match {
+    case Ascending => offsetExpr
+    case Descending => UnaryMinus(offsetExpr) match {
+      case e: Expression if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
+      case o => o
+    }
+  }
+
+  lazy val fakeFrame = SpecifiedWindowFrame(RowFrame, boundary, boundary)
+}
 
 /**
  * An offset window function is a window function that returns the value of the input column offset
@@ -339,31 +382,9 @@ object WindowFunctionType {
  * offset -2, will get the value of x 2 rows back in the partition.
  */
 abstract class OffsetWindowFunction
-  extends Expression with WindowFunction with Unevaluable with ImplicitCastInputTypes {
-  /**
-   * Input expression to evaluate against a row which a number of rows below or above (depending on
-   * the value and sign of the offset) the current row.
-   */
-  val input: Expression
+  extends WindowFunction with OffsetWindowSpec with Unevaluable with ImplicitCastInputTypes {
 
-  /**
-   * Default result value for the function when the `offset`th row does not exist.
-   */
-  val default: Expression
-
-  /**
-   * (Foldable) expression that contains the number of rows between the current row and the row
-   * where the input expression is evaluated.
-   */
-  val offset: Expression
-
-  /**
-   * Direction of the number of rows between the current row and the row where the input expression
-   * is evaluated.
-   */
-  val direction: SortDirection
-
-  override def children: Seq[Expression] = Seq(input, offset, default)
+  override def children: Seq[Expression] = Seq(input, offsetExpr, default)
 
   /*
    * The result of an OffsetWindowFunction is dependent on the frame in which the
@@ -377,8 +398,8 @@ abstract class OffsetWindowFunction
 
   override lazy val frame: WindowFrame = {
     val boundary = direction match {
-      case Ascending => offset
-      case Descending => UnaryMinus(offset) match {
+      case Ascending => offsetExpr
+      case Descending => UnaryMinus(offsetExpr) match {
           case e: Expression if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
           case o => o
       }
@@ -390,8 +411,8 @@ abstract class OffsetWindowFunction
     val check = super.checkInputDataTypes()
     if (check.isFailure) {
       check
-    } else if (!offset.foldable) {
-      TypeCheckFailure(s"Offset expression '$offset' must be a literal.")
+    } else if (!offsetExpr.foldable) {
+      TypeCheckFailure(s"Offset expression '$offsetExpr' must be a literal.")
     } else {
       TypeCheckSuccess
     }
@@ -402,7 +423,7 @@ abstract class OffsetWindowFunction
   override def inputTypes: Seq[AbstractDataType] =
     Seq(AnyDataType, IntegerType, TypeCollection(input.dataType, NullType))
 
-  override def toString: String = s"$prettyName($input, $offset, $default)"
+  override def toString: String = s"$prettyName($input, $offsetExpr, $default)"
 }
 
 /**
@@ -428,7 +449,7 @@ abstract class OffsetWindowFunction
   """,
   since = "2.0.0",
   group = "window_funcs")
-case class Lead(input: Expression, offset: Expression, default: Expression)
+case class Lead(input: Expression, offsetExpr: Expression, default: Expression)
     extends OffsetWindowFunction {
 
   def this(input: Expression, offset: Expression) = this(input, offset, Literal(null))
@@ -438,6 +459,8 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
   def this() = this(Literal(null))
 
   override val direction = Ascending
+
+  override val ignoreNulls = false
 }
 
 /**
@@ -462,7 +485,7 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
   """,
   since = "2.0.0",
   group = "window_funcs")
-case class Lag(input: Expression, offset: Expression, default: Expression)
+case class Lag(input: Expression, offsetExpr: Expression, default: Expression)
     extends OffsetWindowFunction {
 
   def this(input: Expression, offset: Expression) = this(input, offset, Literal(null))
@@ -472,6 +495,8 @@ case class Lag(input: Expression, offset: Expression, default: Expression)
   def this() = this(Literal(null))
 
   override val direction = Descending
+
+  override val ignoreNulls = false
 }
 
 abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowFunction {
@@ -568,9 +593,15 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   since = "3.1.0",
   group = "window_funcs")
 case class NthValue(input: Expression, offsetExpr: Expression, ignoreNulls: Boolean)
-    extends AggregateWindowFunction with ImplicitCastInputTypes {
+    extends AggregateWindowFunction with OffsetWindowSpec with ImplicitCastInputTypes {
 
   def this(child: Expression, offset: Expression) = this(child, offset, false)
+
+  override lazy val default = Literal.create(null, input.dataType)
+
+  override val direction = Ascending
+
+  override val isRelative = false
 
   override def children: Seq[Expression] = input :: offsetExpr :: Nil
 
@@ -594,13 +625,13 @@ case class NthValue(input: Expression, offsetExpr: Expression, ignoreNulls: Bool
     }
   }
 
-  lazy val offset = offsetExpr.eval().asInstanceOf[Int].toLong
+  private lazy val offset = boundary.eval().asInstanceOf[Int].toLong
   private lazy val result = AttributeReference("result", input.dataType)()
   private lazy val count = AttributeReference("count", LongType)()
   override lazy val aggBufferAttributes: Seq[AttributeReference] = result :: count :: Nil
 
   override lazy val initialValues: Seq[Literal] = Seq(
-    /* result = */ Literal.create(null, input.dataType),
+    /* result = */ default,
     /* count = */ Literal(1L)
   )
 
