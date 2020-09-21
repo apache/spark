@@ -91,6 +91,46 @@ public class XXH64Suite {
   }
 
   @Test
+  public void testKnownWordArrayInputs() {
+    Assert.assertEquals(0XEF46DB3751D8E999L,
+            hasher.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 0));
+    Assert.assertEquals(0XAC75FDA2929B17EFL,
+            XXH64.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 0, PRIME));
+    Assert.assertEquals(0XF74CB1451B32B8CFL,
+            hasher.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 8));
+    Assert.assertEquals(0X9C44B77FBCC302C5L,
+            XXH64.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 8, PRIME));
+    Assert.assertEquals(0X169173A697113B29L,
+            hasher.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 16));
+    Assert.assertEquals(0XA0B652822C1538F6L,
+            XXH64.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 16, PRIME));
+    Assert.assertEquals(0XCEF5D1497F99F246L,
+            hasher.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 24));
+    Assert.assertEquals(0X1FA29EA08AA60D77L,
+            XXH64.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 24, PRIME));
+    Assert.assertEquals(0XAF5753D39159EDEEL,
+            hasher.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 32));
+    Assert.assertEquals(0XDCAB9233B8CA7B0FL,
+            XXH64.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 32, PRIME));
+    Assert.assertEquals(0XBAB04D3F1769013L,
+            hasher.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 40));
+    Assert.assertEquals(0X21273A6B8D344CF0L,
+            XXH64.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 40, PRIME));
+    Assert.assertEquals(0XB3571A0E02A3F4E1L,
+            hasher.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 48));
+    Assert.assertEquals(0X867479AC0EF16154L,
+            XXH64.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 48, PRIME));
+    Assert.assertEquals(0XA3D5C82BD2EE104AL,
+            hasher.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 56));
+    Assert.assertEquals(0X55EF042CF82C04D7L,
+            XXH64.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 56, PRIME));
+    Assert.assertEquals(0X18F5388F1D2BA08CL,
+            hasher.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 64));
+    Assert.assertEquals(0X479E7103CF9AA020L,
+            XXH64.hashUnsafeWords(BUFFER, Platform.BYTE_ARRAY_OFFSET, 64, PRIME));
+  }
+
+  @Test
   public void randomizedStressTest() {
     int size = 65536;
     Random rand = new Random();
