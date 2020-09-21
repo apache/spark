@@ -356,6 +356,10 @@ trait OffsetWindowSpec extends Expression {
    */
   val direction: SortDirection
 
+  /**
+   * An optional specification that indicates the offset window function should skip null values in
+   * the determination of which row to use.
+   */
   val ignoreNulls: Boolean
 
   /**
@@ -396,16 +400,7 @@ abstract class OffsetWindowFunction
 
   override def nullable: Boolean = default == null || default.nullable || input.nullable
 
-  override lazy val frame: WindowFrame = {
-    val boundary = direction match {
-      case Ascending => offsetExpr
-      case Descending => UnaryMinus(offsetExpr) match {
-          case e: Expression if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
-          case o => o
-      }
-    }
-    SpecifiedWindowFrame(RowFrame, boundary, boundary)
-  }
+  override lazy val frame: WindowFrame = fakeFrame
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val check = super.checkInputDataTypes()
