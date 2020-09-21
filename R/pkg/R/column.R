@@ -359,7 +359,7 @@ setMethod("!", signature(x = "Column"), function(x) not(x))
 
 #' withField
 #'
-#' Adds/replaces field in a struct `Column` by name.
+#' Adds/replaces field in a struct \code{Column} by name.
 #'
 #' @param x a Column
 #' @param fieldName a character
