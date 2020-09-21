@@ -21,7 +21,7 @@ import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownA
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.jdbc.JdbcDialects
-import org.apache.spark.sql.sources.{AggregateFunction, Aggregation, Filter}
+import org.apache.spark.sql.sources.{AggregateFunc, Aggregation, Filter}
 import org.apache.spark.sql.types.StructType
 
 case class JDBCScanBuilder(
@@ -35,7 +35,7 @@ case class JDBCScanBuilder(
 
   private var pushedFilter = Array.empty[Filter]
 
-  private var pushedAggregations = Aggregation(Seq.empty[AggregateFunction], Seq.empty[String])
+  private var pushedAggregations = Aggregation(Seq.empty[AggregateFunc], Seq.empty[String])
 
   private var prunedSchema = schema
 

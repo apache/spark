@@ -121,9 +121,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
   }
 
   test("scan with aggregate push-down") {
-    val df = sql("select MAX(SALARY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
+    val df1 = sql("select MAX(SALARY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
       " group by DEPT")
-    // df.explain(true)
+    // df1.explain(true)
     // scalastyle:off line.size.limit
     // == Parsed Logical Plan ==
     // 'Aggregate ['DEPT], [unresolvedalias('MAX('SALARY), None), unresolvedalias('MIN('BONUS), None)]
@@ -138,23 +138,91 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     // +- RelationV2[DEPT#0, NAME#1, SALARY#2, BONUS#3] test.employee
     //
     // == Optimized Logical Plan ==
-    // Aggregate [DEPT#0], [max(SALARY#2) AS max(SALARY)#6, min(BONUS#3) AS min(BONUS)#7]
-    // +- RelationV2[DEPT#0, SALARY#2, BONUS#3] test.employee
+    // Aggregate [DEPT#0], [max(max(SALARY)#13) AS max(SALARY)#6, min(min(BONUS)#14) AS min(BONUS)#7]
+    // +- RelationV2[DEPT#0, max(SALARY)#13, min(BONUS)#14] test.employee
     //
     // == Physical Plan ==
-    //  *(2) HashAggregate(keys=[DEPT#0], functions=[max(SALARY#2), min(BONUS#3)], output=[max(SALARY)#6, min(BONUS)#7])
+    //  *(2) HashAggregate(keys=[DEPT#0], functions=[max(max(SALARY)#13), min(min(BONUS)#14)], output=[max(SALARY)#6, min(BONUS)#7])
     // +- Exchange hashpartitioning(DEPT#0, 5), true, [id=#13]
-    // +- *(1) HashAggregate(keys=[DEPT#0], functions=[partial_max(SALARY#2), partial_min(BONUS#3)], output=[DEPT#0, max#15, min#16])
-    // +- *(1) Scan org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCScan$$anon$1@739e8b96 [DEPT#0,SALARY#2,BONUS#3] PushedAggregates: [*Max(SALARY), *Min(BONUS)], PushedFilters: [IsNotNull(dept), GreaterThan(dept,0)], PushedGroupby: [*DEPT], ReadSchema: struct<DEPT:int,SALARY:int,BONUS:int>
+    // +- *(1) HashAggregate(keys=[DEPT#0], functions=[partial_max(max(SALARY)#13), partial_min(min(BONUS)#14)], output=[DEPT#0, max#17, min#18])
+    // +- *(1) Scan org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCScan$$anon$1@5f025000 [DEPT#0,max(SALARY)#13,min(BONUS)#14] PushedAggregates: [*Max(SALARY), *Min(BONUS)], PushedFilters: [IsNotNull(dept), GreaterThan(dept,0)], PushedGroupby: [*DEPT], ReadSchema: struct<DEPT:int,max(SALARY):int,min(BONUS):int>
     // scalastyle:on line.size.limit
-    // df.show()
+    //
+    // df1.show
     // +-----------+----------+
     // |max(SALARY)|min(BONUS)|
     // +-----------+----------+
     // |      10000|      1000|
     // |      12000|      1200|
     // +-----------+----------+
-    checkAnswer(df, Seq(Row(10000, 1000), Row(12000, 1200)))
+    checkAnswer(df1, Seq(Row(10000, 1000), Row(12000, 1200)))
+
+    val df2 = sql("select MAX(ID), MIN(ID) FROM h2.test.people where id > 0")
+    //  df2.explain(true)
+    // scalastyle:off line.size.limit
+    // == Parsed Logical Plan ==
+    // 'Project [unresolvedalias('MAX('ID), None), unresolvedalias('MIN('ID), None)]
+    // +- 'Filter ('id > 0)
+    // +- 'UnresolvedRelation [h2, test, people], []
+    //
+    // == Analyzed Logical Plan ==
+    // max(ID): int, min(ID): int
+    // Aggregate [max(ID#69) AS max(ID)#72, min(ID#69) AS min(ID)#73]
+    // +- Filter (id#69 > 0)
+    // +- SubqueryAlias h2.test.people
+    // +- RelationV2[NAME#68, ID#69] test.people
+    //
+    // == Optimized Logical Plan ==
+    // Aggregate [max(max(ID)#77) AS max(ID)#72, min(min(ID)#78) AS min(ID)#73]
+    // +- RelationV2[max(ID)#77, min(ID)#78] test.people
+    //
+    // == Physical Plan ==
+    //  *(2) HashAggregate(keys=[], functions=[max(max(ID)#77), min(min(ID)#78)], output=[max(ID)#72, min(ID)#73])
+    // +- Exchange SinglePartition, true, [id=#97]
+    // +- *(1) HashAggregate(keys=[], functions=[partial_max(max(ID)#77), partial_min(min(ID)#78)], output=[max#81, min#82])
+    // +- *(1) Scan org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCScan$$anon$1@3f6f9cef [max(ID)#77,min(ID)#78] PushedAggregates: [*Max(ID), *Min(ID)], PushedFilters: [IsNotNull(id), GreaterThan(id,0)], PushedGroupby: [], ReadSchema: struct<max(ID):int,min(ID):int>
+    // scalastyle:on line.size.limit
+
+    //  df2.show()
+    // +-------+-------+
+    // |max(ID)|min(ID)|
+    // +-------+-------+
+    // |      2|      1|
+    // +-------+-------+
+    checkAnswer(df2, Seq(Row(2, 1)))
+
+    val df3 = sql("select AVG(ID) FROM h2.test.people where id > 0")
+    checkAnswer(df3, Seq(Row(1.0)))
+
+    val df4 = sql("select MAX(SALARY) + 1 FROM h2.test.employee")
+    // df4.explain(true)
+    // scalastyle:off line.size.limit
+    // == Parsed Logical Plan ==
+    // 'Project [unresolvedalias(('MAX('SALARY) + 1), None)]
+    // +- 'UnresolvedRelation [h2, test, employee], []
+    //
+    // == Analyzed Logical Plan ==
+    // (max(SALARY) + 1): int
+    // Aggregate [(max(SALARY#161) + 1) AS (max(SALARY) + 1)#164]
+    // +- SubqueryAlias h2.test.employee
+    // +- RelationV2[DEPT#159, NAME#160, SALARY#161, BONUS#162] test.employee
+    //
+    // == Optimized Logical Plan ==
+    // Aggregate [(max((max(SALARY) + 1)#167) + 1) AS (max(SALARY) + 1)#164]
+    // +- RelationV2[(max(SALARY) + 1)#167] test.employee
+    //
+    // == Physical Plan ==
+    // *(2) HashAggregate(keys=[], functions=[max((max(SALARY) + 1)#167)], output=[(max(SALARY) + 1)#164])
+    // +- Exchange SinglePartition, true, [id=#242]
+    // +- *(1) HashAggregate(keys=[], functions=[partial_max((max(SALARY) + 1)#167)], output=[max#169])
+    // +- *(1) Scan org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCScan$$anon$1@241d1052 [(max(SALARY) + 1)#167] PushedAggregates: [*Max(SALARY)], PushedFilters: [], PushedGroupby: [], ReadSchema: struct<(max(SALARY) + 1):int>
+    // scalastyle:on line.size.limit
+    checkAnswer(df4, Seq(Row(12001)))
+
+    // COUNT push down is not supported yet
+    val df5 = sql("select COUNT(*) FROM h2.test.employee")
+    df5.explain(true)
+    checkAnswer(df5, Seq(Row(4)))
   }
 
   test("read/write with partition info") {

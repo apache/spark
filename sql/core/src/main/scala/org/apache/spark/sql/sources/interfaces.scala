@@ -241,7 +241,7 @@ abstract class BaseRelation {
    *
    * @since 3.1.0
    */
-  def unhandledAggregates(aggregates: Array[AggregateFunction]): Array[AggregateFunction] =
+  def unhandledAggregates(aggregates: Array[AggregateFunc]): Array[AggregateFunc] =
     aggregates
 }
 

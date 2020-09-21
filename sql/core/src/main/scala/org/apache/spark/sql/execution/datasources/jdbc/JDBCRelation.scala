@@ -265,13 +265,13 @@ private[sql] case class JDBCRelation(
     }
   }
 
-  override def unhandledAggregates(aggregates: Array[AggregateFunction]):
-    Array[AggregateFunction] = {
+  override def unhandledAggregates(aggregates: Array[AggregateFunc]):
+    Array[AggregateFunc] = {
     if (jdbcOptions.pushDownAggregate) {
       if (JDBCRDD.compileAggregates(aggregates, JdbcDialects.get(jdbcOptions.url)).isEmpty) {
         aggregates
       } else {
-        Array.empty[AggregateFunction]
+        Array.empty[AggregateFunc]
       }
     } else {
       aggregates

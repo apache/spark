@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownA
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.sources.{AggregateFunction, Aggregation}
+import org.apache.spark.sql.sources.{AggregateFunc, Aggregation}
 import org.apache.spark.sql.types.StructType
 
 object PushDownUtils extends PredicateHelper {
@@ -83,7 +83,7 @@ object PushDownUtils extends PredicateHelper {
         groupby: Seq[Expression]): Aggregation = {
       scanBuilder match {
         case r: SupportsPushDownAggregates =>
-          val translatedAggregates = mutable.ArrayBuffer.empty[sources.AggregateFunction]
+          val translatedAggregates = mutable.ArrayBuffer.empty[sources.AggregateFunc]
           // Catalyst aggregate expression that can't be translated to data source aggregates.
           val untranslatableExprs = mutable.ArrayBuffer.empty[AggregateExpression]
 
@@ -110,7 +110,7 @@ object PushDownUtils extends PredicateHelper {
 
           r.pushedAggregation
 
-        case _ => Aggregation(Seq.empty[AggregateFunction], Seq.empty[String])
+        case _ => Aggregation(Seq.empty[AggregateFunc], Seq.empty[String])
       }
     }
 

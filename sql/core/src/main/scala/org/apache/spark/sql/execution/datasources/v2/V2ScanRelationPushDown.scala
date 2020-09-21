@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.mutable.ArrayBuilder
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
@@ -25,7 +27,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.sources.{AggregateFunction, Aggregation}
+import org.apache.spark.sql.sources.{AggregateFunc, Aggregation}
 import org.apache.spark.sql.types.StructType
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] {
@@ -65,9 +67,58 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
               V1ScanWrapper(v1, translated, pushedFilters, aggregation)
             case _ => scan
           }
-          val r = buildLogicalPlan(project, relation, wrappedScan, output, normalizedProjects,
-            postScanFilters)
-          Aggregate(groupingExpressions, resultExpressions, r)
+
+          if (aggregation.aggregateExpressions.isEmpty) {
+            val plan = buildLogicalPlan(project, relation, wrappedScan, output, normalizedProjects,
+              postScanFilters)
+            Aggregate(groupingExpressions, resultExpressions, plan)
+          } else {
+            val resultAttributes = resultExpressions.map(_.toAttribute)
+              .map ( e => e match { case a: AttributeReference => a })
+            var index = 0
+            val aggOutputBuilder = ArrayBuilder.make[AttributeReference]
+            for (a <- resultAttributes) {
+              aggOutputBuilder +=
+                a.copy(dataType = aggregates(index).dataType)(exprId = NamedExpression.newExprId,
+                  qualifier = a.qualifier)
+              index += 1
+            }
+            val aggOutput = aggOutputBuilder.result
+
+            var newOutput = aggOutput
+            for (col <- output) {
+              if (!aggOutput.exists(_.name.contains(col.name))) {
+                newOutput = col +: newOutput
+              }
+            }
+
+            val r = buildLogicalPlan(newOutput, relation, wrappedScan, newOutput,
+              normalizedProjects, postScanFilters)
+            val plan = Aggregate(groupingExpressions, resultExpressions, r)
+
+            var i = 0
+            plan.transformExpressions {
+            case agg: AggregateExpression =>
+              val aggFunction: aggregate.AggregateFunction = {
+                i += 1
+                if (agg.aggregateFunction.isInstanceOf[aggregate.Max]) {
+                  aggregate.Max(aggOutput(i - 1))
+                } else if (agg.aggregateFunction.isInstanceOf[aggregate.Min]) {
+                  aggregate.Min(aggOutput(i - 1))
+                } else if (agg.aggregateFunction.isInstanceOf[aggregate.Average]) {
+                  aggregate.Average(aggOutput(i - 1))
+                } else if (agg.aggregateFunction.isInstanceOf[aggregate.Sum]) {
+                  aggregate.Sum(aggOutput(i - 1))
+                } else {
+                  agg.aggregateFunction
+                }
+              }
+              agg.transform {
+                case a: aggregate.AggregateFunction => aggFunction
+              }
+            }
+          }
+
         case _ =>
           Aggregate(groupingExpressions, resultExpressions, child)
       }
@@ -89,7 +140,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
         case v1: V1Scan =>
           val translated = filters.flatMap(DataSourceStrategy.translateFilter(_, true))
           V1ScanWrapper(v1, translated, pushedFilters,
-            Aggregation(Seq.empty[AggregateFunction], Seq.empty[String]))
+            Aggregation(Seq.empty[AggregateFunc], Seq.empty[String]))
 
         case _ => scan
       }

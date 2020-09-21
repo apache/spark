@@ -359,7 +359,7 @@ object DataSourceStrategy
         l.output.toStructType,
         Set.empty,
         Set.empty,
-        Aggregation(Seq.empty[AggregateFunction], Seq.empty[String]),
+        Aggregation(Seq.empty[AggregateFunc], Seq.empty[String]),
         toCatalystRDD(l, baseRelation.buildScan()),
         baseRelation,
         None) :: Nil
@@ -433,7 +433,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        Aggregation(Seq.empty[AggregateFunction], Seq.empty[String]),
+        Aggregation(Seq.empty[AggregateFunc], Seq.empty[String]),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
@@ -456,7 +456,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        Aggregation(Seq.empty[AggregateFunction], Seq.empty[String]),
+        Aggregation(Seq.empty[AggregateFunc], Seq.empty[String]),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
@@ -704,10 +704,14 @@ object DataSourceStrategy
     (nonconvertiblePredicates ++ unhandledPredicates, pushedFilters, handledFilters)
   }
 
-  def translateAggregate(aggregates: AggregateExpression): Option[AggregateFunction] = {
+  def translateAggregate(aggregates: AggregateExpression): Option[AggregateFunc] = {
 
     def columnAsString(e: Expression): String = e match {
       case AttributeReference(name, _, _, _) => name
+      case Cast(child, _, _) => child match {
+        case AttributeReference(name, _, _, _) => name
+        case _ => ""
+      }
       case _ => ""
     }
 

@@ -133,7 +133,7 @@ object JDBCRDD extends Logging {
     })
   }
 
-  def compileAggregates(aggregates: Seq[AggregateFunction], dialect: JdbcDialect):
+  def compileAggregates(aggregates: Seq[AggregateFunc], dialect: JdbcDialect):
   Map[String, Array[String]] = {
     def quote(colName: String): String = dialect.quoteIdentifier(colName)
     val compiledAggregates = aggregates.map {
@@ -178,7 +178,7 @@ object JDBCRDD extends Logging {
       filters: Array[Filter],
       parts: Array[Partition],
       options: JDBCOptions,
-      aggregation: Aggregation = Aggregation(Seq.empty[AggregateFunction], Seq.empty[String]))
+      aggregation: Aggregation = Aggregation(Seq.empty[AggregateFunc], Seq.empty[String]))
     : RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
@@ -210,7 +210,7 @@ private[jdbc] class JDBCRDD(
     partitions: Array[Partition],
     url: String,
     options: JDBCOptions,
-    aggregation: Aggregation = Aggregation(Seq.empty[AggregateFunction], Seq.empty[String]))
+    aggregation: Aggregation = Aggregation(Seq.empty[AggregateFunc], Seq.empty[String]))
   extends RDD[InternalRow](sc, Nil) {
 
   /**
@@ -218,19 +218,39 @@ private[jdbc] class JDBCRDD(
    */
   override def getPartitions: Array[Partition] = partitions
 
+  private var updatedSchema: StructType = schema
+
   /**
    * `columns`, but as a String suitable for injection into a SQL query.
    */
   private val columnList: String = {
     val compiledAggregates = JDBCRDD.compileAggregates(aggregation.aggregateExpressions,
       JdbcDialects.get(url))
+    val flippedMap = compiledAggregates.map(_.swap)
+    val colDataTypeMap: Map[String, StructField] = columns.zip(schema.fields).toMap
+    updatedSchema = new StructType()
     val sb = new StringBuilder()
     columns.map(c => compiledAggregates.getOrElse(c, c)).foreach(
       x => x match {
-        case str: String => sb.append(", ").append(str)
-        case array: Array[String] => sb.append(", ").append(array.mkString(", "))
+        case str: String =>
+          sb.append(", ").append(str)
+          updatedSchema = updatedSchema.add(colDataTypeMap.get(str).get)
+        case array: Array[String] =>
+          sb.append(", ").append(array.mkString(", "))
+          for (a <- array) {
+            if (a.contains("MAX") || a.contains("MIN") || a.contains("SUM")) {
+              // get the original column data type
+              // todo: change data type for SUM
+              updatedSchema = updatedSchema.add(colDataTypeMap.get(flippedMap.get(array).get).get)
+            } else { // AVG
+              val dataField = colDataTypeMap.get(flippedMap.get(array).get).get
+              updatedSchema = updatedSchema.add(dataField.name, DoubleType, dataField.nullable)
+            }
+
+          }
       }
     )
+
     if (sb.length == 0) "1" else sb.substring(1)
   }
 
@@ -351,7 +371,8 @@ private[jdbc] class JDBCRDD(
     stmt.setFetchSize(options.fetchSize)
     stmt.setQueryTimeout(options.queryTimeout)
     rs = stmt.executeQuery()
-    val rowsIterator = JdbcUtils.resultSetToSparkInternalRows(rs, schema, inputMetrics)
+
+    val rowsIterator = JdbcUtils.resultSetToSparkInternalRows(rs, updatedSchema, inputMetrics)
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       new InterruptibleIterator(context, rowsIterator), close())
