@@ -67,6 +67,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * @note V and C can be different -- for example, one might group an RDD of type
    * (Int, Int) into an RDD of type (Int, Seq[Int]).
+   *
+   * reduceByKey和groupByKey都是调用的  combineByKeyWithClassTag
+   * 但是在相同的计算规则下，reduceByKey更高效，reduceByKey的createCombiner 做了预聚合
+   * 但是groupByKey的createCombiner 返回的是一个buffer
+   *
    */
   @Experimental
   def combineByKeyWithClassTag[C](

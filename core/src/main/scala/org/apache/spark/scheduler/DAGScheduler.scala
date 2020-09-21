@@ -721,7 +721,6 @@ private[spark] class DAGScheduler(
   /**
    * Run an action job on the given RDD and pass all the results to the resultHandler function as
    * they arrive.
-   * runJob方法中调用了submitJob方法，用于提交job，该方法返回一个JobWaiter，用于等待DAGScheduler任务完成
    *
    * @param rdd           target RDD to run tasks on
    * @param func          a function to run on each partition of the RDD
@@ -742,6 +741,7 @@ private[spark] class DAGScheduler(
     val start: Long = System.nanoTime
     val waiter: JobWaiter[U] = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
     ThreadUtils.awaitReady(waiter.completionFuture, Duration.Inf)
+    // waiter 等待job执行完成
     waiter.completionFuture.value.get match {
       case scala.util.Success(_) =>
         logInfo("Job %d finished: %s, took %f s".format
@@ -1091,8 +1091,8 @@ private[spark] class DAGScheduler(
         missing match {
           case Nil => logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
             submitMissingTasks(stage, jobId.get)
-          case _ => missing.foreach(submitStage)
-            waitingStages += stage
+          case _ => missing.foreach(submitStage) //   递归划分stage
+            waitingStages += stage    // 将stage放入到等待执行的队列中
         }
 
         //        if (missing.isEmpty) {
