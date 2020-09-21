@@ -33,21 +33,9 @@ class JsonSuite extends PlanTest with ExpressionEvalHelper {
 
   val schema = StructType.fromDDL("a int, b int")
 
-  private val jsonAtt = ('json).string.notNull
   private val structAtt = ('struct).struct(schema).notNull
 
-  private val testRelation = LocalRelation(jsonAtt, structAtt)
-
-  test("SPARK-32948: optimize to_json + from_json") {
-    val options = Map.empty[String, String]
-
-    val query = testRelation
-      .select(StructsToJson(options, JsonToStructs(schema, options, 'json)).as("json"))
-    val optimized = Optimizer.execute(query.analyze)
-
-    val expected = testRelation.select('json.as("json")).analyze
-    comparePlans(optimized, expected)
-  }
+  private val testRelation = LocalRelation(structAtt)
 
   test("SPARK-32948: optimize from_json + to_json") {
     val options = Map.empty[String, String]
