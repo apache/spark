@@ -484,7 +484,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    */
   def table(tableName: String): DataFrame = {
     require(tableName != null, "The table name can't be null")
-    val identifier = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    val identifier = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     Dataset.ofRows(
       sparkSession,
       UnresolvedRelation(

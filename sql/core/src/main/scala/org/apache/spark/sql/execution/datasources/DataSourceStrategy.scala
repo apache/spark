@@ -282,7 +282,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta, options))
 
-    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, _), _, _, _, _) =>
+    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false), _, _, _, _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
     case UnresolvedCatalogRelation(tableMeta, options, false)
@@ -296,7 +296,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       getStreamingRelation(tableMeta, extraOptions)
 
     case s @ StreamingRelationV2(
-    _, _, table, extraOptions, _, Some(UnresolvedCatalogRelation(tableMeta, _, true))) =>
+        _, _, table, extraOptions, _, Some(UnresolvedCatalogRelation(tableMeta, _, true))) =>
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       if (table.isInstanceOf[SupportsRead]
           && table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ)) {
