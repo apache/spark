@@ -335,7 +335,8 @@ object WindowFunctionType {
 trait OffsetWindowSpec extends Expression {
   /**
    * Input expression to evaluate against a row which a number of rows below or above (depending on
-   * the value and sign of the offset) the current row.
+   * the value and sign of the offset) the starting row. (current row if isRelative=true, or the
+   * first row of the window frame otherwise).
    */
   val input: Expression
 
@@ -345,14 +346,15 @@ trait OffsetWindowSpec extends Expression {
   val default: Expression
 
   /**
-   * (Foldable) expression that contains the number of rows between the current row and the row
-   * where the input expression is evaluated.
+   * (Foldable) expression that contains the number of rows between the starting row (current row
+   * if isRelative=true, or the first row of the window frame otherwise) and the row where the
+   * input expression is evaluated.
    */
   val offsetExpr: Expression
 
   /**
-   * Direction of the number of rows between the current row and the row where the input expression
-   * is evaluated.
+   * Direction of the number of rows between the current row or the first row of the entire
+   * window partition and the row where the input expression is evaluated.
    */
   val direction: SortDirection
 
