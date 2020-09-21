@@ -428,6 +428,7 @@ exportMethods("%<=>%",
               "weekofyear",
               "when",
               "window",
+              "withField",
               "xxhash64",
               "year")
 

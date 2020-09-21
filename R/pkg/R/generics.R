@@ -729,6 +729,9 @@ setGeneric("over", function(x, window) { standardGeneric("over") })
 #' @rdname eq_null_safe
 setGeneric("%<=>%", function(x, value) { standardGeneric("%<=>%") })
 
+#' @rdname withField
+setGeneric("withField", function(x, fieldName, col) { standardGeneric("withField") })
+
 ###################### WindowSpec Methods ##########################
 
 #' @rdname partitionBy
