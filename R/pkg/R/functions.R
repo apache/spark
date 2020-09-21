@@ -4407,3 +4407,18 @@ setMethod("current_timestamp",
             jc <- callJStatic("org.apache.spark.sql.functions", "current_timestamp")
             column(jc)
           })
+
+#' @details
+#' \code{timestamp_seconds}: Creates timestamp from the number of seconds since UTC epoch.
+#'
+#' @rdname column_datetime_functions
+#' @aliases timestamp_seconds timestamp_seconds,Column-method
+#' @note timestamp_seconds since 3.1.0
+setMethod("timestamp_seconds",
+    signature(x = "Column"),
+    function(x) {
+        jc <- callJStatic(
+            "org.apache.spark.sql.functions", "timestamp_seconds", x@jc
+        )
+        column(jc)
+    })

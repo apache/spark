@@ -1424,6 +1424,7 @@ test_that("column functions", {
     date_trunc("quarter", c) + current_date() + current_timestamp()
   c25 <- overlay(c1, c2, c3, c3) + overlay(c1, c2, c3) + overlay(c1, c2, 1) +
     overlay(c1, c2, 3, 4)
+  c26 <- timestamp_seconds(c1)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
