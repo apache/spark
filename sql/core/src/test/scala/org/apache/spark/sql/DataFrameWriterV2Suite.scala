@@ -144,6 +144,26 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(exc.getMessage.contains("table_name"))
   }
 
+  test("Append: fail if it writes to the temp view") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+    spark.table("testcat.table_name").createOrReplaceTempView("temp_view")
+
+    val exc = intercept[AnalysisException] {
+      spark.table("source").writeTo("temp_view").append()
+    }
+    assert(exc.getMessage.contains("temp_view"))
+  }
+
+  test("Append: fail if it writes to the view") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+    spark.sql("CREATE OR REPLACE VIEW table_view AS SELECT id, data FROM testcat.table_name")
+
+    val exc = intercept[AnalysisException] {
+      spark.table("source").writeTo("table_view").append()
+    }
+    assert(exc.getMessage.contains("table_view"))
+  }
+
   test("Overwrite: overwrite by expression: true") {
     spark.sql(
       "CREATE TABLE testcat.table_name (id bigint, data string) USING foo PARTITIONED BY (id)")
@@ -208,6 +228,26 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(exc.getMessage.contains("table_name"))
   }
 
+  test("Overwrite: fail if it writes to the temp view") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+    spark.table("testcat.table_name").createOrReplaceTempView("temp_view")
+
+    val exc = intercept[AnalysisException] {
+      spark.table("source").writeTo("temp_view").overwrite(lit(true))
+    }
+    assert(exc.getMessage.contains("temp_view"))
+  }
+
+  test("Overwrite: fail if it writes to the view") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+    spark.sql("CREATE OR REPLACE VIEW table_view AS SELECT id, data FROM testcat.table_name")
+
+    val exc = intercept[AnalysisException] {
+      spark.table("source").writeTo("table_view").overwrite(lit(true))
+    }
+    assert(exc.getMessage.contains("table_view"))
+  }
+
   test("OverwritePartitions: overwrite conflicting partitions") {
     spark.sql(
       "CREATE TABLE testcat.table_name (id bigint, data string) USING foo PARTITIONED BY (id)")
@@ -270,6 +310,26 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     }
 
     assert(exc.getMessage.contains("table_name"))
+  }
+
+  test("OverwritePartitions: fail if it writes to the temp view") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+    spark.table("testcat.table_name").createOrReplaceTempView("temp_view")
+
+    val exc = intercept[AnalysisException] {
+      spark.table("source").writeTo("temp_view").overwritePartitions()
+    }
+    assert(exc.getMessage.contains("temp_view"))
+  }
+
+  test("OverwritePartitions: fail if it writes to the view") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+    spark.sql("CREATE OR REPLACE VIEW table_view AS SELECT id, data FROM testcat.table_name")
+
+    val exc = intercept[AnalysisException] {
+      spark.table("source").writeTo("table_view").overwritePartitions()
+    }
+    assert(exc.getMessage.contains("table_view"))
   }
 
   test("Create: basic behavior") {

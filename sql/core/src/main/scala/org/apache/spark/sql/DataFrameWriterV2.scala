@@ -153,6 +153,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    */
   @throws(classOf[NoSuchTableException])
   def append(): Unit = {
+    assertNoTempView("append")
     val append = loadTable(catalog, identifier) match {
       case Some(t) =>
         AppendData.byName(
@@ -177,6 +178,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    */
   @throws(classOf[NoSuchTableException])
   def overwrite(condition: Column): Unit = {
+    assertNoTempView("overwrite")
     val overwrite = loadTable(catalog, identifier) match {
       case Some(t) =>
         OverwriteByExpression.byName(
@@ -204,6 +206,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    */
   @throws(classOf[NoSuchTableException])
   def overwritePartitions(): Unit = {
+    assertNoTempView("overwritePartitions")
     val dynamicOverwrite = loadTable(catalog, identifier) match {
       case Some(t) =>
         OverwritePartitionsDynamic.byName(
@@ -214,6 +217,12 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     }
 
     runCommand("overwritePartitions")(dynamicOverwrite)
+  }
+
+  private def assertNoTempView(name: String): Unit = {
+    if (sparkSession.sessionState.catalog.isTempView(tableName)) {
+      throw new AnalysisException(s"Temporary view $table doesn't support $name")
+    }
   }
 
   /**
