@@ -570,7 +570,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _applicationAttemptId = _taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
     if (_conf.get(UI_REVERSE_PROXY)) {
-      val proxyUrl = _conf.get("spark.ui.reverseProxyUrl", "").stripSuffix("/") +
+      val proxyUrl = _conf.get(UI_REVERSE_PROXY_URL.key, "").stripSuffix("/") +
         "/proxy/" + _applicationId
       System.setProperty("spark.ui.proxyBase", proxyUrl)
     }

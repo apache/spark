@@ -280,7 +280,7 @@ private[deploy] class Worker(
         activeMasterWebUiUrl.stripSuffix("/"), workerId))
        // if reverseProxyUrl is not set, then we continue to generate relative URLs
        // starting with "/" throughout the UI and do not use activeMasterWebUiUrl
-       val proxyUrl = conf.get("spark.ui.reverseProxyUrl", "").stripSuffix("/") +
+       val proxyUrl = conf.get(UI_REVERSE_PROXY_URL.key, "").stripSuffix("/") +
          "/proxy/" + workerId
        System.setProperty("spark.ui.proxyBase", proxyUrl)
     }

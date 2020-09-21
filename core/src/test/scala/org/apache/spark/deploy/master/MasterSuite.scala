@@ -355,7 +355,7 @@ class MasterSuite extends SparkFunSuite
   test("master/worker web ui available with reverseProxy") {
     implicit val formats = org.json4s.DefaultFormats
     val conf = new SparkConf()
-    conf.set("spark.ui.reverseProxy", "true")
+    conf.set(UI_REVERSE_PROXY, true)
     val localCluster = new LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
     val masterUrl = s"http://localhost:${localCluster.masterWebUIPort}"
@@ -395,8 +395,8 @@ class MasterSuite extends SparkFunSuite
     implicit val formats = org.json4s.DefaultFormats
     val reverseProxyUrl = "http://proxyhost:8080/path/to/spark"
     val conf = new SparkConf()
-    conf.set("spark.ui.reverseProxy", "true")
-    conf.set("spark.ui.reverseProxyUrl", reverseProxyUrl)
+    conf.set(UI_REVERSE_PROXY, true)
+    conf.set(UI_REVERSE_PROXY_URL, reverseProxyUrl)
     val localCluster = new LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
     val masterUrl = s"http://localhost:${localCluster.masterWebUIPort}"
