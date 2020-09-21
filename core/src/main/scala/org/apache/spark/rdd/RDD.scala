@@ -957,7 +957,7 @@ abstract class RDD[T: ClassTag](
    */
   def foreach(f: T => Unit): Unit = withScope {
     val cleanF: T => Unit = sc.clean(f)
-    sc.runJob(this, (iter: Iterator[T]) => iter.foreach(cleanF))
+          sc.runJob(this, (iter: Iterator[T]) => iter.foreach(cleanF))
   }
 
   /**

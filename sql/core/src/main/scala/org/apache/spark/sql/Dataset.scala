@@ -260,7 +260,7 @@ class Dataset[T] private[sql](
         Column(col).cast(StringType)
       }
     }
-    val data = newDf.select(castCols: _*).take(numRows + 1)
+    val data: Array[Row] = newDf.select(castCols: _*).take(numRows + 1)
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
@@ -297,7 +297,7 @@ class Dataset[T] private[sql](
       vertical: Boolean = false): String = {
     val numRows = _numRows.max(0).min(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH - 1)
     // Get rows represented by Seq[Seq[String]], we may get one more line if it has more data.
-    val tmpRows = getRows(numRows, truncate)
+    val tmpRows: Seq[Seq[String]] = getRows(numRows, truncate)
 
     val hasMoreData = tmpRows.length - 1 > numRows
     val rows = tmpRows.take(numRows + 1)
