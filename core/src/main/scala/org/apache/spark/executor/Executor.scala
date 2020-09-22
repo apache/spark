@@ -337,7 +337,10 @@ private[spark] class Executor(
     private def collectAccumulatorsAndResetStatusOnFailure(taskStartTime: Long) = {
       // Report executor runtime and JVM gc time
       Option(task).foreach(t => {
-        t.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStartTime)
+        t.metrics.setExecutorRunTime(
+          // SPARK-32898: it's possible that a task is killed when taskStartTime has the initial
+          // value(=0) still. In this case, the executorRunTime should be considered as 0.
+          if (taskStartTime > 0) System.currentTimeMillis() - taskStartTime else 0)
         t.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
       })
 
