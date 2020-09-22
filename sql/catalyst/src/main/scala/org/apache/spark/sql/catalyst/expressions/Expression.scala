@@ -1048,6 +1048,11 @@ trait ComplexTypeMergingExpression extends Expression {
   @transient
   lazy val inputTypesForMerging: Seq[DataType] = children.map(_.dataType)
 
+  private lazy val internalDataType: DataType = {
+    dataTypeCheck
+    inputTypesForMerging.reduceLeft(TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(_, _).get)
+  }
+
   def dataTypeCheck: Unit = {
     require(
       inputTypesForMerging.nonEmpty,
@@ -1058,10 +1063,7 @@ trait ComplexTypeMergingExpression extends Expression {
         s" The input types found are\n\t${inputTypesForMerging.mkString("\n\t")}")
   }
 
-  override def dataType: DataType = {
-    dataTypeCheck
-    inputTypesForMerging.reduceLeft(TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(_, _).get)
-  }
+  override def dataType: DataType = internalDataType
 }
 
 /**
