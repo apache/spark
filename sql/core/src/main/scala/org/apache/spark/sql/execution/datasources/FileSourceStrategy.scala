@@ -158,8 +158,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         ExpressionSet(Nil)
       } else {
         val predicates = ExpressionSet(normalizedFilters
-          .flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
-          .filter(_.references.subsetOf(partitionSet)))
+          .flatMap(extractPredicatesWithinOutputSet(_, partitionSet)))
         logInfo(s"Pruning directories with: ${predicates.mkString(",")}")
         predicates
       }
