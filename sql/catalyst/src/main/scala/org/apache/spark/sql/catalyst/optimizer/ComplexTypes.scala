@@ -40,13 +40,13 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
       // Remove redundant field extraction.
       case GetStructField(createNamedStruct: CreateNamedStruct, ordinal, _) =>
         createNamedStruct.valExprs(ordinal)
-    case GetStructField(updateFields: UpdateFields, ordinal, _) =>
-      val structExpr = updateFields.structExpr
-      updateFields.newExprs(ordinal) match {
+    case GetStructField(u: UpdateFields, ordinal, _) if !u.structExpr.isInstanceOf[UpdateFields] =>
+      val structExpr = u.structExpr
+      u.newExprs(ordinal) match {
         // if the struct itself is null, then any value extracted from it (expr) will be null
         // so we don't need to wrap expr in If(IsNull(struct), Literal(null, expr.dataType), expr)
         case expr: GetStructField if expr.child.semanticEquals(structExpr) => expr
-        case expr => If(IsNull(ultimateStruct(structExpr)), Literal(null, expr.dataType), expr)
+        case expr => If(IsNull(structExpr), Literal(null, expr.dataType), expr)
       }
       // Remove redundant array indexing.
       case GetArrayStructFields(CreateArray(elems, useStringTypeWhenEmpty), field, ordinal, _, _) =>
@@ -68,11 +68,5 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
         }
       case GetMapValue(CreateMap(elems, _), key) => CaseKeyWhen(key, elems)
     }
-  }
-
-  @scala.annotation.tailrec
-  private def ultimateStruct(expr: Expression): Expression = expr match {
-    case e: UpdateFields => ultimateStruct(e.structExpr)
-    case e => e
   }
 }
