@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
  * NOTE: this rule is designed to be applied right after [[EnsureRequirements]],
  * where all [[ShuffleExchangeExec]] and [[SortExec]] have been added to plan properly.
  *
- * When BUCKETING_ENABLED and DYNAMIC_DECIDE_BUCKETING_ENABLED are set to true, go through
+ * When BUCKETING_ENABLED and AUTO_BUCKETED_SCAN_ENABLED are set to true, go through
  * query plan to check where bucketed table scan is unnecessary, and disable bucketed table
  * scan if needed.
  *
@@ -142,14 +142,12 @@ case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan]
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.bucketingEnabled || !conf.autoBucketedScanEnabled) {
       plan
+    } else if (plan.find(hasInterestingPartition).isDefined) {
+      disableBucketWithInterestingPartition(plan, false, false)
     } else {
-      if (plan.find(hasInterestingPartition).isEmpty) {
-        // Disable all bucketed scans if there's no operator with interesting partition
-        // found in query plan.
-        disableAllBucketedScan(plan)
-      } else {
-        disableBucketWithInterestingPartition(plan, false, false)
-      }
+      // Disable all bucketed scans if there's no operator with interesting partition
+      // found in query plan.
+      disableAllBucketedScan(plan)
     }
   }
 }
