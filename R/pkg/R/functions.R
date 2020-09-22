@@ -1417,8 +1417,10 @@ setMethod("quarter",
           })
 
 #' @details
-#' \code{percentile_approx} Returns the approximate percentile value of
-#' numeric column at the given percentage.
+#' \code{percentile_approx} Returns the approximate \code{percentile} of the numeric column
+#' \code{col} which is the smallest value in the ordered \code{col} values (sorted from least to
+#' greatest) such that no more than \code{percentage} of \code{col} values is less than the value
+#' or equal to that value.
 #'
 #' @param percentage Numeric percentage at which percentile should be computed
 #'                   All values should be between 0 and 1.
