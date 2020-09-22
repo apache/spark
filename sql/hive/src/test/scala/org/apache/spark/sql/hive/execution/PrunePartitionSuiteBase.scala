@@ -48,13 +48,13 @@ abstract class PrunePartitionSuiteBase extends QueryTest with SQLTestUtils with 
         assertPrunedPartitions(
           "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)", 2, 1)
         assertPrunedPartitions(
-           "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (i = 1 OR p = '2')", 4, 0)
+          "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (i = 1 OR p = '2')", 4, 0)
         assertPrunedPartitions(
           "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '3' AND i = 3 )", 2, 1)
         assertPrunedPartitions(
           "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '2' OR p = '3')", 3, 1)
         assertPrunedPartitions(
-          "SELECT * FROM t", 4, expectedPushedDownFilterCount = 0)
+          "SELECT * FROM t", 4, 0)
         assertPrunedPartitions(
           "SELECT * FROM t WHERE p = '1' AND i = 2", 1, 2)
         assertPrunedPartitions(
