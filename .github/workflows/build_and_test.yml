@@ -304,12 +304,6 @@ jobs:
           -Dguava.version=25.0-jre -Djava.version=11 -Dtest.default.exclude.tags=  -Dtest=none \
           -DwildcardSuites="org.apache.spark.ui.ChromeUISeleniumSuite,org.apache.spark.deploy.history.ChromeUIHistoryServerSuite" test
         rm -rf ~/.m2/repository/org/apache/spark
-    - name: Upload test results to report
-      if: always()
-      uses: actions/upload-artifact@v2
-      with:
-        name: test-results-webui
-        path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: failure()
       uses: actions/upload-artifact@v2
