@@ -951,6 +951,14 @@ object SQLConf {
     .checkValue(_ > 0, "the value of spark.sql.sources.bucketing.maxBuckets must be greater than 0")
     .createWithDefault(100000)
 
+  val AUTO_BUCKETED_SCAN_ENABLED =
+    buildConf("spark.sql.sources.bucketing.autoBucketedScan.enabled")
+      .doc("When true, decide whether to do bucketed scan on input tables based on query plan " +
+        "automatically.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
@@ -2764,14 +2772,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val DYNAMIC_DECIDE_BUCKETING_ENABLED =
-    buildConf("spark.sql.sources.dynamic.decide.bucketing.enabled")
-      .doc("When true, dynamically decide whether to do bucketed scan on input tables " +
-        "based on query plan.")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(true)
-
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3172,6 +3172,8 @@ class SQLConf extends Serializable with Logging {
 
   def bucketingMaxBuckets: Int = getConf(SQLConf.BUCKETING_MAX_BUCKETS)
 
+  def autoBucketedScanEnabled: Boolean = getConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
+
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
@@ -3393,8 +3395,6 @@ class SQLConf extends Serializable with Logging {
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
   def truncateTrashEnabled: Boolean = getConf(SQLConf.TRUNCATE_TRASH_ENABLED)
-
-  def dynamicDecideBucketingEnabled: Boolean = getConf(SQLConf.DYNAMIC_DECIDE_BUCKETING_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -262,7 +262,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
           "p1=2/file7_0000" -> 1),
         buckets = 3)
 
-    withSQLConf(SQLConf.DYNAMIC_DECIDE_BUCKETING_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "false") {
       // No partition pruning
       checkScan(table) { partitions =>
         assert(partitions.size == 3)

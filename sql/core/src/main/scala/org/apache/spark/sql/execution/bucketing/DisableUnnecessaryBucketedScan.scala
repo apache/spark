@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Plans bucketing dynamically based on actual physical query plan.
+ * Disable unnecessary bucketed table scan based on actual physical query plan.
  * NOTE: this rule is designed to be applied right after [[EnsureRequirements]],
  * where all [[ShuffleExchangeExec]] and [[SortExec]] have been added to plan properly.
  *
@@ -36,8 +36,10 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * For all operators which [[hasInterestingPartition]] (i.e., require [[ClusteredDistribution]]
  * or [[HashClusteredDistribution]]), check if the sub-plan for operator has [[Exchange]] and
- * bucketed table scan (and only allow certain operators in plan, see details in
- * [[canDisableBucketedScan]]). If yes, disable the bucketed table scan in the sub-plan.
+ * bucketed table scan. If yes, disable the bucketed table scan in the sub-plan.
+ * Only allow certain operators in sub-plan, which guarantees each sub-plan is single lineage
+ * (i.e., each operator has only one child). See details in
+ * [[disableBucketWithInterestingPartition]]).
  *
  * Examples:
  * (1).join:
@@ -66,31 +68,42 @@ import org.apache.spark.sql.internal.SQLConf
  * the paper "Access Path Selection in a Relational Database Management System"
  * (http://www.inf.ed.ac.uk/teaching/courses/adbs/AccessPath.pdf).
  */
-case class PlanBucketing(conf: SQLConf) extends Rule[SparkPlan] {
-  private def disableBucketWithInterestingPartition(plan: SparkPlan): SparkPlan = {
-    var hasPlanWithInterestingPartition = false
+case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan] {
 
-    val newPlan = plan.transformUp {
+  /**
+   * Disable bucketed table scan with pre-order traversal of plan.
+   *
+   * @param withInterestingPartition The traversed plan has operator with interesting partition.
+   * @param withExchange The traversed plan has [[Exchange]] operator.
+   */
+  private def disableBucketWithInterestingPartition(
+      plan: SparkPlan,
+      withInterestingPartition: Boolean,
+      withExchange: Boolean): SparkPlan = {
+    plan match {
       case p if hasInterestingPartition(p) =>
-        hasPlanWithInterestingPartition = true
-
-        val newChildren = p.children.map(child => {
-          if (canDisableBucketedScan(child)) {
-            disableBucketedScan(child)
-          } else {
-            child
-          }
-        })
-        p.withNewChildren(newChildren)
-      case other => other
-    }
-
-    if (hasPlanWithInterestingPartition) {
-      newPlan
-    } else {
-      // Disable all bucketed scans if there's no operator with interesting partition
-      // found in query plan.
-      disableBucketedScan(newPlan)
+        // Operators with interesting partition, propagates `withInterestingPartition` as true
+        // to its children.
+        p.mapChildren(disableBucketWithInterestingPartition(_, true, false))
+      case exchange: Exchange if withInterestingPartition =>
+        // Exchange operator propagates `withExchange` as true to its child
+        // if the plan has interesting partition.
+        exchange.mapChildren(disableBucketWithInterestingPartition(
+          _, withInterestingPartition, true))
+      case scan: FileSourceScanExec
+          if withInterestingPartition && withExchange && isBucketedScanWithoutFilter(scan) =>
+        // Disable bucketed table scan if the plan has interesting partition,
+        // and [[Exchange]] in the plan.
+        scan.copy(disableBucketedScan = true)
+      case o =>
+        if (isAllowedUnaryExecNode(o)) {
+          // Propagates `withInterestingPartition` and `withExchange` from parent
+          // for only allowed single-child nodes.
+          o.mapChildren(disableBucketWithInterestingPartition(
+            _, withInterestingPartition, withExchange))
+        } else {
+          o.mapChildren(disableBucketWithInterestingPartition(_, false, false))
+        }
     }
   }
 
@@ -101,14 +114,8 @@ case class PlanBucketing(conf: SQLConf) extends Rule[SparkPlan] {
     }
   }
 
-  private def canDisableBucketedScan(plan: SparkPlan): Boolean = {
-    val hasExchange = plan.find(_.isInstanceOf[Exchange]).isDefined
-    val hasBucketedScan = plan.find {
-      case scan: FileSourceScanExec => isBucketedScanWithoutFilter(scan)
-      case _ => false
-    }.isDefined
-
-    def isAllowedPlan(plan: SparkPlan): Boolean = plan match {
+  private def isAllowedUnaryExecNode(plan: SparkPlan): Boolean = {
+    plan match {
       case _: SortExec | _: Exchange | _: ProjectExec | _: FilterExec |
            _: FileSourceScanExec => true
       case partialAgg: BaseAggregateExec =>
@@ -116,29 +123,33 @@ case class PlanBucketing(conf: SQLConf) extends Rule[SparkPlan] {
         modes.nonEmpty && modes.forall(mode => mode == Partial || mode == PartialMerge)
       case _ => false
     }
-    val onlyHasAllowedPlans = plan.find(!isAllowedPlan(_)).isEmpty
-    hasExchange && hasBucketedScan && onlyHasAllowedPlans
-  }
-
-  private def disableBucketedScan(plan: SparkPlan): SparkPlan = {
-    plan.transformUp {
-      case scan: FileSourceScanExec if isBucketedScanWithoutFilter(scan) =>
-        scan.copy(optionalDynamicDecideBucketing = Some(false))
-    }
   }
 
   private def isBucketedScanWithoutFilter(scan: FileSourceScanExec): Boolean = {
-    // Do not disable bucketing for the scan if it has filter pruning,
-    // because bucketing is still useful here to save CPU/IO cost with
+    // Do not disable bucketed table scan if it has filter pruning,
+    // because bucketed table scan is still useful here to save CPU/IO cost with
     // only reading selected bucket files.
     scan.bucketedScan && scan.optionalBucketSet.isEmpty
   }
 
+  private def disableAllBucketedScan(plan: SparkPlan): SparkPlan = {
+    plan.transformUp {
+      case scan: FileSourceScanExec if isBucketedScanWithoutFilter(scan) =>
+        scan.copy(disableBucketedScan = true)
+    }
+  }
+
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.bucketingEnabled || !conf.dynamicDecideBucketingEnabled) {
+    if (!conf.bucketingEnabled || !conf.autoBucketedScanEnabled) {
       plan
     } else {
-      disableBucketWithInterestingPartition(plan)
+      if (plan.find(hasInterestingPartition).isEmpty) {
+        // Disable all bucketed scans if there's no operator with interesting partition
+        // found in query plan.
+        disableAllBucketedScan(plan)
+      } else {
+        disableBucketWithInterestingPartition(plan, false, false)
+      }
     }
   }
 }

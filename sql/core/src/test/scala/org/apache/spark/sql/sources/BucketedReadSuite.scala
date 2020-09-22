@@ -81,7 +81,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         .bucketBy(8, "j", "k")
         .saveAsTable("bucketed_table")
 
-      withSQLConf(SQLConf.DYNAMIC_DECIDE_BUCKETING_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "false") {
         val bucketValue = Random.nextInt(maxI)
         val table = spark.table("bucketed_table").filter($"i" === bucketValue)
         val query = table.queryExecution
@@ -1015,7 +1015,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("SPARK-32859: decide bucketing dynamically based on query plan") {
+  test("SPARK-32859: disable unnecessary bucketed table scan based on query plan") {
     withTable("t1", "t2") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("t1")
       df2.write.format("parquet").bucketBy(4, "i").saveAsTable("t2")
@@ -1036,11 +1036,11 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         ("SELECT * FROM t1 WHERE j = 1", 0, 1)
       ).foreach { case (query, bucketedScan1, bucketedScan2) =>
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
-          SQLConf.DYNAMIC_DECIDE_BUCKETING_ENABLED.key -> "true") {
+          SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
           checkNumBucketedScan(query, bucketedScan1)
           val result = sql(query).collect()
 
-          withSQLConf(SQLConf.DYNAMIC_DECIDE_BUCKETING_ENABLED.key -> "false") {
+          withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "false") {
             checkNumBucketedScan(query, bucketedScan2)
             checkAnswer(sql(query), result)
           }

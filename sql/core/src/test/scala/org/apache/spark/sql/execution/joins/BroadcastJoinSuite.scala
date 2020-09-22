@@ -432,7 +432,7 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
         // join1 is a broadcast join where df2 is broadcasted. Note that output partitioning on the
         // streamed side (t1) is HashPartitioning (bucketed files).
         val join1 = t1.join(df2, t1("i1") === df2("i2") && t1("j1") === df2("j2"))
-        withSQLConf(SQLConf.DYNAMIC_DECIDE_BUCKETING_ENABLED.key -> "false") {
+        withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "false") {
           val plan1 = join1.queryExecution.executedPlan
           assert(collect(plan1) { case e: ShuffleExchangeExec => e }.isEmpty)
           val broadcastJoins = collect(plan1) { case b: BroadcastHashJoinExec => b }

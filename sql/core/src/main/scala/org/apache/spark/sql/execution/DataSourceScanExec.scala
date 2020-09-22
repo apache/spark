@@ -155,9 +155,10 @@ case class RowDataSourceScanExec(
  * @param partitionFilters Predicates to use for partition pruning.
  * @param optionalBucketSet Bucket ids for bucket pruning.
  * @param optionalNumCoalescedBuckets Number of coalesced buckets.
- * @param optionalDynamicDecideBucketing Disable bucketing dynamically based on query plan.
  * @param dataFilters Filters on non-partition columns.
- * @param tableIdentifier identifier for the table in the metastore.
+ * @param tableIdentifier Identifier for the table in the metastore.
+ * @param disableBucketedScan Disable bucketed scan based on physical query plan, see rule
+ *                            [[DisableUnnecessaryBucketedScan]] for details.
  */
 case class FileSourceScanExec(
     @transient relation: HadoopFsRelation,
@@ -166,9 +167,9 @@ case class FileSourceScanExec(
     partitionFilters: Seq[Expression],
     optionalBucketSet: Option[BitSet],
     optionalNumCoalescedBuckets: Option[Int],
-    optionalDynamicDecideBucketing: Option[Boolean],
     dataFilters: Seq[Expression],
-    tableIdentifier: Option[TableIdentifier])
+    tableIdentifier: Option[TableIdentifier],
+    disableBucketedScan: Boolean = false)
   extends DataSourceScanExec {
 
   // Note that some vals referring the file-based relation are lazy intentionally
@@ -260,7 +261,7 @@ case class FileSourceScanExec(
   // exposed for testing
   lazy val bucketedScan: Boolean = {
     if (relation.sparkSession.sessionState.conf.bucketingEnabled && relation.bucketSpec.isDefined
-      && optionalDynamicDecideBucketing.getOrElse(true)) {
+      && !disableBucketedScan) {
       val spec = relation.bucketSpec.get
       val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
       bucketColumns.size == spec.bucketColumnNames.size
@@ -342,7 +343,7 @@ case class FileSourceScanExec(
       location.getClass.getSimpleName +
         Utils.buildLocationMetadata(location.rootPaths, maxMetadataValueLength)
     val metadata =
-      Map(
+      HashMap(
         "Format" -> relation.fileFormat.toString,
         "ReadSchema" -> requiredSchema.catalogString,
         "Batched" -> supportsColumnar.toString,
@@ -351,20 +352,22 @@ case class FileSourceScanExec(
         "DataFilters" -> seqToString(dataFilters),
         "Location" -> locationDesc)
 
-    val withSelectedBucketsCount = relation.bucketSpec.map { spec =>
-      val numSelectedBuckets = optionalBucketSet.map { b =>
-        b.cardinality()
-      } getOrElse {
-        spec.numBuckets
+    if (bucketedScan) {
+      relation.bucketSpec.map { spec =>
+        val numSelectedBuckets = optionalBucketSet.map { b =>
+          b.cardinality()
+        } getOrElse {
+          spec.numBuckets
+        }
+        metadata += ("SelectedBucketsCount" ->
+          (s"$numSelectedBuckets out of ${spec.numBuckets}" +
+            optionalNumCoalescedBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
       }
-      metadata + ("SelectedBucketsCount" ->
-        (s"$numSelectedBuckets out of ${spec.numBuckets}" +
-          optionalNumCoalescedBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
-    } getOrElse {
-      metadata
+    } else if (disableBucketedScan) {
+      metadata += ("DisableBucketedScan" -> "true")
     }
 
-    withSelectedBucketsCount
+    metadata.toMap
   }
 
   override def verboseStringWithOperatorId(): String = {
@@ -626,8 +629,8 @@ case class FileSourceScanExec(
         filterUnusedDynamicPruningExpressions(partitionFilters), output),
       optionalBucketSet,
       optionalNumCoalescedBuckets,
-      optionalDynamicDecideBucketing,
       QueryPlan.normalizePredicates(dataFilters, output),
-      None)
+      None,
+      disableBucketedScan)
   }
 }

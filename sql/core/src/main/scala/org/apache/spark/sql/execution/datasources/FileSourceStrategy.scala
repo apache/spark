@@ -220,7 +220,6 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           partitionKeyFilters.toSeq,
           bucketSet,
           None,
-          None,
           dataFilters,
           table.map(_.identifier))
 
