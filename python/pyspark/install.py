@@ -100,7 +100,10 @@ def install_spark(dest, spark_version, hadoop_version, hive_version):
 
     package_name = checked_package_name(spark_version, hadoop_version, hive_version)
     package_local_path = os.path.join(dest, "%s.tgz" % package_name)
-    sites = get_preferred_mirrors()
+    if "PYSPARK_RELEASE_MIRROR" in os.environ:
+        sites = [os.environ["PYSPARK_RELEASE_MIRROR"]]
+    else:
+        sites = get_preferred_mirrors()
     print("Trying to download Spark %s from [%s]" % (spark_version, ", ".join(sites)))
 
     pretty_pkg_name = "%s for Hadoop %s" % (

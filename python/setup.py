@@ -120,6 +120,11 @@ class InstallCommand(install):
 
     def run(self):
         install.run(self)
+
+        # Make sure the destination is always clean.
+        spark_dist = os.path.join(self.install_lib, "pyspark", "spark-distribution")
+        rmtree(spark_dist, ignore_errors=True)
+
         if ("HADOOP_VERSION" in os.environ) or ("HIVE_VERSION" in os.environ):
             # Note that SPARK_VERSION environment is just a testing purpose.
             spark_version, hadoop_version, hive_version = install_module.checked_versions(
@@ -134,7 +139,7 @@ class InstallCommand(install):
                 return
 
             install_module.install_spark(
-                dest=os.path.join(self.install_lib, "pyspark", "spark-distribution"),
+                dest=spark_dist,
                 spark_version=spark_version,
                 hadoop_version=hadoop_version,
                 hive_version=hive_version)
