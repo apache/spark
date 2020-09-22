@@ -283,9 +283,9 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ~/.m2/repository
-        key: java11-maven-${{ hashFiles('**/pom.xml') }}
+        key: webui-tests-with-chrome-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
-          java11-maven-
+          webui-tests-with-chrome-maven-
     - name: Install Java 11
       uses: actions/setup-java@v1
       with:
