@@ -1357,6 +1357,10 @@ setGeneric("substring_index", function(x, delim, count) { standardGeneric("subst
 #' @name NULL
 setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
 
+#' @rdname column_datetime_functions
+#' @name timestamp_seconds
+setGeneric("timestamp_seconds", function(x) { standardGeneric("timestamp_seconds") })
+
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("transform_keys", function(x, f) {  standardGeneric("transform_keys") })
