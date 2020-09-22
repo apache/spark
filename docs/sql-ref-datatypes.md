@@ -314,3 +314,33 @@ SELECT COUNT(*), c2 FROM test GROUP BY c2;
 |        3| Infinity|
 +---------+---------+
 ```
+
+#### Data type compatibility
+
+The following is the hierarchy of data type compatibility. In an operation involving different and compatible data types, these will be promoted to the lowest common top type to perform the operation.
+
+For example, if you have an add operation between an integer and a float, the integer will be treated as a float, the least common compatible type, resulting the operation in a float.
+
+The most common operations where this hierarchy is applied are:
+* Parse Csv files
+* Parse Json files
+* Expressions (in, sum, avg, if, ...)
+* Date time expressions (date_add, date_sub, ...)
+
+|Data type|Hierarchy compatible types|
+|---------|--------------------------|
+|ByteType |ByteType,ShortType, IntegerType, LongType, FloatType, DoubleType|
+|ShortType |ShortType,IntegerType, LongType, FloatType, DoubleType|
+|IntegerType |IntegerType,LongType, FloatType, DoubleType|
+|LongType |LongType,FloatType, DoubleType|
+|FloatType |FloatType,DoubleType|
+|DoubleType |DoubleType|
+|StringType |StringType|
+|BinaryType |BinaryType|
+|BooleanType |BooleanType|
+|TimestampType |TimestampType, DateType|
+|DateType |DateType|
+
+In the case of CSV and JSON parsing, if the types being parsed in the same column are not compatible, the result will be cast into StringType
+
+The case of DecimalType, is treated differently, for example, there is no common type for double and decimal because double's range is larger than decimal, and yet decimal is more precise than double, but in an operation, we would cast the decimal into double.
