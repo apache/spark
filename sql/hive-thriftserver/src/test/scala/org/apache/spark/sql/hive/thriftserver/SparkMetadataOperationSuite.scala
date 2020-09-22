@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.sql.{DatabaseMetaData, ResultSet}
 
+import org.apache.hive.service.cli.HiveSQLException
+
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.types._
 
@@ -28,23 +30,40 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
 
   test("Spark's own GetSchemasOperation(SparkGetSchemasOperation)") {
     def checkResult(rs: ResultSet, dbNames: Seq[String]): Unit = {
-      for (i <- dbNames.indices) {
-        assert(rs.next())
-        assert(rs.getString("TABLE_SCHEM") === dbNames(i))
+      val expected = dbNames.iterator
+      while(rs.next() || expected.hasNext) {
+        assert(rs.getString("TABLE_SCHEM") === expected.next)
+        assert(rs.getString("TABLE_CATALOG").isEmpty)
       }
       // Make sure there are no more elements
       assert(!rs.next())
+      assert(!expected.hasNext, "All expected schemas should be visited")
     }
 
-    withDatabase("db1", "db2") { statement =>
-      Seq("CREATE DATABASE db1", "CREATE DATABASE db2").foreach(statement.execute)
-
+    val dbs = Seq("db1", "db2", "db33", "db44")
+    val dbDflts = Seq("default", "global_temp")
+    withDatabase(dbs: _*) { statement =>
+      dbs.foreach( db => statement.execute(s"CREATE DATABASE IF NOT EXISTS $db"))
       val metaData = statement.getConnection.getMetaData
 
-      checkResult(metaData.getSchemas(null, "%"), Seq("db1", "db2", "default", "global_temp"))
+      Seq("", "%", null, ".*", "_*", "_%", ".%") foreach { pattern =>
+        checkResult(metaData.getSchemas(null, pattern), dbs ++ dbDflts)
+      }
+
+      Seq("db%", "db*") foreach { pattern =>
+        checkResult(metaData.getSchemas(null, pattern), dbs)
+      }
+
+      Seq("db_", "db.") foreach { pattern =>
+        checkResult(metaData.getSchemas(null, pattern), dbs.take(2))
+      }
+
       checkResult(metaData.getSchemas(null, "db1"), Seq("db1"))
       checkResult(metaData.getSchemas(null, "db_not_exist"), Seq.empty)
-      checkResult(metaData.getSchemas(null, "db*"), Seq("db1", "db2"))
+
+      val e = intercept[HiveSQLException](metaData.getSchemas(null, "*"))
+      assert(e.getCause.getMessage ===
+        "Error operating GET_SCHEMAS Dangling meta character '*' near index 0\n*\n^")
     }
   }
 
