@@ -268,7 +268,7 @@ private[hive] trait HiveStrategies {
           val predicates = ExpressionSet(normalized
             .flatMap(extractPredicatesWithinOutputSet(_, partitionKeyIds)))
             .filter(_.references.subsetOf(partitionKeyIds))
-          logInfo(s"Pruning directories with: ${filters.mkString(",")}")
+          logInfo(s"Pruning partitions with: ${filters.mkString(",")}")
           predicates
         }
 
