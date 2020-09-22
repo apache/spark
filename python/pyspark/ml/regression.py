@@ -686,7 +686,7 @@ class IsotonicRegression(JavaEstimator, _IsotonicRegressionParams, HasWeightCol,
     def __init__(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                  weightCol=None, isotonic=True, featureIndex=0):
         """
-        __init__(self, \\*, eaturesCol="features", labelCol="label", predictionCol="prediction", \
+        __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  weightCol=None, isotonic=True, featureIndex=0):
         """
         super(IsotonicRegression, self).__init__()

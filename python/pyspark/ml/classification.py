@@ -3221,7 +3221,7 @@ class FMClassifier(_JavaProbabilisticClassifier, _FactorizationMachinesParams, J
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
                   tol=1e-6, solver="adamW", thresholds=None, seed=None):
         """
-        setParams(self, \\*, eaturesCol="features", labelCol="label", predictionCol="prediction", \
+        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
