@@ -18,6 +18,9 @@ package org.apache.spark.deploy.k8s
 
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
+import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder,
+  ContainerStateRunning, ContainerStateTerminated,
+  ContainerStateWaiting, ContainerStatus, Pod, PodBuilder}
 
 private[spark] object KubernetesUtils {
 
@@ -60,4 +63,15 @@ private[spark] object KubernetesUtils {
   }
 
   def parseMasterUrl(url: String): String = url.substring("k8s://".length)
+
+  def buildPodWithServiceAccount(serviceAccount: Option[String], pod: SparkPod): Option[Pod] = {
+    serviceAccount.map { account =>
+      new PodBuilder(pod.pod)
+        .editOrNewSpec()
+        .withServiceAccount(account)
+        .withServiceAccountName(account)
+        .endSpec()
+        .build()
+    }
+  }
 }
