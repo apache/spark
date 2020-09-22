@@ -161,7 +161,6 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         logInfo(s"Pruning directories with: ${predicates.mkString(",")}")
         predicates
       }
-
       // subquery expressions are filtered out because they can't be used to prune buckets or pushed
       // down as data filters, yet they would be executed
       val normalizedFiltersWithoutSubqueries =

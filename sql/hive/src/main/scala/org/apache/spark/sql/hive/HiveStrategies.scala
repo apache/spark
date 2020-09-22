@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.assertNoNullTypeInSchema
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
-import org.apache.spark.sql.execution.datasources.CreateTable
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrategy}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.execution.HiveScriptTransformationExec
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -254,22 +254,29 @@ private[hive] trait HiveStrategies {
    * Retrieves data using a HiveTableScan.  Partition pruning predicates are also detected and
    * applied.
    */
-  object HiveTableScans extends Strategy {
+  object HiveTableScans extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ScanOperation(projectList, predicates, relation: HiveTableRelation) =>
+      case ScanOperation(projectList, filters, relation: HiveTableRelation) =>
         // Filter out all predicates that only deal with partition keys, these are given to the
         // hive table scan operator to be used for partition pruning.
         val partitionKeyIds = AttributeSet(relation.partitionCols)
-        val (pruningPredicates, otherPredicates) = predicates.partition { predicate =>
-          !predicate.references.isEmpty &&
-          predicate.references.subsetOf(partitionKeyIds)
+        val normalized = DataSourceStrategy.normalizeExprs(
+          filters.filter(_.deterministic), relation.output)
+        val partitionKeyFilters = if (relation.partitionCols.isEmpty) {
+          ExpressionSet(Nil)
+        } else {
+          val predicates = ExpressionSet(normalized
+            .flatMap(extractPredicatesWithinOutputSet(_, partitionKeyIds)))
+            .filter(_.references.subsetOf(partitionKeyIds))
+          logInfo(s"Pruning directories with: ${filters.mkString(",")}")
+          predicates
         }
 
         pruneFilterProject(
           projectList,
-          otherPredicates,
+          (ExpressionSet(filters) -- partitionKeyFilters).toSeq,
           identity[Seq[Expression]],
-          HiveTableScanExec(_, relation, pruningPredicates)(sparkSession)) :: Nil
+          HiveTableScanExec(_, relation, partitionKeyFilters.toSeq)(sparkSession)) :: Nil
       case _ =>
         Nil
     }

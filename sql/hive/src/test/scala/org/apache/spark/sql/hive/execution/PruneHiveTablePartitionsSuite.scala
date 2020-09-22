@@ -75,7 +75,7 @@ class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
         }
         val scale = 20
         val predicate = (1 to scale).map(i => s"(p0 = '$i' AND p1 = '$i')").mkString(" OR ")
-        assertPrunedPartitions(s"SELECT * FROM t WHERE $predicate", scale)
+        assertPrunedPartitions(s"SELECT * FROM t WHERE $predicate", scale, 1)
       }
     }
   }
