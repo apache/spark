@@ -19,21 +19,24 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, GetStructField, WithFields}
+import org.apache.spark.sql.catalyst.expressions.{Expression, WithFields}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 
 
 /**
  * Optimizes [[WithFields]] expression chains.
  */
 object OptimizeWithFields extends Rule[LogicalPlan] {
+  lazy val resolver = SQLConf.get.resolver
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case WithFields(structExpr, names, values) if names.distinct.length != names.length =>
       val newNames = mutable.ArrayBuffer.empty[String]
       val newValues = mutable.ArrayBuffer.empty[Expression]
       names.zip(values).reverse.foreach { case (name, value) =>
-        if (!newNames.contains(name)) {
+        if (newNames.find(resolver(_, name)).isEmpty) {
           newNames += name
           newValues += value
         }
