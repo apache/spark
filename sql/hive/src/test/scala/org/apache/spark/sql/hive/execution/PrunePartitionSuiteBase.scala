@@ -76,9 +76,9 @@ abstract class PrunePartitionSuiteBase extends QueryTest with SQLTestUtils with 
     assert(getScanExecPartitionSize(plan) == expectedPartitionCount)
     val pushedDownPartitionFilters = qe.executedPlan.collectFirst {
       case scan: FileSourceScanExec => scan.partitionFilters
-      case scan: HiveTableScanExec => scan.partitionFilters
+      case scan: HiveTableScanExec => scan.partitionPruningPred
     }
-    assert(pushedDownPartitionFilters == Some(expectedPushedDownFilterCount))
+    assert(pushedDownPartitionFilters.map(_.length) == Some(expectedPushedDownFilterCount))
   }
 
   protected def getScanExecPartitionSize(plan: SparkPlan): Long
