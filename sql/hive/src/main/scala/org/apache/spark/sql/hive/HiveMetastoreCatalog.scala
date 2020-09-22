@@ -195,7 +195,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           metastoreSchema,
           fileFormatClass,
           Some(partitionSchema))
-        
+
         val logicalRelation = cached.getOrElse {
           val sizeInBytes = relation.stats.sizeInBytes.toLong
           val fileIndex = {
