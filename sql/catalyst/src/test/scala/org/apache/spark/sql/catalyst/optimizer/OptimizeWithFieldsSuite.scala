@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, GetStructField, Literal
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-
+import org.apache.spark.sql.internal.SQLConf
 
 class OptimizeWithFieldsSuite extends PlanTest {
 
@@ -92,7 +92,7 @@ class OptimizeWithFieldsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-32941: optimize WithFields chain") {
+  test("SPARK-32941: optimize WithFields chain - case insensitive") {
     val originalQuery = testRelation
       .select(Alias(
         WithFields(
@@ -101,13 +101,54 @@ class OptimizeWithFieldsSuite extends PlanTest {
             Seq("b1"),
             Seq(Literal(4))),
           Seq("b1"),
-          Seq(Literal(5))), "out")())
+          Seq(Literal(5))), "out1")(),
+        Alias(
+          WithFields(
+            WithFields(
+              'a,
+              Seq("b1"),
+              Seq(Literal(4))),
+            Seq("B1"),
+            Seq(Literal(5))), "out2")())
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .select(Alias(WithFields('a, Seq("b1"), Seq(Literal(5))), "out")())
+      .select(
+        Alias(WithFields('a, Seq("b1"), Seq(Literal(5))), "out1")(),
+        Alias(WithFields('a, Seq("B1"), Seq(Literal(5))), "out2")())
       .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-32941: optimize WithFields chain - case sensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val originalQuery = testRelation
+        .select(Alias(
+          WithFields(
+            WithFields(
+              'a,
+              Seq("b1"),
+              Seq(Literal(4))),
+            Seq("b1"),
+            Seq(Literal(5))), "out1")(),
+          Alias(
+            WithFields(
+              WithFields(
+                'a,
+                Seq("b1"),
+                Seq(Literal(4))),
+              Seq("B1"),
+              Seq(Literal(5))), "out2")())
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer = testRelation
+        .select(
+          Alias(WithFields('a, Seq("b1"), Seq(Literal(5))), "out1")(),
+          Alias(WithFields('a, Seq("b1", "B1"), Seq(Literal(4), Literal(5))), "out2")())
+        .analyze
+
+      comparePlans(optimized, correctAnswer)
+    }
   }
 }

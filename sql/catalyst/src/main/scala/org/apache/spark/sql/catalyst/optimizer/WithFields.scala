@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.util.Locale
+
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, WithFields}
@@ -29,18 +31,33 @@ import org.apache.spark.sql.internal.SQLConf
  * Optimizes [[WithFields]] expression chains.
  */
 object OptimizeWithFields extends Rule[LogicalPlan] {
-  lazy val resolver = SQLConf.get.resolver
-
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case WithFields(structExpr, names, values) if names.distinct.length != names.length =>
+    case WithFields(structExpr, names, values)
+        if names.map(_.toLowerCase(Locale.ROOT)).distinct.length != names.length =>
+      val caseSensitive = SQLConf.get.caseSensitiveAnalysis
+
       val newNames = mutable.ArrayBuffer.empty[String]
       val newValues = mutable.ArrayBuffer.empty[Expression]
-      names.zip(values).reverse.foreach { case (name, value) =>
-        if (newNames.find(resolver(_, name)).isEmpty) {
-          newNames += name
-          newValues += value
+
+      if (caseSensitive) {
+        names.zip(values).reverse.foreach { case (name, value) =>
+          if (!newNames.contains(name)) {
+            newNames += name
+            newValues += value
+          }
+        }
+      } else {
+        val nameSet = mutable.HashSet.empty[String]
+        names.zip(values).reverse.foreach { case (name, value) =>
+          val lowercaseName = name.toLowerCase(Locale.ROOT)
+          if (!nameSet.contains(lowercaseName)) {
+            newNames += name
+            newValues += value
+            nameSet += lowercaseName
+          }
         }
       }
+
       WithFields(structExpr, names = newNames.reverse.toSeq, valExprs = newValues.reverse.toSeq)
 
     case WithFields(WithFields(struct, names1, valExprs1), names2, valExprs2) =>
