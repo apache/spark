@@ -33,7 +33,7 @@ class JsonSuite extends PlanTest with ExpressionEvalHelper {
 
   val schema = StructType.fromDDL("a int, b int")
 
-  private val structAtt = ('struct).struct(schema).notNull
+  private val structAtt = 'struct.struct(schema).notNull
 
   private val testRelation = LocalRelation(structAtt)
 

@@ -28,7 +28,7 @@ object OptimizeJsonExprs extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case p => p.transformExpressionsUp {
       case JsonToStructs(_, options1, StructsToJson(options2, child, timeZoneId2), timeZoneId1)
-          if options1.isEmpty && options2.isEmpty && timeZoneId1 == timeZoneId2 =>
+          if options1 == options2 && timeZoneId1 == timeZoneId2 =>
         child
     }
   }
