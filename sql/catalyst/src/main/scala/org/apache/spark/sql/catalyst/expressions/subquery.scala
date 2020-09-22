@@ -226,7 +226,7 @@ case class ScalarSubquery(
     exprId: ExprId = NamedExpression.newExprId)
   extends SubqueryExpression(plan, children, exprId) with Unevaluable {
 
-  private lazy val internalDataType: DataType = {
+  private val internalDataType: DataType = {
     assert(plan.schema.fields.nonEmpty, "Scalar subquery should have only one column")
     plan.schema.fields.head.dataType
   }
