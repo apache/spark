@@ -683,7 +683,8 @@ object PrefixSpanModel extends Loader[PrefixSpanModel[_]] {
 
     def loadImpl[Item: ClassTag](freqSequences: DataFrame, sample: Item): PrefixSpanModel[Item] = {
       val freqSequencesRDD = freqSequences.select("sequence", "freq").rdd.map { x =>
-        val sequence = x.getAs[Seq[Seq[Item]]](0).map(_.toArray).toArray
+        val sequence =
+          x.getAs[scala.collection.Seq[scala.collection.Seq[Item]]](0).map(_.toArray).toArray
         val freq = x.getLong(1)
         new PrefixSpan.FreqSequence(sequence, freq)
       }
