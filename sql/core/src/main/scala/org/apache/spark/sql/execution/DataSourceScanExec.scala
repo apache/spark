@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.TimeUnit._
 
-import scala.collection.mutable
 import scala.collection.mutable.HashMap
 
 import org.apache.commons.lang3.StringUtils
@@ -344,7 +343,7 @@ case class FileSourceScanExec(
       location.getClass.getSimpleName +
         Utils.buildLocationMetadata(location.rootPaths, maxMetadataValueLength)
     val metadata =
-      mutable.HashMap(
+      Map(
         "Format" -> relation.fileFormat.toString,
         "ReadSchema" -> requiredSchema.catalogString,
         "Batched" -> supportsColumnar.toString,
@@ -354,21 +353,23 @@ case class FileSourceScanExec(
         "Location" -> locationDesc)
 
     if (bucketedScan) {
-      relation.bucketSpec.foreach { spec =>
+      val withSelectedBucketsCount = relation.bucketSpec.map { spec =>
         val numSelectedBuckets = optionalBucketSet.map { b =>
           b.cardinality()
         } getOrElse {
           spec.numBuckets
         }
-        metadata += ("SelectedBucketsCount" ->
+        metadata + ("SelectedBucketsCount" ->
           (s"$numSelectedBuckets out of ${spec.numBuckets}" +
             optionalNumCoalescedBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
+      } getOrElse {
+        metadata
       }
-    } else if (disableBucketedScan) {
-      metadata += ("DisableBucketedScan" -> "true")
-    }
 
-    metadata.toMap
+      withSelectedBucketsCount
+    } else {
+      metadata
+    }
   }
 
   override def verboseStringWithOperatorId(): String = {

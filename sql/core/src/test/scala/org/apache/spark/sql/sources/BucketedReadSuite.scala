@@ -1033,7 +1033,12 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         ("SELECT SUM(i) FROM t1 GROUP BY i", 1, 1),
         ("SELECT SUM(i) FROM t1 GROUP BY j", 0, 1),
         ("SELECT * FROM t1 WHERE i = 1", 1, 1),
-        ("SELECT * FROM t1 WHERE j = 1", 0, 1)
+        ("SELECT * FROM t1 WHERE j = 1", 0, 1),
+        ("""
+         SELECT t1.i FROM t1
+         UNION ALL
+         (SELECT t2.i FROM t2 GROUP BY t2.i)
+         """.stripMargin, 1, 2)
       ).foreach { case (query, bucketedScan1, bucketedScan2) =>
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
           SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {

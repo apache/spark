@@ -344,18 +344,6 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     }
   }
 
-  test("SPARK-32859: disable unnecessary bucketed table scan based on query plan") {
-    withTable("t1", "t2") {
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
-        SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
-        Seq(1, 2).toDF("i").write.bucketBy(8, "i").saveAsTable("t1")
-        Seq(2, 3).toDF("i").write.saveAsTable("t2")
-        val joined = sql("SELECT * FROM t1 JOIN t2 ON t1.i + 1 = t2.i")
-        checkKeywordsExistsInExplain(joined, keywords = "DisableBucketedScan: true")
-      }
-    }
-  }
-
   test("Coalesced bucket info should be a part of explain string") {
     withTable("t1", "t2") {
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",

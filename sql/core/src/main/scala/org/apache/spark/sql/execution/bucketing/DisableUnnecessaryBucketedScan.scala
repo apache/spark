@@ -91,9 +91,13 @@ case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan]
         exchange.mapChildren(disableBucketWithInterestingPartition(
           _, withInterestingPartition, true))
       case scan: FileSourceScanExec
-          if withInterestingPartition && withExchange && isBucketedScanWithoutFilter(scan) =>
-        // Disable bucketed table scan if the plan has interesting partition,
-        // and [[Exchange]] in the plan.
+          if ((withInterestingPartition && withExchange) || !withInterestingPartition)
+            && isBucketedScanWithoutFilter(scan) =>
+        // Disable bucketed table scan if
+        // (1). The sub-plan has operator with interesting partition, [[Exchange],
+        //      and allowed single-child operators.
+        // (2). The sub-plan does not have operator with interesting partition, or there's
+        //      non-allowed operators in the middle of sub-plan.
         scan.copy(disableBucketedScan = true)
       case o =>
         if (isAllowedUnaryExecNode(o)) {
@@ -118,8 +122,7 @@ case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan]
     plan match {
       case _: SortExec | _: ProjectExec | _: FilterExec => true
       case partialAgg: BaseAggregateExec =>
-        val modes = partialAgg.aggregateExpressions.map(_.mode)
-        modes.nonEmpty && modes.forall(mode => mode == Partial || mode == PartialMerge)
+        partialAgg.requiredChildDistributionExpressions.isEmpty
       case _ => false
     }
   }
@@ -131,13 +134,6 @@ case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan]
     scan.bucketedScan && scan.optionalBucketSet.isEmpty
   }
 
-  private def disableAllBucketedScan(plan: SparkPlan): SparkPlan = {
-    plan.transformUp {
-      case scan: FileSourceScanExec if isBucketedScanWithoutFilter(scan) =>
-        scan.copy(disableBucketedScan = true)
-    }
-  }
-
   def apply(plan: SparkPlan): SparkPlan = {
     lazy val hasBucketedScanWithoutFilter = plan.find {
       case scan: FileSourceScanExec => isBucketedScanWithoutFilter(scan)
@@ -146,12 +142,8 @@ case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan]
 
     if (!conf.bucketingEnabled || !conf.autoBucketedScanEnabled || !hasBucketedScanWithoutFilter) {
       plan
-    } else if (plan.find(hasInterestingPartition).isDefined) {
-      disableBucketWithInterestingPartition(plan, false, false)
     } else {
-      // Disable all bucketed scans if there's no operator with interesting partition
-      // found in query plan.
-      disableAllBucketedScan(plan)
+      disableBucketWithInterestingPartition(plan, false, false)
     }
   }
 }
