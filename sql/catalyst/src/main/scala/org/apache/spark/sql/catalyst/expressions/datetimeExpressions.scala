@@ -1565,13 +1565,13 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
     _FUNC_(date, fmt) - Returns `date` with the time portion of the day truncated to the unit specified by the format model `fmt`.
   """,
   arguments = """
-     Arguments:
-       * date - date value or valid date string
-       * fmt - the format representing the unit to be truncated to
-           - "YEAR", "YYYY", "YY" - truncate to the first date of the year that the `date` falls in
-           - "QUARTER" - truncate to the first date of the quarter that the `date` falls in
-           - "MONTH", "MM", "MON" - truncate to the first date of the month that the `date` falls in
-           - "WEEK" - truncate to the Monday of the week that the `date` falls in
+    Arguments:
+      * date - date value or valid date string
+      * fmt - the format representing the unit to be truncated to
+          - "YEAR", "YYYY", "YY" - truncate to the first date of the year that the `date` falls in
+          - "QUARTER" - truncate to the first date of the quarter that the `date` falls in
+          - "MONTH", "MM", "MON" - truncate to the first date of the month that the `date` falls in
+          - "WEEK" - truncate to the Monday of the week that the `date` falls in
   """,
   examples = """
     Examples:
@@ -1619,19 +1619,19 @@ case class TruncDate(date: Expression, format: Expression)
     _FUNC_(fmt, ts) - Returns timestamp `ts` truncated to the unit specified by the format model `fmt`.
   """,
   arguments = """
-     Arguments:
-       * fmt - the format representing the unit to be truncated to
-           - "YEAR", "YYYY", "YY" - truncate to the first date of the year that the `ts` falls in, the time part will be zero out
-           - "QUARTER" - truncate to the first date of the quarter that the `ts` falls in, the time part will be zero out
-           - "MONTH", "MM", "MON" - truncate to the first date of the month that the `ts` falls in, the time part will be zero out
-           - "WEEK" - truncate to the Monday of the week that the `ts` falls in, the time part will be zero out
-           - "DAY", "DD" - zero out the time part
-           - "HOUR" - zero out the minute and second with fraction part
-           - "MINUTE"- zero out the second with fraction part
-           - "SECOND" -  zero out the second fraction part
-           - "MILLISECOND" - zero out the microseconds
-           - "MICROSECOND" - everything remains
-       * ts - datetime value or valid timestamp string
+    Arguments:
+      * fmt - the format representing the unit to be truncated to
+          - "YEAR", "YYYY", "YY" - truncate to the first date of the year that the `ts` falls in, the time part will be zero out
+          - "QUARTER" - truncate to the first date of the quarter that the `ts` falls in, the time part will be zero out
+          - "MONTH", "MM", "MON" - truncate to the first date of the month that the `ts` falls in, the time part will be zero out
+          - "WEEK" - truncate to the Monday of the week that the `ts` falls in, the time part will be zero out
+          - "DAY", "DD" - zero out the time part
+          - "HOUR" - zero out the minute and second with fraction part
+          - "MINUTE"- zero out the second with fraction part
+          - "SECOND" -  zero out the second fraction part
+          - "MILLISECOND" - zero out the microseconds
+          - "MICROSECOND" - everything remains
+      * ts - datetime value or valid timestamp string
   """,
   examples = """
     Examples:
