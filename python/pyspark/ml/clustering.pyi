@@ -28,7 +28,6 @@ from pyspark.ml.util import (
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaWrapper
 from pyspark.ml.param.shared import (
     HasAggregationDepth,
-    HasBlockSize,
     HasCheckpointInterval,
     HasDistanceMeasure,
     HasFeaturesCol,
@@ -71,7 +70,6 @@ class _GaussianMixtureParams(
     HasTol,
     HasAggregationDepth,
     HasWeightCol,
-    HasBlockSize,
 ):
     k: Param[int]
     def __init__(self, *args: Any): ...
@@ -115,8 +113,7 @@ class GaussianMixture(
         maxIter: int = ...,
         seed: Optional[int] = ...,
         aggregationDepth: int = ...,
-        weightCol: Optional[str] = ...,
-        blockSize: int = ...
+        weightCol: Optional[str] = ...
     ) -> None: ...
     def setParams(
         self,
@@ -129,8 +126,7 @@ class GaussianMixture(
         maxIter: int = ...,
         seed: Optional[int] = ...,
         aggregationDepth: int = ...,
-        weightCol: Optional[str] = ...,
-        blockSize: int = ...
+        weightCol: Optional[str] = ...
     ) -> GaussianMixture: ...
     def setK(self, value: int) -> GaussianMixture: ...
     def setMaxIter(self, value: int) -> GaussianMixture: ...
@@ -141,7 +137,6 @@ class GaussianMixture(
     def setSeed(self, value: int) -> GaussianMixture: ...
     def setTol(self, value: float) -> GaussianMixture: ...
     def setAggregationDepth(self, value: int) -> GaussianMixture: ...
-    def setBlockSize(self, value: int) -> GaussianMixture: ...
 
 class GaussianMixtureSummary(ClusteringSummary):
     @property
