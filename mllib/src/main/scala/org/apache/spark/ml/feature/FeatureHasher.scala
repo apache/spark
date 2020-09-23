@@ -133,7 +133,7 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
 
     var catCols = dataset.schema(localInputCols.toSet)
       .filterNot(_.dataType.isInstanceOf[NumericType]).map(_.name).toArray
-    if (isSet(categoricalCols)) catCols = (catCols.toSet ++ $(categoricalCols)).toArray
+    if (isSet(categoricalCols)) catCols = (catCols ++ $(categoricalCols)).distinct
     val catIndices = catCols.map(localInputCols.indexOf)
 
     val realCols = (localInputCols.toSet -- catCols).toArray
