@@ -54,7 +54,7 @@ Here is the script ``main.py`` from the previous example that will be executed o
 
 There are multiple ways to ship the dependencies to the cluster:
 
-- Using py-files (limited mostly to python only code, doesn't support native libs like pyarrow, numpy, ..)
+- Using py-files
 - Using a zipped virtual environment
 - Using PEX
 - Using Docker
@@ -108,7 +108,7 @@ Example with spark-submit on YARN:
 
 .. code-block:: bash
 
-  export PYSPARK_DRIVER_PYTHON=`which python`
+  export PYSPARK_DRIVER_PYTHON=python
   export PYSPARK_PYTHON=./environment/bin/python
   spark-submit --master=yarn --deploy-mode client \
   --archives conda_env.tar.gz#environment \
@@ -168,7 +168,7 @@ Example with spark-submit on YARN:
 
 .. code-block:: bash
 
-  export PYSPARK_DRIVER_PYTHON=`which python`
+  export PYSPARK_DRIVER_PYTHON=python
   export PYSPARK_PYTHON=./myarchive.pex
   spark-submit --master=yarn --deploy-mode client \
   --files myarchive.pex \
@@ -190,7 +190,7 @@ Example using SparkSession.builder on YARN:
   main(spark)
 
 Notes
-=====
+-----
 
 The Python interpreter that has been used to generate the PEX file must be available on each executor. PEX doesn't include the Python interpreter.
 
