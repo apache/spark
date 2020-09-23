@@ -232,7 +232,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
             Dataset.ofRows(
               sparkSession,
               StreamingRelationV2(
-                Some(provider), source, table, dsOptions, table.schema.toAttributes, v1Relation))
+                Some(provider), source, table, dsOptions,
+                table.schema.toAttributes, None, None, v1Relation))
 
           // fallback to v1
           // TODO (SPARK-27483): we should move this fallback logic to an analyzer rule.

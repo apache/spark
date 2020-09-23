@@ -24,14 +24,17 @@ import scala.collection.JavaConverters._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.connector.InMemoryTableCatalog
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, V2TableWithV1Fallback}
+import org.apache.spark.sql.connector.{FakeV2Provider, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.ScanBuilder
-import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamScanBuilder}
+import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamScanBuilder, StreamingRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
+import org.apache.spark.sql.streaming.sources.FakeScanBuilder
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -89,6 +92,16 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("stream table API with non-streaming temp view") {
+    val tblName = "my_table"
+    withTable(tblName) {
+      spark.range(3).createOrReplaceTempView(tblName)
+      intercept[AnalysisException] {
+        spark.readStream.table(tblName)
+      }.message.contains("not supported")
+    }
+  }
+
   test("read table without streaming capability support") {
     val tableIdentifer = "testcat.table_name"
 
@@ -102,10 +115,8 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
   test("read table with custom catalog") {
     val tblName = "teststream.table_name"
     withTable(tblName) {
-
       spark.sql(s"CREATE TABLE $tblName (data int) USING foo")
       val stream = MemoryStream[Int]
-
       val testCatalog = spark.sessionState.catalogManager.catalog("teststream").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
       table.asInstanceOf[InMemoryStreamTable].setStream(stream)
@@ -124,10 +135,8 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
 
     val tblName = "teststream.ns.table_name"
     withTable(tblName) {
-
       spark.sql(s"CREATE TABLE $tblName (data int) USING foo")
       val stream = MemoryStream[Int]
-
       val testCatalog = spark.sessionState.catalogManager.catalog("teststream").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns"), "table_name"))
       table.asInstanceOf[InMemoryStreamTable].setStream(stream)
@@ -140,6 +149,27 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       )
     }
   }
+
+  test("fallback to V1 relation") {
+    val tblName = DataStreamTableAPISuite.V1FallbackTestTableName
+    spark.conf.set(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key,
+      classOf[InMemoryStreamTableCatalog].getName)
+    val v2Source = classOf[FakeV2Provider].getName
+    withTempDir { tempDir =>
+      withTable(tblName) {
+        spark.sql(s"CREATE TABLE $tblName (data int) USING $v2Source")
+        val plan = spark.readStream.option("path", tempDir.getCanonicalPath).table(tblName)
+          .queryExecution.analyzed.collectFirst {
+          case d: StreamingRelation => d
+        }
+        assert(plan.nonEmpty)
+      }
+    }
+  }
+}
+
+object DataStreamTableAPISuite {
+  val V1FallbackTestTableName = "fallbackV1Test"
 }
 
 class InMemoryStreamTable(override val name: String) extends Table with SupportsRead {
@@ -158,19 +188,42 @@ class InMemoryStreamTable(override val name: String) extends Table with Supports
   }
 }
 
+class NonStreamV2Table(override val name: String)
+    extends Table with SupportsRead with V2TableWithV1Fallback {
+  override def schema(): StructType = StructType(Nil)
+  override def capabilities(): util.Set[TableCapability] = Set(TableCapability.BATCH_READ).asJava
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new FakeScanBuilder
+
+  override def v1Table: CatalogTable = {
+    CatalogTable(
+      identifier =
+        TableIdentifier(DataStreamTableAPISuite.V1FallbackTestTableName, Some("default")),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      owner = null,
+      schema = schema(),
+      provider = Some("parquet"))
+  }
+}
+
+
 class InMemoryStreamTableCatalog extends InMemoryTableCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override def createTable(
-    ident: Identifier,
-    schema: StructType,
-    partitions: Array[Transform],
-    properties: util.Map[String, String]): Table = {
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident)
     }
 
-    val table = new InMemoryStreamTable(s"$name.${ident.quoted}")
+    val table = if (ident.name() == DataStreamTableAPISuite.V1FallbackTestTableName) {
+      new NonStreamV2Table(s"$name.${ident.quoted}")
+    } else {
+      new InMemoryStreamTable(s"$name.${ident.quoted}")
+    }
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table

@@ -847,9 +847,9 @@ class Analyzer(
    */
   object ResolveTempViews extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case u @ UnresolvedRelation(ident, _, _) =>
-        lookupTempView(ident).getOrElse(u)
-      case i @ InsertIntoStatement(UnresolvedRelation(ident, _, _), _, _, _, _) =>
+      case u @ UnresolvedRelation(ident, _, isStreaming) =>
+        lookupTempView(ident, isStreaming).getOrElse(u)
+      case i @ InsertIntoStatement(UnresolvedRelation(ident, _, false), _, _, _, _) =>
         lookupTempView(ident)
           .map(view => i.copy(table = view))
           .getOrElse(i)
@@ -862,15 +862,22 @@ class Analyzer(
         lookupTempView(ident).map(_ => ResolvedView(ident.asIdentifier)).getOrElse(u)
     }
 
-    def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] = {
+    def lookupTempView(
+        identifier: Seq[String], isStreaming: Boolean = false): Option[LogicalPlan] = {
       // Permanent View can't refer to temp views, no need to lookup at all.
       if (isResolvingView) return None
 
-      identifier match {
+      val tmpView = identifier match {
         case Seq(part1) => v1SessionCatalog.lookupTempView(part1)
         case Seq(part1, part2) => v1SessionCatalog.lookupGlobalTempView(part1, part2)
         case _ => None
       }
+
+      if (isStreaming && tmpView.nonEmpty && !tmpView.get.isStreaming) {
+        throw new AnalysisException("The temp view related to non-streaming relation is " +
+          "not supported in readStream.table().")
+      }
+      tmpView
     }
   }
 
@@ -897,11 +904,12 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case u: UnresolvedRelation =>
         lookupV2Relation(u.multipartIdentifier, u.options, u.isStreaming)
-          .map {
-            case rel: DataSourceV2Relation =>
-              val ident = rel.identifier.get
-              SubqueryAlias(rel.catalog.get.name +: ident.namespace :+ ident.name, rel)
-            case o => o
+          .map { relation =>
+            val (catalog, ident) = relation match {
+              case ds: DataSourceV2Relation => (ds.catalog, ds.identifier.get)
+              case s: StreamingRelationV2 => (s.catalog, s.identifier.get)
+            }
+            SubqueryAlias(catalog.get.name +: ident.namespace :+ ident.name, relation)
           }.getOrElse(u)
 
       case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident)) =>
@@ -941,8 +949,8 @@ class Analyzer(
           CatalogV2Util.loadTable(catalog, ident) match {
             case Some(table) =>
               if (isStreaming) {
-                Some(StreamingRelationV2(
-                  None, table.name, table, options, table.schema.toAttributes, None))
+                Some(StreamingRelationV2(None, table.name, table, options,
+                  table.schema.toAttributes, Some(catalog), Some(ident), None))
               } else {
                 Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), options))
               }
@@ -1038,16 +1046,23 @@ class Analyzer(
           lazy val loaded = CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table =>
               if (isStreaming) {
-                UnresolvedCatalogRelation(v1Table.v1Table, options, isStreaming = true)
+                SubqueryAlias(
+                  catalog.name +: ident.asMultipartIdentifier,
+                  UnresolvedCatalogRelation(v1Table.v1Table, options, isStreaming = true))
               } else {
                 v1SessionCatalog.getRelation(v1Table.v1Table, options)
               }
             case table =>
               if (isStreaming) {
-                val tableMeta = v1SessionCatalog.getTableMetadata(ident.asTableIdentifier)
-                StreamingRelationV2(
-                  None, table.name, table, options, table.schema.toAttributes,
-                  Some(UnresolvedCatalogRelation(tableMeta, isStreaming = true)))
+                val v1Fallback = table match {
+                  case withFallback: V2TableWithV1Fallback =>
+                    Some(UnresolvedCatalogRelation(withFallback.v1Table, isStreaming = true))
+                  case _ => None
+                }
+                SubqueryAlias(
+                  catalog.name +: ident.asMultipartIdentifier,
+                  StreamingRelationV2(None, table.name, table, options, table.schema.toAttributes,
+                    Some(catalog), Some(ident), v1Fallback))
               } else {
                 SubqueryAlias(
                   catalog.name +: ident.asMultipartIdentifier,
