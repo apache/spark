@@ -267,8 +267,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       } catch (IOException ioe) {
         // No exception will be thrown here. req.meta.nioByteBuffer will not throw IOException
         // because it's a NettyManagedBuffer. This try-catch block is to make compiler happy.
-        logger.error("Error in handling failure while invoking RpcHandler#receive() on RPC id "
-            + req.requestId, e);
+        logger.error("Error in handling failure while invoking RpcHandler#receive() on RPC id {}",
+            req.requestId, e);
       } finally {
         req.meta.release();
       }
@@ -296,7 +296,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   /**
    * Make a full copy of a nio ByteBuffer.
    */
-  private ByteBuffer cloneBuffer(ByteBuffer buf) {
+  private static ByteBuffer cloneBuffer(ByteBuffer buf) {
     ByteBuffer clone = ByteBuffer.allocate(buf.capacity());
     clone.put(buf.duplicate());
     clone.flip();

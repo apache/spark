@@ -24,7 +24,7 @@ import java.net.ConnectException;
  * and logged.
  * Note: {@link RetryingBlockFetcher} will delegate the exception to this handler only when
  * - remaining retries < max retries
- * - exception is either an IOException or SaslException
+ * - exception is an IOException
  */
 
 public interface ErrorHandler {

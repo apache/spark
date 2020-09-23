@@ -22,10 +22,10 @@ import java.io.IOException;
 import com.google.common.base.Throwables;
 import org.junit.Test;
 
+import static org.junit.Assert.*;
+
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
 import org.apache.spark.network.util.JavaUtils;
-
-import static org.junit.Assert.*;
 
 public class BlockPushExceptionSuite {
 
