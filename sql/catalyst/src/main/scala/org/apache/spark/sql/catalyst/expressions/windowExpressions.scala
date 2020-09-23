@@ -45,6 +45,17 @@ case class WindowSpecDefinition(
 
   override def children: Seq[Expression] = partitionSpec ++ orderSpec :+ frameSpecification
 
+  /*
+   * The result of an OffsetWindowFunction is dependent on the frame in which the
+   * OffsetWindowFunction is executed, the input expression and the default expression. Even when
+   * both the input and the default expression are foldable, the result is still not foldable due to
+   * the frame.
+   *
+   * Note, the value of foldable is set to false in the trait Unevaluable
+   *
+   * override def foldable: Boolean = false
+   */
+
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess &&
       frameSpecification.isInstanceOf[SpecifiedWindowFrame]
