@@ -45,8 +45,9 @@ import org.apache.spark.tags.ExtendedSQLTest
  *   actual explain plan: /path/to/tmp/q1.actual.explain.txt
  *   [actual simplified plan]
  *
- * The explain files are saved to help debug later, they are not checked. Only the simplified
- * plans are checked (by string comparison).
+ * The place where these two simplified plans first become different will be marked with
+ * the hint caret. Besides, the explain files are saved to help debug later, they are not
+ * checked. Only the simplified plans are checked (by string comparison).
  *
  *
  * To run the entire test suite:
@@ -153,6 +154,8 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       // write out for debugging
       FileUtils.writeStringToFile(actualSimplifiedFile, actualSimplified, StandardCharsets.UTF_8)
       FileUtils.writeStringToFile(actualExplainFile, explain, StandardCharsets.UTF_8)
+      val (approvedSimplifiedWithHint, actualSimplifiedWithHint) =
+        addDiffHint(approvedSimplified, actualSimplified)
 
       fail(
         s"""
@@ -160,14 +163,81 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
           |last approved simplified plan: ${approvedSimplifiedFile.getAbsolutePath}
           |last approved explain plan: ${approvedExplainFile.getAbsolutePath}
           |
-          |$approvedSimplified
+          |$approvedSimplifiedWithHint
           |
           |actual simplified plan: ${actualSimplifiedFile.getAbsolutePath}
           |actual explain plan: ${actualExplainFile.getAbsolutePath}
           |
-          |$actualSimplified
+          |$actualSimplifiedWithHint
         """.stripMargin)
     }
+  }
+
+  /**
+   * Add the hint to the simplified plans where they first become different.
+   */
+  private def addDiffHint(approvedSimplified: String, actualSimplified: String)
+    : (String, String) = {
+    val approvedLines = approvedSimplified.split("\n").reverse
+    val actualLines = actualSimplified.split("\n").reverse
+    val approvedBuilder = new mutable.ArrayStack[String]()
+    val actualBuilder = new mutable.ArrayStack[String]()
+    val minLineNum = Math.min(approvedLines.length, actualLines.length)
+    val maxLineNum = Math.max(approvedLines.length, actualLines.length)
+    var curLine = 0
+    var foundLineDiff = false
+    while (curLine < minLineNum) {
+      val approvedLine = approvedLines(curLine)
+      val actualLine = actualLines(curLine)
+      val trimmedApprovedLine = approvedLine.trim
+      val trimmedActualLine = actualLine.trim
+      if (!foundLineDiff && trimmedApprovedLine != trimmedActualLine) {
+        foundLineDiff = true
+        val approvedDiffBuilder = new mutable.StringBuilder()
+        val actualDiffBuilder = new mutable.StringBuilder()
+        val minCharNum = Math.min(trimmedApprovedLine.length, trimmedActualLine.length)
+        var curChar = 0
+        var foundCharDiff = false
+        var stopSearch = false
+
+        // the comparision starts from the first non-leading-space
+        approvedLine.takeWhile(_ == ' ').foreach(approvedDiffBuilder.append)
+        actualLine.takeWhile(_ == ' ').foreach(actualDiffBuilder.append)
+
+        while (!stopSearch && curChar < minCharNum) {
+          if (trimmedApprovedLine(curChar) == trimmedActualLine(curChar)) {
+            // stop adding hint if the successive differences are broken
+            if (foundCharDiff) {
+              stopSearch = true
+            } else {
+              approvedDiffBuilder.append(" ")
+              actualDiffBuilder.append(" ")
+            }
+          } else {
+            // add the hint
+            approvedDiffBuilder.append("^")
+            actualDiffBuilder.append("^")
+            foundCharDiff = true
+          }
+          curChar += 1
+        }
+        approvedBuilder += approvedDiffBuilder.toString()
+        actualBuilder += actualDiffBuilder.toString()
+      }
+      approvedBuilder += approvedLine
+      actualBuilder += actualLine
+      curLine += 1
+    }
+
+    (minLineNum until maxLineNum).foreach { i =>
+      val (targetBuilder, targetLines) = if (approvedLines.length == maxLineNum) {
+        (approvedBuilder, approvedLines)
+      } else {
+        (actualBuilder, actualLines)
+      }
+      targetBuilder += targetLines(i)
+    }
+    (approvedBuilder.mkString("\n"), actualBuilder.mkString("\n"))
   }
 
   /**
