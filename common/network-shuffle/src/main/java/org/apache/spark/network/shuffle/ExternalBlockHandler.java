@@ -192,9 +192,6 @@ public class ExternalBlockHandler extends RpcHandler {
       GetLocalDirsForExecutors msg = (GetLocalDirsForExecutors) msgObj;
       checkAuth(client, msg.appId);
       Map<String, String[]> localDirs = blockManager.getLocalDirs(msg.appId, msg.execIds);
-      if (Arrays.stream(msg.execIds).anyMatch(String::isEmpty)) {
-        localDirs.put("", mergeManager.getMergedBlockDirs(msg.appId));
-      }
       callback.onSuccess(new LocalDirsForExecutors(localDirs).toByteBuffer());
 
     } else if (msgObj instanceof FinalizeShuffleMerge) {
