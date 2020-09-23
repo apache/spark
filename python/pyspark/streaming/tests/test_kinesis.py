@@ -80,7 +80,7 @@ class KinesisStreamTests(PySparkStreamingTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.streaming.tests.test_kinesis import *
+    from pyspark.streaming.tests.test_kinesis import *  # noqa: F401
 
     try:
         import xmlrunner

@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, Collect
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -267,13 +266,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     for (tz <- ALL_TIMEZONES) {
       val timeZoneId = Option(tz.getId)
-      var c = Calendar.getInstance(TimeZoneGMT)
+      var c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 2, 8, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
         millisToMicros(c.getTimeInMillis))
-      c = Calendar.getInstance(TimeZoneGMT)
+      c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 10, 1, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
@@ -290,7 +289,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(nts, TimestampType, UTC_OPT), StringType, UTC_OPT), nts)
     checkEvaluation(
       cast(cast(ts, StringType, UTC_OPT), TimestampType, UTC_OPT),
-      DateTimeUtils.fromJavaTimestamp(ts))
+      fromJavaTimestamp(ts))
 
     // all convert to string type to check
     checkEvaluation(
@@ -305,6 +304,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(cast(cast(
       cast(cast("5", ByteType), ShortType), IntegerType), FloatType), DoubleType), LongType),
       5.toLong)
+
     checkEvaluation(
       cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
         DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
@@ -376,12 +376,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(ts, LongType), 15.toLong)
     checkEvaluation(cast(ts, FloatType), 15.003f)
     checkEvaluation(cast(ts, DoubleType), 15.003)
+
     checkEvaluation(cast(cast(tss, ShortType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(cast(cast(tss, LongType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(
       cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType),
       millis.toFloat / MILLIS_PER_SECOND)
@@ -690,16 +691,22 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ret1, "[1, 2, 3, 4, 5]")
     val ret2 = cast(Literal.create(Array("ab", "cde", "f")), StringType)
     checkEvaluation(ret2, "[ab, cde, f]")
-    val ret3 = cast(Literal.create(Array("ab", null, "c")), StringType)
-    checkEvaluation(ret3, "[ab,, c]")
-    val ret4 = cast(Literal.create(Array("ab".getBytes, "cde".getBytes, "f".getBytes)), StringType)
+    Seq(false, true).foreach { omitNull =>
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> omitNull.toString) {
+        val ret3 = cast(Literal.create(Array("ab", null, "c")), StringType)
+        checkEvaluation(ret3, s"[ab,${if (omitNull) "" else " null"}, c]")
+      }
+    }
+    val ret4 =
+      cast(Literal.create(Array("ab".getBytes, "cde".getBytes, "f".getBytes)), StringType)
     checkEvaluation(ret4, "[ab, cde, f]")
     val ret5 = cast(
       Literal.create(Array("2014-12-03", "2014-12-04", "2014-12-06").map(Date.valueOf)),
       StringType)
     checkEvaluation(ret5, "[2014-12-03, 2014-12-04, 2014-12-06]")
     val ret6 = cast(
-      Literal.create(Array("2014-12-03 13:01:00", "2014-12-04 15:05:00").map(Timestamp.valueOf)),
+      Literal.create(Array("2014-12-03 13:01:00", "2014-12-04 15:05:00")
+        .map(Timestamp.valueOf)),
       StringType)
     checkEvaluation(ret6, "[2014-12-03 13:01:00, 2014-12-04 15:05:00]")
     val ret7 = cast(Literal.create(Array(Array(1, 2, 3), Array(4, 5))), StringType)
@@ -711,47 +718,59 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-22973 Cast map to string") {
-    val ret1 = cast(Literal.create(Map(1 -> "a", 2 -> "b", 3 -> "c")), StringType)
-    checkEvaluation(ret1, "[1 -> a, 2 -> b, 3 -> c]")
-    val ret2 = cast(
-      Literal.create(Map("1" -> "a".getBytes, "2" -> null, "3" -> "c".getBytes)),
-      StringType)
-    checkEvaluation(ret2, "[1 -> a, 2 ->, 3 -> c]")
-    val ret3 = cast(
-      Literal.create(Map(
-        1 -> Date.valueOf("2014-12-03"),
-        2 -> Date.valueOf("2014-12-04"),
-        3 -> Date.valueOf("2014-12-05"))),
-      StringType)
-    checkEvaluation(ret3, "[1 -> 2014-12-03, 2 -> 2014-12-04, 3 -> 2014-12-05]")
-    val ret4 = cast(
-      Literal.create(Map(
-        1 -> Timestamp.valueOf("2014-12-03 13:01:00"),
-        2 -> Timestamp.valueOf("2014-12-04 15:05:00"))),
-      StringType)
-    checkEvaluation(ret4, "[1 -> 2014-12-03 13:01:00, 2 -> 2014-12-04 15:05:00]")
-    val ret5 = cast(
-      Literal.create(Map(
-        1 -> Array(1, 2, 3),
-        2 -> Array(4, 5, 6))),
-      StringType)
-    checkEvaluation(ret5, "[1 -> [1, 2, 3], 2 -> [4, 5, 6]]")
+    Seq(
+      false -> ("{", "}"),
+      true -> ("[", "]")).foreach { case (legacyCast, (lb, rb)) =>
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> legacyCast.toString) {
+        val ret1 = cast(Literal.create(Map(1 -> "a", 2 -> "b", 3 -> "c")), StringType)
+        checkEvaluation(ret1, s"${lb}1 -> a, 2 -> b, 3 -> c$rb")
+        val ret2 = cast(
+          Literal.create(Map("1" -> "a".getBytes, "2" -> null, "3" -> "c".getBytes)),
+          StringType)
+        checkEvaluation(ret2, s"${lb}1 -> a, 2 ->${if (legacyCast) "" else " null"}, 3 -> c$rb")
+        val ret3 = cast(
+          Literal.create(Map(
+            1 -> Date.valueOf("2014-12-03"),
+            2 -> Date.valueOf("2014-12-04"),
+            3 -> Date.valueOf("2014-12-05"))),
+          StringType)
+        checkEvaluation(ret3, s"${lb}1 -> 2014-12-03, 2 -> 2014-12-04, 3 -> 2014-12-05$rb")
+        val ret4 = cast(
+          Literal.create(Map(
+            1 -> Timestamp.valueOf("2014-12-03 13:01:00"),
+            2 -> Timestamp.valueOf("2014-12-04 15:05:00"))),
+          StringType)
+        checkEvaluation(ret4, s"${lb}1 -> 2014-12-03 13:01:00, 2 -> 2014-12-04 15:05:00$rb")
+        val ret5 = cast(
+          Literal.create(Map(
+            1 -> Array(1, 2, 3),
+            2 -> Array(4, 5, 6))),
+          StringType)
+        checkEvaluation(ret5, s"${lb}1 -> [1, 2, 3], 2 -> [4, 5, 6]$rb")
+      }
+    }
   }
 
   test("SPARK-22981 Cast struct to string") {
-    val ret1 = cast(Literal.create((1, "a", 0.1)), StringType)
-    checkEvaluation(ret1, "[1, a, 0.1]")
-    val ret2 = cast(Literal.create(Tuple3[Int, String, String](1, null, "a")), StringType)
-    checkEvaluation(ret2, "[1,, a]")
-    val ret3 = cast(Literal.create(
-      (Date.valueOf("2014-12-03"), Timestamp.valueOf("2014-12-03 15:05:00"))), StringType)
-    checkEvaluation(ret3, "[2014-12-03, 2014-12-03 15:05:00]")
-    val ret4 = cast(Literal.create(((1, "a"), 5, 0.1)), StringType)
-    checkEvaluation(ret4, "[[1, a], 5, 0.1]")
-    val ret5 = cast(Literal.create((Seq(1, 2, 3), "a", 0.1)), StringType)
-    checkEvaluation(ret5, "[[1, 2, 3], a, 0.1]")
-    val ret6 = cast(Literal.create((1, Map(1 -> "a", 2 -> "b", 3 -> "c"))), StringType)
-    checkEvaluation(ret6, "[1, [1 -> a, 2 -> b, 3 -> c]]")
+    Seq(
+      false -> ("{", "}"),
+      true -> ("[", "]")).foreach { case (legacyCast, (lb, rb)) =>
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> legacyCast.toString) {
+        val ret1 = cast(Literal.create((1, "a", 0.1)), StringType)
+        checkEvaluation(ret1, s"${lb}1, a, 0.1$rb")
+        val ret2 = cast(Literal.create(Tuple3[Int, String, String](1, null, "a")), StringType)
+        checkEvaluation(ret2, s"${lb}1,${if (legacyCast) "" else " null"}, a$rb")
+        val ret3 = cast(Literal.create(
+          (Date.valueOf("2014-12-03"), Timestamp.valueOf("2014-12-03 15:05:00"))), StringType)
+        checkEvaluation(ret3, s"${lb}2014-12-03, 2014-12-03 15:05:00$rb")
+        val ret4 = cast(Literal.create(((1, "a"), 5, 0.1)), StringType)
+        checkEvaluation(ret4, s"$lb${lb}1, a$rb, 5, 0.1$rb")
+        val ret5 = cast(Literal.create((Seq(1, 2, 3), "a", 0.1)), StringType)
+        checkEvaluation(ret5, s"$lb[1, 2, 3], a, 0.1$rb")
+        val ret6 = cast(Literal.create((1, Map(1 -> "a", 2 -> "b", 3 -> "c"))), StringType)
+        checkEvaluation(ret6, s"${lb}1, ${lb}1 -> a, 2 -> b, 3 -> c$rb$rb")
+      }
+    }
   }
 
   test("up-cast") {
@@ -1026,6 +1045,7 @@ class CastSuite extends CastSuiteBase {
 
   test("cast from int 2") {
     checkEvaluation(cast(1, LongType), 1.toLong)
+
     checkEvaluation(cast(cast(1000, TimestampType), LongType), 1000.toLong)
     checkEvaluation(cast(cast(-1200, TimestampType), LongType), -1200.toLong)
 
@@ -1310,6 +1330,48 @@ class CastSuite extends CastSuiteBase {
       checkEvaluation(cast(negativeTs, LongType), expectedSecs)
     }
   }
+
+  test("SPARK-31710: fail casting from numeric to timestamp if it is forbidden") {
+    Seq(true, false).foreach { enable =>
+      withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> enable.toString) {
+        assert(cast(2.toByte, TimestampType).resolved == enable)
+        assert(cast(10.toShort, TimestampType).resolved == enable)
+        assert(cast(3, TimestampType).resolved == enable)
+        assert(cast(10L, TimestampType).resolved == enable)
+        assert(cast(Decimal(1.2), TimestampType).resolved == enable)
+        assert(cast(1.7f, TimestampType).resolved == enable)
+        assert(cast(2.3d, TimestampType).resolved == enable)
+      }
+    }
+  }
+
+  test("SPARK-32828: cast from a derived user-defined type to a base type") {
+    val v = Literal.create(Row(1), new ExampleSubTypeUDT())
+    checkEvaluation(cast(v, new ExampleBaseTypeUDT), Row(1))
+  }
+
+  test("Fast fail for cast string type to decimal type") {
+    checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
+      Decimal("12345678901234567890123456789012345678"))
+    checkEvaluation(cast("123456789012345678901234567890123456789", DecimalType(38, 0)), null)
+    checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 1)), null)
+
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
+      Decimal("0E-18"))
+    checkEvaluation(cast("6E-120", DecimalType(38, 0)),
+      Decimal("0"))
+
+    checkEvaluation(cast("6E+37", DecimalType(38, 0)),
+      Decimal("60000000000000000000000000000000000000"))
+    checkEvaluation(cast("6E+38", DecimalType(38, 0)), null)
+    checkEvaluation(cast("6E+37", DecimalType(38, 1)), null)
+
+    checkEvaluation(cast("abcd", DecimalType(38, 1)), null)
+  }
 }
 
 /**
@@ -1332,24 +1394,25 @@ class AnsiCastSuite extends CastSuiteBase {
       val array = Literal.create(Seq("123", "true", "f", null),
         ArrayType(StringType, containsNull = true))
       checkExceptionInExpression[NumberFormatException](
-        cast(array, ArrayType(dataType, containsNull = true)), "invalid input")
+        cast(array, ArrayType(dataType, containsNull = true)),
+        "invalid input syntax for type numeric: true")
       checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), "invalid input")
+        cast("string", dataType), "invalid input syntax for type numeric: string")
       checkExceptionInExpression[NumberFormatException](
-        cast("123-string", dataType), "invalid input")
+        cast("123-string", dataType), "invalid input syntax for type numeric: 123-string")
       checkExceptionInExpression[NumberFormatException](
-        cast("2020-07-19", dataType), "invalid input")
+        cast("2020-07-19", dataType), "invalid input syntax for type numeric: 2020-07-19")
       checkExceptionInExpression[NumberFormatException](
-        cast("1.23", dataType), "invalid input")
+        cast("1.23", dataType), "invalid input syntax for type numeric: 1.23")
     }
 
     Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>
       checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), "invalid input")
+        cast("string", dataType), "invalid input syntax for type numeric: string")
       checkExceptionInExpression[NumberFormatException](
-        cast("123.000.00", dataType), "invalid input")
+        cast("123.000.00", dataType), "invalid input syntax for type numeric: 123.000.00")
       checkExceptionInExpression[NumberFormatException](
-        cast("abc.com", dataType), "invalid input")
+        cast("abc.com", dataType), "invalid input syntax for type numeric: abc.com")
     }
   }
 
@@ -1364,5 +1427,38 @@ class AnsiCastSuite extends CastSuiteBase {
       checkExceptionInExpression[ArithmeticException](cast(negativeTs, IntegerType), errMsg("int"))
       checkEvaluation(cast(negativeTs, LongType), expectedSecs)
     }
+  }
+
+  test("Fast fail for cast string type to decimal type in ansi mode") {
+    checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
+      Decimal("12345678901234567890123456789012345678"))
+    checkExceptionInExpression[ArithmeticException](
+      cast("123456789012345678901234567890123456789", DecimalType(38, 0)),
+      "out of decimal type range")
+    checkExceptionInExpression[ArithmeticException](
+      cast("12345678901234567890123456789012345678", DecimalType(38, 1)),
+      "cannot be represented as Decimal(38, 1)")
+
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
+      Decimal("0E-18"))
+    checkEvaluation(cast("6E-120", DecimalType(38, 0)),
+      Decimal("0"))
+
+    checkEvaluation(cast("6E+37", DecimalType(38, 0)),
+      Decimal("60000000000000000000000000000000000000"))
+    checkExceptionInExpression[ArithmeticException](
+      cast("6E+38", DecimalType(38, 0)),
+      "out of decimal type range")
+    checkExceptionInExpression[ArithmeticException](
+      cast("6E+37", DecimalType(38, 1)),
+      "cannot be represented as Decimal(38, 1)")
+
+    checkExceptionInExpression[NumberFormatException](
+      cast("abcd", DecimalType(38, 1)),
+      "invalid input syntax for type numeric")
   }
 }

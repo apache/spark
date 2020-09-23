@@ -15,28 +15,19 @@
 # limitations under the License.
 #
 
-# To disallow implicit relative import. Remove this once we drop Python 2.
-from __future__ import absolute_import
-from __future__ import print_function
 import sys
 import warnings
 from functools import reduce
 from threading import RLock
 
-if sys.version >= '3':
-    basestring = unicode = str
-    xrange = range
-else:
-    from itertools import imap as map
-
 from pyspark import since
-from pyspark.rdd import RDD, ignore_unicode_prefix
+from pyspark.rdd import RDD
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.conversion import SparkConversionMixin
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.types import Row, DataType, StringType, StructType, \
+from pyspark.sql.types import DataType, StructType, \
     _make_type_verifier, _infer_schema, _has_nulltype, _merge_type, _create_converter, \
     _parse_datatype_string
 from pyspark.sql.utils import install_exception_handler
@@ -52,11 +43,11 @@ def _monkey_patch_RDD(sparkSession):
         This is a shorthand for ``spark.createDataFrame(rdd, schema, sampleRatio)``
 
         :param schema: a :class:`pyspark.sql.types.StructType` or list of names of columns
-        :param samplingRatio: the sample ratio of rows used for inferring
+        :param sampleRatio: the sample ratio of rows used for inferring
         :return: a DataFrame
 
         >>> rdd.toDF().collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
         """
         return sparkSession.createDataFrame(self, schema, sampleRatio)
 
@@ -197,11 +188,11 @@ class SparkSession(SparkConversionMixin):
     _instantiatedSession = None
     _activeSession = None
 
-    @ignore_unicode_prefix
     def __init__(self, sparkContext, jsparkSession=None):
         """Creates a new SparkSession.
 
         >>> from datetime import datetime
+        >>> from pyspark.sql import Row
         >>> spark = SparkSession(sc)
         >>> allTypes = sc.parallelize([Row(i=1, s="string", d=1.0, l=1,
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
@@ -213,7 +204,7 @@ class SparkSession(SparkConversionMixin):
         [Row((i + CAST(1 AS BIGINT))=2, (d + CAST(1 AS DOUBLE))=2.0, (NOT b)=False, list[1]=2, \
             dict[s]=0, time=datetime.datetime(2014, 8, 1, 14, 1, 5), a=1)]
         >>> df.rdd.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time, x.row.a, x.list)).collect()
-        [(1, u'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
+        [(1, 'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
         """
         from pyspark.sql.context import SQLContext
         self._sc = sparkContext
@@ -265,7 +256,10 @@ class SparkSession(SparkConversionMixin):
     @since(3.0)
     def getActiveSession(cls):
         """
-        Returns the active SparkSession for the current thread, returned by the builder.
+        Returns the active SparkSession for the current thread, returned by the builder
+
+        :return: :class:`SparkSession` if an active session exists for the current thread
+
         >>> s = SparkSession.getActiveSession()
         >>> l = [('Alice', 1)]
         >>> rdd = s.sparkContext.parallelize(l)
@@ -365,18 +359,14 @@ class SparkSession(SparkConversionMixin):
 
     def _inferSchemaFromList(self, data, names=None):
         """
-        Infer schema from list of Row or tuple.
+        Infer schema from list of Row, dict, or tuple.
 
-        :param data: list of Row or tuple
+        :param data: list of Row, dict, or tuple
         :param names: list of column names
         :return: :class:`pyspark.sql.types.StructType`
         """
         if not data:
             raise ValueError("can not infer schema from empty dataset")
-        first = data[0]
-        if type(first) is dict:
-            warnings.warn("inferring schema from dict is deprecated,"
-                          "please use pyspark.sql.Row instead")
         schema = reduce(_merge_type, (_infer_schema(row, names) for row in data))
         if _has_nulltype(schema):
             raise ValueError("Some of types cannot be determined after inferring")
@@ -384,9 +374,9 @@ class SparkSession(SparkConversionMixin):
 
     def _inferSchema(self, rdd, samplingRatio=None, names=None):
         """
-        Infer schema from an RDD of Row or tuple.
+        Infer schema from an RDD of Row, dict, or tuple.
 
-        :param rdd: an RDD of Row or tuple
+        :param rdd: an RDD of Row, dict, or tuple
         :param samplingRatio: sampling ratio, or no sampling (default)
         :return: :class:`pyspark.sql.types.StructType`
         """
@@ -394,9 +384,6 @@ class SparkSession(SparkConversionMixin):
         if not first:
             raise ValueError("The first row in RDD is empty, "
                              "can not infer schema")
-        if type(first) is dict:
-            warnings.warn("Using RDD of dict to inferSchema is deprecated. "
-                          "Use pyspark.sql.Row instead")
 
         if samplingRatio is None:
             schema = _infer_schema(first, names=names)
@@ -489,7 +476,6 @@ class SparkSession(SparkConversionMixin):
         return SparkSession.builder.getOrCreate()
 
     @since(2.0)
-    @ignore_unicode_prefix
     def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True):
         """
         Creates a :class:`DataFrame` from an :class:`RDD`, a list or a :class:`pandas.DataFrame`.
@@ -527,34 +513,29 @@ class SparkSession(SparkConversionMixin):
 
         .. note:: Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
 
-        .. note:: When Arrow optimization is enabled, strings inside Pandas DataFrame in Python
-            2 are converted into bytes as they are bytes in Python 2 whereas regular strings are
-            left as strings. When using strings in Python 2, use unicode `u""` as Python standard
-            practice.
-
         >>> l = [('Alice', 1)]
         >>> spark.createDataFrame(l).collect()
-        [Row(_1=u'Alice', _2=1)]
+        [Row(_1='Alice', _2=1)]
         >>> spark.createDataFrame(l, ['name', 'age']).collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
 
         >>> d = [{'name': 'Alice', 'age': 1}]
         >>> spark.createDataFrame(d).collect()
-        [Row(age=1, name=u'Alice')]
+        [Row(age=1, name='Alice')]
 
         >>> rdd = sc.parallelize(l)
         >>> spark.createDataFrame(rdd).collect()
-        [Row(_1=u'Alice', _2=1)]
+        [Row(_1='Alice', _2=1)]
         >>> df = spark.createDataFrame(rdd, ['name', 'age'])
         >>> df.collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
 
         >>> from pyspark.sql import Row
         >>> Person = Row('name', 'age')
         >>> person = rdd.map(lambda r: Person(*r))
         >>> df2 = spark.createDataFrame(person)
         >>> df2.collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
 
         >>> from pyspark.sql.types import *
         >>> schema = StructType([
@@ -562,15 +543,15 @@ class SparkSession(SparkConversionMixin):
         ...    StructField("age", IntegerType(), True)])
         >>> df3 = spark.createDataFrame(rdd, schema)
         >>> df3.collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
 
         >>> spark.createDataFrame(df.toPandas()).collect()  # doctest: +SKIP
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
         >>> spark.createDataFrame(pandas.DataFrame([[1, 2]])).collect()  # doctest: +SKIP
         [Row(0=1, 1=2)]
 
         >>> spark.createDataFrame(rdd, "a: string, b: int").collect()
-        [Row(a=u'Alice', b=1)]
+        [Row(a='Alice', b=1)]
         >>> rdd = rdd.map(lambda row: row[1])
         >>> spark.createDataFrame(rdd, "int").collect()
         [Row(value=1)]
@@ -584,7 +565,7 @@ class SparkSession(SparkConversionMixin):
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
 
-        if isinstance(schema, basestring):
+        if isinstance(schema, str):
             schema = _parse_datatype_string(schema)
         elif isinstance(schema, (list, tuple)):
             # Must re-encode any unicode strings to be consistent with StructField names
@@ -631,7 +612,6 @@ class SparkSession(SparkConversionMixin):
         df._schema = schema
         return df
 
-    @ignore_unicode_prefix
     @since(2.0)
     def sql(self, sqlQuery):
         """Returns a :class:`DataFrame` representing the result of the given query.
@@ -641,7 +621,7 @@ class SparkSession(SparkConversionMixin):
         >>> df.createOrReplaceTempView("table1")
         >>> df2 = spark.sql("SELECT field1 AS f1, field2 as f2 from table1")
         >>> df2.collect()
-        [Row(f1=1, f2=u'row1'), Row(f1=2, f2=u'row2'), Row(f1=3, f2=u'row3')]
+        [Row(f1=1, f2='row1'), Row(f1=2, f2='row2'), Row(f1=3, f2='row3')]
         """
         return DataFrame(self._jsparkSession.sql(sqlQuery), self._wrapped)
 

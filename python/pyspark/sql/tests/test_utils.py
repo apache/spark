@@ -52,7 +52,7 @@ class UtilsTests(ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_utils import *
+    from pyspark.sql.tests.test_utils import *  # noqa: F401
 
     try:
         import xmlrunner

@@ -54,7 +54,7 @@ private[spark] object PythonUtils {
    * Convert list of T into seq of T (for calling API with varargs)
    */
   def toSeq[T](vs: JList[T]): Seq[T] = {
-    vs.asScala
+    vs.asScala.toSeq
   }
 
   /**

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -22,20 +22,15 @@ import json
 import os
 import re
 import sys
-if sys.version < '3':
-    from urllib2 import urlopen
-    from urllib2 import Request
-    from urllib2 import HTTPError
-else:
-    from urllib.request import urlopen
-    from urllib.request import Request
-    from urllib.error import HTTPError
+from urllib.request import urlopen
+from urllib.request import Request
+from urllib.error import HTTPError
 
 try:
     import jira.client
 except ImportError:
     print("This tool requires the jira-python library")
-    print("Install using 'sudo pip install jira'")
+    print("Install using 'sudo pip3 install jira'")
     sys.exit(-1)
 
 # User facing configs

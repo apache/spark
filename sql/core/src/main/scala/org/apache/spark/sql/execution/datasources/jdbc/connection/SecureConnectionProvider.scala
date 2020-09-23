@@ -33,7 +33,7 @@ import org.apache.spark.util.SecurityUtils
 private[connection] object SecurityConfigurationLock
 
 private[jdbc] abstract class SecureConnectionProvider(driver: Driver, options: JDBCOptions)
-    extends BasicConnectionProvider(driver, options) with Logging {
+  extends BasicConnectionProvider(driver, options) with Logging {
   override def getConnection(): Connection = {
     setAuthenticationConfigIfNeeded()
     super.getConnection()

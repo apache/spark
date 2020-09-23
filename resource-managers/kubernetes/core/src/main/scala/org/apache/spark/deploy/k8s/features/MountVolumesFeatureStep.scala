@@ -19,6 +19,7 @@ package org.apache.spark.deploy.k8s.features
 import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.Constants.ENV_EXECUTOR_ID
 
 private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
@@ -56,7 +57,13 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
           new VolumeBuilder()
             .withHostPath(new HostPathVolumeSource(hostPath, ""))
 
-        case KubernetesPVCVolumeConf(claimName) =>
+        case KubernetesPVCVolumeConf(claimNameTemplate) =>
+          val claimName = conf match {
+            case c: KubernetesExecutorConf =>
+              claimNameTemplate.replaceAll(ENV_EXECUTOR_ID, c.executorId)
+            case _ =>
+              claimNameTemplate
+          }
           new VolumeBuilder()
             .withPersistentVolumeClaim(
               new PersistentVolumeClaimVolumeSource(claimName, spec.mountReadOnly))

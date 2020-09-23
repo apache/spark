@@ -170,7 +170,7 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
         // We take the latest record for the timestamp. Please refer to the class Javadoc for
         // detailed explanation
         val time = sortedByTime.last.time
-        segment = wrappedLog.write(aggregate(sortedByTime), time)
+        segment = wrappedLog.write(aggregate(sortedByTime.toSeq), time)
       }
       buffer.foreach(_.promise.success(segment))
     } catch {

@@ -139,7 +139,7 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
     if (addedFiles.nonEmpty) {
       val fs = new Path(addedFiles.head).getFileSystem(taskContext.getConfiguration)
       val statuses: Seq[SinkFileStatus] =
-        addedFiles.map(f => SinkFileStatus(fs.getFileStatus(new Path(f))))
+        addedFiles.map(f => SinkFileStatus(fs.getFileStatus(new Path(f)))).toSeq
       new TaskCommitMessage(statuses)
     } else {
       new TaskCommitMessage(Seq.empty[SinkFileStatus])

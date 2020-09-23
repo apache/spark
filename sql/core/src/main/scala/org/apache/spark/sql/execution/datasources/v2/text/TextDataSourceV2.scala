@@ -31,14 +31,16 @@ class TextDataSourceV2 extends FileDataSourceV2 {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     val paths = getPaths(options)
-    val tableName = getTableName(paths)
-    TextTable(tableName, sparkSession, options, paths, None, fallbackFileFormat)
+    val tableName = getTableName(options, paths)
+    val optionsWithoutPaths = getOptionsWithoutPaths(options)
+    TextTable(tableName, sparkSession, optionsWithoutPaths, paths, None, fallbackFileFormat)
   }
 
   override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
     val paths = getPaths(options)
-    val tableName = getTableName(paths)
-    TextTable(tableName, sparkSession, options, paths, Some(schema), fallbackFileFormat)
+    val tableName = getTableName(options, paths)
+    val optionsWithoutPaths = getOptionsWithoutPaths(options)
+    TextTable(tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
   }
 }
 

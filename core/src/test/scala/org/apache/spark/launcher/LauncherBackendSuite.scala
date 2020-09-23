@@ -21,8 +21,9 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration._
 
-import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark._
 import org.apache.spark.internal.config.UI.UI_ENABLED

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -42,6 +43,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -237,11 +239,12 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
  * data source.
  */
 class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  private def readDataSourceTable(table: CatalogTable): LogicalPlan = {
+  private def readDataSourceTable(
+      table: CatalogTable, extraOptions: CaseInsensitiveStringMap): LogicalPlan = {
     val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
     val catalog = sparkSession.sessionState.catalog
+    val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
     catalog.getCachedPlan(qualifiedTableName, () => {
-      val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
       val dataSource =
         DataSource(
           sparkSession,
@@ -251,24 +254,24 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
           partitionColumns = table.partitionColumnNames,
           bucketSpec = table.bucketSpec,
           className = table.provider.get,
-          options = table.storage.properties ++ pathOption,
+          options = dsOptions,
           catalogTable = Some(table))
       LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
     })
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta), _, _, _, _)
+    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options), _, _, _, _)
         if DDLUtils.isDatasourceTable(tableMeta) =>
-      i.copy(table = readDataSourceTable(tableMeta))
+      i.copy(table = readDataSourceTable(tableMeta, options))
 
-    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta), _, _, _, _) =>
+    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _), _, _, _, _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
-    case UnresolvedCatalogRelation(tableMeta) if DDLUtils.isDatasourceTable(tableMeta) =>
-      readDataSourceTable(tableMeta)
+    case UnresolvedCatalogRelation(tableMeta, options) if DDLUtils.isDatasourceTable(tableMeta) =>
+      readDataSourceTable(tableMeta, options)
 
-    case UnresolvedCatalogRelation(tableMeta) =>
+    case UnresolvedCatalogRelation(tableMeta, _) =>
       DDLUtils.readHiveTable(tableMeta)
   }
 }
@@ -307,7 +310,7 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
     case l @ LogicalRelation(baseRelation: TableScan, _, _, _) =>
       RowDataSourceScanExec(
         l.output,
-        l.output.indices,
+        l.output.toStructType,
         Set.empty,
         Set.empty,
         toCatalystRDD(l, baseRelation.buildScan()),
@@ -379,8 +382,8 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
         .map(relation.attributeMap)
 
       val scan = RowDataSourceScanExec(
-        relation.output,
-        requestedColumns.map(relation.output.indexOf),
+        requestedColumns,
+        requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
@@ -401,8 +404,8 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
         (projectSet ++ filterSet -- handledSet).map(relation.attributeMap).toSeq
 
       val scan = RowDataSourceScanExec(
-        relation.output,
-        requestedColumns.map(relation.output.indexOf),
+        requestedColumns,
+        requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
@@ -668,6 +671,8 @@ abstract class PushableColumnBase {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     def helper(e: Expression): Option[Seq[String]] = e match {
       case a: Attribute =>
+        // Attribute that contains dot "." in name is supported only when
+        // nested predicate pushdown is enabled.
         if (nestedPredicatePushdownEnabled || !a.name.contains(".")) {
           Some(Seq(a.name))
         } else {

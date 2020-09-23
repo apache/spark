@@ -238,7 +238,7 @@ class SparkSubmitTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_appsubmit import *
+    from pyspark.tests.test_appsubmit import *  # noqa: F401
 
     try:
         import xmlrunner

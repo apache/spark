@@ -148,14 +148,20 @@ public class SessionManager extends CompositeService {
     }
   }
 
+  private final Object timeoutCheckerLock = new Object();
+
   private void startTimeoutChecker() {
     final long interval = Math.max(checkInterval, 3000L);  // minimum 3 seconds
-    Runnable timeoutChecker = new Runnable() {
+    final Runnable timeoutChecker = new Runnable() {
       @Override
       public void run() {
-        for (sleepInterval(interval); !shutdown; sleepInterval(interval)) {
+        sleepFor(interval);
+        while (!shutdown) {
           long current = System.currentTimeMillis();
           for (HiveSession session : new ArrayList<HiveSession>(handleToSession.values())) {
+            if (shutdown) {
+              break;
+            }
             if (sessionTimeout > 0 && session.getLastAccessTime() + sessionTimeout <= current
                 && (!checkOperation || session.getNoOperationTime() > sessionTimeout)) {
               SessionHandle handle = session.getSessionHandle();
@@ -170,24 +176,34 @@ public class SessionManager extends CompositeService {
               session.closeExpiredOperations();
             }
           }
+          sleepFor(interval);
         }
       }
 
-      private void sleepInterval(long interval) {
-        try {
-          Thread.sleep(interval);
-        } catch (InterruptedException e) {
-          // ignore
+      private void sleepFor(long interval) {
+        synchronized (timeoutCheckerLock) {
+          try {
+            timeoutCheckerLock.wait(interval);
+          } catch (InterruptedException e) {
+            // Ignore, and break.
+          }
         }
       }
     };
     backgroundOperationPool.execute(timeoutChecker);
   }
 
+  private void shutdownTimeoutChecker() {
+    shutdown = true;
+    synchronized (timeoutCheckerLock) {
+      timeoutCheckerLock.notify();
+    }
+  }
+
   @Override
   public synchronized void stop() {
     super.stop();
-    shutdown = true;
+    shutdownTimeoutChecker();
     if (backgroundOperationPool != null) {
       backgroundOperationPool.shutdown();
       long timeout = hiveConf.getTimeVar(

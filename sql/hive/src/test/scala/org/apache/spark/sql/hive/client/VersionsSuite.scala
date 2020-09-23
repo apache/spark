@@ -41,7 +41,7 @@ import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveVersion
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.tags.ExtendedHiveTest
+import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 /**
@@ -51,6 +51,7 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
  * is not fully tested.
  */
 // TODO: Refactor this to `HiveClientSuite` and make it a subclass of `HiveVersionSuite`
+@SlowHiveTest
 @ExtendedHiveTest
 class VersionsSuite extends SparkFunSuite with Logging {
 
@@ -982,7 +983,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
            """.stripMargin
           )
 
-          val errorMsg = "Cannot safely cast 'f0': DecimalType(2,1) to BinaryType"
+          val errorMsg = "Cannot safely cast 'f0': decimal(2,1) to binary"
 
           if (isPartitioned) {
             val insertStmt = s"INSERT OVERWRITE TABLE $tableName partition (ds='a') SELECT 1.3"

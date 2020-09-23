@@ -25,14 +25,13 @@
 """
 
 import sys
-import warnings
 
 import numpy as np
 from distutils.version import LooseVersion
 
 from pyspark import SparkContext
 from pyspark.sql.types import Row, _create_row, _parse_datatype_json_string
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import SparkSession
 
 __all__ = ["ImageSchema"]
 

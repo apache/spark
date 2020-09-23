@@ -20,16 +20,12 @@ import os
 import sys
 from tempfile import NamedTemporaryFile
 import threading
+import pickle
 
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import ChunkedStream, pickle_protocol
-from pyspark.util import _exception_message, print_exec
+from pyspark.util import print_exec
 
-if sys.version < '3':
-    import cPickle as pickle
-else:
-    import pickle
-    unicode = str
 
 __all__ = ['Broadcast']
 
@@ -113,7 +109,7 @@ class Broadcast(object):
             raise
         except Exception as e:
             msg = "Could not serialize broadcast: %s: %s" \
-                  % (e.__class__.__name__, _exception_message(e))
+                  % (e.__class__.__name__, str(e))
             print_exec(sys.stderr)
             raise pickle.PicklingError(msg)
         f.close()

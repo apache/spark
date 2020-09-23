@@ -18,9 +18,9 @@
 from math import sqrt
 import unittest
 
-from numpy import array, random, exp, abs, tile
+from numpy import array, abs, tile
 
-from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, Vectors
+from pyspark.mllib.linalg import SparseVector, DenseVector, Vectors
 from pyspark.mllib.linalg.distributed import RowMatrix
 from pyspark.mllib.feature import HashingTF, IDF, StandardScaler, ElementwiseProduct, Word2Vec
 from pyspark.testing.mllibutils import MLlibTestCase
@@ -182,7 +182,7 @@ class DimensionalityReductionTests(MLlibTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mllib.tests.test_feature import *
+    from pyspark.mllib.tests.test_feature import *  # noqa: F401
 
     try:
         import xmlrunner

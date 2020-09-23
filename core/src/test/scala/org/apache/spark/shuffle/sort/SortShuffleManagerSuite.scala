@@ -20,7 +20,7 @@ package org.apache.spark.shuffle.sort
 import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, Serializer}

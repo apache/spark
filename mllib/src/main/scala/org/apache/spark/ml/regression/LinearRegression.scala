@@ -105,6 +105,10 @@ private[regression] trait LinearRegressionParams extends PredictorParams
   @Since("2.3.0")
   def getEpsilon: Double = $(epsilon)
 
+  setDefault(regParam -> 0.0, fitIntercept -> true, standardization -> true,
+    elasticNetParam -> 0.0, maxIter -> 100, tol -> 1E-6, solver -> Auto,
+    aggregationDepth -> 2, loss -> SquaredError, epsilon -> 1.35, blockSize -> 1)
+
   override protected def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean,
@@ -191,7 +195,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.3.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
-  setDefault(regParam -> 0.0)
 
   /**
    * Set if we should fit the intercept.
@@ -201,7 +204,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.5.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
-  setDefault(fitIntercept -> true)
 
   /**
    * Whether to standardize the training features before fitting the model.
@@ -217,7 +219,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.5.0")
   def setStandardization(value: Boolean): this.type = set(standardization, value)
-  setDefault(standardization -> true)
 
   /**
    * Set the ElasticNet mixing parameter.
@@ -233,7 +234,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.4.0")
   def setElasticNetParam(value: Double): this.type = set(elasticNetParam, value)
-  setDefault(elasticNetParam -> 0.0)
 
   /**
    * Set the maximum number of iterations.
@@ -243,7 +243,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.3.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
-  setDefault(maxIter -> 100)
 
   /**
    * Set the convergence tolerance of iterations.
@@ -254,7 +253,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.4.0")
   def setTol(value: Double): this.type = set(tol, value)
-  setDefault(tol -> 1E-6)
 
   /**
    * Whether to over-/under-sample training instances according to the given weights in weightCol.
@@ -283,7 +281,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.6.0")
   def setSolver(value: String): this.type = set(solver, value)
-  setDefault(solver -> Auto)
 
   /**
    * Suggested depth for treeAggregate (greater than or equal to 2).
@@ -295,7 +292,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("2.1.0")
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
-  setDefault(aggregationDepth -> 2)
 
   /**
    * Sets the value of param [[loss]].
@@ -305,7 +301,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("2.3.0")
   def setLoss(value: String): this.type = set(loss, value)
-  setDefault(loss -> SquaredError)
 
   /**
    * Sets the value of param [[epsilon]].
@@ -315,7 +310,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("2.3.0")
   def setEpsilon(value: Double): this.type = set(epsilon, value)
-  setDefault(epsilon -> 1.35)
 
   /**
    * Set block size for stacking input data in matrices.
@@ -334,7 +328,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("3.1.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
-  setDefault(blockSize -> 1)
 
   override protected def train(dataset: Dataset[_]): LinearRegressionModel = instrumented { instr =>
     instr.logPipelineStage(this)
@@ -433,7 +426,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         Vectors.dense(Array.fill(dim)(1.0))
     }
 
-    val  (parameters, objectiveHistory) = if ($(blockSize) == 1) {
+    val (parameters, objectiveHistory) = if ($(blockSize) == 1) {
       trainOnRows(instances, yMean, yStd, featuresMean, featuresStd,
         initialValues, regularization, optimizer)
     } else {
@@ -939,8 +932,10 @@ class LinearRegressionTrainingSummary private[regression] (
    * @see `LinearRegression.solver`
    */
   @Since("1.5.0")
-  val totalIterations = objectiveHistory.length
-
+  val totalIterations = {
+    assert(objectiveHistory.length > 0, s"objectiveHistory length should be greater than 1.")
+    objectiveHistory.length - 1
+  }
 }
 
 /**
@@ -961,21 +956,27 @@ class LinearRegressionSummary private[regression] (
     private val privateModel: LinearRegressionModel,
     private val diagInvAtWA: Array[Double]) extends Serializable {
 
-  @transient private val metrics = new RegressionMetrics(
-    predictions
-      .select(col(predictionCol), col(labelCol).cast(DoubleType))
-      .rdd
-      .map { case Row(pred: Double, label: Double) => (pred, label) },
-    !privateModel.getFitIntercept)
+  @transient private val metrics = {
+    val weightCol =
+      if (!privateModel.isDefined(privateModel.weightCol) || privateModel.getWeightCol.isEmpty) {
+        lit(1.0)
+      } else {
+        col(privateModel.getWeightCol).cast(DoubleType)
+      }
+
+    new RegressionMetrics(
+      predictions
+        .select(col(predictionCol), col(labelCol).cast(DoubleType), weightCol)
+        .rdd
+        .map { case Row(pred: Double, label: Double, weight: Double) => (pred, label, weight) },
+      !privateModel.getFitIntercept)
+  }
 
   /**
    * Returns the explained variance regression score.
    * explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
    * Reference: <a href="http://en.wikipedia.org/wiki/Explained_variation">
    * Wikipedia explain variation</a>
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val explainedVariance: Double = metrics.explainedVariance
@@ -983,9 +984,6 @@ class LinearRegressionSummary private[regression] (
   /**
    * Returns the mean absolute error, which is a risk function corresponding to the
    * expected value of the absolute error loss or l1-norm loss.
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val meanAbsoluteError: Double = metrics.meanAbsoluteError
@@ -993,9 +991,6 @@ class LinearRegressionSummary private[regression] (
   /**
    * Returns the mean squared error, which is a risk function corresponding to the
    * expected value of the squared error loss or quadratic loss.
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val meanSquaredError: Double = metrics.meanSquaredError
@@ -1003,9 +998,6 @@ class LinearRegressionSummary private[regression] (
   /**
    * Returns the root mean squared error, which is defined as the square root of
    * the mean squared error.
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val rootMeanSquaredError: Double = metrics.rootMeanSquaredError
@@ -1014,9 +1006,6 @@ class LinearRegressionSummary private[regression] (
    * Returns R^2^, the coefficient of determination.
    * Reference: <a href="http://en.wikipedia.org/wiki/Coefficient_of_determination">
    * Wikipedia coefficient of determination</a>
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val r2: Double = metrics.r2
@@ -1025,9 +1014,6 @@ class LinearRegressionSummary private[regression] (
    * Returns Adjusted R^2^, the adjusted coefficient of determination.
    * Reference: <a href="https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2">
    * Wikipedia coefficient of determination</a>
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("2.3.0")
   val r2adj: Double = {
@@ -1044,7 +1030,7 @@ class LinearRegressionSummary private[regression] (
   }
 
   /** Number of instances in DataFrame predictions */
-  lazy val numInstances: Long = predictions.count()
+  lazy val numInstances: Long = metrics.count
 
   /** Degrees of freedom */
   @Since("2.2.0")

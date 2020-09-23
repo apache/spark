@@ -83,6 +83,11 @@ object ParserUtils {
     node.getText.slice(1, node.getText.size - 1)
   }
 
+  /** Collect the entries if any. */
+  def entry(key: String, value: Token): Seq[(String, String)] = {
+    Option(value).toSeq.map(x => key -> string(x))
+  }
+
   /** Get the origin (line and position) of the token. */
   def position(token: Token): Origin = {
     val opt = Option(token)

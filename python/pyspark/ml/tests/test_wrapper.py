@@ -117,7 +117,7 @@ class WrapperTests(MLlibTestCase):
         self.assertEqual(_java2py(self.sc, java_array), expected_str_list)
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_wrapper import *
+    from pyspark.ml.tests.test_wrapper import *  # noqa: F401
 
     try:
         import xmlrunner

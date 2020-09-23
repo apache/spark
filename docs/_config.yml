@@ -8,9 +8,14 @@ gems:
 kramdown:
   entity_output: numeric
 
+plugins:
+  - jekyll-redirect-from
+
 include:
   - _static
   - _modules
+  - _images
+  - _sources
 
 # These allow the documentation to be updated with newer releases
 # of Spark, Scala, and Mesos.

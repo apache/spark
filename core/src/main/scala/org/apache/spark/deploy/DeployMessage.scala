@@ -108,6 +108,13 @@ private[deploy] object DeployMessages {
 
   case class Heartbeat(workerId: String, worker: RpcEndpointRef) extends DeployMessage
 
+  /**
+   * Used by the MasterWebUI to request the master to decommission all workers that are active on
+   * any of the given hostnames.
+   * @param hostnames: A list of hostnames without the ports. Like "localhost", "foo.bar.com" etc
+   */
+  case class DecommissionWorkersOnHosts(hostnames: Seq[String])
+
   // Master to Worker
 
   sealed trait RegisterWorkerResponse
@@ -158,8 +165,6 @@ private[deploy] object DeployMessages {
 
   case object ReregisterWithMaster // used when a worker attempts to reconnect to a master
 
-  case object DecommissionSelf // Mark as decommissioned. May be Master to Worker in the future.
-
   // AppClient to Master
 
   case class RegisterApplication(appDescription: ApplicationDescription, driver: RpcEndpointRef)
@@ -182,8 +187,10 @@ private[deploy] object DeployMessages {
     Utils.checkHostPort(hostPort)
   }
 
+  // When the host of Worker is lost or decommissioned, the `workerHost` is the host address
+  // of that Worker. Otherwise, it's None.
   case class ExecutorUpdated(id: Int, state: ExecutorState, message: Option[String],
-    exitStatus: Option[Int], workerLost: Boolean)
+    exitStatus: Option[Int], workerHost: Option[String])
 
   case class ApplicationRemoved(message: String)
 

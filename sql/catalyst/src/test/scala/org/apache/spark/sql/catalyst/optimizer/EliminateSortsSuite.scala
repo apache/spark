@@ -197,13 +197,25 @@ class EliminateSortsSuite extends PlanTest {
     comparePlans(optimizedThrice, correctAnswerThrice)
   }
 
-  test("remove orderBy in groupBy clause with count aggs") {
-    val projectPlan = testRelation.select('a, 'b)
-    val unnecessaryOrderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
-    val groupByPlan = unnecessaryOrderByPlan.groupBy('a)(count(1))
-    val optimized = Optimize.execute(groupByPlan.analyze)
-    val correctAnswer = projectPlan.groupBy('a)(count(1)).analyze
-    comparePlans(optimized, correctAnswer)
+  test("remove orderBy in groupBy clause with order irrelevant aggs") {
+    Seq(
+      (e : Expression) => min(e),
+      (e : Expression) => minDistinct(e),
+      (e : Expression) => max(e),
+      (e : Expression) => maxDistinct(e),
+      (e : Expression) => count(e),
+      (e : Expression) => countDistinct(e),
+      (e : Expression) => bitAnd(e),
+      (e : Expression) => bitOr(e),
+      (e : Expression) => bitXor(e)
+    ).foreach(agg => {
+      val projectPlan = testRelation.select('a, 'b)
+      val unnecessaryOrderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
+      val groupByPlan = unnecessaryOrderByPlan.groupBy('a)(agg('b))
+      val optimized = Optimize.execute(groupByPlan.analyze)
+      val correctAnswer = projectPlan.groupBy('a)(agg('b)).analyze
+      comparePlans(optimized, correctAnswer)
+    })
   }
 
   test("remove orderBy in groupBy clause with sum aggs") {
@@ -281,6 +293,15 @@ class EliminateSortsSuite extends PlanTest {
     val joinPlan = orderByPlan.join(projectPlanB).select('a, 'd)
     val optimized = Optimize.execute(joinPlan.analyze)
     val correctAnswer = joinPlan.analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-32318: should not remove orderBy in distribute statement") {
+    val projectPlan = testRelation.select('a, 'b)
+    val orderByPlan = projectPlan.orderBy('b.desc)
+    val distributedPlan = orderByPlan.distribute('a)(1)
+    val optimized = Optimize.execute(distributedPlan.analyze)
+    val correctAnswer = distributedPlan.analyze
     comparePlans(optimized, correctAnswer)
   }
 

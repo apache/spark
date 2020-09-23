@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from pyspark.sql.types import StructType, StructField, IntegerType
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -47,20 +48,26 @@ class CatalogTests(ReusedSQLTestCase):
         spark = self.spark
         with self.database("some_db"):
             spark.sql("CREATE DATABASE some_db")
-            with self.table("tab1", "some_db.tab2"):
+            with self.table("tab1", "some_db.tab2", "tab3_via_catalog"):
                 with self.tempView("temp_tab"):
                     self.assertEquals(spark.catalog.listTables(), [])
                     self.assertEquals(spark.catalog.listTables("some_db"), [])
                     spark.createDataFrame([(1, 1)]).createOrReplaceTempView("temp_tab")
                     spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
                     spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet")
+
+                    schema = StructType([StructField("a", IntegerType(), True)])
+                    description = "this a table created via Catalog.createTable()"
+                    spark.catalog.createTable(
+                        "tab3_via_catalog", schema=schema, description=description)
+
                     tables = sorted(spark.catalog.listTables(), key=lambda t: t.name)
                     tablesDefault = \
                         sorted(spark.catalog.listTables("default"), key=lambda t: t.name)
                     tablesSomeDb = \
                         sorted(spark.catalog.listTables("some_db"), key=lambda t: t.name)
                     self.assertEquals(tables, tablesDefault)
-                    self.assertEquals(len(tables), 2)
+                    self.assertEquals(len(tables), 3)
                     self.assertEquals(len(tablesSomeDb), 2)
                     self.assertEquals(tables[0], Table(
                         name="tab1",
@@ -69,6 +76,12 @@ class CatalogTests(ReusedSQLTestCase):
                         tableType="MANAGED",
                         isTemporary=False))
                     self.assertEquals(tables[1], Table(
+                        name="tab3_via_catalog",
+                        database="default",
+                        description=description,
+                        tableType="MANAGED",
+                        isTemporary=False))
+                    self.assertEquals(tables[2], Table(
                         name="temp_tab",
                         database=None,
                         description=None,
@@ -190,7 +203,7 @@ class CatalogTests(ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_catalog import *
+    from pyspark.sql.tests.test_catalog import *  # noqa: F401
 
     try:
         import xmlrunner

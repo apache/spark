@@ -47,8 +47,8 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
       require(shardIdToDataAndSeqNumbers.size > 1, "Need data to be sent to multiple shards")
 
       shardIds = shardIdToDataAndSeqNumbers.keySet.toSeq
-      shardIdToData = shardIdToDataAndSeqNumbers.mapValues { _.map { _._1 }}
-      shardIdToSeqNumbers = shardIdToDataAndSeqNumbers.mapValues { _.map { _._2 }}
+      shardIdToData = shardIdToDataAndSeqNumbers.mapValues(_.map(_._1)).toMap
+      shardIdToSeqNumbers = shardIdToDataAndSeqNumbers.mapValues(_.map(_._2)).toMap
       shardIdToRange = shardIdToSeqNumbers.map { case (shardId, seqNumbers) =>
         val seqNumRange = SequenceNumberRange(
           testUtils.streamName, shardId, seqNumbers.head, seqNumbers.last, seqNumbers.size)

@@ -187,7 +187,7 @@ class PandasGroupedOpsMixin(object):
         """
         Cogroups this group with another group so that we can run cogrouped operations.
 
-        See :class:`CoGroupedData` for the operations that can be run.
+        See :class:`PandasCogroupedOps` for the operations that can be run.
         """
         from pyspark.sql import GroupedData
 
@@ -230,7 +230,7 @@ class PandasCogroupedOps(object):
 
         :param func: a Python native function that takes two `pandas.DataFrame`\\s, and
             outputs a `pandas.DataFrame`, or that takes one tuple (grouping keys) and two
-            pandas ``DataFrame``s, and outputs a pandas ``DataFrame``.
+            pandas ``DataFrame``\\s, and outputs a pandas ``DataFrame``.
         :param schema: the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
 

@@ -219,6 +219,11 @@ double literals:
 decimal_digits  { D | exponent [ D ] }  | digit [ ... ] { exponent [ D ] | [ exponent ] D }
 ```
 
+float literals:
+```sql
+decimal_digits  { F | exponent [ F ] }  | digit [ ... ] { exponent [ F ] | [ exponent ] F }
+```
+
 While decimal_digits is defined as
 ```sql
 [ + | - ] { digit [ ... ] . [ digit [ ... ] ] | . digit [ ... ] }
@@ -238,6 +243,10 @@ E [ + | - ] digit [ ... ]
 * **D**
 
     Case insensitive, indicates `DOUBLE`, which is an 8-byte double-precision floating point number.
+
+* **F**
+
+    Case insensitive, indicates `FLOAT`, which is a 4-byte single-precision floating point number.
 
 * **BD**
 

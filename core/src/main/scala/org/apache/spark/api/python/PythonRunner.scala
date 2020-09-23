@@ -613,7 +613,7 @@ private[spark] class PythonRunner(funcs: Seq[ChainedPythonFunctions])
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
         val command = funcs.head.funcs.head.command
         dataOut.writeInt(command.length)
-        dataOut.write(command)
+        dataOut.write(command.toArray)
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {

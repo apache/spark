@@ -213,9 +213,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
           Seq(fs.listStatus(path1), fs.listStatus(path2), fs.listStatus(path3)).flatten
 
         val schema = SchemaMergeUtils.mergeSchemasInParallel(
-          spark,
-          fileStatuses,
-          schemaReader)
+          spark, Map.empty, fileStatuses, schemaReader)
 
         assert(schema.isDefined)
         assert(schema.get == StructType(Seq(

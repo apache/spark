@@ -76,7 +76,7 @@ object KryoSerializerBenchmark extends BenchmarkBase {
     conf.set(EXECUTOR_EXTRA_JAVA_OPTIONS,
       "-XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads")
     conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
-    conf.set(KRYO_USER_REGISTRATORS, classOf[MyRegistrator].getName)
+    conf.set(KRYO_USER_REGISTRATORS, Seq(classOf[MyRegistrator].getName))
     conf.set(KRYO_USE_POOL, usePool)
 
     if (sc != null) {

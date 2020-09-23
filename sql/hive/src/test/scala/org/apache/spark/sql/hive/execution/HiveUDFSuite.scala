@@ -434,8 +434,8 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     withTempView("tab1") {
       Seq(Tuple1(1451400761)).toDF("test_date").createOrReplaceTempView("tab1")
       sql(s"CREATE TEMPORARY FUNCTION testUDFToDate AS '${classOf[GenericUDFToDate].getName}'")
-      val count = sql("select testUDFToDate(cast(test_date as timestamp))" +
-        " from tab1 group by testUDFToDate(cast(test_date as timestamp))").count()
+      val count = sql("select testUDFToDate(timestamp_seconds(test_date))" +
+        " from tab1 group by testUDFToDate(timestamp_seconds(test_date))").count()
       sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToDate")
       assert(count == 1)
     }

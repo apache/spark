@@ -352,7 +352,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_udf_window import *
+    from pyspark.sql.tests.test_pandas_udf_window import *  # noqa: F401
 
     try:
         import xmlrunner

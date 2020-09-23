@@ -105,11 +105,37 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     }
   }
 
+  test("SPARK-32870: Default expressions in FunctionRegistry should have their " +
+    "usage, examples and since filled") {
+    val ignoreSet = Set(
+      // Explicitly inherits NonSQLExpression, and has no ExpressionDescription
+      "org.apache.spark.sql.catalyst.expressions.TimeWindow",
+      // Cast aliases do not need examples
+      "org.apache.spark.sql.catalyst.expressions.Cast")
+
+    spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
+      val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
+      if (!ignoreSet.contains(info.getClassName)) {
+        withClue(s"Function '${info.getName}', Expression class '${info.getClassName}'") {
+          assert(info.getUsage.nonEmpty)
+          assert(info.getExamples.startsWith("\n    Examples:\n"))
+          assert(info.getExamples.endsWith("\n  "))
+          assert(info.getSince.matches("[0-9]+\\.[0-9]+\\.[0-9]+"))
+
+          if (info.getArguments.nonEmpty) {
+            assert(info.getArguments.startsWith("\n    Arguments:\n"))
+            assert(info.getArguments.endsWith("\n  "))
+          }
+        }
+      }
+    }
+  }
+
   test("check outputs of expression examples") {
     def unindentAndTrim(s: String): String = {
       s.replaceAll("\n\\s+", "\n").trim
     }
-    val beginSqlStmtRe = "  > ".r
+    val beginSqlStmtRe = "\n      > ".r
     val endSqlStmtRe = ";\n".r
     def checkExampleSyntax(example: String): Unit = {
       val beginStmtNum = beginSqlStmtRe.findAllIn(example).length
@@ -129,8 +155,15 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.Randn",
       "org.apache.spark.sql.catalyst.expressions.Shuffle",
       "org.apache.spark.sql.catalyst.expressions.Uuid",
+      // Other nondeterministic expressions
+      "org.apache.spark.sql.catalyst.expressions.MonotonicallyIncreasingID",
+      "org.apache.spark.sql.catalyst.expressions.SparkPartitionID",
+      "org.apache.spark.sql.catalyst.expressions.InputFileName",
+      "org.apache.spark.sql.catalyst.expressions.InputFileBlockStart",
+      "org.apache.spark.sql.catalyst.expressions.InputFileBlockLength",
       // The example calls methods that return unstable results.
-      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
+      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection",
+      "org.apache.spark.sql.catalyst.expressions.SparkVersion")
 
     val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
     parFuncs.foreach { funcId =>

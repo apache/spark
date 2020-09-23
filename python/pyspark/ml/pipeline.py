@@ -14,17 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-import sys
 import os
 
-if sys.version > '3':
-    basestring = str
-
-from pyspark import since, keyword_only, SparkContext
+from pyspark import keyword_only, since, SparkContext
 from pyspark.ml.base import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
-from pyspark.ml.util import *
+from pyspark.ml.util import MLReadable, MLWritable, JavaMLWriter, JavaMLReader, \
+    DefaultParamsReader, DefaultParamsWriter, MLWriter, MLReader, JavaMLWritable
 from pyspark.ml.wrapper import JavaParams, JavaWrapper
 from pyspark.ml.common import inherit_doc, _java2py, _py2java
 
@@ -54,9 +50,9 @@ class Pipeline(Estimator, MLReadable, MLWritable):
     stages = Param(Params._dummy(), "stages", "a list of pipeline stages")
 
     @keyword_only
-    def __init__(self, stages=None):
+    def __init__(self, *, stages=None):
         """
-        __init__(self, stages=None)
+        __init__(self, \\*, stages=None)
         """
         super(Pipeline, self).__init__()
         kwargs = self._input_kwargs
@@ -81,9 +77,9 @@ class Pipeline(Estimator, MLReadable, MLWritable):
 
     @keyword_only
     @since("1.3.0")
-    def setParams(self, stages=None):
+    def setParams(self, *, stages=None):
         """
-        setParams(self, stages=None)
+        setParams(self, \\*, stages=None)
         Sets params for Pipeline.
         """
         kwargs = self._input_kwargs

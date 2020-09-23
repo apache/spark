@@ -67,7 +67,7 @@ class EstimatorTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_base import *
+    from pyspark.ml.tests.test_base import *  # noqa: F401
 
     try:
         import xmlrunner

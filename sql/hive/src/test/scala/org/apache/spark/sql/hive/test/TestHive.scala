@@ -38,6 +38,7 @@ import org.apache.spark.internal.config.UI._
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -58,6 +59,7 @@ object TestHive
       new SparkConf()
         .set("spark.sql.test", "")
         .set(SQLConf.CODEGEN_FALLBACK.key, "false")
+        .set(SQLConf.CODEGEN_FACTORY_MODE.key, CodegenObjectFactoryMode.CODEGEN_ONLY.toString)
         .set(HiveUtils.HIVE_METASTORE_BARRIER_PREFIXES.key,
           "org.apache.spark.sql.hive.execution.PairSerDe")
         .set(WAREHOUSE_PATH.key, TestHiveContext.makeWarehouseDir().toURI.getPath)
@@ -222,7 +224,7 @@ private[hive] class TestHiveSparkSession(
 
   @transient
   override lazy val sessionState: SessionState = {
-    new TestHiveSessionStateBuilder(this, parentSessionState).build()
+    new TestHiveSessionStateBuilder(this, parentSessionState, Map.empty).build()
   }
 
   lazy val metadataHive: HiveClient = {
@@ -599,7 +601,7 @@ private[hive] class TestHiveQueryExecution(
     // Make sure any test tables referenced are loaded.
     val referencedTables =
       describedTables ++
-        logical.collect { case UnresolvedRelation(ident) => ident.asTableIdentifier }
+        logical.collect { case UnresolvedRelation(ident, _) => ident.asTableIdentifier }
     val resolver = sparkSession.sessionState.conf.resolver
     val referencedTestTables = referencedTables.flatMap { tbl =>
       val testTableOpt = sparkSession.testTables.keys.find(resolver(_, tbl.table))
@@ -648,8 +650,9 @@ private[hive] object TestHiveContext {
 
 private[sql] class TestHiveSessionStateBuilder(
     session: SparkSession,
-    state: Option[SessionState])
-  extends HiveSessionStateBuilder(session, state)
+    state: Option[SessionState],
+    options: Map[String, String])
+  extends HiveSessionStateBuilder(session, state, options)
   with WithTestConf {
 
   override def overrideConfs: Map[String, String] = TestHiveContext.overrideConfs
@@ -658,7 +661,7 @@ private[sql] class TestHiveSessionStateBuilder(
     new TestHiveQueryExecution(session.asInstanceOf[TestHiveSparkSession], plan)
   }
 
-  override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _)
+  override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _, Map.empty)
 }
 
 private[hive] object HiveTestJars {

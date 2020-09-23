@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow

@@ -105,7 +105,7 @@ object ResolveHints {
 
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
-          case ResolvedHint(u @ UnresolvedRelation(ident), hint)
+          case ResolvedHint(u @ UnresolvedRelation(ident, _), hint)
               if matchedIdentifierInHint(ident) =>
             ResolvedHint(u, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
@@ -113,7 +113,7 @@ object ResolveHints {
               if matchedIdentifierInHint(extractIdentifier(r)) =>
             ResolvedHint(r, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
-          case UnresolvedRelation(ident) if matchedIdentifierInHint(ident) =>
+          case UnresolvedRelation(ident, _) if matchedIdentifierInHint(ident) =>
             ResolvedHint(plan, createHintInfo(hintName))
 
           case r: SubqueryAlias if matchedIdentifierInHint(extractIdentifier(r)) =>
@@ -183,7 +183,7 @@ object ResolveHints {
       val hintName = hint.name.toUpperCase(Locale.ROOT)
 
       def createRepartitionByExpression(
-          numPartitions: Int, partitionExprs: Seq[Any]): RepartitionByExpression = {
+          numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionByExpression = {
         val sortOrders = partitionExprs.filter(_.isInstanceOf[SortOrder])
         if (sortOrders.nonEmpty) throw new IllegalArgumentException(
           s"""Invalid partitionExprs specified: $sortOrders
@@ -208,11 +208,11 @@ object ResolveHints {
           throw new AnalysisException(s"$hintName Hint expects a partition number as a parameter")
 
         case param @ Seq(IntegerLiteral(numPartitions), _*) if shuffle =>
-          createRepartitionByExpression(numPartitions, param.tail)
+          createRepartitionByExpression(Some(numPartitions), param.tail)
         case param @ Seq(numPartitions: Int, _*) if shuffle =>
-          createRepartitionByExpression(numPartitions, param.tail)
+          createRepartitionByExpression(Some(numPartitions), param.tail)
         case param @ Seq(_*) if shuffle =>
-          createRepartitionByExpression(conf.numShufflePartitions, param)
+          createRepartitionByExpression(None, param)
       }
     }
 
@@ -224,7 +224,7 @@ object ResolveHints {
       val hintName = hint.name.toUpperCase(Locale.ROOT)
 
       def createRepartitionByExpression(
-          numPartitions: Int, partitionExprs: Seq[Any]): RepartitionByExpression = {
+          numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionByExpression = {
         val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
         if (invalidParams.nonEmpty) {
           throw new AnalysisException(s"$hintName Hint parameter should include columns, but " +
@@ -239,11 +239,11 @@ object ResolveHints {
 
       hint.parameters match {
         case param @ Seq(IntegerLiteral(numPartitions), _*) =>
-          createRepartitionByExpression(numPartitions, param.tail)
+          createRepartitionByExpression(Some(numPartitions), param.tail)
         case param @ Seq(numPartitions: Int, _*) =>
-          createRepartitionByExpression(numPartitions, param.tail)
+          createRepartitionByExpression(Some(numPartitions), param.tail)
         case param @ Seq(_*) =>
-          createRepartitionByExpression(conf.numShufflePartitions, param)
+          createRepartitionByExpression(None, param)
       }
     }
 
@@ -276,6 +276,17 @@ object ResolveHints {
       case h: UnresolvedHint =>
         hintErrorHandler.hintNotRecognized(h.name, h.parameters)
         h.child
+    }
+  }
+
+  /**
+   * Removes all the hints when `spark.sql.optimizer.disableHints` is set.
+   * This is executed at the very beginning of the Analyzer to disable
+   * the hint functionality.
+   */
+  class DisableHints(conf: SQLConf) extends RemoveAllHints(conf: SQLConf) {
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      if (conf.getConf(SQLConf.DISABLE_HINTS)) super.apply(plan) else plan
     }
   }
 }

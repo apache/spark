@@ -51,4 +51,11 @@ private object DB2Dialect extends JdbcDialect {
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  // scalastyle:off line.size.limit
+  // See https://www.ibm.com/support/knowledgecenter/en/SSEPGG_11.5.0/com.ibm.db2.luw.sql.ref.doc/doc/r0000980.html
+  // scalastyle:on line.size.limit
+  override def renameTable(oldTable: String, newTable: String): String = {
+    s"RENAME TABLE $oldTable TO $newTable"
+  }
 }

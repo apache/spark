@@ -23,7 +23,8 @@ import time
 import unittest
 
 from pyspark.sql import SparkSession, Row
-from pyspark.sql.types import *
+from pyspark.sql.types import StringType, IntegerType, DoubleType, StructType, StructField, \
+    BooleanType, DateType, TimestampType, FloatType
 from pyspark.sql.utils import AnalysisException, IllegalArgumentException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils, have_pyarrow, have_pandas, \
     pandas_requirement_message, pyarrow_requirement_message
@@ -379,8 +380,6 @@ class DataFrameTests(ReusedSQLTestCase):
 
     # add tests for SPARK-23647 (test more types for hint)
     def test_extended_hint_types(self):
-        from pyspark.sql import DataFrame
-
         df = self.spark.range(10e10).toDF("id")
         such_a_nice_list = ["itworks1", "itworks2", "itworks3"]
         hinted_df = df.hint("my awesome hint", 1.2345, "what", such_a_nice_list)
@@ -644,7 +643,7 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST(col6 AS DOUBLE) AS double,
             CAST(col7 AS BOOLEAN) AS boolean,
             CAST(col8 AS STRING) AS string,
-            CAST(col9 AS TIMESTAMP) AS timestamp
+            timestamp_seconds(col9) AS timestamp
             FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1),
                         (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
             """
@@ -905,7 +904,7 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_dataframe import *
+    from pyspark.sql.tests.test_dataframe import *  # noqa: F401
 
     try:
         import xmlrunner

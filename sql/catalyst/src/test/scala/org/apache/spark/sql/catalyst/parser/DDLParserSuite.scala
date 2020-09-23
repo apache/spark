@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, FunctionResourceType, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1134,58 +1134,74 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
-  test("merge into table: at most two matched clauses") {
-    val exc = intercept[ParseException] {
-      parsePlan(
-        """
-          |MERGE INTO testcat1.ns1.ns2.tbl AS target
-          |USING testcat2.ns1.ns2.tbl AS source
-          |ON target.col1 = source.col1
-          |WHEN MATCHED AND (target.col2='delete') THEN DELETE
-          |WHEN MATCHED AND (target.col2='update1') THEN UPDATE SET target.col2 = source.col2
-          |WHEN MATCHED AND (target.col2='update2') THEN UPDATE SET target.col2 = source.col2
-          |WHEN NOT MATCHED AND (target.col2='insert')
-          |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
-        """.stripMargin)
-    }
-
-    assert(exc.getMessage.contains("There should be at most 2 'WHEN MATCHED' clauses."))
+  test("merge into table: multi matched and not matched clauses") {
+    parseCompare(
+      """
+        |MERGE INTO testcat1.ns1.ns2.tbl AS target
+        |USING testcat2.ns1.ns2.tbl AS source
+        |ON target.col1 = source.col1
+        |WHEN MATCHED AND (target.col2='delete') THEN DELETE
+        |WHEN MATCHED AND (target.col2='update1') THEN UPDATE SET target.col2 = 1
+        |WHEN MATCHED AND (target.col2='update2') THEN UPDATE SET target.col2 = 2
+        |WHEN NOT MATCHED AND (target.col2='insert1')
+        |THEN INSERT (target.col1, target.col2) values (source.col1, 1)
+        |WHEN NOT MATCHED AND (target.col2='insert2')
+        |THEN INSERT (target.col1, target.col2) values (source.col1, 2)
+      """.stripMargin,
+      MergeIntoTable(
+        SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
+        SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
+        EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+        Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
+          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update1"))),
+            Seq(Assignment(UnresolvedAttribute("target.col2"), Literal(1)))),
+          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update2"))),
+            Seq(Assignment(UnresolvedAttribute("target.col2"), Literal(2))))),
+        Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert1"))),
+          Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+            Assignment(UnresolvedAttribute("target.col2"), Literal(1)))),
+          InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert2"))),
+            Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+              Assignment(UnresolvedAttribute("target.col2"), Literal(2)))))))
   }
 
-  test("merge into table: at most one not matched clause") {
+  test("merge into table: only the last matched clause can omit the condition") {
     val exc = intercept[ParseException] {
       parsePlan(
         """
           |MERGE INTO testcat1.ns1.ns2.tbl AS target
           |USING testcat2.ns1.ns2.tbl AS source
           |ON target.col1 = source.col1
-          |WHEN MATCHED AND (target.col2='delete') THEN DELETE
-          |WHEN MATCHED AND (target.col2='update1') THEN UPDATE SET target.col2 = source.col2
-          |WHEN NOT MATCHED AND (target.col2='insert1')
-          |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
-          |WHEN NOT MATCHED AND (target.col2='insert2')
-          |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
-        """.stripMargin)
-    }
-
-    assert(exc.getMessage.contains("There should be at most 1 'WHEN NOT MATCHED' clause."))
-  }
-
-  test("merge into table: the first matched clause must have a condition if there's a second") {
-    val exc = intercept[ParseException] {
-      parsePlan(
-        """
-          |MERGE INTO testcat1.ns1.ns2.tbl AS target
-          |USING testcat2.ns1.ns2.tbl AS source
-          |ON target.col1 = source.col1
+          |WHEN MATCHED AND (target.col2 == 'update1') THEN UPDATE SET target.col2 = 1
+          |WHEN MATCHED THEN UPDATE SET target.col2 = 2
           |WHEN MATCHED THEN DELETE
-          |WHEN MATCHED THEN UPDATE SET target.col2 = source.col2
           |WHEN NOT MATCHED AND (target.col2='insert')
           |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
         """.stripMargin)
     }
 
-    assert(exc.getMessage.contains("the first MATCHED clause must have a condition"))
+    assert(exc.getMessage.contains("only the last MATCHED clause can omit the condition"))
+  }
+
+  test("merge into table: only the last not matched clause can omit the condition") {
+    val exc = intercept[ParseException] {
+      parsePlan(
+        """
+          |MERGE INTO testcat1.ns1.ns2.tbl AS target
+          |USING testcat2.ns1.ns2.tbl AS source
+          |ON target.col1 = source.col1
+          |WHEN MATCHED AND (target.col2 == 'update') THEN UPDATE SET target.col2 = source.col2
+          |WHEN MATCHED THEN DELETE
+          |WHEN NOT MATCHED AND (target.col2='insert1')
+          |THEN INSERT (target.col1, target.col2) values (source.col1, 1)
+          |WHEN NOT MATCHED
+          |THEN INSERT (target.col1, target.col2) values (source.col1, 2)
+          |WHEN NOT MATCHED
+          |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
+        """.stripMargin)
+    }
+
+    assert(exc.getMessage.contains("only the last NOT MATCHED clause can omit the condition"))
   }
 
   test("merge into table: there must be a when (not) matched condition") {
@@ -1199,26 +1215,6 @@ class DDLParserSuite extends AnalysisTest {
     }
 
     assert(exc.getMessage.contains("There must be at least one WHEN clause in a MERGE statement"))
-  }
-
-  test("merge into table: there can be only a single use DELETE or UPDATE") {
-    Seq("UPDATE SET *", "DELETE").foreach { op =>
-      val exc = intercept[ParseException] {
-        parsePlan(
-          s"""
-             |MERGE INTO testcat1.ns1.ns2.tbl AS target
-             |USING testcat2.ns1.ns2.tbl AS source
-             |ON target.col1 = source.col1
-             |WHEN MATCHED AND (target.col2='delete') THEN $op
-             |WHEN MATCHED THEN $op
-             |WHEN NOT MATCHED AND (target.col2='insert')
-             |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
-           """.stripMargin)
-      }
-
-      assert(exc.getMessage.contains(
-        "UPDATE and DELETE can appear at most once in MATCHED clauses"))
-    }
   }
 
   test("show tables") {
@@ -1966,7 +1962,6 @@ class DDLParserSuite extends AnalysisTest {
       """
         |CREATE OR REPLACE GLOBAL TEMPORARY VIEW a.b.c
         |(col1, col3 COMMENT 'hello')
-        |TBLPROPERTIES('prop1Key'="prop1Val")
         |COMMENT 'BLABLA'
         |AS SELECT * FROM tab1
       """.stripMargin
@@ -1975,7 +1970,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq("a", "b", "c"),
       Seq("col1" -> None, "col3" -> Some("hello")),
       Some("BLABLA"),
-      Map("prop1Key" -> "prop1Val"),
+      Map(),
       Some("SELECT * FROM tab1"),
       parsePlan("SELECT * FROM tab1"),
       false,
@@ -2007,6 +2002,17 @@ class DDLParserSuite extends AnalysisTest {
     intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
   }
 
+  test("SPARK-32374: create temporary view with properties not allowed") {
+    assertUnsupported(
+      sql = """
+        |CREATE OR REPLACE TEMPORARY VIEW a.b.c
+        |(col1, col3 COMMENT 'hello')
+        |TBLPROPERTIES('prop1Key'="prop1Val")
+        |AS SELECT * FROM tab1
+      """.stripMargin,
+      containsThesePhrases = Seq("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"))
+  }
+
   test("SHOW TBLPROPERTIES table") {
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c"),
@@ -2020,40 +2026,40 @@ class DDLParserSuite extends AnalysisTest {
   test("DESCRIBE FUNCTION") {
     comparePlans(
       parsePlan("DESC FUNCTION a"),
-      DescribeFunctionStatement(Seq("a"), false))
+      DescribeFunction(UnresolvedFunc(Seq("a")), false))
     comparePlans(
       parsePlan("DESCRIBE FUNCTION a"),
-      DescribeFunctionStatement(Seq("a"), false))
+      DescribeFunction(UnresolvedFunc(Seq("a")), false))
     comparePlans(
       parsePlan("DESCRIBE FUNCTION a.b.c"),
-      DescribeFunctionStatement(Seq("a", "b", "c"), false))
+      DescribeFunction(UnresolvedFunc(Seq("a", "b", "c")), false))
     comparePlans(
       parsePlan("DESCRIBE FUNCTION EXTENDED a.b.c"),
-      DescribeFunctionStatement(Seq("a", "b", "c"), true))
+      DescribeFunction(UnresolvedFunc(Seq("a", "b", "c")), true))
   }
 
   test("SHOW FUNCTIONS") {
     comparePlans(
       parsePlan("SHOW FUNCTIONS"),
-      ShowFunctionsStatement(true, true, None, None))
+      ShowFunctions(None, true, true, None))
     comparePlans(
       parsePlan("SHOW USER FUNCTIONS"),
-      ShowFunctionsStatement(true, false, None, None))
+      ShowFunctions(None, true, false, None))
     comparePlans(
       parsePlan("SHOW user FUNCTIONS"),
-      ShowFunctionsStatement(true, false, None, None))
+      ShowFunctions(None, true, false, None))
     comparePlans(
       parsePlan("SHOW SYSTEM FUNCTIONS"),
-      ShowFunctionsStatement(false, true, None, None))
+      ShowFunctions(None, false, true, None))
     comparePlans(
       parsePlan("SHOW ALL FUNCTIONS"),
-      ShowFunctionsStatement(true, true, None, None))
+      ShowFunctions(None, true, true, None))
     comparePlans(
       parsePlan("SHOW FUNCTIONS LIKE 'funct*'"),
-      ShowFunctionsStatement(true, true, Some("funct*"), None))
+      ShowFunctions(None, true, true, Some("funct*")))
     comparePlans(
       parsePlan("SHOW FUNCTIONS LIKE a.b.c"),
-      ShowFunctionsStatement(true, true, None, Some(Seq("a", "b", "c"))))
+      ShowFunctions(Some(UnresolvedFunc(Seq("a", "b", "c"))), true, true, None))
     val sql = "SHOW other FUNCTIONS"
     intercept(sql, s"$sql not supported")
   }
@@ -2061,19 +2067,19 @@ class DDLParserSuite extends AnalysisTest {
   test("DROP FUNCTION") {
     comparePlans(
       parsePlan("DROP FUNCTION a"),
-      DropFunctionStatement(Seq("a"), false, false))
+      DropFunction(UnresolvedFunc(Seq("a")), false, false))
     comparePlans(
       parsePlan("DROP FUNCTION a.b.c"),
-      DropFunctionStatement(Seq("a", "b", "c"), false, false))
+      DropFunction(UnresolvedFunc(Seq("a", "b", "c")), false, false))
     comparePlans(
       parsePlan("DROP TEMPORARY FUNCTION a.b.c"),
-      DropFunctionStatement(Seq("a", "b", "c"), false, true))
+      DropFunction(UnresolvedFunc(Seq("a", "b", "c")), false, true))
     comparePlans(
       parsePlan("DROP FUNCTION IF EXISTS a.b.c"),
-      DropFunctionStatement(Seq("a", "b", "c"), true, false))
+      DropFunction(UnresolvedFunc(Seq("a", "b", "c")), true, false))
     comparePlans(
       parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a.b.c"),
-      DropFunctionStatement(Seq("a", "b", "c"), true, true))
+      DropFunction(UnresolvedFunc(Seq("a", "b", "c")), true, true))
   }
 
   test("CREATE FUNCTION") {
@@ -2111,6 +2117,15 @@ class DDLParserSuite extends AnalysisTest {
 
     intercept("CREATE FUNCTION a as 'fun' USING OTHER 'o'",
       "Operation not allowed: CREATE FUNCTION with resource type 'other'")
+  }
+
+  test("REFRESH FUNCTION") {
+    parseCompare("REFRESH FUNCTION c",
+      RefreshFunction(UnresolvedFunc(Seq("c"))))
+    parseCompare("REFRESH FUNCTION b.c",
+      RefreshFunction(UnresolvedFunc(Seq("b", "c"))))
+    parseCompare("REFRESH FUNCTION a.b.c",
+      RefreshFunction(UnresolvedFunc(Seq("a", "b", "c"))))
   }
 
   private case class TableSpec(

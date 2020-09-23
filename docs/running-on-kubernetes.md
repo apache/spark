@@ -23,10 +23,6 @@ license: |
 Spark can run on clusters managed by [Kubernetes](https://kubernetes.io). This feature makes use of native
 Kubernetes scheduler that has been added to Spark.
 
-**The Kubernetes scheduler is currently experimental.
-In future versions, there may be behavioral changes around configuration,
-container images and entrypoints.**
-
 # Security
 
 Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
@@ -1341,7 +1337,7 @@ The following affect the driver and executor containers. All other containers in
   <td>See description</td>
   <td>
     The container name will be assigned by spark ("spark-kubernetes-driver" for the driver container, and
-    "executor" for each executor container) if not defined by the pod template. If the container is defined by the
+    "spark-kubernetes-executor" for each executor container) if not defined by the pod template. If the container is defined by the
     template, the template's name will be used.
   </td>
 </tr>

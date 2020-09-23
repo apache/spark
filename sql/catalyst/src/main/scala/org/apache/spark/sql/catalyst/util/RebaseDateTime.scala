@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId}
 import java.time.temporal.ChronoField
 import java.util.{Calendar, TimeZone}
+import java.util.Calendar.{DAY_OF_MONTH, DST_OFFSET, ERA, HOUR_OF_DAY, MINUTE, MONTH, SECOND, YEAR, ZONE_OFFSET}
 
 import scala.collection.mutable.AnyRefMap
 
@@ -102,15 +103,15 @@ object RebaseDateTime {
       .setInstant(Math.multiplyExact(days, MILLIS_PER_DAY))
       .build()
     val localDate = LocalDate.of(
-      utcCal.get(Calendar.YEAR),
-      utcCal.get(Calendar.MONTH) + 1,
+      utcCal.get(YEAR),
+      utcCal.get(MONTH) + 1,
       // The number of days will be added later to handle non-existing
       // Julian dates in Proleptic Gregorian calendar.
       // For example, 1000-02-29 exists in Julian calendar because 1000
       // is a leap year but it is not a leap year in Gregorian calendar.
       1)
-      .`with`(ChronoField.ERA, utcCal.get(Calendar.ERA))
-      .plusDays(utcCal.get(Calendar.DAY_OF_MONTH) - 1)
+      .`with`(ChronoField.ERA, utcCal.get(ERA))
+      .plusDays(utcCal.get(DAY_OF_MONTH) - 1)
     Math.toIntExact(localDate.toEpochDay)
   }
 
@@ -185,7 +186,8 @@ object RebaseDateTime {
       .setTimeZone(TimeZoneUTC)
       .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
       .build()
-    Math.toIntExact(Math.floorDiv(utcCal.getTimeInMillis, MILLIS_PER_DAY))
+    assert(utcCal.getTimeInMillis % MILLIS_PER_DAY == 0)
+    Math.toIntExact(utcCal.getTimeInMillis / MILLIS_PER_DAY)
   }
 
   /**
@@ -319,27 +321,43 @@ object RebaseDateTime {
    *   Julian calendar: 1582-01-01 00:00:00.123456 -> -12243196799876544
    * The code below converts -12244061221876544 to -12243196799876544.
    *
-   * @param zoneId The time zone ID at which the rebasing should be performed.
+   * @param tz The time zone at which the rebasing should be performed.
    * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'
    *               in Proleptic Gregorian calendar. It can be negative.
    * @return The rebased microseconds since the epoch in Julian calendar.
    */
-  private[sql] def rebaseGregorianToJulianMicros(zoneId: ZoneId, micros: Long): Long = {
+  private[sql] def rebaseGregorianToJulianMicros(tz: TimeZone, micros: Long): Long = {
     val instant = microsToInstant(micros)
-    var ldt = instant.atZone(zoneId).toLocalDateTime
+    val zoneId = tz.toZoneId
+    val zonedDateTime = instant.atZone(zoneId)
+    var ldt = zonedDateTime.toLocalDateTime
     if (ldt.isAfter(julianEndTs) && ldt.isBefore(gregorianStartTs)) {
       ldt = LocalDateTime.of(gregorianStartDate, ldt.toLocalTime)
     }
     val cal = new Calendar.Builder()
-      // `gregory` is a hybrid calendar that supports both
-      // the Julian and Gregorian calendar systems
+      // `gregory` is a hybrid calendar that supports both the Julian and Gregorian calendar systems
       .setCalendarType("gregory")
       .setDate(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth)
       .setTimeOfDay(ldt.getHour, ldt.getMinute, ldt.getSecond)
-      // Local time-line can overlaps, such as at an autumn daylight savings cutover.
-      // This setting selects the original local timestamp mapped to the given `micros`.
-      .set(Calendar.DST_OFFSET, zoneId.getRules.getDaylightSavings(instant).toMillis.toInt)
+      .setTimeZone(tz)
       .build()
+    // A local timestamp can have 2 instants in the cases of switching from:
+    //  1. Summer to winter time.
+    //  2. One standard time zone to another one. For example, Asia/Hong_Kong switched from JST
+    //     to HKT on 18 November, 1945 01:59:59 AM.
+    // Below we check that the original `instant` is earlier or later instant. If it is an earlier
+    // instant, we take the standard and DST offsets of the previous day otherwise of the next one.
+    val trans = zoneId.getRules.getTransition(ldt)
+    if (trans != null && trans.isOverlap) {
+      val cloned = cal.clone().asInstanceOf[Calendar]
+      // Does the current offset belong to the offset before the transition.
+      // If so, we will take zone offsets from the previous day otherwise from the next day.
+      // This assumes that transitions cannot happen often than once per 2 days.
+      val shift = if (trans.getOffsetBefore == zonedDateTime.getOffset) -1 else 1
+      cloned.add(DAY_OF_MONTH, shift)
+      cal.set(ZONE_OFFSET, cloned.get(ZONE_OFFSET))
+      cal.set(DST_OFFSET, cloned.get(DST_OFFSET))
+    }
     millisToMicros(cal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
   }
 
@@ -364,7 +382,7 @@ object RebaseDateTime {
       val tzId = timeZone.getID
       val rebaseRecord = gregJulianRebaseMap.getOrNull(tzId)
       if (rebaseRecord == null || micros < rebaseRecord.switches(0)) {
-        rebaseGregorianToJulianMicros(timeZone.toZoneId, micros)
+        rebaseGregorianToJulianMicros(timeZone, micros)
       } else {
         rebaseMicros(rebaseRecord, micros)
       }
@@ -386,45 +404,50 @@ object RebaseDateTime {
    *   Proleptic Gregorian calendar: 1582-01-01 00:00:00.123456 -> -12244061221876544
    * The code below converts -12243196799876544 to -12244061221876544.
    *
-   * @param zoneId The time zone ID at which the rebasing should be performed.
+   * @param tz The time zone at which the rebasing should be performed.
    * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'
    *               in the Julian calendar. It can be negative.
    * @return The rebased microseconds since the epoch in Proleptic Gregorian calendar.
    */
-  private[sql] def rebaseJulianToGregorianMicros(zoneId: ZoneId, micros: Long): Long = {
+  private[sql] def rebaseJulianToGregorianMicros(tz: TimeZone, micros: Long): Long = {
     val cal = new Calendar.Builder()
-      // `gregory` is a hybrid calendar that supports both
-      // the Julian and Gregorian calendar systems
+      // `gregory` is a hybrid calendar that supports both the Julian and Gregorian calendar systems
       .setCalendarType("gregory")
       .setInstant(microsToMillis(micros))
+      .setTimeZone(tz)
       .build()
     val localDateTime = LocalDateTime.of(
-      cal.get(Calendar.YEAR),
-      cal.get(Calendar.MONTH) + 1,
+      cal.get(YEAR),
+      cal.get(MONTH) + 1,
       // The number of days will be added later to handle non-existing
       // Julian dates in Proleptic Gregorian calendar.
       // For example, 1000-02-29 exists in Julian calendar because 1000
       // is a leap year but it is not a leap year in Gregorian calendar.
       1,
-      cal.get(Calendar.HOUR_OF_DAY),
-      cal.get(Calendar.MINUTE),
-      cal.get(Calendar.SECOND),
+      cal.get(HOUR_OF_DAY),
+      cal.get(MINUTE),
+      cal.get(SECOND),
       (Math.floorMod(micros, MICROS_PER_SECOND) * NANOS_PER_MICROS).toInt)
-      .`with`(ChronoField.ERA, cal.get(Calendar.ERA))
-      .plusDays(cal.get(Calendar.DAY_OF_MONTH) - 1)
+      .`with`(ChronoField.ERA, cal.get(ERA))
+      .plusDays(cal.get(DAY_OF_MONTH) - 1)
+    val zoneId = tz.toZoneId
     val zonedDateTime = localDateTime.atZone(zoneId)
-    // Assuming the daylight saving switchover time is 2:00, the local clock will go back to
-    // 2:00 after hitting 2:59. This means the local time between [2:00, 3:00) appears twice, and
-    // can map to two different physical times (seconds from the UTC epoch).
-    // Java 8 time API resolves the ambiguity by picking the earlier physical time. This is the same
-    // as Java 7 time API, except for 2:00 where Java 7 picks the later physical time.
-    // Here we detect the "2:00" case and pick the latter physical time, to be compatible with the
-    // Java 7 date-time.
-    val adjustedZdt = if (cal.get(Calendar.DST_OFFSET) == 0) {
-      zonedDateTime.withLaterOffsetAtOverlap()
-    } else {
-      zonedDateTime
-    }
+    // In the case of local timestamp overlapping, we need to choose the correct time instant
+    // which is related to the original local timestamp. We look ahead of 1 day, and if the next
+    // date has the same standard zone and DST offsets, the current local timestamp belongs to
+    // the period after the transition. In that case, we take the later zoned date time otherwise
+    // earlier one. Here, we assume that transitions happen not often than once per day.
+    val trans = zoneId.getRules.getTransition(localDateTime)
+    val adjustedZdt = if (trans != null && trans.isOverlap) {
+      val dstOffset = cal.get(DST_OFFSET)
+      val zoneOffset = cal.get(ZONE_OFFSET)
+      cal.add(DAY_OF_MONTH, 1)
+      if (zoneOffset == cal.get(ZONE_OFFSET) && dstOffset == cal.get(DST_OFFSET)) {
+        zonedDateTime.withLaterOffsetAtOverlap()
+      } else {
+        zonedDateTime.withEarlierOffsetAtOverlap()
+      }
+    } else zonedDateTime
     instantToMicros(adjustedZdt.toInstant)
   }
 
@@ -460,7 +483,7 @@ object RebaseDateTime {
       val tzId = timeZone.getID
       val rebaseRecord = julianGregRebaseMap.getOrNull(tzId)
       if (rebaseRecord == null || micros < rebaseRecord.switches(0)) {
-        rebaseJulianToGregorianMicros(timeZone.toZoneId, micros)
+        rebaseJulianToGregorianMicros(timeZone, micros)
       } else {
         rebaseMicros(rebaseRecord, micros)
       }

@@ -16,11 +16,7 @@
 # limitations under the License.
 #
 
-import sys
 import unittest
-
-if sys.version > '3':
-    basestring = str
 
 from pyspark.ml.feature import Binarizer, CountVectorizer, CountVectorizerModel, HashingTF, IDF, \
     NGram, RFormula, StopWordsRemover, StringIndexer, StringIndexerModel, VectorSizeHint
@@ -91,7 +87,7 @@ class FeatureTests(SparkSessionTestCase):
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, ["panda"])
         self.assertEqual(type(stopWordRemover.getStopWords()), list)
-        self.assertTrue(isinstance(stopWordRemover.getStopWords()[0], basestring))
+        self.assertTrue(isinstance(stopWordRemover.getStopWords()[0], str))
         # Custom
         stopwords = ["panda"]
         stopWordRemover.setStopWords(stopwords)
@@ -304,7 +300,7 @@ class HashingTFTest(SparkSessionTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_feature import *
+    from pyspark.ml.tests.test_feature import *  # noqa: F401
 
     try:
         import xmlrunner

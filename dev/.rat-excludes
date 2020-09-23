@@ -31,9 +31,7 @@ dagre-d3.min.js
 graphlib-dot.min.js
 sorttable.js
 vis-timeline-graph2d.min.js
-vis-timeline-graph2d.min.js.map
 vis-timeline-graph2d.min.css
-vis-timeline-graph2d.min.css.map
 dataTables.bootstrap4.1.10.20.min.css
 dataTables.bootstrap4.1.10.20.min.js
 dataTables.rowsGroup.js
@@ -49,9 +47,8 @@ jsonFormatter.min.js
 .*json
 .*data
 .*log
-pyspark-coverage-site/
-cloudpickle.py
-heapq3.py
+pyspark-coverage-site/*
+cloudpickle/*
 join.py
 SparkExprTyper.scala
 SparkILoop.scala
@@ -125,3 +122,5 @@ SessionManager.java
 SessionHandler.java
 GangliaReporter.java
 application_1578436911597_0052
+config.properties
+app-20200706201101-0003

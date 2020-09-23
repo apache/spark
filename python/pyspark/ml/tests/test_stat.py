@@ -40,7 +40,7 @@ class ChiSquareTestTests(SparkSessionTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_stat import *
+    from pyspark.ml.tests.test_stat import *  # noqa: F401
 
     try:
         import xmlrunner

@@ -18,7 +18,6 @@ from datetime import datetime, timedelta
 import hashlib
 import os
 import random
-import sys
 import tempfile
 import time
 from glob import glob
@@ -26,14 +25,11 @@ from glob import glob
 from py4j.protocol import Py4JJavaError
 
 from pyspark import shuffle, RDD
-from pyspark.resource import ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder,\
+from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder,\
     TaskResourceRequests
 from pyspark.serializers import CloudPickleSerializer, BatchedSerializer, PickleSerializer,\
     MarshalSerializer, UTF8Deserializer, NoOpSerializer
 from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME, QuietTest
-
-if sys.version_info[0] >= 3:
-    xrange = range
 
 
 global_func = lambda: "Hi"
@@ -193,15 +189,13 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_sampling_default_seed(self):
         # Test for SPARK-3995 (default seed setting)
-        data = self.sc.parallelize(xrange(1000), 1)
+        data = self.sc.parallelize(range(1000), 1)
         subset = data.takeSample(False, 10)
         self.assertEqual(len(subset), 10)
 
     def test_aggregate_mutable_zero_value(self):
         # Test for SPARK-9021; uses aggregate and treeAggregate to build dict
         # representing a counter of ints
-        # NOTE: dict is used instead of collections.Counter for Python 2.6
-        # compatibility
         from collections import defaultdict
 
         # Show that single or multiple partitions work
@@ -262,8 +256,6 @@ class RDDTests(ReusedPySparkTestCase):
     def test_fold_mutable_zero_value(self):
         # Test for SPARK-9021; uses fold to merge an RDD of dict counters into
         # a single dict
-        # NOTE: dict is used instead of collections.Counter for Python 2.6
-        # compatibility
         from collections import defaultdict
 
         counts1 = defaultdict(int, dict((i, 1) for i in range(10)))
@@ -439,7 +431,7 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_large_closure(self):
         N = 200000
-        data = [float(i) for i in xrange(N)]
+        data = [float(i) for i in range(N)]
         rdd = self.sc.parallelize(range(1), 1).map(lambda x: len(data))
         self.assertEqual(N, rdd.first())
         # regression test for SPARK-6886
@@ -464,8 +456,8 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_zip_with_different_object_sizes(self):
         # regress test for SPARK-5973
-        a = self.sc.parallelize(xrange(10000)).map(lambda i: '*' * i)
-        b = self.sc.parallelize(xrange(10000, 20000)).map(lambda i: '*' * i)
+        a = self.sc.parallelize(range(10000)).map(lambda i: '*' * i)
+        b = self.sc.parallelize(range(10000, 20000)).map(lambda i: '*' * i)
         self.assertEqual(10000, a.zip(b).count())
 
     def test_zip_with_different_number_of_items(self):
@@ -487,7 +479,7 @@ class RDDTests(ReusedPySparkTestCase):
             self.assertRaises(Exception, lambda: a.zip(b).count())
 
     def test_count_approx_distinct(self):
-        rdd = self.sc.parallelize(xrange(1000))
+        rdd = self.sc.parallelize(range(1000))
         self.assertTrue(950 < rdd.countApproxDistinct(0.03) < 1050)
         self.assertTrue(950 < rdd.map(float).countApproxDistinct(0.03) < 1050)
         self.assertTrue(950 < rdd.map(str).countApproxDistinct(0.03) < 1050)
@@ -641,7 +633,7 @@ class RDDTests(ReusedPySparkTestCase):
     def test_external_group_by_key(self):
         self.sc._conf.set("spark.python.worker.memory", "1m")
         N = 2000001
-        kv = self.sc.parallelize(xrange(N)).map(lambda x: (x % 3, x))
+        kv = self.sc.parallelize(range(N)).map(lambda x: (x % 3, x))
         gkv = kv.groupByKey().cache()
         self.assertEqual(3, gkv.count())
         filtered = gkv.filter(lambda kv: kv[0] == 1)
@@ -698,7 +690,7 @@ class RDDTests(ReusedPySparkTestCase):
 
     # Regression test for SPARK-6294
     def test_take_on_jrdd(self):
-        rdd = self.sc.parallelize(xrange(1 << 20)).map(lambda x: str(x))
+        rdd = self.sc.parallelize(range(1 << 20)).map(lambda x: str(x))
         rdd._jrdd.first()
 
     def test_sortByKey_uses_all_partitions_not_only_first_and_last(self):
@@ -889,7 +881,7 @@ class RDDTests(ReusedPySparkTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.tests.test_rdd import *
+    from pyspark.tests.test_rdd import *  # noqa: F401
 
     try:
         import xmlrunner

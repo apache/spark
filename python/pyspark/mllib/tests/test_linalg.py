@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import sys
 import array as pyarray
 import unittest
 
@@ -30,9 +29,6 @@ from pyspark.mllib.regression import LabeledPoint
 from pyspark.sql import Row
 from pyspark.testing.mllibutils import MLlibTestCase
 from pyspark.testing.utils import have_scipy
-
-if sys.version >= '3':
-    long = int
 
 
 class VectorTests(MLlibTestCase):
@@ -447,7 +443,7 @@ class VectorUDTTests(MLlibTestCase):
 
     def test_indexed_row_matrix_from_dataframe(self):
         from pyspark.sql.utils import IllegalArgumentException
-        df = self.spark.createDataFrame([Row(long(0), Vectors.dense(1))])
+        df = self.spark.createDataFrame([Row(int(0), Vectors.dense(1))])
         matrix = IndexedRowMatrix(df)
         self.assertEqual(matrix.numRows(), 1)
         self.assertEqual(matrix.numCols(), 1)
@@ -642,7 +638,7 @@ class SciPyTests(MLlibTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mllib.tests.test_linalg import *
+    from pyspark.mllib.tests.test_linalg import *  # noqa: F401
 
     try:
         import xmlrunner
