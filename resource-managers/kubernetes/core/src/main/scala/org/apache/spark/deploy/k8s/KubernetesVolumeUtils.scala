@@ -71,7 +71,13 @@ private[spark] object KubernetesVolumeUtils {
 
       case KUBERNETES_VOLUMES_PVC_TYPE =>
         val claimNameKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY"
-        KubernetesPVCVolumeConf(options(claimNameKey))
+        val storageClassKey =
+          s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_CLAIM_STORAGE_CLASS_KEY"
+        val sizeLimitKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY"
+        KubernetesPVCVolumeConf(
+          options(claimNameKey),
+          options.get(storageClassKey),
+          options.get(sizeLimitKey))
 
       case KUBERNETES_VOLUMES_EMPTYDIR_TYPE =>
         val mediumKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY"
