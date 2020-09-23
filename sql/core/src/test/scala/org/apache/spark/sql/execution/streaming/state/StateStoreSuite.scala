@@ -962,7 +962,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
     put(saveStore, key, get(restoreStore, key).get + 1)
     saveStore.commit()
-    restoreStore.abort()
+    restoreStore.close()
 
     // check that state is correct for next batch
     val provider2 = newStoreProvider(storeId)

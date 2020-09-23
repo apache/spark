@@ -92,7 +92,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       }
     }
 
-    override def abort(): Unit = {}
+    override def close(): Unit = {}
   }
 
   /** Implementation of [[StateStore]] API which is backed by an HDFS-compatible file system */
