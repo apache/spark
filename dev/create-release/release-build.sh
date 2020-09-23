@@ -275,6 +275,9 @@ if [[ "$1" == "package" ]]; then
   # In dry run mode, only build the first one. The keys in BINARY_PKGS_ARGS are used as the
   # list of packages to be built, so it's ok for things to be missing in BINARY_PKGS_EXTRA.
 
+  # NOTE: Don't forget to update the valid combinations of distributions at
+  #   'python/pyspark.install.py' and 'python/docs/source/getting_started/installation.rst'
+  #   if you're changing them.
   declare -A BINARY_PKGS_ARGS
   BINARY_PKGS_ARGS["hadoop3.2"]="-Phadoop-3.2 $HIVE_PROFILES"
   if ! is_dry_run; then
