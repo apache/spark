@@ -58,8 +58,8 @@ class SQLHadoopMapReduceCommitProtocol(
   }
 
   // They are only used in driver
-  private var totalPartitions: Set[String] = Set.empty
-  private var totalCreatedFiles: Long = 0L
+  @volatile private var totalPartitions: Set[String] = Set.empty
+  @volatile private var totalCreatedFiles: Long = 0L
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     var committer = super.setupCommitter(context)
@@ -101,8 +101,7 @@ class SQLHadoopMapReduceCommitProtocol(
   override def onTaskCommit(taskCommit: TaskCommitMessage): Unit = {
     logDebug(s"onTaskCommit($taskCommit)")
     if (hasValidPath) {
-      val (addedAbsPathFiles, allPartitionPaths) =
-        taskCommit.obj.asInstanceOf[(Map[String, String], Set[String])]
+      val (_, allPartitionPaths) = taskCommit.obj.asInstanceOf[(Map[String, String], Set[String])]
       val partitionsPerTask = allPartitionPaths.size
       if (partitionsPerTask > maxDynamicPartitionsPerTask) {
         throw new SparkException(s"Task tried to create $partitionsPerTask dynamic partitions," +

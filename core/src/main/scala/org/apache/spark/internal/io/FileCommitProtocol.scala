@@ -184,16 +184,10 @@ object FileCommitProtocol extends Logging {
     }
     // If that still doesn't exist, try the one with (jobId: string, outputPath: String).
     require(!dynamicPartitionOverwrite,
-      "Dynamic Partition Overwrite is enabled but" +
-        s" the committer ${className} does not have the appropriate constructor")
-    try {
-      logDebug("Falling back to (String, String) constructor")
-      val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
-      ctor.newInstance(jobId, outputPath)
-    } catch {
-      case _: NoSuchMethodException =>
-        // no suitable ctor, throw exception
-        throw new RuntimeException("No constructor found for FileCommitProtocol!")
-    }
+    "Dynamic Partition Overwrite is enabled but" +
+      s" the committer ${className} does not have the appropriate constructor")
+    logDebug("Falling back to (String, String) constructor")
+    val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
+    ctor.newInstance(jobId, outputPath)
   }
 }
