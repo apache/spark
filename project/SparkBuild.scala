@@ -159,7 +159,7 @@ object SparkBuild extends PomBuild {
         val scalaSourceV = Seq(file(scalaSource.in(config).value.getAbsolutePath))
         val configV = (baseDirectory in ThisBuild).value / scalaStyleOnCompileConfig
         val configUrlV = scalastyleConfigUrl.in(config).value
-        val streamsV = streams.in(config).value
+        val streamsV = (streams.in(config).value: @sbtUnchecked)
         val failOnErrorV = true
         val failOnWarningV = false
         val scalastyleTargetV = scalastyleTarget.in(config).value
@@ -418,7 +418,7 @@ object SparkBuild extends PomBuild {
     }
   ))(assembly)
 
-  enable(Seq(sparkShell := sparkShell in LocalProject("assembly")))(spark)
+  enable(Seq(sparkShell := (sparkShell in LocalProject("assembly")).value))(spark)
 
   // TODO: move this to its upstream project.
   override def projectDefinitions(baseDirectory: File): Seq[Project] = {
