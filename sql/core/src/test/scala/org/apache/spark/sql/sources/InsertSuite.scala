@@ -849,7 +849,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             """
               |create table dynamic_partition_bucket(i int, part1 int, part2 int) using parquet
               |partitioned by (part1, part2)
-              |clustered by (i) into 3 buckets
+              |clustered by (i) into 5 buckets
             """.stripMargin)
           val e3 = intercept[SparkException] {
             // we use same partition (part1=2/part2=2) to make total partitions less then 3

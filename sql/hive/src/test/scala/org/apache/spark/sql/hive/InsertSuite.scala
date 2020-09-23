@@ -876,7 +876,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
             """
               |create table hive_dynamic_partition_bucket(i int) stored as parquet
               |partitioned by (part1 int, part2 int)
-              |clustered by (i) into 3 buckets
+              |clustered by (i) into 5 buckets
             """.stripMargin)
           val e3 = intercept[SparkException] {
             // we use same partition (part1=2/part2=2) to make total partitions less then 3
