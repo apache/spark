@@ -444,6 +444,7 @@ class StreamSuite extends StreamTest {
 
   override protected def sparkConf: SparkConf = super.sparkConf
     .set("spark.redaction.string.regex", "file:/[\\w_]+")
+    .set("spark.executor.cores", "2")
 
   test("explain - redaction") {
     val replacement = "*********"

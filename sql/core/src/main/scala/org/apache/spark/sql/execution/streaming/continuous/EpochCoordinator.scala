@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, PartitionOffset}
@@ -257,6 +258,7 @@ private[continuous] class EpochCoordinator(
 
     case SetReaderPartitions(numPartitions) =>
       numReaderPartitions = numPartitions
+      checkTotalCores()
       context.reply(())
 
     case SetWriterPartitions(numPartitions) =>
@@ -266,5 +268,26 @@ private[continuous] class EpochCoordinator(
     case StopContinuousExecutionWrites =>
       queryWritesStopped = true
       context.reply(())
+  }
+
+  private def checkTotalCores(): Unit = {
+    val numExecutors = session.conf.get(config.EXECUTOR_INSTANCES.key, "1").toInt
+    val coresPerExecutor = session.conf.get(config.EXECUTOR_CORES.key, "1").toInt
+    val cpusPerTask = session.conf.get(config.CPUS_PER_TASK.key, "1").toInt
+    val maxCores = session.conf.get(config.CORES_MAX.key).toInt
+    val totalRequestedCores = numExecutors * coresPerExecutor
+    val totalAvailableCores = Math.min(totalRequestedCores, maxCores)
+    val neededCores = numReaderPartitions * cpusPerTask
+    val INSTRUCTION_FOR_FEWER_CORES =
+      s"""
+        |Total $numReaderPartitions (kafka partitions) * $cpusPerTask (cpus per task) =
+        |$neededCores needed,
+        |but only have min($numExecutors (executors) * $coresPerExecutor (cores per executor) =
+        |$totalRequestedCores, spark.cores.max = $maxCores) = $totalAvailableCores (total cores).
+        |Please increase total number of executor cores to at least $neededCores.
+    """.stripMargin.replaceAll("\n", " ")
+    if (totalAvailableCores < neededCores) {
+      query.stopInNewThread(new IllegalStateException(INSTRUCTION_FOR_FEWER_CORES))
+    }
   }
 }
