@@ -28,7 +28,7 @@ import org.apache.spark.network.shuffle.protocol.PushBlockStream;
 
 /**
  * The MergedShuffleFileManager is used to process push based shuffle when enabled. It works
- * along side {@link ExternalShuffleBlockHandler} and serves as an RPCHandler for
+ * along side {@link ExternalBlockHandler} and serves as an RPCHandler for
  * {@link org.apache.spark.network.server.RpcHandler#receiveStream}, where it processes the
  * remotely pushed streams of shuffle blocks to merge them into merged shuffle files. Right
  * now, push based shuffle can only be enabled when external shuffle service in YARN mode
@@ -82,9 +82,7 @@ public interface MergedShuffleFileManager {
    *
    * @param appId application ID
    * @param cleanupLocalDirs flag indicating whether MergedShuffleFileManager should handle
-   *                         deletion of local dirs itself. Ideally, we should be able to delegate
-   *                         to YARN to handle local dir deletion in YARN mode. This does not work
-   *                         as expected yet. See LIHADOOP-52202.
+   *                         deletion of local dirs itself.
    */
   void applicationRemoved(String appId, boolean cleanupLocalDirs);
 

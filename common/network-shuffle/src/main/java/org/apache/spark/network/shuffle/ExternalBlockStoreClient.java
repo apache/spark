@@ -31,7 +31,6 @@ import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
@@ -158,74 +157,6 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       for (String blockId : blockIds) {
         listener.onBlockFetchFailure(blockId, e);
       }
-    }
-  }
-
-  @Override
-  public void getMergedBlockMeta(
-      String host,
-      int port,
-      String mergedBlockId,
-      MergedBlocksMetaListener listener) {
-    checkInit();
-    logger.debug("Get merged blocks meta from {}:{} for block {}", host, port, mergedBlockId);
-    try {
-      TransportClient client = clientFactory.createClient(host, port);
-      client.sendMergedBlockMetaReq(appId, mergedBlockId, new MergedBlockMetaResponseCallback() {
-        @Override
-        public void onSuccess(int numChunks, ManagedBuffer buffer) {
-          logger.trace("Successfully got merged block meta for {}", mergedBlockId);
-          listener.onSuccess(mergedBlockId, new MergedBlockMeta(numChunks, buffer));
-        }
-
-        @Override
-        public void onFailure(Throwable e) {
-          logger.error("Failed while getting merged block meta", e);
-          listener.onFailure(mergedBlockId, e);
-        }
-      });
-    } catch (Exception e) {
-      logger.error("Exception while getting merged block meta", e);
-      listener.onFailure(mergedBlockId, e);
-    }
-  }
-
-  /**
-   * Invoked by Spark driver to notify external shuffle services to finalize the shuffle merge
-   * for a given shuffle. This allows the driver to start the shuffle reducer stage after properly
-   * finishing the shuffle merge process associated with the shuffle mapper stage.
-   *
-   * @param host host of shuffle server
-   * @param port port of shuffle server.
-   * @param shuffleId shuffle ID of the shuffle to be finalized
-   * @param listener the listener to receive MergeStatuses
-   */
-  // TODO Might be better create a separate shuffle client similar to MesosExternalShuffleClient,
-  // TODO as this is going to be used by the driver, to avoid having to initialize an
-  // TODO ExternalShuffleClient.
-  public void finalizeShuffleMerge(
-      String host,
-      int port,
-      int shuffleId,
-      MergeFinalizerListener listener) {
-    checkInit();
-    try {
-      TransportClient client = clientFactory.createClient(host, port);
-      ByteBuffer finalizeShuffleMerge = new FinalizeShuffleMerge(appId, shuffleId).toByteBuffer();
-      client.sendRpc(finalizeShuffleMerge, new RpcResponseCallback() {
-        @Override
-        public void onSuccess(ByteBuffer response) {
-          listener.onShuffleMergeSuccess(
-              (MergeStatuses) BlockTransferMessage.Decoder.fromByteBuffer(response));
-        }
-
-        @Override
-        public void onFailure(Throwable e) {
-          listener.onShuffleMergeFailure(e);
-        }
-      });
-    } catch (Exception e) {
-      logger.error("Exception while sending finalizeShuffleMerge request", e);
     }
   }
 

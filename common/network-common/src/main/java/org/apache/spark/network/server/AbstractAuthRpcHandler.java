@@ -104,9 +104,4 @@ public abstract class AbstractAuthRpcHandler extends RpcHandler {
   public boolean isAuthenticated() {
     return isAuthenticated;
   }
-
-  @Override
-  public MergedBlockMetaReqHandler getMergedBlockMetaReqHandler() {
-    return delegate.getMergedBlockMetaReqHandler();
-  }
 }

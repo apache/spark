@@ -33,7 +33,6 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.protocol.ChunkFetchFailure;
 import org.apache.spark.network.protocol.ChunkFetchSuccess;
-import org.apache.spark.network.protocol.MergedBlockMetaSuccess;
 import org.apache.spark.network.protocol.ResponseMessage;
 import org.apache.spark.network.protocol.RpcFailure;
 import org.apache.spark.network.protocol.RpcResponse;
@@ -57,7 +56,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   private final Map<StreamChunkId, ChunkReceivedCallback> outstandingFetches;
 
-  private final Map<Long, BaseResponseCallback> outstandingRpcs;
+  private final Map<Long, RpcResponseCallback> outstandingRpcs;
 
   private final Queue<Pair<String, StreamCallback>> streamCallbacks;
   private volatile boolean streamActive;
@@ -82,7 +81,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     outstandingFetches.remove(streamChunkId);
   }
 
-  public void addRpcRequest(long requestId, BaseResponseCallback callback) {
+  public void addRpcRequest(long requestId, RpcResponseCallback callback) {
     updateTimeOfLastRequest();
     outstandingRpcs.put(requestId, callback);
   }
@@ -113,7 +112,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
         logger.warn("ChunkReceivedCallback.onFailure throws exception", e);
       }
     }
-    for (Map.Entry<Long, BaseResponseCallback> entry : outstandingRpcs.entrySet()) {
+    for (Map.Entry<Long, RpcResponseCallback> entry : outstandingRpcs.entrySet()) {
       try {
         entry.getValue().onFailure(cause);
       } catch (Exception e) {
@@ -185,7 +184,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       }
     } else if (message instanceof RpcResponse) {
       RpcResponse resp = (RpcResponse) message;
-      RpcResponseCallback listener = (RpcResponseCallback) outstandingRpcs.get(resp.requestId);
+      RpcResponseCallback listener = outstandingRpcs.get(resp.requestId);
       if (listener == null) {
         logger.warn("Ignoring response for RPC {} from {} ({} bytes) since it is not outstanding",
           resp.requestId, getRemoteAddress(channel), resp.body().size());
@@ -199,30 +198,13 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       }
     } else if (message instanceof RpcFailure) {
       RpcFailure resp = (RpcFailure) message;
-      BaseResponseCallback listener = outstandingRpcs.get(resp.requestId);
+      RpcResponseCallback listener = outstandingRpcs.get(resp.requestId);
       if (listener == null) {
         logger.warn("Ignoring response for RPC {} from {} ({}) since it is not outstanding",
           resp.requestId, getRemoteAddress(channel), resp.errorString);
       } else {
         outstandingRpcs.remove(resp.requestId);
         listener.onFailure(new RuntimeException(resp.errorString));
-      }
-    } else if (message instanceof MergedBlockMetaSuccess) {
-      MergedBlockMetaSuccess resp = (MergedBlockMetaSuccess) message;
-      MergedBlockMetaResponseCallback listener =
-          (MergedBlockMetaResponseCallback) outstandingRpcs.get(resp.requestId);
-      if (listener == null) {
-        logger.warn(
-            "Ignoring response for MergedBlockMetaRequest {} from {} ({} bytes) since it is not"
-                + " outstanding", resp.requestId, getRemoteAddress(channel), resp.body().size());
-        resp.body().release();
-      } else {
-        outstandingRpcs.remove(resp.requestId);
-        try {
-          listener.onSuccess(resp.getNumChunks(), resp.body());
-        } finally {
-          resp.body().release();
-        }
       }
     } else if (message instanceof StreamResponse) {
       StreamResponse resp = (StreamResponse) message;

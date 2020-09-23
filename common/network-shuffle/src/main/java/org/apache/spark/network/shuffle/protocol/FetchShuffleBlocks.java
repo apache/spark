@@ -29,7 +29,10 @@ import org.apache.spark.network.protocol.Encoders;
 import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
 
 /** Request to read a set of blocks. Returns {@link StreamHandle}. */
-public class FetchShuffleBlocks extends AbstractFetchShuffleBlocks {
+public class FetchShuffleBlocks extends BlockTransferMessage {
+  public final String appId;
+  public final String execId;
+  public final int shuffleId;
   // The length of mapIds must equal to reduceIds.size(), for the i-th mapId in mapIds,
   // it corresponds to the i-th int[] in reduceIds, which contains all reduce id for this map id.
   public final long[] mapIds;
@@ -47,7 +50,9 @@ public class FetchShuffleBlocks extends AbstractFetchShuffleBlocks {
       long[] mapIds,
       int[][] reduceIds,
       boolean batchFetchEnabled) {
-    super(appId, execId, shuffleId);
+    this.appId = appId;
+    this.execId = execId;
+    this.shuffleId = shuffleId;
     this.mapIds = mapIds;
     this.reduceIds = reduceIds;
     assert(mapIds.length == reduceIds.length);
@@ -64,7 +69,10 @@ public class FetchShuffleBlocks extends AbstractFetchShuffleBlocks {
 
   @Override
   public String toString() {
-    return toStringHelper()
+    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+      .append("appId", appId)
+      .append("execId", execId)
+      .append("shuffleId", shuffleId)
       .append("mapIds", Arrays.toString(mapIds))
       .append("reduceIds", Arrays.deepToString(reduceIds))
       .append("batchFetchEnabled", batchFetchEnabled)
@@ -77,31 +85,24 @@ public class FetchShuffleBlocks extends AbstractFetchShuffleBlocks {
     if (o == null || getClass() != o.getClass()) return false;
 
     FetchShuffleBlocks that = (FetchShuffleBlocks) o;
-    if (!super.equals(that)) return false;
+
+    if (shuffleId != that.shuffleId) return false;
     if (batchFetchEnabled != that.batchFetchEnabled) return false;
+    if (!appId.equals(that.appId)) return false;
+    if (!execId.equals(that.execId)) return false;
     if (!Arrays.equals(mapIds, that.mapIds)) return false;
     return Arrays.deepEquals(reduceIds, that.reduceIds);
   }
 
   @Override
   public int hashCode() {
-    int result = super.hashCode();
+    int result = appId.hashCode();
+    result = 31 * result + execId.hashCode();
+    result = 31 * result + shuffleId;
     result = 31 * result + Arrays.hashCode(mapIds);
     result = 31 * result + Arrays.deepHashCode(reduceIds);
     result = 31 * result + (batchFetchEnabled ? 1 : 0);
     return result;
-  }
-
-  @Override
-  public int getNumBlocks() {
-    if (batchFetchEnabled) {
-      return mapIds.length;
-    }
-    int numBlocks = 0;
-    for (int[] ids : reduceIds) {
-      numBlocks += ids.length;
-    }
-    return numBlocks;
   }
 
   @Override
@@ -110,7 +111,9 @@ public class FetchShuffleBlocks extends AbstractFetchShuffleBlocks {
     for (int[] ids: reduceIds) {
       encodedLengthOfReduceIds += Encoders.IntArrays.encodedLength(ids);
     }
-    return super.encodedLength()
+    return Encoders.Strings.encodedLength(appId)
+      + Encoders.Strings.encodedLength(execId)
+      + 4 /* encoded length of shuffleId */
       + Encoders.LongArrays.encodedLength(mapIds)
       + 4 /* encoded length of reduceIds.size() */
       + encodedLengthOfReduceIds
@@ -119,7 +122,9 @@ public class FetchShuffleBlocks extends AbstractFetchShuffleBlocks {
 
   @Override
   public void encode(ByteBuf buf) {
-    super.encode(buf);
+    Encoders.Strings.encode(buf, appId);
+    Encoders.Strings.encode(buf, execId);
+    buf.writeInt(shuffleId);
     Encoders.LongArrays.encode(buf, mapIds);
     buf.writeInt(reduceIds.length);
     for (int[] ids: reduceIds) {

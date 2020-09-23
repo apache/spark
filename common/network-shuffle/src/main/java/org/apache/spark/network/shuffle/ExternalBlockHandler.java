@@ -33,7 +33,6 @@ import com.codahale.metrics.MetricSet;
 import com.codahale.metrics.Timer;
 import com.codahale.metrics.Counter;
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
 import org.apache.spark.network.client.StreamCallbackWithID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,11 +56,8 @@ import org.apache.spark.network.util.TransportConf;
  * Blocks are registered with the "one-for-one" strategy, meaning each Transport-layer Chunk
  * is equivalent to one block.
  */
-public class ExternalBlockHandler extends RpcHandler
-    implements RpcHandler.MergedBlockMetaReqHandler {
+public class ExternalBlockHandler extends RpcHandler {
   private static final Logger logger = LoggerFactory.getLogger(ExternalBlockHandler.class);
-  private static final String SHUFFLE_BLOCK_PREFIX = "shuffle";
-  private static final String SHUFFLE_CHUNK_PREFIX = "shuffleChunk";
 
   @VisibleForTesting
   final ExternalShuffleBlockResolver blockManager;
@@ -72,7 +68,8 @@ public class ExternalBlockHandler extends RpcHandler
   public ExternalBlockHandler(TransportConf conf, File registeredExecutorFile)
     throws IOException {
     this(new OneForOneStreamManager(),
-      new ExternalShuffleBlockResolver(conf, registeredExecutorFile), new NoOpMergedShuffleFileManager());
+      new ExternalShuffleBlockResolver(conf, registeredExecutorFile),
+      new NoOpMergedShuffleFileManager());
   }
 
   public ExternalBlockHandler(
@@ -96,7 +93,7 @@ public class ExternalBlockHandler extends RpcHandler
     this(streamManager, blockManager, new NoOpMergedShuffleFileManager());
   }
 
-  /** Enables mocking out the StreamManager and BlockManager. */
+  /** Enables mocking out the StreamManager, BlockManager, and MergeManager. */
   @VisibleForTesting
   public ExternalBlockHandler(
       OneForOneStreamManager streamManager,
@@ -133,22 +130,24 @@ public class ExternalBlockHandler extends RpcHandler
       BlockTransferMessage msgObj,
       TransportClient client,
       RpcResponseCallback callback) {
-    if (msgObj instanceof AbstractFetchShuffleBlocks || msgObj instanceof OpenBlocks) {
+    if (msgObj instanceof FetchShuffleBlocks || msgObj instanceof OpenBlocks) {
       final Timer.Context responseDelayContext = metrics.openBlockRequestLatencyMillis.time();
       try {
         int numBlockIds;
         long streamId;
-        if (msgObj instanceof AbstractFetchShuffleBlocks) {
-          AbstractFetchShuffleBlocks msg = (AbstractFetchShuffleBlocks) msgObj;
+        if (msgObj instanceof FetchShuffleBlocks) {
+          FetchShuffleBlocks msg = (FetchShuffleBlocks) msgObj;
           checkAuth(client, msg.appId);
-          numBlockIds = ((AbstractFetchShuffleBlocks) msgObj).getNumBlocks();
-          Iterator<ManagedBuffer> iterator;
-          if (msgObj instanceof  FetchShuffleBlocks) {
-            iterator = new ShuffleManagedBufferIterator((FetchShuffleBlocks)msgObj);
+          numBlockIds = 0;
+          if (msg.batchFetchEnabled) {
+            numBlockIds = msg.mapIds.length;
           } else {
-            iterator = new ShuffleChunkManagedBufferIterator((FetchShuffleBlockChunks)msgObj);
+            for (int[] ids: msg.reduceIds) {
+              numBlockIds += ids.length;
+            }
           }
-          streamId = streamManager.registerStream(client.getClientId(), iterator, client.getChannel());
+          streamId = streamManager.registerStream(client.getClientId(),
+            new ShuffleManagedBufferIterator(msg), client.getChannel());
         } else {
           // For the compatibility with the old version, still keep the support for OpenBlocks.
           OpenBlocks msg = (OpenBlocks) msgObj;
@@ -169,6 +168,7 @@ public class ExternalBlockHandler extends RpcHandler
       } finally {
         responseDelayContext.stop();
       }
+
     } else if (msgObj instanceof RegisterExecutor) {
       final Timer.Context responseDelayContext =
         metrics.registerExecutorRequestLatencyMillis.time();
@@ -192,7 +192,7 @@ public class ExternalBlockHandler extends RpcHandler
       GetLocalDirsForExecutors msg = (GetLocalDirsForExecutors) msgObj;
       checkAuth(client, msg.appId);
       Map<String, String[]> localDirs = blockManager.getLocalDirs(msg.appId, msg.execIds);
-      if (Arrays.stream(msg.execIds).anyMatch(execId -> execId.isEmpty())) {
+      if (Arrays.stream(msg.execIds).anyMatch(String::isEmpty)) {
         localDirs.put("", mergeManager.getMergedBlockDirs(msg.appId));
       }
       callback.onSuccess(new LocalDirsForExecutors(localDirs).toByteBuffer());
@@ -214,35 +214,6 @@ public class ExternalBlockHandler extends RpcHandler
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
     }
-  }
-
-  @Override
-  public void receiveMergeBlockMetaReq(
-      TransportClient client, String appId, String mergedBlockId,
-      MergedBlockMetaResponseCallback callback) {
-
-    final Timer.Context responseDelayContext = metrics.fetchMergedBlocksMetaLatencyMillis.time();
-    try {
-      checkAuth(client, appId);
-      String[] blockIdParts = mergedBlockId.split("_");
-      if (blockIdParts.length != 4 || !blockIdParts[0].equals(SHUFFLE_BLOCK_PREFIX)) {
-        throw new IllegalArgumentException(
-            "Unexpected shuffle block id format: " + mergedBlockId);
-      }
-      MergedBlockMeta mergedMeta =
-          mergeManager.getMergedBlockMeta(appId, Integer.parseInt(blockIdParts[1]),
-              Integer.parseInt(blockIdParts[3]));
-      logger.debug(
-          "Merged block chunks {} : {} ", mergedBlockId, mergedMeta.getNumChunks());
-      callback.onSuccess(mergedMeta.getNumChunks(), mergedMeta.getChunksBitmapBuffer());
-    } finally {
-      responseDelayContext.stop();
-    }
-  }
-
-  @Override
-  public MergedBlockMetaReqHandler getMergedBlockMetaReqHandler() {
-    return this;
   }
 
   @Override
@@ -309,8 +280,6 @@ public class ExternalBlockHandler extends RpcHandler
     private final Timer openBlockRequestLatencyMillis = new Timer();
     // Time latency for executor registration latency in ms
     private final Timer registerExecutorRequestLatencyMillis = new Timer();
-    // Time latency for processing fetch merged blocks meta request latency in ms
-    private final Timer fetchMergedBlocksMetaLatencyMillis = new Timer();
     // Time latency for processing finalize shuffle merge request latency in ms
     private final Timer finalizeShuffleMergeLatencyMillis = new Timer();
     // Block transfer rate in byte per second
@@ -324,7 +293,6 @@ public class ExternalBlockHandler extends RpcHandler
       allMetrics = new HashMap<>();
       allMetrics.put("openBlockRequestLatencyMillis", openBlockRequestLatencyMillis);
       allMetrics.put("registerExecutorRequestLatencyMillis", registerExecutorRequestLatencyMillis);
-      allMetrics.put("fetchMergedBlocksMetaLatencyMillis", fetchMergedBlocksMetaLatencyMillis);
       allMetrics.put("finalizeShuffleMergeLatencyMillis", finalizeShuffleMergeLatencyMillis);
       allMetrics.put("blockTransferRateBytes", blockTransferRateBytes);
       allMetrics.put("registeredExecutorsSize",
@@ -344,36 +312,19 @@ public class ExternalBlockHandler extends RpcHandler
     private int index = 0;
     private final Function<Integer, ManagedBuffer> blockDataForIndexFn;
     private final int size;
-    private final boolean requestForMergedBlockChunks;
 
     ManagedBufferIterator(OpenBlocks msg) {
       String appId = msg.appId;
       String execId = msg.execId;
       String[] blockIds = msg.blockIds;
       String[] blockId0Parts = blockIds[0].split("_");
-      if (blockId0Parts.length == 4
-          && (blockId0Parts[0].equals(SHUFFLE_BLOCK_PREFIX)
-              || blockId0Parts[0].equals(SHUFFLE_CHUNK_PREFIX))) {
+      if (blockId0Parts.length == 4 && blockId0Parts[0].equals("shuffle")) {
         final int shuffleId = Integer.parseInt(blockId0Parts[1]);
-        requestForMergedBlockChunks = blockId0Parts[0].equals(SHUFFLE_CHUNK_PREFIX);
         final int[] mapIdAndReduceIds = shuffleMapIdAndReduceIds(blockIds, shuffleId);
         size = mapIdAndReduceIds.length;
-        blockDataForIndexFn =
-            index -> {
-              if (requestForMergedBlockChunks) {
-                return mergeManager.getMergedBlockData(
-                    msg.appId, shuffleId, mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1]);
-              } else {
-                return blockManager.getBlockData(
-                    msg.appId,
-                    msg.execId,
-                    shuffleId,
-                    mapIdAndReduceIds[index],
-                    mapIdAndReduceIds[index + 1]);
-              }
-            };
+        blockDataForIndexFn = index -> blockManager.getBlockData(appId, execId, shuffleId,
+          mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1]);
       } else if (blockId0Parts.length == 3 && blockId0Parts[0].equals("rdd")) {
-        requestForMergedBlockChunks = false;
         final int[] rddAndSplitIds = rddAndSplitIds(blockIds);
         size = rddAndSplitIds.length;
         blockDataForIndexFn = index -> blockManager.getRddBlockData(appId, execId,
@@ -400,18 +351,14 @@ public class ExternalBlockHandler extends RpcHandler
       final int[] mapIdAndReduceIds = new int[2 * blockIds.length];
       for (int i = 0; i < blockIds.length; i++) {
         String[] blockIdParts = blockIds[i].split("_");
-        if (blockIdParts.length != 4 ||
-            (!requestForMergedBlockChunks && !blockIdParts[0].equals(SHUFFLE_BLOCK_PREFIX)) ||
-            (requestForMergedBlockChunks && !blockIdParts[0].equals(SHUFFLE_CHUNK_PREFIX))) {
+        if (blockIdParts.length != 4 || !blockIdParts[0].equals("shuffle")) {
           throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[i]);
         }
         if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
           throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
             ", got:" + blockIds[i]);
         }
-        // For regular blocks this is mapId. For chunks this is reduceId.
         mapIdAndReduceIds[2 * i] = Integer.parseInt(blockIdParts[2]);
-        // For regular blocks this is reduceId. For chunks this is chunkId.
         mapIdAndReduceIds[2 * i + 1] = Integer.parseInt(blockIdParts[3]);
       }
       return mapIdAndReduceIds;
@@ -484,52 +431,9 @@ public class ExternalBlockHandler extends RpcHandler
     }
   }
 
-  private class ShuffleChunkManagedBufferIterator implements Iterator<ManagedBuffer> {
-
-    private int reduceIdx = 0;
-    private int chunkIdx = 0;
-
-    private final String appId;
-    private final String execId;
-    private final int shuffleId;
-    private final int[] reduceIds;
-    private final int[][] chunkIds;
-
-    ShuffleChunkManagedBufferIterator(FetchShuffleBlockChunks msg) {
-      appId = msg.appId;
-      execId = msg.execId;
-      shuffleId = msg.shuffleId;
-      reduceIds = msg.reduceIds;
-      chunkIds = msg.chunkIds;
-    }
-
-    @Override
-    public boolean hasNext() {
-      // reduceIds.length must equal to chunkIds.length, and the passed in FetchShuffleBlockChunks
-      // must have non-empty reduceIds and chunkIds, see the checking logic in
-      // OneForOneBlockFetcher.
-      assert(reduceIds.length != 0 && reduceIds.length == chunkIds.length);
-      return reduceIdx < reduceIds.length && chunkIdx < chunkIds[reduceIdx].length;
-    }
-
-    @Override
-    public ManagedBuffer next() {
-      ManagedBuffer block = mergeManager.getMergedBlockData(
-          appId, shuffleId, reduceIds[reduceIdx], chunkIds[reduceIdx][chunkIdx]);
-      if (chunkIdx < chunkIds[reduceIdx].length - 1) {
-        chunkIdx += 1;
-      } else {
-        chunkIdx = 0;
-        reduceIdx += 1;
-      }
-      metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
-      return block;
-    }
-  }
-
   /**
-   * Dummy implementation of merged shuffle file manager. Suitable for when this feature
-   * is not turned on.
+   * Dummy implementation of merged shuffle file manager. Suitable for when push-based shuffle
+   * is not enabled.
    */
   private static class NoOpMergedShuffleFileManager implements MergedShuffleFileManager {
 

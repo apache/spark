@@ -56,7 +56,13 @@ public class BlockPushException extends RuntimeException {
       BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(rawBuffer);
       if (msgObj instanceof PushBlockStream) {
         PushBlockStream header = (PushBlockStream) msgObj;
-        return new BlockPushException(header, StandardCharsets.UTF_8.decode(rawBuffer).toString());
+        // When decoding the header, the rawBuffer's position is not updated since it was
+        // consumed via netty's ByteBuf. Updating the rawBuffer's position here to retrieve
+        // the remaining exception message.
+        ByteBuffer remainingBuffer = (ByteBuffer) rawBuffer.position(rawBuffer.position()
+            + header.encodedLength() + 1);
+        return new BlockPushException(header,
+            StandardCharsets.UTF_8.decode(remainingBuffer).toString());
       } else {
         throw new UnsupportedOperationException(String.format("Cannot decode the header. "
             + "Expected PushBlockStream but got %s instead", msgObj.getClass().getSimpleName()));

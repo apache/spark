@@ -22,11 +22,9 @@ import java.nio.ByteBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.protocol.MergedBlockMetaRequest;
 
 /**
  * Handler for sendRPC() messages sent by {@link org.apache.spark.network.client.TransportClient}s.
@@ -34,10 +32,6 @@ import org.apache.spark.network.protocol.MergedBlockMetaRequest;
 public abstract class RpcHandler {
 
   private static final RpcResponseCallback ONE_WAY_CALLBACK = new OneWayRpcCallback();
-  private static final MergedBlockMetaReqHandler NOOP_MERGED_BLOCK_META_REQ_HANDLER =
-      (client, appId, mergedBlockId, callback) -> {
-        // do nothing
-      };
 
   /**
    * Receive a single RPC message. Any exception thrown while in this method will be sent back to
@@ -106,10 +100,6 @@ public abstract class RpcHandler {
     receive(client, message, ONE_WAY_CALLBACK);
   }
 
-  public MergedBlockMetaReqHandler getMergedBlockMetaReqHandler() {
-    return NOOP_MERGED_BLOCK_META_REQ_HANDLER;
-  }
-
   /**
    * Invoked when the channel associated with the given client is active.
    */
@@ -139,12 +129,4 @@ public abstract class RpcHandler {
 
   }
 
-  /**
-   * Handler for {@link MergedBlockMetaRequest}.
-   */
-  public interface MergedBlockMetaReqHandler {
-    void receiveMergeBlockMetaReq(
-        TransportClient client, String appId, String mergedBlockId,
-        MergedBlockMetaResponseCallback callback);
-  }
 }

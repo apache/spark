@@ -17,19 +17,25 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.util.EventListener;
+import java.io.IOException;
 
-import org.apache.spark.network.shuffle.protocol.MergeStatuses;
+import com.google.common.base.Throwables;
+import org.junit.Test;
 
-public interface MergeFinalizerListener extends EventListener {
-  /**
-   * Called once upon successful response on finalize shuffle merge on a remote shuffle service.
-   * The returned {@link MergeStatuses} is passed to the listener for further processing
-   */
-  void onShuffleMergeSuccess(MergeStatuses statuses);
+import org.apache.spark.network.shuffle.protocol.PushBlockStream;
+import org.apache.spark.network.util.JavaUtils;
 
-  /**
-   * Called once upon failure
-   */
-  void onShuffleMergeFailure(Throwable e);
+import static org.junit.Assert.*;
+
+public class BlockPushExceptionSuite {
+
+  @Test
+  public void testDecodeExceptionMsg() {
+    PushBlockStream header = new PushBlockStream("app_0", "block_0", 128);
+    IOException ioexp = new IOException("Test exception");
+    String encodedMsg = JavaUtils.encodeHeaderIntoErrorString(header.toByteBuffer(), ioexp);
+    BlockPushException exp = BlockPushException.decodeException(encodedMsg);
+    assertEquals(header, exp.getHeader());
+    assertEquals(Throwables.getStackTraceAsString(ioexp), exp.getMessage());
+  }
 }
