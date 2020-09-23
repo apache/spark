@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.bucketing
 
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Partial, PartialMerge}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashClusteredDistribution}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SortExec, SparkPlan}
@@ -32,14 +31,14 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * When BUCKETING_ENABLED and AUTO_BUCKETED_SCAN_ENABLED are set to true, go through
  * query plan to check where bucketed table scan is unnecessary, and disable bucketed table
- * scan if needed.
+ * scan if:
  *
- * For all operators which [[hasInterestingPartition]] (i.e., require [[ClusteredDistribution]]
- * or [[HashClusteredDistribution]]), check if the sub-plan for operator has [[Exchange]] and
- * bucketed table scan. If yes, disable the bucketed table scan in the sub-plan.
- * Only allow certain operators in sub-plan, which guarantees each sub-plan is single lineage
- * (i.e., each operator has only one child). See details in
- * [[disableBucketWithInterestingPartition]]).
+ * (1).The sub-plan from root to bucketed table scan, only contains operator which
+ * [[hasInterestingPartition]], [[Exchange]], and allowed single-child operators
+ * ([[isAllowedUnaryExecNode]]).
+ *
+ * (2).The sub-plan from root to bucketed table scan, does not contain operator which
+ * [[hasInterestingPartition]].
  *
  * Examples:
  * (1).join:
@@ -75,39 +74,45 @@ case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan]
    *
    * @param withInterestingPartition The traversed plan has operator with interesting partition.
    * @param withExchange The traversed plan has [[Exchange]] operator.
+   * @param withNonAllowedNodes The traversed plan has operators not to be
+   *                            [[isAllowedUnaryExecNode]].
    */
   private def disableBucketWithInterestingPartition(
       plan: SparkPlan,
       withInterestingPartition: Boolean,
-      withExchange: Boolean): SparkPlan = {
+      withExchange: Boolean,
+      withNonAllowedNodes: Boolean): SparkPlan = {
     plan match {
       case p if hasInterestingPartition(p) =>
-        // Operators with interesting partition, propagates `withInterestingPartition` as true
-        // to its children.
-        p.mapChildren(disableBucketWithInterestingPartition(_, true, false))
-      case exchange: Exchange if withInterestingPartition =>
-        // Exchange operator propagates `withExchange` as true to its child
-        // if the plan has interesting partition.
+        // Operator with interesting partition, propagates `withInterestingPartition` as true
+        // to its children, and resets `withExchange` and `withNonAllowedNodes` as false.
+        p.mapChildren(disableBucketWithInterestingPartition(_, true, false, false))
+      case exchange: Exchange =>
+        // Exchange operator propagates `withExchange` as true to its child.
         exchange.mapChildren(disableBucketWithInterestingPartition(
-          _, withInterestingPartition, true))
-      case scan: FileSourceScanExec
-          if ((withInterestingPartition && withExchange) || !withInterestingPartition)
-            && isBucketedScanWithoutFilter(scan) =>
-        // Disable bucketed table scan if
-        // (1). The sub-plan has operator with interesting partition, [[Exchange],
-        //      and allowed single-child operators.
-        // (2). The sub-plan does not have operator with interesting partition, or there's
-        //      non-allowed operators in the middle of sub-plan.
-        scan.copy(disableBucketedScan = true)
-      case o =>
-        if (isAllowedUnaryExecNode(o)) {
-          // Propagates `withInterestingPartition` and `withExchange` from parent
-          // for only allowed single-child nodes.
-          o.mapChildren(disableBucketWithInterestingPartition(
-            _, withInterestingPartition, withExchange))
+          _, withInterestingPartition, true, withNonAllowedNodes))
+      case scan: FileSourceScanExec =>
+        if (isBucketedScanWithoutFilter(scan)) {
+          val isSafeToDisableWithInterestingPartition =
+            withInterestingPartition && withExchange && !withNonAllowedNodes
+          if (isSafeToDisableWithInterestingPartition || !withInterestingPartition) {
+            // Disable bucketed table scan if:
+            // (1).The sub-plan has operator with interesting partition, exchange operator,
+            //     and allowed single-child operators.
+            // (2).The sub-plan does not have operator with interesting partition.
+            scan.copy(disableBucketedScan = true)
+          } else {
+            scan
+          }
         } else {
-          o.mapChildren(disableBucketWithInterestingPartition(_, false, false))
+          scan
         }
+      case o =>
+        o.mapChildren(disableBucketWithInterestingPartition(
+          _,
+          withInterestingPartition,
+          withExchange,
+          withNonAllowedNodes || !isAllowedUnaryExecNode(o)))
     }
   }
 
@@ -143,7 +148,7 @@ case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan]
     if (!conf.bucketingEnabled || !conf.autoBucketedScanEnabled || !hasBucketedScanWithoutFilter) {
       plan
     } else {
-      disableBucketWithInterestingPartition(plan, false, false)
+      disableBucketWithInterestingPartition(plan, false, false, false)
     }
   }
 }
