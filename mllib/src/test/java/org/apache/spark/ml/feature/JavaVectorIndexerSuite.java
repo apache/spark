@@ -35,7 +35,7 @@ public class JavaVectorIndexerSuite extends SharedSparkSession {
 
   @Test
   public void vectorIndexerAPI() {
-    // The tests are to check Java compatibility.mllib/src/test/scala/org/apache/spark/ml/regression/RandomForestRegressorSuite.scala
+    // The tests are to check Java compatibility.
     List<FeatureData> points = Arrays.asList(
       new FeatureData(Vectors.dense(0.0, -2.0)),
       new FeatureData(Vectors.dense(1.0, 3.0)),

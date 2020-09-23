@@ -170,7 +170,7 @@ final class Word2Vec @Since("1.4.0") (
   override def fit(dataset: Dataset[_]): Word2VecModel = {
     transformSchema(dataset.schema, logging = true)
     val input =
-      dataset.select($(inputCol)).rdd.map(_.getAs[scala.collection.Seq[String]](0))
+      dataset.select($(inputCol)).rdd.map(_.getSeq[String](0))
     val wordVectors = new feature.Word2Vec()
       .setLearningRate($(stepSize))
       .setMinCount($(minCount))

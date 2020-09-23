@@ -523,7 +523,7 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
         val data = sparkSession.read.parquet(dataPath)
           .select("labelsArray")
           .head()
-        data.getAs[scala.collection.Seq[scala.collection.Seq[String]]](0).map(_.toArray).toArray
+        data.getSeq[scala.collection.Seq[String]](0).map(_.toArray).toArray
       }
       val model = new StringIndexerModel(metadata.uid, labelsArray)
       metadata.getAndSetParams(model)
