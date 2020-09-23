@@ -54,8 +54,6 @@ import sys
 from itertools import chain, product
 import marshal
 import struct
-import types
-import collections
 import zlib
 import itertools
 import pickle

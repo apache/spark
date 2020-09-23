@@ -34,9 +34,8 @@ from pyspark.broadcast import Broadcast, BroadcastPickleRegistry
 from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway, local_connect_and_auth
-from pyspark.serializers import CloudPickleSerializer, BatchedSerializer, \
-    UTF8Deserializer, PairDeserializer, AutoBatchedSerializer, \
-    NoOpSerializer, ChunkedStream
+from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
+    PairDeserializer, AutoBatchedSerializer, NoOpSerializer, ChunkedStream
 from pyspark.storagelevel import StorageLevel
 from pyspark.resource.information import ResourceInformation
 from pyspark.rdd import RDD, _load_from_socket
@@ -82,8 +81,8 @@ class SparkContext(object):
     PACKAGE_EXTENSIONS = ('.zip', '.egg', '.jar')
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
-                 environment=None, batchSize=0, serializer=CloudPickleSerializer(),
-                 conf=None, gateway=None, jsc=None, profiler_cls=BasicProfiler):
+                 environment=None, batchSize=0, serializer=PickleSerializer(), conf=None,
+                 gateway=None, jsc=None, profiler_cls=BasicProfiler):
         """
         Create a new SparkContext. At least the master and app name should be set,
         either through the named parameters here or through `conf`.
