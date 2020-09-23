@@ -133,6 +133,13 @@ private[continuous] class EpochCoordinator(
 
   private var currentDriverEpoch = startEpoch
 
+  val INSTRUCTION_FOR_FEWER_CORES =
+    """
+      |Total %s kafka partitions to read,
+      |but only have %s(executors) * %s(cores per executor) = %s(total cores).
+      |Please increase total number of executor cores to at least %s.
+    """.stripMargin
+
   // (epoch, partition) -> message
   private val partitionCommits =
     mutable.Map[(Long, Int), WriterCommitMessage]()
@@ -257,6 +264,7 @@ private[continuous] class EpochCoordinator(
 
     case SetReaderPartitions(numPartitions) =>
       numReaderPartitions = numPartitions
+      checkTotalCores()
       context.reply(())
 
     case SetWriterPartitions(numPartitions) =>
@@ -266,5 +274,17 @@ private[continuous] class EpochCoordinator(
     case StopContinuousExecutionWrites =>
       queryWritesStopped = true
       context.reply(())
+  }
+
+  private def checkTotalCores(): Unit = {
+    val numExecutors = session.conf.get("spark.executor.instances", "1").toInt
+    val coresPerExecutor = session.conf.get("spark.executor.cores", "1").toInt
+    val totalCores = numExecutors * coresPerExecutor
+    logDebug(s"Check total cores $totalCores and kafka partition number $numReaderPartitions")
+    if (totalCores < numReaderPartitions) {
+      throw new IllegalStateException(INSTRUCTION_FOR_FEWER_CORES
+        .format(numReaderPartitions, numExecutors, coresPerExecutor,
+          totalCores, numReaderPartitions))
+    }
   }
 }

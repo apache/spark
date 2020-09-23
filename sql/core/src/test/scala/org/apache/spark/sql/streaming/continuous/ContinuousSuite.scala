@@ -37,7 +37,9 @@ class ContinuousSuiteBase extends StreamTest {
     new SparkContext(
       "local[10]",
       "continuous-stream-test-sql-context",
-      sparkConf.set("spark.sql.testkey", "true")))
+      sparkConf.set("spark.sql.testkey", "true")
+        .set("spark.executor.cores", "10")
+    ))
 
   protected def waitForRateSourceTriggers(query: ContinuousExecution, numTriggers: Int): Unit = {
     query.awaitEpoch(0)
