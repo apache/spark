@@ -2059,7 +2059,8 @@ object SQLConf {
     buildConf("spark.sql.dynamic.partition.maxPartitions")
       .doc("Maximum total number of dynamic partitions allowed to be created by one DML. " +
         s"This only takes effect when ${FILE_COMMIT_PROTOCOL_CLASS.key} set to " +
-        s"org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol")
+        "org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol")
+      .version("3.1.0")
       .intConf
       .createWithDefault(Int.MaxValue)
 
@@ -2067,17 +2068,19 @@ object SQLConf {
     buildConf("spark.sql.dynamic.partition.maxPartitionsPerTask")
       .doc("Maximum number of dynamic partitions allowed to be created per task. " +
         s"This only takes effect when ${FILE_COMMIT_PROTOCOL_CLASS.key} set to " +
-        s"org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol")
+        "org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol")
+      .version("3.1.0")
       .intConf
       .createWithDefault(Int.MaxValue)
 
   val DYNAMIC_PARTITION_MAX_CREATED_FILES =
     buildConf("spark.sql.dynamic.partition.maxCreatedFiles")
       .doc("Maximum total number of files allowed to be created in dynamic partitions write " +
-        "by one DML. This only takes effect when ${FILE_COMMIT_PROTOCOL_CLASS.key} set to " +
-        s"org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol")
-      .intConf
-      .createWithDefault(Int.MaxValue)
+        s"by one DML. This only takes effect when ${FILE_COMMIT_PROTOCOL_CLASS.key} set to " +
+        "org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol")
+      .version("3.1.0")
+      .longConf
+      .createWithDefault(Long.MaxValue)
 
   object StoreAssignmentPolicy extends Enumeration {
     val ANSI, LEGACY, STRICT = Value
@@ -3330,7 +3333,7 @@ class SQLConf extends Serializable with Logging {
 
   def maxDynamicPartitionsPerTask: Int = getConf(DYNAMIC_PARTITION_MAX_PARTITIONS_PER_TASK)
 
-  def maxCreatedFilesInDynamicPartition: Int = getConf(DYNAMIC_PARTITION_MAX_CREATED_FILES)
+  def maxCreatedFilesInDynamicPartition: Long = getConf(DYNAMIC_PARTITION_MAX_CREATED_FILES)
 
   def storeAssignmentPolicy: StoreAssignmentPolicy.Value =
     StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))

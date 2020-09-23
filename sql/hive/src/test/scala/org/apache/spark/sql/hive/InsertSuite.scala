@@ -871,8 +871,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         }
 
         // total files restriction
-        withSQLConf(SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key -> "3",
-          SQLConf.DYNAMIC_PARTITION_MAX_CREATED_FILES.key -> "3") {
+        withSQLConf(SQLConf.DYNAMIC_PARTITION_MAX_CREATED_FILES.key -> "3") {
           sql(
             """
               |create table hive_dynamic_partition_bucket(i int) stored as parquet

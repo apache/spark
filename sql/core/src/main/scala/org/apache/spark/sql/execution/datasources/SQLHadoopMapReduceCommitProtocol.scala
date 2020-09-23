@@ -53,13 +53,13 @@ class SQLHadoopMapReduceCommitProtocol(
 
   private val maxCreatedFilesInDynamicPartition = restrictions.get(
     SQLConf.DYNAMIC_PARTITION_MAX_CREATED_FILES.key) match {
-    case Some(value) => value.asInstanceOf[Int]
-    case None => Int.MaxValue
+    case Some(value) => value.asInstanceOf[Long]
+    case None => Long.MaxValue
   }
 
   // They are only used in driver
   private var totalPartitions: Set[String] = Set.empty
-  private var totalCreatedFiles: Int = 0
+  private var totalCreatedFiles: Long = 0L
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     var committer = super.setupCommitter(context)

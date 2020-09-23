@@ -95,7 +95,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
 
       val fileRestriction = SQLConf.DYNAMIC_PARTITION_MAX_CREATED_FILES.key -> (
         Option(hadoopConf.get("hive.exec.max.created.files")) match {
-          case Some(num) => num.toInt
+          case Some(num) => num.toLong
           case None => sparkSession.sessionState.conf.maxCreatedFilesInDynamicPartition
         })
 
@@ -109,7 +109,6 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
         sparkSession.sessionState.conf.fileCommitProtocolClass,
         jobId = java.util.UUID.randomUUID().toString,
         outputPath = outputLocation,
-        dynamicPartitionOverwrite = true,
         restrictions = dynamicPartitionRestrictions)
     } else {
       FileCommitProtocol.instantiate(

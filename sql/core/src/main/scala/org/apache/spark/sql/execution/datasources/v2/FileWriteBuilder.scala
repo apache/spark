@@ -54,10 +54,20 @@ abstract class FileWriteBuilder(
     // Hadoop Configurations are case sensitive.
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
     val job = getJobInstance(hadoopConf, path)
+
+    val dynamicPartitionRestrictions: Map[String, _] = Map(
+      SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key ->
+        sparkSession.sessionState.conf.maxDynamicPartitions,
+      SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS_PER_TASK.key ->
+        sparkSession.sessionState.conf.maxDynamicPartitionsPerTask,
+      SQLConf.DYNAMIC_PARTITION_MAX_CREATED_FILES.key ->
+        sparkSession.sessionState.conf.maxCreatedFilesInDynamicPartition
+    )
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
-      outputPath = paths.head)
+      outputPath = paths.head,
+      restrictions = dynamicPartitionRestrictions)
     lazy val description =
       createWriteJobDescription(sparkSession, hadoopConf, job, paths.head, options.asScala.toMap)
 
