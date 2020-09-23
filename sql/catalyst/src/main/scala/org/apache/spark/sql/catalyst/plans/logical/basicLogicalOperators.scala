@@ -262,19 +262,7 @@ case class Union(
       AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
   }
 
-  private def makeUnionOutput(): Seq[Attribute] = {
-    children.map(_.output).transpose.map { attrs =>
-      val firstAttr = attrs.head
-      val nullable = attrs.exists(_.nullable)
-      val newDt = attrs.map(_.dataType).reduce(StructType.merge)
-      if (firstAttr.dataType == newDt) {
-        firstAttr.withNullability(nullable)
-      } else {
-        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
-          NamedExpression.newExprId, firstAttr.qualifier)
-      }
-    }
-  }
+  override def producedAttributes: AttributeSet = AttributeSet(unionOutput)
 
   // updating nullability to make all the children consistent
   override def output: Seq[Attribute] = {
@@ -282,7 +270,7 @@ case class Union(
     unionOutput
   }
 
-  def allChildrenCompatible: Boolean = {
+  lazy val allChildrenCompatible: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
     childrenResolved && children.tail.forall { child =>
       // compare the attribute number with the first child
