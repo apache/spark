@@ -62,10 +62,10 @@ import org.apache.spark.sql.types._
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(10.0, array(0.5, 0.4, 0.1), 100);
-       [10.0,10.0,10.0]
-      > SELECT _FUNC_(10.0, 0.5, 100);
-       10.0
+      > SELECT _FUNC_(col, array(0.5, 0.4, 0.1), 100) FROM VALUES (0), (1), (2), (10) AS tab(col);
+       [1,1,0]
+      > SELECT _FUNC_(col, 0.5, 100) FROM VALUES (0), (6), (7), (9), (10) AS tab(col);
+       7
   """)
 case class ApproximatePercentile(
     child: Expression,
