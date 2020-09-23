@@ -66,7 +66,7 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * The idea of [[hasInterestingPartition]] is inspired from "interesting order" in
  * the paper "Access Path Selection in a Relational Database Management System"
- * (http://www.inf.ed.ac.uk/teaching/courses/adbs/AccessPath.pdf).
+ * (https://dl.acm.org/doi/10.1145/582095.582099).
  */
 case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan] {
 
@@ -116,8 +116,7 @@ case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan]
 
   private def isAllowedUnaryExecNode(plan: SparkPlan): Boolean = {
     plan match {
-      case _: SortExec | _: Exchange | _: ProjectExec | _: FilterExec |
-           _: FileSourceScanExec => true
+      case _: SortExec | _: ProjectExec | _: FilterExec => true
       case partialAgg: BaseAggregateExec =>
         val modes = partialAgg.aggregateExpressions.map(_.mode)
         modes.nonEmpty && modes.forall(mode => mode == Partial || mode == PartialMerge)
@@ -140,7 +139,12 @@ case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan]
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.bucketingEnabled || !conf.autoBucketedScanEnabled) {
+    lazy val hasBucketedScanWithoutFilter = plan.find {
+      case scan: FileSourceScanExec => isBucketedScanWithoutFilter(scan)
+      case _ => false
+    }.isDefined
+
+    if (!conf.bucketingEnabled || !conf.autoBucketedScanEnabled || !hasBucketedScanWithoutFilter) {
       plan
     } else if (plan.find(hasInterestingPartition).isDefined) {
       disableBucketWithInterestingPartition(plan, false, false)

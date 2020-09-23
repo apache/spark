@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.TimeUnit._
 
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 
 import org.apache.commons.lang3.StringUtils
@@ -343,7 +344,7 @@ case class FileSourceScanExec(
       location.getClass.getSimpleName +
         Utils.buildLocationMetadata(location.rootPaths, maxMetadataValueLength)
     val metadata =
-      HashMap(
+      mutable.HashMap(
         "Format" -> relation.fileFormat.toString,
         "ReadSchema" -> requiredSchema.catalogString,
         "Batched" -> supportsColumnar.toString,
@@ -353,7 +354,7 @@ case class FileSourceScanExec(
         "Location" -> locationDesc)
 
     if (bucketedScan) {
-      relation.bucketSpec.map { spec =>
+      relation.bucketSpec.foreach { spec =>
         val numSelectedBuckets = optionalBucketSet.map { b =>
           b.cardinality()
         } getOrElse {
