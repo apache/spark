@@ -41,12 +41,22 @@ class JsonSuite extends PlanTest with ExpressionEvalHelper {
     val options = Map.empty[String, String]
     val schema = StructType.fromDDL("a int, b int")
 
-    val query = testRelation
+    val query1 = testRelation
       .select(JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct"))
-    val optimized = Optimizer.execute(query.analyze)
+    val optimized1 = Optimizer.execute(query1.analyze)
 
     val expected = testRelation.select('struct.as("struct")).analyze
-    comparePlans(optimized, expected)
+    comparePlans(optimized1, expected)
+
+    val query2 = testRelation
+      .select(
+        JsonToStructs(schema, options,
+          StructsToJson(options,
+            JsonToStructs(schema, options,
+              StructsToJson(options, 'struct)))).as("struct"))
+    val optimized2 = Optimizer.execute(query2.analyze)
+
+    comparePlans(optimized2, expected)
   }
 
 }
