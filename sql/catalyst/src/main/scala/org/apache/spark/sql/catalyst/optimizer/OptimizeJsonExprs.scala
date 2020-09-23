@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.types.DataType
 
 /**
  * Simplify redundant json related expressions.
@@ -27,8 +28,10 @@ import org.apache.spark.sql.catalyst.rules.Rule
 object OptimizeJsonExprs extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case p => p.transformExpressions {
-      case JsonToStructs(_, options1, StructsToJson(options2, child, timeZoneId2), timeZoneId1)
-          if options1 == options2 && timeZoneId1 == timeZoneId2 =>
+      case JsonToStructs(schema, options1,
+        t @ StructsToJson(options2, child, timeZoneId2), timeZoneId1)
+          if options1.isEmpty && options2.isEmpty && timeZoneId1 == timeZoneId2 &&
+            schema.sameType(child.dataType) =>
         child
     }
   }
