@@ -138,8 +138,8 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
 
     val realCols = (localInputCols.toSet -- catCols).toArray
     val realIndices = realCols.map(localInputCols.indexOf)
-    // hash of "column_name" of real columns can be pre-computed
-    val realHashes = realCols.map(hashFunc)
+    // pre-compute output indices of real columns
+    val realOutputIndices = realCols.map(c => Utils.nonNegativeMod(hashFunc(c), n))
 
     def getDouble(x: Any): Double = {
       x match {
@@ -160,8 +160,7 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
         if (!row.isNullAt(realIdx)) {
           // numeric values are kept as is, with vector index based on hash of "column_name"
           val value = getDouble(row.get(realIdx))
-          val rawIdx = realHashes(i)
-          val idx = Utils.nonNegativeMod(rawIdx, n)
+          val idx = realOutputIndices(i)
           map.changeValue(idx, value, v => v + value)
         }
         i += 1
