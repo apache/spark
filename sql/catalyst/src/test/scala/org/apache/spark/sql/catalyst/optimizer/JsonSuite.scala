@@ -39,7 +39,6 @@ class JsonSuite extends PlanTest with ExpressionEvalHelper {
 
   test("SPARK-32948: optimize from_json + to_json") {
     val options = Map.empty[String, String]
-    val schema = StructType.fromDDL("a int, b int")
 
     val query1 = testRelation
       .select(JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct"))
@@ -59,4 +58,28 @@ class JsonSuite extends PlanTest with ExpressionEvalHelper {
     comparePlans(optimized2, expected)
   }
 
+  test("SPARK-32948: not optimize from_json + to_json if schema is different") {
+    val options = Map.empty[String, String]
+    val schema = StructType.fromDDL("a int")
+
+    val query = testRelation
+      .select(JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct"))
+    val optimized = Optimizer.execute(query.analyze)
+
+    val expected = testRelation.select(
+      JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct")).analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("SPARK-32948: not optimize from_json + to_json if option is not empty") {
+    val options = Map("testOption" -> "test")
+
+    val query = testRelation
+      .select(JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct"))
+    val optimized = Optimizer.execute(query.analyze)
+
+    val expected = testRelation.select(
+      JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct")).analyze
+    comparePlans(optimized, expected)
+  }
 }
