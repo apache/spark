@@ -125,19 +125,21 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
 
   @Since("2.3.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    val outputSchema = transformSchema(dataset.schema)
     val hashFunc: Any => Int = FeatureHasher.murmur3Hash
+
     val n = $(numFeatures)
     val localInputCols = $(inputCols)
-    val catCols = if (isSet(categoricalCols)) {
-      $(categoricalCols).toSet
-    } else {
-      Set[String]()
-    }
 
-    val outputSchema = transformSchema(dataset.schema)
-    val realFields = outputSchema.fields.filter { f =>
-      f.dataType.isInstanceOf[NumericType] && !catCols.contains(f.name)
-    }.map(_.name).toSet
+    var catCols = dataset.schema(localInputCols.toSet)
+      .filterNot(_.dataType.isInstanceOf[NumericType]).map(_.name).toArray
+    if (isSet(categoricalCols)) catCols = (catCols.toSet ++ $(categoricalCols)).toArray
+    val catIndices = catCols.map(localInputCols.indexOf)
+
+    val realCols = (localInputCols.toSet -- catCols).toArray
+    val realIndices = realCols.map(localInputCols.indexOf)
+    // hash of "column_name" of real columns can be pre-computed
+    val realHashes = realCols.map(hashFunc)
 
     def getDouble(x: Any): Double = {
       x match {
@@ -151,33 +153,39 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
 
     val hashFeatures = udf { row: Row =>
       val map = new OpenHashMap[Int, Double]()
-      localInputCols.foreach { colName =>
-        val fieldIndex = row.fieldIndex(colName)
-        if (!row.isNullAt(fieldIndex)) {
-          val (rawIdx, value) = if (realFields(colName)) {
-            // numeric values are kept as is, with vector index based on hash of "column_name"
-            val value = getDouble(row.get(fieldIndex))
-            val hash = hashFunc(colName)
-            (hash, value)
-          } else {
-            // string, boolean and numeric values that are in catCols are treated as categorical,
-            // with an indicator value of 1.0 and vector index based on hash of "column_name=value"
-            val value = row.get(fieldIndex).toString
-            val fieldName = s"$colName=$value"
-            val hash = hashFunc(fieldName)
-            (hash, 1.0)
-          }
+
+      var i = 0
+      while (i < realIndices.length) {
+        val realIdx = realIndices(i)
+        if (!row.isNullAt(realIdx)) {
+          // numeric values are kept as is, with vector index based on hash of "column_name"
+          val value = getDouble(row.get(realIdx))
+          val rawIdx = realHashes(i)
           val idx = Utils.nonNegativeMod(rawIdx, n)
           map.changeValue(idx, value, v => v + value)
         }
+        i += 1
       }
+
+      i = 0
+      while (i < catIndices.length) {
+        val catIdx = catIndices(i)
+        if (!row.isNullAt(catIdx)) {
+          // string, boolean and numeric values that are in catCols are treated as categorical,
+          // with an indicator value of 1.0 and vector index based on hash of "column_name=value"
+          val string = row.get(catIdx).toString
+          val rawIdx = hashFunc(s"${catCols(i)}=$string")
+          val idx = Utils.nonNegativeMod(rawIdx, n)
+          map.changeValue(idx, 1.0, v => v + 1.0)
+        }
+        i += 1
+      }
+
       Vectors.sparse(n, map.toSeq)
     }
 
     val metadata = outputSchema($(outputCol)).metadata
-    dataset.select(
-      col("*"),
-      hashFeatures(struct($(inputCols).map(col): _*)).as($(outputCol), metadata))
+    dataset.withColumn($(outputCol), hashFeatures(struct($(inputCols).map(col): _*)), metadata)
   }
 
   @Since("2.3.0")
