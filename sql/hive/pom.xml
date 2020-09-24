@@ -88,11 +88,6 @@
       <version>${protobuf.version}</version>
     </dependency>
 -->
-
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client-runtime</artifactId>
-    </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-common</artifactId>
@@ -196,6 +191,16 @@
     </dependency>
   </dependencies>
   <profiles>
+    <profile>
+    <id>hadoop-3.2</id>
+    <dependencies>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client-runtime</artifactId>
+        <version>${hadoop.version}</version>
+      </dependency>
+    </dependencies>
+    </profile>
     <profile>
       <id>hive</id>
       <build>

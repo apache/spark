@@ -65,10 +65,6 @@
       <artifactId>xbean-asm7-shaded</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client-runtime</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-launcher_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
@@ -547,6 +543,26 @@
   </build>
 
   <profiles>
+    <profile>
+      <id>hadoop-2.7</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-client</artifactId>
+          <version>${hadoop.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>hadoop-3.2</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-client-runtime</artifactId>
+          <version>${hadoop.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
     <profile>
       <id>Windows</id>
       <activation>

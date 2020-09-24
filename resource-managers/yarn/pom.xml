@@ -40,6 +40,58 @@
         <spark.yarn.isHadoopProvided>true</spark.yarn.isHadoopProvided>
       </properties>
     </profile>
+    <profile>
+      <id>hadoop-2.7</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-client</artifactId>
+          <version>${hadoop.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-api</artifactId>
+          <version>${hadoop.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-common</artifactId>
+          <version>${hadoop.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-server-web-proxy</artifactId>
+          <version>${hadoop.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-client</artifactId>
+          <version>${hadoop.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-server-tests</artifactId>
+          <version>${hadoop.version}</version>
+          <classifier>tests</classifier>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>hadoop-3.2</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-client-runtime</artifactId>
+          <version>${hadoop.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-client-minicluster</artifactId>
+          <version>${hadoop.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
   </profiles>
 
   <dependencies>
@@ -66,10 +118,6 @@
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
       <type>test-jar</type>
       <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client-runtime</artifactId>
     </dependency>
 
     <dependency>
@@ -123,12 +171,6 @@
       <groupId>org.eclipse.jetty.orbit</groupId>
       <artifactId>javax.servlet.jsp.jstl</artifactId>
       <version>1.2.0.v201105211821</version>
-      <scope>test</scope>
-    </dependency>
-
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client-minicluster</artifactId>
       <scope>test</scope>
     </dependency>
 

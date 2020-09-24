@@ -90,11 +90,6 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client-runtime</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
       <groupId>org.apache.avro</groupId>
       <artifactId>avro-ipc</artifactId>
       <scope>provided</scope>
@@ -131,6 +126,31 @@
       <scope>provided</scope>
     </dependency>
   </dependencies>
+
+  <profiles>
+    <profile>
+      <id>hadoop-2.7</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-client</artifactId>
+          <version>${hadoop.version}</version>
+          <scope>provided</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>hadoop-3.2</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-client-runtime</artifactId>
+          <version>${hadoop.version}</version>
+          <scope>provided</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
 
   <build>
   <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
