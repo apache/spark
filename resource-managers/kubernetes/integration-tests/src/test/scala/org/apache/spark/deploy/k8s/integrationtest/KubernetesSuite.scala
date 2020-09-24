@@ -123,12 +123,12 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   }
 
   protected def runSparkPiAndVerifyCompletion(
-                                               appResource: String = containerLocalSparkDistroExamplesJar,
-                                               driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
-                                               executorPodChecker: Pod => Unit = doBasicExecutorPodCheck,
-                                               appArgs: Array[String] = Array.empty[String],
-                                               appLocator: String = appLocator,
-                                               isJVM: Boolean = true ): Unit = {
+      appResource: String = containerLocalSparkDistroExamplesJar,
+      driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
+      executorPodChecker: Pod => Unit = doBasicExecutorPodCheck,
+      appArgs: Array[String] = Array.empty[String],
+      appLocator: String = appLocator,
+      isJVM: Boolean = true ): Unit = {
     runSparkApplicationAndVerifyCompletion(
       appResource,
       SPARK_PI_MAIN_CLASS,
@@ -141,11 +141,11 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   }
 
   protected def runSparkRemoteCheckAndVerifyCompletion(
-                                                        appResource: String = containerLocalSparkDistroExamplesJar,
-                                                        driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
-                                                        executorPodChecker: Pod => Unit = doBasicExecutorPodCheck,
-                                                        appArgs: Array[String],
-                                                        appLocator: String = appLocator): Unit = {
+      appResource: String = containerLocalSparkDistroExamplesJar,
+      driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
+      executorPodChecker: Pod => Unit = doBasicExecutorPodCheck,
+      appArgs: Array[String],
+      appLocator: String = appLocator): Unit = {
     runSparkApplicationAndVerifyCompletion(
       appResource,
       SPARK_REMOTE_MAIN_CLASS,
@@ -158,11 +158,11 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   }
 
   protected def runSparkJVMCheckAndVerifyCompletion(
-                                                     appResource: String = containerLocalSparkDistroExamplesJar,
-                                                     mainClass: String = SPARK_DRIVER_MAIN_CLASS,
-                                                     driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
-                                                     appArgs: Array[String] = Array("5"),
-                                                     expectedJVMValue: Seq[String]): Unit = {
+      appResource: String = containerLocalSparkDistroExamplesJar,
+      mainClass: String = SPARK_DRIVER_MAIN_CLASS,
+      driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
+      appArgs: Array[String] = Array("5"),
+      expectedJVMValue: Seq[String]): Unit = {
     val appArguments = SparkAppArguments(
       mainAppResource = appResource,
       mainClass = mainClass,
@@ -195,15 +195,15 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   }
 
   protected def runSparkApplicationAndVerifyCompletion(
-                                                        appResource: String,
-                                                        mainClass: String,
-                                                        expectedLogOnCompletion: Seq[String],
-                                                        appArgs: Array[String],
-                                                        driverPodChecker: Pod => Unit,
-                                                        executorPodChecker: Pod => Unit,
-                                                        appLocator: String,
-                                                        isJVM: Boolean,
-                                                        pyFiles: Option[String] = None): Unit = {
+      appResource: String,
+      mainClass: String,
+      expectedLogOnCompletion: Seq[String],
+      appArgs: Array[String],
+      driverPodChecker: Pod => Unit,
+      executorPodChecker: Pod => Unit,
+      appLocator: String,
+      isJVM: Boolean,
+      pyFiles: Option[String] = None): Unit = {
     val appArguments = SparkAppArguments(
       mainAppResource = appResource,
       mainClass = mainClass,

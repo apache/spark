@@ -27,7 +27,7 @@ import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilde
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.KubernetesUtils.buildPodWithServiceAccount
+import org.apache.spark.deploy.k8s.KubernetesUtils.addServiceAccount
 
 private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: KubernetesConf[_])
   extends KubernetesFeatureConfigStep {
@@ -71,7 +71,7 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
 
   override def configurePod(pod: SparkPod): SparkPod = {
     if (!shouldMountSecret) {
-      pod.copy(pod = buildPodWithServiceAccount(driverServiceAccount, pod).getOrElse(pod.pod))
+      pod.copy(pod = addServiceAccount(driverServiceAccount, pod).getOrElse(pod.pod))
     } else {
       val driverPodWithMountedKubernetesCredentials =
         new PodBuilder(pod.pod)

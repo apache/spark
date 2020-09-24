@@ -83,9 +83,9 @@ private[spark] object Config extends Logging {
   val KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME =
     ConfigBuilder(s"$KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX.serviceAccountName")
       .doc("Service account that is used when running the executor pod." +
-        "If this parameter is not setup, the fallback logic will use the driver's service account.")
+        "If this parameter is not setup, the service account defaults to none.")
       .stringConf
-      .createOptional
+      .createWithDefault("none")
 
   val KUBERNETES_DRIVER_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.driver.limit.cores")
@@ -95,9 +95,9 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_DRIVER_SUBMIT_CHECK =
     ConfigBuilder("spark.kubernetes.submitInDriver")
-      .internal()
-      .booleanConf
-      .createWithDefault(false)
+    .internal()
+    .booleanConf
+    .createWithDefault(false)
 
   val KUBERNETES_EXECUTOR_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.executor.limit.cores")
