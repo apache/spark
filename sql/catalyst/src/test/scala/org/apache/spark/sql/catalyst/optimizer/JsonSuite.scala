@@ -72,6 +72,25 @@ class JsonSuite extends PlanTest with ExpressionEvalHelper {
     comparePlans(optimized, expected)
   }
 
+  test("SPARK-32948: not optimize from_json + to_json if nullability is different") {
+    val options = Map.empty[String, String]
+    val nonNullSchema = StructType(
+      StructField("a", IntegerType, false) :: StructField("b", IntegerType, false) :: Nil)
+
+    val structAtt = 'struct.struct(nonNullSchema).notNull
+    val testRelationWithNonNullAttr = LocalRelation(structAtt)
+
+    val schema = StructType.fromDDL("a int, b int")
+
+    val query = testRelationWithNonNullAttr
+      .select(JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct"))
+    val optimized = Optimizer.execute(query.analyze)
+
+    val expected = testRelationWithNonNullAttr.select(
+      JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct")).analyze
+    comparePlans(optimized, expected)
+  }
+
   test("SPARK-32948: not optimize from_json + to_json if option is not empty") {
     val options = Map("testOption" -> "test")
 

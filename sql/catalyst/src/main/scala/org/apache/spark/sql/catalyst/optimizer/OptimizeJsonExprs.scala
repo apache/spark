@@ -29,9 +29,9 @@ object OptimizeJsonExprs extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case p => p.transformExpressions {
       case JsonToStructs(schema, options1,
-        t @ StructsToJson(options2, child, timeZoneId2), timeZoneId1)
+        StructsToJson(options2, child, timeZoneId2), timeZoneId1)
           if options1.isEmpty && options2.isEmpty && timeZoneId1 == timeZoneId2 &&
-            schema.sameType(child.dataType) =>
+            schema == child.dataType =>
         child
     }
   }
