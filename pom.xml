@@ -3144,7 +3144,7 @@
     <profile>
       <id>hadoop-3.2</id>
       <activation>
-        <activeByDefault>true</activeByDefault>
+        <property><name>!hadoop-2.7</name></property>
       </activation>
       <dependencies>
         <dependency>
