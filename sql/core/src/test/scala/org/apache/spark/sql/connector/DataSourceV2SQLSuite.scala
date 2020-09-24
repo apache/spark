@@ -1724,7 +1724,6 @@ class DataSourceV2SQLSuite
       val identifier = Identifier.of(Array("ns1", "ns2"), "tbl")
 
       assert(!testCatalog.isTableInvalidated(identifier))
-
       sql(s"REFRESH TABLE $t")
       assert(testCatalog.isTableInvalidated(identifier))
     }
