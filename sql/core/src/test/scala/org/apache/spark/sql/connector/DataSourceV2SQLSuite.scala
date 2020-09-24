@@ -1729,6 +1729,18 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-XXXXX: REFRESH TABLE should resolve to a temporary view first") {
+    withTable("testcat.ns.t") {
+      withTempView("t") {
+        sql("CREATE TABLE testcat.ns.t (id bigint) USING foo AS SELECT 1")
+        sql("CREATE TEMPORARY VIEW t AS SELECT 2")
+        sql("USE testcat.ns")
+        sql("SELECT * FROM t")
+        sql("REFRESH TABLE t")
+      }
+    }
+  }
+
   test("REPLACE TABLE: v1 table") {
     val e = intercept[AnalysisException] {
       sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
