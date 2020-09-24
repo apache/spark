@@ -1724,19 +1724,25 @@ class DataSourceV2SQLSuite
       val identifier = Identifier.of(Array("ns1", "ns2"), "tbl")
 
       assert(!testCatalog.isTableInvalidated(identifier))
+
       sql(s"REFRESH TABLE $t")
       assert(testCatalog.isTableInvalidated(identifier))
     }
   }
 
-  test("SPARK-XXXXX: REFRESH TABLE should resolve to a temporary view first") {
+  test("SPARK-32990: REFRESH TABLE should resolve to a temporary view first") {
     withTable("testcat.ns.t") {
       withTempView("t") {
-        sql("CREATE TABLE testcat.ns.t (id bigint) USING foo AS SELECT 1")
+        sql("CREATE TABLE testcat.ns.t (id bigint) USING foo")
         sql("CREATE TEMPORARY VIEW t AS SELECT 2")
         sql("USE testcat.ns")
-        sql("SELECT * FROM t")
+
+        val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[InMemoryTableCatalog]
+        val identifier = Identifier.of(Array("ns"), "t")
+
+        assert(!testCatalog.isTableInvalidated(identifier))
         sql("REFRESH TABLE t")
+        assert(!testCatalog.isTableInvalidated(identifier))
       }
     }
   }

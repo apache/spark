@@ -1382,6 +1382,14 @@ case class ShowCreateTableAsSerdeCommand(table: TableIdentifier)
   }
 }
 
+/**
+ * A command to refresh all cached entries associated with the table.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   REFRESH TABLE [db_name.]table_name
+ * }}}
+ */
 case class RefreshTableCommand(tableIdent: TableIdentifier)
   extends RunnableCommand {
 
