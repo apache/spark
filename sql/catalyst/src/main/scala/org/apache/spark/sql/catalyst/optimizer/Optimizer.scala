@@ -190,7 +190,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Early Filter and Projection Push-Down", Once, earlyScanPushDownRules: _*) :+
     // Since join costs in AQP can change between multiple runs, there is no reason that we have an
     // idempotence enforcement on this batch. We thus make it FixedPoint(1) instead of Once.
-    Batch("Join Reorder", FixedPoint(1),
+    Batch("Join Reorder", Once,
       CostBasedJoinReorder) :+
     Batch("Eliminate Sorts", Once,
       EliminateSorts) :+
