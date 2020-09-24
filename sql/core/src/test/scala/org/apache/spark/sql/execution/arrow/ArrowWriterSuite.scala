@@ -309,6 +309,8 @@ class ArrowWriterSuite extends SparkFunSuite {
     val map3 = reader.getMap(3)
     assert(map3 == null)
     writer.root.close()
+
+    // TODO: figure why writer doesn't fail without setIndexDefined
   }
 
   test("empty map") {

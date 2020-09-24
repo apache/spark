@@ -20,9 +20,9 @@ Type-specific codes between pandas and PyArrow. Also contains some utils to corr
 pandas instances during the type conversion.
 """
 
-from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, \
-    DoubleType, DecimalType, StringType, BinaryType, DateType, TimestampType, ArrayType, \
-    StructType, StructField, BooleanType
+from pyspark.sql.types import BooleanType, ByteType, ShortType, IntegerType, LongType, \
+    FloatType, DoubleType, DecimalType, StringType, BinaryType, DateType, TimestampType, \
+    ArrayType, MapType, StructType, StructField
 
 
 def to_arrow_type(dt):
@@ -58,6 +58,11 @@ def to_arrow_type(dt):
         if type(dt.elementType) in [StructType, TimestampType]:
             raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
         arrow_type = pa.list_(to_arrow_type(dt.elementType))
+    elif type(dt) == MapType:
+        if type(dt.keyType) in [StructType, TimestampType] or \
+                type(dt.valueType) in [StructType, TimestampType]:
+            raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
+        arrow_type = pa.map_(to_arrow_type(dt.keyType), to_arrow_type(dt.valueType))
     elif type(dt) == StructType:
         if any(type(field.dataType) == StructType for field in dt):
             raise TypeError("Nested StructType not supported in conversion to Arrow")
@@ -110,6 +115,10 @@ def from_arrow_type(at):
         if types.is_timestamp(at.value_type):
             raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
         spark_type = ArrayType(from_arrow_type(at.value_type))
+    elif types.is_map(at):
+        if types.is_timestamp(at.key_type) or types.is_timestamp(at.item_type):
+            raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
+        spark_type = MapType(from_arrow_type(at.key_type), from_arrow_type(at.item_type))
     elif types.is_struct(at):
         if any(types.is_struct(field.type) for field in at):
             raise TypeError("Nested StructType not supported in conversion from Arrow: " + str(at))

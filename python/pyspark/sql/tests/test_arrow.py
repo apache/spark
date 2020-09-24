@@ -336,6 +336,40 @@ class ArrowTests(ReusedSQLTestCase):
                 self.assertTrue(expected[r][e] == result_arrow[r][e] and
                                 result[r][e] == result_arrow[r][e])
 
+    def test_createDataFrame_with_map_type(self):
+        map_data = [{"a": 1}, {"b": 2, "c": 3}, {}, None, {"d": None}]
+
+        pdf = pd.DataFrame({"id": [0, 1, 2, 3, 4], "m": map_data})
+        schema = "id long, m map<string, long>"
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+            df = self.spark.createDataFrame(pdf, schema=schema)
+
+        # pyarrow currently requires a list of pairs for each map
+        pdf["m"] = [list(m.items()) if m is not None else None for m in map_data]
+
+        df_arrow = self.spark.createDataFrame(pdf, schema=schema)
+
+        result = df.collect()
+        result_arrow = df_arrow.collect()
+
+        self.assertEqual(len(result), len(result_arrow))
+        for row, row_arrow in zip(result, result_arrow):
+            i, m = row
+            _, m_arrow = row_arrow
+            self.assertEqual(m, map_data[i])
+            self.assertEqual(m_arrow, map_data[i])
+
+    def test_toPandas_with_map_type(self):
+        pdf = pd.DataFrame({"id": [0, 1, 2, 3, 4],
+                            "m": [{"a": 1}, {"b": 2, "c": 3}, {}, None, {"d": None}]})
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+            df = self.spark.createDataFrame(pdf, schema="id long, m map<string, long>")
+
+        pdf_non, pdf_arrow = self._toPandas_arrow_toggle(df)
+        assert_frame_equal(pdf_arrow, pdf_non)
+
     def test_createDataFrame_with_int_col_names(self):
         import numpy as np
         pdf = pd.DataFrame(np.random.rand(4, 2))
