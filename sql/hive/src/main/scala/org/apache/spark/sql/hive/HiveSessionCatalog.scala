@@ -74,6 +74,9 @@ private[sql] class HiveSessionCatalog(
         t.asInstanceOf[Success[Expression]].get
       } else {
         val exception = t.asInstanceOf[Failure[Expression]].exception
+        if (exception.getMessage.contains("Invalid number of arguments for function")) {
+          throw exception
+        }
         var udfExpr: Option[Expression] = None
         try {
           // When we instantiate hive UDF wrapper class, we may throw exception if the input
@@ -109,18 +112,12 @@ private[sql] class HiveSessionCatalog(
               } else {
                 noHandlerMsg
               }
-            val analysisException = new AnalysisException(
-              s"Spark UDAF Error: ${exception.getMessage}\n" +
-                s"Hive UDF/UDAF/UDTF Error: $errorMsg"
-            )
+            val analysisException = new AnalysisException(errorMsg)
             analysisException.setStackTrace(e.getStackTrace)
             throw analysisException
         }
         udfExpr.getOrElse {
-          throw new AnalysisException(
-            s"Spark UDAF Error: ${exception.getMessage}\n" +
-              s"Hive UDF/UDAF/UDTF Error: " +
-              s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
+          throw new AnalysisException(s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
         }
       }
     }

@@ -162,7 +162,8 @@ class HiveUDAFSuite extends QueryTest
     }
   }
 
-  test("SPARK-32243: Hive mode use spark udaf should show error") {
+  test("SPARK-32243: Spark UDAF Invalid arguments number error should throw earlier") {
+    // func need two arguments
     val functionName = "longProductSum"
     val functionClass = "org.apache.spark.sql.hive.execution.LongProductSum"
     withUserDefinedFunction(functionName -> true) {
@@ -170,10 +171,8 @@ class HiveUDAFSuite extends QueryTest
       val e = intercept[AnalysisException] {
         sql(s"SELECT $functionName(100)")
       }.getMessage
-      assert(
-        Seq(s"Invalid number of arguments for function $functionName. Expected: 2; Found: 1;",
-          "No handler for UDF/UDAF/UDTF 'org.apache.spark.sql.hive.execution.LongProductSum';")
-          .forall(e.contains))
+      assert(e.contains(
+        s"Invalid number of arguments for function $functionName. Expected: 2; Found: 1;"))
     }
   }
 }
