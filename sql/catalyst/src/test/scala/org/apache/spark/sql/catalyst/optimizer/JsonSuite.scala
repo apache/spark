@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.getZoneId
 import org.apache.spark.sql.types._
 
 class JsonSuite extends PlanTest with ExpressionEvalHelper {
@@ -81,5 +82,28 @@ class JsonSuite extends PlanTest with ExpressionEvalHelper {
     val expected = testRelation.select(
       JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct")).analyze
     comparePlans(optimized, expected)
+  }
+
+  test("SPARK-32948: not optimize from_json + to_json if timezone is different") {
+    val options = Map.empty[String, String]
+    val UTC_OPT = Option("UTC")
+    val PST = getZoneId("-08:00")
+
+    val query1 = testRelation
+      .select(JsonToStructs(schema, options,
+        StructsToJson(options, 'struct, Option(PST.getId)), UTC_OPT).as("struct"))
+    val optimized1 = Optimizer.execute(query1.analyze)
+
+    val expected1 = testRelation.select(
+      JsonToStructs(schema, options,
+        StructsToJson(options, 'struct, Option(PST.getId)), UTC_OPT).as("struct")).analyze
+    comparePlans(optimized1, expected1)
+
+    val query2 = testRelation
+      .select(JsonToStructs(schema, options,
+        StructsToJson(options, 'struct, UTC_OPT), UTC_OPT).as("struct"))
+    val optimized2 = Optimizer.execute(query2.analyze)
+    val expected2 = testRelation.select('struct.as("struct")).analyze
+    comparePlans(optimized2, expected2)
   }
 }
