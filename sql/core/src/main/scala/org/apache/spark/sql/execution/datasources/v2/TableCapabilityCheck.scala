@@ -43,8 +43,7 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
       case r: DataSourceV2Relation if !r.table.supports(BATCH_READ) =>
         failAnalysis(s"Table ${r.table.name()} does not support batch scan.")
 
-      case r: StreamingRelationV2
-          if !r.table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) && r.v1Relation.isEmpty =>
+      case r: StreamingRelationV2 if !r.table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
         throw new AnalysisException(s"Table ${r.table.name()} does not support either " +
           "micro-batch or continuous scan.")
 

@@ -1046,6 +1046,9 @@ class Analyzer(
           lazy val loaded = CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table =>
               if (isStreaming) {
+                if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
+                  throw new AnalysisException("Stream reading does not support views.")
+                }
                 SubqueryAlias(
                   catalog.name +: ident.asMultipartIdentifier,
                   UnresolvedCatalogRelation(v1Table.v1Table, options, isStreaming = true))

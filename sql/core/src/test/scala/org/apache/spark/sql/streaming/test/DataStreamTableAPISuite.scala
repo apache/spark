@@ -26,12 +26,13 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, V2TableWithV1Fallback}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.{FakeV2Provider, InMemoryTableCatalog}
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{Identifier, SupportsRead, Table, TableCapability, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.ScanBuilder
-import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamScanBuilder, StreamingRelation}
+import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamScanBuilder}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.streaming.sources.FakeScanBuilder
@@ -158,11 +159,13 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     withTempDir { tempDir =>
       withTable(tblName) {
         spark.sql(s"CREATE TABLE $tblName (data int) USING $v2Source")
+
+        // Check the StreamingRelationV2 has been replaced by StreamingRelation
         val plan = spark.readStream.option("path", tempDir.getCanonicalPath).table(tblName)
           .queryExecution.analyzed.collectFirst {
-          case d: StreamingRelation => d
-        }
-        assert(plan.nonEmpty)
+            case d: StreamingRelationV2 => d
+          }
+        assert(plan.isEmpty)
       }
     }
   }
