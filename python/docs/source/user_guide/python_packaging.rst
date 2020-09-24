@@ -24,7 +24,7 @@ When you want to run your PySpark application on a cluster such as YARN, Kuberne
 sure that the your code and all used libraries are available on the executors.
 
 As an example let's say you may want to run the `Pandas UDF's examples <arrow_pandas.rst#series-to-scalar>`_.
-As it uses pyarrow as an underlying implementation we need to make sure to have pcyarrow installed on each executor
+As it uses pyarrow as an underlying implementation we need to make sure to have pyarrow installed on each executor
 on the cluster. Otherwise you may get errors such as ``ModuleNotFoundError: No module named 'pyarrow'``.
 
 Here is the script ``app.py`` from the previous example that will be executed on the cluster:
