@@ -19,7 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.io.{File, IOException}
 import java.lang.reflect.{InvocationTargetException, Modifier}
-import java.net.{URI, URL}
+import java.net.{URI, URL, URLEncoder}
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{TimeoutException, TimeUnit}
 
@@ -307,7 +307,8 @@ private[spark] class ApplicationMaster(
       // The client-mode AM doesn't listen for incoming connections, so report an invalid port.
       registerAM(Utils.localHostName, -1, sparkConf,
         sparkConf.getOption("spark.driver.appUIAddress"), appAttemptId)
-      addAmIpFilter(Some(driverRef), s"/proxy/$appAttemptId")
+      val encodedAppId = URLEncoder.encode(appAttemptId.getApplicationId.toString, "UTF-8")
+      addAmIpFilter(Some(driverRef), s"/proxy/$encodedAppId")
       createAllocator(driverRef, sparkConf, clientRpcEnv, appAttemptId, cachedResourcesConf)
       reporterThread.join()
     } catch {

@@ -175,9 +175,9 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       clientMode = false,
       extraConf = Map(
         "spark.yarn.appMasterEnv.PYSPARK_DRIVER_PYTHON"
-          -> sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python"),
+          -> sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"),
         "spark.yarn.appMasterEnv.PYSPARK_PYTHON"
-          -> sys.env.getOrElse("PYSPARK_PYTHON", "python")),
+          -> sys.env.getOrElse("PYSPARK_PYTHON", "python3")),
       extraEnv = Map(
         "PYSPARK_DRIVER_PYTHON" -> "not python",
         "PYSPARK_PYTHON" -> "not python"))
