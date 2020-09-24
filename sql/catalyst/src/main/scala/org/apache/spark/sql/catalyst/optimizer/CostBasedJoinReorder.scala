@@ -150,9 +150,16 @@ object JoinReorderDP extends PredicateHelper with Logging {
     // Level i maintains all found plans for i + 1 items.
     // Create the initial plans: each plan is a single item with zero cost.
     val itemIndex = items.zipWithIndex
-    val foundPlans = mutable.Buffer[JoinPlanMap](itemIndex.map {
-      case (item, id) => Set(id) -> JoinPlan(Set(id), item, ExpressionSet(), Cost(0, 0))
-    }.toMap)
+    val foundPlans = mutable.Buffer[JoinPlanMap]({
+      // SPARK-32687: Change to use `LinkedHashMap` to make sure that items are
+      // inserted and iterated in the same order.
+      val joinPlanMap = new JoinPlanMap
+      itemIndex.foreach {
+        case (item, id) =>
+          joinPlanMap.put(Set(id), JoinPlan(Set(id), item, ExpressionSet(), Cost(0, 0)))
+      }
+      joinPlanMap
+    })
 
     // Build filters from the join graph to be used by the search algorithm.
     val filters = JoinReorderDPFilters.buildJoinGraphInfo(conf, items, conditions, itemIndex)
@@ -198,7 +205,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
       topOutput: AttributeSet,
       filters: Option[JoinGraphInfo]): JoinPlanMap = {
 
-    val nextLevel = mutable.Map.empty[Set[Int], JoinPlan]
+    val nextLevel = new JoinPlanMap
     var k = 0
     val lev = existingLevels.length - 1
     // Build plans for the next level from plans at level k (one side of the join) and level
@@ -231,7 +238,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
       }
       k += 1
     }
-    nextLevel.toMap
+    nextLevel
   }
 
   /**
@@ -316,7 +323,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
   }
 
   /** Map[set of item ids, join plan for these items] */
-  type JoinPlanMap = Map[Set[Int], JoinPlan]
+  type JoinPlanMap = mutable.LinkedHashMap[Set[Int], JoinPlan]
 
   /**
    * Partial join order in a specific level.
