@@ -178,6 +178,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
    */
   private def addDiffHint(approvedSimplified: String, actualSimplified: String)
     : (String, String) = {
+    // reverse the plan so we can compare the node from the bottom to top
     val approvedLines = approvedSimplified.split("\n").reverse
     val actualLines = actualSimplified.split("\n").reverse
     val approvedBuilder = new mutable.ArrayStack[String]()
