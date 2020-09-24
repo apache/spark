@@ -352,6 +352,7 @@ case class FileSourceScanExec(
         "DataFilters" -> seqToString(dataFilters),
         "Location" -> locationDesc)
 
+    // TODO(SPARK-32986): Add bucketed scan info in explain output of FileSourceScanExec
     if (bucketedScan) {
       val withSelectedBucketsCount = relation.bucketSpec.map { spec =>
         val numSelectedBuckets = optionalBucketSet.map { b =>
@@ -547,6 +548,7 @@ case class FileSourceScanExec(
           .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
       }
 
+    // TODO(SPARK-32985): Decouple bucket filter pruning and bucketed table scan
     val prunedFilesGroupedToBuckets = if (optionalBucketSet.isDefined) {
       val bucketSet = optionalBucketSet.get
       filesGroupedToBuckets.filter {
