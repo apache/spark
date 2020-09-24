@@ -275,7 +275,10 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
         s"$sparkHome/python")
     val extraEnvVars = Map(
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
-      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator)) ++ extraEnv
+      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator),
+      "PYSPARK_DRIVER_PYTHON" -> "python3",
+      "PYSPARK_PYTHON" -> "python3"
+    ) ++ extraEnv
 
     val moduleDir = {
       val subdir = new File(tempDir, "pyModules")
