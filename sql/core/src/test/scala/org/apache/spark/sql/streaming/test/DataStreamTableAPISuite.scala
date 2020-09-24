@@ -99,7 +99,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       spark.range(3).createOrReplaceTempView(tblName)
       intercept[AnalysisException] {
         spark.readStream.table(tblName)
-      }.message.contains("not supported")
+      }.message.contains("is not a temp view of streaming logical plan")
     }
   }
 

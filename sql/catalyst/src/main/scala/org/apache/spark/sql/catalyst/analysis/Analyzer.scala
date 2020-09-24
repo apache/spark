@@ -874,8 +874,8 @@ class Analyzer(
       }
 
       if (isStreaming && tmpView.nonEmpty && !tmpView.get.isStreaming) {
-        throw new AnalysisException("The temp view related to non-streaming relation is " +
-          "not supported in readStream.table().")
+        throw new AnalysisException(s"${identifier.quoted} is not a temp view of streaming " +
+          s"logical plan, please use batch API such as `DataFrameReader.table` to read it.")
       }
       tmpView
     }
@@ -1047,7 +1047,9 @@ class Analyzer(
             case v1Table: V1Table =>
               if (isStreaming) {
                 if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
-                  throw new AnalysisException("Stream reading does not support views.")
+                  throw new AnalysisException(s"${identifier.quoted} is a permanent view, " +
+                    "which is not supported by streaming reading API such as " +
+                    "`DataStreamReader.table` yet.")
                 }
                 SubqueryAlias(
                   catalog.name +: ident.asMultipartIdentifier,
