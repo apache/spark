@@ -108,7 +108,7 @@ object SparkBuild extends PomBuild {
   override val userPropertiesMap = System.getProperties.asScala.toMap
 
   lazy val MavenCompile = config("m2r") extend(Compile)
-  lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
+  lazy val publishLocalBoth = TaskKey[Unit]("localPublish", "publish local for m2 and ivy", KeyRanks.ATask)
 
   lazy val sparkGenjavadocSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies += compilerPlugin(
@@ -225,7 +225,7 @@ object SparkBuild extends PomBuild {
         .withArtifacts(packagedArtifacts.value.toVector)
         .withLogging(ivyLoggingLevel.value),
     publishMavenStyle in MavenCompile := true,
-    publishLocal in MavenCompile := publishTask(publishLocalConfiguration in MavenCompile, deliverLocal).value,
+    publishLocal in MavenCompile := publishTask(publishLocalConfiguration in MavenCompile).value,
     publishLocalBoth := Seq(publishLocal in MavenCompile, publishLocal).dependOn.value,
 
     javacOptions in (Compile, doc) ++= {
