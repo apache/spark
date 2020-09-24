@@ -76,7 +76,7 @@ object CSVUtils {
         headerNames.diff(headerNames.distinct).distinct
       }
 
-      row.zipWithIndex.map { case (value, index) =>
+      val header = row.zipWithIndex.map { case (value, index) =>
         if (value == null || value.isEmpty || value == options.nullValue) {
           // When there are empty strings or the values set in `nullValue`, put the
           // index as the suffix.
@@ -92,6 +92,12 @@ object CSVUtils {
         } else {
           value
         }
+      }
+      if (header.sameElements(row)) {
+        header
+      } else {
+        // Ensure that the newly generated and existing headers are not duplicated.
+        makeSafeHeader(header, caseSensitive, options)
       }
     } else {
       row.zipWithIndex.map { case (_, index) =>
