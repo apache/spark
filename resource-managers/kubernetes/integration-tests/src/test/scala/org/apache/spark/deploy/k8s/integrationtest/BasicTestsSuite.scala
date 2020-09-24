@@ -109,7 +109,7 @@ private[spark] object BasicTestsSuite {
   val SPARK_PAGE_RANK_MAIN_CLASS: String = "org.apache.spark.examples.SparkPageRank"
   val CONTAINER_LOCAL_FILE_DOWNLOAD_PATH = "/var/spark-data/spark-files"
   val CONTAINER_LOCAL_DOWNLOADED_PAGE_RANK_DATA_FILE =
-    s"$CONTAINER_LOCAL_FILE_DOWNLOAD_PATH/pagerank_data.txt"
+     s"$CONTAINER_LOCAL_FILE_DOWNLOAD_PATH/pagerank_data.txt"
   val REMOTE_PAGE_RANK_DATA_FILE =
     "https://raw.githubusercontent.com/apache/spark/master/data/mllib/pagerank_data.txt"
   val REMOTE_PAGE_RANK_FILE_NAME = "pagerank_data.txt"
