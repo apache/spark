@@ -18,6 +18,7 @@ package org.apache.spark.deploy.k8s
 
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
+
 import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder,
   ContainerStateRunning, ContainerStateTerminated,
   ContainerStateWaiting, ContainerStatus, Pod, PodBuilder}
