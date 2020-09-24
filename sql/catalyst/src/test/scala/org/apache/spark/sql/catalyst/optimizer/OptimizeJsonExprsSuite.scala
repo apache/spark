@@ -24,9 +24,10 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getZoneId
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-class JsonSuite extends PlanTest with ExpressionEvalHelper {
+class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
   object Optimizer extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Json optimization", FixedPoint(10), OptimizeJsonExprs) :: Nil
@@ -70,6 +71,21 @@ class JsonSuite extends PlanTest with ExpressionEvalHelper {
     val expected = testRelation.select(
       JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct")).analyze
     comparePlans(optimized, expected)
+  }
+
+  test("SPARK-32948: if user gives schema with different letter case under case-insensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val options = Map.empty[String, String]
+      val schema = StructType.fromDDL("a int, B int")
+
+      val query = testRelation
+        .select(JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct"))
+      val optimized = Optimizer.execute(query.analyze)
+
+      val expected = testRelation.select(
+        JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct")).analyze
+      comparePlans(optimized, expected)
+    }
   }
 
   test("SPARK-32948: not optimize from_json + to_json if nullability is different") {
