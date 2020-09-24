@@ -7,7 +7,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum(sales),su
             HashAggregate [channel,i_brand_id,i_class_id,i_category_id,spark_grouping_id,sales,number_sales] [sum,isEmpty,sum,sum,isEmpty,sum]
               Expand [sales,number_sales,channel,i_brand_id,i_class_id,i_category_id]
                 InputAdapter
-                  Union
+                  Union [sales,number_sales,channel,i_brand_id,i_class_id,i_category_id]
                     WholeStageCodegen (39)
                       Project [sales,number_sales,i_brand_id,i_class_id,i_category_id]
                         Filter [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true))]
@@ -19,7 +19,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum(sales),su
                                     WholeStageCodegen (7)
                                       HashAggregate [quantity,list_price] [sum,count,sum,count]
                                         InputAdapter
-                                          Union
+                                          Union [quantity,list_price]
                                             WholeStageCodegen (2)
                                               Project [ss_quantity,ss_list_price]
                                                 BroadcastHashJoin [ss_sold_date_sk,d_date_sk]

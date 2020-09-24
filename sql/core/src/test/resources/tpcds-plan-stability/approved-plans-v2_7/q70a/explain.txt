@@ -284,90 +284,92 @@ Aggregate Attributes [1]: [sum(total_sum#31)#37]
 Results [6]: [sum(total_sum#31)#37 AS total_sum#38, s_state#9, null AS s_county#39, 0 AS g_state#40, 1 AS g_county#41, 1 AS lochierarchy#42]
 
 (47) Union
+Arguments: [total_sum#43, s_state#44, s_county#45, g_state#46, g_county#47, lochierarchy#48]
 
 (48) HashAggregate [codegen id : 22]
-Input [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
-Keys [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
+Input [6]: [total_sum#43, s_state#44, s_county#45, g_state#46, g_county#47, lochierarchy#48]
+Keys [6]: [total_sum#43, s_state#44, s_county#45, g_state#46, g_county#47, lochierarchy#48]
 Functions: []
 Aggregate Attributes: []
-Results [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
+Results [6]: [total_sum#43, s_state#44, s_county#45, g_state#46, g_county#47, lochierarchy#48]
 
 (49) Exchange
-Input [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
-Arguments: hashpartitioning(total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28, 5), true, [id=#43]
+Input [6]: [total_sum#43, s_state#44, s_county#45, g_state#46, g_county#47, lochierarchy#48]
+Arguments: hashpartitioning(total_sum#43, s_state#44, s_county#45, g_state#46, g_county#47, lochierarchy#48, 5), true, [id=#49]
 
 (50) HashAggregate [codegen id : 23]
-Input [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
-Keys [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
+Input [6]: [total_sum#43, s_state#44, s_county#45, g_state#46, g_county#47, lochierarchy#48]
+Keys [6]: [total_sum#43, s_state#44, s_county#45, g_state#46, g_county#47, lochierarchy#48]
 Functions: []
 Aggregate Attributes: []
-Results [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
+Results [6]: [total_sum#43, s_state#44, s_county#45, g_state#46, g_county#47, lochierarchy#48]
 
 (51) ReusedExchange [Reuses operator id: 40]
-Output [3]: [s_state#9, s_county#8, sum#44]
+Output [3]: [s_state#9, s_county#8, sum#50]
 
 (52) HashAggregate [codegen id : 33]
-Input [3]: [s_state#9, s_county#8, sum#44]
+Input [3]: [s_state#9, s_county#8, sum#50]
 Keys [2]: [s_state#9, s_county#8]
 Functions [1]: [sum(UnscaledValue(ss_net_profit#3))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#3))#45]
-Results [1]: [MakeDecimal(sum(UnscaledValue(ss_net_profit#3))#45,17,2) AS total_sum#31]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#3))#51]
+Results [1]: [MakeDecimal(sum(UnscaledValue(ss_net_profit#3))#51,17,2) AS total_sum#31]
 
 (53) HashAggregate [codegen id : 33]
 Input [1]: [total_sum#31]
 Keys: []
 Functions [1]: [partial_sum(total_sum#31)]
-Aggregate Attributes [2]: [sum#46, isEmpty#47]
-Results [2]: [sum#48, isEmpty#49]
+Aggregate Attributes [2]: [sum#52, isEmpty#53]
+Results [2]: [sum#54, isEmpty#55]
 
 (54) Exchange
-Input [2]: [sum#48, isEmpty#49]
-Arguments: SinglePartition, true, [id=#50]
+Input [2]: [sum#54, isEmpty#55]
+Arguments: SinglePartition, true, [id=#56]
 
 (55) HashAggregate [codegen id : 34]
-Input [2]: [sum#48, isEmpty#49]
+Input [2]: [sum#54, isEmpty#55]
 Keys: []
 Functions [1]: [sum(total_sum#31)]
-Aggregate Attributes [1]: [sum(total_sum#31)#51]
-Results [6]: [sum(total_sum#31)#51 AS total_sum#52, null AS s_state#53, null AS s_county#54, 1 AS g_state#55, 1 AS g_county#56, 2 AS lochierarchy#57]
+Aggregate Attributes [1]: [sum(total_sum#31)#57]
+Results [6]: [sum(total_sum#31)#57 AS total_sum#58, null AS s_state#59, null AS s_county#60, 1 AS g_state#61, 1 AS g_county#62, 2 AS lochierarchy#63]
 
 (56) Union
+Arguments: [total_sum#64, s_state#65, s_county#66, g_state#67, g_county#68, lochierarchy#69]
 
 (57) HashAggregate [codegen id : 35]
-Input [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
-Keys [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
+Input [6]: [total_sum#64, s_state#65, s_county#66, g_state#67, g_county#68, lochierarchy#69]
+Keys [6]: [total_sum#64, s_state#65, s_county#66, g_state#67, g_county#68, lochierarchy#69]
 Functions: []
 Aggregate Attributes: []
-Results [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
+Results [6]: [total_sum#64, s_state#65, s_county#66, g_state#67, g_county#68, lochierarchy#69]
 
 (58) Exchange
-Input [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
-Arguments: hashpartitioning(total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28, 5), true, [id=#58]
+Input [6]: [total_sum#64, s_state#65, s_county#66, g_state#67, g_county#68, lochierarchy#69]
+Arguments: hashpartitioning(total_sum#64, s_state#65, s_county#66, g_state#67, g_county#68, lochierarchy#69, 5), true, [id=#70]
 
 (59) HashAggregate [codegen id : 36]
-Input [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
-Keys [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
+Input [6]: [total_sum#64, s_state#65, s_county#66, g_state#67, g_county#68, lochierarchy#69]
+Keys [6]: [total_sum#64, s_state#65, s_county#66, g_state#67, g_county#68, lochierarchy#69]
 Functions: []
 Aggregate Attributes: []
-Results [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, CASE WHEN (g_county#27 = 0) THEN s_state#9 END AS _w0#59]
+Results [5]: [total_sum#64, s_state#65, s_county#66, lochierarchy#69, CASE WHEN (g_county#68 = 0) THEN s_state#65 END AS _w0#71]
 
 (60) Exchange
-Input [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, _w0#59]
-Arguments: hashpartitioning(lochierarchy#28, _w0#59, 5), true, [id=#60]
+Input [5]: [total_sum#64, s_state#65, s_county#66, lochierarchy#69, _w0#71]
+Arguments: hashpartitioning(lochierarchy#69, _w0#71, 5), true, [id=#72]
 
 (61) Sort [codegen id : 37]
-Input [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, _w0#59]
-Arguments: [lochierarchy#28 ASC NULLS FIRST, _w0#59 ASC NULLS FIRST, total_sum#25 DESC NULLS LAST], false, 0
+Input [5]: [total_sum#64, s_state#65, s_county#66, lochierarchy#69, _w0#71]
+Arguments: [lochierarchy#69 ASC NULLS FIRST, _w0#71 ASC NULLS FIRST, total_sum#64 DESC NULLS LAST], false, 0
 
 (62) Window
-Input [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, _w0#59]
-Arguments: [rank(total_sum#25) windowspecdefinition(lochierarchy#28, _w0#59, total_sum#25 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#61], [lochierarchy#28, _w0#59], [total_sum#25 DESC NULLS LAST]
+Input [5]: [total_sum#64, s_state#65, s_county#66, lochierarchy#69, _w0#71]
+Arguments: [rank(total_sum#64) windowspecdefinition(lochierarchy#69, _w0#71, total_sum#64 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#73], [lochierarchy#69, _w0#71], [total_sum#64 DESC NULLS LAST]
 
 (63) Project [codegen id : 38]
-Output [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, rank_within_parent#61]
-Input [6]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, _w0#59, rank_within_parent#61]
+Output [5]: [total_sum#64, s_state#65, s_county#66, lochierarchy#69, rank_within_parent#73]
+Input [6]: [total_sum#64, s_state#65, s_county#66, lochierarchy#69, _w0#71, rank_within_parent#73]
 
 (64) TakeOrderedAndProject
-Input [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, rank_within_parent#61]
-Arguments: 100, [lochierarchy#28 DESC NULLS LAST, CASE WHEN (lochierarchy#28 = 0) THEN s_state#9 END ASC NULLS FIRST, rank_within_parent#61 ASC NULLS FIRST], [total_sum#25, s_state#9, s_county#8, lochierarchy#28, rank_within_parent#61]
+Input [5]: [total_sum#64, s_state#65, s_county#66, lochierarchy#69, rank_within_parent#73]
+Arguments: 100, [lochierarchy#69 DESC NULLS LAST, CASE WHEN (lochierarchy#69 = 0) THEN s_state#65 END ASC NULLS FIRST, rank_within_parent#73 ASC NULLS FIRST], [total_sum#64, s_state#65, s_county#66, lochierarchy#69, rank_within_parent#73]
 

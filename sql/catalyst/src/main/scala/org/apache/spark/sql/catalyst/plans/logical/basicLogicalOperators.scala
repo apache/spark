@@ -215,7 +215,7 @@ case class Except(
 object Union {
 
   def apply(left: LogicalPlan, right: LogicalPlan, output: Seq[Attribute]): Union = {
-    Union(left :: right :: Nil, unionOutput = output)
+    Union(left :: right :: Nil, unionOutput = Some(output))
   }
 
   def apply(left: LogicalPlan, right: LogicalPlan): Union = {
@@ -235,7 +235,7 @@ case class Union(
     children: Seq[LogicalPlan],
     byName: Boolean = false,
     allowMissingCol: Boolean = false,
-    unionOutput: Seq[Attribute] = Seq.empty) extends LogicalPlan {
+    unionOutput: Option[Seq[Attribute]] = None) extends LogicalPlan {
   assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
 
   override def maxRows: Option[Long] = {
@@ -262,12 +262,13 @@ case class Union(
       AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
   }
 
-  override def producedAttributes: AttributeSet = AttributeSet(unionOutput)
+  override def producedAttributes: AttributeSet =
+    if (unionOutput.isDefined) AttributeSet(unionOutput.get) else AttributeSet.empty
 
   // updating nullability to make all the children consistent
   override def output: Seq[Attribute] = {
-    assert(unionOutput.nonEmpty, "Union should have at least a single column")
-    unionOutput
+    assert(unionOutput.isDefined, "Union should have at least a single column")
+    unionOutput.get
   }
 
   lazy val allChildrenCompatible: Boolean = {
@@ -284,7 +285,7 @@ case class Union(
 
   override lazy val resolved: Boolean = {
     children.length > 1 && !(byName || allowMissingCol) && allChildrenCompatible &&
-      unionOutput.nonEmpty
+      unionOutput.isDefined
   }
 
   /**
@@ -319,7 +320,7 @@ case class Union(
 
   override protected lazy val validConstraints: ExpressionSet = {
     children
-      .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
+      .map(child => rewriteConstraints(output, child.output, child.constraints))
       .reduce(merge(_, _))
   }
 }

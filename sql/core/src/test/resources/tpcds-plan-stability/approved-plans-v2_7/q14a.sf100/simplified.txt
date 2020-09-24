@@ -6,7 +6,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
           WholeStageCodegen (606)
             HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sum_sales,number_sales]
               InputAdapter
-                Union
+                Union [channel,i_brand_id,i_class_id,i_category_id,sum_sales,number_sales]
                   WholeStageCodegen (485)
                     HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sum_sales,number_sales]
                       InputAdapter
@@ -14,7 +14,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                           WholeStageCodegen (484)
                             HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sum_sales,number_sales]
                               InputAdapter
-                                Union
+                                Union [channel,i_brand_id,i_class_id,i_category_id,sum_sales,number_sales]
                                   WholeStageCodegen (363)
                                     HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sum_sales,number_sales]
                                       InputAdapter
@@ -22,7 +22,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                           WholeStageCodegen (362)
                                             HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sum_sales,number_sales]
                                               InputAdapter
-                                                Union
+                                                Union [channel,i_brand_id,i_class_id,i_category_id,sum_sales,number_sales]
                                                   WholeStageCodegen (241)
                                                     HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sum_sales,number_sales]
                                                       InputAdapter
@@ -30,7 +30,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                           WholeStageCodegen (240)
                                                             HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sum_sales,number_sales]
                                                               InputAdapter
-                                                                Union
+                                                                Union [channel,i_brand_id,i_class_id,i_category_id,sum_sales,number_sales]
                                                                   WholeStageCodegen (119)
                                                                     HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sum,isEmpty,sum] [sum(sales),sum(number_salesL),sum_sales,number_sales,sum,isEmpty,sum]
                                                                       InputAdapter
@@ -38,7 +38,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                                           WholeStageCodegen (118)
                                                                             HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sales,number_sales] [sum,isEmpty,sum,sum,isEmpty,sum]
                                                                               InputAdapter
-                                                                                Union
+                                                                                Union [channel,i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                                                   WholeStageCodegen (39)
                                                                                     Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                                                       Filter [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true))]
@@ -50,7 +50,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                                                                   WholeStageCodegen (7)
                                                                                                     HashAggregate [quantity,list_price] [sum,count,sum,count]
                                                                                                       InputAdapter
-                                                                                                        Union
+                                                                                                        Union [quantity,list_price]
                                                                                                           WholeStageCodegen (2)
                                                                                                             Project [ss_quantity,ss_list_price]
                                                                                                               BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
@@ -301,7 +301,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                                                     WholeStageCodegen (237)
                                                                                       HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sales,number_sales] [sum,isEmpty,sum,sum,isEmpty,sum]
                                                                                         InputAdapter
-                                                                                          Union
+                                                                                          Union [channel,i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                                                             WholeStageCodegen (158)
                                                                                               Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                                                                 Filter [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true))]
@@ -335,7 +335,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                                     WholeStageCodegen (359)
                                                                       HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sales,number_sales] [sum,isEmpty,sum,sum,isEmpty,sum]
                                                                         InputAdapter
-                                                                          Union
+                                                                          Union [channel,i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                                             WholeStageCodegen (280)
                                                                               Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                                                 Filter [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true))]
@@ -369,7 +369,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                     WholeStageCodegen (481)
                                                       HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sales,number_sales] [sum,isEmpty,sum,sum,isEmpty,sum]
                                                         InputAdapter
-                                                          Union
+                                                          Union [channel,i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                             WholeStageCodegen (402)
                                                               Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                                 Filter [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true))]
@@ -403,7 +403,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                     WholeStageCodegen (603)
                                       HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sales,number_sales] [sum,isEmpty,sum,sum,isEmpty,sum]
                                         InputAdapter
-                                          Union
+                                          Union [channel,i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                             WholeStageCodegen (524)
                                               Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                 Filter [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true))]

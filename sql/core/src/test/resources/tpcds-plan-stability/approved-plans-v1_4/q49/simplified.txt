@@ -6,7 +6,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
           WholeStageCodegen (22)
             HashAggregate [channel,item,return_ratio,return_rank,currency_rank]
               InputAdapter
-                Union
+                Union [channel,item,return_ratio,return_rank,currency_rank]
                   WholeStageCodegen (7)
                     Project [item,return_ratio,return_rank,currency_rank]
                       Filter [return_rank,currency_rank]

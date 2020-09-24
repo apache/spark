@@ -6,7 +6,7 @@ CollectLimit
           WholeStageCodegen (37)
             HashAggregate [sales] [sum,isEmpty,sum,isEmpty]
               InputAdapter
-                Union
+                Union [sales]
                   WholeStageCodegen (18)
                     Project [cs_quantity,cs_list_price]
                       BroadcastHashJoin [cs_sold_date_sk,d_date_sk]

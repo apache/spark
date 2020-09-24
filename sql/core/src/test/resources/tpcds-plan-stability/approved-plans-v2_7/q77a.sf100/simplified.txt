@@ -6,7 +6,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
           WholeStageCodegen (80)
             HashAggregate [channel,id,sales,returns,profit]
               InputAdapter
-                Union
+                Union [channel,id,sales,returns,profit]
                   WholeStageCodegen (53)
                     HashAggregate [channel,id,sales,returns,profit]
                       InputAdapter
@@ -14,7 +14,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                           WholeStageCodegen (52)
                             HashAggregate [channel,id,sales,returns,profit]
                               InputAdapter
-                                Union
+                                Union [channel,id,sales,returns,profit]
                                   WholeStageCodegen (25)
                                     HashAggregate [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                                       InputAdapter
@@ -22,7 +22,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                           WholeStageCodegen (24)
                                             HashAggregate [channel,id,sales,returns,profit] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                                               InputAdapter
-                                                Union
+                                                Union [channel,id,sales,returns,profit]
                                                   WholeStageCodegen (8)
                                                     Project [s_store_sk,sales,returns,profit,profit_loss]
                                                       BroadcastHashJoin [s_store_sk,s_store_sk]

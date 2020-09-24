@@ -14,7 +14,7 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
                           WholeStageCodegen (35)
                             HashAggregate [total_sum,s_state,s_county,g_state,g_county,lochierarchy]
                               InputAdapter
-                                Union
+                                Union [total_sum,s_state,s_county,g_state,g_county,lochierarchy]
                                   WholeStageCodegen (23)
                                     HashAggregate [total_sum,s_state,s_county,g_state,g_county,lochierarchy]
                                       InputAdapter
@@ -22,7 +22,7 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
                                           WholeStageCodegen (22)
                                             HashAggregate [total_sum,s_state,s_county,g_state,g_county,lochierarchy]
                                               InputAdapter
-                                                Union
+                                                Union [total_sum,s_state,s_county,g_state,g_county,lochierarchy]
                                                   WholeStageCodegen (10)
                                                     HashAggregate [s_state,s_county,sum] [sum(UnscaledValue(ss_net_profit)),total_sum,g_state,g_county,lochierarchy,sum]
                                                       InputAdapter

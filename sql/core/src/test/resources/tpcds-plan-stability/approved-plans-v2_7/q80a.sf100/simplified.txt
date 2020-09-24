@@ -6,7 +6,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
           WholeStageCodegen (101)
             HashAggregate [channel,id,sales,returns,profit]
               InputAdapter
-                Union
+                Union [channel,id,sales,returns,profit]
                   WholeStageCodegen (67)
                     HashAggregate [channel,id,sales,returns,profit]
                       InputAdapter
@@ -14,7 +14,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                           WholeStageCodegen (66)
                             HashAggregate [channel,id,sales,returns,profit]
                               InputAdapter
-                                Union
+                                Union [channel,id,sales,returns,profit]
                                   WholeStageCodegen (32)
                                     HashAggregate [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                                       InputAdapter
@@ -22,7 +22,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                           WholeStageCodegen (31)
                                             HashAggregate [channel,id,sales,returns,profit] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                                               InputAdapter
-                                                Union
+                                                Union [channel,id,sales,returns,profit]
                                                   WholeStageCodegen (10)
                                                     HashAggregate [s_store_id,sum,sum,isEmpty,sum,isEmpty] [sum(UnscaledValue(ss_ext_sales_price)),sum(coalesce(cast(sr_return_amt as decimal(12,2)), 0.00)),sum(CheckOverflow((promote_precision(cast(ss_net_profit as decimal(13,2))) - promote_precision(cast(coalesce(cast(sr_net_loss as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true)),channel,id,sales,returns,profit,sum,sum,isEmpty,sum,isEmpty]
                                                       InputAdapter

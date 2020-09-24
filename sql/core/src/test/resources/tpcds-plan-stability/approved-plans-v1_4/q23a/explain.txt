@@ -379,27 +379,28 @@ Output [1]: [CheckOverflow((promote_precision(cast(cast(ws_quantity#44 as decima
 Input [4]: [ws_sold_date_sk#41, ws_quantity#44, ws_list_price#45, d_date_sk#8]
 
 (68) Union
+Arguments: [sales#52]
 
 (69) HashAggregate [codegen id : 19]
-Input [1]: [sales#40]
+Input [1]: [sales#52]
 Keys: []
-Functions [1]: [partial_sum(sales#40)]
-Aggregate Attributes [2]: [sum#52, isEmpty#53]
-Results [2]: [sum#54, isEmpty#55]
+Functions [1]: [partial_sum(sales#52)]
+Aggregate Attributes [2]: [sum#53, isEmpty#54]
+Results [2]: [sum#55, isEmpty#56]
 
 (70) Exchange
-Input [2]: [sum#54, isEmpty#55]
-Arguments: SinglePartition, true, [id=#56]
+Input [2]: [sum#55, isEmpty#56]
+Arguments: SinglePartition, true, [id=#57]
 
 (71) HashAggregate [codegen id : 20]
-Input [2]: [sum#54, isEmpty#55]
+Input [2]: [sum#55, isEmpty#56]
 Keys: []
-Functions [1]: [sum(sales#40)]
-Aggregate Attributes [1]: [sum(sales#40)#57]
-Results [1]: [sum(sales#40)#57 AS sum(sales)#58]
+Functions [1]: [sum(sales#52)]
+Aggregate Attributes [1]: [sum(sales#52)#58]
+Results [1]: [sum(sales#52)#58 AS sum(sales)#59]
 
 (72) CollectLimit
-Input [1]: [sum(sales)#58]
+Input [1]: [sum(sales)#59]
 Arguments: 100
 
 ===== Subqueries =====
@@ -459,7 +460,7 @@ Condition : isnotnull(c_customer_sk#26)
 
 (79) BroadcastExchange
 Input [1]: [c_customer_sk#26]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#59]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#60]
 
 (80) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_customer_sk#23]
@@ -490,7 +491,7 @@ Input [2]: [d_date_sk#8, d_year#10]
 
 (86) BroadcastExchange
 Input [1]: [d_date_sk#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#60]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#61]
 
 (87) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_sold_date_sk#6]
@@ -505,37 +506,37 @@ Input [5]: [ss_sold_date_sk#6, ss_quantity#24, ss_sales_price#25, c_customer_sk#
 Input [3]: [ss_quantity#24, ss_sales_price#25, c_customer_sk#26]
 Keys [1]: [c_customer_sk#26]
 Functions [1]: [partial_sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#24 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#25 as decimal(12,2)))), DecimalType(18,2), true))]
-Aggregate Attributes [2]: [sum#61, isEmpty#62]
-Results [3]: [c_customer_sk#26, sum#63, isEmpty#64]
+Aggregate Attributes [2]: [sum#62, isEmpty#63]
+Results [3]: [c_customer_sk#26, sum#64, isEmpty#65]
 
 (90) Exchange
-Input [3]: [c_customer_sk#26, sum#63, isEmpty#64]
-Arguments: hashpartitioning(c_customer_sk#26, 5), true, [id=#65]
+Input [3]: [c_customer_sk#26, sum#64, isEmpty#65]
+Arguments: hashpartitioning(c_customer_sk#26, 5), true, [id=#66]
 
 (91) HashAggregate [codegen id : 4]
-Input [3]: [c_customer_sk#26, sum#63, isEmpty#64]
+Input [3]: [c_customer_sk#26, sum#64, isEmpty#65]
 Keys [1]: [c_customer_sk#26]
 Functions [1]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#24 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#25 as decimal(12,2)))), DecimalType(18,2), true))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#24 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#25 as decimal(12,2)))), DecimalType(18,2), true))#66]
-Results [1]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#24 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#25 as decimal(12,2)))), DecimalType(18,2), true))#66 AS csales#67]
+Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#24 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#25 as decimal(12,2)))), DecimalType(18,2), true))#67]
+Results [1]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#24 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#25 as decimal(12,2)))), DecimalType(18,2), true))#67 AS csales#68]
 
 (92) HashAggregate [codegen id : 4]
-Input [1]: [csales#67]
+Input [1]: [csales#68]
 Keys: []
-Functions [1]: [partial_max(csales#67)]
-Aggregate Attributes [1]: [max#68]
-Results [1]: [max#69]
+Functions [1]: [partial_max(csales#68)]
+Aggregate Attributes [1]: [max#69]
+Results [1]: [max#70]
 
 (93) Exchange
-Input [1]: [max#69]
-Arguments: SinglePartition, true, [id=#70]
+Input [1]: [max#70]
+Arguments: SinglePartition, true, [id=#71]
 
 (94) HashAggregate [codegen id : 5]
-Input [1]: [max#69]
+Input [1]: [max#70]
 Keys: []
-Functions [1]: [max(csales#67)]
-Aggregate Attributes [1]: [max(csales#67)#71]
-Results [1]: [max(csales#67)#71 AS tpcds_cmax#72]
+Functions [1]: [max(csales#68)]
+Aggregate Attributes [1]: [max(csales#68)#72]
+Results [1]: [max(csales#68)#72 AS tpcds_cmax#73]
 
 Subquery:2 Hosting operator id = 60 Hosting Expression = ReusedSubquery Subquery scalar-subquery#35, [id=#36]
 

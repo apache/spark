@@ -360,13 +360,14 @@ object TypeCoercion {
           } else {
             val attrMapping = s.children.head.output.zip(newChildren.head.output)
             val newOutput = ResolveUnion.makeUnionOutput(newChildren)
-            s.copy(children = newChildren, unionOutput = newOutput) -> attrMapping
+            s.copy(children = newChildren, unionOutput = Some(newOutput)) -> attrMapping
           }
       }
     }
 
     /** Build new children with the widest types for each attribute among all the children */
-    private def buildNewChildrenWithWiderTypes(children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
+    private[analysis] def buildNewChildrenWithWiderTypes(children: Seq[LogicalPlan])
+      : Seq[LogicalPlan] = {
       require(children.forall(_.output.length == children.head.output.length))
 
       // Get a sequence of data types, each of which is the widest type of this specific attribute
@@ -1120,6 +1121,8 @@ object TypeCoercion {
 }
 
 trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
+  import TypeCoercion.WidenSetOperationTypes
+
   /**
    * Applies any changes to [[AttributeReference]] data types that are made by the transform method
    * to instances higher in the query tree.
@@ -1141,6 +1144,24 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
 
     // Don't propagate types from unresolved children.
     case q: LogicalPlan if !q.childrenResolved => q
+
+    case u: Union =>
+      if (u.unionOutput.isDefined) {
+        // If this type coercion rule changes the input types of `Union`, we need to
+        // update data types in `unionOutput` accordingly.
+        val newChildren = WidenSetOperationTypes.buildNewChildrenWithWiderTypes(u.children)
+        val newOutputTypes = newChildren.head.output.map(_.dataType)
+        if (!u.output.zip(newOutputTypes).forall { case (a, dt) => a.dataType.sameType(dt)}) {
+          val newOutput = u.output.map(_.asInstanceOf[AttributeReference]).zip(newOutputTypes).map {
+            case (a, dt) => a.copy(dataType = dt)(exprId = a.exprId, qualifier = a.qualifier)
+          }
+          u.copy(children = newChildren, unionOutput = Some(newOutput))
+        } else {
+          u
+        }
+      } else {
+        u
+      }
 
     case q: LogicalPlan =>
       val inputMap = q.inputSet.toSeq.map(a => (a.exprId, a)).toMap

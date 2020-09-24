@@ -453,26 +453,27 @@ Output [5]: [store AS channel#112, item#106, return_ratio#107, return_rank#110, 
 Input [5]: [item#106, return_ratio#107, currency_ratio#108, return_rank#110, currency_rank#111]
 
 (83) Union
+Arguments: [channel#113, item#114, return_ratio#115, return_rank#116, currency_rank#117]
 
 (84) HashAggregate [codegen id : 31]
-Input [5]: [channel#40, item#34, return_ratio#35, return_rank#38, currency_rank#39]
-Keys [5]: [channel#40, item#34, return_ratio#35, return_rank#38, currency_rank#39]
+Input [5]: [channel#113, item#114, return_ratio#115, return_rank#116, currency_rank#117]
+Keys [5]: [channel#113, item#114, return_ratio#115, return_rank#116, currency_rank#117]
 Functions: []
 Aggregate Attributes: []
-Results [5]: [channel#40, item#34, return_ratio#35, return_rank#38, currency_rank#39]
+Results [5]: [channel#113, item#114, return_ratio#115, return_rank#116, currency_rank#117]
 
 (85) Exchange
-Input [5]: [channel#40, item#34, return_ratio#35, return_rank#38, currency_rank#39]
-Arguments: hashpartitioning(channel#40, item#34, return_ratio#35, return_rank#38, currency_rank#39, 5), true, [id=#113]
+Input [5]: [channel#113, item#114, return_ratio#115, return_rank#116, currency_rank#117]
+Arguments: hashpartitioning(channel#113, item#114, return_ratio#115, return_rank#116, currency_rank#117, 5), true, [id=#118]
 
 (86) HashAggregate [codegen id : 32]
-Input [5]: [channel#40, item#34, return_ratio#35, return_rank#38, currency_rank#39]
-Keys [5]: [channel#40, item#34, return_ratio#35, return_rank#38, currency_rank#39]
+Input [5]: [channel#113, item#114, return_ratio#115, return_rank#116, currency_rank#117]
+Keys [5]: [channel#113, item#114, return_ratio#115, return_rank#116, currency_rank#117]
 Functions: []
 Aggregate Attributes: []
-Results [5]: [channel#40, item#34, return_ratio#35, return_rank#38, currency_rank#39]
+Results [5]: [channel#113, item#114, return_ratio#115, return_rank#116, currency_rank#117]
 
 (87) TakeOrderedAndProject
-Input [5]: [channel#40, item#34, return_ratio#35, return_rank#38, currency_rank#39]
-Arguments: 100, [channel#40 ASC NULLS FIRST, return_rank#38 ASC NULLS FIRST, currency_rank#39 ASC NULLS FIRST, item#34 ASC NULLS FIRST], [channel#40, item#34, return_ratio#35, return_rank#38, currency_rank#39]
+Input [5]: [channel#113, item#114, return_ratio#115, return_rank#116, currency_rank#117]
+Arguments: 100, [channel#113 ASC NULLS FIRST, return_rank#116 ASC NULLS FIRST, currency_rank#117 ASC NULLS FIRST, item#114 ASC NULLS FIRST], [channel#113, item#114, return_ratio#115, return_rank#116, currency_rank#117]
 

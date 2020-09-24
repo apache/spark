@@ -692,7 +692,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
         execution.GlobalLimitExec(limit, planLater(child)) :: Nil
       case union: logical.Union =>
-        execution.UnionExec(union.children.map(planLater), union.unionOutput) :: Nil
+        execution.UnionExec(union.children.map(planLater), union.unionOutput.get) :: Nil
       case g @ logical.Generate(generator, _, outer, _, _, child) =>
         execution.GenerateExec(
           generator, g.requiredChildOutput, outer,

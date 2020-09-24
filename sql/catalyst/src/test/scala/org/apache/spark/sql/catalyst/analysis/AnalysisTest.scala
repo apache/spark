@@ -36,8 +36,14 @@ trait AnalysisTest extends PlanTest {
 
   protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = Nil
 
-  private def makeAnalyzer(caseSensitive: Boolean): Analyzer = {
-    val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
+  private def makeAnalyzer(caseSensitive: Boolean, maxIterations: Option[Int] = None): Analyzer = {
+    val conf = {
+      val sqlConf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
+      if (maxIterations.isDefined) {
+        sqlConf.setConf(SQLConf.ANALYZER_MAX_ITERATIONS, maxIterations.get)
+      }
+      sqlConf
+    }
     val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf)
     catalog.createDatabase(
       CatalogDatabase("default", "", new URI("loc"), Map.empty),
@@ -52,15 +58,20 @@ trait AnalysisTest extends PlanTest {
     }
   }
 
-  protected def getAnalyzer(caseSensitive: Boolean) = {
-    if (caseSensitive) caseSensitiveAnalyzer else caseInsensitiveAnalyzer
+  protected def getAnalyzer(caseSensitive: Boolean, maxIterations: Option[Int] = None) = {
+    if (maxIterations.isEmpty) {
+      if (caseSensitive) caseSensitiveAnalyzer else caseInsensitiveAnalyzer
+    } else {
+      makeAnalyzer(caseSensitive, maxIterations)
+    }
   }
 
   protected def checkAnalysis(
       inputPlan: LogicalPlan,
       expectedPlan: LogicalPlan,
-      caseSensitive: Boolean = true): Unit = {
-    val analyzer = getAnalyzer(caseSensitive)
+      caseSensitive: Boolean = true,
+      maxIterations: Option[Int] = None): Unit = {
+    val analyzer = getAnalyzer(caseSensitive, maxIterations)
     val actualPlan = analyzer.executeAndCheck(inputPlan, new QueryPlanningTracker)
     comparePlans(actualPlan, expectedPlan)
   }
@@ -75,8 +86,9 @@ trait AnalysisTest extends PlanTest {
 
   protected def assertAnalysisSuccess(
       inputPlan: LogicalPlan,
-      caseSensitive: Boolean = true): Unit = {
-    val analyzer = getAnalyzer(caseSensitive)
+      caseSensitive: Boolean = true,
+      maxIterations: Option[Int] = None): Unit = {
+    val analyzer = getAnalyzer(caseSensitive, maxIterations)
     val analysisAttempt = analyzer.execute(inputPlan)
     try analyzer.checkAnalysis(analysisAttempt) catch {
       case a: AnalysisException =>
@@ -94,8 +106,9 @@ trait AnalysisTest extends PlanTest {
   protected def assertAnalysisError(
       inputPlan: LogicalPlan,
       expectedErrors: Seq[String],
-      caseSensitive: Boolean = true): Unit = {
-    val analyzer = getAnalyzer(caseSensitive)
+      caseSensitive: Boolean = true,
+      maxIterations: Option[Int] = None): Unit = {
+    val analyzer = getAnalyzer(caseSensitive, maxIterations)
     val e = intercept[AnalysisException] {
       analyzer.checkAnalysis(analyzer.execute(inputPlan))
     }

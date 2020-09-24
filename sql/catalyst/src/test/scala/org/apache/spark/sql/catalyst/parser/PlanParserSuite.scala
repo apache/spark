@@ -243,8 +243,9 @@ class PlanParserSuite extends AnalysisTest {
       "mismatched input 'from' expecting")
     assertEqual(
       "from a insert into tbl1 select * insert into tbl2 select * where s < 10",
-      table("a").select(star()).insertInto("tbl1").union(
-        table("a").where('s < 10).select(star()).insertInto("tbl2")))
+      Union(
+        table("a").select(star()).insertInto("tbl1"),
+        table("a").where('s < 10).select(star()).insertInto("tbl2"), Nil))
     assertEqual(
       "select * from (from a select * select *)",
       table("a").select(star())
@@ -310,7 +311,9 @@ class PlanParserSuite extends AnalysisTest {
     // Multi insert
     val plan2 = table("t").where('x > 5).select(star())
     assertEqual("from t insert into s select * limit 1 insert into u select * where x > 5",
-      plan.limit(1).insertInto("s").union(plan2.insertInto("u")))
+      Union(
+        plan.limit(1).insertInto("s"),
+        plan2.insertInto("u"), Nil))
   }
 
   test("aggregation") {
@@ -413,7 +416,7 @@ class PlanParserSuite extends AnalysisTest {
         .generate(jsonTuple, alias = Some("jtup"), outputNames = Seq("q", "z"))
         .select(star())
         .insertInto("t2"),
-        from.where('s < 10).select(star()).insertInto("t3")))
+        from.where('s < 10).select(star()).insertInto("t3"), Nil))
 
     // Unresolved generator.
     val expected = table("t")

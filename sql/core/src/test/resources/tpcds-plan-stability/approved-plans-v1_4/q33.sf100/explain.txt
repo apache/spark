@@ -353,26 +353,27 @@ Aggregate Attributes [1]: [sum(UnscaledValue(ws_ext_sales_price#35))#39]
 Results [2]: [i_manufact_id#10, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#35))#39,17,2) AS total_sales#40]
 
 (63) Union
+Arguments: [i_manufact_id#41, total_sales#42]
 
 (64) HashAggregate [codegen id : 19]
-Input [2]: [i_manufact_id#10, total_sales#22]
-Keys [1]: [i_manufact_id#10]
-Functions [1]: [partial_sum(total_sales#22)]
-Aggregate Attributes [2]: [sum#41, isEmpty#42]
-Results [3]: [i_manufact_id#10, sum#43, isEmpty#44]
+Input [2]: [i_manufact_id#41, total_sales#42]
+Keys [1]: [i_manufact_id#41]
+Functions [1]: [partial_sum(total_sales#42)]
+Aggregate Attributes [2]: [sum#43, isEmpty#44]
+Results [3]: [i_manufact_id#41, sum#45, isEmpty#46]
 
 (65) Exchange
-Input [3]: [i_manufact_id#10, sum#43, isEmpty#44]
-Arguments: hashpartitioning(i_manufact_id#10, 5), true, [id=#45]
+Input [3]: [i_manufact_id#41, sum#45, isEmpty#46]
+Arguments: hashpartitioning(i_manufact_id#41, 5), true, [id=#47]
 
 (66) HashAggregate [codegen id : 20]
-Input [3]: [i_manufact_id#10, sum#43, isEmpty#44]
-Keys [1]: [i_manufact_id#10]
-Functions [1]: [sum(total_sales#22)]
-Aggregate Attributes [1]: [sum(total_sales#22)#46]
-Results [2]: [i_manufact_id#10, sum(total_sales#22)#46 AS total_sales#47]
+Input [3]: [i_manufact_id#41, sum#45, isEmpty#46]
+Keys [1]: [i_manufact_id#41]
+Functions [1]: [sum(total_sales#42)]
+Aggregate Attributes [1]: [sum(total_sales#42)#48]
+Results [2]: [i_manufact_id#41, sum(total_sales#42)#48 AS total_sales#49]
 
 (67) TakeOrderedAndProject
-Input [2]: [i_manufact_id#10, total_sales#47]
-Arguments: 100, [total_sales#47 ASC NULLS FIRST], [i_manufact_id#10, total_sales#47]
+Input [2]: [i_manufact_id#41, total_sales#49]
+Arguments: 100, [total_sales#49 ASC NULLS FIRST], [i_manufact_id#41, total_sales#49]
 

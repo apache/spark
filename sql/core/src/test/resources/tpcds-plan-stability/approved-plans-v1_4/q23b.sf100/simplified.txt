@@ -1,5 +1,5 @@
 TakeOrderedAndProject [c_last_name,c_first_name,sales]
-  Union
+  Union [c_last_name,c_first_name,sales]
     WholeStageCodegen (28)
       HashAggregate [c_last_name,c_first_name,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2), true)),sales,sum,isEmpty]
         InputAdapter

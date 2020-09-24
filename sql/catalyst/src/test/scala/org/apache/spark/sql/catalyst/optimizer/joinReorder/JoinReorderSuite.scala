@@ -259,9 +259,11 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
         (nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
         .select(nameToAttr("t1.v-1-10"))
 
-    val originalPlan = bottomJoins
-      .union(t4.select(nameToAttr("t4.v-1-10")))
-      .join(t5, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t5.v-1-5")))
+    val originalPlan = {
+      val p = bottomJoins.union(t4.select(nameToAttr("t4.v-1-10"))).analyze
+      val leftKey = p.output.head // t1.v-1-10
+      p.join(t5, Inner, Some(leftKey === nameToAttr("t5.v-1-5")))
+    }
 
     // Should be able to reorder the bottom part.
     // Best order:
@@ -280,9 +282,11 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
         .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
         .select(nameToAttr("t1.v-1-10"))
 
-    val bestPlan = bestBottomPlan
-      .union(t4.select(nameToAttr("t4.v-1-10")))
-      .join(t5, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t5.v-1-5")))
+    val bestPlan = {
+      val p = bestBottomPlan.union(t4.select(nameToAttr("t4.v-1-10"))).analyze
+      val leftKey = p.output.head // t1.v-1-10
+      p.join(t5, Inner, Some(leftKey === nameToAttr("t5.v-1-5")))
+    }
 
     assertEqualJoinPlans(Optimize, originalPlan, bestPlan)
   }

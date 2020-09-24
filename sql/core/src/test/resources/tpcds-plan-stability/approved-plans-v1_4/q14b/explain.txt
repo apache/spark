@@ -689,24 +689,25 @@ Output [2]: [ws_quantity#75 AS quantity#77, ws_list_price#76 AS list_price#78]
 Input [4]: [ws_sold_date_sk#20, ws_quantity#75, ws_list_price#76, d_date_sk#10]
 
 (123) Union
+Arguments: [quantity#79, list_price#80]
 
 (124) HashAggregate [codegen id : 7]
-Input [2]: [quantity#69, list_price#70]
+Input [2]: [quantity#79, list_price#80]
 Keys: []
-Functions [1]: [partial_avg(CheckOverflow((promote_precision(cast(cast(quantity#69 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price#70 as decimal(12,2)))), DecimalType(18,2), true))]
-Aggregate Attributes [2]: [sum#79, count#80]
-Results [2]: [sum#81, count#82]
+Functions [1]: [partial_avg(CheckOverflow((promote_precision(cast(cast(quantity#79 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price#80 as decimal(12,2)))), DecimalType(18,2), true))]
+Aggregate Attributes [2]: [sum#81, count#82]
+Results [2]: [sum#83, count#84]
 
 (125) Exchange
-Input [2]: [sum#81, count#82]
-Arguments: SinglePartition, true, [id=#83]
+Input [2]: [sum#83, count#84]
+Arguments: SinglePartition, true, [id=#85]
 
 (126) HashAggregate [codegen id : 8]
-Input [2]: [sum#81, count#82]
+Input [2]: [sum#83, count#84]
 Keys: []
-Functions [1]: [avg(CheckOverflow((promote_precision(cast(cast(quantity#69 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price#70 as decimal(12,2)))), DecimalType(18,2), true))]
-Aggregate Attributes [1]: [avg(CheckOverflow((promote_precision(cast(cast(quantity#69 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price#70 as decimal(12,2)))), DecimalType(18,2), true))#84]
-Results [1]: [avg(CheckOverflow((promote_precision(cast(cast(quantity#69 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price#70 as decimal(12,2)))), DecimalType(18,2), true))#84 AS average_sales#85]
+Functions [1]: [avg(CheckOverflow((promote_precision(cast(cast(quantity#79 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price#80 as decimal(12,2)))), DecimalType(18,2), true))]
+Aggregate Attributes [1]: [avg(CheckOverflow((promote_precision(cast(cast(quantity#79 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price#80 as decimal(12,2)))), DecimalType(18,2), true))#86]
+Results [1]: [avg(CheckOverflow((promote_precision(cast(cast(quantity#79 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price#80 as decimal(12,2)))), DecimalType(18,2), true))#86 AS average_sales#87]
 
 Subquery:2 Hosting operator id = 68 Hosting Expression = Subquery scalar-subquery#29, [id=#30]
 * Project (130)
@@ -716,22 +717,22 @@ Subquery:2 Hosting operator id = 68 Hosting Expression = Subquery scalar-subquer
 
 
 (127) Scan parquet default.date_dim
-Output [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
+Output [4]: [d_week_seq#28, d_year#11, d_moy#88, d_dom#89]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), IsNotNull(d_dom), EqualTo(d_year,2000), EqualTo(d_moy,12), EqualTo(d_dom,11)]
 ReadSchema: struct<d_week_seq:int,d_year:int,d_moy:int,d_dom:int>
 
 (128) ColumnarToRow [codegen id : 1]
-Input [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
+Input [4]: [d_week_seq#28, d_year#11, d_moy#88, d_dom#89]
 
 (129) Filter [codegen id : 1]
-Input [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
-Condition : (((((isnotnull(d_year#11) AND isnotnull(d_moy#86)) AND isnotnull(d_dom#87)) AND (d_year#11 = 2000)) AND (d_moy#86 = 12)) AND (d_dom#87 = 11))
+Input [4]: [d_week_seq#28, d_year#11, d_moy#88, d_dom#89]
+Condition : (((((isnotnull(d_year#11) AND isnotnull(d_moy#88)) AND isnotnull(d_dom#89)) AND (d_year#11 = 2000)) AND (d_moy#88 = 12)) AND (d_dom#89 = 11))
 
 (130) Project [codegen id : 1]
 Output [1]: [d_week_seq#28]
-Input [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
+Input [4]: [d_week_seq#28, d_year#11, d_moy#88, d_dom#89]
 
 Subquery:3 Hosting operator id = 96 Hosting Expression = ReusedSubquery Subquery scalar-subquery#44, [id=#45]
 
@@ -743,21 +744,21 @@ Subquery:4 Hosting operator id = 88 Hosting Expression = Subquery scalar-subquer
 
 
 (131) Scan parquet default.date_dim
-Output [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
+Output [4]: [d_week_seq#28, d_year#11, d_moy#88, d_dom#89]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), IsNotNull(d_dom), EqualTo(d_year,1999), EqualTo(d_moy,12), EqualTo(d_dom,11)]
 ReadSchema: struct<d_week_seq:int,d_year:int,d_moy:int,d_dom:int>
 
 (132) ColumnarToRow [codegen id : 1]
-Input [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
+Input [4]: [d_week_seq#28, d_year#11, d_moy#88, d_dom#89]
 
 (133) Filter [codegen id : 1]
-Input [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
-Condition : (((((isnotnull(d_year#11) AND isnotnull(d_moy#86)) AND isnotnull(d_dom#87)) AND (d_year#11 = 1999)) AND (d_moy#86 = 12)) AND (d_dom#87 = 11))
+Input [4]: [d_week_seq#28, d_year#11, d_moy#88, d_dom#89]
+Condition : (((((isnotnull(d_year#11) AND isnotnull(d_moy#88)) AND isnotnull(d_dom#89)) AND (d_year#11 = 1999)) AND (d_moy#88 = 12)) AND (d_dom#89 = 11))
 
 (134) Project [codegen id : 1]
 Output [1]: [d_week_seq#28]
-Input [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
+Input [4]: [d_week_seq#28, d_year#11, d_moy#88, d_dom#89]
 
 

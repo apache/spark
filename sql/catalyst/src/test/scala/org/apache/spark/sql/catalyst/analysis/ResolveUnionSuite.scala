@@ -17,7 +17,6 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -54,7 +53,7 @@ class ResolveUnionSuite extends AnalysisTest {
     val projected1 =
       Project(Seq(table2.output(3), table2.output(0), table2.output(1), table2.output(2)), table2)
     val expectedOutput = Seq('i.int, 'u.decimal, 'b.byte, 'd.double)
-    val expected1 = Union(table1 :: projected1 :: Nil, unionOutput = expectedOutput)
+    val expected1 = Union(table1 :: projected1 :: Nil, unionOutput = Some(expectedOutput))
     comparePlans(analyzed1, expected1)
 
     // Allow missing column
@@ -63,7 +62,7 @@ class ResolveUnionSuite extends AnalysisTest {
     val nullAttr1 = Alias(Literal(null, ByteType), "b")()
     val projected2 =
       Project(Seq(table2.output(3), table2.output(0), nullAttr1, table2.output(2)), table3)
-    val expected2 = Union(table1 :: projected2 :: Nil, unionOutput = expectedOutput)
+    val expected2 = Union(table1 :: projected2 :: Nil, unionOutput = Some(expectedOutput))
     comparePlans(analyzed2, expected2)
 
     // Allow missing column + Allow missing column
@@ -72,7 +71,8 @@ class ResolveUnionSuite extends AnalysisTest {
     val nullAttr2 = Alias(Literal(null, DoubleType), "d")()
     val projected3 =
       Project(Seq(table2.output(3), table2.output(0), nullAttr1, nullAttr2), table4)
-    val expected3 = Union(table1 :: projected2 :: projected3 :: Nil, unionOutput = expectedOutput)
+    val expected3 = Union(table1 :: projected2 :: projected3 :: Nil,
+      unionOutput = Some(expectedOutput))
     comparePlans(analyzed3, expected3)
   }
 }

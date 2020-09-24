@@ -429,24 +429,25 @@ Aggregate Attributes [1]: [sum(sumsales#32)#136]
 Results [9]: [null AS i_category#137, null AS i_class#138, null AS i_brand#139, null AS i_product_name#140, null AS d_year#141, null AS d_qoy#142, null AS d_moy#143, null AS s_store_id#144, sum(sumsales#32)#136 AS sumsales#145]
 
 (69) Union
+Arguments: [i_category#146, i_class#147, i_brand#148, i_product_name#149, d_year#150, d_qoy#151, d_moy#152, s_store_id#153, sumsales#154]
 
 (70) Exchange
-Input [9]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, d_moy#9, s_store_id#13, sumsales#28]
-Arguments: hashpartitioning(i_category#19, 5), true, [id=#146]
+Input [9]: [i_category#146, i_class#147, i_brand#148, i_product_name#149, d_year#150, d_qoy#151, d_moy#152, s_store_id#153, sumsales#154]
+Arguments: hashpartitioning(i_category#146, 5), true, [id=#155]
 
 (71) Sort [codegen id : 81]
-Input [9]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, d_moy#9, s_store_id#13, sumsales#28]
-Arguments: [i_category#19 ASC NULLS FIRST, sumsales#28 DESC NULLS LAST], false, 0
+Input [9]: [i_category#146, i_class#147, i_brand#148, i_product_name#149, d_year#150, d_qoy#151, d_moy#152, s_store_id#153, sumsales#154]
+Arguments: [i_category#146 ASC NULLS FIRST, sumsales#154 DESC NULLS LAST], false, 0
 
 (72) Window
-Input [9]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, d_moy#9, s_store_id#13, sumsales#28]
-Arguments: [rank(sumsales#28) windowspecdefinition(i_category#19, sumsales#28 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rk#147], [i_category#19], [sumsales#28 DESC NULLS LAST]
+Input [9]: [i_category#146, i_class#147, i_brand#148, i_product_name#149, d_year#150, d_qoy#151, d_moy#152, s_store_id#153, sumsales#154]
+Arguments: [rank(sumsales#154) windowspecdefinition(i_category#146, sumsales#154 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rk#156], [i_category#146], [sumsales#154 DESC NULLS LAST]
 
 (73) Filter [codegen id : 82]
-Input [10]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, d_moy#9, s_store_id#13, sumsales#28, rk#147]
-Condition : (isnotnull(rk#147) AND (rk#147 <= 100))
+Input [10]: [i_category#146, i_class#147, i_brand#148, i_product_name#149, d_year#150, d_qoy#151, d_moy#152, s_store_id#153, sumsales#154, rk#156]
+Condition : (isnotnull(rk#156) AND (rk#156 <= 100))
 
 (74) TakeOrderedAndProject
-Input [10]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, d_moy#9, s_store_id#13, sumsales#28, rk#147]
-Arguments: 100, [i_category#19 ASC NULLS FIRST, i_class#18 ASC NULLS FIRST, i_brand#17 ASC NULLS FIRST, i_product_name#20 ASC NULLS FIRST, d_year#8 ASC NULLS FIRST, d_qoy#10 ASC NULLS FIRST, d_moy#9 ASC NULLS FIRST, s_store_id#13 ASC NULLS FIRST, sumsales#28 ASC NULLS FIRST, rk#147 ASC NULLS FIRST], [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, d_moy#9, s_store_id#13, sumsales#28, rk#147]
+Input [10]: [i_category#146, i_class#147, i_brand#148, i_product_name#149, d_year#150, d_qoy#151, d_moy#152, s_store_id#153, sumsales#154, rk#156]
+Arguments: 100, [i_category#146 ASC NULLS FIRST, i_class#147 ASC NULLS FIRST, i_brand#148 ASC NULLS FIRST, i_product_name#149 ASC NULLS FIRST, d_year#150 ASC NULLS FIRST, d_qoy#151 ASC NULLS FIRST, d_moy#152 ASC NULLS FIRST, s_store_id#153 ASC NULLS FIRST, sumsales#154 ASC NULLS FIRST, rk#156 ASC NULLS FIRST], [i_category#146, i_class#147, i_brand#148, i_product_name#149, d_year#150, d_qoy#151, d_moy#152, s_store_id#153, sumsales#154, rk#156]
 

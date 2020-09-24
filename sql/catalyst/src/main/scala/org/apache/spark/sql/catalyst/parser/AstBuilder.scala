@@ -229,7 +229,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     if (inserts.length == 1) {
       inserts.head
     } else {
-      Union(inserts.toSeq)
+      Union(inserts.toSeq, unionOutput = Some(Nil))
     }
   }
 

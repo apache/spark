@@ -6,7 +6,7 @@ TakeOrderedAndProject [total_sales,i_manufact_id]
           WholeStageCodegen (19)
             HashAggregate [i_manufact_id,total_sales] [sum,isEmpty,sum,isEmpty]
               InputAdapter
-                Union
+                Union [i_manufact_id,total_sales]
                   WholeStageCodegen (6)
                     HashAggregate [i_manufact_id,sum] [sum(UnscaledValue(ss_ext_sales_price)),total_sales,sum]
                       InputAdapter

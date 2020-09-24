@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, ExprId, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -31,12 +33,15 @@ import org.apache.spark.sql.util.SchemaUtils
  */
 object ResolveUnion extends Rule[LogicalPlan] {
 
-  private[catalyst] def makeUnionOutput(children: Seq[LogicalPlan]): Seq[Attribute] = {
+  def makeUnionOutput(children: Seq[LogicalPlan]): Seq[Attribute] = {
+    val seenExprIdSet = mutable.Map[ExprId, ExprId]()
     children.map(_.output).transpose.map { attrs =>
       val firstAttr = attrs.head
       val nullable = attrs.exists(_.nullable)
       val newDt = attrs.map(_.dataType).reduce(StructType.merge)
-      val newExprId = NamedExpression.newExprId
+      // If child's output has attributes having the same `exprId`, we needs to
+      // assign a unique `exprId` for them.
+      val newExprId = seenExprIdSet.getOrElseUpdate(firstAttr.exprId, NamedExpression.newExprId)
       if (firstAttr.dataType == newDt) {
         firstAttr.withExprId(newExprId).withNullability(nullable)
       } else {
@@ -85,8 +90,13 @@ object ResolveUnion extends Rule[LogicalPlan] {
     } else {
       left
     }
-    val unionOutput = makeUnionOutput(Seq(leftChild, rightChild))
-    Union(leftChild, rightChild, unionOutput)
+    val newUnion = Union(leftChild, rightChild)
+    if (newUnion.allChildrenCompatible) {
+      val unionOutput = makeUnionOutput(Seq(leftChild, rightChild))
+      newUnion.copy(unionOutput = Some(unionOutput))
+    } else {
+      newUnion
+    }
   }
 
   // Check column name duplication
@@ -117,6 +127,6 @@ object ResolveUnion extends Rule[LogicalPlan] {
 
     case u @ Union(children, _, _, unionOutput)
         if u.allChildrenCompatible && unionOutput.isEmpty =>
-      u.copy(unionOutput = makeUnionOutput(children))
+      u.copy(unionOutput = Some(makeUnionOutput(children)))
   }
 }

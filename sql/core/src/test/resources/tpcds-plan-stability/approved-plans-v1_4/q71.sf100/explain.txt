@@ -163,70 +163,71 @@ Output [3]: [ss_ext_sales_price#27 AS ext_price#28, ss_item_sk#26 AS sold_item_s
 Input [5]: [ss_sold_date_sk#24, ss_sold_time_sk#25, ss_item_sk#26, ss_ext_sales_price#27, d_date_sk#10]
 
 (28) Union
+Arguments: [ext_price#31, sold_item_sk#32, time_sk#33]
 
 (29) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [i_item_sk#1]
-Right keys [1]: [sold_item_sk#15]
+Right keys [1]: [sold_item_sk#32]
 Join condition: None
 
 (30) Project [codegen id : 9]
-Output [4]: [i_brand_id#2, i_brand#3, ext_price#14, time_sk#16]
-Input [6]: [i_item_sk#1, i_brand_id#2, i_brand#3, ext_price#14, sold_item_sk#15, time_sk#16]
+Output [4]: [i_brand_id#2, i_brand#3, ext_price#31, time_sk#33]
+Input [6]: [i_item_sk#1, i_brand_id#2, i_brand#3, ext_price#31, sold_item_sk#32, time_sk#33]
 
 (31) Scan parquet default.time_dim
-Output [4]: [t_time_sk#31, t_hour#32, t_minute#33, t_meal_time#34]
+Output [4]: [t_time_sk#34, t_hour#35, t_minute#36, t_meal_time#37]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [Or(EqualTo(t_meal_time,breakfast),EqualTo(t_meal_time,dinner)), IsNotNull(t_time_sk)]
 ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int,t_meal_time:string>
 
 (32) ColumnarToRow [codegen id : 8]
-Input [4]: [t_time_sk#31, t_hour#32, t_minute#33, t_meal_time#34]
+Input [4]: [t_time_sk#34, t_hour#35, t_minute#36, t_meal_time#37]
 
 (33) Filter [codegen id : 8]
-Input [4]: [t_time_sk#31, t_hour#32, t_minute#33, t_meal_time#34]
-Condition : (((t_meal_time#34 = breakfast) OR (t_meal_time#34 = dinner)) AND isnotnull(t_time_sk#31))
+Input [4]: [t_time_sk#34, t_hour#35, t_minute#36, t_meal_time#37]
+Condition : (((t_meal_time#37 = breakfast) OR (t_meal_time#37 = dinner)) AND isnotnull(t_time_sk#34))
 
 (34) Project [codegen id : 8]
-Output [3]: [t_time_sk#31, t_hour#32, t_minute#33]
-Input [4]: [t_time_sk#31, t_hour#32, t_minute#33, t_meal_time#34]
+Output [3]: [t_time_sk#34, t_hour#35, t_minute#36]
+Input [4]: [t_time_sk#34, t_hour#35, t_minute#36, t_meal_time#37]
 
 (35) BroadcastExchange
-Input [3]: [t_time_sk#31, t_hour#32, t_minute#33]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#35]
+Input [3]: [t_time_sk#34, t_hour#35, t_minute#36]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#38]
 
 (36) BroadcastHashJoin [codegen id : 9]
-Left keys [1]: [time_sk#16]
-Right keys [1]: [t_time_sk#31]
+Left keys [1]: [time_sk#33]
+Right keys [1]: [t_time_sk#34]
 Join condition: None
 
 (37) Project [codegen id : 9]
-Output [5]: [i_brand_id#2, i_brand#3, ext_price#14, t_hour#32, t_minute#33]
-Input [7]: [i_brand_id#2, i_brand#3, ext_price#14, time_sk#16, t_time_sk#31, t_hour#32, t_minute#33]
+Output [5]: [i_brand_id#2, i_brand#3, ext_price#31, t_hour#35, t_minute#36]
+Input [7]: [i_brand_id#2, i_brand#3, ext_price#31, time_sk#33, t_time_sk#34, t_hour#35, t_minute#36]
 
 (38) HashAggregate [codegen id : 9]
-Input [5]: [i_brand_id#2, i_brand#3, ext_price#14, t_hour#32, t_minute#33]
-Keys [4]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33]
-Functions [1]: [partial_sum(UnscaledValue(ext_price#14))]
-Aggregate Attributes [1]: [sum#36]
-Results [5]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, sum#37]
+Input [5]: [i_brand_id#2, i_brand#3, ext_price#31, t_hour#35, t_minute#36]
+Keys [4]: [i_brand#3, i_brand_id#2, t_hour#35, t_minute#36]
+Functions [1]: [partial_sum(UnscaledValue(ext_price#31))]
+Aggregate Attributes [1]: [sum#39]
+Results [5]: [i_brand#3, i_brand_id#2, t_hour#35, t_minute#36, sum#40]
 
 (39) Exchange
-Input [5]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, sum#37]
-Arguments: hashpartitioning(i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, 5), true, [id=#38]
+Input [5]: [i_brand#3, i_brand_id#2, t_hour#35, t_minute#36, sum#40]
+Arguments: hashpartitioning(i_brand#3, i_brand_id#2, t_hour#35, t_minute#36, 5), true, [id=#41]
 
 (40) HashAggregate [codegen id : 10]
-Input [5]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33, sum#37]
-Keys [4]: [i_brand#3, i_brand_id#2, t_hour#32, t_minute#33]
-Functions [1]: [sum(UnscaledValue(ext_price#14))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ext_price#14))#39]
-Results [5]: [i_brand_id#2 AS brand_id#40, i_brand#3 AS brand#41, t_hour#32, t_minute#33, MakeDecimal(sum(UnscaledValue(ext_price#14))#39,17,2) AS ext_price#42]
+Input [5]: [i_brand#3, i_brand_id#2, t_hour#35, t_minute#36, sum#40]
+Keys [4]: [i_brand#3, i_brand_id#2, t_hour#35, t_minute#36]
+Functions [1]: [sum(UnscaledValue(ext_price#31))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ext_price#31))#42]
+Results [5]: [i_brand_id#2 AS brand_id#43, i_brand#3 AS brand#44, t_hour#35, t_minute#36, MakeDecimal(sum(UnscaledValue(ext_price#31))#42,17,2) AS ext_price#45]
 
 (41) Exchange
-Input [5]: [brand_id#40, brand#41, t_hour#32, t_minute#33, ext_price#42]
-Arguments: rangepartitioning(ext_price#42 DESC NULLS LAST, brand_id#40 ASC NULLS FIRST, 5), true, [id=#43]
+Input [5]: [brand_id#43, brand#44, t_hour#35, t_minute#36, ext_price#45]
+Arguments: rangepartitioning(ext_price#45 DESC NULLS LAST, brand_id#43 ASC NULLS FIRST, 5), true, [id=#46]
 
 (42) Sort [codegen id : 11]
-Input [5]: [brand_id#40, brand#41, t_hour#32, t_minute#33, ext_price#42]
-Arguments: [ext_price#42 DESC NULLS LAST, brand_id#40 ASC NULLS FIRST], true, 0
+Input [5]: [brand_id#43, brand#44, t_hour#35, t_minute#36, ext_price#45]
+Arguments: [ext_price#45 DESC NULLS LAST, brand_id#43 ASC NULLS FIRST], true, 0
 

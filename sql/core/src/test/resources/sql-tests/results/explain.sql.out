@@ -216,6 +216,7 @@ Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 0))
 
 (7) Union
+Arguments: [key#x, val#x]
 
 (8) HashAggregate [codegen id : 3]
 Input [2]: [key#x, val#x]

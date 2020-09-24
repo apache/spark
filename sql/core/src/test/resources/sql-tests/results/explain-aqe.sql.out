@@ -239,6 +239,7 @@ Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 0))
 
 (5) Union
+Arguments: [key#x, val#x]
 
 (6) HashAggregate
 Input [2]: [key#x, val#x]

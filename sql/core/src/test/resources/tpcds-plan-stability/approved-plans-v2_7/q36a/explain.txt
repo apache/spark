@@ -200,90 +200,92 @@ Aggregate Attributes [2]: [sum(ss_net_profit#31)#42, sum(ss_ext_sales_price#32)#
 Results [6]: [cast(CheckOverflow((promote_precision(sum(ss_net_profit#31)#42) / promote_precision(sum(ss_ext_sales_price#32)#43)), DecimalType(38,11), true) as decimal(38,20)) AS gross_margin#44, i_category#11, null AS i_class#45, 0 AS t_category#46, 1 AS t_class#47, 1 AS lochierarchy#48]
 
 (32) Union
+Arguments: [gross_margin#49, i_category#50, i_class#51, t_category#52, t_class#53, lochierarchy#54]
 
 (33) HashAggregate [codegen id : 12]
-Input [6]: [gross_margin#23, i_category#11, i_class#10, t_category#24, t_class#25, lochierarchy#26]
-Keys [6]: [gross_margin#23, i_category#11, i_class#10, t_category#24, t_class#25, lochierarchy#26]
+Input [6]: [gross_margin#49, i_category#50, i_class#51, t_category#52, t_class#53, lochierarchy#54]
+Keys [6]: [gross_margin#49, i_category#50, i_class#51, t_category#52, t_class#53, lochierarchy#54]
 Functions: []
 Aggregate Attributes: []
-Results [6]: [gross_margin#23, i_category#11, i_class#10, t_category#24, t_class#25, lochierarchy#26]
+Results [6]: [gross_margin#49, i_category#50, i_class#51, t_category#52, t_class#53, lochierarchy#54]
 
 (34) Exchange
-Input [6]: [gross_margin#23, i_category#11, i_class#10, t_category#24, t_class#25, lochierarchy#26]
-Arguments: hashpartitioning(gross_margin#23, i_category#11, i_class#10, t_category#24, t_class#25, lochierarchy#26, 5), true, [id=#49]
+Input [6]: [gross_margin#49, i_category#50, i_class#51, t_category#52, t_class#53, lochierarchy#54]
+Arguments: hashpartitioning(gross_margin#49, i_category#50, i_class#51, t_category#52, t_class#53, lochierarchy#54, 5), true, [id=#55]
 
 (35) HashAggregate [codegen id : 13]
-Input [6]: [gross_margin#23, i_category#11, i_class#10, t_category#24, t_class#25, lochierarchy#26]
-Keys [6]: [gross_margin#23, i_category#11, i_class#10, t_category#24, t_class#25, lochierarchy#26]
+Input [6]: [gross_margin#49, i_category#50, i_class#51, t_category#52, t_class#53, lochierarchy#54]
+Keys [6]: [gross_margin#49, i_category#50, i_class#51, t_category#52, t_class#53, lochierarchy#54]
 Functions: []
 Aggregate Attributes: []
-Results [6]: [gross_margin#23, i_category#11, i_class#10, t_category#24, t_class#25, lochierarchy#26]
+Results [6]: [gross_margin#49, i_category#50, i_class#51, t_category#52, t_class#53, lochierarchy#54]
 
 (36) ReusedExchange [Reuses operator id: 25]
-Output [4]: [i_category#11, i_class#10, sum#50, sum#51]
+Output [4]: [i_category#11, i_class#10, sum#56, sum#57]
 
 (37) HashAggregate [codegen id : 18]
-Input [4]: [i_category#11, i_class#10, sum#50, sum#51]
+Input [4]: [i_category#11, i_class#10, sum#56, sum#57]
 Keys [2]: [i_category#11, i_class#10]
 Functions [2]: [sum(UnscaledValue(ss_net_profit#5)), sum(UnscaledValue(ss_ext_sales_price#4))]
-Aggregate Attributes [2]: [sum(UnscaledValue(ss_net_profit#5))#52, sum(UnscaledValue(ss_ext_sales_price#4))#53]
-Results [2]: [MakeDecimal(sum(UnscaledValue(ss_net_profit#5))#52,17,2) AS ss_net_profit#31, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#4))#53,17,2) AS ss_ext_sales_price#32]
+Aggregate Attributes [2]: [sum(UnscaledValue(ss_net_profit#5))#58, sum(UnscaledValue(ss_ext_sales_price#4))#59]
+Results [2]: [MakeDecimal(sum(UnscaledValue(ss_net_profit#5))#58,17,2) AS ss_net_profit#31, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#4))#59,17,2) AS ss_ext_sales_price#32]
 
 (38) HashAggregate [codegen id : 18]
 Input [2]: [ss_net_profit#31, ss_ext_sales_price#32]
 Keys: []
 Functions [2]: [partial_sum(ss_net_profit#31), partial_sum(ss_ext_sales_price#32)]
-Aggregate Attributes [4]: [sum#54, isEmpty#55, sum#56, isEmpty#57]
-Results [4]: [sum#58, isEmpty#59, sum#60, isEmpty#61]
+Aggregate Attributes [4]: [sum#60, isEmpty#61, sum#62, isEmpty#63]
+Results [4]: [sum#64, isEmpty#65, sum#66, isEmpty#67]
 
 (39) Exchange
-Input [4]: [sum#58, isEmpty#59, sum#60, isEmpty#61]
-Arguments: SinglePartition, true, [id=#62]
+Input [4]: [sum#64, isEmpty#65, sum#66, isEmpty#67]
+Arguments: SinglePartition, true, [id=#68]
 
 (40) HashAggregate [codegen id : 19]
-Input [4]: [sum#58, isEmpty#59, sum#60, isEmpty#61]
+Input [4]: [sum#64, isEmpty#65, sum#66, isEmpty#67]
 Keys: []
 Functions [2]: [sum(ss_net_profit#31), sum(ss_ext_sales_price#32)]
-Aggregate Attributes [2]: [sum(ss_net_profit#31)#63, sum(ss_ext_sales_price#32)#64]
-Results [6]: [cast(CheckOverflow((promote_precision(sum(ss_net_profit#31)#63) / promote_precision(sum(ss_ext_sales_price#32)#64)), DecimalType(38,11), true) as decimal(38,20)) AS gross_margin#65, null AS i_category#66, null AS i_class#67, 1 AS t_category#68, 1 AS t_class#69, 2 AS lochierarchy#70]
+Aggregate Attributes [2]: [sum(ss_net_profit#31)#69, sum(ss_ext_sales_price#32)#70]
+Results [6]: [cast(CheckOverflow((promote_precision(sum(ss_net_profit#31)#69) / promote_precision(sum(ss_ext_sales_price#32)#70)), DecimalType(38,11), true) as decimal(38,20)) AS gross_margin#71, null AS i_category#72, null AS i_class#73, 1 AS t_category#74, 1 AS t_class#75, 2 AS lochierarchy#76]
 
 (41) Union
+Arguments: [gross_margin#77, i_category#78, i_class#79, t_category#80, t_class#81, lochierarchy#82]
 
 (42) HashAggregate [codegen id : 20]
-Input [6]: [gross_margin#23, i_category#11, i_class#10, t_category#24, t_class#25, lochierarchy#26]
-Keys [6]: [gross_margin#23, i_category#11, i_class#10, t_category#24, t_class#25, lochierarchy#26]
+Input [6]: [gross_margin#77, i_category#78, i_class#79, t_category#80, t_class#81, lochierarchy#82]
+Keys [6]: [gross_margin#77, i_category#78, i_class#79, t_category#80, t_class#81, lochierarchy#82]
 Functions: []
 Aggregate Attributes: []
-Results [6]: [gross_margin#23, i_category#11, i_class#10, t_category#24, t_class#25, lochierarchy#26]
+Results [6]: [gross_margin#77, i_category#78, i_class#79, t_category#80, t_class#81, lochierarchy#82]
 
 (43) Exchange
-Input [6]: [gross_margin#23, i_category#11, i_class#10, t_category#24, t_class#25, lochierarchy#26]
-Arguments: hashpartitioning(gross_margin#23, i_category#11, i_class#10, t_category#24, t_class#25, lochierarchy#26, 5), true, [id=#71]
+Input [6]: [gross_margin#77, i_category#78, i_class#79, t_category#80, t_class#81, lochierarchy#82]
+Arguments: hashpartitioning(gross_margin#77, i_category#78, i_class#79, t_category#80, t_class#81, lochierarchy#82, 5), true, [id=#83]
 
 (44) HashAggregate [codegen id : 21]
-Input [6]: [gross_margin#23, i_category#11, i_class#10, t_category#24, t_class#25, lochierarchy#26]
-Keys [6]: [gross_margin#23, i_category#11, i_class#10, t_category#24, t_class#25, lochierarchy#26]
+Input [6]: [gross_margin#77, i_category#78, i_class#79, t_category#80, t_class#81, lochierarchy#82]
+Keys [6]: [gross_margin#77, i_category#78, i_class#79, t_category#80, t_class#81, lochierarchy#82]
 Functions: []
 Aggregate Attributes: []
-Results [5]: [gross_margin#23, i_category#11, i_class#10, lochierarchy#26, CASE WHEN (t_class#25 = 0) THEN i_category#11 END AS _w0#72]
+Results [5]: [gross_margin#77, i_category#78, i_class#79, lochierarchy#82, CASE WHEN (t_class#81 = 0) THEN i_category#78 END AS _w0#84]
 
 (45) Exchange
-Input [5]: [gross_margin#23, i_category#11, i_class#10, lochierarchy#26, _w0#72]
-Arguments: hashpartitioning(lochierarchy#26, _w0#72, 5), true, [id=#73]
+Input [5]: [gross_margin#77, i_category#78, i_class#79, lochierarchy#82, _w0#84]
+Arguments: hashpartitioning(lochierarchy#82, _w0#84, 5), true, [id=#85]
 
 (46) Sort [codegen id : 22]
-Input [5]: [gross_margin#23, i_category#11, i_class#10, lochierarchy#26, _w0#72]
-Arguments: [lochierarchy#26 ASC NULLS FIRST, _w0#72 ASC NULLS FIRST, gross_margin#23 ASC NULLS FIRST], false, 0
+Input [5]: [gross_margin#77, i_category#78, i_class#79, lochierarchy#82, _w0#84]
+Arguments: [lochierarchy#82 ASC NULLS FIRST, _w0#84 ASC NULLS FIRST, gross_margin#77 ASC NULLS FIRST], false, 0
 
 (47) Window
-Input [5]: [gross_margin#23, i_category#11, i_class#10, lochierarchy#26, _w0#72]
-Arguments: [rank(gross_margin#23) windowspecdefinition(lochierarchy#26, _w0#72, gross_margin#23 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#74], [lochierarchy#26, _w0#72], [gross_margin#23 ASC NULLS FIRST]
+Input [5]: [gross_margin#77, i_category#78, i_class#79, lochierarchy#82, _w0#84]
+Arguments: [rank(gross_margin#77) windowspecdefinition(lochierarchy#82, _w0#84, gross_margin#77 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#86], [lochierarchy#82, _w0#84], [gross_margin#77 ASC NULLS FIRST]
 
 (48) Project [codegen id : 23]
-Output [5]: [gross_margin#23, i_category#11, i_class#10, lochierarchy#26, rank_within_parent#74]
-Input [6]: [gross_margin#23, i_category#11, i_class#10, lochierarchy#26, _w0#72, rank_within_parent#74]
+Output [5]: [gross_margin#77, i_category#78, i_class#79, lochierarchy#82, rank_within_parent#86]
+Input [6]: [gross_margin#77, i_category#78, i_class#79, lochierarchy#82, _w0#84, rank_within_parent#86]
 
 (49) TakeOrderedAndProject
-Input [5]: [gross_margin#23, i_category#11, i_class#10, lochierarchy#26, rank_within_parent#74]
-Arguments: 100, [lochierarchy#26 DESC NULLS LAST, CASE WHEN (lochierarchy#26 = 0) THEN i_category#11 END ASC NULLS FIRST, rank_within_parent#74 ASC NULLS FIRST], [gross_margin#23, i_category#11, i_class#10, lochierarchy#26, rank_within_parent#74]
+Input [5]: [gross_margin#77, i_category#78, i_class#79, lochierarchy#82, rank_within_parent#86]
+Arguments: 100, [lochierarchy#82 DESC NULLS LAST, CASE WHEN (lochierarchy#82 = 0) THEN i_category#78 END ASC NULLS FIRST, rank_within_parent#86 ASC NULLS FIRST], [gross_margin#77, i_category#78, i_class#79, lochierarchy#82, rank_within_parent#86]
 

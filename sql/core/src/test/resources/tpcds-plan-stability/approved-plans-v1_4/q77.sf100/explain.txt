@@ -491,30 +491,31 @@ Output [5]: [sales#80, coalesce(returns#94, 0.00) AS returns#97, CheckOverflow((
 Input [6]: [wp_web_page_sk#71, sales#80, profit#81, wp_web_page_sk#86, returns#94, profit_loss#95]
 
 (86) Union
+Arguments: [sales#101, returns#102, profit#103, channel#104, id#105]
 
 (87) Expand [codegen id : 24]
-Input [5]: [sales#17, returns#34, profit#35, channel#36, id#37]
-Arguments: [List(sales#17, returns#34, profit#35, channel#36, id#37, 0), List(sales#17, returns#34, profit#35, channel#36, null, 1), List(sales#17, returns#34, profit#35, null, null, 3)], [sales#17, returns#34, profit#35, channel#101, id#102, spark_grouping_id#103]
+Input [5]: [sales#101, returns#102, profit#103, channel#104, id#105]
+Arguments: [List(sales#101, returns#102, profit#103, channel#104, id#105, 0), List(sales#101, returns#102, profit#103, channel#104, null, 1), List(sales#101, returns#102, profit#103, null, null, 3)], [sales#101, returns#102, profit#103, channel#106, id#107, spark_grouping_id#108]
 
 (88) HashAggregate [codegen id : 24]
-Input [6]: [sales#17, returns#34, profit#35, channel#101, id#102, spark_grouping_id#103]
-Keys [3]: [channel#101, id#102, spark_grouping_id#103]
-Functions [3]: [partial_sum(sales#17), partial_sum(returns#34), partial_sum(profit#35)]
-Aggregate Attributes [6]: [sum#104, isEmpty#105, sum#106, isEmpty#107, sum#108, isEmpty#109]
-Results [9]: [channel#101, id#102, spark_grouping_id#103, sum#110, isEmpty#111, sum#112, isEmpty#113, sum#114, isEmpty#115]
+Input [6]: [sales#101, returns#102, profit#103, channel#106, id#107, spark_grouping_id#108]
+Keys [3]: [channel#106, id#107, spark_grouping_id#108]
+Functions [3]: [partial_sum(sales#101), partial_sum(returns#102), partial_sum(profit#103)]
+Aggregate Attributes [6]: [sum#109, isEmpty#110, sum#111, isEmpty#112, sum#113, isEmpty#114]
+Results [9]: [channel#106, id#107, spark_grouping_id#108, sum#115, isEmpty#116, sum#117, isEmpty#118, sum#119, isEmpty#120]
 
 (89) Exchange
-Input [9]: [channel#101, id#102, spark_grouping_id#103, sum#110, isEmpty#111, sum#112, isEmpty#113, sum#114, isEmpty#115]
-Arguments: hashpartitioning(channel#101, id#102, spark_grouping_id#103, 5), true, [id=#116]
+Input [9]: [channel#106, id#107, spark_grouping_id#108, sum#115, isEmpty#116, sum#117, isEmpty#118, sum#119, isEmpty#120]
+Arguments: hashpartitioning(channel#106, id#107, spark_grouping_id#108, 5), true, [id=#121]
 
 (90) HashAggregate [codegen id : 25]
-Input [9]: [channel#101, id#102, spark_grouping_id#103, sum#110, isEmpty#111, sum#112, isEmpty#113, sum#114, isEmpty#115]
-Keys [3]: [channel#101, id#102, spark_grouping_id#103]
-Functions [3]: [sum(sales#17), sum(returns#34), sum(profit#35)]
-Aggregate Attributes [3]: [sum(sales#17)#117, sum(returns#34)#118, sum(profit#35)#119]
-Results [5]: [channel#101, id#102, sum(sales#17)#117 AS sales#120, sum(returns#34)#118 AS returns#121, sum(profit#35)#119 AS profit#122]
+Input [9]: [channel#106, id#107, spark_grouping_id#108, sum#115, isEmpty#116, sum#117, isEmpty#118, sum#119, isEmpty#120]
+Keys [3]: [channel#106, id#107, spark_grouping_id#108]
+Functions [3]: [sum(sales#101), sum(returns#102), sum(profit#103)]
+Aggregate Attributes [3]: [sum(sales#101)#122, sum(returns#102)#123, sum(profit#103)#124]
+Results [5]: [channel#106, id#107, sum(sales#101)#122 AS sales#125, sum(returns#102)#123 AS returns#126, sum(profit#103)#124 AS profit#127]
 
 (91) TakeOrderedAndProject
-Input [5]: [channel#101, id#102, sales#120, returns#121, profit#122]
-Arguments: 100, [channel#101 ASC NULLS FIRST, id#102 ASC NULLS FIRST], [channel#101, id#102, sales#120, returns#121, profit#122]
+Input [5]: [channel#106, id#107, sales#125, returns#126, profit#127]
+Arguments: 100, [channel#106 ASC NULLS FIRST, id#107 ASC NULLS FIRST], [channel#106, id#107, sales#125, returns#126, profit#127]
 

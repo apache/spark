@@ -6,7 +6,7 @@ TakeOrderedAndProject [channel,col_name,d_year,d_qoy,i_category,sales_cnt,sales_
           WholeStageCodegen (10)
             HashAggregate [channel,col_name,d_year,d_qoy,i_category,ext_sales_price] [count,sum,count,sum]
               InputAdapter
-                Union
+                Union [channel,col_name,d_year,d_qoy,i_category,ext_sales_price]
                   WholeStageCodegen (3)
                     Project [ss_store_sk,d_year,d_qoy,i_category,ss_ext_sales_price]
                       BroadcastHashJoin [ss_sold_date_sk,d_date_sk]

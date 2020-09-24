@@ -7,7 +7,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
             HashAggregate [channel,id,spark_grouping_id,sales,returns,profit] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
               Expand [sales,returns,profit,channel,id]
                 InputAdapter
-                  Union
+                  Union [sales,returns,profit,channel,id]
                     WholeStageCodegen (10)
                       HashAggregate [s_store_id,sum,sum,isEmpty,sum,isEmpty] [sum(UnscaledValue(ss_ext_sales_price)),sum(coalesce(cast(sr_return_amt as decimal(12,2)), 0.00)),sum(CheckOverflow((promote_precision(cast(ss_net_profit as decimal(13,2))) - promote_precision(cast(coalesce(cast(sr_net_loss as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true)),sales,returns,profit,channel,id,sum,sum,isEmpty,sum,isEmpty]
                         InputAdapter

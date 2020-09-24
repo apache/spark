@@ -29,7 +29,7 @@ TakeOrderedAndProject [cd_gender,cd_marital_status,cd_education_status,cd_purcha
                                       Sort [customer_sk]
                                         InputAdapter
                                           Exchange [customer_sk] #4
-                                            Union
+                                            Union [customer_sk]
                                               WholeStageCodegen (4)
                                                 Project [ws_bill_customer_sk]
                                                   BroadcastHashJoin [ws_sold_date_sk,d_date_sk]

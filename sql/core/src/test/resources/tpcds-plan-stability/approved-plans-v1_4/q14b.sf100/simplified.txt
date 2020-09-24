@@ -11,7 +11,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                     WholeStageCodegen (7)
                       HashAggregate [quantity,list_price] [sum,count,sum,count]
                         InputAdapter
-                          Union
+                          Union [quantity,list_price]
                             WholeStageCodegen (2)
                               Project [ss_quantity,ss_list_price]
                                 BroadcastHashJoin [ss_sold_date_sk,d_date_sk]

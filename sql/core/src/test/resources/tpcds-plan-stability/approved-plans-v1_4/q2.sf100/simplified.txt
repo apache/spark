@@ -21,7 +21,7 @@ WholeStageCodegen (16)
                                         Project [sales_price,d_week_seq,d_day_name]
                                           BroadcastHashJoin [sold_date_sk,d_date_sk]
                                             InputAdapter
-                                              Union
+                                              Union [sold_date_sk,sales_price]
                                                 WholeStageCodegen (1)
                                                   Project [ws_sold_date_sk,ws_ext_sales_price]
                                                     Filter [ws_sold_date_sk]

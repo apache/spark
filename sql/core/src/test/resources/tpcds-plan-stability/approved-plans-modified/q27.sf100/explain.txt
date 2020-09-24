@@ -421,8 +421,9 @@ Aggregate Attributes [4]: [avg(cast(agg1#23 as bigint))#99, avg(UnscaledValue(ag
 Results [7]: [null AS i_item_id#103, null AS s_state#104, 1 AS g_state#105, avg(cast(agg1#23 as bigint))#99 AS agg1#106, cast((avg(UnscaledValue(agg2#24))#100 / 100.0) as decimal(11,6)) AS agg2#107, cast((avg(UnscaledValue(agg3#25))#101 / 100.0) as decimal(11,6)) AS agg3#108, cast((avg(UnscaledValue(agg4#26))#102 / 100.0) as decimal(11,6)) AS agg4#109]
 
 (76) Union
+Arguments: [i_item_id#110, s_state#111, g_state#112, agg1#113, agg2#114, agg3#115, agg4#116]
 
 (77) TakeOrderedAndProject
-Input [7]: [i_item_id#21, s_state#18, g_state#48, agg1#49, agg2#50, agg3#51, agg4#52]
-Arguments: 100, [i_item_id#21 ASC NULLS FIRST, s_state#18 ASC NULLS FIRST], [i_item_id#21, s_state#18, g_state#48, agg1#49, agg2#50, agg3#51, agg4#52]
+Input [7]: [i_item_id#110, s_state#111, g_state#112, agg1#113, agg2#114, agg3#115, agg4#116]
+Arguments: 100, [i_item_id#110 ASC NULLS FIRST, s_state#111 ASC NULLS FIRST], [i_item_id#110, s_state#111, g_state#112, agg1#113, agg2#114, agg3#115, agg4#116]
 

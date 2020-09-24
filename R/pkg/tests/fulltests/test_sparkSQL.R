@@ -2684,21 +2684,21 @@ test_that("union(), unionByName(), rbind(), except(), and intersect() on a DataF
   writeLines(lines, jsonPath2)
   df2 <- read.df(jsonPath2, "json")
 
-  unioned <- arrange(union(df, df2), df$age)
+  unioned <- arrange(union(df, df2), "age")
   expect_is(unioned, "SparkDataFrame")
   expect_equal(count(unioned), 6)
   expect_equal(first(unioned)$name, "Michael")
-  expect_equal(count(arrange(suppressWarnings(union(df, df2)), df$age)), 6)
-  expect_equal(count(arrange(suppressWarnings(unionAll(df, df2)), df$age)), 6)
+  expect_equal(count(arrange(suppressWarnings(union(df, df2)), "age")), 6)
+  expect_equal(count(arrange(suppressWarnings(unionAll(df, df2)), "age")), 6)
 
   df1 <- select(df2, "age", "name")
-  unioned1 <- arrange(unionByName(df1, df), df1$age)
+  unioned1 <- arrange(unionByName(df1, df), "age")
   expect_is(unioned, "SparkDataFrame")
   expect_equal(count(unioned), 6)
   # Here, we test if 'Michael' in df is correctly mapped to the same name.
   expect_equal(first(unioned)$name, "Michael")
 
-  unioned2 <- arrange(rbind(unioned, df, df2), df$age)
+  unioned2 <- arrange(rbind(unioned, df, df2), "age")
   expect_is(unioned2, "SparkDataFrame")
   expect_equal(count(unioned2), 12)
   expect_equal(first(unioned2)$name, "Michael")
@@ -2723,12 +2723,12 @@ test_that("union(), unionByName(), rbind(), except(), and intersect() on a DataF
   testthat::expect_error(unionByName(df2, select(df2, "age"), FALSE))
   testthat::expect_error(unionByName(df2, select(df2, "age")))
 
-  excepted <- arrange(except(df, df2), desc(df$age))
+  excepted <- arrange(except(df, df2), desc(column("age")))
   expect_is(unioned, "SparkDataFrame")
   expect_equal(count(excepted), 2)
   expect_equal(first(excepted)$name, "Justin")
 
-  intersected <- arrange(intersect(df, df2), df$age)
+  intersected <- arrange(intersect(df, df2), "age")
   expect_is(unioned, "SparkDataFrame")
   expect_equal(count(intersected), 1)
   expect_equal(first(intersected)$name, "Andy")

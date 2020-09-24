@@ -309,8 +309,9 @@ Aggregate Attributes [1]: [avg(qoh#23)#74]
 Results [5]: [null AS i_product_name#75, null AS i_brand#76, null AS i_class#77, null AS i_category#78, avg(qoh#23)#74 AS qoh#79]
 
 (51) Union
+Arguments: [i_product_name#80, i_brand#81, i_class#82, i_category#83, qoh#84]
 
 (52) TakeOrderedAndProject
-Input [5]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, qoh#29]
-Arguments: 100, [qoh#29 ASC NULLS FIRST, i_product_name#15 ASC NULLS FIRST, i_brand#12 ASC NULLS FIRST, i_class#13 ASC NULLS FIRST, i_category#14 ASC NULLS FIRST], [i_product_name#15, i_brand#12, i_class#13, i_category#14, qoh#29]
+Input [5]: [i_product_name#80, i_brand#81, i_class#82, i_category#83, qoh#84]
+Arguments: 100, [qoh#84 ASC NULLS FIRST, i_product_name#80 ASC NULLS FIRST, i_brand#81 ASC NULLS FIRST, i_class#82 ASC NULLS FIRST, i_category#83 ASC NULLS FIRST], [i_product_name#80, i_brand#81, i_class#82, i_category#83, qoh#84]
 

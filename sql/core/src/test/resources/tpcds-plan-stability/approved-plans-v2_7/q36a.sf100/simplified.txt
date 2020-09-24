@@ -14,7 +14,7 @@ TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,gross_margin,i
                           WholeStageCodegen (20)
                             HashAggregate [gross_margin,i_category,i_class,t_category,t_class,lochierarchy]
                               InputAdapter
-                                Union
+                                Union [gross_margin,i_category,i_class,t_category,t_class,lochierarchy]
                                   WholeStageCodegen (13)
                                     HashAggregate [gross_margin,i_category,i_class,t_category,t_class,lochierarchy]
                                       InputAdapter
@@ -22,7 +22,7 @@ TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,gross_margin,i
                                           WholeStageCodegen (12)
                                             HashAggregate [gross_margin,i_category,i_class,t_category,t_class,lochierarchy]
                                               InputAdapter
-                                                Union
+                                                Union [gross_margin,i_category,i_class,t_category,t_class,lochierarchy]
                                                   WholeStageCodegen (5)
                                                     HashAggregate [i_category,i_class,sum,sum] [sum(UnscaledValue(ss_net_profit)),sum(UnscaledValue(ss_ext_sales_price)),gross_margin,t_category,t_class,lochierarchy,sum,sum]
                                                       InputAdapter

@@ -13,7 +13,7 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                         WholeStageCodegen (15)
                           HashAggregate [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,sales_cnt,sales_amt]
                             InputAdapter
-                              Union
+                              Union [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,sales_cnt,sales_amt]
                                 WholeStageCodegen (10)
                                   HashAggregate [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,sales_cnt,sales_amt]
                                     InputAdapter
@@ -21,7 +21,7 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                         WholeStageCodegen (9)
                                           HashAggregate [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,sales_cnt,sales_amt]
                                             InputAdapter
-                                              Union
+                                              Union [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,sales_cnt,sales_amt]
                                                 WholeStageCodegen (4)
                                                   Project [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,cs_quantity,cr_return_quantity,cs_ext_sales_price,cr_return_amount]
                                                     BroadcastHashJoin [cs_order_number,cs_item_sk,cr_order_number,cr_item_sk]
@@ -113,7 +113,7 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                               WholeStageCodegen (31)
                                 HashAggregate [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,sales_cnt,sales_amt]
                                   InputAdapter
-                                    Union
+                                    Union [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,sales_cnt,sales_amt]
                                       WholeStageCodegen (26)
                                         HashAggregate [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,sales_cnt,sales_amt]
                                           InputAdapter
@@ -121,7 +121,7 @@ TakeOrderedAndProject [sales_cnt_diff,sales_amt_diff,prev_year,year,i_brand_id,i
                                               WholeStageCodegen (25)
                                                 HashAggregate [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,sales_cnt,sales_amt]
                                                   InputAdapter
-                                                    Union
+                                                    Union [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,sales_cnt,sales_amt]
                                                       WholeStageCodegen (20)
                                                         Project [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,cs_quantity,cr_return_quantity,cs_ext_sales_price,cr_return_amount]
                                                           BroadcastHashJoin [cs_order_number,cs_item_sk,cr_order_number,cr_item_sk]

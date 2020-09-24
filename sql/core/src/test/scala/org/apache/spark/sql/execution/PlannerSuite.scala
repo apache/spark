@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.ResolveUnion
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, Sort, Union}
@@ -816,8 +817,10 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("SPARK-26812: wrong nullability for complex datatypes in union") {
     def testUnionOutputType(input1: DataType, input2: DataType, output: DataType): Unit = {
-      val query = Union(
-        LocalRelation(StructField("a", input1)), LocalRelation(StructField("a", input2)))
+      val left = LocalRelation(StructField("a", input1))
+      val right = LocalRelation(StructField("a", input2))
+      val unionOutput = ResolveUnion.makeUnionOutput(Seq(left, right))
+      val query = Union(left, right, unionOutput)
       assert(query.output.head.dataType == output)
     }
 

@@ -524,30 +524,31 @@ Aggregate Attributes [3]: [sum(UnscaledValue(ws_ext_sales_price#83))#104, sum(co
 Results [5]: [MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#83))#104,17,2) AS sales#107, sum(coalesce(cast(wr_return_amt#87 as decimal(12,2)), 0.00))#105 AS returns#108, sum(CheckOverflow((promote_precision(cast(ws_net_profit#84 as decimal(13,2))) - promote_precision(cast(coalesce(cast(wr_net_loss#88 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true))#106 AS profit#109, web channel AS channel#110, concat(web_site, web_site_id#91) AS id#111]
 
 (94) Union
+Arguments: [sales#112, returns#113, profit#114, channel#115, id#116]
 
 (95) Expand [codegen id : 22]
-Input [5]: [sales#39, returns#40, profit#41, channel#42, id#43]
-Arguments: [List(sales#39, returns#40, profit#41, channel#42, id#43, 0), List(sales#39, returns#40, profit#41, channel#42, null, 1), List(sales#39, returns#40, profit#41, null, null, 3)], [sales#39, returns#40, profit#41, channel#112, id#113, spark_grouping_id#114]
+Input [5]: [sales#112, returns#113, profit#114, channel#115, id#116]
+Arguments: [List(sales#112, returns#113, profit#114, channel#115, id#116, 0), List(sales#112, returns#113, profit#114, channel#115, null, 1), List(sales#112, returns#113, profit#114, null, null, 3)], [sales#112, returns#113, profit#114, channel#117, id#118, spark_grouping_id#119]
 
 (96) HashAggregate [codegen id : 22]
-Input [6]: [sales#39, returns#40, profit#41, channel#112, id#113, spark_grouping_id#114]
-Keys [3]: [channel#112, id#113, spark_grouping_id#114]
-Functions [3]: [partial_sum(sales#39), partial_sum(returns#40), partial_sum(profit#41)]
-Aggregate Attributes [6]: [sum#115, isEmpty#116, sum#117, isEmpty#118, sum#119, isEmpty#120]
-Results [9]: [channel#112, id#113, spark_grouping_id#114, sum#121, isEmpty#122, sum#123, isEmpty#124, sum#125, isEmpty#126]
+Input [6]: [sales#112, returns#113, profit#114, channel#117, id#118, spark_grouping_id#119]
+Keys [3]: [channel#117, id#118, spark_grouping_id#119]
+Functions [3]: [partial_sum(sales#112), partial_sum(returns#113), partial_sum(profit#114)]
+Aggregate Attributes [6]: [sum#120, isEmpty#121, sum#122, isEmpty#123, sum#124, isEmpty#125]
+Results [9]: [channel#117, id#118, spark_grouping_id#119, sum#126, isEmpty#127, sum#128, isEmpty#129, sum#130, isEmpty#131]
 
 (97) Exchange
-Input [9]: [channel#112, id#113, spark_grouping_id#114, sum#121, isEmpty#122, sum#123, isEmpty#124, sum#125, isEmpty#126]
-Arguments: hashpartitioning(channel#112, id#113, spark_grouping_id#114, 5), true, [id=#127]
+Input [9]: [channel#117, id#118, spark_grouping_id#119, sum#126, isEmpty#127, sum#128, isEmpty#129, sum#130, isEmpty#131]
+Arguments: hashpartitioning(channel#117, id#118, spark_grouping_id#119, 5), true, [id=#132]
 
 (98) HashAggregate [codegen id : 23]
-Input [9]: [channel#112, id#113, spark_grouping_id#114, sum#121, isEmpty#122, sum#123, isEmpty#124, sum#125, isEmpty#126]
-Keys [3]: [channel#112, id#113, spark_grouping_id#114]
-Functions [3]: [sum(sales#39), sum(returns#40), sum(profit#41)]
-Aggregate Attributes [3]: [sum(sales#39)#128, sum(returns#40)#129, sum(profit#41)#130]
-Results [5]: [channel#112, id#113, sum(sales#39)#128 AS sales#131, sum(returns#40)#129 AS returns#132, sum(profit#41)#130 AS profit#133]
+Input [9]: [channel#117, id#118, spark_grouping_id#119, sum#126, isEmpty#127, sum#128, isEmpty#129, sum#130, isEmpty#131]
+Keys [3]: [channel#117, id#118, spark_grouping_id#119]
+Functions [3]: [sum(sales#112), sum(returns#113), sum(profit#114)]
+Aggregate Attributes [3]: [sum(sales#112)#133, sum(returns#113)#134, sum(profit#114)#135]
+Results [5]: [channel#117, id#118, sum(sales#112)#133 AS sales#136, sum(returns#113)#134 AS returns#137, sum(profit#114)#135 AS profit#138]
 
 (99) TakeOrderedAndProject
-Input [5]: [channel#112, id#113, sales#131, returns#132, profit#133]
-Arguments: 100, [channel#112 ASC NULLS FIRST, id#113 ASC NULLS FIRST], [channel#112, id#113, sales#131, returns#132, profit#133]
+Input [5]: [channel#117, id#118, sales#136, returns#137, profit#138]
+Arguments: 100, [channel#117 ASC NULLS FIRST, id#118 ASC NULLS FIRST], [channel#117, id#118, sales#136, returns#137, profit#138]
 

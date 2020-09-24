@@ -870,8 +870,9 @@ Aggregate Attributes [7]: [avg(agg1#36)#263, avg(agg2#37)#264, avg(agg3#38)#265,
 Results [11]: [null AS i_item_id#270, null AS ca_country#271, null AS ca_state#272, null AS county#273, avg(agg1#36)#263 AS agg1#274, avg(agg2#37)#264 AS agg2#275, avg(agg3#38)#265 AS agg3#276, avg(agg4#39)#266 AS agg4#277, avg(agg5#40)#267 AS agg5#278, avg(agg6#41)#268 AS agg6#279, avg(agg7#42)#269 AS agg7#280]
 
 (159) Union
+Arguments: [i_item_id#281, ca_country#282, ca_state#283, ca_county#284, agg1#285, agg2#286, agg3#287, agg4#288, agg5#289, agg6#290, agg7#291]
 
 (160) TakeOrderedAndProject
-Input [11]: [i_item_id#19, ca_country#30, ca_state#29, ca_county#28, agg1#79, agg2#80, agg3#81, agg4#82, agg5#83, agg6#84, agg7#85]
-Arguments: 100, [ca_country#30 ASC NULLS FIRST, ca_state#29 ASC NULLS FIRST, ca_county#28 ASC NULLS FIRST, i_item_id#19 ASC NULLS FIRST], [i_item_id#19, ca_country#30, ca_state#29, ca_county#28, agg1#79, agg2#80, agg3#81, agg4#82, agg5#83, agg6#84, agg7#85]
+Input [11]: [i_item_id#281, ca_country#282, ca_state#283, ca_county#284, agg1#285, agg2#286, agg3#287, agg4#288, agg5#289, agg6#290, agg7#291]
+Arguments: 100, [ca_country#282 ASC NULLS FIRST, ca_state#283 ASC NULLS FIRST, ca_county#284 ASC NULLS FIRST, i_item_id#281 ASC NULLS FIRST], [i_item_id#281, ca_country#282, ca_state#283, ca_county#284, agg1#285, agg2#286, agg3#287, agg4#288, agg5#289, agg6#290, agg7#291]
 

@@ -1,5 +1,5 @@
 TakeOrderedAndProject [i_item_id,s_state,g_state,agg1,agg2,agg3,agg4]
-  Union
+  Union [i_item_id,s_state,g_state,agg1,agg2,agg3,agg4]
     WholeStageCodegen (6)
       HashAggregate [i_item_id,s_state,sum,count,sum,count,sum,count,sum,count] [avg(cast(agg1 as bigint)),avg(UnscaledValue(agg2)),avg(UnscaledValue(agg3)),avg(UnscaledValue(agg4)),g_state,agg1,agg2,agg3,agg4,sum,count,sum,count,sum,count,sum,count]
         InputAdapter
