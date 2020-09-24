@@ -134,10 +134,10 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
     var catCols = dataset.schema(localInputCols.toSet)
       .filterNot(_.dataType.isInstanceOf[NumericType]).map(_.name).toArray
     if (isSet(categoricalCols)) catCols = (catCols ++ $(categoricalCols)).distinct
-    val catIndices = catCols.map(localInputCols.indexOf)
+    val catIndices = catCols.map(c => localInputCols.indexOf(c))
 
     val realCols = (localInputCols.toSet -- catCols).toArray
-    val realIndices = realCols.map(localInputCols.indexOf)
+    val realIndices = realCols.map(c => localInputCols.indexOf(c))
     // pre-compute output indices of real columns
     val realOutputIndices = realCols.map(c => Utils.nonNegativeMod(hashFunc(c), n))
 
