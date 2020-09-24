@@ -25,3 +25,4 @@ Development
     contributing
     testing
     debugging
+    setting_ide

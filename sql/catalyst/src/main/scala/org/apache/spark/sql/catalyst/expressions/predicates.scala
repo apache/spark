@@ -250,7 +250,17 @@ trait PredicateHelper extends Logging {
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_ expr - Logical not.")
+  usage = "_FUNC_ expr - Logical not.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_ true;
+       false
+      > SELECT _FUNC_ false;
+       true
+      > SELECT _FUNC_ NULL;
+       NULL
+  """,
+  since = "1.0.0")
 case class Not(child: Expression)
   extends UnaryExpression with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
@@ -353,7 +363,8 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
        false
       > SELECT named_struct('a', 1, 'b', 2) _FUNC_(named_struct('a', 1, 'b', 2), named_struct('a', 1, 'b', 3));
        true
-  """)
+  """,
+  since = "1.0.0")
 // scalastyle:on line.size.limit
 case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
@@ -577,7 +588,19 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Logical AND.")
+  usage = "expr1 _FUNC_ expr2 - Logical AND.",
+  examples = """
+    Examples:
+      > SELECT true _FUNC_ true;
+       true
+      > SELECT true _FUNC_ false;
+       false
+      > SELECT true _FUNC_ NULL;
+       NULL
+      > SELECT false _FUNC_ NULL;
+       false
+  """,
+  since = "1.0.0")
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -647,7 +670,19 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Logical OR.")
+  usage = "expr1 _FUNC_ expr2 - Logical OR.",
+  examples = """
+    Examples:
+      > SELECT true _FUNC_ false;
+       true
+      > SELECT false _FUNC_ false;
+       false
+      > SELECT true _FUNC_ NULL;
+       true
+      > SELECT false _FUNC_ NULL;
+       NULL
+  """,
+  since = "1.0.0")
 case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -780,7 +815,8 @@ object Equality {
        NULL
       > SELECT NULL _FUNC_ NULL;
        NULL
-  """)
+  """,
+  since = "1.0.0")
 case class EqualTo(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -823,7 +859,8 @@ case class EqualTo(left: Expression, right: Expression)
        false
       > SELECT NULL _FUNC_ NULL;
        true
-  """)
+  """,
+  since = "1.1.0")
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
 
   override def symbol: String = "<=>"
@@ -880,7 +917,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
        true
       > SELECT 1 _FUNC_ NULL;
        NULL
-  """)
+  """,
+  since = "1.0.0")
 case class LessThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -910,7 +948,8 @@ case class LessThan(left: Expression, right: Expression)
        true
       > SELECT 1 _FUNC_ NULL;
        NULL
-  """)
+  """,
+  since = "1.0.0")
 case class LessThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -940,7 +979,8 @@ case class LessThanOrEqual(left: Expression, right: Expression)
        false
       > SELECT 1 _FUNC_ NULL;
        NULL
-  """)
+  """,
+  since = "1.0.0")
 case class GreaterThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -970,7 +1010,8 @@ case class GreaterThan(left: Expression, right: Expression)
        false
       > SELECT 1 _FUNC_ NULL;
        NULL
-  """)
+  """,
+  since = "1.0.0")
 case class GreaterThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 

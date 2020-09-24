@@ -61,7 +61,8 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
     Examples:
       > SELECT _FUNC_(0 < 1);
        NULL
-  """)
+  """,
+  since = "2.0.0")
 case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def nullable: Boolean = true
@@ -108,7 +109,8 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
     Examples:
       > SELECT _FUNC_();
        default
-  """)
+  """,
+  since = "1.6.0")
 case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
   override def foldable: Boolean = true
@@ -144,7 +146,8 @@ case class CurrentCatalog() extends LeafExpression with Unevaluable {
   """,
   note = """
     The function is non-deterministic.
-  """)
+  """,
+  since = "2.3.0")
 // scalastyle:on line.size.limit
 case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Stateful
     with ExpressionWithRandomSeed {
@@ -185,6 +188,11 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """_FUNC_() - Returns the Spark version. The string contains 2 fields, the first being a release version and the second being a git revision.""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       3.1.0 a6d6ea3efedbad14d99c24143834cd4e2e52fb40
+  """,
   since = "3.0.0")
 // scalastyle:on line.size.limit
 case class SparkVersion() extends LeafExpression with CodegenFallback {
@@ -200,7 +208,7 @@ case class SparkVersion() extends LeafExpression with CodegenFallback {
 @ExpressionDescription(
   usage = """_FUNC_(expr) - Return DDL-formatted type string for the data type of the input.""",
   examples = """
-      Examples:
+    Examples:
       > SELECT _FUNC_(1);
        int
       > SELECT _FUNC_(array(1));

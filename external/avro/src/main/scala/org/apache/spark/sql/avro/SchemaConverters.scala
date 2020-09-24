@@ -118,7 +118,7 @@ object SchemaConverters {
             toSqlTypeHelper(Schema.createUnion(remainingUnionTypes.asJava), existingRecordNames)
               .copy(nullable = true)
           }
-        } else avroSchema.getTypes.asScala.map(_.getType) match {
+        } else avroSchema.getTypes.asScala.map(_.getType).toSeq match {
           case Seq(t1) =>
             toSqlTypeHelper(avroSchema.getTypes.get(0), existingRecordNames)
           case Seq(t1, t2) if Set(t1, t2) == Set(INT, LONG) =>

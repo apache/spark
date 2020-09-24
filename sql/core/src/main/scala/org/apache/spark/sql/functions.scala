@@ -684,8 +684,9 @@ object functions {
   def min(columnName: String): Column = min(Column(columnName))
 
   /**
-   * Aggregate function: returns and array of the approximate percentile values
-   * of numeric column col at the given percentages.
+   * Aggregate function: returns the approximate `percentile` of the numeric column `col` which
+   * is the smallest value in the ordered `col` values (sorted from least to greatest) such that
+   * no more than `percentage` of `col` values is less than the value or equal to that value.
    *
    * If percentage is an array, each value must be between 0.0 and 1.0.
    * If it is a single floating point value, it must be between 0.0 and 1.0.
