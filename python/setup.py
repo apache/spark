@@ -127,6 +127,8 @@ class InstallCommand(install):
 
         if ("HADOOP_VERSION" in os.environ) or ("HIVE_VERSION" in os.environ):
             # Note that SPARK_VERSION environment is just a testing purpose.
+            # HIVE_VERSION environment variable is also internal for now in case
+            # we support another version of Hive in the future.
             spark_version, hadoop_version, hive_version = install_module.checked_versions(
                 os.environ.get("SPARK_VERSION", VERSION).lower(),
                 os.environ.get("HADOOP_VERSION", install_module.DEFAULT_HADOOP).lower(),
