@@ -114,7 +114,7 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    additionalResources
+    additionalResources.toSeq
   }
 }
 
