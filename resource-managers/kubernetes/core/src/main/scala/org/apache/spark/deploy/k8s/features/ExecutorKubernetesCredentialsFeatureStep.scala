@@ -40,5 +40,6 @@ private[spark] class ExecutorKubernetesCredentialsFeatureStep(kubernetesConf: Ku
   }
   override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
 
-  override def getAdditionalKubernetesResources(): Seq[io.fabric8.kubernetes.api.model.HasMetadata] = Seq.empty
+  override def getAdditionalKubernetesResources(): Seq[io.fabric8.kubernetes.api.model.HasMetadata]
+  = Seq.empty
 }
