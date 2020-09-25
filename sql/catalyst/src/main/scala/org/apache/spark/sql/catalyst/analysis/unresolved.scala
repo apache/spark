@@ -264,7 +264,6 @@ case class UnresolvedFunction(
   override def children: Seq[Expression] = arguments ++ filter.toSeq
 
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 
@@ -452,7 +451,6 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
   override def right: Expression = extraction
 
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 
@@ -522,14 +520,12 @@ case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq
 
   override def child: Expression = deserializer
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 }
 
 case class GetColumnByOrdinal(ordinal: Int, dataType: DataType) extends LeafExpression
   with Unevaluable with NonSQLExpression {
-  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 }
@@ -547,7 +543,6 @@ case class GetColumnByOrdinal(ordinal: Int, dataType: DataType) extends LeafExpr
 case class UnresolvedOrdinal(ordinal: Int)
     extends LeafExpression with Unevaluable with NonSQLExpression {
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 }
