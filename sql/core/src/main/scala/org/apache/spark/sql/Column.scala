@@ -931,6 +931,7 @@ class Column(val expr: Expression) extends Logging {
   // scalastyle:off line.size.limit
   /**
    * An expression that drops fields in `StructType` by name.
+   * This is a no-op if schema doesn't contain field name(s).
    *
    * {{{
    *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
