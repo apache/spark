@@ -20,9 +20,10 @@ package org.apache.spark
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.config
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorV2, LongAccumulator}
 
 
 class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
@@ -199,6 +200,53 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     accumsRegistered.foreach(id => assert(AccumulatorContext.get(id) != None))
   }
 
+  test("prevent from external accumulators entering into event") {
+    val listener = new SaveInfoListener
+    val numPartitions = 10
+    sc = new SparkContext("local", "test")
+    sc.conf.set(config.LISTENER_BUS_ALLOW_EXTERNAL_ACCUMULATORS_ENTER_EVENT, false)
+    sc.addSparkListener(listener)
+    // Have each task add 1 to the internal accumulator
+    val internal = InternalAccumulator.METRICS_PREFIX + "a"
+    val external = "a"
+    val internalAccum = createLongAccum(internal)
+    val externalAccum = createLongAccum(external)
+    val rdd = sc.parallelize(1 to 100, numPartitions).mapPartitions { iter =>
+      internalAccum.add(1)
+      externalAccum.add(1)
+      iter
+    }
+    // Register asserts in job completion callback to avoid flakiness
+    listener.registerJobCompletionCallback { () =>
+      val stageInfos = listener.getCompletedStageInfos
+      val taskInfos = listener.getCompletedTaskInfos
+      assert(stageInfos.size === 1)
+      assert(taskInfos.size === numPartitions)
+      // internal accum should be found in stageInfo
+      // external accum should be not found in stageInfo
+      val stageInternalAccum = findAccumByName(stageInfos.head.accumulables.values, internal)
+      assert(stageInternalAccum.get.value.get.asInstanceOf[Long] === numPartitions)
+      val stageExternalAccum = findAccumByName(stageInfos.head.accumulables.values, external)
+      assert(stageExternalAccum.isEmpty)
+      val taskAccumValues = taskInfos.map { taskInfo =>
+        // internal accum should be found in taskInfo
+        // external accum should be not found in taskInfo
+        val taskExternalAccum = findAccumByName(taskInfo.accumulables, external)
+        assert(taskExternalAccum.isEmpty)
+        val taskInternalAccum = findAccumByName(taskInfo.accumulables, internal)
+        assert(taskInternalAccum.get.update.isDefined)
+        assert(taskInternalAccum.get.update.get.asInstanceOf[Long] === 1L)
+        taskInternalAccum.get.value.get.asInstanceOf[Long]
+      }
+      assert(taskAccumValues.sorted === (1L to numPartitions))
+    }
+    rdd.count()
+    listener.awaitNextJobCompletion()
+    // internal accum and external accum should be updated correct
+    assert(internalAccum.value == 10L)
+    assert(externalAccum.value == 10L)
+  }
+
   /**
    * Return the accumulable info that matches the specified name.
    */
@@ -206,6 +254,11 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     accums.find { a => a.name == Some(TEST_ACCUM) }.getOrElse {
       fail(s"unable to find internal accumulator called $TEST_ACCUM")
     }
+  }
+
+  private def findAccumByName(
+      accums: Iterable[AccumulableInfo], name: String): Option[AccumulableInfo] = {
+    accums.find { a => a.name == Some(name) }
   }
 
   /**
@@ -221,6 +274,21 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     }
 
     def accumsRegisteredForCleanup: Seq[Long] = accumsRegistered.toSeq
+  }
+
+  /**
+   * Create a long accumulator and register it to `AccumulatorContext`.
+   */
+  private def createLongAccum(
+      name: String,
+      countFailedValues: Boolean = false,
+      initValue: Long = 0,
+      id: Long = AccumulatorContext.newId()): LongAccumulator = {
+    val acc = new LongAccumulator
+    acc.setValue(initValue)
+    acc.metadata = AccumulatorMetadata(id, Some(name), countFailedValues)
+    AccumulatorContext.register(acc)
+    acc
   }
 
 }

@@ -837,6 +837,15 @@ package object config {
       .timeConf(TimeUnit.NANOSECONDS)
       .createWithDefaultString("1s")
 
+  private[spark] val LISTENER_BUS_ALLOW_EXTERNAL_ACCUMULATORS_ENTER_EVENT =
+    ConfigBuilder("spark.scheduler.listenerbus.externalAccumulatorsEnterEvent.allowed")
+      .doc("When true, external accumulators allowed to enter into spark listener event loop. " +
+        "Otherwise, external accumulators will be updated before entering event loop. " +
+        "It will save driver memory and avoid full GC when false.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   // This property sets the root namespace for metrics reporting
   private[spark] val METRICS_NAMESPACE = ConfigBuilder("spark.metrics.namespace")
     .version("2.1.0")
