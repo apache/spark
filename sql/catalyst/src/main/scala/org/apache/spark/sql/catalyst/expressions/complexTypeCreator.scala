@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -566,14 +568,18 @@ case class WithField(name: String, valExpr: Expression)
 
   override def apply(values: Seq[(StructField, Expression)]): Seq[(StructField, Expression)] = {
     val newFieldExpr = (StructField(name, valExpr.dataType, valExpr.nullable), valExpr)
-    if (values.exists { case (field, _) => resolver(field.name, name) }) {
-      values.map {
-        case (field, _) if resolver(field.name, name) => newFieldExpr
-        case x => x
+    val result = ArrayBuffer.empty[(StructField, Expression)]
+    var hasMatch = false
+    for (existingFieldExpr @ (existingField, _) <- values) {
+      if (resolver(existingField.name, name)) {
+        hasMatch = true
+        result.append(newFieldExpr)
+      } else {
+        result.append(existingFieldExpr)
       }
-    } else {
-      values :+ newFieldExpr
     }
+    if (!hasMatch) result += newFieldExpr
+    result
   }
 
   override def children: Seq[Expression] = valExpr :: Nil
