@@ -199,19 +199,19 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     accumsRegistered.foreach(id => assert(AccumulatorContext.get(id) != None))
   }
 
-  test("prevent from external accumulators entering into event") {
+  test("prevent from external heavy accumulators entering into event") {
     val listener = new SaveInfoListener
     val numPartitions = 10
     sc = new SparkContext("local", "test")
     sc.addSparkListener(listener)
-    // Have each task add 1 to the internal accumulator
-    val internal = InternalAccumulator.METRICS_PREFIX + "a"
-    val external = ExternalHeavyAccumulator.HEAVY_PREFIX + "a"
-    val internalAccum = createLongAccum(internal)
-    val externalAccum = createLongAccum(external)
+    // Have each task add 1 to both accumulators
+    val normalAccumName = "a"
+    val heavyAccumName = ExternalHeavyAccumulator.HEAVY_PREFIX + "a"
+    val normalAccum = createLongAccum(normalAccumName)
+    val heavyAccum = createLongAccum(heavyAccumName)
     val rdd = sc.parallelize(1 to 100, numPartitions).mapPartitions { iter =>
-      internalAccum.add(1)
-      externalAccum.add(1)
+      normalAccum.add(1)
+      heavyAccum.add(1)
       iter
     }
     // Register asserts in job completion callback to avoid flakiness
@@ -220,29 +220,27 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       val taskInfos = listener.getCompletedTaskInfos
       assert(stageInfos.size === 1)
       assert(taskInfos.size === numPartitions)
-      // internal accum should be found in stageInfo
-      // external accum should be not found in stageInfo
-      val stageInternalAccum = findAccumByName(stageInfos.head.accumulables.values, internal)
-      assert(stageInternalAccum.get.value.get.asInstanceOf[Long] === numPartitions)
-      val stageExternalAccum = findAccumByName(stageInfos.head.accumulables.values, external)
-      assert(stageExternalAccum.isEmpty)
+      // normal accum should be found in stageInfo
+      val stageAccum = findAccumByName(stageInfos.head.accumulables.values, normalAccumName)
+      assert(stageAccum.get.value.get.asInstanceOf[Long] === numPartitions)
+      // heavy accum should be not found in stageInfo
+      assert(findAccumByName(stageInfos.head.accumulables.values, heavyAccumName).isEmpty)
       val taskAccumValues = taskInfos.map { taskInfo =>
-        // internal accum should be found in taskInfo
-        // external accum should be not found in taskInfo
-        val taskExternalAccum = findAccumByName(taskInfo.accumulables, external)
-        assert(taskExternalAccum.isEmpty)
-        val taskInternalAccum = findAccumByName(taskInfo.accumulables, internal)
-        assert(taskInternalAccum.get.update.isDefined)
-        assert(taskInternalAccum.get.update.get.asInstanceOf[Long] === 1L)
-        taskInternalAccum.get.value.get.asInstanceOf[Long]
+        // heavy accum should be not found in taskInfo
+        assert(findAccumByName(taskInfo.accumulables, heavyAccumName).isEmpty)
+        // normal accum should be found in taskInfo
+        val taskAccum = findAccumByName(taskInfo.accumulables, normalAccumName)
+        assert(taskAccum.get.update.isDefined)
+        assert(taskAccum.get.update.get.asInstanceOf[Long] === 1L)
+        taskAccum.get.value.get.asInstanceOf[Long]
       }
       assert(taskAccumValues.sorted === (1L to numPartitions))
     }
     rdd.count()
     listener.awaitNextJobCompletion()
-    // internal accum and external accum should be updated correct
-    assert(internalAccum.value == 10L)
-    assert(externalAccum.value == 10L)
+    // normal accum and external heavy accum should be updated correct
+    assert(normalAccum.value == 10L)
+    assert(heavyAccum.value == 10L)
   }
 
   /**
