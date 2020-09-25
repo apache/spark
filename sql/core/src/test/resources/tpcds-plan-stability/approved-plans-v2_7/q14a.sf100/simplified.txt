@@ -192,13 +192,13 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                                                                                                                               Project [i_brand_id,i_class_id,i_category_id]
                                                                                                                                                                 BroadcastHashJoin [ws_item_sk,i_item_sk]
                                                                                                                                                                   Project [ws_item_sk]
-                                                                                                                                                                    BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
+                                                                                                                                                                    BroadcastHashJoin [d_date_sk,ws_sold_date_sk]
+                                                                                                                                                                      InputAdapter
+                                                                                                                                                                        ReusedExchange [d_date_sk] #12
                                                                                                                                                                       Filter [ws_item_sk,ws_sold_date_sk]
                                                                                                                                                                         ColumnarToRow
                                                                                                                                                                           InputAdapter
                                                                                                                                                                             Scan parquet default.web_sales [ws_sold_date_sk,ws_item_sk]
-                                                                                                                                                                      InputAdapter
-                                                                                                                                                                        ReusedExchange [d_date_sk] #12
                                                                                                                                                                   InputAdapter
                                                                                                                                                                     ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id] #15
                                                                                                           InputAdapter

@@ -18,11 +18,7 @@ TakeOrderedAndProject [c_last_name,c_first_name,s_city,profit,substr(s_city, 1, 
                                   Project [ss_customer_sk,ss_addr_sk,ss_store_sk,ss_ticket_number,ss_coupon_amt,ss_net_profit]
                                     BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
                                       Project [ss_customer_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_ticket_number,ss_coupon_amt,ss_net_profit]
-                                        BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                          Filter [ss_sold_date_sk,ss_store_sk,ss_hdemo_sk,ss_customer_sk]
-                                            ColumnarToRow
-                                              InputAdapter
-                                                Scan parquet default.store_sales [ss_sold_date_sk,ss_customer_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_ticket_number,ss_coupon_amt,ss_net_profit]
+                                        BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
                                           InputAdapter
                                             BroadcastExchange #3
                                               WholeStageCodegen (1)
@@ -31,6 +27,10 @@ TakeOrderedAndProject [c_last_name,c_first_name,s_city,profit,substr(s_city, 1, 
                                                     ColumnarToRow
                                                       InputAdapter
                                                         Scan parquet default.date_dim [d_date_sk,d_year,d_dow]
+                                          Filter [ss_sold_date_sk,ss_store_sk,ss_hdemo_sk,ss_customer_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.store_sales [ss_sold_date_sk,ss_customer_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_ticket_number,ss_coupon_amt,ss_net_profit]
                                       InputAdapter
                                         BroadcastExchange #4
                                           WholeStageCodegen (2)

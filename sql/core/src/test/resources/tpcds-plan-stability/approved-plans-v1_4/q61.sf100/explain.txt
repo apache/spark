@@ -60,11 +60,11 @@ TakeOrderedAndProject (69)
                         :     :- * Project (56)
                         :     :  +- * BroadcastHashJoin Inner BuildRight (55)
                         :     :     :- * Project (53)
-                        :     :     :  +- * BroadcastHashJoin Inner BuildRight (52)
-                        :     :     :     :- * Filter (50)
-                        :     :     :     :  +- * ColumnarToRow (49)
-                        :     :     :     :     +- Scan parquet default.store_sales (48)
-                        :     :     :     +- ReusedExchange (51)
+                        :     :     :  +- * BroadcastHashJoin Inner BuildLeft (52)
+                        :     :     :     :- ReusedExchange (48)
+                        :     :     :     +- * Filter (51)
+                        :     :     :        +- * ColumnarToRow (50)
+                        :     :     :           +- Scan parquet default.store_sales (49)
                         :     :     +- ReusedExchange (54)
                         :     +- ReusedExchange (57)
                         +- ReusedExchange (60)
@@ -284,31 +284,31 @@ Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#6))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#6))#31]
 Results [1]: [MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#6))#31,17,2) AS promotions#32]
 
-(48) Scan parquet default.store_sales
+(48) ReusedExchange [Reuses operator id: 8]
+Output [1]: [d_date_sk#7]
+
+(49) Scan parquet default.store_sales
 Output [5]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_store_sk), IsNotNull(ss_sold_date_sk), IsNotNull(ss_customer_sk), IsNotNull(ss_item_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ext_sales_price:decimal(7,2)>
 
-(49) ColumnarToRow [codegen id : 14]
+(50) ColumnarToRow
 Input [5]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6]
 
-(50) Filter [codegen id : 14]
+(51) Filter
 Input [5]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6]
 Condition : (((isnotnull(ss_store_sk#4) AND isnotnull(ss_sold_date_sk#1)) AND isnotnull(ss_customer_sk#3)) AND isnotnull(ss_item_sk#2))
 
-(51) ReusedExchange [Reuses operator id: 8]
-Output [1]: [d_date_sk#7]
-
 (52) BroadcastHashJoin [codegen id : 14]
-Left keys [1]: [ss_sold_date_sk#1]
-Right keys [1]: [d_date_sk#7]
+Left keys [1]: [d_date_sk#7]
+Right keys [1]: [ss_sold_date_sk#1]
 Join condition: None
 
 (53) Project [codegen id : 14]
 Output [4]: [ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6]
-Input [6]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6, d_date_sk#7]
+Input [6]: [d_date_sk#7, ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6]
 
 (54) ReusedExchange [Reuses operator id: 15]
 Output [1]: [i_item_sk#11]

@@ -188,8 +188,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // plan may contain nodes that do not report stats. Anything that uses stats must run after
     // this batch.
     Batch("Early Filter and Projection Push-Down", Once, earlyScanPushDownRules: _*) :+
-    // Since join costs in AQP can change between multiple runs, there is no reason that we have an
-    // idempotence enforcement on this batch. We thus make it FixedPoint(1) instead of Once.
     Batch("Join Reorder", Once,
       CostBasedJoinReorder) :+
     Batch("Eliminate Sorts", Once,

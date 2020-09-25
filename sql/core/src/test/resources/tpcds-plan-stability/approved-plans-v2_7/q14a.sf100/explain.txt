@@ -87,11 +87,11 @@ TakeOrderedAndProject (222)
             :           :           :           :           :                    :     :                                         +- * Project (50)
             :           :           :           :           :                    :     :                                            +- * BroadcastHashJoin Inner BuildRight (49)
             :           :           :           :           :                    :     :                                               :- * Project (47)
-            :           :           :           :           :                    :     :                                               :  +- * BroadcastHashJoin Inner BuildRight (46)
-            :           :           :           :           :                    :     :                                               :     :- * Filter (44)
-            :           :           :           :           :                    :     :                                               :     :  +- * ColumnarToRow (43)
-            :           :           :           :           :                    :     :                                               :     :     +- Scan parquet default.web_sales (42)
-            :           :           :           :           :                    :     :                                               :     +- ReusedExchange (45)
+            :           :           :           :           :                    :     :                                               :  +- * BroadcastHashJoin Inner BuildLeft (46)
+            :           :           :           :           :                    :     :                                               :     :- ReusedExchange (42)
+            :           :           :           :           :                    :     :                                               :     +- * Filter (45)
+            :           :           :           :           :                    :     :                                               :        +- * ColumnarToRow (44)
+            :           :           :           :           :                    :     :                                               :           +- Scan parquet default.web_sales (43)
             :           :           :           :           :                    :     :                                               +- ReusedExchange (48)
             :           :           :           :           :                    :     +- BroadcastExchange (69)
             :           :           :           :           :                    :        +- * Project (68)
@@ -405,31 +405,31 @@ Left keys [6]: [coalesce(brand_id#14, 0), isnull(brand_id#14), coalesce(class_id
 Right keys [6]: [coalesce(i_brand_id#7, 0), isnull(i_brand_id#7), coalesce(i_class_id#8, 0), isnull(i_class_id#8), coalesce(i_category_id#9, 0), isnull(i_category_id#9)]
 Join condition: None
 
-(42) Scan parquet default.web_sales
+(42) ReusedExchange [Reuses operator id: 16]
+Output [1]: [d_date_sk#10]
+
+(43) Scan parquet default.web_sales
 Output [2]: [ws_sold_date_sk#22, ws_item_sk#23]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_item_sk), IsNotNull(ws_sold_date_sk)]
 ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int>
 
-(43) ColumnarToRow [codegen id : 13]
+(44) ColumnarToRow
 Input [2]: [ws_sold_date_sk#22, ws_item_sk#23]
 
-(44) Filter [codegen id : 13]
+(45) Filter
 Input [2]: [ws_sold_date_sk#22, ws_item_sk#23]
 Condition : (isnotnull(ws_item_sk#23) AND isnotnull(ws_sold_date_sk#22))
 
-(45) ReusedExchange [Reuses operator id: 16]
-Output [1]: [d_date_sk#10]
-
 (46) BroadcastHashJoin [codegen id : 13]
-Left keys [1]: [ws_sold_date_sk#22]
-Right keys [1]: [d_date_sk#10]
+Left keys [1]: [d_date_sk#10]
+Right keys [1]: [ws_sold_date_sk#22]
 Join condition: None
 
 (47) Project [codegen id : 13]
 Output [1]: [ws_item_sk#23]
-Input [3]: [ws_sold_date_sk#22, ws_item_sk#23, d_date_sk#10]
+Input [3]: [d_date_sk#10, ws_sold_date_sk#22, ws_item_sk#23]
 
 (48) ReusedExchange [Reuses operator id: 36]
 Output [4]: [i_item_sk#6, i_brand_id#7, i_class_id#8, i_category_id#9]

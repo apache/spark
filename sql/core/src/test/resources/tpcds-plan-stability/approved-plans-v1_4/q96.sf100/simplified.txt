@@ -10,11 +10,7 @@ TakeOrderedAndProject [count(1)]
                   Project [ss_hdemo_sk]
                     BroadcastHashJoin [ss_store_sk,s_store_sk]
                       Project [ss_hdemo_sk,ss_store_sk]
-                        BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
-                          Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
-                            ColumnarToRow
-                              InputAdapter
-                                Scan parquet default.store_sales [ss_sold_time_sk,ss_hdemo_sk,ss_store_sk]
+                        BroadcastHashJoin [t_time_sk,ss_sold_time_sk]
                           InputAdapter
                             BroadcastExchange #2
                               WholeStageCodegen (1)
@@ -23,6 +19,10 @@ TakeOrderedAndProject [count(1)]
                                     ColumnarToRow
                                       InputAdapter
                                         Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
+                          Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                            ColumnarToRow
+                              InputAdapter
+                                Scan parquet default.store_sales [ss_sold_time_sk,ss_hdemo_sk,ss_store_sk]
                       InputAdapter
                         BroadcastExchange #3
                           WholeStageCodegen (2)

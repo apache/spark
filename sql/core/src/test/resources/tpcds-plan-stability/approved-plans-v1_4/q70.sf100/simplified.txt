@@ -17,11 +17,7 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
                                 Project [ss_net_profit,s_state,s_county]
                                   BroadcastHashJoin [ss_store_sk,s_store_sk]
                                     Project [ss_store_sk,ss_net_profit]
-                                      BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                        Filter [ss_sold_date_sk,ss_store_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.store_sales [ss_sold_date_sk,ss_store_sk,ss_net_profit]
+                                      BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
                                         InputAdapter
                                           BroadcastExchange #3
                                             WholeStageCodegen (1)
@@ -30,6 +26,10 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
                                                   ColumnarToRow
                                                     InputAdapter
                                                       Scan parquet default.date_dim [d_date_sk,d_month_seq]
+                                        Filter [ss_sold_date_sk,ss_store_sk]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet default.store_sales [ss_sold_date_sk,ss_store_sk,ss_net_profit]
                                     InputAdapter
                                       BroadcastExchange #4
                                         WholeStageCodegen (8)
@@ -58,13 +58,13 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
                                                                               Project [ss_net_profit,s_state]
                                                                                 BroadcastHashJoin [ss_store_sk,s_store_sk]
                                                                                   Project [ss_store_sk,ss_net_profit]
-                                                                                    BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                                                                    BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
+                                                                                      InputAdapter
+                                                                                        ReusedExchange [d_date_sk] #3
                                                                                       Filter [ss_store_sk,ss_sold_date_sk]
                                                                                         ColumnarToRow
                                                                                           InputAdapter
                                                                                             Scan parquet default.store_sales [ss_sold_date_sk,ss_store_sk,ss_net_profit]
-                                                                                      InputAdapter
-                                                                                        ReusedExchange [d_date_sk] #3
                                                                                   InputAdapter
                                                                                     BroadcastExchange #8
                                                                                       WholeStageCodegen (3)
