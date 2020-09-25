@@ -27,7 +27,7 @@ import org.apache.spark.network.protocol.Encoders;
 
 
 /**
- * Result returned by an ExternalShuffleService to a scheduler. This represents the result
+ * Result returned by an ExternalShuffleService to the DAGScheduler. This represents the result
  * of all the remote shuffle block merge operations performed by an ExternalShuffleService
  * for a given shuffle ID. It includes the shuffle ID, an array of bitmaps each representing
  * the set of mapper partition blocks that are merged for a given reducer partition, an array

@@ -54,61 +54,32 @@ public class Encoders {
   /** Bitmaps are encoded with their serialization length followed by the serialization bytes. */
   public static class Bitmaps {
     public static int encodedLength(RoaringBitmap b) {
-      // Compress the bitmap before serializing it
+      // Compress the bitmap before serializing it. Note that since BlockTransferMessage
+      // needs to invoke encodedLength first to figure out the length for the ByteBuf, it
+      // guarantees that the bitmap will always be compressed before being serialized.
       b.trim();
       b.runOptimize();
       return 4 + b.serializedSizeInBytes();
     }
 
     public static void encode(ByteBuf buf, RoaringBitmap b) {
-      ByteBuffer outBuffer = ByteBuffer.allocate(b.serializedSizeInBytes());
-      try {
-        b.serialize(new DataOutputStream(new OutputStream() {
-          ByteBuffer buffer;
-
-          OutputStream init(ByteBuffer buffer) {
-            this.buffer = buffer;
-            return this;
-          }
-
-          @Override
-          public void close() {
-          }
-
-          @Override
-          public void flush() {
-          }
-
-          @Override
-          public void write(int b) {
-            buffer.put((byte) b);
-          }
-
-          @Override
-          public void write(byte[] b) {
-            buffer.put(b);
-          }
-
-          @Override
-          public void write(byte[] b, int off, int l) {
-            buffer.put(b, off, l);
-          }
-        }.init(outBuffer)));
-      } catch (IOException e) {
-        throw new RuntimeException("Exception while encoding bitmap", e);
-      }
-      byte[] bytes = outBuffer.array();
-      buf.writeInt(bytes.length);
-      buf.writeBytes(bytes);
+      int encodedLength = b.serializedSizeInBytes();
+      buf.writeInt(encodedLength);
+      // RoaringBitmap requires nio ByteBuffer for serde. We expose the netty ByteBuf as a nio
+      // ByteBuffer. Here, we need to explicitly manage the index so we can write into the
+      // ByteBuffer, and the write is reflected in the underneath ByteBuf.
+      b.serialize(buf.nioBuffer(buf.writerIndex(), encodedLength));
+      buf.writerIndex(buf.writerIndex() + encodedLength);
     }
 
     public static RoaringBitmap decode(ByteBuf buf) {
       int length = buf.readInt();
-      byte[] bytes = new byte[length];
-      buf.readBytes(bytes);
       RoaringBitmap bitmap = new RoaringBitmap();
       try {
-        bitmap.deserialize(new DataInputStream(new ByteArrayInputStream(bytes)));
+        bitmap.deserialize(buf.nioBuffer());
+        // RoaringBitmap deserialize does not advance the reader index of the underlying ByteBuf.
+        // Manually update the index here.
+        buf.readerIndex(buf.readerIndex() + length);
       } catch (IOException e) {
         throw new RuntimeException("Exception while decoding bitmap", e);
       }

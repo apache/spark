@@ -51,21 +51,21 @@ public interface ErrorHandler {
         return false;
       }
       // If the block is too late, there is no need to retry it
-      return (t.getMessage() == null || !t.getMessage()
-          .contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX)) && (t.getCause() == null
-          || t.getCause().getMessage() == null || !t.getCause().getMessage()
-          .contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX));
+      return (t.getMessage() == null ||
+          !t.getMessage().contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX)) &&
+          (t.getCause() == null || t.getCause().getMessage() == null ||
+          !t.getCause().getMessage().contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX));
     }
 
     @Override
     public boolean shouldLogError(Throwable t) {
-      return (t.getMessage() == null || (
-          !t.getMessage().contains(BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX)
-              && !t.getMessage().contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX))) && (
-          t.getCause() == null || t.getCause().getMessage() == null || (!t.getCause()
-              .getMessage()
-              .contains(BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX) && !t.getCause()
-              .getMessage()
+      return (t.getMessage() == null ||
+          (!t.getMessage().contains(BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX) &&
+          !t.getMessage().contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX))) &&
+          (t.getCause() == null || t.getCause().getMessage() == null ||
+          (!t.getCause().getMessage()
+              .contains(BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX) &&
+          !t.getCause().getMessage()
               .contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX)));
     }
   }

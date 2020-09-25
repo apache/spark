@@ -48,7 +48,6 @@ import org.apache.spark.network.util.TransportConf;
  * (via BlockTransferService), which has the downside of losing the data if we lose the executors.
  */
 public class ExternalBlockStoreClient extends BlockStoreClient {
-  private static final Logger logger = LoggerFactory.getLogger(ExternalBlockStoreClient.class);
   private static final ErrorHandler PUSH_ERROR_HANDLER = new ErrorHandler.BlockPushErrorHandler();
 
   private final TransportConf conf;

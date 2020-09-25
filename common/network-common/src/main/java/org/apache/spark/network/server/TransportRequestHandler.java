@@ -183,7 +183,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     assert (req.body() == null);
     try {
       // Retain the original metadata buffer, since it will be used during the invocation of
-      // this method. Will be released later.
+      // this method. Will be released later. The metadata will be sent back to the client
+      // in the response in case the client needs the original metadata to handle the response
+      // in a callback.
       req.meta.retain();
       // Make a copy of the original metadata buffer. In benchmark, we noticed that
       // we cannot respond the original metadata buffer back to the client, otherwise
@@ -269,6 +271,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         // because it's a NettyManagedBuffer. This try-catch block is to make compiler happy.
         logger.error("Error in handling failure while invoking RpcHandler#receive() on RPC id {}",
             req.requestId, e);
+        assert false : "Unexpected IOException in handling failure while invoking "
+            + "RpcHandler#receive()";
       } finally {
         req.meta.release();
       }
