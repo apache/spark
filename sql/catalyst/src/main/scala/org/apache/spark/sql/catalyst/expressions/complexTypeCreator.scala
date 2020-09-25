@@ -573,9 +573,9 @@ case class WithField(name: String, valExpr: Expression)
     for (existingFieldExpr @ (existingField, _) <- values) {
       if (resolver(existingField.name, name)) {
         hasMatch = true
-        result.append(newFieldExpr)
+        result += newFieldExpr
       } else {
-        result.append(existingFieldExpr)
+        result += existingFieldExpr
       }
     }
     if (!hasMatch) result += newFieldExpr
