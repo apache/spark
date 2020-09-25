@@ -84,7 +84,7 @@ case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan]
     plan match {
       case p if hasInterestingPartition(p) =>
         // Operator with interesting partition, propagates `withInterestingPartition` as true
-        // to its children, and resets `withExchange` and `withNonAllowedNodes`.
+        // to its children, and resets `withExchange` and `withAllowedNode`.
         p.mapChildren(disableBucketWithInterestingPartition(_, true, false, true))
       case exchange: Exchange =>
         // Exchange operator propagates `withExchange` as true to its child.
