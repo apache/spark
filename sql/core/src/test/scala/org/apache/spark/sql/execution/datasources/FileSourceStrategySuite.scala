@@ -529,7 +529,10 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
   }
 
   test("SPARK-32019: Add spark.sql.files.minPartitionNum config") {
-    withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "2MB") {
+    withSQLConf(
+      SQLConf.FILES_MAX_PARTITION_BYTES.key -> "2MB",
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> String.valueOf(4 * 1024 * 1024)) {
+
       withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "1") {
         val table =
           createTable(files = Seq(
