@@ -33,8 +33,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     BASIC_STEP_TYPE, classOf[BasicExecutorFeatureStep])
   private val credentialsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    CREDENTIALS_STEP_TYPE,classOf[ExecutorKubernetesCredentialsFeatureStep]
-  )
+    CREDENTIALS_STEP_TYPE,classOf[ExecutorKubernetesCredentialsFeatureStep])
   private val mountSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     SECRETS_STEP_TYPE, classOf[MountSecretsFeatureStep])
   private val envSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
@@ -67,7 +66,8 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Nil,
       Seq.empty[String])
     validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf), BASIC_STEP_TYPE, LOCAL_DIRS_STEP_TYPE, CREDENTIALS_STEP_TYPE)
+      builderUnderTest.buildFromFeatures(conf), BASIC_STEP_TYPE, LOCAL_DIRS_STEP_TYPE,
+      CREDENTIALS_STEP_TYPE)
   }
 
   test("Apply secrets step if secrets are present.") {
