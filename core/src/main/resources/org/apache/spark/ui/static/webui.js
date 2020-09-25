@@ -16,9 +16,14 @@
  */
 
 var uiRoot = "";
+var appBasePath = "";
 
 function setUIRoot(val) {
     uiRoot = val;
+}
+
+function setAppBasePath(path) {
+    appBasePath = path;
 }
 
 function collapseTablePageLoad(name, table){
@@ -33,7 +38,7 @@ function collapseTable(thisName, table){
     var status = window.localStorage.getItem(thisName) == "true";
     status = !status;
 
-    thisClass = '.' + thisName
+    var thisClass = '.' + thisName;
 
     // Expand the list of additional metrics.
     var tableDiv = $(thisClass).parent().find('.' + table);
