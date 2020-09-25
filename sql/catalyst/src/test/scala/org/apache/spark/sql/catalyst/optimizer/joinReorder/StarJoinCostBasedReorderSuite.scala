@@ -39,7 +39,7 @@ class StarJoinCostBasedReorderSuite extends JoinReorderPlanTestBase with StatsEs
         PushPredicateThroughJoin,
         ColumnPruning,
         CollapseProject) ::
-      Batch("Join Reorder", FixedPoint(1),
+      Batch("Join Reorder", Once,
         CostBasedJoinReorder) :: Nil
   }
 
