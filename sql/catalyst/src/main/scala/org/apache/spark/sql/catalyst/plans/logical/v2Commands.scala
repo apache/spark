@@ -463,9 +463,9 @@ case class SetCatalogAndNamespace(
 /**
  * The logical plan of the REFRESH TABLE command that works for v2 catalogs.
  */
-case class RefreshTable(
-    catalog: TableCatalog,
-    ident: Identifier) extends Command
+case class RefreshTable(child: LogicalPlan) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
 
 /**
  * The logical plan of the SHOW CURRENT NAMESPACE command that works for v2 catalogs.
