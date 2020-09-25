@@ -578,9 +578,11 @@ case class WithField(name: String, valExpr: Expression)
 
   override def children: Seq[Expression] = valExpr :: Nil
 
-  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
+  override def dataType: DataType = throw new IllegalStateException(
+    "WithField.dataType should not be called.")
 
-  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
+  override def nullable: Boolean = throw new IllegalStateException(
+    "WithField.nullable should not be called.")
 
   override def prettyName: String = "WithField"
 }
