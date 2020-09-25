@@ -33,6 +33,8 @@ import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Typ
 public class PushBlockStream extends BlockTransferMessage {
   public final String appId;
   public final String blockId;
+  // Similar to the chunkIndex in StreamChunkId, indicating the index of a block in a batch of
+  // blocks to be pushed.
   public final int index;
 
   public PushBlockStream(String appId, String blockId, int index) {
