@@ -153,7 +153,7 @@ object UpdateFieldsBenchmark extends SqlBasedBenchmark {
         valuesPerIteration = 1,
         output = output)
 
-      val columnFunc = modifyNestedColumns(
+      val modifiedColumn = modifyNestedColumns(
         col(nestedColName(0, 0)),
         numsToAdd,
         numsToDrop,
@@ -164,11 +164,11 @@ object UpdateFieldsBenchmark extends SqlBasedBenchmark {
       val nullableInputDf = nestedDf(maxDepth, initialNumberOfColumns, nullable = true)
 
       benchmark.addCase("Non-Nullable StructTypes") { _ =>
-        nonNullableInputDf.select(columnFunc).noop()
+        nonNullableInputDf.select(modifiedColumn).queryExecution.optimizedPlan
       }
 
       benchmark.addCase("Nullable StructTypes") { _ =>
-        nullableInputDf.select(columnFunc).noop()
+        nullableInputDf.select(modifiedColumn).queryExecution.optimizedPlan
       }
 
       benchmark.run()

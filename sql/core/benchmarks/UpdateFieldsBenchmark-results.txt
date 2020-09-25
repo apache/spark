@@ -6,8 +6,8 @@ OpenJDK 64-Bit Server VM 1.8.0_212-b03 on Mac OS X 10.14.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 Add 5 columns and drop 0 columns at 20 different depths of nesting:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------------------
-Non-Nullable StructTypes                                                      239            299          57          0.0   239041387.0       1.0X
-Nullable StructTypes                                                          249            275          27          0.0   249397898.0       1.0X
+Non-Nullable StructTypes                                                       64             70           7          0.0    64023392.0       1.0X
+Nullable StructTypes                                                           65             69           4          0.0    65179698.0       1.0X
 
 
 ================================================================================================
@@ -18,8 +18,8 @@ OpenJDK 64-Bit Server VM 1.8.0_212-b03 on Mac OS X 10.14.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 Add 0 columns and drop 5 columns at 20 different depths of nesting:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------------------
-Non-Nullable StructTypes                                                      288            299          10          0.0   287999562.0       1.0X
-Nullable StructTypes                                                          342            348           5          0.0   341891672.0       0.8X
+Non-Nullable StructTypes                                                       42             47           6          0.0    42129670.0       1.0X
+Nullable StructTypes                                                           44             48           5          0.0    44021916.0       1.0X
 
 
 ================================================================================================
@@ -30,7 +30,7 @@ OpenJDK 64-Bit Server VM 1.8.0_212-b03 on Mac OS X 10.14.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 Add 5 columns and drop 5 columns at 20 different depths of nesting:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------------------
-Non-Nullable StructTypes                                                      325            328           4          0.0   324817445.0       1.0X
-Nullable StructTypes                                                          374            395          25          0.0   373766295.0       0.9X
+Non-Nullable StructTypes                                                       74             77           2          0.0    73518396.0       1.0X
+Nullable StructTypes                                                           77             79           2          0.0    76520609.0       1.0X
 
 
