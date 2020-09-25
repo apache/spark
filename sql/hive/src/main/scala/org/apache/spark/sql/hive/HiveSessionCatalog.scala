@@ -74,7 +74,7 @@ private[sql] class HiveSessionCatalog(
         t.asInstanceOf[Success[Expression]].get
       } else {
         val exception = t.asInstanceOf[Failure[Expression]].exception
-        if (exception.getMessage.contains("Invalid number of arguments for function")) {
+        if (exception.isInstanceOf[IllegalArgumentException]) {
           throw exception
         }
         var udfExpr: Option[Expression] = None
