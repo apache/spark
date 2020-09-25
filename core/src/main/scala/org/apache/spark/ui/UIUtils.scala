@@ -443,7 +443,7 @@ private[spark] object UIUtils extends Logging {
             </th>
           case None => <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
         }
-      }
+      }.toSeq
     }
     <table class={listingTableClass} id={id.map(Text.apply)}>
       <thead>{headerRow}</thead>

@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
@@ -91,7 +92,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   private val tags: mutable.Map[TreeNodeTag[_], Any] = mutable.Map.empty
 
   protected def copyTagsFrom(other: BaseType): Unit = {
-    tags ++= other.tags
+    // SPARK-32753: it only makes sense to copy tags to a new node
+    // but it's too expensive to detect other cases likes node removal
+    // so we make a compromise here to copy tags to node with no tags
+    if (tags.isEmpty) {
+      tags ++= other.tags
+    }
   }
 
   def setTagValue[T](tag: TreeNodeTag[T], value: T): Unit = {
@@ -185,7 +191,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def map[A](f: BaseType => A): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     foreach(ret += f(_))
-    ret
+    ret.toSeq
   }
 
   /**
@@ -195,7 +201,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def flatMap[A](f: BaseType => TraversableOnce[A]): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     foreach(ret ++= f(_))
-    ret
+    ret.toSeq
   }
 
   /**
@@ -206,7 +212,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     val ret = new collection.mutable.ArrayBuffer[B]()
     val lifted = pf.lift
     foreach(node => lifted(node).foreach(ret.+=))
-    ret
+    ret.toSeq
   }
 
   /**
@@ -275,8 +281,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       case s: Seq[_] =>
         s.map(mapChild)
       case m: Map[_, _] =>
+        // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
+        // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
         // `mapValues` is lazy and we need to force it to materialize
-        m.mapValues(mapChild).view.force
+        m.mapValues(mapChild).view.force.toMap
       case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
       case Some(child) => Some(mapChild(child))
       case nonChild: AnyRef => nonChild
@@ -411,6 +419,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         } else {
           Some(arg)
         }
+      // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
+      // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
       case m: Map[_, _] => m.mapValues {
         case arg: TreeNode[_] if containsChild(arg) =>
           val newChild = f(arg.asInstanceOf[BaseType])
@@ -421,7 +431,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
             arg
           }
         case other => other
-      }.view.force // `mapValues` is lazy and we need to force it to materialize
+      }.view.force.toMap // `mapValues` is lazy and we need to force it to materialize
       case d: DataType => d // Avoid unpacking Structs
       case args: Stream[_] => args.map(mapChild).force // Force materialization on stream
       case args: Iterable[_] => args.map(mapChild)
@@ -540,6 +550,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case None => Nil
     case Some(null) => Nil
     case Some(any) => any :: Nil
+    case map: CaseInsensitiveStringMap => truncatedString(
+      map.asCaseSensitiveMap().entrySet().toArray(), "[", ", ", "]", maxFields) :: Nil
     case table: CatalogTable =>
       table.storage.serde match {
         case Some(serde) => table.identifier :: serde :: Nil
@@ -588,7 +600,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       addSuffix: Boolean,
       maxFields: Int,
       printOperatorId: Boolean): Unit = {
-    generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields, printOperatorId)
+    generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields, printOperatorId, 0)
   }
 
   /**
@@ -656,8 +668,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       prefix: String = "",
       addSuffix: Boolean = false,
       maxFields: Int,
-      printNodeId: Boolean): Unit = {
-
+      printNodeId: Boolean,
+      indent: Int = 0): Unit = {
+    append("   " * indent)
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
         append(if (isLast) "   " else ":  ")
@@ -681,20 +694,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     if (innerChildren.nonEmpty) {
       innerChildren.init.foreach(_.generateTreeString(
         depth + 2, lastChildren :+ children.isEmpty :+ false, append, verbose,
-        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId))
+        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent))
       innerChildren.last.generateTreeString(
         depth + 2, lastChildren :+ children.isEmpty :+ true, append, verbose,
-        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId)
+        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent)
     }
 
     if (children.nonEmpty) {
       children.init.foreach(_.generateTreeString(
         depth + 1, lastChildren :+ false, append, verbose, prefix, addSuffix,
-        maxFields, printNodeId = printNodeId)
+        maxFields, printNodeId = printNodeId, indent = indent)
       )
       children.last.generateTreeString(
         depth + 1, lastChildren :+ true, append, verbose, prefix,
-        addSuffix, maxFields, printNodeId = printNodeId)
+        addSuffix, maxFields, printNodeId = printNodeId, indent = indent)
     }
   }
 

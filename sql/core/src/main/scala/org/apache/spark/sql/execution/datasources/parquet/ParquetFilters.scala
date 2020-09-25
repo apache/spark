@@ -34,7 +34,6 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
 import org.apache.spark.sql.sources
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -69,14 +68,14 @@ class ParquetFilters(
         // When g is a `Map`, `g.getOriginalType` is `MAP`.
         // When g is a `List`, `g.getOriginalType` is `LIST`.
         case g: GroupType if g.getOriginalType == null =>
-          getPrimitiveFields(g.getFields.asScala, parentFieldNames :+ g.getName)
+          getPrimitiveFields(g.getFields.asScala.toSeq, parentFieldNames :+ g.getName)
         // Parquet only supports push-down for primitive types; as a result, Map and List types
         // are removed.
         case _ => None
       }
     }
 
-    val primitiveFields = getPrimitiveFields(schema.getFields.asScala).map { field =>
+    val primitiveFields = getPrimitiveFields(schema.getFields.asScala.toSeq).map { field =>
       import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
       (field.fieldNames.toSeq.quoted, field)
     }
@@ -91,7 +90,7 @@ class ParquetFilters(
         .groupBy(_._1.toLowerCase(Locale.ROOT))
         .filter(_._2.size == 1)
         .mapValues(_.head._2)
-      CaseInsensitiveMap(dedupPrimitiveFields)
+      CaseInsensitiveMap(dedupPrimitiveFields.toMap)
     }
   }
 
@@ -124,7 +123,7 @@ class ParquetFilters(
   private val ParquetTimestampMicrosType = ParquetSchemaType(TIMESTAMP_MICROS, INT64, 0, null)
   private val ParquetTimestampMillisType = ParquetSchemaType(TIMESTAMP_MILLIS, INT64, 0, null)
 
-  private def dateToDays(date: Any): SQLDate = date match {
+  private def dateToDays(date: Any): Int = date match {
     case d: Date => DateTimeUtils.fromJavaDate(d)
     case ld: LocalDate => DateTimeUtils.localDateToDays(ld)
   }

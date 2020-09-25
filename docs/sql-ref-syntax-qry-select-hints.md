@@ -31,7 +31,7 @@ Hints give users a way to suggest how Spark SQL to use specific approaches to ge
 
 ### Partitioning Hints
 
-Partitioning hints allow users to suggest a partitioning stragety that Spark should follow. `COALESCE`, `REPARTITION`,
+Partitioning hints allow users to suggest a partitioning strategy that Spark should follow. `COALESCE`, `REPARTITION`,
 and `REPARTITION_BY_RANGE` hints are supported and are equivalent to `coalesce`, `repartition`, and
 `repartitionByRange` [Dataset APIs](api/scala/org/apache/spark/sql/Dataset.html), respectively. These hints give users
 a way to tune performance and control the number of output files in Spark SQL. When multiple partitioning hints are

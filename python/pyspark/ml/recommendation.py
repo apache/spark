@@ -18,10 +18,12 @@
 import sys
 
 from pyspark import since, keyword_only
-from pyspark.ml.util import *
+from pyspark.ml.param.shared import HasPredictionCol, HasBlockSize, HasMaxIter, HasRegParam, \
+    HasCheckpointInterval, HasSeed
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
-from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
+from pyspark.ml.param import Params, TypeConverters, Param
+from pyspark.ml.util import JavaMLWritable, JavaMLReadable
 
 
 __all__ = ['ALS', 'ALSModel']
@@ -45,6 +47,10 @@ class _ALSModelParams(HasPredictionCol, HasBlockSize):
                               "user/item ids the model has not seen in the training data. " +
                               "Supported values: 'nan', 'drop'.",
                               typeConverter=TypeConverters.toString)
+
+    def __init__(self, *args):
+        super(_ALSModelParams, self).__init__(*args)
+        self._setDefault(blockSize=4096)
 
     @since("1.4.0")
     def getUserCol(self):
@@ -98,6 +104,14 @@ class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval
     finalStorageLevel = Param(Params._dummy(), "finalStorageLevel",
                               "StorageLevel for ALS model factors.",
                               typeConverter=TypeConverters.toString)
+
+    def __init__(self, *args):
+        super(_ALSParams, self).__init__(*args)
+        self._setDefault(rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
+                         implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item",
+                         ratingCol="rating", nonnegative=False, checkpointInterval=10,
+                         intermediateStorageLevel="MEMORY_AND_DISK",
+                         finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan")
 
     @since("1.4.0")
     def getRank(self):
@@ -275,45 +289,41 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
     True
     >>> sorted(model.itemFactors.collect()) == sorted(model2.itemFactors.collect())
     True
+    >>> model.transform(test).take(1) == model2.transform(test).take(1)
+    True
 
     .. versionadded:: 1.4.0
     """
 
     @keyword_only
-    def __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                 implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
-                 ratingCol="rating", nonnegative=False, checkpointInterval=10,
+    def __init__(self, *, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10,
+                 numItemBlocks=10, implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item",
+                 seed=None, ratingCol="rating", nonnegative=False, checkpointInterval=10,
                  intermediateStorageLevel="MEMORY_AND_DISK",
                  finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096):
         """
-        __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
-                 implicitPrefs=false, alpha=1.0, userCol="user", itemCol="item", seed=None, \
-                 ratingCol="rating", nonnegative=false, checkpointInterval=10, \
+        __init__(self, \\*, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10,
+                 numItemBlocks=10, implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", \
+                 seed=None, ratingCol="rating", nonnegative=False, checkpointInterval=10, \
                  intermediateStorageLevel="MEMORY_AND_DISK", \
                  finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096)
         """
         super(ALS, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.recommendation.ALS", self.uid)
-        self._setDefault(rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                         implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item",
-                         ratingCol="rating", nonnegative=False, checkpointInterval=10,
-                         intermediateStorageLevel="MEMORY_AND_DISK",
-                         finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan",
-                         blockSize=4096)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
-                  ratingCol="rating", nonnegative=False, checkpointInterval=10,
+    def setParams(self, *, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10,
+                  numItemBlocks=10, implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item",
+                  seed=None, ratingCol="rating", nonnegative=False, checkpointInterval=10,
                   intermediateStorageLevel="MEMORY_AND_DISK",
                   finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096):
         """
-        setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
-                 implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None, \
-                 ratingCol="rating", nonnegative=False, checkpointInterval=10, \
+        setParams(self, \\*, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, \
+                 numItemBlocks=10, implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", \
+                 seed=None, ratingCol="rating", nonnegative=False, checkpointInterval=10, \
                  intermediateStorageLevel="MEMORY_AND_DISK", \
                  finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096)
         Sets params for ALS.

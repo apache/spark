@@ -23,7 +23,8 @@ import java.util.{ArrayList => JArrayList, Collections, List => JList}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, HashSet}
 
-import org.apache.mesos.Protos.{ExecutorInfo => MesosExecutorInfo, TaskInfo => MesosTaskInfo, _}
+import org.apache.mesos.Protos.{ExecutorInfo => MesosExecutorInfo, SlaveID => AgentID,
+  TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.SchedulerDriver
 import org.apache.mesos.protobuf.ByteString
 
@@ -46,12 +47,12 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     sc: SparkContext,
     master: String)
   extends SchedulerBackend
-  with org.apache.mesos.Scheduler
+  with MesosScheduler
   with MesosSchedulerUtils {
 
-  // Stores the slave ids that has launched a Mesos executor.
-  val slaveIdToExecutorInfo = new HashMap[String, MesosExecutorInfo]
-  val taskIdToSlaveId = new HashMap[Long, String]
+  // Stores the agent ids that has launched a Mesos executor.
+  val agentIdToExecutorInfo = new HashMap[String, MesosExecutorInfo]
+  val taskIdToAgentId = new HashMap[Long, String]
 
   // An ExecutorInfo for our tasks
   var execArgs: Array[Byte] = null
@@ -64,7 +65,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
   private[mesos] val mesosExecutorCores = sc.conf.get(mesosConfig.EXECUTOR_CORES)
 
   // Offer constraints
-  private[this] val slaveOfferConstraints =
+  private[this] val agentOfferConstraints =
     parseConstraintString(sc.conf.get(mesosConfig.CONSTRAINTS))
 
   // reject offers with mismatched constraints in seconds
@@ -217,7 +218,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     val builder = new StringBuilder
     tasks.asScala.foreach { t =>
       builder.append("Task id: ").append(t.getTaskId.getValue).append("\n")
-        .append("Slave id: ").append(t.getSlaveId.getValue).append("\n")
+        .append("Agent id: ").append(t.getSlaveId.getValue).append("\n")
         .append("Task resources: ").append(t.getResourcesList).append("\n")
         .append("Executor resources: ").append(t.getExecutor.getResourcesList)
         .append("---------------------------------------------\n")
@@ -226,7 +227,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
   }
 
   /**
-   * Method called by Mesos to offer resources on slaves. We respond by asking our active task sets
+   * Method called by Mesos to offer resources on agents. We respond by asking our active task sets
    * for tasks in order of priority. We fill each node with tasks in a round-robin manner so that
    * tasks are balanced across the cluster.
    */
@@ -237,7 +238,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
         offers.asScala.partition { o =>
           val offerAttributes = toAttributeMap(o.getAttributesList)
           val meetsConstraints =
-            matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
+            matchesAttributeRequirements(agentOfferConstraints, offerAttributes)
 
           // add some debug messaging
           if (!meetsConstraints) {
@@ -259,7 +260,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       val (usableOffers, unUsableOffers) = offersMatchingConstraints.partition { o =>
         val mem = getResource(o.getResourcesList, "mem")
         val cpus = getResource(o.getResourcesList, "cpus")
-        val slaveId = o.getSlaveId.getValue
+        val agentId = o.getSlaveId.getValue
         val offerAttributes = toAttributeMap(o.getAttributesList)
 
         // check offers for
@@ -269,7 +270,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
         val meetsCPURequirements = cpus >= (mesosExecutorCores + scheduler.CPUS_PER_TASK)
         val meetsRequirements =
           (meetsMemoryRequirements && meetsCPURequirements) ||
-          (slaveIdToExecutorInfo.contains(slaveId) && cpus >= scheduler.CPUS_PER_TASK)
+          (agentIdToExecutorInfo.contains(agentId) && cpus >= scheduler.CPUS_PER_TASK)
         val debugstr = if (meetsRequirements) "Accepting" else "Declining"
         logDebug(s"$debugstr offer: ${o.getId.getValue} with attributes: "
           + s"$offerAttributes mem: $mem cpu: $cpus")
@@ -281,10 +282,10 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       unUsableOffers.foreach(o => d.declineOffer(o.getId))
 
       val workerOffers = usableOffers.map { o =>
-        val cpus = if (slaveIdToExecutorInfo.contains(o.getSlaveId.getValue)) {
+        val cpus = if (agentIdToExecutorInfo.contains(o.getSlaveId.getValue)) {
           getResource(o.getResourcesList, "cpus").toInt
         } else {
-          // If the Mesos executor has not been started on this slave yet, set aside a few
+          // If the Mesos executor has not been started on this agent yet, set aside a few
           // cores for the Mesos executor by offering fewer cores to the Spark executor
           (getResource(o.getResourcesList, "cpus") - mesosExecutorCores).toInt
         }
@@ -294,51 +295,51 @@ private[spark] class MesosFineGrainedSchedulerBackend(
           cpus)
       }.toIndexedSeq
 
-      val slaveIdToOffer = usableOffers.map(o => o.getSlaveId.getValue -> o).toMap
-      val slaveIdToWorkerOffer = workerOffers.map(o => o.executorId -> o).toMap
-      val slaveIdToResources = new HashMap[String, JList[Resource]]()
+      val agentIdToOffer = usableOffers.map(o => o.getSlaveId.getValue -> o).toMap
+      val agentIdToWorkerOffer = workerOffers.map(o => o.executorId -> o).toMap
+      val agentIdToResources = new HashMap[String, JList[Resource]]()
       usableOffers.foreach { o =>
-        slaveIdToResources(o.getSlaveId.getValue) = o.getResourcesList
+        agentIdToResources(o.getSlaveId.getValue) = o.getResourcesList
       }
 
       val mesosTasks = new HashMap[String, JArrayList[MesosTaskInfo]]
 
-      val slavesIdsOfAcceptedOffers = HashSet[String]()
+      val agentsIdsOfAcceptedOffers = HashSet[String]()
 
       // Call into the TaskSchedulerImpl
       val acceptedOffers = scheduler.resourceOffers(workerOffers).filter(!_.isEmpty)
       acceptedOffers
         .foreach { offer =>
           offer.foreach { taskDesc =>
-            val slaveId = taskDesc.executorId
-            slavesIdsOfAcceptedOffers += slaveId
-            taskIdToSlaveId(taskDesc.taskId) = slaveId
+            val agentId = taskDesc.executorId
+            agentsIdsOfAcceptedOffers += agentId
+            taskIdToAgentId(taskDesc.taskId) = agentId
             val (mesosTask, remainingResources) = createMesosTask(
               taskDesc,
-              slaveIdToResources(slaveId),
-              slaveId)
-            mesosTasks.getOrElseUpdate(slaveId, new JArrayList[MesosTaskInfo])
+              agentIdToResources(agentId),
+              agentId)
+            mesosTasks.getOrElseUpdate(agentId, new JArrayList[MesosTaskInfo])
               .add(mesosTask)
-            slaveIdToResources(slaveId) = remainingResources
+            agentIdToResources(agentId) = remainingResources
           }
         }
 
       // Reply to the offers
       val filters = Filters.newBuilder().setRefuseSeconds(1).build() // TODO: lower timeout?
 
-      mesosTasks.foreach { case (slaveId, tasks) =>
-        slaveIdToWorkerOffer.get(slaveId).foreach(o =>
-          listenerBus.post(SparkListenerExecutorAdded(System.currentTimeMillis(), slaveId,
+      mesosTasks.foreach { case (agentId, tasks) =>
+        agentIdToWorkerOffer.get(agentId).foreach(o =>
+          listenerBus.post(SparkListenerExecutorAdded(System.currentTimeMillis(), agentId,
             // TODO: Add support for log urls for Mesos
             new ExecutorInfo(o.host, o.cores, Map.empty, Map.empty)))
         )
-        logTrace(s"Launching Mesos tasks on slave '$slaveId', tasks:\n${getTasksSummary(tasks)}")
-        d.launchTasks(Collections.singleton(slaveIdToOffer(slaveId).getId), tasks, filters)
+        logTrace(s"Launching Mesos tasks on agent '$agentId', tasks:\n${getTasksSummary(tasks)}")
+        d.launchTasks(Collections.singleton(agentIdToOffer(agentId).getId), tasks, filters)
       }
 
       // Decline offers that weren't used
       // NOTE: This logic assumes that we only get a single offer for each host in a given batch
-      for (o <- usableOffers if !slavesIdsOfAcceptedOffers.contains(o.getSlaveId.getValue)) {
+      for (o <- usableOffers if !agentsIdsOfAcceptedOffers.contains(o.getSlaveId.getValue)) {
         d.declineOffer(o.getId)
       }
     }
@@ -348,19 +349,19 @@ private[spark] class MesosFineGrainedSchedulerBackend(
   def createMesosTask(
       task: TaskDescription,
       resources: JList[Resource],
-      slaveId: String): (MesosTaskInfo, JList[Resource]) = {
+      agentId: String): (MesosTaskInfo, JList[Resource]) = {
     val taskId = TaskID.newBuilder().setValue(task.taskId.toString).build()
-    val (executorInfo, remainingResources) = if (slaveIdToExecutorInfo.contains(slaveId)) {
-      (slaveIdToExecutorInfo(slaveId), resources)
+    val (executorInfo, remainingResources) = if (agentIdToExecutorInfo.contains(agentId)) {
+      (agentIdToExecutorInfo(agentId), resources)
     } else {
-      createExecutorInfo(resources, slaveId)
+      createExecutorInfo(resources, agentId)
     }
-    slaveIdToExecutorInfo(slaveId) = executorInfo
+    agentIdToExecutorInfo(agentId) = executorInfo
     val (finalResources, cpuResources) =
       partitionResources(remainingResources, "cpus", scheduler.CPUS_PER_TASK)
     val taskInfo = MesosTaskInfo.newBuilder()
       .setTaskId(taskId)
-      .setSlaveId(SlaveID.newBuilder().setValue(slaveId).build())
+      .setSlaveId(AgentID.newBuilder().setValue(agentId).build())
       .setExecutor(executorInfo)
       .setName(task.name)
       .addAllResources(cpuResources.asJava)
@@ -375,12 +376,12 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       val state = mesosToTaskState(status.getState)
       synchronized {
         if (TaskState.isFailed(mesosToTaskState(status.getState))
-          && taskIdToSlaveId.contains(tid)) {
-          // We lost the executor on this slave, so remember that it's gone
-          removeExecutor(taskIdToSlaveId(tid), "Lost executor")
+          && taskIdToAgentId.contains(tid)) {
+          // We lost the executor on this agent, so remember that it's gone
+          removeExecutor(taskIdToAgentId(tid), "Lost executor")
         }
         if (TaskState.isFinished(state)) {
-          taskIdToSlaveId.remove(tid)
+          taskIdToAgentId.remove(tid)
         }
       }
       scheduler.statusUpdate(tid, state, status.getData.asReadOnlyByteBuffer)
@@ -406,39 +407,39 @@ private[spark] class MesosFineGrainedSchedulerBackend(
   }
 
   override def frameworkMessage(
-      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]): Unit = {}
+      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: AgentID, b: Array[Byte]): Unit = {}
 
   /**
-   * Remove executor associated with slaveId in a thread safe manner.
+   * Remove executor associated with agentId in a thread safe manner.
    */
-  private def removeExecutor(slaveId: String, reason: String) = {
+  private def removeExecutor(agentId: String, reason: String) = {
     synchronized {
-      listenerBus.post(SparkListenerExecutorRemoved(System.currentTimeMillis(), slaveId, reason))
-      slaveIdToExecutorInfo -= slaveId
+      listenerBus.post(SparkListenerExecutorRemoved(System.currentTimeMillis(), agentId, reason))
+      agentIdToExecutorInfo -= agentId
     }
   }
 
-  private def recordSlaveLost(
-      d: org.apache.mesos.SchedulerDriver, slaveId: SlaveID, reason: ExecutorLossReason): Unit = {
+  private def recordAgentLost(
+      d: org.apache.mesos.SchedulerDriver, agentId: AgentID, reason: ExecutorLossReason): Unit = {
     inClassLoader() {
-      logInfo("Mesos slave lost: " + slaveId.getValue)
-      removeExecutor(slaveId.getValue, reason.toString)
-      scheduler.executorLost(slaveId.getValue, reason)
+      logInfo("Mesos agent lost: " + agentId.getValue)
+      removeExecutor(agentId.getValue, reason.toString)
+      scheduler.executorLost(agentId.getValue, reason)
     }
   }
 
-  override def slaveLost(d: org.apache.mesos.SchedulerDriver, slaveId: SlaveID): Unit = {
-    recordSlaveLost(d, slaveId, SlaveLost())
+  override def agentLost(d: org.apache.mesos.SchedulerDriver, agentId: AgentID): Unit = {
+    recordAgentLost(d, agentId, ExecutorProcessLost())
   }
 
   override def executorLost(
       d: org.apache.mesos.SchedulerDriver,
       executorId: ExecutorID,
-      slaveId: SlaveID,
+      agentId: AgentID,
       status: Int): Unit = {
-    logInfo("Executor lost: %s, marking slave %s as lost".format(executorId.getValue,
-                                                                 slaveId.getValue))
-    recordSlaveLost(d, slaveId, ExecutorExited(status, exitCausedByApp = true))
+    logInfo("Executor lost: %s, marking agent %s as lost".format(executorId.getValue,
+                                                                 agentId.getValue))
+    recordAgentLost(d, agentId, ExecutorExited(status, exitCausedByApp = true))
   }
 
   override def killTask(

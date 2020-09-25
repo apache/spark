@@ -130,7 +130,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         .createMapOutputWriter(shuffleId, mapId, numPartitions);
     try {
       if (!records.hasNext()) {
-        partitionLengths = mapOutputWriter.commitAllPartitions();
+        partitionLengths = mapOutputWriter.commitAllPartitions().getPartitionLengths();
         mapStatus = MapStatus$.MODULE$.apply(
           blockManager.shuffleServerId(), partitionLengths, mapId);
         return;
@@ -219,7 +219,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       partitionWriters = null;
     }
-    return mapOutputWriter.commitAllPartitions();
+    return mapOutputWriter.commitAllPartitions().getPartitionLengths();
   }
 
   private void writePartitionedDataWithChannel(

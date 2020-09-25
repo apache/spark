@@ -82,7 +82,10 @@ class ExecutorStageSummary private[spark](
     val shuffleWriteRecords : Long,
     val memoryBytesSpilled : Long,
     val diskBytesSpilled : Long,
-    val isBlacklistedForStage: Boolean)
+    val isBlacklistedForStage: Boolean,
+    @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
+    @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
+    val peakMemoryMetrics: Option[ExecutorMetrics])
 
 class ExecutorSummary private[spark](
     val id: String,
@@ -259,7 +262,10 @@ class StageData private[spark](
     val tasks: Option[Map[Long, TaskData]],
     val executorSummary: Option[Map[String, ExecutorStageSummary]],
     val killedTasksSummary: Map[String, Int],
-    val resourceProfileId: Int)
+    val resourceProfileId: Int,
+    @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
+    @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
+    val peakExecutorMetrics: Option[ExecutorMetrics])
 
 class TaskData private[spark](
     val taskId: Long,

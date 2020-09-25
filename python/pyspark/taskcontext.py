@@ -14,10 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-from __future__ import print_function
-import json
-
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 

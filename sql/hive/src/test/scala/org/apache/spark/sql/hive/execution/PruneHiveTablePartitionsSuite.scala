@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.execution.SparkPlan
 
-class PruneHiveTablePartitionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
+
+  override def format(): String = "hive"
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -32,7 +32,7 @@ class PruneHiveTablePartitionsSuite extends QueryTest with SQLTestUtils with Tes
         EliminateSubqueryAliases, new PruneHiveTablePartitions(spark)) :: Nil
   }
 
-  test("SPARK-15616 statistics pruned after going throuhg PruneHiveTablePartitions") {
+  test("SPARK-15616: statistics pruned after going through PruneHiveTablePartitions") {
     withTable("test", "temp") {
       sql(
         s"""
@@ -53,5 +53,36 @@ class PruneHiveTablePartitionsSuite extends QueryTest with SQLTestUtils with Tes
       assert(Optimize.execute(analyzed1).stats.sizeInBytes / 4 ===
         Optimize.execute(analyzed2).stats.sizeInBytes)
     }
+  }
+
+  test("Avoid generating too many predicates in partition pruning") {
+    withTempView("temp") {
+      withTable("t") {
+        sql(
+          s"""
+             |CREATE TABLE t(i INT, p0 INT, p1 INT)
+             |USING $format
+             |PARTITIONED BY (p0, p1)""".stripMargin)
+
+        spark.range(0, 10, 1).selectExpr("id as col")
+          .createOrReplaceTempView("temp")
+
+        for (part <- (0 to 25)) {
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE t PARTITION (p0='$part', p1='$part')
+               |SELECT col FROM temp""".stripMargin)
+        }
+        val scale = 20
+        val predicate = (1 to scale).map(i => s"(p0 = '$i' AND p1 = '$i')").mkString(" OR ")
+        assertPrunedPartitions(s"SELECT * FROM t WHERE $predicate", scale)
+      }
+    }
+  }
+
+  override def getScanExecPartitionSize(plan: SparkPlan): Long = {
+    plan.collectFirst {
+      case p: HiveTableScanExec => p
+    }.get.prunedPartitions.size
   }
 }

@@ -81,8 +81,6 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   @Since("3.0.0")
   def setNumBins(value: Int): this.type = set(numBins, value)
 
-  setDefault(numBins -> 1000)
-
   /** @group setParam */
   @Since("1.5.0")
   def setRawPredictionCol(value: String): this.type = set(rawPredictionCol, value)
@@ -95,7 +93,7 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
-  setDefault(metricName -> "areaUnderROC")
+  setDefault(metricName -> "areaUnderROC", numBins -> 1000)
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {

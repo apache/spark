@@ -219,7 +219,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
 
     model1.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
 
-    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       (Vectors.dense(1.0, 1.0), 2.0), (Vectors.dense(10.0, 10.0), 2.0),
       (Vectors.dense(1.0, 0.5), 2.0), (Vectors.dense(10.0, 4.4), 2.0),
       (Vectors.dense(-1.0, 1.0), 2.0), (Vectors.dense(-100.0, 90.0), 2.0))))
@@ -286,7 +286,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
 
     model1.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
 
-    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       (Vectors.dense(1.0, 1.0), 1.0), (Vectors.dense(10.0, 10.0), 2.0),
       (Vectors.dense(1.0, 0.5), 2.0), (Vectors.dense(10.0, 4.4), 3.0),
       (Vectors.dense(-1.0, 1.0), 3.0), (Vectors.dense(-100.0, 90.0), 4.0))))

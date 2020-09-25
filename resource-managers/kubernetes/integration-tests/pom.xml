@@ -27,11 +27,8 @@
   <artifactId>spark-kubernetes-integration-tests_2.12</artifactId>
   <properties>
     <download-maven-plugin.version>1.3.0</download-maven-plugin.version>
-    <exec-maven-plugin.version>1.4.0</exec-maven-plugin.version>
     <extraScalaTestArgs></extraScalaTestArgs>
     <kubernetes-client.version>4.9.2</kubernetes-client.version>
-    <scala-maven-plugin.version>3.2.2</scala-maven-plugin.version>
-    <scalatest-maven-plugin.version>1.0</scalatest-maven-plugin.version>
     <sbt.project.name>kubernetes-integration-tests</sbt.project.name>
 
     <!-- Integration Test Configuration Properties -->
@@ -186,9 +183,6 @@
   <profiles>
     <profile>
       <id>hadoop-2.7</id>
-      <activation>
-        <activeByDefault>true</activeByDefault>
-      </activation>
       <dependencies>
         <dependency>
           <groupId>com.amazonaws</groupId>
@@ -200,6 +194,9 @@
     </profile>
     <profile>
       <id>hadoop-3.2</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
       <dependencies>
         <dependency>
           <groupId>com.amazonaws</groupId>

@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.io.{File, InterruptedIOException, IOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
+import java.time.ZoneId
 import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
 
 import scala.concurrent.TimeoutException
@@ -34,7 +35,7 @@ import org.apache.spark.{SparkConf, SparkContext, TaskContext, TestUtils}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.Range
-import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{LocalLimitExec, SimpleMode, SparkPlan}
@@ -1219,7 +1220,8 @@ class StreamSuite extends StreamTest {
     }
 
     var lastTimestamp = System.currentTimeMillis()
-    val currentDate = DateTimeUtils.microsToDays(DateTimeUtils.millisToMicros(lastTimestamp))
+    val currentDate = DateTimeUtils.microsToDays(
+      DateTimeUtils.millisToMicros(lastTimestamp), ZoneId.systemDefault)
     testStream(df) (
       AddData(input, 1),
       CheckLastBatch { rows: Seq[Row] =>

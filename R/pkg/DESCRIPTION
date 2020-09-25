@@ -15,7 +15,7 @@ URL: https://www.apache.org/ https://spark.apache.org/
 BugReports: https://spark.apache.org/contributing.html
 SystemRequirements: Java (>= 8, < 12)
 Depends:
-    R (>= 3.1),
+    R (>= 3.5),
     methods
 Suggests:
     knitr,
@@ -23,7 +23,7 @@ Suggests:
     testthat,
     e1071,
     survival,
-    arrow (>= 0.15.1)
+    arrow (>= 1.0.0)
 Collate:
     'schema.R'
     'generics.R'

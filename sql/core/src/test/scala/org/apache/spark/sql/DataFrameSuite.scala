@@ -26,7 +26,8 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
-import org.scalatest.Matchers._
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
@@ -195,22 +196,14 @@ class DataFrameSuite extends QueryTest
   private def assertDecimalSumOverflow(
       df: DataFrame, ansiEnabled: Boolean, expectedAnswer: Row): Unit = {
     if (!ansiEnabled) {
-      try {
-        checkAnswer(df, expectedAnswer)
-      } catch {
-        case e: SparkException if e.getCause.isInstanceOf[ArithmeticException] =>
-          // This is an existing bug that we can write overflowed decimal to UnsafeRow but fail
-          // to read it.
-          assert(e.getCause.getMessage.contains("Decimal precision 39 exceeds max precision 38"))
-      }
+      checkAnswer(df, expectedAnswer)
     } else {
       val e = intercept[SparkException] {
-        df.collect
+        df.collect()
       }
       assert(e.getCause.isInstanceOf[ArithmeticException])
       assert(e.getCause.getMessage.contains("cannot be represented as Decimal") ||
-        e.getCause.getMessage.contains("Overflow in sum of decimals") ||
-        e.getCause.getMessage.contains("Decimal precision 39 exceeds max precision 38"))
+        e.getCause.getMessage.contains("Overflow in sum of decimals"))
     }
   }
 
@@ -1275,7 +1268,7 @@ class DataFrameSuite extends QueryTest
       s"""+----------------+
          ||               a|
          |+----------------+
-         ||[1 -> a, 2 -> b]|
+         ||{1 -> a, 2 -> b}|
          |+----------------+
          |""".stripMargin)
     val df3 = Seq(((1, "a"), 0), ((2, "b"), 0)).toDF("a", "b")
@@ -1283,8 +1276,8 @@ class DataFrameSuite extends QueryTest
       s"""+------+---+
          ||     a|  b|
          |+------+---+
-         ||[1, a]|  0|
-         ||[2, b]|  0|
+         ||{1, a}|  0|
+         ||{2, b}|  0|
          |+------+---+
          |""".stripMargin)
   }
@@ -2547,6 +2540,32 @@ class DataFrameSuite extends QueryTest
       val df = spark.read.parquet(f.getAbsolutePath).as[BigDecimal]
       assert(df.schema === new StructType().add(StructField("d", DecimalType(38, 0))))
     }
+  }
+
+  test("SPARK-32640: ln(NaN) should return NaN") {
+    val df = Seq(Double.NaN).toDF("d")
+    checkAnswer(df.selectExpr("ln(d)"), Row(Double.NaN))
+  }
+
+  test("SPARK-32761: aggregating multiple distinct CONSTANT columns") {
+     checkAnswer(sql("select count(distinct 2), count(distinct 2,3)"), Row(1, 1))
+  }
+
+  test("SPARK-32764: -0.0 and 0.0 should be equal") {
+    val df = Seq(0.0 -> -0.0).toDF("pos", "neg")
+    checkAnswer(df.select($"pos" > $"neg"), Row(false))
+  }
+
+  test("SPARK-32635: Replace references with foldables coming only from the node's children") {
+    val a = Seq("1").toDF("col1").withColumn("col2", lit("1"))
+    val b = Seq("2").toDF("col1").withColumn("col2", lit("2"))
+    val aub = a.union(b)
+    val c = aub.filter($"col1" === "2").cache()
+    val d = Seq("2").toDF("col4")
+    val r = d.join(aub, $"col2" === $"col4").select("col4")
+    val l = c.select("col2")
+    val df = l.join(r, $"col2" === $"col4", "LeftOuter")
+    checkAnswer(df, Row("2", "2"))
   }
 }
 

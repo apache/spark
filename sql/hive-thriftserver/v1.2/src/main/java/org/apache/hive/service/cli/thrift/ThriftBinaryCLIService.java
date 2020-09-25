@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.shims.ShimLoader;
+import org.apache.hive.service.ServiceException;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.CLIService;
 import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup;
@@ -45,7 +46,7 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
   }
 
   @Override
-  public void run() {
+  protected void initializeServer() {
     try {
       // Server thread pool
       String threadPoolName = "HiveServer2-Handler-Pool";
@@ -100,6 +101,14 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
       String msg = "Starting " + ThriftBinaryCLIService.class.getSimpleName() + " on port "
           + serverSocket.getServerSocket().getLocalPort() + " with " + minWorkerThreads + "..." + maxWorkerThreads + " worker threads";
       LOG.info(msg);
+    } catch (Exception t) {
+      throw new ServiceException("Error initializing " + getName(), t);
+    }
+  }
+
+  @Override
+  public void run() {
+    try {
       server.serve();
     } catch (Throwable t) {
       LOG.fatal(

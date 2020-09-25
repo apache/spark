@@ -235,20 +235,17 @@ abstract class AbstractCommandBuilder {
       return scala;
     }
     String sparkHome = getSparkHome();
-    // TODO: revisit for Scala 2.13 support
     File scala212 = new File(sparkHome, "launcher/target/scala-2.12");
-    // File scala211 = new File(sparkHome, "launcher/target/scala-2.11");
-    // checkState(!scala212.isDirectory() || !scala211.isDirectory(),
-    //   "Presence of build for multiple Scala versions detected.\n" +
-    //   "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
-    // if (scala212.isDirectory()) {
-    //   return "2.12";
-    // } else {
-    //   checkState(scala211.isDirectory(), "Cannot find any build directories.");
-    //   return "2.11";
-    // }
-    checkState(scala212.isDirectory(), "Cannot find any build directories.");
-    return "2.12";
+    File scala213 = new File(sparkHome, "launcher/target/scala-2.13");
+    checkState(!scala212.isDirectory() || !scala213.isDirectory(),
+      "Presence of build for multiple Scala versions detected.\n" +
+      "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
+    if (scala213.isDirectory()) {
+      return "2.13";
+    } else {
+      checkState(scala212.isDirectory(), "Cannot find any build directories.");
+      return "2.12";
+    }
   }
 
   String getSparkHome() {

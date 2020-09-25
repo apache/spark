@@ -785,10 +785,10 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("SPARK-19526 Support ignore nulls keywords for first and last") {
-    assertEqual("first(a ignore nulls)", First('a, Literal(true)).toAggregateExpression())
-    assertEqual("first(a)", First('a, Literal(false)).toAggregateExpression())
-    assertEqual("last(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
-    assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
+    assertEqual("first(a ignore nulls)", First('a, true).toAggregateExpression())
+    assertEqual("first(a)", First('a, false).toAggregateExpression())
+    assertEqual("last(a ignore nulls)", Last('a, true).toAggregateExpression())
+    assertEqual("last(a)", Last('a, false).toAggregateExpression())
   }
 
   test("timestamp literals") {

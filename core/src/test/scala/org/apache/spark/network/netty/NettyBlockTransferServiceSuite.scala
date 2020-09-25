@@ -25,7 +25,9 @@ import scala.util.Random
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, times, verify, when}
-import org.scalatest._
+import org.scalatest.BeforeAndAfterEach
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{ExecutorDeadException, SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.network.BlockDataManager
@@ -116,8 +118,8 @@ class NettyBlockTransferServiceSuite
       .thenAnswer(_ => {hitExecutorDeadException = true})
 
     service0 = createService(port, driverEndpointRef)
-    val clientFactoryField = service0.getClass.getField(
-      "org$apache$spark$network$netty$NettyBlockTransferService$$clientFactory")
+    val clientFactoryField = service0.getClass
+      .getSuperclass.getSuperclass.getDeclaredField("clientFactory")
     clientFactoryField.setAccessible(true)
     clientFactoryField.set(service0, clientFactory)
 

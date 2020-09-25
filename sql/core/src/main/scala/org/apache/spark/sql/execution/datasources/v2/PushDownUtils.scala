@@ -63,7 +63,7 @@ object PushDownUtils extends PredicateHelper {
         val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
           DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
         }
-        (r.pushedFilters(), untranslatableExprs ++ postScanFilters)
+        (r.pushedFilters(), (untranslatableExprs ++ postScanFilters).toSeq)
 
       case _ => (Nil, filters)
     }

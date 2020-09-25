@@ -227,7 +227,7 @@ class Dataset[T] private[sql](
     val plan = queryExecution.analyzed match {
       case c: Command =>
         LocalRelation(c.output, withAction("command", queryExecution)(_.executeCollect()))
-      case u @ Union(children) if children.forall(_.isInstanceOf[Command]) =>
+      case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) =>
         LocalRelation(u.output, withAction("command", queryExecution)(_.executeCollect()))
       case _ =>
         queryExecution.analyzed
@@ -2030,37 +2030,50 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 2.3.0
    */
-  def unionByName(other: Dataset[T]): Dataset[T] = withSetOperator {
-    // Check column name duplication
-    val resolver = sparkSession.sessionState.analyzer.resolver
-    val leftOutputAttrs = logicalPlan.output
-    val rightOutputAttrs = other.logicalPlan.output
+  def unionByName(other: Dataset[T]): Dataset[T] = unionByName(other, false)
 
-    SchemaUtils.checkColumnNameDuplication(
-      leftOutputAttrs.map(_.name),
-      "in the left attributes",
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
-    SchemaUtils.checkColumnNameDuplication(
-      rightOutputAttrs.map(_.name),
-      "in the right attributes",
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
-
-    // Builds a project list for `other` based on `logicalPlan` output names
-    val rightProjectList = leftOutputAttrs.map { lattr =>
-      rightOutputAttrs.find { rattr => resolver(lattr.name, rattr.name) }.getOrElse {
-        throw new AnalysisException(
-          s"""Cannot resolve column name "${lattr.name}" among """ +
-            s"""(${rightOutputAttrs.map(_.name).mkString(", ")})""")
-      }
-    }
-
-    // Delegates failure checks to `CheckAnalysis`
-    val notFoundAttrs = rightOutputAttrs.diff(rightProjectList)
-    val rightChild = Project(rightProjectList ++ notFoundAttrs, other.logicalPlan)
-
+  /**
+   * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
+   *
+   * The difference between this function and [[union]] is that this function
+   * resolves columns by name (not by position).
+   *
+   * When the parameter `allowMissingColumns` is `true`, the set of column names
+   * in this and other `Dataset` can differ; missing columns will be filled with null.
+   * Further, the missing columns of this `Dataset` will be added at the end
+   * in the schema of the union result:
+   *
+   * {{{
+   *   val df1 = Seq((1, 2, 3)).toDF("col0", "col1", "col2")
+   *   val df2 = Seq((4, 5, 6)).toDF("col1", "col0", "col3")
+   *   df1.unionByName(df2, true).show
+   *
+   *   // output: "col3" is missing at left df1 and added at the end of schema.
+   *   // +----+----+----+----+
+   *   // |col0|col1|col2|col3|
+   *   // +----+----+----+----+
+   *   // |   1|   2|   3|null|
+   *   // |   5|   4|null|   6|
+   *   // +----+----+----+----+
+   *
+   *   df2.unionByName(df1, true).show
+   *
+   *   // output: "col2" is missing at left df2 and added at the end of schema.
+   *   // +----+----+----+----+
+   *   // |col1|col0|col3|col2|
+   *   // +----+----+----+----+
+   *   // |   4|   5|   6|null|
+   *   // |   2|   1|null|   3|
+   *   // +----+----+----+----+
+   * }}}
+   *
+   * @group typedrel
+   * @since 3.1.0
+   */
+  def unionByName(other: Dataset[T], allowMissingColumns: Boolean): Dataset[T] = withSetOperator {
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
-    CombineUnions(Union(logicalPlan, rightChild))
+    CombineUnions(Union(logicalPlan :: other.logicalPlan :: Nil, true, allowMissingColumns))
   }
 
   /**
@@ -2541,7 +2554,9 @@ class Dataset[T] private[sql](
   def dropDuplicates(colNames: Seq[String]): Dataset[T] = withTypedPlan {
     val resolver = sparkSession.sessionState.analyzer.resolver
     val allColumns = queryExecution.analyzed.output
-    val groupCols = colNames.distinct.flatMap { (colName: String) =>
+    // SPARK-31990: We must keep `toSet.toSeq` here because of the backward compatibility issue
+    // (the Streaming's state store depends on the `groupCols` order).
+    val groupCols = colNames.toSet.toSeq.flatMap { (colName: String) =>
       // It is possibly there are more than one columns with the same name,
       // so we call filter instead of find.
       val cols = allColumns.filter(col => resolver(col.name, colName))
@@ -2989,17 +3004,9 @@ class Dataset[T] private[sql](
     Repartition(numPartitions, shuffle = true, logicalPlan)
   }
 
-  /**
-   * Returns a new Dataset partitioned by the given partitioning expressions into
-   * `numPartitions`. The resulting Dataset is hash partitioned.
-   *
-   * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
-   *
-   * @group typedrel
-   * @since 2.0.0
-   */
-  @scala.annotation.varargs
-  def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
+  private def repartitionByExpression(
+      numPartitions: Option[Int],
+      partitionExprs: Seq[Column]): Dataset[T] = {
     // The underlying `LogicalPlan` operator special-cases all-`SortOrder` arguments.
     // However, we don't want to complicate the semantics of this API method.
     // Instead, let's give users a friendly error message, pointing them to the new method.
@@ -3014,6 +3021,20 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a new Dataset partitioned by the given partitioning expressions into
+   * `numPartitions`. The resulting Dataset is hash partitioned.
+   *
+   * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  @scala.annotation.varargs
+  def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
+    repartitionByExpression(Some(numPartitions), partitionExprs)
+  }
+
+  /**
    * Returns a new Dataset partitioned by the given partitioning expressions, using
    * `spark.sql.shuffle.partitions` as number of partitions.
    * The resulting Dataset is hash partitioned.
@@ -3025,7 +3046,20 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartition(partitionExprs: Column*): Dataset[T] = {
-    repartition(sparkSession.sessionState.conf.numShufflePartitions, partitionExprs: _*)
+    repartitionByExpression(None, partitionExprs)
+  }
+
+  private def repartitionByRange(
+      numPartitions: Option[Int],
+      partitionExprs: Seq[Column]): Dataset[T] = {
+    require(partitionExprs.nonEmpty, "At least one partition-by expression must be specified.")
+    val sortOrder: Seq[SortOrder] = partitionExprs.map(_.expr match {
+      case expr: SortOrder => expr
+      case expr: Expression => SortOrder(expr, Ascending)
+    })
+    withTypedPlan {
+      RepartitionByExpression(sortOrder, logicalPlan, numPartitions)
+    }
   }
 
   /**
@@ -3047,14 +3081,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartitionByRange(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
-    require(partitionExprs.nonEmpty, "At least one partition-by expression must be specified.")
-    val sortOrder: Seq[SortOrder] = partitionExprs.map(_.expr match {
-      case expr: SortOrder => expr
-      case expr: Expression => SortOrder(expr, Ascending)
-    })
-    withTypedPlan {
-      RepartitionByExpression(sortOrder, logicalPlan, numPartitions)
-    }
+    repartitionByRange(Some(numPartitions), partitionExprs)
   }
 
   /**
@@ -3076,7 +3103,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartitionByRange(partitionExprs: Column*): Dataset[T] = {
-    repartitionByRange(sparkSession.sessionState.conf.numShufflePartitions, partitionExprs: _*)
+    repartitionByRange(None, partitionExprs)
   }
 
   /**
@@ -3103,6 +3130,10 @@ class Dataset[T] private[sql](
   /**
    * Returns a new Dataset that contains only the unique rows from this Dataset.
    * This is an alias for `dropDuplicates`.
+   *
+   * Note that for a streaming [[Dataset]], this method returns distinct rows only once
+   * regardless of the output mode, which the behavior may not be same with `DISTINCT` in SQL
+   * against streaming [[Dataset]].
    *
    * @note Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
@@ -3518,7 +3549,7 @@ class Dataset[T] private[sql](
         val numPartitions = arrowBatchRdd.partitions.length
 
         // Store collection results for worst case of 1 to N-1 partitions
-        val results = new Array[Array[Array[Byte]]](numPartitions - 1)
+        val results = new Array[Array[Array[Byte]]](Math.max(0, numPartitions - 1))
         var lastIndex = -1  // index of last partition written
 
         // Handler to eagerly write partitions to Python in order

@@ -22,6 +22,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
 import org.apache.spark.rdd.RDD
@@ -269,4 +270,26 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    * @return  predicted label
    */
   protected def raw2prediction(rawPrediction: Vector): Double = rawPrediction.argmax
+
+  /**
+   * If the rawPrediction and prediction columns are set, this method returns the current model,
+   * otherwise it generates new columns for them and sets them as columns on a new copy of
+   * the current model
+   */
+  private[classification] def findSummaryModel():
+  (ClassificationModel[FeaturesType, M], String, String) = {
+    val model = if ($(rawPredictionCol).isEmpty && $(predictionCol).isEmpty) {
+      copy(ParamMap.empty)
+        .setRawPredictionCol("rawPrediction_" + java.util.UUID.randomUUID.toString)
+        .setPredictionCol("prediction_" + java.util.UUID.randomUUID.toString)
+    } else if ($(rawPredictionCol).isEmpty) {
+      copy(ParamMap.empty).setRawPredictionCol("rawPrediction_" +
+        java.util.UUID.randomUUID.toString)
+    } else if ($(predictionCol).isEmpty) {
+      copy(ParamMap.empty).setPredictionCol("prediction_" + java.util.UUID.randomUUID.toString)
+    } else {
+      this
+    }
+    (model, model.getRawPredictionCol, model.getPredictionCol)
+  }
 }

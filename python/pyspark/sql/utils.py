@@ -16,21 +16,8 @@
 #
 
 import py4j
-import sys
 
 from pyspark import SparkContext
-
-if sys.version_info.major >= 3:
-    unicode = str
-    # Disable exception chaining (PEP 3134) in captured exceptions
-    # in order to hide JVM stacktace.
-    exec("""
-def raise_from(e):
-    raise e from None
-""")
-else:
-    def raise_from(e):
-        raise e
 
 
 class CapturedException(Exception):
@@ -45,11 +32,7 @@ class CapturedException(Exception):
         desc = self.desc
         if debug_enabled:
             desc = desc + "\n\nJVM stacktrace:\n%s" % self.stackTrace
-        # encode unicode instance for python2 for human readable description
-        if sys.version_info.major < 3 and isinstance(desc, unicode):
-            return str(desc.encode('utf-8'))
-        else:
-            return str(desc)
+        return str(desc)
 
 
 class AnalysisException(CapturedException):
@@ -116,8 +99,8 @@ def convert_exception(e):
             # To make sure this only catches Python UDFs.
             and any(map(lambda v: "org.apache.spark.sql.execution.python" in v.toString(),
                         c.getStackTrace()))):
-        msg = ("\n  An exception was thrown from Python worker in the executor. "
-               "The below is the Python worker stacktrace.\n%s" % c.getMessage())
+        msg = ("\n  An exception was thrown from the Python worker. "
+               "Please see the stack trace below.\n%s" % c.getMessage())
         return PythonException(msg, stacktrace)
     return UnknownException(s, stacktrace, c)
 
@@ -131,7 +114,7 @@ def capture_sql_exception(f):
             if not isinstance(converted, UnknownException):
                 # Hide where the exception came from that shows a non-Pythonic
                 # JVM exception message.
-                raise_from(converted)
+                raise converted from None
             else:
                 raise
     return deco

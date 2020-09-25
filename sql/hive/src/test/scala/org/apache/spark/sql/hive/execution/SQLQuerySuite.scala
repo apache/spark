@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Functio
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.execution.TestUncaughtExceptionHandler
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.command.{FunctionsCommand, LoadDataCommand}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
@@ -43,6 +44,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
 case class Nested1(f1: Nested2)
@@ -91,7 +93,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   test("script") {
     withTempView("script_table") {
       assume(TestUtils.testCommandAvailable("/bin/bash"))
-      assume(TestUtils.testCommandAvailable("echo | sed"))
+      assume(TestUtils.testCommandAvailable("echo"))
+      assume(TestUtils.testCommandAvailable("sed"))
       val scriptFilePath = getTestResourcePath("test_script.sh")
       val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
       df.createOrReplaceTempView("script_table")
@@ -1172,7 +1175,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
   test("SPARK-6785: HiveQuerySuite - Date comparison test 2") {
     checkAnswer(
-      sql("SELECT CAST(CAST(0 AS timestamp) AS date) > CAST(0 AS timestamp) FROM src LIMIT 1"),
+      sql("SELECT CAST(timestamp_seconds(0) AS date) > timestamp_seconds(0) FROM src LIMIT 1"),
       Row(false))
   }
 
@@ -1182,10 +1185,10 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       sql(
         """
           | SELECT
-          | CAST(CAST(0 AS timestamp) AS date),
-          | CAST(CAST(CAST(0 AS timestamp) AS date) AS string),
-          | CAST(0 AS timestamp),
-          | CAST(CAST(0 AS timestamp) AS string),
+          | CAST(timestamp_seconds(0) AS date),
+          | CAST(CAST(timestamp_seconds(0) AS date) AS string),
+          | timestamp_seconds(0),
+          | CAST(timestamp_seconds(0) AS string),
           | CAST(CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date) AS timestamp)
           | FROM src LIMIT 1
         """.stripMargin),
@@ -2203,38 +2206,63 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  test("SPARK-21912 ORC/Parquet table should not create invalid column names") {
+  test("SPARK-21912 Parquet table should not create invalid column names") {
     Seq(" ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
-      Seq("ORC", "PARQUET").foreach { source =>
-        withTable("t21912") {
-          val m = intercept[AnalysisException] {
-            sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
-          }.getMessage
-          assert(m.contains(s"contains invalid character(s)"))
+      val source = "PARQUET"
+      withTable("t21912") {
+        val m = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
+        }.getMessage
+        assert(m.contains(s"contains invalid character(s)"))
 
-          val m1 = intercept[AnalysisException] {
-            sql(s"CREATE TABLE t21912 STORED AS $source AS SELECT 1 `col$name`")
-          }.getMessage
-          assert(m1.contains(s"contains invalid character(s)"))
+        val m1 = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t21912 STORED AS $source AS SELECT 1 `col$name`")
+        }.getMessage
+        assert(m1.contains(s"contains invalid character(s)"))
 
-          val m2 = intercept[AnalysisException] {
-            sql(s"CREATE TABLE t21912 USING $source AS SELECT 1 `col$name`")
-          }.getMessage
-          assert(m2.contains(s"contains invalid character(s)"))
+        val m2 = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t21912 USING $source AS SELECT 1 `col$name`")
+        }.getMessage
+        assert(m2.contains(s"contains invalid character(s)"))
 
-          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
-            val m3 = intercept[AnalysisException] {
-              sql(s"CREATE TABLE t21912(`col$name` INT) USING hive OPTIONS (fileFormat '$source')")
-            }.getMessage
-            assert(m3.contains(s"contains invalid character(s)"))
-          }
-
-          sql(s"CREATE TABLE t21912(`col` INT) USING $source")
-          val m4 = intercept[AnalysisException] {
-            sql(s"ALTER TABLE t21912 ADD COLUMNS(`col$name` INT)")
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+          val m3 = intercept[AnalysisException] {
+            sql(s"CREATE TABLE t21912(`col$name` INT) USING hive OPTIONS (fileFormat '$source')")
           }.getMessage
-          assert(m4.contains(s"contains invalid character(s)"))
+          assert(m3.contains(s"contains invalid character(s)"))
         }
+
+        sql(s"CREATE TABLE t21912(`col` INT) USING $source")
+        val m4 = intercept[AnalysisException] {
+          sql(s"ALTER TABLE t21912 ADD COLUMNS(`col$name` INT)")
+        }.getMessage
+        assert(m4.contains(s"contains invalid character(s)"))
+      }
+    }
+  }
+
+  test("SPARK-32889: ORC table column name supports special characters") {
+    assume(HiveUtils.isHive23)
+    // " " "," is not allowed.
+    Seq("$", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
+      val source = "ORC"
+      Seq(s"CREATE TABLE t32889(`$name` INT) USING $source",
+          s"CREATE TABLE t32889 STORED AS $source AS SELECT 1 `$name`",
+          s"CREATE TABLE t32889 USING $source AS SELECT 1 `$name`",
+          s"CREATE TABLE t32889(`$name` INT) USING hive OPTIONS (fileFormat '$source')")
+      .foreach { command =>
+        withTable("t32889") {
+          sql(command)
+          assertResult(name)(
+            sessionState.catalog.getTableMetadata(TableIdentifier("t32889")).schema.fields(0).name)
+        }
+      }
+
+      withTable("t32889") {
+        sql(s"CREATE TABLE t32889(`col` INT) USING $source")
+        sql(s"ALTER TABLE t32889 ADD COLUMNS(`$name` INT)")
+        assertResult(name)(
+          sessionState.catalog.getTableMetadata(TableIdentifier("t32889")).schema.fields(1).name)
       }
     }
   }
@@ -2544,8 +2572,23 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       assert(e.getMessage.contains("Cannot modify the value of a static config"))
     }
   }
+
+  test("SPARK-29295: dynamic partition map parsed from partition path should be case insensitive") {
+    withTable("t") {
+      withSQLConf("hive.exec.dynamic.partition" -> "true",
+        "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        withTempDir { loc =>
+          sql(s"CREATE TABLE t(c1 INT) PARTITIONED BY(P1 STRING) LOCATION '${loc.getAbsolutePath}'")
+          sql("INSERT OVERWRITE TABLE t PARTITION(P1) VALUES(1, 'caseSensitive')")
+          checkAnswer(sql("select * from t"), Row(1, "caseSensitive"))
+        }
+      }
+    }
+  }
 }
 
+@SlowHiveTest
 class SQLQuerySuite extends SQLQuerySuiteBase with DisableAdaptiveExecutionSuite
+@SlowHiveTest
 class SQLQuerySuiteAE extends SQLQuerySuiteBase with EnableAdaptiveExecutionSuite
 

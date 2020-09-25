@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import org.apache.hive.service.cli.OperationState
+import org.apache.hive.service.cli.{HiveSQLException, OperationState}
 import org.apache.hive.service.cli.operation.Operation
 
 import org.apache.spark.SparkContext
@@ -37,7 +37,7 @@ private[hive] trait SparkOperation extends Operation with Logging {
 
   protected var statementId = getHandle().getHandleIdentifier().getPublicId().toString()
 
-  protected def cleanup(): Unit = Unit // noop by default
+  protected def cleanup(): Unit = () // noop by default
 
   abstract override def run(): Unit = {
     withLocalProperties {
@@ -46,8 +46,8 @@ private[hive] trait SparkOperation extends Operation with Logging {
   }
 
   abstract override def close(): Unit = {
-    cleanup()
     super.close()
+    cleanup()
     logInfo(s"Close statement with $statementId")
     HiveThriftServer2.eventManager.onOperationClosed(statementId)
   }
@@ -92,5 +92,17 @@ private[hive] trait SparkOperation extends Operation with Logging {
     case VIEW => "VIEW"
     case t =>
       throw new IllegalArgumentException(s"Unknown table type is found: $t")
+  }
+
+  protected def onError(): PartialFunction[Throwable, Unit] = {
+    case e: Throwable =>
+      logError(s"Error operating $getType with $statementId", e)
+      super.setState(OperationState.ERROR)
+      HiveThriftServer2.eventManager.onStatementError(
+        statementId, e.getMessage, Utils.exceptionString(e))
+      e match {
+        case _: HiveSQLException => throw e
+        case _ => throw new HiveSQLException(s"Error operating $getType ${e.getMessage}", e)
+      }
   }
 }

@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.Locale
+import java.time.ZoneOffset
+import java.util.{Locale, TimeZone}
 import javax.ws.rs.core.UriBuilder
 
 import scala.collection.JavaConverters._
@@ -32,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
@@ -56,6 +58,9 @@ class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser(conf) {
 class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
 
+  private val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=(.*)""".r
+  private val configKeyDef = """([a-zA-Z_\d\\.:]+)$""".r
+
   /**
    * Create a [[SetCommand]] logical plan.
    *
@@ -64,17 +69,28 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * character in the raw string.
    */
   override def visitSetConfiguration(ctx: SetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    // Construct the command.
-    val raw = remainder(ctx.SET.getSymbol)
-    val keyValueSeparatorIndex = raw.indexOf('=')
-    if (keyValueSeparatorIndex >= 0) {
-      val key = raw.substring(0, keyValueSeparatorIndex).trim
-      val value = raw.substring(keyValueSeparatorIndex + 1).trim
-      SetCommand(Some(key -> Option(value)))
-    } else if (raw.nonEmpty) {
-      SetCommand(Some(raw.trim -> None))
+    remainder(ctx.SET.getSymbol).trim match {
+      case configKeyValueDef(key, value) =>
+        SetCommand(Some(key -> Option(value.trim)))
+      case configKeyDef(key) =>
+        SetCommand(Some(key -> None))
+      case s if s == "-v" =>
+        SetCommand(Some("-v" -> None))
+      case s if s.isEmpty =>
+        SetCommand(None)
+      case _ => throw new ParseException("Expected format is 'SET', 'SET key', or " +
+        "'SET key=value'. If you want to include special characters in key, " +
+        "please use quotes, e.g., SET `ke y`=value.", ctx)
+    }
+  }
+
+  override def visitSetQuotedConfiguration(ctx: SetQuotedConfigurationContext)
+    : LogicalPlan = withOrigin(ctx) {
+    val keyStr = ctx.configKey().getText
+    if (ctx.EQ() != null) {
+      SetCommand(Some(keyStr -> Option(remainder(ctx.EQ().getSymbol).trim)))
     } else {
-      SetCommand(None)
+      SetCommand(Some(keyStr -> None))
     }
   }
 
@@ -83,11 +99,60 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Example SQL :
    * {{{
    *   RESET;
+   *   RESET spark.sql.session.timeZone;
    * }}}
    */
   override def visitResetConfiguration(
       ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    ResetCommand
+    remainder(ctx.RESET.getSymbol).trim match {
+      case configKeyDef(key) =>
+        ResetCommand(Some(key))
+      case s if s.trim.isEmpty =>
+        ResetCommand(None)
+      case _ => throw new ParseException("Expected format is 'RESET' or 'RESET key'. " +
+        "If you want to include special characters in key, " +
+        "please use quotes, e.g., RESET `ke y`.", ctx)
+    }
+  }
+
+  override def visitResetQuotedConfiguration(
+      ctx: ResetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
+    ResetCommand(Some(ctx.configKey().getText))
+  }
+
+  /**
+   * Create a [[SetCommand]] logical plan to set [[SQLConf.SESSION_LOCAL_TIMEZONE]]
+   * Example SQL :
+   * {{{
+   *   SET TIME ZONE LOCAL;
+   *   SET TIME ZONE 'Asia/Shanghai';
+   *   SET TIME ZONE INTERVAL 10 HOURS;
+   * }}}
+   */
+  override def visitSetTimeZone(ctx: SetTimeZoneContext): LogicalPlan = withOrigin(ctx) {
+    val key = SQLConf.SESSION_LOCAL_TIMEZONE.key
+    if (ctx.interval != null) {
+      val interval = parseIntervalLiteral(ctx.interval)
+      if (interval.months != 0 || interval.days != 0 ||
+        math.abs(interval.microseconds) > 18 * DateTimeConstants.MICROS_PER_HOUR ||
+        interval.microseconds % DateTimeConstants.MICROS_PER_SECOND != 0) {
+        throw new ParseException("The interval value must be in the range of [-18, +18] hours" +
+          " with second precision",
+          ctx.interval())
+      } else {
+        val seconds = (interval.microseconds / DateTimeConstants.MICROS_PER_SECOND).toInt
+        SetCommand(Some(key -> Some(ZoneOffset.ofTotalSeconds(seconds).toString)))
+      }
+    } else if (ctx.timezone != null) {
+      ctx.timezone.getType match {
+        case SqlBaseParser.LOCAL =>
+          SetCommand(Some(key -> Some(TimeZone.getDefault.getID)))
+        case _ =>
+          SetCommand(Some(key -> Some(string(ctx.STRING))))
+      }
+    } else {
+      throw new ParseException("Invalid time zone displacement value", ctx)
+    }
   }
 
   /**
@@ -229,14 +294,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitNestedConstantList(
       ctx: NestedConstantListContext): Seq[Seq[String]] = withOrigin(ctx) {
-    ctx.constantList.asScala.map(visitConstantList)
+    ctx.constantList.asScala.map(visitConstantList).toSeq
   }
 
   /**
    * Convert a constants list into a String sequence.
    */
   override def visitConstantList(ctx: ConstantListContext): Seq[String] = withOrigin(ctx) {
-    ctx.constant.asScala.map(visitStringConstant)
+    ctx.constant.asScala.map(visitStringConstant).toSeq
   }
 
   /**
@@ -355,7 +420,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
     // Storage format
     val defaultStorage = HiveSerDe.getDefaultStorage(conf)
-    validateRowFormatFileFormat(ctx.rowFormat.asScala, ctx.createFileFormat.asScala, ctx)
+    validateRowFormatFileFormat(
+      ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx)
     val fileStorage = ctx.createFileFormat.asScala.headOption.map(visitCreateFileFormat)
       .getOrElse(CatalogStorageFormat.empty)
     val rowStorage = ctx.rowFormat.asScala.headOption.map(visitRowFormat)
@@ -588,10 +654,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitRowFormatDelimited(
       ctx: RowFormatDelimitedContext): CatalogStorageFormat = withOrigin(ctx) {
-    // Collect the entries if any.
-    def entry(key: String, value: Token): Seq[(String, String)] = {
-      Option(value).toSeq.map(x => key -> string(x))
-    }
     // TODO we need proper support for the NULL format.
     val entries =
       entry("field.delim", ctx.fieldsTerminatedBy) ++
@@ -690,14 +752,18 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         // expects a seq of pairs in which the old parsers' token names are used as keys.
         // Transforming the result of visitRowFormatDelimited would be quite a bit messier than
         // retrieving the key value pairs ourselves.
-        def entry(key: String, value: Token): Seq[(String, String)] = {
-          Option(value).map(t => key -> t.getText).toSeq
-        }
         val entries = entry("TOK_TABLEROWFORMATFIELD", c.fieldsTerminatedBy) ++
           entry("TOK_TABLEROWFORMATCOLLITEMS", c.collectionItemsTerminatedBy) ++
           entry("TOK_TABLEROWFORMATMAPKEYS", c.keysTerminatedBy) ++
-          entry("TOK_TABLEROWFORMATLINES", c.linesSeparatedBy) ++
-          entry("TOK_TABLEROWFORMATNULL", c.nullDefinedAs)
+          entry("TOK_TABLEROWFORMATNULL", c.nullDefinedAs) ++
+          Option(c.linesSeparatedBy).toSeq.map { token =>
+            val value = string(token)
+            validate(
+              value == "\n",
+              s"LINES TERMINATED BY only supports newline '\\n' right now: $value",
+              c)
+            "TOK_TABLEROWFORMATLINES" -> value
+          }
 
         (entries, None, Seq.empty, None)
 
@@ -746,7 +812,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       ctx: QueryOrganizationContext,
       expressions: Seq[Expression],
       query: LogicalPlan): LogicalPlan = {
-    RepartitionByExpression(expressions, query, conf.numShufflePartitions)
+    RepartitionByExpression(expressions, query, None)
   }
 
   /**

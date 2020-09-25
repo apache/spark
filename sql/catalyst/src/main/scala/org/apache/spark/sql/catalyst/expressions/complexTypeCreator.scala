@@ -36,7 +36,8 @@ import org.apache.spark.unsafe.types.UTF8String
     Examples:
       > SELECT _FUNC_(1, 2, 3);
        [1,2,3]
-  """)
+  """,
+  since = "1.1.0")
 case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
   extends Expression {
 
@@ -153,7 +154,8 @@ private [sql] object GenArrayData {
     Examples:
       > SELECT _FUNC_(1.0, '2', 3.0, '4');
        {1.0:"2",3.0:"4"}
-  """)
+  """,
+  since = "2.0.0")
 case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
   extends Expression {
 
@@ -253,7 +255,8 @@ object CreateMap {
     Examples:
       > SELECT _FUNC_(array(1.0, 3.0), array('2', '4'));
        {1.0:"2",3.0:"4"}
-  """, since = "2.4.0")
+  """,
+  since = "2.4.0")
 case class MapFromArrays(left: Expression, right: Expression)
   extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
 
@@ -301,7 +304,6 @@ case class MapFromArrays(left: Expression, right: Expression)
  */
 case object NamePlaceholder extends LeafExpression with Unevaluable {
   override lazy val resolved: Boolean = false
-  override def foldable: Boolean = false
   override def nullable: Boolean = false
   override def dataType: DataType = StringType
   override def prettyName: String = "NamePlaceholder"
@@ -346,10 +348,14 @@ object CreateStruct {
       "struct",
       "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.",
       "",
+      """
+        |    Examples:
+        |      > SELECT _FUNC_(1, 2, 3);
+        |       {"col1":1,"col2":2,"col3":3}
+        |  """.stripMargin,
       "",
       "",
-      "",
-      "",
+      "1.4.0",
       "")
     ("struct", (info, this.create))
   }
@@ -367,7 +373,8 @@ object CreateStruct {
     Examples:
       > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
        {"a":1,"b":2,"c":3}
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
   lazy val (nameExprs, valExprs) = children.grouped(2).map {
@@ -538,4 +545,60 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   }
 
   override def prettyName: String = "str_to_map"
+}
+
+/**
+ * Adds/replaces field in struct by name.
+ */
+case class WithFields(
+    structExpr: Expression,
+    names: Seq[String],
+    valExprs: Seq[Expression]) extends Unevaluable {
+
+  assert(names.length == valExprs.length)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!structExpr.dataType.isInstanceOf[StructType]) {
+      TypeCheckResult.TypeCheckFailure(
+        "struct argument should be struct type, got: " + structExpr.dataType.catalogString)
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def children: Seq[Expression] = structExpr +: valExprs
+
+  override def dataType: StructType = evalExpr.dataType.asInstanceOf[StructType]
+
+  override def nullable: Boolean = structExpr.nullable
+
+  override def prettyName: String = "with_fields"
+
+  lazy val evalExpr: Expression = {
+    val existingExprs = structExpr.dataType.asInstanceOf[StructType].fieldNames.zipWithIndex.map {
+      case (name, i) => (name, GetStructField(KnownNotNull(structExpr), i).asInstanceOf[Expression])
+    }
+
+    val addOrReplaceExprs = names.zip(valExprs)
+
+    val resolver = SQLConf.get.resolver
+    val newExprs = addOrReplaceExprs.foldLeft(existingExprs) {
+      case (resultExprs, newExpr @ (newExprName, _)) =>
+        if (resultExprs.exists(x => resolver(x._1, newExprName))) {
+          resultExprs.map {
+            case (name, _) if resolver(name, newExprName) => newExpr
+            case x => x
+          }
+        } else {
+          resultExprs :+ newExpr
+        }
+    }.flatMap { case (name, expr) => Seq(Literal(name), expr) }
+
+    val expr = CreateNamedStruct(newExprs)
+    if (structExpr.nullable) {
+      If(IsNull(structExpr), Literal(null, expr.dataType), expr)
+    } else {
+      expr
+    }
+  }
 }

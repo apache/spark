@@ -55,7 +55,8 @@ package object state {
         valueSchema: StructType,
         indexOrdinal: Option[Int],
         sessionState: SessionState,
-        storeCoordinator: Option[StateStoreCoordinatorRef])(
+        storeCoordinator: Option[StateStoreCoordinatorRef],
+        extraOptions: Map[String, String] = Map.empty)(
         storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U]): StateStoreRDD[T, U] = {
 
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
@@ -78,7 +79,8 @@ package object state {
         valueSchema,
         indexOrdinal,
         sessionState,
-        storeCoordinator)
+        storeCoordinator,
+        extraOptions)
     }
   }
 }

@@ -3,8 +3,8 @@
 -- separating this from datetime-formatting.sql, because the text form
 -- for patterns with 5 letters in SimpleDateFormat varies from different JDKs
 select date_format('2018-11-17 13:33:33.333', 'GGGGG');
--- pattern letter count can not be greater than 10
-select date_format('2018-11-17 13:33:33.333', 'yyyyyyyyyyy');
+-- pattern letter count can not be greater than 6
+select date_format('2018-11-17 13:33:33.333', 'yyyyyyy');
 -- q/L in JDK 8 will fail when the count is more than 2
 select date_format('2018-11-17 13:33:33.333', 'qqqqq');
 select date_format('2018-11-17 13:33:33.333', 'QQQQQ');

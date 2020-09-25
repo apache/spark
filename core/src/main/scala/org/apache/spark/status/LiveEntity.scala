@@ -33,7 +33,7 @@ import org.apache.spark.scheduler.{AccumulableInfo, StageInfo, TaskInfo}
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.{RDDInfo, StorageLevel}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.AccumulatorContext
+import org.apache.spark.util.{AccumulatorContext, Utils}
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -307,7 +307,7 @@ private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extend
   // peak values for executor level metrics
   val peakExecutorMetrics = new ExecutorMetrics()
 
-  def hostname: String = if (host != null) host else hostPort.split(":")(0)
+  def hostname: String = if (host != null) host else Utils.parseHostPort(hostPort)._1
 
   override protected def doUpdate(): Any = {
     val memoryMetrics = if (totalOnHeap >= 0) {
@@ -365,6 +365,8 @@ private class LiveExecutorStageSummary(
 
   var metrics = createMetrics(default = 0L)
 
+  val peakExecutorMetrics = new ExecutorMetrics()
+
   override protected def doUpdate(): Any = {
     val info = new v1.ExecutorStageSummary(
       taskTime,
@@ -381,7 +383,8 @@ private class LiveExecutorStageSummary(
       metrics.shuffleWriteMetrics.recordsWritten,
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled,
-      isBlacklisted)
+      isBlacklisted,
+      Some(peakExecutorMetrics).filter(_.isSet))
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
   }
 
@@ -419,6 +422,8 @@ private class LiveStage extends LiveEntity {
   val activeTasksPerExecutor = new HashMap[String, Int]().withDefaultValue(0)
 
   var blackListedExecutors = new HashSet[String]()
+
+  val peakExecutorMetrics = new ExecutorMetrics()
 
   // Used for cleanup of tasks after they reach the configured limit. Not written to the store.
   @volatile var cleaning = false
@@ -484,7 +489,8 @@ private class LiveStage extends LiveEntity {
       tasks = None,
       executorSummary = None,
       killedTasksSummary = killedSummary,
-      resourceProfileId = info.resourceProfileId)
+      resourceProfileId = info.resourceProfileId,
+      Some(peakExecutorMetrics).filter(_.isSet))
   }
 
   override protected def doUpdate(): Any = {

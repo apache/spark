@@ -100,6 +100,17 @@ trait LegacyDateFormatter extends DateFormatter {
   }
 }
 
+/**
+ * The legacy formatter is based on Apache Commons FastDateFormat. The formatter uses the default
+ * JVM time zone intentionally for compatibility with Spark 2.4 and earlier versions.
+ *
+ * Note: Using of the default JVM time zone makes the formatter compatible with the legacy
+ *       `DateTimeUtils` methods `toJavaDate` and `fromJavaDate` that are based on the default
+ *       JVM time zone too.
+ *
+ * @param pattern `java.text.SimpleDateFormat` compatible pattern.
+ * @param locale The locale overrides the system locale and is used in parsing/formatting.
+ */
 class LegacyFastDateFormatter(pattern: String, locale: Locale) extends LegacyDateFormatter {
   @transient
   private lazy val fdf = FastDateFormat.getInstance(pattern, locale)
@@ -108,6 +119,22 @@ class LegacyFastDateFormatter(pattern: String, locale: Locale) extends LegacyDat
   override def validatePatternString(): Unit = fdf
 }
 
+// scalastyle:off line.size.limit
+/**
+ * The legacy formatter is based on `java.text.SimpleDateFormat`. The formatter uses the default
+ * JVM time zone intentionally for compatibility with Spark 2.4 and earlier versions.
+ *
+ * Note: Using of the default JVM time zone makes the formatter compatible with the legacy
+ *       `DateTimeUtils` methods `toJavaDate` and `fromJavaDate` that are based on the default
+ *       JVM time zone too.
+ *
+ * @param pattern The pattern describing the date and time format.
+ *                See <a href="https://docs.oracle.com/javase/7/docs/api/java/text/SimpleDateFormat.html">
+ *                Date and Time Patterns</a>
+ * @param locale  The locale whose date format symbols should be used. It overrides the system
+ *                locale in parsing/formatting.
+ */
+// scalastyle:on line.size.limit
 class LegacySimpleDateFormatter(pattern: String, locale: Locale) extends LegacyDateFormatter {
   @transient
   private lazy val sdf = new SimpleDateFormat(pattern, locale)

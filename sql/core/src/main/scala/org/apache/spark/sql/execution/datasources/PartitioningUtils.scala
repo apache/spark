@@ -273,7 +273,7 @@ object PartitioningUtils {
       (None, Some(path))
     } else {
       val (columnNames, values) = columns.reverse.unzip
-      (Some(PartitionValues(columnNames, values)), Some(currentPath))
+      (Some(PartitionValues(columnNames.toSeq, values.toSeq)), Some(currentPath))
     }
   }
 
@@ -420,7 +420,7 @@ object PartitioningUtils {
     val distinctPartColNames = pathWithPartitionValues.map(_._2.columnNames).distinct
 
     def groupByKey[K, V](seq: Seq[(K, V)]): Map[K, Iterable[V]] =
-      seq.groupBy { case (key, _) => key }.mapValues(_.map { case (_, value) => value })
+      seq.groupBy { case (key, _) => key }.mapValues(_.map { case (_, value) => value }).toMap
 
     val partColNamesToPaths = groupByKey(pathWithPartitionValues.map {
       case (path, partValues) => partValues.columnNames -> path
@@ -544,6 +544,9 @@ object PartitioningUtils {
       schema: StructType,
       partitionColumns: Seq[String],
       caseSensitive: Boolean): Unit = {
+
+    SchemaUtils.checkColumnNameDuplication(
+      partitionColumns, partitionColumns.mkString(", "), caseSensitive)
 
     partitionColumnsSchema(schema, partitionColumns, caseSensitive).foreach {
       field => field.dataType match {

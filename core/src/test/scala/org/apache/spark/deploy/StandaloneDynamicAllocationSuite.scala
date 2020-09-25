@@ -545,7 +545,7 @@ class StandaloneDynamicAllocationSuite
       // will not timeout anything related to executors.
       .set(config.Network.NETWORK_TIMEOUT.key, "2h")
       .set(config.EXECUTOR_HEARTBEAT_INTERVAL.key, "1h")
-      .set(config.STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT.key, "1h")
+      .set(config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT.key, "1h")
   }
 
   /** Make a master to which our application will send executor requests. */

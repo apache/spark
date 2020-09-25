@@ -334,7 +334,7 @@
     </dependency>
     <dependency>
       <groupId>org.seleniumhq.selenium</groupId>
-      <artifactId>selenium-htmlunit-driver</artifactId>
+      <artifactId>htmlunit-driver</artifactId>
       <scope>test</scope>
     </dependency>
     <!-- Coerce sbt into honoring these dependency updates: -->
