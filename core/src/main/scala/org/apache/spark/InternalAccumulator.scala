@@ -77,3 +77,10 @@ private[spark] object InternalAccumulator {
 
   // scalastyle:on
 }
+
+object ExternalHeavyAccumulator {
+  // An accumulator which start with this prefix will be handled
+  // before entering into listener event processing loop.
+  // This kind accumulator won't be store in Spark UI and will be GC ASAP.
+  val HEAVY_PREFIX = "external.heavy."
+}

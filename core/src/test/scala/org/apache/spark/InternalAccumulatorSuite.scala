@@ -20,7 +20,6 @@ package org.apache.spark
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.internal.config
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorV2, LongAccumulator}
@@ -204,11 +203,10 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     val listener = new SaveInfoListener
     val numPartitions = 10
     sc = new SparkContext("local", "test")
-    sc.conf.set(config.LISTENER_BUS_ALLOW_EXTERNAL_ACCUMULATORS_ENTER_EVENT, false)
     sc.addSparkListener(listener)
     // Have each task add 1 to the internal accumulator
     val internal = InternalAccumulator.METRICS_PREFIX + "a"
-    val external = "a"
+    val external = ExternalHeavyAccumulator.HEAVY_PREFIX + "a"
     val internalAccum = createLongAccum(internal)
     val externalAccum = createLongAccum(external)
     val rdd = sc.parallelize(1 to 100, numPartitions).mapPartitions { iter =>

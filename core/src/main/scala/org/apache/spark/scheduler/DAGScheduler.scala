@@ -274,41 +274,36 @@ private[spark] class DAGScheduler(
       accumUpdates: Seq[AccumulatorV2[_, _]],
       metricPeaks: Array[Long],
       taskInfo: TaskInfo): Unit = {
-    val newAccumUpdates =
-      if (sc.conf.get(config.LISTENER_BUS_ALLOW_EXTERNAL_ACCUMULATORS_ENTER_EVENT)) {
-        accumUpdates
-      } else {
-        // It may cause heavy full GC problem if external accumulators keep in memory.
-        // We update external accumulators before they entering into Spark listener event loop.
-        val (internal, external) = accumUpdates.partition { acc =>
-          acc.name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))
+    // It may cause heavy full GC problem if some heavy external accumulators keep in memory.
+    // We update these heavy accumulators before they entering into Spark listener event loop.
+    val (heavyAccumUpdates, otherAccumUpdates) = accumUpdates.partition { acc =>
+      acc.name.exists(_.startsWith(ExternalHeavyAccumulator.HEAVY_PREFIX))
+    }
+    heavyAccumUpdates.foreach { updates =>
+      val id = updates.id
+      try {
+        // Find the corresponding accumulator on the driver and update it
+        val acc: AccumulatorV2[Any, Any] = AccumulatorContext.get(id) match {
+          case Some(accum) => accum.asInstanceOf[AccumulatorV2[Any, Any]]
+          case None =>
+            throw new SparkException(s"attempted to access non-existent accumulator $id")
         }
-        external.foreach { updates =>
-          val id = updates.id
-          try {
-            // Find the corresponding accumulator on the driver and update it
-            val acc: AccumulatorV2[Any, Any] = AccumulatorContext.get(id) match {
-              case Some(accum) => accum.asInstanceOf[AccumulatorV2[Any, Any]]
-              case None =>
-                throw new SparkException(s"attempted to access non-existent accumulator $id")
-            }
-            acc.merge(updates.asInstanceOf[AccumulatorV2[Any, Any]])
-          } catch {
-            case NonFatal(e) =>
-              // Log the class name to make it easy to find the bad implementation
-              val accumClassName = AccumulatorContext.get(id) match {
-                case Some(accum) => accum.getClass.getName
-                case None => "Unknown class"
-              }
-              logError(
-                s"Failed to update accumulator $id ($accumClassName) for task ${task.partitionId}",
-                e)
+        acc.merge(updates.asInstanceOf[AccumulatorV2[Any, Any]])
+      } catch {
+        case NonFatal(e) =>
+          // Log the class name to make it easy to find the bad implementation
+          val accumClassName = AccumulatorContext.get(id) match {
+            case Some(accum) => accum.getClass.getName
+            case None => "Unknown class"
           }
-        }
-        internal
+          logError(
+            s"Failed to update accumulator $id ($accumClassName) for task ${task.partitionId}",
+            e)
       }
+    }
+
     eventProcessLoop.post(
-      CompletionEvent(task, reason, result, newAccumUpdates, metricPeaks, taskInfo))
+      CompletionEvent(task, reason, result, otherAccumUpdates, metricPeaks, taskInfo))
   }
 
   /**
