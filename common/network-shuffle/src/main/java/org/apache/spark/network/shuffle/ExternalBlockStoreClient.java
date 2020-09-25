@@ -28,8 +28,6 @@ import java.util.concurrent.Future;
 
 import com.codahale.metrics.MetricSet;
 import com.google.common.collect.Lists;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
