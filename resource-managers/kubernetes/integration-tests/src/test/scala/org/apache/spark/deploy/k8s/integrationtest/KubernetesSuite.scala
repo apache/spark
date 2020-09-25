@@ -264,6 +264,10 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       === baseMemory)
   }
 
+  protected def doExecutorServiceAccountCheck(executorPod: Pod, account: String): Unit = {
+    doBasicExecutorPodCheck(executorPod)
+    assert(executorPod.getSpec.getServiceAccount == kubernetesTestComponents.serviceAccountName)
+  }
 
   protected def doBasicDriverPyPodCheck(driverPod: Pod): Unit = {
     assert(driverPod.getMetadata.getName === driverPodName)
