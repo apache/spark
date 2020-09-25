@@ -66,76 +66,102 @@ object UpdateFieldsBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  private def nestedRow(colNums: Seq[Int], maxDepth: Int, currDepth: Int = 1): Row = {
-    if (currDepth == maxDepth) {
-      Row.fromSeq(colNums)
-    } else {
-      val values = colNums.foldLeft(Seq.empty[Any]) {
-        case (values, colNum) if colNum == 0 =>
-          values :+ nestedRow(colNums, maxDepth, currDepth + 1)
-        case (values, colNum) =>
-          values :+ colNum
-      }
-      Row.fromSeq(values)
-    }
-  }
-
   /**
-   * Utility function for generating a DataFrame with nested columns.
+   * Utility function for generating an empty DataFrame with nested columns.
    *
    * @param maxDepth: The depth to which to create nested columns.
-   * @param numColsAtEachDepth: The number of columns to create at each depth. The value of each
-   *                          column will be the same as its index (IntegerType) at that depth
-   *                          unless the index = 0, in which case it may be a StructType which
-   *                          represents the next depth.
-   * @param nullable: This value is used to set the nullability of StructType columns.
+   * @param numColsAtEachDepth: The number of columns to create at each depth.
+   * @param nullable: This value is used to set the nullability of any StructType columns.
    */
-  def nestedDf(maxDepth: Int, numColsAtEachDepth: Int, nullable: Boolean): DataFrame = {
+  def emptyNestedDf(maxDepth: Int, numColsAtEachDepth: Int, nullable: Boolean): DataFrame = {
     require(maxDepth > 0)
     require(numColsAtEachDepth > 0)
 
-    val colNums = 0 until numColsAtEachDepth
-    val nestedColumn = nestedRow(colNums, maxDepth)
-    val nestedColumnDataType = nestedStructType(colNums, nullable, maxDepth)
-
+    val nestedColumnDataType = nestedStructType(0 until numColsAtEachDepth, nullable, maxDepth)
     spark.createDataFrame(
-      spark.sparkContext.parallelize(Row(nestedColumn) :: Nil),
+      spark.sparkContext.emptyRDD[Row],
       StructType(Seq(StructField(nestedColName(0, 0), nestedColumnDataType, nullable))))
   }
 
-  // simulates how a user would add/drop nested fields in a performant manner
-  def modifyNestedColumns(
-      column: Column,
-      numsToAdd: Seq[Int],
-      numsToDrop: Seq[Int],
-      maxDepth: Int,
-      currDepth: Int = 1): Column = {
+  private trait ModifyNestedColumns {
+    val name: String
+    def apply(column: Column, numsToAdd: Seq[Int], numsToDrop: Seq[Int], maxDepth: Int): Column
+  }
 
-    // drop columns at the current depth
-    val dropped = if (numsToDrop.nonEmpty) {
-      column.dropFields(numsToDrop.map(num => nestedColName(currDepth, num)): _*)
-    } else column
+  private object Performant extends ModifyNestedColumns {
+    override val name: String = "performant"
 
-    // add columns at the current depth
-    val added = numsToAdd.foldLeft(dropped) {
-      (res, num) => res.withField(nestedColName(currDepth, num), lit(num))
-    }
+    override def apply(
+        column: Column,
+        numsToAdd: Seq[Int],
+        numsToDrop: Seq[Int],
+        maxDepth: Int): Column = helper(column, numsToAdd, numsToDrop, maxDepth, 1)
 
-    if (currDepth == maxDepth) {
-      added
-    } else {
-      // add/drop columns at the next depth
-      val newValue = modifyNestedColumns(
-        column = col((0 to currDepth).map(d => nestedColName(d, 0)).mkString(".")),
-        numsToAdd = numsToAdd,
-        numsToDrop = numsToDrop,
-        currDepth = currDepth + 1,
-        maxDepth = maxDepth)
-      added.withField(nestedColName(currDepth, 0), newValue)
+    private def helper(
+        column: Column,
+        numsToAdd: Seq[Int],
+        numsToDrop: Seq[Int],
+        maxDepth: Int,
+        currDepth: Int): Column = {
+
+      // drop columns at the current depth
+      val dropped = if (numsToDrop.nonEmpty) {
+        column.dropFields(numsToDrop.map(num => nestedColName(currDepth, num)): _*)
+      } else column
+
+      // add columns at the current depth
+      val added = numsToAdd.foldLeft(dropped) {
+        (res, num) => res.withField(nestedColName(currDepth, num), lit(num))
+      }
+
+      if (currDepth == maxDepth) {
+        added
+      } else {
+        // add/drop columns at the next depth
+        val newValue = helper(
+          column = col((0 to currDepth).map(d => nestedColName(d, 0)).mkString(".")),
+          numsToAdd = numsToAdd,
+          numsToDrop = numsToDrop,
+          currDepth = currDepth + 1,
+          maxDepth = maxDepth)
+        added.withField(nestedColName(currDepth, 0), newValue)
+      }
     }
   }
 
-  def updateFieldsBenchmark(
+  private object NonPerformant extends ModifyNestedColumns {
+    override val name: String = "non-performant"
+
+    override def apply(
+        column: Column,
+        numsToAdd: Seq[Int],
+        numsToDrop: Seq[Int],
+        maxDepth: Int): Column = {
+
+      val dropped = if (numsToDrop.nonEmpty) {
+        val colsToDrop = (1 to maxDepth).flatMap { depth =>
+          numsToDrop.map(num => s"${prefix(depth)}${nestedColName(depth, num)}")
+        }
+        column.dropFields(colsToDrop: _*)
+      } else column
+
+      val added = {
+        val colsToAdd = (1 to maxDepth).flatMap { depth =>
+          numsToAdd.map(num => (s"${prefix(depth)}${nestedColName(depth, num)}", lit(num)))
+        }
+        colsToAdd.foldLeft(dropped)((col, add) => col.withField(add._1, add._2))
+      }
+
+      added
+    }
+
+    private def prefix(depth: Int): String =
+      if (depth == 1) ""
+      else (1 until depth).map(d => nestedColName(d, 0)).mkString("", ".", ".")
+  }
+
+  private def updateFieldsBenchmark(
+      methods: Seq[ModifyNestedColumns],
       maxDepth: Int,
       initialNumberOfColumns: Int,
       numsToAdd: Seq[Int] = Seq.empty,
@@ -147,28 +173,29 @@ object UpdateFieldsBenchmark extends SqlBasedBenchmark {
     runBenchmark(name) {
       val benchmark = new Benchmark(
         name = name,
-        // Because the point of this benchmark is only to ensure Spark is able to analyze and
-        // optimize long UpdateFields chains quickly, this benchmark operates only over 1 row of
-        // data.
-        valuesPerIteration = 1,
+        // The purpose of this benchmark is to ensure Spark is able to analyze and optimize long
+        // UpdateFields chains quickly so it runs over 0 rows of data.
+        valuesPerIteration = 0,
         output = output)
 
-      val modifiedColumn = modifyNestedColumns(
-        col(nestedColName(0, 0)),
-        numsToAdd,
-        numsToDrop,
-        maxDepth
-      ).as(nestedColName(0, 0))
+      val nonNullableStructsDf = emptyNestedDf(maxDepth, initialNumberOfColumns, nullable = false)
+      val nullableStructsDf = emptyNestedDf(maxDepth, initialNumberOfColumns, nullable = true)
 
-      val nonNullableInputDf = nestedDf(maxDepth, initialNumberOfColumns, nullable = false)
-      val nullableInputDf = nestedDf(maxDepth, initialNumberOfColumns, nullable = true)
+      methods.foreach { method =>
+        val modifiedColumn = method(
+          column = col(nestedColName(0, 0)),
+          numsToAdd = numsToAdd,
+          numsToDrop = numsToDrop,
+          maxDepth = maxDepth
+        ).as(nestedColName(0, 0))
 
-      benchmark.addCase("Non-Nullable StructTypes") { _ =>
-        nonNullableInputDf.select(modifiedColumn).queryExecution.optimizedPlan
-      }
+        benchmark.addCase(s"To non-nullable StructTypes using ${method.name} method") { _ =>
+          nonNullableStructsDf.select(modifiedColumn).queryExecution.optimizedPlan
+        }
 
-      benchmark.addCase("Nullable StructTypes") { _ =>
-        nullableInputDf.select(modifiedColumn).queryExecution.optimizedPlan
+        benchmark.addCase(s"To nullable StructTypes using ${method.name} method") { _ =>
+          nullableStructsDf.select(modifiedColumn).queryExecution.optimizedPlan
+        }
       }
 
       benchmark.run()
@@ -176,23 +203,24 @@ object UpdateFieldsBenchmark extends SqlBasedBenchmark {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val maxDepth = 20
-
+    // This benchmark compares the performant and non-performant methods of writing the same query.
+    // We use small values for maxDepth, numsToAdd, and numsToDrop because the NonPerformant method
+    // scales extremely poorly with the number of nested columns being added/dropped.
     updateFieldsBenchmark(
-      maxDepth = maxDepth,
+      methods = Seq(Performant, NonPerformant),
+      maxDepth = 3,
       initialNumberOfColumns = 5,
-      numsToAdd = 5 to 9)
+      numsToAdd = 5 to 6,
+      numsToDrop = 3 to 4)
 
+    // This benchmark is to show that the performant method of writing a query when we want to add
+    // and drop a large number of nested columns scales nicely.
     updateFieldsBenchmark(
-      maxDepth = maxDepth,
-      initialNumberOfColumns = 10,
-      numsToDrop = 5 to 9)
-
-    updateFieldsBenchmark(
-      maxDepth = maxDepth,
-      initialNumberOfColumns = 10,
-      numsToAdd = 10 to 14,
-      numsToDrop = 5 to 9)
+      methods = Seq(Performant),
+      maxDepth = 100,
+      initialNumberOfColumns = 51,
+      numsToAdd = 51 to 100,
+      numsToDrop = 1 to 50)
   }
 }
 
@@ -201,23 +229,23 @@ class UpdateFieldsBenchmark extends QueryTest with SharedSparkSession {
 
   test("nestedDf should generate nested DataFrames") {
     checkAnswer(
-      nestedDf(1, 1, nullable = false),
-      Row(Row(0)) :: Nil,
+      emptyNestedDf(1, 1, nullable = false),
+      Seq.empty[Row],
       StructType(Seq(StructField("nested0Col0", StructType(Seq(
         StructField("nested1Col0", IntegerType, nullable = false))),
         nullable = false))))
 
     checkAnswer(
-      nestedDf(1, 2, nullable = false),
-      Row(Row(0, 1)) :: Nil,
+      emptyNestedDf(1, 2, nullable = false),
+      Seq.empty[Row],
       StructType(Seq(StructField("nested0Col0", StructType(Seq(
         StructField("nested1Col0", IntegerType, nullable = false),
         StructField("nested1Col1", IntegerType, nullable = false))),
         nullable = false))))
 
     checkAnswer(
-      nestedDf(2, 1, nullable = false),
-      Row(Row(Row(0))) :: Nil,
+      emptyNestedDf(2, 1, nullable = false),
+      Seq.empty[Row],
       StructType(Seq(StructField("nested0Col0", StructType(Seq(
         StructField("nested1Col0", StructType(Seq(
           StructField("nested2Col0", IntegerType, nullable = false))),
@@ -225,8 +253,8 @@ class UpdateFieldsBenchmark extends QueryTest with SharedSparkSession {
         nullable = false))))
 
     checkAnswer(
-      nestedDf(2, 2, nullable = false),
-      Row(Row(Row(0, 1), 1)) :: Nil,
+      emptyNestedDf(2, 2, nullable = false),
+      Seq.empty[Row],
       StructType(Seq(StructField("nested0Col0", StructType(Seq(
         StructField("nested1Col0", StructType(Seq(
           StructField("nested2Col0", IntegerType, nullable = false),
@@ -236,8 +264,8 @@ class UpdateFieldsBenchmark extends QueryTest with SharedSparkSession {
         nullable = false))))
 
     checkAnswer(
-      nestedDf(2, 2, nullable = true),
-      Row(Row(Row(0, 1), 1)) :: Nil,
+      emptyNestedDf(2, 2, nullable = true),
+      Seq.empty[Row],
       StructType(Seq(StructField("nested0Col0", StructType(Seq(
         StructField("nested1Col0", StructType(Seq(
           StructField("nested2Col0", IntegerType, nullable = false),
@@ -247,64 +275,36 @@ class UpdateFieldsBenchmark extends QueryTest with SharedSparkSession {
         nullable = true))))
   }
 
-  private val maxDepth = 3
+  Seq(Performant, NonPerformant).foreach { method =>
+    Seq(false, true).foreach { nullable =>
+      test(s"should add and drop 1 column at each depth of nesting using ${method.name} method, " +
+      s"nullable = $nullable") {
+        val maxDepth = 3
 
-  test("modifyNestedColumns should add 5 columns at each depth of nesting") {
-    // dataframe with nested*Col0 to nested*Col4 at each depth
-    val inputDf = nestedDf(maxDepth, 5, nullable = false)
+        // dataframe with nested*Col0 to nested*Col2 at each depth
+        val inputDf = emptyNestedDf(maxDepth, 3, nullable)
 
-    // add nested*Col5 through nested*Col9 at each depth
-    val resultDf = inputDf.select(modifyNestedColumns(
-      column = col(nestedColName(0, 0)),
-      numsToAdd = 5 to 9,
-      numsToDrop = Seq.empty,
-      maxDepth = maxDepth
-    ).as("nested0Col0"))
+        // add nested*Col3 and drop nested*Col2
+        val modifiedColumn = method(
+          column = col(nestedColName(0, 0)),
+          numsToAdd = Seq(3),
+          numsToDrop = Seq(2),
+          maxDepth = maxDepth
+        ).as(nestedColName(0, 0))
+        val resultDf = inputDf.select(modifiedColumn)
 
-    // dataframe with nested*Col0 to nested*Col9 at each depth
-    val expectedDf = nestedDf(maxDepth, 10, nullable = false)
-    checkAnswer(resultDf, expectedDf.collect(), expectedDf.schema)
-  }
+        // dataframe with nested*Col0, nested*Col1, nested*Col3 at each depth
+        val expectedDf = {
+          val colNums = Seq(0, 1, 3)
+          val nestedColumnDataType = nestedStructType(colNums, nullable, maxDepth)
 
-  test("modifyNestedColumns should drop 5 columns at each depth of nesting") {
-    // dataframe with nested*Col0 to nested*Col9 at each depth
-    val inputDf = nestedDf(maxDepth, 10, nullable = false)
+          spark.createDataFrame(
+            spark.sparkContext.emptyRDD[Row],
+            StructType(Seq(StructField(nestedColName(0, 0), nestedColumnDataType, nullable))))
+        }
 
-    // drop nested*Col5 to nested*Col9 at each of 20 depths
-    val resultDf = inputDf.select(modifyNestedColumns(
-      column = col(nestedColName(0, 0)),
-      numsToAdd = Seq.empty,
-      numsToDrop = 5 to 9,
-      maxDepth = maxDepth
-    ).as("nested0Col0"))
-
-    // dataframe with nested*Col0 to nested*Col4 at each depth
-    val expectedDf = nestedDf(maxDepth, 5, nullable = false)
-    checkAnswer(resultDf, expectedDf.collect(), expectedDf.schema)
-  }
-
-  test("modifyNestedColumns should add and drop 5 columns at each depth of nesting") {
-    // dataframe with nested*Col0 to nested*Col9 at each depth
-    val inputDf = nestedDf(maxDepth, 10, nullable = false)
-
-    // drop nested*Col5 to nested*Col9 at each depth
-    val resultDf = inputDf.select(modifyNestedColumns(
-      column = col(nestedColName(0, 0)),
-      numsToAdd = 10 to 14,
-      numsToDrop = 5 to 9,
-      maxDepth = maxDepth
-    ).as("nested0Col0"))
-
-    // dataframe with nested*Col0 to nested*Col4 and nested*Col10 to nested*Col14 at each depth
-    val expectedDf = {
-      val numCols = (0 to 4) ++ (10 to 14)
-      val nestedColumn = nestedRow(numCols, maxDepth)
-      val nestedColumnDataType = nestedStructType(numCols, nullable = false, maxDepth)
-
-      spark.createDataFrame(
-        sparkContext.parallelize(Row(nestedColumn) :: Nil),
-        StructType(Seq(StructField(nestedColName(0, 0), nestedColumnDataType, nullable = false))))
+        checkAnswer(resultDf, expectedDf.collect(), expectedDf.schema)
+      }
     }
-    checkAnswer(resultDf, expectedDf.collect(), expectedDf.schema)
   }
 }

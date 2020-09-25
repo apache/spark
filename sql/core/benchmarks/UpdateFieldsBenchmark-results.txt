@@ -1,36 +1,26 @@
 ================================================================================================
-Add 5 columns and drop 0 columns at 20 different depths of nesting
+Add 2 columns and drop 2 columns at 3 different depths of nesting
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 1.8.0_212-b03 on Mac OS X 10.14.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-Add 5 columns and drop 0 columns at 20 different depths of nesting:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
---------------------------------------------------------------------------------------------------------------------------------------------------
-Non-Nullable StructTypes                                                       64             70           7          0.0    64023392.0       1.0X
-Nullable StructTypes                                                           65             69           4          0.0    65179698.0       1.0X
+Add 2 columns and drop 2 columns at 3 different depths of nesting:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------
+To non-nullable StructTypes using performant method                           10             11           2          0.0      Infinity       1.0X
+To nullable StructTypes using performant method                                9             10           1          0.0      Infinity       1.0X
+To non-nullable StructTypes using non-performant method                     2457           2464          10          0.0      Infinity       0.0X
+To nullable StructTypes using non-performant method                        42641          43804        1644          0.0      Infinity       0.0X
 
 
 ================================================================================================
-Add 0 columns and drop 5 columns at 20 different depths of nesting
-================================================================================================
-
-OpenJDK 64-Bit Server VM 1.8.0_212-b03 on Mac OS X 10.14.6
-Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-Add 0 columns and drop 5 columns at 20 different depths of nesting:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
---------------------------------------------------------------------------------------------------------------------------------------------------
-Non-Nullable StructTypes                                                       42             47           6          0.0    42129670.0       1.0X
-Nullable StructTypes                                                           44             48           5          0.0    44021916.0       1.0X
-
-
-================================================================================================
-Add 5 columns and drop 5 columns at 20 different depths of nesting
+Add 50 columns and drop 50 columns at 100 different depths of nesting
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 1.8.0_212-b03 on Mac OS X 10.14.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-Add 5 columns and drop 5 columns at 20 different depths of nesting:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
---------------------------------------------------------------------------------------------------------------------------------------------------
-Non-Nullable StructTypes                                                       74             77           2          0.0    73518396.0       1.0X
-Nullable StructTypes                                                           77             79           2          0.0    76520609.0       1.0X
+Add 50 columns and drop 50 columns at 100 different depths of nesting:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+To non-nullable StructTypes using performant method                             4595           4927         470          0.0      Infinity       1.0X
+To nullable StructTypes using performant method                                 5185           5516         468          0.0      Infinity       0.9X
 
 
