@@ -623,25 +623,28 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
 
   override def prettyName: String = "update_fields"
 
-  private lazy val existingFieldExprs: Seq[(StructField, Expression)] =
-    structExpr.dataType.asInstanceOf[StructType].fields.zipWithIndex.map {
-      case (field, i) => (field, GetStructField(structExpr, i))
-    }
+  private lazy val newFieldExprs: Seq[(StructField, Expression)] = {
+    val existingFieldExprs: Seq[(StructField, Expression)] =
+      structExpr.dataType.asInstanceOf[StructType].fields.zipWithIndex.map {
+        case (field, i) => (field, GetStructField(structExpr, i))
+      }
 
-  private lazy val newFieldExprs: Seq[(StructField, Expression)] =
     fieldOps.foldLeft(existingFieldExprs)((exprs, op) => op(exprs))
+  }
 
   private lazy val newFields: Seq[StructField] = newFieldExprs.map(_._1)
 
   lazy val newExprs: Seq[Expression] = newFieldExprs.map(_._2)
 
-  private lazy val createNamedStructExpr = CreateNamedStruct(newFieldExprs.flatMap {
-    case (field, expr) => Seq(Literal(field.name), expr)
-  })
+  lazy val evalExpr: Expression = {
+    val createNamedStructExpr = CreateNamedStruct(newFieldExprs.flatMap {
+      case (field, expr) => Seq(Literal(field.name), expr)
+    })
 
-  lazy val evalExpr: Expression = if (structExpr.nullable) {
-    If(IsNull(structExpr), Literal(null, dataType), createNamedStructExpr)
-  } else {
-    createNamedStructExpr
+    if (structExpr.nullable) {
+      If(IsNull(structExpr), Literal(null, dataType), createNamedStructExpr)
+    } else {
+      createNamedStructExpr
+    }
   }
 }
