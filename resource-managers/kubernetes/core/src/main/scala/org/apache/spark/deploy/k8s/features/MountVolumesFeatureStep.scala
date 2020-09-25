@@ -66,32 +66,30 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
         case KubernetesPVCVolumeConf(claimNameTemplate, storageClass, size) =>
           val claimName = conf match {
             case c: KubernetesExecutorConf =>
-              val claimName = claimNameTemplate
+              claimNameTemplate
                 .replaceAll(PVC_ON_DEMAND,
                   s"${conf.resourceNamePrefix}-exec-${c.executorId}$PVC_POSTFIX-$i")
                 .replaceAll(ENV_EXECUTOR_ID, c.executorId)
-
-              if (storageClass.isDefined && size.isDefined) {
-                additionalResources.append(new PersistentVolumeClaimBuilder()
-                  .withKind(PVC)
-                  .withApiVersion("v1")
-                  .withNewMetadata()
-                    .withName(claimName)
-                    .endMetadata()
-                  .withNewSpec()
-                    .withStorageClassName(storageClass.get)
-                    .withAccessModes(PVC_ACCESS_MODE)
-                    .withResources(new ResourceRequirementsBuilder()
-                      .withRequests(Map("storage" -> new Quantity(size.get)).asJava).build())
-                    .endSpec()
-                  .build())
-              }
-
-              claimName
-
             case _ =>
               claimNameTemplate
+                .replaceAll(PVC_ON_DEMAND, s"${conf.resourceNamePrefix}-driver$PVC_POSTFIX-$i")
           }
+          if (storageClass.isDefined && size.isDefined) {
+            additionalResources.append(new PersistentVolumeClaimBuilder()
+              .withKind(PVC)
+              .withApiVersion("v1")
+              .withNewMetadata()
+                .withName(claimName)
+                .endMetadata()
+              .withNewSpec()
+                .withStorageClassName(storageClass.get)
+                .withAccessModes(PVC_ACCESS_MODE)
+                .withResources(new ResourceRequirementsBuilder()
+                  .withRequests(Map("storage" -> new Quantity(size.get)).asJava).build())
+                .endSpec()
+              .build())
+          }
+
           new VolumeBuilder()
             .withPersistentVolumeClaim(
               new PersistentVolumeClaimVolumeSource(claimName, spec.mountReadOnly))
