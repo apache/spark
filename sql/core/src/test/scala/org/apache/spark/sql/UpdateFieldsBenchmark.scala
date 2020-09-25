@@ -42,10 +42,10 @@ object UpdateFieldsBenchmark extends SqlBasedBenchmark {
   private def nestedColName(d: Int, colNum: Int): String = s"nested${d}Col$colNum"
 
   private def nestedStructType(
-    colNums: Seq[Int],
-    nullable: Boolean,
-    maxDepth: Int,
-    currDepth: Int = 1): StructType = {
+      colNums: Seq[Int],
+      nullable: Boolean,
+      maxDepth: Int,
+      currDepth: Int = 1): StructType = {
 
     if (currDepth == maxDepth) {
       val fields = colNums.map { colNum =>
@@ -105,11 +105,11 @@ object UpdateFieldsBenchmark extends SqlBasedBenchmark {
 
   // simulates how a user would add/drop nested fields in a performant manner
   def modifyNestedColumns(
-    column: Column,
-    numsToAdd: Seq[Int],
-    numsToDrop: Seq[Int],
-    maxDepth: Int,
-    currDepth: Int = 1): Column = {
+      column: Column,
+      numsToAdd: Seq[Int],
+      numsToDrop: Seq[Int],
+      maxDepth: Int,
+      currDepth: Int = 1): Column = {
 
     // drop columns at the current depth
     val dropped = if (numsToDrop.nonEmpty) {
@@ -136,10 +136,10 @@ object UpdateFieldsBenchmark extends SqlBasedBenchmark {
   }
 
   def updateFieldsBenchmark(
-    maxDepth: Int,
-    initialNumberOfColumns: Int,
-    numsToAdd: Seq[Int] = Seq.empty,
-    numsToDrop: Seq[Int] = Seq.empty): Unit = {
+      maxDepth: Int,
+      initialNumberOfColumns: Int,
+      numsToAdd: Seq[Int] = Seq.empty,
+      numsToDrop: Seq[Int] = Seq.empty): Unit = {
 
     val name = s"Add ${numsToAdd.length} columns and drop ${numsToDrop.length} columns " +
       s"at $maxDepth different depths of nesting"

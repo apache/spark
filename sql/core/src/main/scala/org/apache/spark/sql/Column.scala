@@ -1008,9 +1008,9 @@ class Column(val expr: Expression) extends Logging {
   }
 
   private def updateFieldsHelper(
-    structExpr: Expression,
-    namePartsRemaining: Seq[String],
-    valueFunc: String => StructFieldsOperation): UpdateFields = {
+      structExpr: Expression,
+      namePartsRemaining: Seq[String],
+      valueFunc: String => StructFieldsOperation): UpdateFields = {
 
     val fieldName = namePartsRemaining.head
     if (namePartsRemaining.length == 1) {

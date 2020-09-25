@@ -161,9 +161,9 @@ abstract class QueryTest extends PlanTest {
   }
 
   protected def checkAnswer(
-    df: => DataFrame,
-    expectedAnswer: Seq[Row],
-    expectedSchema: StructType): Unit = {
+      df: => DataFrame,
+      expectedAnswer: Seq[Row],
+      expectedSchema: StructType): Unit = {
     checkAnswer(df, expectedAnswer)
     assert(df.schema == expectedSchema)
   }
