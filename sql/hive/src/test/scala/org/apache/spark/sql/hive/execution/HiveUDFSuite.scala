@@ -34,6 +34,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.command.FunctionsCommand
 import org.apache.spark.sql.functions.max
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -659,6 +660,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("SPARK-32877: add test for Hive UDF complex decimal type") {
+    assume(HiveUtils.isHive23)
     withUserDefinedFunction("testArraySum" -> false) {
       sql(s"CREATE FUNCTION testArraySum AS '${classOf[ArraySumUDF].getName}'")
       checkAnswer(
