@@ -33,15 +33,15 @@ import org.apache.spark.sql.internal.SQLConf
  * query plan to check where bucketed table scan is unnecessary, and disable bucketed table
  * scan if:
  *
- * (1).The sub-plan from root to bucketed table scan, only contains operator which
- * [[hasInterestingPartition]], [[Exchange]], and allowed single-child operators
- * ([[isAllowedUnaryExecNode]]).
+ * 1.The sub-plan from the nearest downstream [[hasInterestingPartition]] operator
+ * to the bucketed table scan, contains only [[isAllowedUnaryExecNode]] operators
+ * and at least one [[Exchange]].
  *
- * (2).The sub-plan from root to bucketed table scan, does not contain operator which
- * [[hasInterestingPartition]].
+ * 2.The sub-plan from root to bucketed table scan, does not contain
+ * [[hasInterestingPartition]] operator.
  *
  * Examples:
- * (1).join:
+ * 1.join:
  *         SortMergeJoin(t1.i = t2.j)
  *            /            \
  *        Sort(i)        Sort(j)
@@ -51,7 +51,7 @@ import org.apache.spark.sql.internal.SQLConf
  *   Scan(t1: i, j)
  * (bucketed on column j, DISABLE bucketed scan)
  *
- * (2).aggregate:
+ * 2.aggregate:
  *         HashAggregate(i, ..., Final)
  *                      |
  *                  Shuffle(i)
@@ -74,32 +74,25 @@ case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan]
    *
    * @param withInterestingPartition The traversed plan has operator with interesting partition.
    * @param withExchange The traversed plan has [[Exchange]] operator.
-   * @param withNonAllowedNodes The traversed plan has operators not to be
-   *                            [[isAllowedUnaryExecNode]].
+   * @param withAllowedNode The traversed plan has only [[isAllowedUnaryExecNode]] operators.
    */
   private def disableBucketWithInterestingPartition(
       plan: SparkPlan,
       withInterestingPartition: Boolean,
       withExchange: Boolean,
-      withNonAllowedNodes: Boolean): SparkPlan = {
+      withAllowedNode: Boolean): SparkPlan = {
     plan match {
       case p if hasInterestingPartition(p) =>
         // Operator with interesting partition, propagates `withInterestingPartition` as true
-        // to its children, and resets `withExchange` and `withNonAllowedNodes` as false.
-        p.mapChildren(disableBucketWithInterestingPartition(_, true, false, false))
+        // to its children, and resets `withExchange` and `withNonAllowedNodes`.
+        p.mapChildren(disableBucketWithInterestingPartition(_, true, false, true))
       case exchange: Exchange =>
         // Exchange operator propagates `withExchange` as true to its child.
         exchange.mapChildren(disableBucketWithInterestingPartition(
-          _, withInterestingPartition, true, withNonAllowedNodes))
+          _, withInterestingPartition, true, withAllowedNode))
       case scan: FileSourceScanExec =>
         if (isBucketedScanWithoutFilter(scan)) {
-          val isSafeToDisableWithInterestingPartition =
-            withInterestingPartition && withExchange && !withNonAllowedNodes
-          if (isSafeToDisableWithInterestingPartition || !withInterestingPartition) {
-            // Disable bucketed table scan if:
-            // (1).The sub-plan has operator with interesting partition, exchange operator,
-            //     and allowed single-child operators.
-            // (2).The sub-plan does not have operator with interesting partition.
+          if (!withInterestingPartition || (withExchange && withAllowedNode)) {
             scan.copy(disableBucketedScan = true)
           } else {
             scan
@@ -112,7 +105,7 @@ case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan]
           _,
           withInterestingPartition,
           withExchange,
-          withNonAllowedNodes || !isAllowedUnaryExecNode(o)))
+          withAllowedNode && isAllowedUnaryExecNode(o)))
     }
   }
 
@@ -148,7 +141,7 @@ case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan]
     if (!conf.bucketingEnabled || !conf.autoBucketedScanEnabled || !hasBucketedScanWithoutFilter) {
       plan
     } else {
-      disableBucketWithInterestingPartition(plan, false, false, false)
+      disableBucketWithInterestingPartition(plan, false, false, true)
     }
   }
 }

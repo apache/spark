@@ -354,7 +354,7 @@ case class FileSourceScanExec(
 
     // TODO(SPARK-32986): Add bucketed scan info in explain output of FileSourceScanExec
     if (bucketedScan) {
-      val withSelectedBucketsCount = relation.bucketSpec.map { spec =>
+      relation.bucketSpec.map { spec =>
         val numSelectedBuckets = optionalBucketSet.map { b =>
           b.cardinality()
         } getOrElse {
@@ -366,8 +366,6 @@ case class FileSourceScanExec(
       } getOrElse {
         metadata
       }
-
-      withSelectedBucketsCount
     } else {
       metadata
     }
