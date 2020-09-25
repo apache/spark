@@ -1626,6 +1626,24 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     }.getMessage should include("cannot drop all fields in struct")
   }
 
+  test("dropFields should drop field with no name in struct") {
+    val structType = StructType(Seq(
+      StructField("a", IntegerType, nullable = false),
+      StructField("", IntegerType, nullable = false)))
+
+    val structLevel1: DataFrame = spark.createDataFrame(
+      sparkContext.parallelize(Row(Row(1, 2)) :: Nil),
+      StructType(Seq(StructField("a", structType, nullable = false))))
+
+    checkAnswer(
+      structLevel1.withColumn("a", $"a".dropFields("")),
+      Row(Row(1)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false))),
+          nullable = false))))
+  }
+
   test("dropFields should drop field in nested struct") {
     checkAnswer(
       structLevel2.withColumn("a", 'a.dropFields("a.b")),
