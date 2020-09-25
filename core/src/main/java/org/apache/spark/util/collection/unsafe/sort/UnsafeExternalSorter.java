@@ -409,17 +409,26 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    *                 the record size.
    */
   private void allocateMemoryForRecordIfNecessary(int required) throws IOException {
-    // 1. Ensure that the pointer array has space for another record. This may cause a spill.
+    // Step 1:
+    // Ensure that the pointer array has space for another record. This may cause a spill.
     growPointerArrayIfNecessary();
-    // 2. Ensure that the last page has space for another record. This may cause a spill.
+    // Step 2:
+    // Ensure that the last page has space for another record. This may cause a spill.
     acquireNewPageIfNecessary(required);
-    // 3. The allocation in step 2 could have caused a spill, which would have freed the pointer
-    //    array allocated in step 1. Therefore we need to check again whether we have to allocate
-    //    a new pointer array.
-    //    Note that if the allocation in this step causes a spill event then it won't cause the page
-    //    allocated in the previous step to be freed. This step will only allocate memory if we
-    //    have spilled in the previous step, and spill() will only free memory if a record has been
-    //    inserted in the sorter (which is not the case after spilling).
+    // Step 3:
+    // The allocation in step 2 could have caused a spill, which would have freed the pointer
+    // array allocated in step 1. Therefore we need to check again whether we have to allocate
+    // a new pointer array.
+    //
+    // If the allocation in this step causes a spill event then it will not cause the page
+    // allocated in the previous step to be freed. The function `spill` only frees memory if at
+    // least one record has been inserted in the in-memory sorter. This will not be the case if
+    // we have spilled in the previous step.
+    //
+    // If we did not spill in the previous step then `growPointerArrayIfNecessary` will be a
+    // no-op that does not allocate any memory, and therefore can't cause a spill event.
+    //
+    // Thus there is no need to call `acquireNewPageIfNecessary` again after this step.
     growPointerArrayIfNecessary();
   }
 
