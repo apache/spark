@@ -54,3 +54,13 @@ class AnalysisException protected[sql] (
     s"$message;$lineAnnotation$positionAnnotation"
   }
 }
+
+/**
+ * Thrown when a query failed for invalid function argument size, usually because query pass
+ * throw argument number to function.
+ *
+ * @Since 3.1.0
+ */
+class InvalidFunctionArgumentException protected[sql](message: String)
+  extends AnalysisException(message, None, None, None, None) {
+}

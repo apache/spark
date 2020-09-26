@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo
 import test.org.apache.spark.sql.MyDoubleAvg
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, InvalidFunctionArgumentException, QueryTest, Row}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -168,11 +168,11 @@ class HiveUDAFSuite extends QueryTest
     val functionClass = "org.apache.spark.sql.hive.execution.LongProductSum"
     withUserDefinedFunction(functionName -> true) {
       sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$functionClass'")
-      val e = intercept[IllegalArgumentException] {
+      val e = intercept[AnalysisException] {
         sql(s"SELECT $functionName(100)")
       }.getMessage
       assert(e.contains(
-        s"Invalid number of arguments for function $functionName. Expected: 2; Found: 1"))
+        s"Invalid number of arguments for function $functionName. Expected: 2; Found: 1;"))
     }
   }
 }
