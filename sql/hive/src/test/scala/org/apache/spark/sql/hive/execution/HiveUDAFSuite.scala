@@ -168,11 +168,11 @@ class HiveUDAFSuite extends QueryTest
     val functionClass = "org.apache.spark.sql.hive.execution.LongProductSum"
     withUserDefinedFunction(functionName -> true) {
       sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$functionClass'")
-      val e = intercept[AnalysisException] {
+      val e = intercept[IllegalArgumentException] {
         sql(s"SELECT $functionName(100)")
       }.getMessage
       assert(e.contains(
-        s"Invalid number of arguments for function $functionName. Expected: 2; Found: 1;"))
+        s"Invalid number of arguments for function $functionName. Expected: 2; Found: 1"))
     }
   }
 }
