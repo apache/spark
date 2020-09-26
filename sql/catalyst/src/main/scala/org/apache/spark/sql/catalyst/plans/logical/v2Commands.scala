@@ -316,6 +316,17 @@ case class DescribeRelation(
 }
 
 /**
+ * The logical plan of the DESCRIBE relation_name col_name command that works for v2 tables.
+ */
+case class DescribeColumn(
+    relation: LogicalPlan,
+    colNameParts: Seq[String],
+    isExtended: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(relation)
+  override def output: Seq[Attribute] = DescribeTableSchema.describeColumnAttributes()
+}
+
+/**
  * The logical plan of the DELETE FROM command that works for v2 tables.
  */
 case class DeleteFromTable(
