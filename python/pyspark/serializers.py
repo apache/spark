@@ -342,7 +342,7 @@ class NoOpSerializer(FramedSerializer):
 
 # Hack namedtuple, make it picklable
 
-__cls = {}
+__cls = {}  # type: ignore
 
 
 def _restore(name, fields, value):
