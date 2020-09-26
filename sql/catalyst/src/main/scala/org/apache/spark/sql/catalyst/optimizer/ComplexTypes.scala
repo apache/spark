@@ -40,14 +40,14 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
       // Remove redundant field extraction.
       case GetStructField(createNamedStruct: CreateNamedStruct, ordinal, _) =>
         createNamedStruct.valExprs(ordinal)
-    case GetStructField(u: UpdateFields, ordinal, _) if !u.structExpr.isInstanceOf[UpdateFields] =>
-      val structExpr = u.structExpr
-      u.newExprs(ordinal) match {
-        // if the struct itself is null, then any value extracted from it (expr) will be null
-        // so we don't need to wrap expr in If(IsNull(struct), Literal(null, expr.dataType), expr)
-        case expr: GetStructField if expr.child.semanticEquals(structExpr) => expr
-        case expr => If(IsNull(structExpr), Literal(null, expr.dataType), expr)
-      }
+      case GetStructField(u: UpdateFields, ordinal, _)if !u.structExpr.isInstanceOf[UpdateFields] =>
+        val structExpr = u.structExpr
+        u.newExprs(ordinal) match {
+          // if the struct itself is null, then any value extracted from it (expr) will be null
+          // so we don't need to wrap expr in If(IsNull(struct), Literal(null, expr.dataType), expr)
+          case expr: GetStructField if expr.child.semanticEquals(structExpr) => expr
+          case expr => If(IsNull(structExpr), Literal(null, expr.dataType), expr)
+        }
       // Remove redundant array indexing.
       case GetArrayStructFields(CreateArray(elems, useStringTypeWhenEmpty), field, ordinal, _, _) =>
         // Instead of selecting the field on the entire array, select it from each member
