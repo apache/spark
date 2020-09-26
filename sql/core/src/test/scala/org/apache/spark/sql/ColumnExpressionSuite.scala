@@ -931,8 +931,8 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     sparkContext.parallelize(Row(Row(1, null, 3)) :: Nil),
     StructType(Seq(StructField("a", structType, nullable = false))))
 
-  private lazy val nullStructLevel1: DataFrame = spark.createDataFrame(
-    sparkContext.parallelize(Row(null) :: Nil),
+  private lazy val nullableStructLevel1: DataFrame = spark.createDataFrame(
+    sparkContext.parallelize(Row(null) :: Row(Row(1, null, 3)) :: Nil),
     StructType(Seq(StructField("a", structType, nullable = true))))
 
   private lazy val structLevel2: DataFrame = spark.createDataFrame(
@@ -942,12 +942,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         StructField("a", structType, nullable = false))),
         nullable = false))))
 
-  private lazy val nullStructLevel2: DataFrame = spark.createDataFrame(
-    sparkContext.parallelize(Row(Row(null)) :: Nil),
+  private lazy val nullableStructLevel2: DataFrame = spark.createDataFrame(
+    sparkContext.parallelize(Row(null) :: Row(Row(null)) :: Row(Row(Row(1, null, 3))) :: Nil),
     StructType(Seq(
       StructField("a", StructType(Seq(
         StructField("a", structType, nullable = true))),
-        nullable = false))))
+        nullable = true))))
 
   private lazy val structLevel3: DataFrame = spark.createDataFrame(
     sparkContext.parallelize(Row(Row(Row(Row(1, null, 3)))) :: Nil),
@@ -1034,10 +1034,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test("withField should add field to null struct") {
+  test("withField should add field to nullable struct") {
     checkAnswer(
-      nullStructLevel1.withColumn("a", $"a".withField("d", lit(4))),
-      Row(null) :: Nil,
+      nullableStructLevel1.withColumn("a", $"a".withField("d", lit(4))),
+      Row(null) :: Row(Row(1, null, 3, 4)) :: Nil,
       StructType(Seq(
         StructField("a", StructType(Seq(
           StructField("a", IntegerType, nullable = false),
@@ -1047,10 +1047,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = true))))
   }
 
-  test("withField should add field to nested null struct") {
+  test("withField should add field to nested nullable struct") {
     checkAnswer(
-      nullStructLevel2.withColumn("a", $"a".withField("a.d", lit(4))),
-      Row(Row(null)) :: Nil,
+      nullableStructLevel2.withColumn("a", $"a".withField("a.d", lit(4))),
+      Row(null) :: Row(Row(null)) :: Row(Row(Row(1, null, 3, 4))) :: Nil,
       StructType(
         Seq(StructField("a", StructType(Seq(
           StructField("a", StructType(Seq(
@@ -1059,7 +1059,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             StructField("c", IntegerType, nullable = false),
             StructField("d", IntegerType, nullable = false))),
             nullable = true))),
-          nullable = false))))
+          nullable = true))))
   }
 
   test("withField should add null field to struct") {
@@ -1089,6 +1089,20 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
+  test("withField should add multiple fields to nullable struct") {
+    checkAnswer(
+      nullableStructLevel1.withColumn("a", 'a.withField("d", lit(4)).withField("e", lit(5))),
+      Row(null) :: Row(Row(1, null, 3, 4, 5)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = false),
+          StructField("d", IntegerType, nullable = false),
+          StructField("e", IntegerType, nullable = false))),
+          nullable = true))))
+  }
+
   test("withField should add field to nested struct") {
     Seq(
       structLevel2.withColumn("a", 'a.withField("a.d", lit(4))),
@@ -1106,6 +1120,48 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
               StructField("d", IntegerType, nullable = false))),
               nullable = false))),
             nullable = false))))
+    }
+  }
+
+  test("withField should add multiple fields to nested struct") {
+    Seq(
+      col("a").withField("a", $"a.a".withField("d", lit(4)).withField("e", lit(5))),
+      col("a").withField("a.d", lit(4)).withField("a.e", lit(5))
+    ).foreach { column =>
+      checkAnswer(
+        structLevel2.select(column.as("a")),
+        Row(Row(Row(1, null, 3, 4, 5))) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = true),
+              StructField("c", IntegerType, nullable = false),
+              StructField("d", IntegerType, nullable = false),
+              StructField("e", IntegerType, nullable = false))),
+              nullable = false))),
+            nullable = false))))
+    }
+  }
+
+  test("withField should add multiple fields to nested nullable struct") {
+    Seq(
+      col("a").withField("a", $"a.a".withField("d", lit(4)).withField("e", lit(5))),
+      col("a").withField("a.d", lit(4)).withField("a.e", lit(5))
+    ).foreach { column =>
+      checkAnswer(
+        nullableStructLevel2.select(column.as("a")),
+        Row(null) :: Row(Row(null)) :: Row(Row(Row(1, null, 3, 4, 5))) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = true),
+              StructField("c", IntegerType, nullable = false),
+              StructField("d", IntegerType, nullable = false),
+              StructField("e", IntegerType, nullable = false))),
+              nullable = true))),
+            nullable = true))))
     }
   }
 
@@ -1138,10 +1194,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test("withField should replace field in null struct") {
+  test("withField should replace field in nullable struct") {
     checkAnswer(
-      nullStructLevel1.withColumn("a", 'a.withField("b", lit("foo"))),
-      Row(null) :: Nil,
+      nullableStructLevel1.withColumn("a", 'a.withField("b", lit("foo"))),
+      Row(null) :: Row(Row(1, "foo", 3)) ::  Nil,
       StructType(Seq(
         StructField("a", StructType(Seq(
           StructField("a", IntegerType, nullable = false),
@@ -1150,10 +1206,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = true))))
   }
 
-  test("withField should replace field in nested null struct") {
+  test("withField should replace field in nested nullable struct") {
     checkAnswer(
-      nullStructLevel2.withColumn("a", $"a".withField("a.b", lit("foo"))),
-      Row(Row(null)) :: Nil,
+      nullableStructLevel2.withColumn("a", $"a".withField("a.b", lit("foo"))),
+      Row(null) :: Row(Row(null)) :: Row(Row(Row(1, "foo", 3))) :: Nil,
       StructType(
         Seq(StructField("a", StructType(Seq(
           StructField("a", StructType(Seq(
@@ -1161,7 +1217,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             StructField("b", StringType, nullable = false),
             StructField("c", IntegerType, nullable = false))),
             nullable = true))),
-          nullable = false))))
+          nullable = true))))
   }
 
   test("withField should replace field with null value in struct") {
@@ -1188,6 +1244,18 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
+  test("withField should replace multiple fields in nullable struct") {
+    checkAnswer(
+      nullableStructLevel1.withColumn("a", 'a.withField("a", lit(10)).withField("b", lit(20))),
+      Row(null) :: Row(Row(10, 20, 3)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = false),
+          StructField("c", IntegerType, nullable = false))),
+          nullable = true))))
+  }
+
   test("withField should replace field in nested struct") {
     Seq(
       structLevel2.withColumn("a", $"a".withField("a.b", lit(2))),
@@ -1204,6 +1272,44 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
               StructField("c", IntegerType, nullable = false))),
               nullable = false))),
             nullable = false))))
+    }
+  }
+
+  test("withField should replace multiple fields in nested struct") {
+    Seq(
+      col("a").withField("a", $"a.a".withField("a", lit(10)).withField("b", lit(20))),
+      col("a").withField("a.a", lit(10)).withField("a.b", lit(20))
+    ).foreach { column =>
+      checkAnswer(
+        structLevel2.select(column.as("a")),
+        Row(Row(Row(10, 20, 3))) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = false),
+              StructField("c", IntegerType, nullable = false))),
+              nullable = false))),
+            nullable = false))))
+    }
+  }
+
+  test("withField should replace multiple fields in nested nullable struct") {
+    Seq(
+      col("a").withField("a", $"a.a".withField("a", lit(10)).withField("b", lit(20))),
+      col("a").withField("a.a", lit(10)).withField("a.b", lit(20))
+    ).foreach { column =>
+      checkAnswer(
+        nullableStructLevel2.select(column.as("a")),
+        Row(null) :: Row(Row(null)) :: Row(Row(Row(10, 20, 3))) :: Nil,
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("a", IntegerType, nullable = false),
+              StructField("b", IntegerType, nullable = false),
+              StructField("c", IntegerType, nullable = false))),
+              nullable = true))),
+            nullable = true))))
     }
   }
 
@@ -1484,6 +1590,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-32641: extracting field from null struct column after withField should return " +
     "null if the original struct was null") {
+    val nullStructLevel1 = spark.createDataFrame(
+      sparkContext.parallelize(Row(null) :: Nil),
+      StructType(Seq(StructField("a", structType, nullable = true))))
+
     // extract newly added field
     checkAnswer(
       nullStructLevel1.withColumn("a", $"a".withField("d", lit(4)).getField("d")),
@@ -1594,10 +1704,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test("dropFields should drop field in null struct") {
+  test("dropFields should drop field in nullable struct") {
     checkAnswer(
-      nullStructLevel1.withColumn("a", $"a".dropFields("b")),
-      Row(null) :: Nil,
+      nullableStructLevel1.withColumn("a", $"a".dropFields("b")),
+      Row(null) :: Row(Row(1, 3)) :: Nil,
       StructType(Seq(
         StructField("a", StructType(Seq(
           StructField("a", IntegerType, nullable = false),
@@ -1669,29 +1779,29 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test("dropFields should drop field in nested null struct") {
+  test("dropFields should drop field in nested nullable struct") {
     checkAnswer(
-      nullStructLevel2.withColumn("a", $"a".dropFields("a.b")),
-      Row(Row(null)) :: Nil,
+      nullableStructLevel2.withColumn("a", $"a".dropFields("a.b")),
+      Row(null) :: Row(Row(null)) :: Row(Row(Row(1, 3))) :: Nil,
       StructType(
         Seq(StructField("a", StructType(Seq(
           StructField("a", StructType(Seq(
             StructField("a", IntegerType, nullable = false),
             StructField("c", IntegerType, nullable = false))),
             nullable = true))),
-          nullable = false))))
+          nullable = true))))
   }
 
-  test("dropFields should drop multiple fields in nested null struct") {
+  test("dropFields should drop multiple fields in nested nullable struct") {
     checkAnswer(
-      nullStructLevel2.withColumn("a", $"a".dropFields("a.b", "a.c")),
-      Row(Row(null)) :: Nil,
+      nullableStructLevel2.withColumn("a", $"a".dropFields("a.b", "a.c")),
+      Row(null) :: Row(Row(null)) :: Row(Row(Row(1))) :: Nil,
       StructType(
         Seq(StructField("a", StructType(Seq(
           StructField("a", StructType(Seq(
             StructField("a", IntegerType, nullable = false))),
             nullable = true))),
-          nullable = false))))
+          nullable = true))))
   }
 
   test("dropFields should drop field in deeply nested struct") {
@@ -2025,31 +2135,25 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("should move field up one level of nesting") {
-    val nullableStructLevel2: DataFrame = spark.createDataFrame(
-      sparkContext.parallelize(Row(Row(null)) :: Row(Row(Row(1, 2, 3))) :: Nil),
-      StructType(Seq(
-        StructField("a", StructType(Seq(
-          StructField("a", structType, nullable = true))),
-          nullable = true))))
-
     // move a field up one level
     checkAnswer(
       nullableStructLevel2.select(
-        col("a").withField("b", col("a.a.b")).dropFields("a.b").as("res")),
-      Row(Row(null, null)) ::  Row(Row(Row(1, 3), 2)) :: Nil,
+        col("a").withField("c", col("a.a.c")).dropFields("a.c").as("res")),
+      Row(null) :: Row(Row(null, null)) ::  Row(Row(Row(1, null), 3)) :: Nil,
       StructType(Seq(
         StructField("res", StructType(Seq(
           StructField("a", StructType(Seq(
             StructField("a", IntegerType, nullable = false),
-            StructField("c", IntegerType, nullable = false))),
+            StructField("b", IntegerType, nullable = true))),
             nullable = true),
-          StructField("b", IntegerType, nullable = true))),
+          StructField("c", IntegerType, nullable = true))),
           nullable = true))))
 
     // move a field up one level and then extract it
     checkAnswer(
-      nullableStructLevel2.select(col("a").withField("b", col("a.a.b")).getField("b").as("res")),
-      Row(null) :: Row(2) :: Nil,
+      nullableStructLevel2.select(
+        col("a").withField("c", col("a.a.c")).dropFields("a.c").getField("c").as("res")),
+      Row(null) :: Row(null) :: Row(3) :: Nil,
       StructType(Seq(StructField("res", IntegerType, nullable = true))))
   }
 
@@ -2089,7 +2193,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("should still be able to refer to dropped column within the same select statement") {
-    // we can still access the nested column even after dropping it within the select statement
+    // we can still access the nested column even after dropping it within the same select statement
     checkAnswer(
       structLevel1.select($"a".dropFields("c").withField("z", $"a.c").as("a")),
       Row(Row(1, null, 3)) :: Nil,
