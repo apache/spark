@@ -741,7 +741,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     case class MalformedNameExpression(child: Expression) extends TaggingExpression
   }
 
-  test("SC-32999: TreeNode.nodeName should not throw malformed class name error") {
+  test("SPARK-32999: TreeNode.nodeName should not throw malformed class name error") {
     val testTriggersExpectedError = try {
       classOf[MalformedClassObject.MalformedNameExpression].getSimpleName
       false
