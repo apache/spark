@@ -1300,7 +1300,7 @@ class SessionCatalog(
       // Check input argument size
       if (e.inputTypes.size != input.size) {
         throw new InvalidFunctionArgumentException(s"Invalid number of arguments for " +
-          s"function $name. Expected: ${e.inputTypes.size}; Found: ${input.size};")
+          s"function $name. Expected: ${e.inputTypes.size}; Found: ${input.size}")
       }
       e
     } else {
