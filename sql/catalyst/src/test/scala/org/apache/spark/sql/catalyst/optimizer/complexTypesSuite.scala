@@ -677,25 +677,25 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
           If(IsNull('struct1), Literal(null, IntegerType), Literal(3)) as "struct3B"))
   }
 
-  test("simplify add multiple nested fields to struct") {
-    // this scenario is possible if users add multiple nested columns via the Column.withField API
-    // ideally, users should not be doing this.
-    val nullableStructLevel2 = LocalRelation(
+  test("simplify add multiple nested fields to non-nullable struct") {
+    // this scenario is possible if users add multiple nested columns to a non-nullable struct
+    // using the Column.withField API in a non-performant way
+    val structLevel2 = LocalRelation(
       'a1.struct(
-        'a2.struct('a3.int)).withNullability(false))
+        'a2.struct('a3.int.notNull)).notNull)
 
     val query = {
       val addB3toA1A2 = UpdateFields('a1, Seq(WithField("a2",
         UpdateFields(GetStructField('a1, 0), Seq(WithField("b3", Literal(2)))))))
 
-      nullableStructLevel2.select(
+      structLevel2.select(
         UpdateFields(
           addB3toA1A2,
           Seq(WithField("a2", UpdateFields(
             GetStructField(addB3toA1A2, 0), Seq(WithField("c3", Literal(3))))))).as("a1"))
     }
 
-    val expected = nullableStructLevel2.select(
+    val expected = structLevel2.select(
       UpdateFields('a1, Seq(
         // scalastyle:off line.size.limit
         WithField("a2", UpdateFields(GetStructField('a1, 0), WithField("b3", 2) :: Nil)),
@@ -706,30 +706,103 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     checkRule(query, expected)
   }
 
-  test("simplify drop multiple nested fields in struct") {
-    // this scenario is possible if users drop multiple nested columns via the Column.dropFields API
-    // ideally, users should not be doing this.
-    val df = LocalRelation(
+  test("simplify add multiple nested fields to nullable struct") {
+    // this scenario is possible if users add multiple nested columns to a nullable struct
+    // using the Column.withField API in a non-performant way
+    val structLevel2 = LocalRelation(
       'a1.struct(
-        'a2.struct('a3.int, 'b3.int, 'c3.int).withNullability(false)
-      ).withNullability(false))
+        'a2.struct('a3.int.notNull)))
+
+    val query = {
+      val addB3toA1A2 = UpdateFields('a1, Seq(WithField("a2",
+        UpdateFields(GetStructField('a1, 0), Seq(WithField("b3", Literal(2)))))))
+
+      structLevel2.select(
+        UpdateFields(
+          addB3toA1A2,
+          Seq(WithField("a2", UpdateFields(
+            GetStructField(addB3toA1A2, 0), Seq(WithField("c3", Literal(3))))))).as("a1"))
+    }
+
+    val expected = {
+      val repeatedExpr = UpdateFields(GetStructField('a1, 0), WithField("b3", Literal(2)) :: Nil)
+      val repeatedExprDataType = StructType(Seq(
+        StructField("a3", IntegerType, nullable = false),
+        StructField("b3", IntegerType, nullable = false)))
+
+      structLevel2.select(
+        UpdateFields('a1, Seq(
+          WithField("a2", repeatedExpr),
+          WithField("a2", UpdateFields(
+            If(IsNull('a1), Literal(null, repeatedExprDataType), repeatedExpr),
+            WithField("c3", Literal(3)) :: Nil))
+        )).as("a1"))
+    }
+
+    checkRule(query, expected)
+  }
+
+  test("simplify drop multiple nested fields in non-nullable struct") {
+    // this scenario is possible if users drop multiple nested columns in a non-nullable struct
+    // using the Column.dropFields API in a non-performant way
+    val structLevel2 = LocalRelation(
+      'a1.struct(
+        'a2.struct('a3.int.notNull, 'b3.int.notNull, 'c3.int.notNull).notNull
+      ).notNull)
 
     val query = {
       val dropA1A2B = UpdateFields('a1, Seq(WithField("a2", UpdateFields(
         GetStructField('a1, 0), Seq(DropField("b3"))))))
 
-      df.select(
+      structLevel2.select(
         UpdateFields(
           dropA1A2B,
           Seq(WithField("a2", UpdateFields(
             GetStructField(dropA1A2B, 0), Seq(DropField("c3")))))).as("a1"))
     }
 
-    val expected = df.select(
+    val expected = structLevel2.select(
       UpdateFields('a1, Seq(
         WithField("a2", UpdateFields(GetStructField('a1, 0), Seq(DropField("b3")))),
         WithField("a2", UpdateFields(GetStructField('a1, 0), Seq(DropField("b3"), DropField("c3"))))
       )).as("a1"))
+
+    checkRule(query, expected)
+  }
+
+  test("simplify drop multiple nested fields in nullable struct") {
+    // this scenario is possible if users drop multiple nested columns in a nullable struct
+    // using the Column.dropFields API in a non-performant way
+    val structLevel2 = LocalRelation(
+      'a1.struct(
+        'a2.struct('a3.int.notNull, 'b3.int.notNull, 'c3.int.notNull)
+      ))
+
+    val query = {
+      val dropA1A2B = UpdateFields('a1, Seq(WithField("a2", UpdateFields(
+        GetStructField('a1, 0), Seq(DropField("b3"))))))
+
+      structLevel2.select(
+        UpdateFields(
+          dropA1A2B,
+          Seq(WithField("a2", UpdateFields(
+            GetStructField(dropA1A2B, 0), Seq(DropField("c3")))))).as("a1"))
+    }
+
+    val expected = {
+      val repeatedExpr = UpdateFields(GetStructField('a1, 0), DropField("b3") :: Nil)
+      val repeatedExprDataType = StructType(Seq(
+        StructField("a3", IntegerType, nullable = false),
+        StructField("c3", IntegerType, nullable = false)))
+
+      structLevel2.select(
+        UpdateFields('a1, Seq(
+          WithField("a2", repeatedExpr),
+          WithField("a2", UpdateFields(
+            If(IsNull('a1), Literal(null, repeatedExprDataType), repeatedExpr),
+            DropField("c3") :: Nil))
+        )).as("a1"))
+    }
 
     checkRule(query, expected)
   }
