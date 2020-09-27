@@ -500,4 +500,53 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(e6, 0.toByte)
     }
   }
+
+  private def testDecimalAndLongType(testFunc: (Int => Any) => Unit): Unit = {
+    testFunc(_.toLong)
+    testFunc(Decimal(_))
+  }
+
+  test("SPARK-33008: division by zero on divide-like operations returns incorrect result") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      testDecimalAndDoubleType { convert =>
+        val one = Literal(convert(1))
+        val zero = Literal(convert(0))
+        checkEvaluation(Divide(Literal.create(null, one.dataType), zero), null)
+        checkEvaluation(Divide(one, Literal.create(null, zero.dataType)), null)
+        checkExceptionInExpression[ArithmeticException](Divide(one, zero), "divide by zero")
+      }
+
+      testDecimalAndLongType { convert =>
+        val one = Literal(convert(1))
+        val zero = Literal(convert(0))
+        checkEvaluation(IntegralDivide(Literal.create(null, one.dataType), zero), null)
+        checkEvaluation(IntegralDivide(one, Literal.create(null, zero.dataType)), null)
+        checkExceptionInExpression[ArithmeticException](
+          IntegralDivide(one, zero), "divide by zero")
+      }
+
+      testNumericDataTypes { convert =>
+        val one = Literal(convert(1))
+        val zero = Literal(convert(0))
+        checkEvaluation(Remainder(Literal.create(null, one.dataType), zero), null)
+        checkEvaluation(Remainder(one, Literal.create(null, zero.dataType)), null)
+        checkExceptionInExpression[ArithmeticException](Remainder(one, zero), "divide by zero")
+
+        checkEvaluation(Pmod(Literal.create(null, one.dataType), zero), null)
+        checkEvaluation(Pmod(one, Literal.create(null, zero.dataType)), null)
+        checkExceptionInExpression[ArithmeticException](Pmod(one, zero), "divide by zero")
+      }
+
+      checkExceptionInExpression[ArithmeticException](
+        Pmod(Literal(-7), Literal(0)), "divide by zero")
+      checkExceptionInExpression[ArithmeticException](
+        Pmod(Literal(7.2D), Literal(0D)), "divide by zero")
+      checkExceptionInExpression[ArithmeticException](
+        Pmod(Literal(7.2F), Literal(0F)), "divide by zero")
+      checkExceptionInExpression[ArithmeticException](
+        Pmod(Literal(2.toByte), Literal(0.toByte)), "divide by zero")
+      checkExceptionInExpression[ArithmeticException](
+        Pmod(positiveShort, 0.toShort), "divide by zero")
+    }
+  }
 }

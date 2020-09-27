@@ -320,24 +320,31 @@ trait DivModLike extends BinaryArithmetic {
 
   override def nullable: Boolean = true
 
-  final override def eval(input: InternalRow): Any = {
-    val input2 = right.eval(input)
-    if (input2 == null || input2 == 0) {
-      null
+  private lazy val isZero: Any => Boolean = right.dataType match {
+    case _: DecimalType => x => x.asInstanceOf[Decimal].isZero
+    case _ => x => x == 0
+  }
+
+  private def divByZero: Any = {
+    if (checkOverflow) {
+      throw new ArithmeticException("divide by zero")
     } else {
-      val input1 = left.eval(input)
-      if (input1 == null) {
-        null
-      } else {
-        evalOperation(input1, input2)
-      }
+      null
+    }
+  }
+
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    if (isZero(input2)) {
+      divByZero
+    } else {
+      evalOperation(input1, input2)
     }
   }
 
   def evalOperation(left: Any, right: Any): Any
 
   /**
-   * Special case handling due to division/remainder by 0 => null.
+   * Special case handling due to division/remainder by 0 => null or ArithmeticException.
    */
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval1 = left.genCode(ctx)
@@ -347,6 +354,11 @@ trait DivModLike extends BinaryArithmetic {
       s"${eval2.value}.isZero()"
     } else {
       s"${eval2.value} == 0"
+    }
+    val divByZero = if (checkOverflow) {
+      "throw new ArithmeticException(\"divide by zero\");"
+    } else {
+      s"${ev.isNull} = true;"
     }
     val javaType = CodeGenerator.javaType(dataType)
     val operation = if (operandsDataType.isInstanceOf[DecimalType]) {
@@ -360,22 +372,24 @@ trait DivModLike extends BinaryArithmetic {
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         if ($isZero) {
-          ${ev.isNull} = true;
+          $divByZero
         } else {
           ${eval1.code}
           ${ev.value} = $operation;
         }""")
     } else {
       ev.copy(code = code"""
-        ${eval2.code}
+        ${eval1.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        if (${eval2.isNull} || $isZero) {
+        if (${eval1.isNull}) {
           ${ev.isNull} = true;
         } else {
-          ${eval1.code}
-          if (${eval1.isNull}) {
+          ${eval2.code}
+          if (${eval2.isNull}) {
             ${ev.isNull} = true;
+          } else if ($isZero) {
+            $divByZero
           } else {
             ${ev.value} = $operation;
           }
@@ -530,24 +544,31 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def nullable: Boolean = true
 
-  override def eval(input: InternalRow): Any = {
-    val input2 = right.eval(input)
-    if (input2 == null || input2 == 0) {
-      null
+  private lazy val isZero: Any => Boolean = right.dataType match {
+    case _: DecimalType => x => x.asInstanceOf[Decimal].isZero
+    case _ => x => x == 0
+  }
+
+  private def divByZero: Any = {
+    if (checkOverflow) {
+      throw new ArithmeticException("divide by zero")
     } else {
-      val input1 = left.eval(input)
-      if (input1 == null) {
-        null
-      } else {
-        input1 match {
-          case i: Integer => pmod(i, input2.asInstanceOf[java.lang.Integer])
-          case l: Long => pmod(l, input2.asInstanceOf[java.lang.Long])
-          case s: Short => pmod(s, input2.asInstanceOf[java.lang.Short])
-          case b: Byte => pmod(b, input2.asInstanceOf[java.lang.Byte])
-          case f: Float => pmod(f, input2.asInstanceOf[java.lang.Float])
-          case d: Double => pmod(d, input2.asInstanceOf[java.lang.Double])
-          case d: Decimal => pmod(d, input2.asInstanceOf[Decimal])
-        }
+      null
+    }
+  }
+
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    if (isZero(input2)) {
+      divByZero
+    } else {
+      input1 match {
+        case i: Integer => pmod(i, input2.asInstanceOf[java.lang.Integer])
+        case l: Long => pmod(l, input2.asInstanceOf[java.lang.Long])
+        case s: Short => pmod(s, input2.asInstanceOf[java.lang.Short])
+        case b: Byte => pmod(b, input2.asInstanceOf[java.lang.Byte])
+        case f: Float => pmod(f, input2.asInstanceOf[java.lang.Float])
+        case d: Double => pmod(d, input2.asInstanceOf[java.lang.Double])
+        case d: Decimal => pmod(d, input2.asInstanceOf[Decimal])
       }
     }
   }
@@ -559,6 +580,11 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
       s"${eval2.value}.isZero()"
     } else {
       s"${eval2.value} == 0"
+    }
+    val divByZero = if (checkOverflow) {
+      "throw new ArithmeticException(\"divide by zero\");"
+    } else {
+      s"${ev.isNull} = true;"
     }
     val remainder = ctx.freshName("remainder")
     val javaType = CodeGenerator.javaType(dataType)
@@ -601,22 +627,24 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         if ($isZero) {
-          ${ev.isNull} = true;
+          $divByZero
         } else {
           ${eval1.code}
           $result
         }""")
     } else {
       ev.copy(code = code"""
-        ${eval2.code}
+        ${eval1.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        if (${eval2.isNull} || $isZero) {
+        if (${eval1.isNull}) {
           ${ev.isNull} = true;
         } else {
-          ${eval1.code}
-          if (${eval1.isNull}) {
+          ${eval2.code}
+          if (${eval2.isNull}) {
             ${ev.isNull} = true;
+          } else if ($isZero) {
+            $divByZero
           } else {
             $result
           }
