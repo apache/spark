@@ -772,7 +772,7 @@ object ScalaReflection extends ScalaReflection {
             StructField(fieldName, dataType, nullable)
           }), nullable = true)
       case t if isSubtype(t, localTypeOf[Enumeration#Value]) =>
-        Schema(StringType, nullable = false)
+        Schema(StringType, nullable = true)
       case other =>
         throw new UnsupportedOperationException(s"Schema for type $other is not supported")
     }

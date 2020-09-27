@@ -1932,6 +1932,12 @@ class DatasetSuite extends QueryTest
       Seq(FooClassWithEnum(1, FooEnum.E1), FooClassWithEnum(2, FooEnum.E2)).toDS(),
       Seq(FooClassWithEnum(1, FooEnum.E1), FooClassWithEnum(2, FooEnum.E2)): _*
     )
+
+    // test null
+    checkDataset(
+      Seq(FooClassWithEnum(1, null), FooClassWithEnum(2, FooEnum.E2)).toDS(),
+      Seq(FooClassWithEnum(1, null), FooClassWithEnum(2, FooEnum.E2)): _*
+    )
   }
 }
 
