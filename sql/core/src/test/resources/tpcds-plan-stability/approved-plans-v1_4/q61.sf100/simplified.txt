@@ -14,9 +14,9 @@ TakeOrderedAndProject [promotions,total,(CAST((CAST(CAST(promotions AS DECIMAL(1
                           Project [ss_customer_sk,ss_ext_sales_price]
                             BroadcastHashJoin [ss_store_sk,s_store_sk]
                               Project [ss_customer_sk,ss_store_sk,ss_ext_sales_price]
-                                BroadcastHashJoin [ss_promo_sk,p_promo_sk]
-                                  Project [ss_customer_sk,ss_store_sk,ss_promo_sk,ss_ext_sales_price]
-                                    BroadcastHashJoin [ss_item_sk,i_item_sk]
+                                BroadcastHashJoin [ss_item_sk,i_item_sk]
+                                  Project [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ext_sales_price]
+                                    BroadcastHashJoin [ss_promo_sk,p_promo_sk]
                                       Project [ss_item_sk,ss_customer_sk,ss_store_sk,ss_promo_sk,ss_ext_sales_price]
                                         BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                           Filter [ss_store_sk,ss_promo_sk,ss_sold_date_sk,ss_customer_sk,ss_item_sk]
@@ -34,19 +34,19 @@ TakeOrderedAndProject [promotions,total,(CAST((CAST(CAST(promotions AS DECIMAL(1
                                       InputAdapter
                                         BroadcastExchange #3
                                           WholeStageCodegen (2)
-                                            Project [i_item_sk]
-                                              Filter [i_category,i_item_sk]
+                                            Project [p_promo_sk]
+                                              Filter [p_channel_dmail,p_channel_email,p_channel_tv,p_promo_sk]
                                                 ColumnarToRow
                                                   InputAdapter
-                                                    Scan parquet default.item [i_item_sk,i_category]
+                                                    Scan parquet default.promotion [p_promo_sk,p_channel_dmail,p_channel_email,p_channel_tv]
                                   InputAdapter
                                     BroadcastExchange #4
                                       WholeStageCodegen (3)
-                                        Project [p_promo_sk]
-                                          Filter [p_channel_dmail,p_channel_email,p_channel_tv,p_promo_sk]
+                                        Project [i_item_sk]
+                                          Filter [i_category,i_item_sk]
                                             ColumnarToRow
                                               InputAdapter
-                                                Scan parquet default.promotion [p_promo_sk,p_channel_dmail,p_channel_email,p_channel_tv]
+                                                Scan parquet default.item [i_item_sk,i_category]
                               InputAdapter
                                 BroadcastExchange #5
                                   WholeStageCodegen (4)
@@ -94,7 +94,7 @@ TakeOrderedAndProject [promotions,total,(CAST((CAST(CAST(promotions AS DECIMAL(1
                                         InputAdapter
                                           ReusedExchange [d_date_sk] #2
                                     InputAdapter
-                                      ReusedExchange [i_item_sk] #3
+                                      ReusedExchange [i_item_sk] #4
                                 InputAdapter
                                   ReusedExchange [s_store_sk] #5
                             InputAdapter

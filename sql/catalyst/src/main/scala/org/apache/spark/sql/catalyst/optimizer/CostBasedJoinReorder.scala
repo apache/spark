@@ -206,13 +206,15 @@ object JoinReorderDP extends PredicateHelper with Logging {
       filters: Option[JoinGraphInfo]): JoinPlanMap = {
 
     val nextLevel = new JoinPlanMap
-    var k = 0
     val lev = existingLevels.length - 1
+    var k = lev
     // Build plans for the next level from plans at level k (one side of the join) and level
     // lev - k (the other side of the join).
-    // For the lower level k, we only need to search from 0 to lev - k, because when building
+    // For the higher level k, we only need to search from lev to lev - k, because when building
     // a join from A and B, both A J B and B J A are handled.
-    while (k <= lev - k) {
+    // Start searching from highest level to make sure that optimally ordered input doesn't get
+    // reordered into another plan with the same cost. 
+    while (k >= lev - k) {
       val oneSideCandidates = existingLevels(k).values.toSeq
       for (i <- oneSideCandidates.indices) {
         val oneSidePlan = oneSideCandidates(i)
@@ -236,7 +238,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
           }
         }
       }
-      k += 1
+      k -= 1
     }
     nextLevel
   }

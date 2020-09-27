@@ -27,12 +27,12 @@ TakeOrderedAndProject (69)
       :              :     :     :        +- * Project (14)
       :              :     :     :           +- * Filter (13)
       :              :     :     :              +- * ColumnarToRow (12)
-      :              :     :     :                 +- Scan parquet default.item (11)
+      :              :     :     :                 +- Scan parquet default.promotion (11)
       :              :     :     +- BroadcastExchange (22)
       :              :     :        +- * Project (21)
       :              :     :           +- * Filter (20)
       :              :     :              +- * ColumnarToRow (19)
-      :              :     :                 +- Scan parquet default.promotion (18)
+      :              :     :                 +- Scan parquet default.item (18)
       :              :     +- BroadcastExchange (29)
       :              :        +- * Project (28)
       :              :           +- * Filter (27)
@@ -115,67 +115,67 @@ Join condition: None
 Output [5]: [ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_promo_sk#5, ss_ext_sales_price#6]
 Input [7]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_promo_sk#5, ss_ext_sales_price#6, d_date_sk#7]
 
-(11) Scan parquet default.item
-Output [2]: [i_item_sk#11, i_category#12]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_category), EqualTo(i_category,Jewelry), IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_category:string>
-
-(12) ColumnarToRow [codegen id : 2]
-Input [2]: [i_item_sk#11, i_category#12]
-
-(13) Filter [codegen id : 2]
-Input [2]: [i_item_sk#11, i_category#12]
-Condition : ((isnotnull(i_category#12) AND (i_category#12 = Jewelry)) AND isnotnull(i_item_sk#11))
-
-(14) Project [codegen id : 2]
-Output [1]: [i_item_sk#11]
-Input [2]: [i_item_sk#11, i_category#12]
-
-(15) BroadcastExchange
-Input [1]: [i_item_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#13]
-
-(16) BroadcastHashJoin [codegen id : 7]
-Left keys [1]: [ss_item_sk#2]
-Right keys [1]: [i_item_sk#11]
-Join condition: None
-
-(17) Project [codegen id : 7]
-Output [4]: [ss_customer_sk#3, ss_store_sk#4, ss_promo_sk#5, ss_ext_sales_price#6]
-Input [6]: [ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_promo_sk#5, ss_ext_sales_price#6, i_item_sk#11]
-
-(18) Scan parquet default.promotion
-Output [4]: [p_promo_sk#14, p_channel_dmail#15, p_channel_email#16, p_channel_tv#17]
+(11) Scan parquet default.promotion
+Output [4]: [p_promo_sk#11, p_channel_dmail#12, p_channel_email#13, p_channel_tv#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/promotion]
 PushedFilters: [Or(Or(EqualTo(p_channel_dmail,Y),EqualTo(p_channel_email,Y)),EqualTo(p_channel_tv,Y)), IsNotNull(p_promo_sk)]
 ReadSchema: struct<p_promo_sk:int,p_channel_dmail:string,p_channel_email:string,p_channel_tv:string>
 
+(12) ColumnarToRow [codegen id : 2]
+Input [4]: [p_promo_sk#11, p_channel_dmail#12, p_channel_email#13, p_channel_tv#14]
+
+(13) Filter [codegen id : 2]
+Input [4]: [p_promo_sk#11, p_channel_dmail#12, p_channel_email#13, p_channel_tv#14]
+Condition : ((((p_channel_dmail#12 = Y) OR (p_channel_email#13 = Y)) OR (p_channel_tv#14 = Y)) AND isnotnull(p_promo_sk#11))
+
+(14) Project [codegen id : 2]
+Output [1]: [p_promo_sk#11]
+Input [4]: [p_promo_sk#11, p_channel_dmail#12, p_channel_email#13, p_channel_tv#14]
+
+(15) BroadcastExchange
+Input [1]: [p_promo_sk#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#15]
+
+(16) BroadcastHashJoin [codegen id : 7]
+Left keys [1]: [ss_promo_sk#5]
+Right keys [1]: [p_promo_sk#11]
+Join condition: None
+
+(17) Project [codegen id : 7]
+Output [4]: [ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6]
+Input [6]: [ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_promo_sk#5, ss_ext_sales_price#6, p_promo_sk#11]
+
+(18) Scan parquet default.item
+Output [2]: [i_item_sk#16, i_category#17]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_category), EqualTo(i_category,Jewelry), IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int,i_category:string>
+
 (19) ColumnarToRow [codegen id : 3]
-Input [4]: [p_promo_sk#14, p_channel_dmail#15, p_channel_email#16, p_channel_tv#17]
+Input [2]: [i_item_sk#16, i_category#17]
 
 (20) Filter [codegen id : 3]
-Input [4]: [p_promo_sk#14, p_channel_dmail#15, p_channel_email#16, p_channel_tv#17]
-Condition : ((((p_channel_dmail#15 = Y) OR (p_channel_email#16 = Y)) OR (p_channel_tv#17 = Y)) AND isnotnull(p_promo_sk#14))
+Input [2]: [i_item_sk#16, i_category#17]
+Condition : ((isnotnull(i_category#17) AND (i_category#17 = Jewelry)) AND isnotnull(i_item_sk#16))
 
 (21) Project [codegen id : 3]
-Output [1]: [p_promo_sk#14]
-Input [4]: [p_promo_sk#14, p_channel_dmail#15, p_channel_email#16, p_channel_tv#17]
+Output [1]: [i_item_sk#16]
+Input [2]: [i_item_sk#16, i_category#17]
 
 (22) BroadcastExchange
-Input [1]: [p_promo_sk#14]
+Input [1]: [i_item_sk#16]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#18]
 
 (23) BroadcastHashJoin [codegen id : 7]
-Left keys [1]: [ss_promo_sk#5]
-Right keys [1]: [p_promo_sk#14]
+Left keys [1]: [ss_item_sk#2]
+Right keys [1]: [i_item_sk#16]
 Join condition: None
 
 (24) Project [codegen id : 7]
 Output [3]: [ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6]
-Input [5]: [ss_customer_sk#3, ss_store_sk#4, ss_promo_sk#5, ss_ext_sales_price#6, p_promo_sk#14]
+Input [5]: [ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6, i_item_sk#16]
 
 (25) Scan parquet default.store
 Output [2]: [s_store_sk#19, s_gmt_offset#20]
@@ -310,17 +310,17 @@ Join condition: None
 Output [4]: [ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6]
 Input [6]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6, d_date_sk#7]
 
-(54) ReusedExchange [Reuses operator id: 15]
-Output [1]: [i_item_sk#11]
+(54) ReusedExchange [Reuses operator id: 22]
+Output [1]: [i_item_sk#16]
 
 (55) BroadcastHashJoin [codegen id : 14]
 Left keys [1]: [ss_item_sk#2]
-Right keys [1]: [i_item_sk#11]
+Right keys [1]: [i_item_sk#16]
 Join condition: None
 
 (56) Project [codegen id : 14]
 Output [3]: [ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6]
-Input [5]: [ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6, i_item_sk#11]
+Input [5]: [ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6, i_item_sk#16]
 
 (57) ReusedExchange [Reuses operator id: 29]
 Output [1]: [s_store_sk#19]
