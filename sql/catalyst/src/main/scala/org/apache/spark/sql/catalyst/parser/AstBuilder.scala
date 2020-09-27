@@ -3418,7 +3418,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       spec -> location
     }
     AlterTableAddPartitionStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
+      UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier)),
       specsAndLocs.toSeq,
       ctx.EXISTS != null)
   }
@@ -3458,7 +3458,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       operationNotAllowed("ALTER VIEW ... DROP PARTITION", ctx)
     }
     AlterTableDropPartitionStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
+      UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier)),
       ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec).toSeq,
       ifExists = ctx.EXISTS != null,
       purge = ctx.PURGE != null,

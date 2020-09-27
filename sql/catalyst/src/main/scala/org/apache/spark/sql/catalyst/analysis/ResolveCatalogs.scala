@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, SupportsPartitionManagement, TableCatalog, TableChange}
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -233,8 +233,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       ShowCurrentNamespace(catalogManager)
 
     case c @ AlterTableAddPartitionStatement(
-        NonSessionCatalogAndTable(catalog, tableName), _, _) =>
-      val table = catalog.asTableCatalog.loadTable(tableName.asIdentifier).asPartitionable
+        ResolvedTable(_, _, table: SupportsPartitionManagement), _, _) =>
       val partitions = c.partitionSpecsAndLocs.map { case (spec, location) =>
         val tableProperties = table.properties().asScala.toMap
         val partParams =
@@ -248,11 +247,10 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         c.ifNotExists)
 
     case c @ AlterTableDropPartitionStatement(
-        NonSessionCatalogAndTable(catalog, tableName), _, _, _, _) =>
+        ResolvedTable(_, _, table: SupportsPartitionManagement), _, _, _, _) =>
       if (c.purge) {
         logWarning("PURGE won't take effect here, please put it in table properties")
       }
-      val table = catalog.asTableCatalog.loadTable(tableName.asIdentifier).asPartitionable
       AlterTableDropPartition(
         table,
         c.specs.map(_.asPartitionIdentifier(table.partitionSchema())),

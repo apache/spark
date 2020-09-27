@@ -221,7 +221,7 @@ case class AlterTableRecoverPartitionsStatement(
  * ALTER TABLE ... ADD PARTITION command, as parsed from SQL
  */
 case class AlterTableAddPartitionStatement(
-    tableName: Seq[String],
+    child: LogicalPlan,
     partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[String])],
     ifNotExists: Boolean) extends ParsedStatement
 
@@ -237,7 +237,7 @@ case class AlterTableRenamePartitionStatement(
  * ALTER TABLE ... DROP PARTITION command, as parsed from SQL
  */
 case class AlterTableDropPartitionStatement(
-    tableName: Seq[String],
+    child: LogicalPlan,
     specs: Seq[TablePartitionSpec],
     ifExists: Boolean,
     purge: Boolean,

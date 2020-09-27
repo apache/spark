@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, SupportsPartitionManagement, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
@@ -498,9 +498,10 @@ class ResolveSessionCatalog(
         "ALTER TABLE RECOVER PARTITIONS")
 
     case AlterTableAddPartitionStatement(
-        SessionCatalogAndTable(_, tbl), partitionSpecsAndLocs, ifNotExists) =>
+        r @ ResolvedTable(_, _, _: V1Table), partitionSpecsAndLocs, ifNotExists)
+        if isSessionCatalog(r.catalog) =>
       AlterTableAddPartitionCommand(
-        tbl.asTableIdentifier,
+        r.identifier.asTableIdentifier,
         partitionSpecsAndLocs,
         ifNotExists)
 
@@ -512,9 +513,10 @@ class ResolveSessionCatalog(
         to)
 
     case AlterTableDropPartitionStatement(
-        SessionCatalogAndTable(_, tbl), specs, ifExists, purge, retainData) =>
+        r @ ResolvedTable(_, _, _: V1Table), specs, ifExists, purge, retainData)
+        if isSessionCatalog(r.catalog) =>
       AlterTableDropPartitionCommand(
-        tbl.asTableIdentifier,
+        r.identifier.asTableIdentifier,
         specs,
         ifExists,
         purge,
