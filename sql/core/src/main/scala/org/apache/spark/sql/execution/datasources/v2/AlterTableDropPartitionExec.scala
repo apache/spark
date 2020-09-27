@@ -34,20 +34,19 @@ case class AlterTableDropPartitionExec(
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    val notExistsPartIdents = partIdents.filterNot(table.partitionExists)
+    val (existsPartIdents, notExistsPartIdents) = partIdents.partition(table.partitionExists)
+
     if (notExistsPartIdents.nonEmpty && !ignoreIfNotExists) {
       throw new NoSuchPartitionsException(
         table.name(), notExistsPartIdents, table.partitionSchema())
     }
 
-    val existsPartitions = partIdents.filterNot(notExistsPartIdents.contains)
-    existsPartitions match {
+    existsPartIdents match {
       case Seq() => // Nothing will be done
       case Seq(partIdent) =>
         table.dropPartition(partIdent)
       case Seq(_ *) if table.isInstanceOf[SupportsAtomicPartitionManagement] =>
-        table.asAtomicPartitionable
-          .dropPartitions(existsPartitions.toArray)
+        table.asAtomicPartitionable.dropPartitions(existsPartIdents.toArray)
       case _ =>
         throw new UnsupportedOperationException(
           s"Nonatomic partition table ${table.name()} can not drop multiple partitions.")

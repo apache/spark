@@ -558,8 +558,8 @@ case class ShowFunctions(
  *
  * The syntax of this command is:
  * {{{
- *     ALTER TABLE table ADD [IF NOT EXISTS] PARTITION spec1 [LOCATION 'loc1']
- *                                          PARTITION spec2 [LOCATION 'loc2']
+ *     ALTER TABLE table ADD [IF NOT EXISTS]
+ *                 PARTITION spec1 [LOCATION 'loc1'][, PARTITION spec2 [LOCATION 'loc2'], ...];
  * }}}
  */
 case class AlterTableAddPartition(

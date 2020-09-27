@@ -280,8 +280,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       AlterTableAddPartitionExec(table, parts, ignoreIfExists) :: Nil
 
     case AlterTableDropPartition(table, partIdents, ignoreIfNotExists) =>
-      AlterTableDropPartitionExec(
-        table, partIdents, ignoreIfNotExists) :: Nil
+      AlterTableDropPartitionExec(table, partIdents, ignoreIfNotExists) :: Nil
 
     case _ => Nil
   }

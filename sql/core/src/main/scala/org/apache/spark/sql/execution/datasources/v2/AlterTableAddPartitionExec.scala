@@ -36,23 +36,24 @@ case class AlterTableAddPartitionExec(
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    val existsPartIdents = partitions.map(_._1).filter(table.partitionExists)
-    if (existsPartIdents.nonEmpty && !ignoreIfExists) {
+    val (existsParts, notExistsParts) =
+      partitions.partition(p => table.partitionExists(p._1))
+
+    if (existsParts.nonEmpty && !ignoreIfExists) {
       throw new PartitionsAlreadyExistException(
-        table.name(), existsPartIdents, table.partitionSchema())
+        table.name(), existsParts.map(_._1), table.partitionSchema())
     }
 
-    val notExistsPartitions =
-      partitions.filterNot(part => existsPartIdents.contains(part._1))
-    notExistsPartitions match {
+    notExistsParts match {
       case Seq() => // Nothing will be done
-      case Seq((partIdent, properties)) =>
-        table.createPartition(partIdent, properties.asJava)
+      case Seq((partIdent, partProp)) =>
+        table.createPartition(partIdent, partProp.asJava)
       case Seq(_ *) if table.isInstanceOf[SupportsAtomicPartitionManagement] =>
+        val (partIdents, partProps) = notExistsParts.unzip
         table.asAtomicPartitionable
           .createPartitions(
-            notExistsPartitions.map(_._1).toArray,
-            notExistsPartitions.map(_._2.asJava).toArray)
+            partIdents.toArray,
+            partProps.map(_.asJava).toArray)
       case _ =>
         throw new UnsupportedOperationException(
           s"Nonatomic partition table ${table.name()} can not add multiple partitions.")

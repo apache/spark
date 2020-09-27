@@ -16,6 +16,7 @@
  */
 
 package org.apache.spark.sql.connector
+
 import java.util
 
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException

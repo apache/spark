@@ -90,8 +90,7 @@ object DataSourceV2Implicits {
     def asPartitionIdentifier(partSchema: StructType): InternalRow = {
       val conflictKeys = partSpec.keys.toSeq.diff(partSchema.map(_.name))
       if (conflictKeys.nonEmpty) {
-        throw new AnalysisException(
-          s"Partition key ${conflictKeys.mkString(",")} not exists")
+        throw new AnalysisException(s"Partition key ${conflictKeys.mkString(",")} not exists")
       }
 
       val partValues = partSchema.map { part =>
@@ -99,6 +98,7 @@ object DataSourceV2Implicits {
         if (partValue == null) {
           null
         } else {
+          // TODO: Support other datatypes, such as DateType
           part.dataType match {
             case _: ByteType =>
               partValue.toByte
