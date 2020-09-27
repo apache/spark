@@ -213,7 +213,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
     // For the higher level k, we only need to search from lev to lev - k, because when building
     // a join from A and B, both A J B and B J A are handled.
     // Start searching from highest level to make sure that optimally ordered input doesn't get
-    // reordered into another plan with the same cost. 
+    // reordered into another plan with the same cost.
     while (k >= lev - k) {
       val oneSideCandidates = existingLevels(k).values.toSeq
       for (i <- oneSideCandidates.indices) {
