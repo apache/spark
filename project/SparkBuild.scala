@@ -35,7 +35,6 @@ import com.typesafe.tools.mima.plugin.MimaKeys
 import org.scalastyle.sbt.ScalastylePlugin.autoImport._
 import org.scalastyle.sbt.Tasks
 import sbtassembly.AssemblyPlugin.autoImport._
-import sbtunidoc.GenJavadocPlugin.autoImport._
 
 import spray.revolver.RevolverPlugin._
 
@@ -84,7 +83,8 @@ object BuildCommons {
 object SparkBuild extends PomBuild {
 
   import BuildCommons._
-  import sbtunidoc.ScalaUnidocPlugin
+  import sbtunidoc.GenJavadocPlugin
+  import sbtunidoc.GenJavadocPlugin.autoImport._
   import scala.collection.mutable.Map
 
   val projectsMap: Map[String, Seq[Setting[_]]] = Map.empty
@@ -110,11 +110,8 @@ object SparkBuild extends PomBuild {
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("localPublish", "publish local for m2 and ivy", KeyRanks.ATask)
 
-  lazy val sparkGenjavadocSettings: Seq[sbt.Def.Setting[_]] = Seq(
-    libraryDependencies += compilerPlugin(
-      "com.typesafe.genjavadoc" %% "genjavadoc-plugin" % unidocGenjavadocVersion.value cross CrossVersion.full),
+  lazy val sparkGenjavadocSettings: Seq[sbt.Def.Setting[_]] = GenJavadocPlugin.projectSettings ++ Seq(
     scalacOptions ++= Seq(
-      "-P:genjavadoc:out=" + (target.value / "java"),
       "-P:genjavadoc:strictVisibility=true" // hide package private types
     )
   )
