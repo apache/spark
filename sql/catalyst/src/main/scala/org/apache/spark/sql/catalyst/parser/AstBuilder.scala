@@ -3364,7 +3364,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[RefreshTableStatement]].
+   * Create a [[RefreshTable]].
    *
    * For example:
    * {{{
@@ -3372,7 +3372,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitRefreshTable(ctx: RefreshTableContext): LogicalPlan = withOrigin(ctx) {
-    RefreshTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()))
+    RefreshTable(UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier())))
   }
 
   /**

@@ -430,11 +430,6 @@ case class ShowPartitionsStatement(
     partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
 
 /**
- * A REFRESH TABLE statement, as parsed from SQL
- */
-case class RefreshTableStatement(tableName: Seq[String]) extends ParsedStatement
-
-/**
  * A SHOW COLUMNS statement, as parsed from SQL
  */
 case class ShowColumnsStatement(

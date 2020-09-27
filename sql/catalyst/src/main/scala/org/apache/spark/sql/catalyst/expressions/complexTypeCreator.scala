@@ -304,7 +304,6 @@ case class MapFromArrays(left: Expression, right: Expression)
  */
 case object NamePlaceholder extends LeafExpression with Unevaluable {
   override lazy val resolved: Boolean = false
-  override def foldable: Boolean = false
   override def nullable: Boolean = false
   override def dataType: DataType = StringType
   override def prettyName: String = "NamePlaceholder"
