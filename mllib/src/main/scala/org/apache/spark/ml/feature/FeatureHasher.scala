@@ -91,7 +91,8 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
   /**
    * Numeric columns to treat as categorical features. By default only string and boolean
    * columns are treated as categorical, so this param can be used to explicitly specify the
-   * numerical columns to treat as categorical.
+   * numerical columns to treat as categorical. Note, the relevant columns should also be set in
+   * `inputCols`, categorical columns not set in `inputCols` will be listed in a warning.
    * @group param
    */
   @Since("2.3.0")
