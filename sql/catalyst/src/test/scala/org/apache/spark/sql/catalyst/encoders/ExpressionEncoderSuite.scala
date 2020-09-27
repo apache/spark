@@ -395,7 +395,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(Map("key" -> FooEnum.E1), "Map with String key and scala Enum")
   encodeDecodeTest(Map(FooEnum.E1 -> "value"), "Map with scala Enum key and String value")
   encodeDecodeTest(FooClassWithEnum(1, FooEnum.E1), "case class with Int and scala Enum")
-  encodeDecodeTest(FooEnum.E1, "case class with Int and scala Enum")
+  encodeDecodeTest(FooEnum.E1, "scala Enum")
 
   // Scala / Java big decimals ----------------------------------------------------------
 
