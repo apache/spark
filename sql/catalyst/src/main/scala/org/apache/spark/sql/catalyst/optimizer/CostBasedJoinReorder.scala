@@ -40,23 +40,20 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
     if (!conf.cboEnabled || !conf.joinReorderEnabled) {
       plan
     } else {
-      val result = plan transformDown applyLocally
+      val result = plan transformDown {
+        // Start reordering with a joinable item, which is an InnerLike join with conditions.
+        // Avoid reordering if a join hint is present.
+        case j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE) =>
+          reorder(j, j.output)
+        case p @ Project(projectList, Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE))
+          if projectList.forall(_.isInstanceOf[Attribute]) =>
+          reorder(p, p.output)
+      }
       // After reordering is finished, convert OrderedJoin back to Join.
       result transform {
         case OrderedJoin(left, right, jt, cond) => Join(left, right, jt, cond, JoinHint.NONE)
       }
     }
-  }
-
-  private val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
-    // Start reordering with a joinable item, which is an InnerLike join with conditions.
-    // Avoid reordering if a join hint is present.
-    case j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE) =>
-      reorder(j, j.output)
-    case p @ Project(projectList, Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE))
-      if projectList.forall(_.isInstanceOf[Attribute]) =>
-      reorder(p, p.output)
-
   }
 
   private def reorder(plan: LogicalPlan, output: Seq[Attribute]): LogicalPlan = {
@@ -66,9 +63,7 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
       // We also need to check if costs of all items can be evaluated.
       if (items.size > 2 && items.size <= conf.joinReorderDPThreshold && conditions.nonEmpty &&
           items.forall(_.stats.rowCount.isDefined)) {
-        // Transform and sort all the items to guarantee idempotence
-        val transformedItems = items.map(_ transformDown applyLocally).sortBy(_.semanticHash())
-        JoinReorderDP.search(conf, transformedItems, conditions, output)
+        JoinReorderDP.search(conf, items, conditions, output)
       } else {
         plan
       }
@@ -347,10 +342,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
     /** Get the cost of the root node of this plan tree. */
     def rootCost(conf: SQLConf): Cost = {
       if (itemIds.size > 1) {
-        val rootStats = (plan transform {
-          // The OrderedJoin does not propagate stats
-          case OrderedJoin(left, right, jt, cond) => Join(left, right, jt, cond, JoinHint.NONE)
-        }).stats
+        val rootStats = plan.stats
         Cost(rootStats.rowCount.get, rootStats.sizeInBytes)
       } else {
         // If the plan is a leaf item, it has zero cost.

@@ -28,7 +28,11 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),aggOrder,avg(wr_refunded_cas
                                                       Exchange [ws_item_sk,ws_order_number] #3
                                                         WholeStageCodegen (2)
                                                           Project [ws_sold_date_sk,ws_item_sk,ws_order_number,ws_quantity,ws_sales_price,ws_net_profit]
-                                                            BroadcastHashJoin [wp_web_page_sk,ws_web_page_sk]
+                                                            BroadcastHashJoin [ws_web_page_sk,wp_web_page_sk]
+                                                              Filter [ws_item_sk,ws_order_number,ws_web_page_sk,ws_sold_date_sk,ws_sales_price,ws_net_profit]
+                                                                ColumnarToRow
+                                                                  InputAdapter
+                                                                    Scan parquet default.web_sales [ws_sold_date_sk,ws_item_sk,ws_web_page_sk,ws_order_number,ws_quantity,ws_sales_price,ws_net_profit]
                                                               InputAdapter
                                                                 BroadcastExchange #4
                                                                   WholeStageCodegen (1)
@@ -36,10 +40,6 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),aggOrder,avg(wr_refunded_cas
                                                                       ColumnarToRow
                                                                         InputAdapter
                                                                           Scan parquet default.web_page [wp_web_page_sk]
-                                                              Filter [ws_item_sk,ws_order_number,ws_web_page_sk,ws_sold_date_sk,ws_sales_price,ws_net_profit]
-                                                                ColumnarToRow
-                                                                  InputAdapter
-                                                                    Scan parquet default.web_sales [ws_sold_date_sk,ws_item_sk,ws_web_page_sk,ws_order_number,ws_quantity,ws_sales_price,ws_net_profit]
                                               InputAdapter
                                                 WholeStageCodegen (5)
                                                   Sort [wr_item_sk,wr_order_number]

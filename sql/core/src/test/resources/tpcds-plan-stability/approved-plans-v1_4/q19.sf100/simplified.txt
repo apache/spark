@@ -13,12 +13,16 @@ TakeOrderedAndProject [ext_price,brand,brand_id,i_manufact_id,i_manufact]
                         InputAdapter
                           Exchange [ss_customer_sk] #2
                             WholeStageCodegen (4)
-                              Project [i_brand_id,i_brand,i_manufact_id,i_manufact,ss_customer_sk,ss_ext_sales_price,s_zip]
+                              Project [ss_customer_sk,ss_ext_sales_price,i_brand_id,i_brand,i_manufact_id,i_manufact,s_zip]
                                 BroadcastHashJoin [ss_store_sk,s_store_sk]
-                                  Project [i_brand_id,i_brand,i_manufact_id,i_manufact,ss_customer_sk,ss_store_sk,ss_ext_sales_price]
+                                  Project [ss_customer_sk,ss_store_sk,ss_ext_sales_price,i_brand_id,i_brand,i_manufact_id,i_manufact]
                                     BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                      Project [i_brand_id,i_brand,i_manufact_id,i_manufact,ss_sold_date_sk,ss_customer_sk,ss_store_sk,ss_ext_sales_price]
-                                        BroadcastHashJoin [i_item_sk,ss_item_sk]
+                                      Project [ss_sold_date_sk,ss_customer_sk,ss_store_sk,ss_ext_sales_price,i_brand_id,i_brand,i_manufact_id,i_manufact]
+                                        BroadcastHashJoin [ss_item_sk,i_item_sk]
+                                          Filter [ss_sold_date_sk,ss_item_sk,ss_customer_sk,ss_store_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_customer_sk,ss_store_sk,ss_ext_sales_price]
                                           InputAdapter
                                             BroadcastExchange #3
                                               WholeStageCodegen (1)
@@ -27,10 +31,6 @@ TakeOrderedAndProject [ext_price,brand,brand_id,i_manufact_id,i_manufact]
                                                     ColumnarToRow
                                                       InputAdapter
                                                         Scan parquet default.item [i_item_sk,i_brand_id,i_brand,i_manufact_id,i_manufact,i_manager_id]
-                                          Filter [ss_sold_date_sk,ss_item_sk,ss_customer_sk,ss_store_sk]
-                                            ColumnarToRow
-                                              InputAdapter
-                                                Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_customer_sk,ss_store_sk,ss_ext_sales_price]
                                       InputAdapter
                                         BroadcastExchange #4
                                           WholeStageCodegen (2)

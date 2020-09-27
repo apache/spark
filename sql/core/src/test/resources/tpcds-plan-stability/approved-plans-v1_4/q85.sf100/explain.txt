@@ -18,14 +18,14 @@ TakeOrderedAndProject (57)
                :           :     :     :     :- * Sort (11)
                :           :     :     :     :  +- Exchange (10)
                :           :     :     :     :     +- * Project (9)
-               :           :     :     :     :        +- * BroadcastHashJoin Inner BuildLeft (8)
-               :           :     :     :     :           :- BroadcastExchange (4)
-               :           :     :     :     :           :  +- * Filter (3)
-               :           :     :     :     :           :     +- * ColumnarToRow (2)
-               :           :     :     :     :           :        +- Scan parquet default.web_page (1)
-               :           :     :     :     :           +- * Filter (7)
-               :           :     :     :     :              +- * ColumnarToRow (6)
-               :           :     :     :     :                 +- Scan parquet default.web_sales (5)
+               :           :     :     :     :        +- * BroadcastHashJoin Inner BuildRight (8)
+               :           :     :     :     :           :- * Filter (3)
+               :           :     :     :     :           :  +- * ColumnarToRow (2)
+               :           :     :     :     :           :     +- Scan parquet default.web_sales (1)
+               :           :     :     :     :           +- BroadcastExchange (7)
+               :           :     :     :     :              +- * Filter (6)
+               :           :     :     :     :                 +- * ColumnarToRow (5)
+               :           :     :     :     :                    +- Scan parquet default.web_page (4)
                :           :     :     :     +- * Sort (16)
                :           :     :     :        +- Exchange (15)
                :           :     :     :           +- * Filter (14)
@@ -58,54 +58,54 @@ TakeOrderedAndProject (57)
                                  +- Scan parquet default.customer_demographics (45)
 
 
-(1) Scan parquet default.web_page
-Output [1]: [wp_web_page_sk#1]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/web_page]
-PushedFilters: [IsNotNull(wp_web_page_sk)]
-ReadSchema: struct<wp_web_page_sk:int>
-
-(2) ColumnarToRow [codegen id : 1]
-Input [1]: [wp_web_page_sk#1]
-
-(3) Filter [codegen id : 1]
-Input [1]: [wp_web_page_sk#1]
-Condition : isnotnull(wp_web_page_sk#1)
-
-(4) BroadcastExchange
-Input [1]: [wp_web_page_sk#1]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#2]
-
-(5) Scan parquet default.web_sales
-Output [7]: [ws_sold_date_sk#3, ws_item_sk#4, ws_web_page_sk#5, ws_order_number#6, ws_quantity#7, ws_sales_price#8, ws_net_profit#9]
+(1) Scan parquet default.web_sales
+Output [7]: [ws_sold_date_sk#1, ws_item_sk#2, ws_web_page_sk#3, ws_order_number#4, ws_quantity#5, ws_sales_price#6, ws_net_profit#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_item_sk), IsNotNull(ws_order_number), IsNotNull(ws_web_page_sk), IsNotNull(ws_sold_date_sk), Or(Or(And(GreaterThanOrEqual(ws_sales_price,100.00),LessThanOrEqual(ws_sales_price,150.00)),And(GreaterThanOrEqual(ws_sales_price,50.00),LessThanOrEqual(ws_sales_price,100.00))),And(GreaterThanOrEqual(ws_sales_price,150.00),LessThanOrEqual(ws_sales_price,200.00))), Or(Or(And(GreaterThanOrEqual(ws_net_profit,100.00),LessThanOrEqual(ws_net_profit,200.00)),And(GreaterThanOrEqual(ws_net_profit,150.00),LessThanOrEqual(ws_net_profit,300.00))),And(GreaterThanOrEqual(ws_net_profit,50.00),LessThanOrEqual(ws_net_profit,250.00)))]
 ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_web_page_sk:int,ws_order_number:int,ws_quantity:int,ws_sales_price:decimal(7,2),ws_net_profit:decimal(7,2)>
 
-(6) ColumnarToRow
-Input [7]: [ws_sold_date_sk#3, ws_item_sk#4, ws_web_page_sk#5, ws_order_number#6, ws_quantity#7, ws_sales_price#8, ws_net_profit#9]
+(2) ColumnarToRow [codegen id : 2]
+Input [7]: [ws_sold_date_sk#1, ws_item_sk#2, ws_web_page_sk#3, ws_order_number#4, ws_quantity#5, ws_sales_price#6, ws_net_profit#7]
 
-(7) Filter
-Input [7]: [ws_sold_date_sk#3, ws_item_sk#4, ws_web_page_sk#5, ws_order_number#6, ws_quantity#7, ws_sales_price#8, ws_net_profit#9]
-Condition : (((((isnotnull(ws_item_sk#4) AND isnotnull(ws_order_number#6)) AND isnotnull(ws_web_page_sk#5)) AND isnotnull(ws_sold_date_sk#3)) AND ((((ws_sales_price#8 >= 100.00) AND (ws_sales_price#8 <= 150.00)) OR ((ws_sales_price#8 >= 50.00) AND (ws_sales_price#8 <= 100.00))) OR ((ws_sales_price#8 >= 150.00) AND (ws_sales_price#8 <= 200.00)))) AND ((((ws_net_profit#9 >= 100.00) AND (ws_net_profit#9 <= 200.00)) OR ((ws_net_profit#9 >= 150.00) AND (ws_net_profit#9 <= 300.00))) OR ((ws_net_profit#9 >= 50.00) AND (ws_net_profit#9 <= 250.00))))
+(3) Filter [codegen id : 2]
+Input [7]: [ws_sold_date_sk#1, ws_item_sk#2, ws_web_page_sk#3, ws_order_number#4, ws_quantity#5, ws_sales_price#6, ws_net_profit#7]
+Condition : (((((isnotnull(ws_item_sk#2) AND isnotnull(ws_order_number#4)) AND isnotnull(ws_web_page_sk#3)) AND isnotnull(ws_sold_date_sk#1)) AND ((((ws_sales_price#6 >= 100.00) AND (ws_sales_price#6 <= 150.00)) OR ((ws_sales_price#6 >= 50.00) AND (ws_sales_price#6 <= 100.00))) OR ((ws_sales_price#6 >= 150.00) AND (ws_sales_price#6 <= 200.00)))) AND ((((ws_net_profit#7 >= 100.00) AND (ws_net_profit#7 <= 200.00)) OR ((ws_net_profit#7 >= 150.00) AND (ws_net_profit#7 <= 300.00))) OR ((ws_net_profit#7 >= 50.00) AND (ws_net_profit#7 <= 250.00))))
+
+(4) Scan parquet default.web_page
+Output [1]: [wp_web_page_sk#8]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/web_page]
+PushedFilters: [IsNotNull(wp_web_page_sk)]
+ReadSchema: struct<wp_web_page_sk:int>
+
+(5) ColumnarToRow [codegen id : 1]
+Input [1]: [wp_web_page_sk#8]
+
+(6) Filter [codegen id : 1]
+Input [1]: [wp_web_page_sk#8]
+Condition : isnotnull(wp_web_page_sk#8)
+
+(7) BroadcastExchange
+Input [1]: [wp_web_page_sk#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#9]
 
 (8) BroadcastHashJoin [codegen id : 2]
-Left keys [1]: [wp_web_page_sk#1]
-Right keys [1]: [ws_web_page_sk#5]
+Left keys [1]: [ws_web_page_sk#3]
+Right keys [1]: [wp_web_page_sk#8]
 Join condition: None
 
 (9) Project [codegen id : 2]
-Output [6]: [ws_sold_date_sk#3, ws_item_sk#4, ws_order_number#6, ws_quantity#7, ws_sales_price#8, ws_net_profit#9]
-Input [8]: [wp_web_page_sk#1, ws_sold_date_sk#3, ws_item_sk#4, ws_web_page_sk#5, ws_order_number#6, ws_quantity#7, ws_sales_price#8, ws_net_profit#9]
+Output [6]: [ws_sold_date_sk#1, ws_item_sk#2, ws_order_number#4, ws_quantity#5, ws_sales_price#6, ws_net_profit#7]
+Input [8]: [ws_sold_date_sk#1, ws_item_sk#2, ws_web_page_sk#3, ws_order_number#4, ws_quantity#5, ws_sales_price#6, ws_net_profit#7, wp_web_page_sk#8]
 
 (10) Exchange
-Input [6]: [ws_sold_date_sk#3, ws_item_sk#4, ws_order_number#6, ws_quantity#7, ws_sales_price#8, ws_net_profit#9]
-Arguments: hashpartitioning(cast(ws_item_sk#4 as bigint), cast(ws_order_number#6 as bigint), 5), true, [id=#10]
+Input [6]: [ws_sold_date_sk#1, ws_item_sk#2, ws_order_number#4, ws_quantity#5, ws_sales_price#6, ws_net_profit#7]
+Arguments: hashpartitioning(cast(ws_item_sk#2 as bigint), cast(ws_order_number#4 as bigint), 5), true, [id=#10]
 
 (11) Sort [codegen id : 3]
-Input [6]: [ws_sold_date_sk#3, ws_item_sk#4, ws_order_number#6, ws_quantity#7, ws_sales_price#8, ws_net_profit#9]
-Arguments: [cast(ws_item_sk#4 as bigint) ASC NULLS FIRST, cast(ws_order_number#6 as bigint) ASC NULLS FIRST], false, 0
+Input [6]: [ws_sold_date_sk#1, ws_item_sk#2, ws_order_number#4, ws_quantity#5, ws_sales_price#6, ws_net_profit#7]
+Arguments: [cast(ws_item_sk#2 as bigint) ASC NULLS FIRST, cast(ws_order_number#4 as bigint) ASC NULLS FIRST], false, 0
 
 (12) Scan parquet default.web_returns
 Output [8]: [wr_item_sk#11, wr_refunded_cdemo_sk#12, wr_refunded_addr_sk#13, wr_returning_cdemo_sk#14, wr_reason_sk#15, wr_order_number#16, wr_fee#17, wr_refunded_cash#18]
@@ -130,13 +130,13 @@ Input [8]: [wr_item_sk#11, wr_refunded_cdemo_sk#12, wr_refunded_addr_sk#13, wr_r
 Arguments: [wr_item_sk#11 ASC NULLS FIRST, wr_order_number#16 ASC NULLS FIRST], false, 0
 
 (17) SortMergeJoin [codegen id : 9]
-Left keys [2]: [cast(ws_item_sk#4 as bigint), cast(ws_order_number#6 as bigint)]
+Left keys [2]: [cast(ws_item_sk#2 as bigint), cast(ws_order_number#4 as bigint)]
 Right keys [2]: [wr_item_sk#11, wr_order_number#16]
 Join condition: None
 
 (18) Project [codegen id : 9]
-Output [10]: [ws_sold_date_sk#3, ws_quantity#7, ws_sales_price#8, ws_net_profit#9, wr_refunded_cdemo_sk#12, wr_refunded_addr_sk#13, wr_returning_cdemo_sk#14, wr_reason_sk#15, wr_fee#17, wr_refunded_cash#18]
-Input [14]: [ws_sold_date_sk#3, ws_item_sk#4, ws_order_number#6, ws_quantity#7, ws_sales_price#8, ws_net_profit#9, wr_item_sk#11, wr_refunded_cdemo_sk#12, wr_refunded_addr_sk#13, wr_returning_cdemo_sk#14, wr_reason_sk#15, wr_order_number#16, wr_fee#17, wr_refunded_cash#18]
+Output [10]: [ws_sold_date_sk#1, ws_quantity#5, ws_sales_price#6, ws_net_profit#7, wr_refunded_cdemo_sk#12, wr_refunded_addr_sk#13, wr_returning_cdemo_sk#14, wr_reason_sk#15, wr_fee#17, wr_refunded_cash#18]
+Input [14]: [ws_sold_date_sk#1, ws_item_sk#2, ws_order_number#4, ws_quantity#5, ws_sales_price#6, ws_net_profit#7, wr_item_sk#11, wr_refunded_cdemo_sk#12, wr_refunded_addr_sk#13, wr_returning_cdemo_sk#14, wr_reason_sk#15, wr_order_number#16, wr_fee#17, wr_refunded_cash#18]
 
 (19) Scan parquet default.date_dim
 Output [2]: [d_date_sk#20, d_year#21]
@@ -161,13 +161,13 @@ Input [1]: [d_date_sk#20]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#22]
 
 (24) BroadcastHashJoin [codegen id : 9]
-Left keys [1]: [ws_sold_date_sk#3]
+Left keys [1]: [ws_sold_date_sk#1]
 Right keys [1]: [d_date_sk#20]
 Join condition: None
 
 (25) Project [codegen id : 9]
-Output [9]: [ws_quantity#7, ws_sales_price#8, ws_net_profit#9, wr_refunded_cdemo_sk#12, wr_refunded_addr_sk#13, wr_returning_cdemo_sk#14, wr_reason_sk#15, wr_fee#17, wr_refunded_cash#18]
-Input [11]: [ws_sold_date_sk#3, ws_quantity#7, ws_sales_price#8, ws_net_profit#9, wr_refunded_cdemo_sk#12, wr_refunded_addr_sk#13, wr_returning_cdemo_sk#14, wr_reason_sk#15, wr_fee#17, wr_refunded_cash#18, d_date_sk#20]
+Output [9]: [ws_quantity#5, ws_sales_price#6, ws_net_profit#7, wr_refunded_cdemo_sk#12, wr_refunded_addr_sk#13, wr_returning_cdemo_sk#14, wr_reason_sk#15, wr_fee#17, wr_refunded_cash#18]
+Input [11]: [ws_sold_date_sk#1, ws_quantity#5, ws_sales_price#6, ws_net_profit#7, wr_refunded_cdemo_sk#12, wr_refunded_addr_sk#13, wr_returning_cdemo_sk#14, wr_reason_sk#15, wr_fee#17, wr_refunded_cash#18, d_date_sk#20]
 
 (26) Scan parquet default.reason
 Output [2]: [r_reason_sk#23, r_reason_desc#24]
@@ -193,8 +193,8 @@ Right keys [1]: [cast(r_reason_sk#23 as bigint)]
 Join condition: None
 
 (31) Project [codegen id : 9]
-Output [9]: [ws_quantity#7, ws_sales_price#8, ws_net_profit#9, wr_refunded_cdemo_sk#12, wr_refunded_addr_sk#13, wr_returning_cdemo_sk#14, wr_fee#17, wr_refunded_cash#18, r_reason_desc#24]
-Input [11]: [ws_quantity#7, ws_sales_price#8, ws_net_profit#9, wr_refunded_cdemo_sk#12, wr_refunded_addr_sk#13, wr_returning_cdemo_sk#14, wr_reason_sk#15, wr_fee#17, wr_refunded_cash#18, r_reason_sk#23, r_reason_desc#24]
+Output [9]: [ws_quantity#5, ws_sales_price#6, ws_net_profit#7, wr_refunded_cdemo_sk#12, wr_refunded_addr_sk#13, wr_returning_cdemo_sk#14, wr_fee#17, wr_refunded_cash#18, r_reason_desc#24]
+Input [11]: [ws_quantity#5, ws_sales_price#6, ws_net_profit#7, wr_refunded_cdemo_sk#12, wr_refunded_addr_sk#13, wr_returning_cdemo_sk#14, wr_reason_sk#15, wr_fee#17, wr_refunded_cash#18, r_reason_sk#23, r_reason_desc#24]
 
 (32) Scan parquet default.customer_address
 Output [3]: [ca_address_sk#26, ca_state#27, ca_country#28]
@@ -221,18 +221,18 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (37) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [wr_refunded_addr_sk#13]
 Right keys [1]: [cast(ca_address_sk#26 as bigint)]
-Join condition: ((((ca_state#27 IN (IN,OH,NJ) AND (ws_net_profit#9 >= 100.00)) AND (ws_net_profit#9 <= 200.00)) OR ((ca_state#27 IN (WI,CT,KY) AND (ws_net_profit#9 >= 150.00)) AND (ws_net_profit#9 <= 300.00))) OR ((ca_state#27 IN (LA,IA,AR) AND (ws_net_profit#9 >= 50.00)) AND (ws_net_profit#9 <= 250.00)))
+Join condition: ((((ca_state#27 IN (IN,OH,NJ) AND (ws_net_profit#7 >= 100.00)) AND (ws_net_profit#7 <= 200.00)) OR ((ca_state#27 IN (WI,CT,KY) AND (ws_net_profit#7 >= 150.00)) AND (ws_net_profit#7 <= 300.00))) OR ((ca_state#27 IN (LA,IA,AR) AND (ws_net_profit#7 >= 50.00)) AND (ws_net_profit#7 <= 250.00)))
 
 (38) Project [codegen id : 9]
-Output [7]: [ws_quantity#7, ws_sales_price#8, wr_refunded_cdemo_sk#12, wr_returning_cdemo_sk#14, wr_fee#17, wr_refunded_cash#18, r_reason_desc#24]
-Input [11]: [ws_quantity#7, ws_sales_price#8, ws_net_profit#9, wr_refunded_cdemo_sk#12, wr_refunded_addr_sk#13, wr_returning_cdemo_sk#14, wr_fee#17, wr_refunded_cash#18, r_reason_desc#24, ca_address_sk#26, ca_state#27]
+Output [7]: [ws_quantity#5, ws_sales_price#6, wr_refunded_cdemo_sk#12, wr_returning_cdemo_sk#14, wr_fee#17, wr_refunded_cash#18, r_reason_desc#24]
+Input [11]: [ws_quantity#5, ws_sales_price#6, ws_net_profit#7, wr_refunded_cdemo_sk#12, wr_refunded_addr_sk#13, wr_returning_cdemo_sk#14, wr_fee#17, wr_refunded_cash#18, r_reason_desc#24, ca_address_sk#26, ca_state#27]
 
 (39) Exchange
-Input [7]: [ws_quantity#7, ws_sales_price#8, wr_refunded_cdemo_sk#12, wr_returning_cdemo_sk#14, wr_fee#17, wr_refunded_cash#18, r_reason_desc#24]
+Input [7]: [ws_quantity#5, ws_sales_price#6, wr_refunded_cdemo_sk#12, wr_returning_cdemo_sk#14, wr_fee#17, wr_refunded_cash#18, r_reason_desc#24]
 Arguments: hashpartitioning(wr_refunded_cdemo_sk#12, wr_returning_cdemo_sk#14, 5), true, [id=#30]
 
 (40) Sort [codegen id : 10]
-Input [7]: [ws_quantity#7, ws_sales_price#8, wr_refunded_cdemo_sk#12, wr_returning_cdemo_sk#14, wr_fee#17, wr_refunded_cash#18, r_reason_desc#24]
+Input [7]: [ws_quantity#5, ws_sales_price#6, wr_refunded_cdemo_sk#12, wr_returning_cdemo_sk#14, wr_fee#17, wr_refunded_cash#18, r_reason_desc#24]
 Arguments: [wr_refunded_cdemo_sk#12 ASC NULLS FIRST, wr_returning_cdemo_sk#14 ASC NULLS FIRST], false, 0
 
 (41) Scan parquet default.customer_demographics
@@ -287,16 +287,16 @@ Arguments: [cast(cd_demo_sk#31 as bigint) ASC NULLS FIRST, cast(cd_demo_sk#35 as
 (52) SortMergeJoin [codegen id : 14]
 Left keys [2]: [wr_refunded_cdemo_sk#12, wr_returning_cdemo_sk#14]
 Right keys [2]: [cast(cd_demo_sk#31 as bigint), cast(cd_demo_sk#35 as bigint)]
-Join condition: ((((((cd_marital_status#32 = M) AND (cd_education_status#33 = Advanced Degree)) AND (ws_sales_price#8 >= 100.00)) AND (ws_sales_price#8 <= 150.00)) OR ((((cd_marital_status#32 = S) AND (cd_education_status#33 = College)) AND (ws_sales_price#8 >= 50.00)) AND (ws_sales_price#8 <= 100.00))) OR ((((cd_marital_status#32 = W) AND (cd_education_status#33 = 2 yr Degree)) AND (ws_sales_price#8 >= 150.00)) AND (ws_sales_price#8 <= 200.00)))
+Join condition: ((((((cd_marital_status#32 = M) AND (cd_education_status#33 = Advanced Degree)) AND (ws_sales_price#6 >= 100.00)) AND (ws_sales_price#6 <= 150.00)) OR ((((cd_marital_status#32 = S) AND (cd_education_status#33 = College)) AND (ws_sales_price#6 >= 50.00)) AND (ws_sales_price#6 <= 100.00))) OR ((((cd_marital_status#32 = W) AND (cd_education_status#33 = 2 yr Degree)) AND (ws_sales_price#6 >= 150.00)) AND (ws_sales_price#6 <= 200.00)))
 
 (53) Project [codegen id : 14]
-Output [4]: [ws_quantity#7, wr_fee#17, wr_refunded_cash#18, r_reason_desc#24]
-Input [11]: [ws_quantity#7, ws_sales_price#8, wr_refunded_cdemo_sk#12, wr_returning_cdemo_sk#14, wr_fee#17, wr_refunded_cash#18, r_reason_desc#24, cd_demo_sk#31, cd_marital_status#32, cd_education_status#33, cd_demo_sk#35]
+Output [4]: [ws_quantity#5, wr_fee#17, wr_refunded_cash#18, r_reason_desc#24]
+Input [11]: [ws_quantity#5, ws_sales_price#6, wr_refunded_cdemo_sk#12, wr_returning_cdemo_sk#14, wr_fee#17, wr_refunded_cash#18, r_reason_desc#24, cd_demo_sk#31, cd_marital_status#32, cd_education_status#33, cd_demo_sk#35]
 
 (54) HashAggregate [codegen id : 14]
-Input [4]: [ws_quantity#7, wr_fee#17, wr_refunded_cash#18, r_reason_desc#24]
+Input [4]: [ws_quantity#5, wr_fee#17, wr_refunded_cash#18, r_reason_desc#24]
 Keys [1]: [r_reason_desc#24]
-Functions [3]: [partial_avg(cast(ws_quantity#7 as bigint)), partial_avg(UnscaledValue(wr_refunded_cash#18)), partial_avg(UnscaledValue(wr_fee#17))]
+Functions [3]: [partial_avg(cast(ws_quantity#5 as bigint)), partial_avg(UnscaledValue(wr_refunded_cash#18)), partial_avg(UnscaledValue(wr_fee#17))]
 Aggregate Attributes [6]: [sum#39, count#40, sum#41, count#42, sum#43, count#44]
 Results [7]: [r_reason_desc#24, sum#45, count#46, sum#47, count#48, sum#49, count#50]
 
@@ -307,9 +307,9 @@ Arguments: hashpartitioning(r_reason_desc#24, 5), true, [id=#51]
 (56) HashAggregate [codegen id : 15]
 Input [7]: [r_reason_desc#24, sum#45, count#46, sum#47, count#48, sum#49, count#50]
 Keys [1]: [r_reason_desc#24]
-Functions [3]: [avg(cast(ws_quantity#7 as bigint)), avg(UnscaledValue(wr_refunded_cash#18)), avg(UnscaledValue(wr_fee#17))]
-Aggregate Attributes [3]: [avg(cast(ws_quantity#7 as bigint))#52, avg(UnscaledValue(wr_refunded_cash#18))#53, avg(UnscaledValue(wr_fee#17))#54]
-Results [5]: [substr(r_reason_desc#24, 1, 20) AS substr(r_reason_desc, 1, 20)#55, avg(cast(ws_quantity#7 as bigint))#52 AS avg(ws_quantity)#56, cast((avg(UnscaledValue(wr_refunded_cash#18))#53 / 100.0) as decimal(11,6)) AS avg(wr_refunded_cash)#57, cast((avg(UnscaledValue(wr_fee#17))#54 / 100.0) as decimal(11,6)) AS avg(wr_fee)#58, avg(cast(ws_quantity#7 as bigint))#52 AS aggOrder#59]
+Functions [3]: [avg(cast(ws_quantity#5 as bigint)), avg(UnscaledValue(wr_refunded_cash#18)), avg(UnscaledValue(wr_fee#17))]
+Aggregate Attributes [3]: [avg(cast(ws_quantity#5 as bigint))#52, avg(UnscaledValue(wr_refunded_cash#18))#53, avg(UnscaledValue(wr_fee#17))#54]
+Results [5]: [substr(r_reason_desc#24, 1, 20) AS substr(r_reason_desc, 1, 20)#55, avg(cast(ws_quantity#5 as bigint))#52 AS avg(ws_quantity)#56, cast((avg(UnscaledValue(wr_refunded_cash#18))#53 / 100.0) as decimal(11,6)) AS avg(wr_refunded_cash)#57, cast((avg(UnscaledValue(wr_fee#17))#54 / 100.0) as decimal(11,6)) AS avg(wr_fee)#58, avg(cast(ws_quantity#5 as bigint))#52 AS aggOrder#59]
 
 (57) TakeOrderedAndProject
 Input [5]: [substr(r_reason_desc, 1, 20)#55, avg(ws_quantity)#56, avg(wr_refunded_cash)#57, avg(wr_fee)#58, aggOrder#59]
