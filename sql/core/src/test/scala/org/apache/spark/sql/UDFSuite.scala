@@ -494,7 +494,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       sparkContext.parallelize(Seq(Row(Map("a" -> new BigDecimal("2011000000000002456556"))))),
       StructType(Seq(StructField("col1", MapType(StringType, DecimalType(30, 0))))))
     val udf2 = org.apache.spark.sql.functions.udf((map: Map[String, BigDecimal]) => {
-      map.mapValues(value => if (value == null) null else value.toBigInteger.toString)
+      map.mapValues(value => if (value == null) null else value.toBigInteger.toString).toMap
     })
     checkAnswer(df2.select(udf2($"col1")), Seq(Row(Map("a" -> "2011000000000002456556"))))
   }
@@ -550,7 +550,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       udf((d: LocalDate, i: Instant) => LocalDateInstantType(d, i)))
     checkAnswer(df.selectExpr(s"buildLocalDateInstantType(d, i) as di")
       .select('di.cast(StringType)),
-      Row(s"[$expectedDate, $expectedInstant]") :: Nil)
+      Row(s"{$expectedDate, $expectedInstant}") :: Nil)
 
     // test null cases
     spark.udf.register("buildLocalDateInstantType",
@@ -580,7 +580,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       udf((t: Timestamp, i: Instant) => TimestampInstantType(t, i)))
     checkAnswer(df.selectExpr("buildTimestampInstantType(t, i) as ti")
       .select('ti.cast(StringType)),
-      Row(s"[$expectedTimestamp, $expectedInstant]"))
+      Row(s"{$expectedTimestamp, $expectedInstant}"))
 
     // test null cases
     spark.udf.register("buildTimestampInstantType",

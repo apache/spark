@@ -50,9 +50,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
 import org.apache.spark.util.Utils
 
-abstract class AvroSuite extends QueryTest with SharedSparkSession {
+abstract class AvroSuite extends QueryTest with SharedSparkSession with NestedDataSourceSuiteBase {
   import testImplicits._
 
+  override val nestedDataSources = Seq("avro")
   val episodesAvro = testFile("episodes.avro")
   val testAvro = testFile("test.avro")
 
@@ -542,7 +543,8 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
 
     val array_of_boolean =
       spark.read.format("avro").load(testAvro).select("array_of_boolean").collect()
-    assert(array_of_boolean.map(_(0).asInstanceOf[Seq[Boolean]].size).toSet == Set(3, 1, 0))
+    assert(array_of_boolean.map(_(0).asInstanceOf[scala.collection.Seq[Boolean]].size).toSet ==
+      Set(3, 1, 0))
 
     val bytes = spark.read.format("avro").load(testAvro).select("bytes").collect()
     assert(bytes.map(_(0).asInstanceOf[Array[Byte]].length).toSet == Set(3, 1, 0))

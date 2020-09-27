@@ -216,7 +216,7 @@ object SQLConf {
         "for using switch statements in InSet must be non-negative and less than or equal to 600")
       .createWithDefault(400)
 
-  val OPTIMIZER_PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.optimizer.planChangeLog.level")
+  val PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
       "plan after a rule or batch is applied. The value can be 'trace', 'debug', 'info', " +
@@ -229,17 +229,17 @@ object SQLConf {
         "'trace', 'debug', 'info', 'warn' and 'error'.")
     .createWithDefault("trace")
 
-  val OPTIMIZER_PLAN_CHANGE_LOG_RULES = buildConf("spark.sql.optimizer.planChangeLog.rules")
+  val PLAN_CHANGE_LOG_RULES = buildConf("spark.sql.planChangeLog.rules")
     .internal()
-    .doc("Configures a list of rules to be logged in the optimizer, in which the rules are " +
+    .doc("Configures a list of rules for logging plan changes, in which the rules are " +
       "specified by their rule names and separated by comma.")
     .version("3.0.0")
     .stringConf
     .createOptional
 
-  val OPTIMIZER_PLAN_CHANGE_LOG_BATCHES = buildConf("spark.sql.optimizer.planChangeLog.batches")
+  val PLAN_CHANGE_LOG_BATCHES = buildConf("spark.sql.planChangeLog.batches")
     .internal()
-    .doc("Configures a list of batches to be logged in the optimizer, in which the batches " +
+    .doc("Configures a list of batches for logging plan changes, in which the batches " +
       "are specified by their batch names and separated by comma.")
     .version("3.0.0")
     .stringConf
@@ -329,7 +329,10 @@ object SQLConf {
 
   val PREFER_SORTMERGEJOIN = buildConf("spark.sql.join.preferSortMergeJoin")
     .internal()
-    .doc("When true, prefer sort merge join over shuffle hash join.")
+    .doc("When true, prefer sort merge join over shuffled hash join. " +
+      "Sort merge join consumes less memory than shuffled hash join and it works efficiently " +
+      "when both join tables are large. On the other hand, shuffled hash join can improve " +
+      "performance (e.g., of full outer joins) when one of join tables is much smaller.")
     .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
@@ -519,6 +522,15 @@ object SQLConf {
       .checkValue(_ >= 0, "The non-empty partition ratio must be positive number.")
       .createWithDefault(0.2)
 
+  val ADAPTIVE_OPTIMIZER_EXCLUDED_RULES =
+    buildConf("spark.sql.adaptive.optimizer.excludedRules")
+      .doc("Configures a list of rules to be disabled in the adaptive optimizer, in which the " +
+        "rules are specified by their rule names and separated by comma. The optimizer will log " +
+        "the rules that have indeed been excluded.")
+      .version("3.1.0")
+      .stringConf
+      .createOptional
+
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
       .internal()
@@ -561,7 +573,7 @@ object SQLConf {
       " a heavily underestimated result.")
     .version("2.3.1")
     .doubleConf
-    .checkValue(_ > 0, "the value of fileDataSizeFactor must be greater than 0")
+    .checkValue(_ > 0, "the value of fileCompressionFactor must be greater than 0")
     .createWithDefault(1.0)
 
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
@@ -1211,6 +1223,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val REMOVE_REDUNDANT_PROJECTS_ENABLED = buildConf("spark.sql.execution.removeRedundantProjects")
+    .internal()
+    .doc("Whether to remove redundant project exec node based on children's output and " +
+      "ordering requirement.")
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val STATE_STORE_PROVIDER_CLASS =
     buildConf("spark.sql.streaming.stateStore.providerClass")
       .internal()
@@ -1236,9 +1256,9 @@ object SQLConf {
   val STATE_STORE_FORMAT_VALIDATION_ENABLED =
     buildConf("spark.sql.streaming.stateStore.formatValidation.enabled")
       .internal()
-      .doc("When true, check if the UnsafeRow from the state store is valid or not when running " +
-        "streaming queries. This can happen if the state store format has been changed. Note, " +
-        "the feature is only effective in the build-in HDFS state store provider now.")
+      .doc("When true, check if the data from state store is valid or not when running streaming " +
+        "queries. This can happen if the state store format has been changed. Note, the feature " +
+        "is only effective in the build-in HDFS state store provider now.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
@@ -1598,8 +1618,8 @@ object SQLConf {
   val NDV_MAX_ERROR =
     buildConf("spark.sql.statistics.ndv.maxError")
       .internal()
-      .doc("The maximum estimation error allowed in HyperLogLog++ algorithm when generating " +
-        "column level statistics.")
+      .doc("The maximum relative standard deviation allowed in HyperLogLog++ algorithm " +
+        "when generating column level statistics.")
       .version("2.1.1")
       .doubleConf
       .createWithDefault(0.05)
@@ -1799,7 +1819,7 @@ object SQLConf {
         "1. pyspark.sql.DataFrame.toPandas " +
         "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
         "The following data types are unsupported: " +
-        "BinaryType, MapType, ArrayType of TimestampType, and nested StructType.")
+        "MapType, ArrayType of TimestampType, and nested StructType.")
       .version("3.0.0")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 
@@ -2108,9 +2128,9 @@ object SQLConf {
       .doc("A comma-separated list of data source short names or fully qualified data source " +
         "implementation class names for which Spark tries to push down predicates for nested " +
         "columns and/or names containing `dots` to data sources. This configuration is only " +
-        "effective with file-based data source in DSv1. Currently, Parquet implements " +
-        "both optimizations while ORC only supports predicates for names containing `dots`. The " +
-        "other data sources don't support this feature yet. So the default value is 'parquet,orc'.")
+        "effective with file-based data sources in DSv1. Currently, Parquet and ORC implement " +
+        "both optimizations. The other data sources don't support this feature yet. So the " +
+        "default value is 'parquet,orc'.")
       .version("3.0.0")
       .stringConf
       .createWithDefault("parquet,orc")
@@ -2349,6 +2369,14 @@ object SQLConf {
       "value for 'spark.sql.maxPlanStringLength'.  Length must be a valid string length " +
       "(nonnegative and shorter than the maximum size).")
     .createWithDefaultString(s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}")
+
+  val MAX_METADATA_STRING_LENGTH = buildConf("spark.sql.maxMetadataStringLength")
+    .doc("Maximum number of characters to output for a metadata string. e.g. " +
+      "file location in `DataSourceScanExec`, every value will be abbreviated if exceed length.")
+    .version("3.1.0")
+    .intConf
+    .checkValue(_ > 3, "This value must be bigger than 3.")
+    .createWithDefault(100)
 
   val SET_COMMAND_REJECTS_SPARK_CORE_CONFS =
     buildConf("spark.sql.legacy.setCommandRejectsSparkCoreConfs")
@@ -2686,8 +2714,55 @@ object SQLConf {
         "optimized from O(M*N) calculation into O(M) calculation " +
         "using Hash lookup instead of Looping lookup." +
         "Only support for singleColumn NAAJ for now.")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val LEGACY_COMPLEX_TYPES_TO_STRING =
+    buildConf("spark.sql.legacy.castComplexTypesToString.enabled")
+      .internal()
+      .doc("When true, maps and structs are wrapped by [] in casting to strings, and " +
+        "NULL elements of structs/maps/arrays will be omitted while converting to strings. " +
+        "Otherwise, if this is false, which is the default, maps and structs are wrapped by {}, " +
+        "and NULL elements will be converted to \"null\".")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_PATH_OPTION_BEHAVIOR =
+    buildConf("spark.sql.legacy.pathOptionBehavior.enabled")
+      .internal()
+      .doc("When true, \"path\" option is overwritten if one path parameter is passed to " +
+        "DataFrameReader.load(), DataFrameWriter.save(), DataStreamReader.load(), or " +
+        "DataStreamWriter.start(). Also, \"path\" option is added to the overall paths if " +
+        "multiple path parameters are passed to DataFrameReader.load()")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_EXTRA_OPTIONS_BEHAVIOR =
+    buildConf("spark.sql.legacy.extraOptionsBehavior.enabled")
+      .internal()
+      .doc("When true, the extra options will be ignored for DataFrameReader.table(). If set it " +
+        "to false, which is the default, Spark will check if the extra options have the same " +
+        "key, but the value is different with the table serde properties. If the check passes, " +
+        "the extra options will be merged with the serde properties as the scan options. " +
+        "Otherwise, an exception will be thrown.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val TRUNCATE_TRASH_ENABLED =
+    buildConf("spark.sql.truncate.trash.enabled")
+      .doc("This configuration decides when truncating table, whether data files will be moved " +
+        "to trash directory or deleted permanently. The trash retention time is controlled by " +
+        "'fs.trash.interval', and in default, the server side configuration value takes " +
+        "precedence over the client-side one. Note that if 'fs.trash.interval' is non-positive, " +
+        "this will be a no-op and log a warning message. If the data fails to be moved to "  +
+        "trash, Spark will turn to delete it permanently.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -2761,7 +2836,13 @@ object SQLConf {
         s"Use '${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}' instead of it."),
       RemovedConfig("spark.sql.execution.pandas.respectSessionTimeZone", "3.0.0", "true",
         "The non-default behavior is considered as a bug, see SPARK-22395. " +
-        "The config was deprecated since Spark 2.3.")
+        "The config was deprecated since Spark 2.3."),
+      RemovedConfig("spark.sql.optimizer.planChangeLog.level", "3.1.0", "trace",
+        s"Please use `${PLAN_CHANGE_LOG_LEVEL.key}` instead."),
+      RemovedConfig("spark.sql.optimizer.planChangeLog.rules", "3.1.0", "",
+        s"Please use `${PLAN_CHANGE_LOG_RULES.key}` instead."),
+      RemovedConfig("spark.sql.optimizer.planChangeLog.batches", "3.1.0", "",
+        s"Please use `${PLAN_CHANGE_LOG_BATCHES.key}` instead.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -2798,11 +2879,11 @@ class SQLConf extends Serializable with Logging {
 
   def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
 
-  def optimizerPlanChangeLogLevel: String = getConf(OPTIMIZER_PLAN_CHANGE_LOG_LEVEL)
+  def planChangeLogLevel: String = getConf(PLAN_CHANGE_LOG_LEVEL)
 
-  def optimizerPlanChangeRules: Option[String] = getConf(OPTIMIZER_PLAN_CHANGE_LOG_RULES)
+  def planChangeRules: Option[String] = getConf(PLAN_CHANGE_LOG_RULES)
 
-  def optimizerPlanChangeBatches: Option[String] = getConf(OPTIMIZER_PLAN_CHANGE_LOG_BATCHES)
+  def planChangeBatches: Option[String] = getConf(PLAN_CHANGE_LOG_BATCHES)
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
 
@@ -3271,6 +3352,8 @@ class SQLConf extends Serializable with Logging {
 
   def maxPlanStringLength: Int = getConf(SQLConf.MAX_PLAN_STRING_LENGTH).toInt
 
+  def maxMetadataStringLength: Int = getConf(SQLConf.MAX_METADATA_STRING_LENGTH)
+
   def setCommandRejectsSparkCoreConfs: Boolean =
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
 
@@ -3298,6 +3381,10 @@ class SQLConf extends Serializable with Logging {
 
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
+
+  def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
+
+  def truncateTrashEnabled: Boolean = getConf(SQLConf.TRUNCATE_TRASH_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

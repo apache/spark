@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import sys
 import operator
 import time
 from itertools import chain

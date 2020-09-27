@@ -101,4 +101,6 @@ private class DummyTaskScheduler extends TaskScheduler {
   override def executorDecommission(
     executorId: String,
     decommissionInfo: ExecutorDecommissionInfo): Unit = {}
+  override def getExecutorDecommissionState(
+    executorId: String): Option[ExecutorDecommissionState] = None
 }

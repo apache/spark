@@ -16,7 +16,6 @@
 #
 
 import datetime
-import sys
 from itertools import chain
 import re
 
@@ -369,7 +368,7 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertListEqual(actual, expected)
 
     def test_higher_order_function_failures(self):
-        from pyspark.sql.functions import col, exists, transform
+        from pyspark.sql.functions import col, transform
 
         # Should fail with varargs
         with self.assertRaises(ValueError):
@@ -394,10 +393,10 @@ class FunctionsTests(ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_functions import *
+    from pyspark.sql.tests.test_functions import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

@@ -687,12 +687,20 @@ class MasterSuite extends SparkFunSuite
     }
   }
 
-  // TODO(SPARK-32250): Enable the test back. It is flaky in GitHub Actions.
-  ignore("SPARK-27510: Master should avoid dead loop while launching executor failed in Worker") {
+  test("SPARK-27510: Master should avoid dead loop while launching executor failed in Worker") {
     val master = makeAliveMaster()
     var worker: MockExecutorLaunchFailWorker = null
     try {
-      worker = new MockExecutorLaunchFailWorker(master)
+      val conf = new SparkConf()
+      // SPARK-32250: When running test on Github Action machine, the available processors in JVM
+      // is only 2, while on Jenkins it's 32. For this specific test, 2 available processors, which
+      // also decides number of threads in Dispatcher, is not enough to consume the messages. In
+      // the worst situation, MockExecutorLaunchFailWorker would occupy these 2 threads for
+      // handling messages LaunchDriver, LaunchExecutor at the same time but leave no thread for
+      // the driver to handle the message RegisteredApplication. At the end, it results in the dead
+      // lock situation. Therefore, we need to set more threads to avoid the dead lock.
+      conf.set(Network.RPC_NETTY_DISPATCHER_NUM_THREADS, 6)
+      worker = new MockExecutorLaunchFailWorker(master, conf)
       worker.rpcEnv.setupEndpoint("worker", worker)
       val workerRegMsg = RegisterWorker(
         worker.id,

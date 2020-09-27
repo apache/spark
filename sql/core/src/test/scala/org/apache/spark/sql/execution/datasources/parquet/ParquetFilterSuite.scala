@@ -122,34 +122,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
   private def withNestedParquetDataFrame(inputDF: DataFrame)
       (runTest: (DataFrame, String, Any => Any) => Unit): Unit = {
-    assert(inputDF.schema.fields.length == 1)
-    assert(!inputDF.schema.fields.head.dataType.isInstanceOf[StructType])
-    val df = inputDF.toDF("temp")
-    Seq(
-      (
-        df.withColumnRenamed("temp", "a"),
-        "a", // zero nesting
-        (x: Any) => x),
-      (
-        df.withColumn("a", struct(df("temp") as "b")).drop("temp"),
-        "a.b", // one level nesting
-        (x: Any) => Row(x)),
-      (
-        df.withColumn("a", struct(struct(df("temp") as "c") as "b")).drop("temp"),
-        "a.b.c", // two level nesting
-        (x: Any) => Row(Row(x))
-      ),
-      (
-        df.withColumnRenamed("temp", "a.b"),
-        "`a.b`", // zero nesting with column name containing `dots`
-        (x: Any) => x
-      ),
-      (
-        df.withColumn("a.b", struct(df("temp") as "c.d") ).drop("temp"),
-        "`a.b`.`c.d`", // one level nesting with column names containing `dots`
-        (x: Any) => Row(x)
-      )
-    ).foreach { case (newDF, colName, resultFun) =>
+    withNestedDataFrame(inputDF).foreach { case (newDF, colName, resultFun) =>
       withTempPath { file =>
         newDF.write.format(dataSourceName).save(file.getCanonicalPath)
         readParquetFile(file.getCanonicalPath) { df => runTest(df, colName, resultFun) }

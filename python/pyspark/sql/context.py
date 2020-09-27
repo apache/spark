@@ -23,8 +23,7 @@ from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.types import IntegerType, Row, StringType
-from pyspark.sql.udf import UDFRegistration
+from pyspark.sql.udf import UDFRegistration  # noqa: F401
 from pyspark.sql.utils import install_exception_handler
 
 __all__ = ["SQLContext", "HiveContext"]
@@ -53,6 +52,7 @@ class SQLContext(object):
         .. note:: Deprecated in 3.0.0. Use :func:`SparkSession.builder.getOrCreate()` instead.
 
         >>> from datetime import datetime
+        >>> from pyspark.sql import Row
         >>> sqlContext = SQLContext(sc)
         >>> allTypes = sc.parallelize([Row(i=1, s="string", d=1.0, l=1,
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
@@ -66,9 +66,10 @@ class SQLContext(object):
         >>> df.rdd.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time, x.row.a, x.list)).collect()
         [(1, 'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
         """
-        warnings.warn(
-            "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
-            DeprecationWarning)
+        if sparkSession is None:
+            warnings.warn(
+                "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
+                DeprecationWarning)
 
         self._sc = sparkContext
         self._jsc = self._sc._jsc

@@ -22,7 +22,7 @@ import java.util.Properties
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
@@ -104,6 +104,73 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         sql("SHOW TABLES IN h2.test"),
         Seq(Row("test", "people"), Row("test", "new_table")))
+    }
+  }
+
+  test("alter table ... add column") {
+    withTable("h2.test.alt_table") {
+      sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")
+      sql("ALTER TABLE h2.test.alt_table ADD COLUMNS (C1 INTEGER, C2 STRING)")
+      var t = spark.table("h2.test.alt_table")
+      var expectedSchema = new StructType()
+        .add("ID", IntegerType)
+        .add("C1", IntegerType)
+        .add("C2", StringType)
+      assert(t.schema === expectedSchema)
+      sql("ALTER TABLE h2.test.alt_table ADD COLUMNS (C3 DOUBLE)")
+      t = spark.table("h2.test.alt_table")
+      expectedSchema = expectedSchema.add("C3", DoubleType)
+      assert(t.schema === expectedSchema)
+    }
+  }
+
+  test("alter table ... rename column") {
+    withTable("h2.test.alt_table") {
+      sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")
+      sql("ALTER TABLE h2.test.alt_table RENAME COLUMN ID TO C")
+      val t = spark.table("h2.test.alt_table")
+      val expectedSchema = new StructType().add("C", IntegerType)
+      assert(t.schema === expectedSchema)
+    }
+  }
+
+  test("alter table ... drop column") {
+    withTable("h2.test.alt_table") {
+      sql("CREATE TABLE h2.test.alt_table (C1 INTEGER, C2 INTEGER) USING _")
+      sql("ALTER TABLE h2.test.alt_table DROP COLUMN C1")
+      val t = spark.table("h2.test.alt_table")
+      val expectedSchema = new StructType().add("C2", IntegerType)
+      assert(t.schema === expectedSchema)
+    }
+  }
+
+  test("alter table ... update column type") {
+    withTable("h2.test.alt_table") {
+      sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")
+      sql("ALTER TABLE h2.test.alt_table ALTER COLUMN id TYPE DOUBLE")
+      val t = spark.table("h2.test.alt_table")
+      val expectedSchema = new StructType().add("ID", DoubleType)
+      assert(t.schema === expectedSchema)
+    }
+  }
+
+  test("alter table ... update column nullability") {
+    withTable("h2.test.alt_table") {
+      sql("CREATE TABLE h2.test.alt_table (ID INTEGER NOT NULL) USING _")
+      sql("ALTER TABLE h2.test.alt_table ALTER COLUMN ID DROP NOT NULL")
+      val t = spark.table("h2.test.alt_table")
+      val expectedSchema = new StructType().add("ID", IntegerType, nullable = true)
+      assert(t.schema === expectedSchema)
+    }
+  }
+
+  test("alter table ... update column comment not supported") {
+    withTable("h2.test.alt_table") {
+      sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")
+      val thrown = intercept[java.sql.SQLFeatureNotSupportedException] {
+        sql("ALTER TABLE h2.test.alt_table ALTER COLUMN ID COMMENT 'test'")
+      }
+      assert(thrown.getMessage.contains("Unsupported TableChange"))
     }
   }
 }

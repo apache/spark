@@ -21,18 +21,14 @@ rem This script loads spark-env.cmd if it exists, and ensures it is only loaded 
 rem spark-env.cmd is loaded from SPARK_CONF_DIR if set, or within the current directory's
 rem conf\ subdirectory.
 
-set SPARK_ENV_CMD=spark-env.cmd
 if not defined SPARK_ENV_LOADED (
   set SPARK_ENV_LOADED=1
 
-  if [%SPARK_CONF_DIR%] == [] (
+  if not defined SPARK_CONF_DIR (
     set SPARK_CONF_DIR=%~dp0..\conf
   )
 
-  set SPARK_ENV_CMD=%SPARK_CONF_DIR%\%SPARK_ENV_CMD%
-  if exist %SPARK_ENV_CMD% (
-    call %SPARK_ENV_CMD%
-  )
+  call :LoadSparkEnv
 )
 
 rem Setting SPARK_SCALA_VERSION if not already set.
@@ -40,8 +36,8 @@ rem Setting SPARK_SCALA_VERSION if not already set.
 set SCALA_VERSION_1=2.13
 set SCALA_VERSION_2=2.12
 
-set ASSEMBLY_DIR1=%SPARK_HOME%\assembly\target\scala-%SCALA_VERSION_1%
-set ASSEMBLY_DIR2=%SPARK_HOME%\assembly\target\scala-%SCALA_VERSION_2%
+set ASSEMBLY_DIR1="%SPARK_HOME%\assembly\target\scala-%SCALA_VERSION_1%"
+set ASSEMBLY_DIR2="%SPARK_HOME%\assembly\target\scala-%SCALA_VERSION_2%"
 set ENV_VARIABLE_DOC=https://spark.apache.org/docs/latest/configuration.html#environment-variables
 
 if not defined SPARK_SCALA_VERSION (
@@ -59,3 +55,8 @@ if not defined SPARK_SCALA_VERSION (
   )
 )
 exit /b 0
+
+:LoadSparkEnv
+if exist "%SPARK_CONF_DIR%\spark-env.cmd" (
+  call "%SPARK_CONF_DIR%\spark-env.cmd"
+)

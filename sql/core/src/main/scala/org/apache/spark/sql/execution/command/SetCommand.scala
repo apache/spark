@@ -172,15 +172,16 @@ object SetCommand {
 case class ResetCommand(config: Option[String]) extends RunnableCommand with IgnoreCachedData {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val conf = sparkSession.sessionState.conf
     val defaults = sparkSession.sparkContext.conf
     config match {
       case Some(key) =>
-        conf.unsetConf(key)
-        defaults.getOption(key).foreach(conf.setConfString(key, _))
+        sparkSession.conf.unset(key)
+        defaults.getOption(key).foreach(sparkSession.conf.set(key, _))
       case None =>
-        conf.clear()
-        defaults.getAll.foreach { case (k, v) => conf.setConfString(k, v) }
+        sparkSession.sessionState.conf.clear()
+        defaults.getAll.foreach { case (k, v) =>
+          sparkSession.sessionState.conf.setConfString(k, v)
+        }
     }
     Seq.empty[Row]
   }

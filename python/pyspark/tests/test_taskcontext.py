@@ -16,7 +16,6 @@
 #
 import os
 import random
-import shutil
 import stat
 import sys
 import tempfile
@@ -322,10 +321,10 @@ class TaskContextTestsWithResources(unittest.TestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.tests.test_taskcontext import *
+    from pyspark.tests.test_taskcontext import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

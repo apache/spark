@@ -61,7 +61,7 @@ class JDBCTableCatalog extends TableCatalog with Logging {
         .getTables(null, schemaPattern, "%", Array("TABLE"));
       new Iterator[Identifier] {
         def hasNext = rs.next()
-        def next = Identifier.of(namespace, rs.getString("TABLE_NAME"))
+        def next() = Identifier.of(namespace, rs.getString("TABLE_NAME"))
       }.toArray
     }
   }
@@ -129,11 +129,12 @@ class JDBCTableCatalog extends TableCatalog with Logging {
     JDBCTable(ident, schema, writeOptions)
   }
 
-  // TODO (SPARK-32402): Implement ALTER TABLE in JDBC Table Catalog
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
-    // scalastyle:off throwerror
-    throw new NotImplementedError()
-    // scalastyle:on throwerror
+    checkNamespace(ident.namespace())
+    withConnection { conn =>
+      JdbcUtils.alterTable(conn, getTableName(ident), changes, options)
+      loadTable(ident)
+    }
   }
 
   private def checkNamespace(namespace: Array[String]): Unit = {

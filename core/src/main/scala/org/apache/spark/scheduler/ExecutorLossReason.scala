@@ -53,10 +53,16 @@ private [spark] object LossReasonPending extends ExecutorLossReason("Pending los
 
 /**
  * @param _message human readable loss reason
- * @param workerLost whether the worker is confirmed lost too (i.e. including shuffle service)
+ * @param workerHost it's defined when the host is confirmed lost too (i.e. including
+ *                   shuffle service)
+ * @param causedByApp whether the loss of the executor is the fault of the running app.
+ *                    (assumed true by default unless known explicitly otherwise)
  */
 private[spark]
-case class ExecutorProcessLost(_message: String = "Worker lost", workerLost: Boolean = false)
+case class ExecutorProcessLost(
+    _message: String = "Executor Process Lost",
+    workerHost: Option[String] = None,
+    causedByApp: Boolean = true)
   extends ExecutorLossReason(_message)
 
 /**
@@ -64,5 +70,9 @@ case class ExecutorProcessLost(_message: String = "Worker lost", workerLost: Boo
  *
  * This is used by the task scheduler to remove state associated with the executor, but
  * not yet fail any tasks that were running in the executor before the executor is "fully" lost.
+ * If you update this code make sure to re-run the K8s integration tests.
+ *
+ * @param workerHost it is defined when the worker is decommissioned too
  */
-private [spark] object ExecutorDecommission extends ExecutorLossReason("Executor decommission.")
+private [spark] case class ExecutorDecommission(workerHost: Option[String] = None)
+ extends ExecutorLossReason("Executor decommission.")

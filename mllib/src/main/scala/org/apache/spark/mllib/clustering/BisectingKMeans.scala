@@ -153,30 +153,25 @@ class BisectingKMeans private (
     this
   }
 
-  private[spark] def run(
-      input: RDD[Vector],
-      instr: Option[Instrumentation]): BisectingKMeansModel = {
-    val instances: RDD[(Vector, Double)] = input.map {
-      case (point) => (point, 1.0)
-    }
-    runWithWeight(instances, None)
-  }
-
   private[spark] def runWithWeight(
-      input: RDD[(Vector, Double)],
+      instances: RDD[(Vector, Double)],
+      handlePersistence: Boolean,
       instr: Option[Instrumentation]): BisectingKMeansModel = {
-    val d = input.map(_._1.size).first
+    val d = instances.map(_._1.size).first
     logInfo(s"Feature dimension: $d.")
 
-    val dMeasure: DistanceMeasure = DistanceMeasure.decodeFromString(this.distanceMeasure)
-    // Compute and cache vector norms for fast distance computation.
-    val norms = input.map(d => Vectors.norm(d._1, 2.0))
-    val vectors = input.zip(norms).map {
-      case ((x, weight), norm) => new VectorWithNorm(x, norm, weight)
-    }
-    if (input.getStorageLevel == StorageLevel.NONE) {
+    val dMeasure = DistanceMeasure.decodeFromString(this.distanceMeasure)
+    val norms = instances.map(d => Vectors.norm(d._1, 2.0))
+    val vectors = instances.zip(norms)
+      .map { case ((x, weight), norm) => new VectorWithNorm(x, norm, weight) }
+
+    if (handlePersistence) {
       vectors.persist(StorageLevel.MEMORY_AND_DISK)
+    } else {
+      // Compute and cache vector norms for fast distance computation.
+      norms.persist(StorageLevel.MEMORY_AND_DISK)
     }
+
     var assignments = vectors.map(v => (ROOT_INDEX, v))
     var activeClusters = summarize(d, assignments, dMeasure)
     instr.foreach(_.logNumExamples(activeClusters.values.map(_.size).sum))
@@ -244,13 +239,11 @@ class BisectingKMeans private (
       }
       level += 1
     }
-    if (preIndices != null) {
-      preIndices.unpersist()
-    }
-    if (indices != null) {
-      indices.unpersist()
-    }
-    vectors.unpersist()
+
+    if (preIndices != null) { preIndices.unpersist() }
+    if (indices != null) { indices.unpersist() }
+    if (handlePersistence) { vectors.unpersist() } else { norms.unpersist() }
+
     val clusters = activeClusters ++ inactiveClusters
     val root = buildTree(clusters, dMeasure)
     val totalCost = root.leafNodes.map(_.cost).sum
@@ -264,7 +257,9 @@ class BisectingKMeans private (
    */
   @Since("1.6.0")
   def run(input: RDD[Vector]): BisectingKMeansModel = {
-    run(input, None)
+    val instances = input.map(point => (point, 1.0))
+    val handlePersistence = input.getStorageLevel == StorageLevel.NONE
+    runWithWeight(instances, handlePersistence, None)
   }
 
   /**

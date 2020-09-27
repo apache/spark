@@ -18,14 +18,17 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
 
-import io.fabric8.kubernetes.api.model.PodBuilder
-import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.mutable
+import scala.util.control.NonFatal
+
+import io.fabric8.kubernetes.api.model.{HasMetadata, PersistentVolumeClaim, PodBuilder}
+import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
+import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{Clock, Utils}
 
@@ -212,16 +215,33 @@ private[spark] class ExecutorPodsAllocator(
           newExecutorId.toString,
           applicationId,
           driverPod)
-        val executorPod = executorBuilder.buildFromFeatures(executorConf, secMgr,
+        val resolvedExecutorSpec = executorBuilder.buildFromFeatures(executorConf, secMgr,
           kubernetesClient)
+        val executorPod = resolvedExecutorSpec.pod
         val podWithAttachedContainer = new PodBuilder(executorPod.pod)
           .editOrNewSpec()
           .addToContainers(executorPod.container)
           .endSpec()
           .build()
-        kubernetesClient.pods().create(podWithAttachedContainer)
-        newlyCreatedExecutors(newExecutorId) = clock.getTimeMillis()
-        logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
+        val createdExecutorPod = kubernetesClient.pods().create(podWithAttachedContainer)
+        try {
+          val resources = resolvedExecutorSpec.executorKubernetesResources
+          addOwnerReference(createdExecutorPod, resources)
+          resources
+            .filter(_.getKind == "PersistentVolumeClaim")
+            .foreach { resource =>
+              val pvc = resource.asInstanceOf[PersistentVolumeClaim]
+              logInfo(s"Trying to create PersistentVolumeClaim ${pvc.getMetadata.getName} with " +
+                s"StorageClass ${pvc.getSpec.getStorageClassName}")
+              kubernetesClient.persistentVolumeClaims().create(pvc)
+            }
+          newlyCreatedExecutors(newExecutorId) = clock.getTimeMillis()
+          logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
+        } catch {
+          case NonFatal(e) =>
+            kubernetesClient.pods().delete(createdExecutorPod)
+            throw e
+        }
       }
     }
 

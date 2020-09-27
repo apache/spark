@@ -18,7 +18,7 @@
 import unittest
 
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
-from pyspark.sql.types import *
+from pyspark.sql.types import DoubleType, StructType, StructField, LongType
 from pyspark.sql.utils import ParseException, PythonException
 from pyspark.rdd import PythonEvalType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
@@ -28,7 +28,7 @@ from pyspark.testing.utils import QuietTest
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
 class PandasUDFTests(ReusedSQLTestCase):
 
     def test_pandas_udf_basic(self):
@@ -241,10 +241,10 @@ class PandasUDFTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_udf import *
+    from pyspark.sql.tests.test_pandas_udf import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

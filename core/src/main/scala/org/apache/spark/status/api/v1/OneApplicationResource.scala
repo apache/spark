@@ -104,10 +104,10 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
     val resourceProfileInfo = ui.store.resourceProfileInfo()
     new v1.ApplicationEnvironmentInfo(
       envInfo.runtime,
-      Utils.redact(ui.conf, envInfo.sparkProperties),
-      Utils.redact(ui.conf, envInfo.hadoopProperties),
-      Utils.redact(ui.conf, envInfo.systemProperties),
-      envInfo.classpathEntries,
+      Utils.redact(ui.conf, envInfo.sparkProperties).sortBy(_._1),
+      Utils.redact(ui.conf, envInfo.hadoopProperties).sortBy(_._1),
+      Utils.redact(ui.conf, envInfo.systemProperties).sortBy(_._1),
+      envInfo.classpathEntries.sortBy(_._1),
       resourceProfileInfo)
   }
 

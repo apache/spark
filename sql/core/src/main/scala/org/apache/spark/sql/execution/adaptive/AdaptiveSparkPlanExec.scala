@@ -32,7 +32,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
-import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
@@ -58,7 +58,7 @@ import org.apache.spark.util.ThreadUtils
  * the rest of the plan.
  */
 case class AdaptiveSparkPlanExec(
-    initialPlan: SparkPlan,
+    inputPlan: SparkPlan,
     @transient context: AdaptiveExecutionContext,
     @transient preprocessingRules: Seq[Rule[SparkPlan]],
     @transient isSubquery: Boolean)
@@ -75,20 +75,19 @@ case class AdaptiveSparkPlanExec(
     case _ => logDebug(_)
   }
 
-  // The logical plan optimizer for re-optimizing the current logical plan.
-  @transient private val optimizer = new RuleExecutor[LogicalPlan] {
-    // TODO add more optimization rules
-    override protected def batches: Seq[Batch] = Seq(
-      Batch("Demote BroadcastHashJoin", Once, DemoteBroadcastHashJoin(conf))
-    )
-  }
+  @transient private val planChangeLogger = new PlanChangeLogger[SparkPlan]()
 
+  // The logical plan optimizer for re-optimizing the current logical plan.
+  @transient private val optimizer = new AQEOptimizer(conf)
+
+  @transient private val removeRedundantProjects = RemoveRedundantProjects(conf)
   @transient private val ensureRequirements = EnsureRequirements(conf)
 
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
+    removeRedundantProjects,
     ensureRequirements
   ) ++ context.session.sessionState.queryStagePrepRules
 
@@ -112,8 +111,10 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val costEvaluator = SimpleCostEvaluator
 
-  @volatile private var currentPhysicalPlan =
-    applyPhysicalRules(initialPlan, queryStagePreparationRules)
+  @transient private val initialPlan = applyPhysicalRules(
+    inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
+
+  @volatile private var currentPhysicalPlan = initialPlan
 
   private var isFinalPlan = false
 
@@ -134,9 +135,9 @@ case class AdaptiveSparkPlanExec(
 
   override def conf: SQLConf = context.session.sessionState.conf
 
-  override def output: Seq[Attribute] = initialPlan.output
+  override def output: Seq[Attribute] = inputPlan.output
 
-  override def doCanonicalize(): SparkPlan = initialPlan.canonicalized
+  override def doCanonicalize(): SparkPlan = inputPlan.canonicalized
 
   override def resetMetrics(): Unit = {
     metrics.valuesIterator.foreach(_.reset())
@@ -233,7 +234,9 @@ case class AdaptiveSparkPlanExec(
 
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(
-        result.newPlan, queryStageOptimizerRules ++ postStageCreationRules)
+        result.newPlan,
+        queryStageOptimizerRules ++ postStageCreationRules,
+        Some((planChangeLogger, "AQE Final Query Stage Optimization")))
       isFinalPlan = true
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
       currentPhysicalPlan
@@ -285,34 +288,69 @@ case class AdaptiveSparkPlanExec(
       prefix: String = "",
       addSuffix: Boolean = false,
       maxFields: Int,
-      printNodeId: Boolean): Unit = {
-    super.generateTreeString(depth,
+      printNodeId: Boolean,
+      indent: Int = 0): Unit = {
+    super.generateTreeString(
+      depth,
       lastChildren,
       append,
       verbose,
       prefix,
       addSuffix,
       maxFields,
-      printNodeId)
-    currentPhysicalPlan.generateTreeString(
-      depth + 1,
-      lastChildren :+ true,
+      printNodeId,
+      indent)
+    generateTreeStringWithHeader(
+      if (isFinalPlan) "Final Plan" else "Current Plan",
+      currentPhysicalPlan,
+      depth,
+      lastChildren,
       append,
       verbose,
-      "",
-      addSuffix = false,
+      maxFields,
+      printNodeId)
+    generateTreeStringWithHeader(
+      "Initial Plan",
+      initialPlan,
+      depth,
+      lastChildren,
+      append,
+      verbose,
       maxFields,
       printNodeId)
   }
 
-  override def hashCode(): Int = initialPlan.hashCode()
+  private def generateTreeStringWithHeader(
+      header: String,
+      plan: SparkPlan,
+      depth: Int,
+      lastChildren: Seq[Boolean],
+      append: String => Unit,
+      verbose: Boolean,
+      maxFields: Int,
+      printNodeId: Boolean): Unit = {
+    append("   " * depth)
+    append(s"+- == $header ==\n")
+    plan.generateTreeString(
+      0,
+      Nil,
+      append,
+      verbose,
+      prefix = "",
+      addSuffix = false,
+      maxFields,
+      printNodeId,
+      indent = depth + 1)
+  }
+
+  override def hashCode(): Int = inputPlan.hashCode()
 
   override def equals(obj: Any): Boolean = {
     if (!obj.isInstanceOf[AdaptiveSparkPlanExec]) {
       return false
     }
 
-    this.initialPlan == obj.asInstanceOf[AdaptiveSparkPlanExec].initialPlan
+    this.inputPlan == obj.asInstanceOf[AdaptiveSparkPlanExec].inputPlan
   }
 
   /**
@@ -380,11 +418,14 @@ case class AdaptiveSparkPlanExec(
   }
 
   private def newQueryStage(e: Exchange): QueryStageExec = {
-    val optimizedPlan = applyPhysicalRules(e.child, queryStageOptimizerRules)
+    val optimizedPlan = applyPhysicalRules(
+      e.child, queryStageOptimizerRules, Some((planChangeLogger, "AQE Query Stage Optimization")))
     val queryStage = e match {
       case s: ShuffleExchangeLike =>
         val newShuffle = applyPhysicalRules(
-          s.withNewChildren(Seq(optimizedPlan)), postStageCreationRules)
+          s.withNewChildren(Seq(optimizedPlan)),
+          postStageCreationRules,
+          Some((planChangeLogger, "AQE Post Stage Creation")))
         if (!newShuffle.isInstanceOf[ShuffleExchangeLike]) {
           throw new IllegalStateException(
             "Custom columnar rules cannot transform shuffle node to something else.")
@@ -392,7 +433,9 @@ case class AdaptiveSparkPlanExec(
         ShuffleQueryStageExec(currentStageId, newShuffle)
       case b: BroadcastExchangeLike =>
         val newBroadcast = applyPhysicalRules(
-          b.withNewChildren(Seq(optimizedPlan)), postStageCreationRules)
+          b.withNewChildren(Seq(optimizedPlan)),
+          postStageCreationRules,
+          Some((planChangeLogger, "AQE Post Stage Creation")))
         if (!newBroadcast.isInstanceOf[BroadcastExchangeLike]) {
           throw new IllegalStateException(
             "Custom columnar rules cannot transform broadcast node to something else.")
@@ -501,7 +544,10 @@ case class AdaptiveSparkPlanExec(
     logicalPlan.invalidateStatsCache()
     val optimized = optimizer.execute(logicalPlan)
     val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
-    val newPlan = applyPhysicalRules(sparkPlan, preprocessingRules ++ queryStagePreparationRules)
+    val newPlan = applyPhysicalRules(
+      sparkPlan,
+      preprocessingRules ++ queryStagePreparationRules,
+      Some((planChangeLogger, "AQE Replanning")))
     (newPlan, optimized)
   }
 
@@ -597,8 +643,22 @@ object AdaptiveSparkPlanExec {
   /**
    * Apply a list of physical operator rules on a [[SparkPlan]].
    */
-  def applyPhysicalRules(plan: SparkPlan, rules: Seq[Rule[SparkPlan]]): SparkPlan = {
-    rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
+  def applyPhysicalRules(
+      plan: SparkPlan,
+      rules: Seq[Rule[SparkPlan]],
+      loggerAndBatchName: Option[(PlanChangeLogger[SparkPlan], String)] = None): SparkPlan = {
+    if (loggerAndBatchName.isEmpty) {
+      rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
+    } else {
+      val (logger, batchName) = loggerAndBatchName.get
+      val newPlan = rules.foldLeft(plan) { case (sp, rule) =>
+        val result = rule.apply(sp)
+        logger.logRule(rule.ruleName, sp, result)
+        result
+      }
+      logger.logBatch(batchName, plan, newPlan)
+      newPlan
+    }
   }
 }
 

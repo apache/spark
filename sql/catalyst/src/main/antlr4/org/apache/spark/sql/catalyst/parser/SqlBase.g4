@@ -16,7 +16,7 @@
 
 grammar SqlBase;
 
-@members {
+@parser::members {
   /**
    * When false, INTERSECT is given the greater precedence over the other set
    * operations (UNION, EXCEPT and MINUS) as per the SQL standard.
@@ -29,6 +29,13 @@ grammar SqlBase;
    */
   public boolean legacy_exponent_literal_as_decimal_enabled = false;
 
+  /**
+   * When true, the behavior of keywords follows ANSI SQL standard.
+   */
+  public boolean SQL_standard_keyword_behavior = false;
+}
+
+@lexer::members {
   /**
    * Verify whether current token is a valid decimal token (which contains dot).
    * Returns true if the character that follows the token is not a digit or letter or underscore.
@@ -50,11 +57,6 @@ grammar SqlBase;
       return true;
     }
   }
-
-  /**
-   * When true, the behavior of keywords follows ANSI SQL standard.
-   */
-  public boolean SQL_standard_keyword_behavior = false;
 
   /**
    * This method will be called when we see '/*' and try to match it as a bracketed comment.
@@ -244,9 +246,15 @@ statement
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone=(STRING | LOCAL)                          #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
+    | SET configKey (EQ .*?)?                                          #setQuotedConfiguration
     | SET .*?                                                          #setConfiguration
+    | RESET configKey                                                  #resetQuotedConfiguration
     | RESET .*?                                                        #resetConfiguration
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
+    ;
+
+configKey
+    : quotedIdentifier
     ;
 
 unsupportedHiveNativeCommands
@@ -843,7 +851,7 @@ errorCapturingMultiUnitsInterval
     ;
 
 multiUnitsInterval
-    : (intervalValue intervalUnit)+
+    : (intervalValue unit+=identifier)+
     ;
 
 errorCapturingUnitToUnitInterval
@@ -851,22 +859,12 @@ errorCapturingUnitToUnitInterval
     ;
 
 unitToUnitInterval
-    : value=intervalValue from=intervalUnit TO to=intervalUnit
+    : value=intervalValue from=identifier TO to=identifier
     ;
 
 intervalValue
     : (PLUS | MINUS)? (INTEGER_VALUE | DECIMAL_VALUE)
     | STRING
-    ;
-
-intervalUnit
-    : DAY
-    | HOUR
-    | MINUTE
-    | MONTH
-    | SECOND
-    | YEAR
-    | identifier
     ;
 
 colPosition
@@ -1278,7 +1276,6 @@ nonReserved
     | DATA
     | DATABASE
     | DATABASES
-    | DAY
     | DBPROPERTIES
     | DEFINED
     | DELETE
@@ -1322,7 +1319,6 @@ nonReserved
     | GROUP
     | GROUPING
     | HAVING
-    | HOUR
     | IF
     | IGNORE
     | IMPORT
@@ -1355,8 +1351,6 @@ nonReserved
     | MAP
     | MATCHED
     | MERGE
-    | MINUTE
-    | MONTH
     | MSCK
     | NAMESPACE
     | NAMESPACES
@@ -1412,7 +1406,6 @@ nonReserved
     | ROW
     | ROWS
     | SCHEMA
-    | SECOND
     | SELECT
     | SEPARATED
     | SERDE
@@ -1467,7 +1460,6 @@ nonReserved
     | WHERE
     | WINDOW
     | WITH
-    | YEAR
     | ZONE
 //--DEFAULT-NON-RESERVED-END
     ;
@@ -1531,7 +1523,6 @@ CURRENT_USER: 'CURRENT_USER';
 DATA: 'DATA';
 DATABASE: 'DATABASE';
 DATABASES: 'DATABASES' | 'SCHEMAS';
-DAY: 'DAY';
 DBPROPERTIES: 'DBPROPERTIES';
 DEFINED: 'DEFINED';
 DELETE: 'DELETE';
@@ -1577,7 +1568,6 @@ GRANT: 'GRANT';
 GROUP: 'GROUP';
 GROUPING: 'GROUPING';
 HAVING: 'HAVING';
-HOUR: 'HOUR';
 IF: 'IF';
 IGNORE: 'IGNORE';
 IMPORT: 'IMPORT';
@@ -1614,8 +1604,6 @@ MACRO: 'MACRO';
 MAP: 'MAP';
 MATCHED: 'MATCHED';
 MERGE: 'MERGE';
-MINUTE: 'MINUTE';
-MONTH: 'MONTH';
 MSCK: 'MSCK';
 NAMESPACE: 'NAMESPACE';
 NAMESPACES: 'NAMESPACES';
@@ -1674,7 +1662,6 @@ ROLLUP: 'ROLLUP';
 ROW: 'ROW';
 ROWS: 'ROWS';
 SCHEMA: 'SCHEMA';
-SECOND: 'SECOND';
 SELECT: 'SELECT';
 SEMI: 'SEMI';
 SEPARATED: 'SEPARATED';
@@ -1733,7 +1720,6 @@ WHEN: 'WHEN';
 WHERE: 'WHERE';
 WINDOW: 'WINDOW';
 WITH: 'WITH';
-YEAR: 'YEAR';
 ZONE: 'ZONE';
 //--SPARK-KEYWORD-LIST-END
 //============================

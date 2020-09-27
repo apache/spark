@@ -348,7 +348,6 @@ case class MergeIntoTable(
 
 sealed abstract class MergeAction extends Expression with Unevaluable {
   def condition: Option[Expression]
-  override def foldable: Boolean = false
   override def nullable: Boolean = false
   override def dataType: DataType = throw new UnresolvedException(this, "nullable")
   override def children: Seq[Expression] = condition.toSeq
@@ -369,7 +368,6 @@ case class InsertAction(
 }
 
 case class Assignment(key: Expression, value: Expression) extends Expression with Unevaluable {
-  override def foldable: Boolean = false
   override def nullable: Boolean = false
   override def dataType: DataType = throw new UnresolvedException(this, "nullable")
   override def children: Seq[Expression] = key ::  value :: Nil
@@ -463,9 +461,9 @@ case class SetCatalogAndNamespace(
 /**
  * The logical plan of the REFRESH TABLE command that works for v2 catalogs.
  */
-case class RefreshTable(
-    catalog: TableCatalog,
-    ident: Identifier) extends Command
+case class RefreshTable(child: LogicalPlan) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
 
 /**
  * The logical plan of the SHOW CURRENT NAMESPACE command that works for v2 catalogs.

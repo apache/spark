@@ -506,7 +506,8 @@ private[spark] class AppStatusStore(
       tasks = Some(tasks),
       executorSummary = Some(executorSummary(stage.stageId, stage.attemptId)),
       killedTasksSummary = stage.killedTasksSummary,
-      resourceProfileId = stage.resourceProfileId)
+      resourceProfileId = stage.resourceProfileId,
+      peakExecutorMetrics = stage.peakExecutorMetrics)
   }
 
   def rdd(rddId: Int): v1.RDDStorageInfo = {

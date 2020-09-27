@@ -177,6 +177,7 @@ Clustering
     BisectingKMeansSummary
     KMeans
     KMeansModel
+    KMeansSummary
     GaussianMixture
     GaussianMixtureModel
     GaussianMixtureSummary

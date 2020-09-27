@@ -64,11 +64,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       val rdd = v1Relation.buildScan()
       val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
-      val originalOutputNames = relation.table.schema().map(_.name)
-      val requiredColumnsIndex = output.map(_.name).map(originalOutputNames.indexOf)
       val dsScan = RowDataSourceScanExec(
         output,
-        requiredColumnsIndex,
+        output.toStructType,
         translated.toSet,
         pushed.toSet,
         unsafeRowRDD,
@@ -129,8 +127,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             propsWithOwner, writeOptions, ifNotExists) :: Nil
       }
 
-    case RefreshTable(catalog, ident) =>
-      RefreshTableExec(catalog, ident) :: Nil
+    case RefreshTable(r: ResolvedTable) =>
+      RefreshTableExec(r.catalog, r.identifier) :: Nil
 
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)

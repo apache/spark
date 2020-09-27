@@ -33,6 +33,7 @@ Core Classes
     Column
     Row
     GroupedData
+    PandasCogroupedOps
     DataFrameNaFunctions
     DataFrameStatFunctions
     Window
@@ -539,4 +540,5 @@ Grouping
     GroupedData.min
     GroupedData.pivot
     GroupedData.sum
+    PandasCogroupedOps.applyInPandas
 

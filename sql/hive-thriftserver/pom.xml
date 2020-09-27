@@ -152,18 +152,6 @@
               </sources>
             </configuration>
           </execution>
-          <execution>
-            <id>add-test-source</id>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>add-test-source</goal>
-            </goals>
-            <configuration>
-              <sources>
-                <source>v${hive.version.short}/src/test/scala</source>
-              </sources>
-            </configuration>
-          </execution>
         </executions>
       </plugin>
     </plugins>

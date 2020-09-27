@@ -16,9 +16,8 @@
 #
 
 import unittest
-import sys
 
-from pyspark.sql.functions import array, explode, col, lit, udf, sum, pandas_udf, PandasUDFType
+from pyspark.sql.functions import array, explode, col, lit, udf, pandas_udf
 from pyspark.sql.types import DoubleType, StructType, StructField, Row
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
@@ -26,15 +25,15 @@ from pyspark.testing.utils import QuietTest
 
 if have_pandas:
     import pandas as pd
-    from pandas.util.testing import assert_frame_equal, assert_series_equal
+    from pandas.util.testing import assert_frame_equal
 
 if have_pyarrow:
-    import pyarrow as pa
+    import pyarrow as pa  # noqa: F401
 
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
 class CogroupedMapInPandasTests(ReusedSQLTestCase):
 
     @property
@@ -245,10 +244,10 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_cogrouped_map import *
+    from pyspark.sql.tests.test_pandas_cogrouped_map import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

@@ -298,7 +298,7 @@ later.
 
 In order to synchronize PVM threads with JVM threads, you should set `PYSPARK_PIN_THREAD` environment variable
 to `true`. This pinned thread mode allows one PVM thread has one corresponding JVM thread. With this mode,
-`pyspark.InheritableThread` is recommanded to use together for a PVM thread to inherit the interitable attributes
+`pyspark.InheritableThread` is recommended to use together for a PVM thread to inherit the inheritable attributes
  such as local properties in a JVM thread.
 
 Note that `PYSPARK_PIN_THREAD` is currently experimental and not recommended for use in production.

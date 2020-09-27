@@ -93,7 +93,8 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         tasks = None,
         executorSummary = None,
         killedTasksSummary = Map.empty,
-        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
+        peakExecutorMetrics = None
       )
       val taskTable = new TaskPagedTable(
         stageData,

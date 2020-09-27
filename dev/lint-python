@@ -147,8 +147,7 @@ flake8 checks failed."
     fi
 
     echo "starting $FLAKE8_BUILD test..."
-    FLAKE8_REPORT=$( ($FLAKE8_BUILD . --count --select=E901,E999,F821,F822,F823 \
-                     --max-line-length=100 --show-source --statistics) 2>&1)
+    FLAKE8_REPORT=$( ($FLAKE8_BUILD --append-config dev/tox.ini --count --show-source --statistics .) 2>&1)
     FLAKE8_STATUS=$?
 
     if [ "$FLAKE8_STATUS" -ne 0 ]; then
@@ -193,6 +192,22 @@ function sphinx_test {
     PYTHON_HAS_THEME=$("$PYTHON_EXECUTABLE" -c 'import importlib.util; print(importlib.util.find_spec("pydata_sphinx_theme") is not None)')
     if [[ "$PYTHON_HAS_THEME" == "False" ]]; then
         echo "$PYTHON_EXECUTABLE does not have pydata_sphinx_theme installed. Skipping Sphinx build for now."
+        echo
+        return
+    fi
+
+    # TODO(SPARK-32666): Install nbsphinx in Jenkins machines
+    PYTHON_HAS_NBSPHINX=$("$PYTHON_EXECUTABLE" -c 'import importlib.util; print(importlib.util.find_spec("nbsphinx") is not None)')
+    if [[ "$PYTHON_HAS_NBSPHINX" == "False" ]]; then
+        echo "$PYTHON_EXECUTABLE does not have nbsphinx installed. Skipping Sphinx build for now."
+        echo
+        return
+    fi
+
+    # TODO(SPARK-32666): Install ipython in Jenkins machines
+    PYTHON_HAS_IPYTHON=$("$PYTHON_EXECUTABLE" -c 'import importlib.util; print(importlib.util.find_spec("IPython") is not None)')
+    if [[ "$PYTHON_HAS_IPYTHON" == "False" ]]; then
+        echo "$PYTHON_EXECUTABLE does not have ipython installed. Skipping Sphinx build for now."
         echo
         return
     fi

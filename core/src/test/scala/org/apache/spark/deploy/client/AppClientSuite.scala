@@ -59,7 +59,7 @@ class AppClientSuite
    */
   override def beforeAll(): Unit = {
     super.beforeAll()
-    conf = new SparkConf().set(config.Worker.WORKER_DECOMMISSION_ENABLED.key, "true")
+    conf = new SparkConf().set(config.DECOMMISSION_ENABLED.key, "true")
     securityManager = new SecurityManager(conf)
     masterRpcEnv = RpcEnv.create(Master.SYSTEM_NAME, "localhost", 0, conf, securityManager)
     workerRpcEnvs = (0 until numWorkers).map { i =>
@@ -129,7 +129,7 @@ class AppClientSuite
         // We only record decommissioning for the executor we've requested
         assert(ci.listener.execDecommissionedMap.size === 1)
         val decommissionInfo = ci.listener.execDecommissionedMap.get(executorId)
-        assert(decommissionInfo != null && decommissionInfo.isHostDecommissioned,
+        assert(decommissionInfo != null && decommissionInfo.workerHost.isDefined,
           s"$executorId should have been decommissioned along with its worker")
       }
 
@@ -245,7 +245,7 @@ class AppClientSuite
     }
 
     def executorRemoved(
-        id: String, message: String, exitStatus: Option[Int], workerLost: Boolean): Unit = {
+        id: String, message: String, exitStatus: Option[Int], workerHost: Option[String]): Unit = {
       execRemovedList.add(id)
     }
 
