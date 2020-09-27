@@ -655,7 +655,13 @@ def main():
         # If we're running the tests in Github Actions, attempt to detect and test
         # only the affected modules.
         if test_env == "github_actions":
-            if os.environ["GITHUB_BASE_REF"] != "":
+            if os.environ["GITHUB_INPUT_BRANCH"] != "":
+                # Dispatched request
+                # Note that it assumes Github Actions has already merged
+                # the given `GITHUB_INPUT_BRANCH` branch.
+                changed_files = identify_changed_files_from_git_commits(
+                    "HEAD", target_branch=os.environ["GITHUB_SHA"])
+            elif os.environ["GITHUB_BASE_REF"] != "":
                 # Pull requests
                 changed_files = identify_changed_files_from_git_commits(
                     os.environ["GITHUB_SHA"], target_branch=os.environ["GITHUB_BASE_REF"])

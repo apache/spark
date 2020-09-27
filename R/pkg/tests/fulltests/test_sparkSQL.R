@@ -1424,6 +1424,7 @@ test_that("column functions", {
     date_trunc("quarter", c) + current_date() + current_timestamp()
   c25 <- overlay(c1, c2, c3, c3) + overlay(c1, c2, c3) + overlay(c1, c2, 1) +
     overlay(c1, c2, 3, 4)
+  c26 <- timestamp_seconds(c1)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1803,6 +1804,19 @@ test_that("column functions", {
   )
 
   expect_equal(actual, expected)
+
+  # Test withField
+  lines <- c("{\"Person\": {\"name\":\"Bob\", \"age\":24}}")
+  jsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
+  writeLines(lines, jsonPath)
+  df <- read.df(jsonPath, "json")
+  result <- collect(
+      select(
+          select(df, alias(withField(df$Person, "dummy", lit(42)), "Person")),
+          "Person.dummy"
+      )
+  )
+  expect_equal(result, data.frame(dummy = 42))
 })
 
 test_that("column binary mathfunctions", {
@@ -2695,6 +2709,19 @@ test_that("union(), unionByName(), rbind(), except(), and intersect() on a DataF
                "Names of input data frames are different.")
   expect_error(rbind(df, df2, df3),
                "Names of input data frames are different.")
+
+
+  df4 <- unionByName(df2, select(df2, "age"), TRUE)
+
+  expect_equal(
+      sum(collect(
+          select(df4, alias(isNull(df4$name), "missing_name")
+      ))$missing_name),
+      3
+  )
+
+  testthat::expect_error(unionByName(df2, select(df2, "age"), FALSE))
+  testthat::expect_error(unionByName(df2, select(df2, "age")))
 
   excepted <- arrange(except(df, df2), desc(df$age))
   expect_is(unioned, "SparkDataFrame")

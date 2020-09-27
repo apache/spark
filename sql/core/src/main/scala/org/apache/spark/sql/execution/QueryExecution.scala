@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
@@ -359,7 +359,14 @@ object QueryExecution {
   private[execution] def prepareForExecution(
       preparations: Seq[Rule[SparkPlan]],
       plan: SparkPlan): SparkPlan = {
-    preparations.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
+    val planChangeLogger = new PlanChangeLogger[SparkPlan]()
+    val preparedPlan = preparations.foldLeft(plan) { case (sp, rule) =>
+      val result = rule.apply(sp)
+      planChangeLogger.logRule(rule.ruleName, sp, result)
+      result
+    }
+    planChangeLogger.logBatch("Preparations", plan, preparedPlan)
+    preparedPlan
   }
 
   /**

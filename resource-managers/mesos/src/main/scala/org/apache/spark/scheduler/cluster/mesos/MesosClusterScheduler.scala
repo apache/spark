@@ -536,7 +536,9 @@ private[spark] class MesosClusterScheduler(
     val formattedFiles = pyFiles.map { path =>
       new File(sandboxPath, path.split("/").last).toString()
     }.mkString(",")
-    options ++= Seq("--py-files", formattedFiles)
+    if (!formattedFiles.equals("")) {
+      options ++= Seq("--py-files", formattedFiles)
+    }
 
     // --conf
     val replicatedOptionsExcludeList = Set(
@@ -548,7 +550,7 @@ private[spark] class MesosClusterScheduler(
     val driverConf = desc.conf.getAll
       .filter { case (key, _) => !replicatedOptionsExcludeList.contains(key) }
       .toMap
-    (defaultConf ++ driverConf).foreach { case (key, value) =>
+    (defaultConf ++ driverConf).toSeq.sortBy(_._1).foreach { case (key, value) =>
       options ++= Seq("--conf", s"${key}=${value}") }
 
     options.map(shellEscape)

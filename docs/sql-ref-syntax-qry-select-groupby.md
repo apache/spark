@@ -58,7 +58,7 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 
 * **grouping_expression**
 
-    Specifies the critieria based on which the rows are grouped together. The grouping of rows is performed based on
+    Specifies the criteria based on which the rows are grouped together. The grouping of rows is performed based on
     result values of the grouping expressions. A grouping expression may be a column alias, a column position
     or an expression.
 

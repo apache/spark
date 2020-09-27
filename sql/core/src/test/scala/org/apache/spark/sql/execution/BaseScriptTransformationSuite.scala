@@ -65,6 +65,14 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   def isHive23OrSpark: Boolean
 
+  // In Hive 1.2, the string representation of a decimal omits trailing zeroes.
+  // But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
+  val decimalToString: Column => Column = if (isHive23OrSpark) {
+    c => c.cast("string")
+  } else {
+    c => c.cast("decimal(1, 0)").cast("string")
+  }
+
   def createScriptTransformationExec(
       input: Seq[Expression],
       script: String,
@@ -112,7 +120,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   test("SPARK-25990: TRANSFORM should handle different data types correctly") {
     assume(TestUtils.testCommandAvailable("python"))
-    val scriptFilePath = getTestResourcePath("test_script.py")
+    val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
 
     withTempView("v") {
       val df = Seq(
@@ -130,13 +138,6 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
            |FROM v
         """.stripMargin)
 
-      // In Hive 1.2, the string representation of a decimal omits trailing zeroes.
-      // But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
-      val decimalToString: Column => Column = if (isHive23OrSpark) {
-        c => c.cast("string")
-      } else {
-        c => c.cast("decimal(1, 0)").cast("string")
-      }
       checkAnswer(query, identity, df.select(
         'a.cast("string"),
         'b.cast("string"),
@@ -148,7 +149,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   test("SPARK-25990: TRANSFORM should handle schema less correctly (no serde)") {
     assume(TestUtils.testCommandAvailable("python"))
-    val scriptFilePath = getTestResourcePath("test_script.py")
+    val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
 
     withTempView("v") {
       val df = Seq(
@@ -310,6 +311,95 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         }
       }
     }
+  }
+
+  test("SPARK-32608: Script Transform ROW FORMAT DELIMIT value should format value") {
+    withTempView("v") {
+      val df = Seq(
+        (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
+        (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2)),
+        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))
+      ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
+      df.createTempView("v")
+
+      // input/output with same delimit
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY ','
+             |  COLLECTION ITEMS TERMINATED BY '#'
+             |  MAP KEYS TERMINATED BY '@'
+             |  LINES TERMINATED BY '\n'
+             |  NULL DEFINED AS 'null'
+             |  USING 'cat' AS (a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY ','
+             |  COLLECTION ITEMS TERMINATED BY '#'
+             |  MAP KEYS TERMINATED BY '@'
+             |  LINES TERMINATED BY '\n'
+             |  NULL DEFINED AS 'NULL'
+             |FROM v
+        """.stripMargin), identity, df.select(
+          'a.cast("string"),
+          'b.cast("string"),
+          'c.cast("string"),
+          'd.cast("string"),
+          'e.cast("string")).collect())
+
+      // input/output with different delimit and show result
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY ','
+             |  LINES TERMINATED BY '\n'
+             |  NULL DEFINED AS 'null'
+             |  USING 'cat' AS (value)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '&'
+             |  LINES TERMINATED BY '\n'
+             |  NULL DEFINED AS 'NULL'
+             |FROM v
+        """.stripMargin), identity, df.select(
+          concat_ws(",",
+            'a.cast("string"),
+            'b.cast("string"),
+            'c.cast("string"),
+            'd.cast("string"),
+            'e.cast("string"))).collect())
+    }
+  }
+
+  test("SPARK-32667: SCRIPT TRANSFORM pad null value to fill column" +
+    " when without schema less (no-serde)") {
+    val df = Seq(
+      (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
+      (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2)),
+      (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))
+    ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
+
+    checkAnswer(
+      df,
+      (child: SparkPlan) => createScriptTransformationExec(
+        input = Seq(
+          df.col("a").expr,
+          df.col("b").expr),
+        script = "cat",
+        output = Seq(
+          AttributeReference("a", StringType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", StringType)(),
+          AttributeReference("d", StringType)()),
+        child = child,
+        ioschema = defaultIOSchema
+      ),
+      df.select(
+        'a.cast("string").as("a"),
+        'b.cast("string").as("b"),
+        lit(null), lit(null)).collect())
   }
 }
 

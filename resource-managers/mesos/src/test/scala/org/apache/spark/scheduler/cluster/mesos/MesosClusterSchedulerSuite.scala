@@ -592,10 +592,10 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
 
     val expectedCmd = "cd spark-version*;  " +
         "bin/spark-submit --name \"app name\" --master mesos://mesos://localhost:5050 " +
-        "--driver-cores 1.0 --driver-memory 1000M --class Main --py-files  " +
-        "--conf spark.executor.uri=s3a://bucket/spark-version.tgz " +
+        "--driver-cores 1.0 --driver-memory 1000M --class Main " +
         "--conf \"another.conf=\\\\value\" " +
         "--conf \"spark.app.name=app name\" " +
+        "--conf spark.executor.uri=s3a://bucket/spark-version.tgz " +
         "../jar " +
         "\"--a=\\$2\" " +
         "--b \"x y z\""

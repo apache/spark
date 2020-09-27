@@ -61,7 +61,7 @@ class JDBCTableCatalog extends TableCatalog with Logging {
         .getTables(null, schemaPattern, "%", Array("TABLE"));
       new Iterator[Identifier] {
         def hasNext = rs.next()
-        def next = Identifier.of(namespace, rs.getString("TABLE_NAME"))
+        def next() = Identifier.of(namespace, rs.getString("TABLE_NAME"))
       }.toArray
     }
   }

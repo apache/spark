@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.net.URI
 import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
@@ -38,6 +39,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.Utils
 
 /**
  * End-to-end test cases for SQL queries.
@@ -567,6 +569,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   /** Load built-in test tables into the SparkSession. */
   private def createTestTables(session: SparkSession): Unit = {
     import session.implicits._
+
+    // Before creating test tables, deletes orphan directories in warehouse dir
+    Seq("testdata", "arraydata", "mapdata", "aggtest", "onek", "tenk1").foreach { dirName =>
+      val f = new File(new URI(s"${conf.warehousePath}/$dirName"))
+      if (f.exists()) {
+        Utils.deleteRecursively(f)
+      }
+    }
 
     (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
       .repartition(1)

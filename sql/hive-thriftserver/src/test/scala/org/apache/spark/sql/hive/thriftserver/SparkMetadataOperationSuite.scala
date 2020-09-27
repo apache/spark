@@ -19,7 +19,8 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.sql.{DatabaseMetaData, ResultSet}
 
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, DecimalType, DoubleType, FloatType, IntegerType, MapType, NumericType, StringType, StructType, TimestampType}
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.types._
 
 class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
 
@@ -186,14 +187,16 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
   }
 
   test("Spark's own GetFunctionsOperation(SparkGetFunctionsOperation)") {
-    def checkResult(rs: ResultSet, functionName: Seq[String]): Unit = {
-      for (i <- functionName.indices) {
+    def checkResult(rs: ResultSet, functionNames: Seq[String]): Unit = {
+      functionNames.foreach { func =>
+        val exprInfo = FunctionRegistry.expressions(func)._1
         assert(rs.next())
         assert(rs.getString("FUNCTION_SCHEM") === "default")
-        assert(rs.getString("FUNCTION_NAME") === functionName(i))
-        assert(rs.getString("REMARKS").startsWith(s"${functionName(i)}("))
+        assert(rs.getString("FUNCTION_NAME") === exprInfo.getName)
+        assert(rs.getString("REMARKS") ===
+          s"Usage: ${exprInfo.getUsage}\nExtended Usage:${exprInfo.getExtended}")
         assert(rs.getInt("FUNCTION_TYPE") === DatabaseMetaData.functionResultUnknown)
-        assert(rs.getString("SPECIFIC_NAME").startsWith("org.apache.spark.sql.catalyst"))
+        assert(rs.getString("SPECIFIC_NAME") === exprInfo.getClassName)
       }
       // Make sure there are no more elements
       assert(!rs.next())
@@ -209,20 +212,7 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       checkResult(metaData.getFunctions(null, "default", "overlay"), Seq("overlay"))
       checkResult(metaData.getFunctions(null, "default", "shift*"),
         Seq("shiftleft", "shiftright", "shiftrightunsigned"))
-    }
-
-    withJdbcStatement() { statement =>
-      val metaData = statement.getConnection.getMetaData
-      val rs = metaData.getFunctions(null, "default", "upPer")
-      assert(rs.next())
-      assert(rs.getString("FUNCTION_SCHEM") === "default")
-      assert(rs.getString("FUNCTION_NAME") === "upper")
-      assert(rs.getString("REMARKS") ===
-        "upper(str) - Returns `str` with all characters changed to uppercase.")
-      assert(rs.getInt("FUNCTION_TYPE") === DatabaseMetaData.functionResultUnknown)
-      assert(rs.getString("SPECIFIC_NAME") === "org.apache.spark.sql.catalyst.expressions.Upper")
-      // Make sure there are no more elements
-      assert(!rs.next())
+      checkResult(metaData.getFunctions(null, "default", "upPer"), Seq("upper"))
     }
   }
 
@@ -331,6 +321,60 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       }
 
       assert(pos === 17, "all columns should have been verified")
+    }
+  }
+
+  test("get columns operation should handle interval column properly") {
+    val viewName = "view_interval"
+    val ddl = s"CREATE GLOBAL TEMP VIEW $viewName as select interval 1 day as i"
+
+    withJdbcStatement(viewName) { statement =>
+      statement.execute(ddl)
+      val data = statement.getConnection.getMetaData
+      val rowSet = data.getColumns("", "global_temp", viewName, null)
+      while (rowSet.next()) {
+        assert(rowSet.getString("TABLE_CAT") === null)
+        assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
+        assert(rowSet.getString("TABLE_NAME") === viewName)
+        assert(rowSet.getString("COLUMN_NAME") === "i")
+        assert(rowSet.getInt("DATA_TYPE") === java.sql.Types.OTHER)
+        assert(rowSet.getString("TYPE_NAME").equalsIgnoreCase(CalendarIntervalType.sql))
+        assert(rowSet.getInt("COLUMN_SIZE") === CalendarIntervalType.defaultSize)
+        assert(rowSet.getInt("DECIMAL_DIGITS") === 0)
+        assert(rowSet.getInt("NUM_PREC_RADIX") === 0)
+        assert(rowSet.getInt("NULLABLE") === 0)
+        assert(rowSet.getString("REMARKS") === "")
+        assert(rowSet.getInt("ORDINAL_POSITION") === 0)
+        assert(rowSet.getString("IS_NULLABLE") === "YES")
+        assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
+      }
+    }
+  }
+
+  test("handling null in view for get columns operations") {
+    val viewName = "view_null"
+    val ddl = s"CREATE GLOBAL TEMP VIEW $viewName as select null as n"
+
+    withJdbcStatement(viewName) { statement =>
+      statement.execute(ddl)
+      val data = statement.getConnection.getMetaData
+      val rowSet = data.getColumns("", "global_temp", viewName, "n")
+      while (rowSet.next()) {
+        assert(rowSet.getString("TABLE_CAT") === null)
+        assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
+        assert(rowSet.getString("TABLE_NAME") === viewName)
+        assert(rowSet.getString("COLUMN_NAME") === "n")
+        assert(rowSet.getInt("DATA_TYPE") === java.sql.Types.NULL)
+        assert(rowSet.getString("TYPE_NAME").equalsIgnoreCase(NullType.sql))
+        assert(rowSet.getInt("COLUMN_SIZE") === 1)
+        assert(rowSet.getInt("DECIMAL_DIGITS") === 0)
+        assert(rowSet.getInt("NUM_PREC_RADIX") === 0)
+        assert(rowSet.getInt("NULLABLE") === 1)
+        assert(rowSet.getString("REMARKS") === "")
+        assert(rowSet.getInt("ORDINAL_POSITION") === 0)
+        assert(rowSet.getString("IS_NULLABLE") === "YES")
+        assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
+      }
     }
   }
 }

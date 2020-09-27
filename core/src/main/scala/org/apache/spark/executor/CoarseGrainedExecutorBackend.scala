@@ -172,10 +172,7 @@ private[spark] class CoarseGrainedExecutorBackend(
           driver match {
             case Some(endpoint) =>
               logInfo("Sending DecommissionExecutor to driver.")
-              endpoint.send(
-                DecommissionExecutor(
-                  executorId,
-                  ExecutorDecommissionInfo(msg, isHostDecommissioned = false)))
+              endpoint.send(DecommissionExecutor(executorId, ExecutorDecommissionInfo(msg)))
             case _ =>
               logError("No registered driver to send Decommission to.")
           }
@@ -275,7 +272,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       // Tell master we are are decommissioned so it stops trying to schedule us
       if (driver.nonEmpty) {
         driver.get.askSync[Boolean](DecommissionExecutor(
-            executorId, ExecutorDecommissionInfo(msg, false)))
+          executorId, ExecutorDecommissionInfo(msg)))
       } else {
         logError("No driver to message decommissioning.")
       }
@@ -294,10 +291,15 @@ private[spark] class CoarseGrainedExecutorBackend(
         override def run(): Unit = {
           var lastTaskRunningTime = System.nanoTime()
           val sleep_time = 1000 // 1s
-
+          // This config is internal and only used by unit tests to force an executor
+          // to hang around for longer when decommissioned.
+          val initialSleepMillis = env.conf.getInt(
+            "spark.test.executor.decommission.initial.sleep.millis", sleep_time)
+          if (initialSleepMillis > 0) {
+            Thread.sleep(initialSleepMillis)
+          }
           while (true) {
             logInfo("Checking to see if we can shutdown.")
-            Thread.sleep(sleep_time)
             if (executor == null || executor.numRunningTasks == 0) {
               if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
                 logInfo("No running tasks, checking migrations")
@@ -323,6 +325,7 @@ private[spark] class CoarseGrainedExecutorBackend(
               // move forward.
               lastTaskRunningTime = System.nanoTime()
             }
+            Thread.sleep(sleep_time)
           }
         }
       }

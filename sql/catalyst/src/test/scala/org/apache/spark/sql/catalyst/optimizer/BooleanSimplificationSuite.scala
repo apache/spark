@@ -221,14 +221,14 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
 
   test("Complementation Laws - null handling") {
     checkCondition('e && !'e,
-      testRelationWithData.where(If('e.isNull, Literal.create(null, BooleanType), false)).analyze)
+      testRelationWithData.where(And(Literal(null, BooleanType), 'e.isNull)).analyze)
     checkCondition(!'e && 'e,
-      testRelationWithData.where(If('e.isNull, Literal.create(null, BooleanType), false)).analyze)
+      testRelationWithData.where(And(Literal(null, BooleanType), 'e.isNull)).analyze)
 
     checkCondition('e || !'e,
-      testRelationWithData.where(If('e.isNull, Literal.create(null, BooleanType), true)).analyze)
+      testRelationWithData.where(Or('e.isNotNull, Literal(null, BooleanType))).analyze)
     checkCondition(!'e || 'e,
-      testRelationWithData.where(If('e.isNull, Literal.create(null, BooleanType), true)).analyze)
+      testRelationWithData.where(Or('e.isNotNull, Literal(null, BooleanType))).analyze)
   }
 
   test("Complementation Laws - negative case") {

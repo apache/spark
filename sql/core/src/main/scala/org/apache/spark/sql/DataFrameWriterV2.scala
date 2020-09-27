@@ -324,7 +324,7 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    * [[org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException]].
    *
    * @throws org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
-   *         If the table already exists
+   *         If the table does not exist
    */
   @throws(classOf[CannotReplaceMissingTableException])
   def replace(): Unit

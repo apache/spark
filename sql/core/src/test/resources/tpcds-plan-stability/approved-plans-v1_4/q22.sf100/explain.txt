@@ -1,0 +1,170 @@
+== Physical Plan ==
+TakeOrderedAndProject (30)
++- * HashAggregate (29)
+   +- Exchange (28)
+      +- * HashAggregate (27)
+         +- * Expand (26)
+            +- * Project (25)
+               +- * SortMergeJoin Inner (24)
+                  :- * Sort (18)
+                  :  +- Exchange (17)
+                  :     +- * Project (16)
+                  :        +- * BroadcastHashJoin Inner BuildRight (15)
+                  :           :- * Project (9)
+                  :           :  +- * BroadcastHashJoin Inner BuildRight (8)
+                  :           :     :- * Filter (3)
+                  :           :     :  +- * ColumnarToRow (2)
+                  :           :     :     +- Scan parquet default.inventory (1)
+                  :           :     +- BroadcastExchange (7)
+                  :           :        +- * Filter (6)
+                  :           :           +- * ColumnarToRow (5)
+                  :           :              +- Scan parquet default.warehouse (4)
+                  :           +- BroadcastExchange (14)
+                  :              +- * Project (13)
+                  :                 +- * Filter (12)
+                  :                    +- * ColumnarToRow (11)
+                  :                       +- Scan parquet default.date_dim (10)
+                  +- * Sort (23)
+                     +- Exchange (22)
+                        +- * Filter (21)
+                           +- * ColumnarToRow (20)
+                              +- Scan parquet default.item (19)
+
+
+(1) Scan parquet default.inventory
+Output [4]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/inventory]
+PushedFilters: [IsNotNull(inv_date_sk), IsNotNull(inv_item_sk), IsNotNull(inv_warehouse_sk)]
+ReadSchema: struct<inv_date_sk:int,inv_item_sk:int,inv_warehouse_sk:int,inv_quantity_on_hand:int>
+
+(2) ColumnarToRow [codegen id : 3]
+Input [4]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4]
+
+(3) Filter [codegen id : 3]
+Input [4]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4]
+Condition : ((isnotnull(inv_date_sk#1) AND isnotnull(inv_item_sk#2)) AND isnotnull(inv_warehouse_sk#3))
+
+(4) Scan parquet default.warehouse
+Output [1]: [w_warehouse_sk#5]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/warehouse]
+PushedFilters: [IsNotNull(w_warehouse_sk)]
+ReadSchema: struct<w_warehouse_sk:int>
+
+(5) ColumnarToRow [codegen id : 1]
+Input [1]: [w_warehouse_sk#5]
+
+(6) Filter [codegen id : 1]
+Input [1]: [w_warehouse_sk#5]
+Condition : isnotnull(w_warehouse_sk#5)
+
+(7) BroadcastExchange
+Input [1]: [w_warehouse_sk#5]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#6]
+
+(8) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [inv_warehouse_sk#3]
+Right keys [1]: [w_warehouse_sk#5]
+Join condition: None
+
+(9) Project [codegen id : 3]
+Output [3]: [inv_date_sk#1, inv_item_sk#2, inv_quantity_on_hand#4]
+Input [5]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4, w_warehouse_sk#5]
+
+(10) Scan parquet default.date_dim
+Output [2]: [d_date_sk#7, d_month_seq#8]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1200), LessThanOrEqual(d_month_seq,1211), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_month_seq:int>
+
+(11) ColumnarToRow [codegen id : 2]
+Input [2]: [d_date_sk#7, d_month_seq#8]
+
+(12) Filter [codegen id : 2]
+Input [2]: [d_date_sk#7, d_month_seq#8]
+Condition : (((isnotnull(d_month_seq#8) AND (d_month_seq#8 >= 1200)) AND (d_month_seq#8 <= 1211)) AND isnotnull(d_date_sk#7))
+
+(13) Project [codegen id : 2]
+Output [1]: [d_date_sk#7]
+Input [2]: [d_date_sk#7, d_month_seq#8]
+
+(14) BroadcastExchange
+Input [1]: [d_date_sk#7]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#9]
+
+(15) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [inv_date_sk#1]
+Right keys [1]: [d_date_sk#7]
+Join condition: None
+
+(16) Project [codegen id : 3]
+Output [2]: [inv_item_sk#2, inv_quantity_on_hand#4]
+Input [4]: [inv_date_sk#1, inv_item_sk#2, inv_quantity_on_hand#4, d_date_sk#7]
+
+(17) Exchange
+Input [2]: [inv_item_sk#2, inv_quantity_on_hand#4]
+Arguments: hashpartitioning(inv_item_sk#2, 5), true, [id=#10]
+
+(18) Sort [codegen id : 4]
+Input [2]: [inv_item_sk#2, inv_quantity_on_hand#4]
+Arguments: [inv_item_sk#2 ASC NULLS FIRST], false, 0
+
+(19) Scan parquet default.item
+Output [5]: [i_item_sk#11, i_brand#12, i_class#13, i_category#14, i_product_name#15]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int,i_brand:string,i_class:string,i_category:string,i_product_name:string>
+
+(20) ColumnarToRow [codegen id : 5]
+Input [5]: [i_item_sk#11, i_brand#12, i_class#13, i_category#14, i_product_name#15]
+
+(21) Filter [codegen id : 5]
+Input [5]: [i_item_sk#11, i_brand#12, i_class#13, i_category#14, i_product_name#15]
+Condition : isnotnull(i_item_sk#11)
+
+(22) Exchange
+Input [5]: [i_item_sk#11, i_brand#12, i_class#13, i_category#14, i_product_name#15]
+Arguments: hashpartitioning(i_item_sk#11, 5), true, [id=#16]
+
+(23) Sort [codegen id : 6]
+Input [5]: [i_item_sk#11, i_brand#12, i_class#13, i_category#14, i_product_name#15]
+Arguments: [i_item_sk#11 ASC NULLS FIRST], false, 0
+
+(24) SortMergeJoin [codegen id : 7]
+Left keys [1]: [inv_item_sk#2]
+Right keys [1]: [i_item_sk#11]
+Join condition: None
+
+(25) Project [codegen id : 7]
+Output [5]: [inv_quantity_on_hand#4, i_product_name#15, i_brand#12, i_class#13, i_category#14]
+Input [7]: [inv_item_sk#2, inv_quantity_on_hand#4, i_item_sk#11, i_brand#12, i_class#13, i_category#14, i_product_name#15]
+
+(26) Expand [codegen id : 7]
+Input [5]: [inv_quantity_on_hand#4, i_product_name#15, i_brand#12, i_class#13, i_category#14]
+Arguments: [List(inv_quantity_on_hand#4, i_product_name#15, i_brand#12, i_class#13, i_category#14, 0), List(inv_quantity_on_hand#4, i_product_name#15, i_brand#12, i_class#13, null, 1), List(inv_quantity_on_hand#4, i_product_name#15, i_brand#12, null, null, 3), List(inv_quantity_on_hand#4, i_product_name#15, null, null, null, 7), List(inv_quantity_on_hand#4, null, null, null, null, 15)], [inv_quantity_on_hand#4, i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21]
+
+(27) HashAggregate [codegen id : 7]
+Input [6]: [inv_quantity_on_hand#4, i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21]
+Keys [5]: [i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21]
+Functions [1]: [partial_avg(cast(inv_quantity_on_hand#4 as bigint))]
+Aggregate Attributes [2]: [sum#22, count#23]
+Results [7]: [i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21, sum#24, count#25]
+
+(28) Exchange
+Input [7]: [i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21, sum#24, count#25]
+Arguments: hashpartitioning(i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21, 5), true, [id=#26]
+
+(29) HashAggregate [codegen id : 8]
+Input [7]: [i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21, sum#24, count#25]
+Keys [5]: [i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21]
+Functions [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))]
+Aggregate Attributes [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))#27]
+Results [5]: [i_product_name#17, i_brand#18, i_class#19, i_category#20, avg(cast(inv_quantity_on_hand#4 as bigint))#27 AS qoh#28]
+
+(30) TakeOrderedAndProject
+Input [5]: [i_product_name#17, i_brand#18, i_class#19, i_category#20, qoh#28]
+Arguments: 100, [qoh#28 ASC NULLS FIRST, i_product_name#17 ASC NULLS FIRST, i_brand#18 ASC NULLS FIRST, i_class#19 ASC NULLS FIRST, i_category#20 ASC NULLS FIRST], [i_product_name#17, i_brand#18, i_class#19, i_category#20, qoh#28]
+

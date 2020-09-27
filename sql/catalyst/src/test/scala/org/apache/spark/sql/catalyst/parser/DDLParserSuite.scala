@@ -1665,7 +1665,7 @@ class DDLParserSuite extends AnalysisTest {
   test("REFRESH TABLE") {
     comparePlans(
       parsePlan("REFRESH TABLE a.b.c"),
-      RefreshTableStatement(Seq("a", "b", "c")))
+      RefreshTable(UnresolvedTableOrView(Seq("a", "b", "c"))))
   }
 
   test("show columns") {

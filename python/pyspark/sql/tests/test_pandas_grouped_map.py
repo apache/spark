@@ -24,7 +24,9 @@ from decimal import Decimal
 from pyspark.sql import Row
 from pyspark.sql.functions import array, explode, col, lit, udf, sum, pandas_udf, PandasUDFType, \
     window
-from pyspark.sql.types import *
+from pyspark.sql.types import IntegerType, DoubleType, ArrayType, BinaryType, ByteType, \
+    LongType, DecimalType, ShortType, FloatType, StringType, BooleanType, StructType, \
+    StructField, NullType, MapType, TimestampType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
@@ -39,7 +41,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
 class GroupedMapInPandasTests(ReusedSQLTestCase):
 
     @property
@@ -606,10 +608,10 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_grouped_map import *
+    from pyspark.sql.tests.test_pandas_grouped_map import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

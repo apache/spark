@@ -10,26 +10,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Download test results to report
-      # TODO(SPARK-32605): It was forked to have a custom fix
-      # https://github.com/HyukjinKwon/action-surefire-report/commit/c96094cc35061fcf154a7cb46807f2f3e2339476
-      # in order to add the support of custom target commit SHA. It should be contributed back to the original
-      # plugin and avoid using the fork.
-      uses: HyukjinKwon/action-download-artifact@master
+      uses: dawidd6/action-download-artifact@v2
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         workflow: ${{ github.event.workflow_run.workflow_id }}
         commit: ${{ github.event.workflow_run.head_commit.id }}
     - name: Publish test report
-      # TODO(SPARK-32606): It was forked to have a custom fix
-      # https://github.com/HyukjinKwon/action-download-artifact/commit/750b71af351aba467757d7be6924199bb08db4ed
-      # in order to add the support to download all artifacts. It should be contributed back to the original
-      # plugin and avoid using the fork.
-      # Alternatively, we can use the official actions/download-artifact once they support to download artifacts
-      # between different workloads, see also https://github.com/actions/download-artifact/issues/3
-      uses: HyukjinKwon/action-surefire-report@master
+      uses: scacap/action-surefire-report@v1
       with:
-        check_name: Test report
+        check_name: Report test results
         github_token: ${{ secrets.GITHUB_TOKEN }}
         report_paths: "**/target/test-reports/*.xml"
         commit: ${{ github.event.workflow_run.head_commit.id }}
-

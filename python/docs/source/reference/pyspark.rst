@@ -39,6 +39,7 @@ Public Classes
     RDDBarrier
     BarrierTaskContext
     BarrierTaskInfo
+    InheritableThread
 
 
 Spark Context APIs

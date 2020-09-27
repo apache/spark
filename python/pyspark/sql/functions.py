@@ -592,7 +592,9 @@ def nanvl(col1, col2):
 
 @since(3.1)
 def percentile_approx(col, percentage, accuracy=10000):
-    """Returns the approximate percentile value of numeric column col at the given percentage.
+    """Returns the approximate `percentile` of the numeric column `col` which is the smallest value
+    in the ordered `col` values (sorted from least to greatest) such that no more than `percentage`
+    of `col` values is less than the value or equal to that value.
     The value of percentage must be between 0.0 and 1.0.
 
     The accuracy parameter (default: 10000)

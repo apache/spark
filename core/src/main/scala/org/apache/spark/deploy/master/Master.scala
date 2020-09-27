@@ -308,7 +308,7 @@ private[deploy] class Master(
             appInfo.resetRetryCount()
           }
 
-          exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus, false))
+          exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus, None))
 
           if (ExecutorState.isFinished(state)) {
             // Remove this executor from the worker and app
@@ -909,9 +909,10 @@ private[deploy] class Master(
         exec.application.driver.send(ExecutorUpdated(
           exec.id, ExecutorState.DECOMMISSIONED,
           Some("worker decommissioned"), None,
-          // workerLost is being set to true here to let the driver know that the host (aka. worker)
-          // is also being decommissioned.
-          workerLost = true))
+          // worker host is being set here to let the driver know that the host (aka. worker)
+          // is also being decommissioned. So the driver can unregister all the shuffle map
+          // statues located at this host when it receives the executor lost event.
+          Some(worker.host)))
         exec.state = ExecutorState.DECOMMISSIONED
         exec.application.removeExecutor(exec)
       }
@@ -932,7 +933,7 @@ private[deploy] class Master(
     for (exec <- worker.executors.values) {
       logInfo("Telling app of lost executor: " + exec.id)
       exec.application.driver.send(ExecutorUpdated(
-        exec.id, ExecutorState.LOST, Some("worker lost"), None, workerLost = true))
+        exec.id, ExecutorState.LOST, Some("worker lost"), None, Some(worker.host)))
       exec.state = ExecutorState.LOST
       exec.application.removeExecutor(exec)
     }
