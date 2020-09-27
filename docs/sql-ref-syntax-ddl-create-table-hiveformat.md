@@ -31,6 +31,9 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ COMMENT table_comment ]
     [ PARTITIONED BY ( col_name2[:] col_type2 [ COMMENT col_comment2 ], ... ) 
         | ( col_name1, col_name2, ... ) ]
+    [ CLUSTERED BY ( col_name1, col_name2, ...) 
+        [ SORTED BY (col_name1 [ ASC | DESC ], col_name2 [ ASC | DESC ], ...) ] 
+        INTO num_buckets BUCKETS ]
     [ ROW FORMAT row_format ]
     [ STORED AS file_format ]
     [ LOCATION path ]
@@ -65,6 +68,18 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
     Partitions are created on the table, based on the columns specified.
     
+* **CLUSTERED BY**
+
+    Specifies bucket columns for bucketing table.
+    
+* **SORTED BY**
+
+    Used to sort bucket column, we can combine with `ASC` for ascending order, with `DESC` for descending order.
+    
+* **INTO num_buckets BUCKETS**
+
+    Specifies buckets numbers, which is used in  `CLUSTERED BY` clause.
+        
 * **row_format**    
 
     Use the `SERDE` clause to specify a custom SerDe for one table. Otherwise, use the `DELIMITED` clause to use the native SerDe and specify the delimiter, escape character, null character and so on.
@@ -203,6 +218,17 @@ CREATE EXTERNAL TABLE family (id INT, name STRING)
     STORED AS INPUTFORMAT 'com.ly.spark.example.serde.io.SerDeExampleInputFormat'
         OUTPUTFORMAT 'com.ly.spark.example.serde.io.SerDeExampleOutputFormat'
     LOCATION '/tmp/family/';
+
+--Use `CLUSTERED BY` clause to create bucket table without `SORTED BY`
+CREATE TABLE TEST1(ID INT, AGE STRING)
+    CLUSTERED BY (ID)
+    INTO 4 BUCKETS
+
+--Use `CLUSTERED BY` clause to create bucket table with `SORTED BY`
+CREATE TABLE TEST2(ID INT, NAME STRING)
+    CLUSTERED BY (ID,NAME)
+    SORTED BY (ID ASC)
+    INTO 3 BUCKETS
 ```
 
 ### Related Statements
