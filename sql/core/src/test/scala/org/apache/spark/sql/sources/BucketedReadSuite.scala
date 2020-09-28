@@ -1017,8 +1017,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
   private def checkDisableBucketedScan(
     query: String,
-    expectedNumBucketedScanEnabled: Int,
-    expectedNumBucketedScanDisabled: Int): Unit = {
+    expectedNumScanWithAutoScanEnabled: Int,
+    expectedNumScanWithAutoScanDisabled: Int): Unit = {
 
     def checkNumBucketedScan(query: String, expectedNumBucketedScan: Int): Unit = {
       val plan = sql(query).queryExecution.executedPlan
@@ -1027,11 +1027,11 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
 
     withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
-      checkNumBucketedScan(query, expectedNumBucketedScanEnabled)
+      checkNumBucketedScan(query, expectedNumScanWithAutoScanEnabled)
       val result = sql(query).collect()
 
       withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "false") {
-        checkNumBucketedScan(query, expectedNumBucketedScanDisabled)
+        checkNumBucketedScan(query, expectedNumScanWithAutoScanDisabled)
         checkAnswer(sql(query), result)
       }
     }
@@ -1072,8 +1072,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         // Aggregate on non-bucketed column
         ("SELECT SUM(i) FROM t1 GROUP BY j", 0, 1),
         ("SELECT j, SUM(i), COUNT(j) FROM t1 GROUP BY j", 0, 1)
-      ).foreach { case (query, bucketedScanEnabled, bucketedScanDisabled) =>
-        checkDisableBucketedScan(query, bucketedScanEnabled, bucketedScanDisabled)
+      ).foreach { case (query, numScanWithAutoScanEnabled, numScanWithAutoScanDisabled) =>
+        checkDisableBucketedScan(query, numScanWithAutoScanEnabled, numScanWithAutoScanDisabled)
       }
     }
   }
@@ -1115,8 +1115,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
          SELECT /*+ merge(t1, t3)*/ * FROM t1 JOIN t2 JOIN t3
          ON t1.j = t2.j AND t2.j = t3.j
          """.stripMargin, 0, 3)
-      ).foreach { case (query, bucketedScanEnabled, bucketedScanDisabled) =>
-        checkDisableBucketedScan(query, bucketedScanEnabled, bucketedScanDisabled)
+      ).foreach { case (query, numScanWithAutoScanEnabled, numScanWithAutoScanDisabled) =>
+        checkDisableBucketedScan(query, numScanWithAutoScanEnabled, numScanWithAutoScanDisabled)
       }
     }
   }
@@ -1146,8 +1146,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         ("SELECT i, j, COUNT(*) FROM t1 GROUP BY i, j", 1, 1),
         ("SELECT i, COUNT(i) FROM t1 GROUP BY i", 0, 0),
         ("SELECT i, COUNT(j) FROM t1 GROUP BY i", 0, 1)
-      ).foreach { case (query, bucketedScanEnabled, bucketedScanDisabled) =>
-        checkDisableBucketedScan(query, bucketedScanEnabled, bucketedScanDisabled)
+      ).foreach { case (query, numScanWithAutoScanEnabled, numScanWithAutoScanDisabled) =>
+        checkDisableBucketedScan(query, numScanWithAutoScanEnabled, numScanWithAutoScanDisabled)
       }
     }
   }
@@ -1187,8 +1187,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
          FROM (SELECT t1.j FROM t1 JOIN t3 ON t1.j = t3.j)
          GROUP BY j
          """.stripMargin, 0, 0)
-      ).foreach { case (query, bucketedScanEnabled, bucketedScanDisabled) =>
-        checkDisableBucketedScan(query, bucketedScanEnabled, bucketedScanDisabled)
+      ).foreach { case (query, numScanWithAutoScanEnabled, numScanWithAutoScanDisabled) =>
+        checkDisableBucketedScan(query, numScanWithAutoScanEnabled, numScanWithAutoScanDisabled)
       }
     }
   }

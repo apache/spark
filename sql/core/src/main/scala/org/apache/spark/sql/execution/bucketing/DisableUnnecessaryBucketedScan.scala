@@ -116,6 +116,12 @@ case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan]
     }
   }
 
+  /**
+   * Check if the operator is allowed single-child operator.
+   * We may revisit this method later as we probably can
+   * remove this restriction to allow arbitrary operator between
+   * bucketed table scan and operator with interesting partition.
+   */
   private def isAllowedUnaryExecNode(plan: SparkPlan): Boolean = {
     plan match {
       case _: SortExec | _: ProjectExec | _: FilterExec => true
