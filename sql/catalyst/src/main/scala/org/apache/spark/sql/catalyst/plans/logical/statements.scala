@@ -223,7 +223,9 @@ case class AlterTableRecoverPartitionsStatement(
 case class AlterTableAddPartitionStatement(
     child: LogicalPlan,
     partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[String])],
-    ifNotExists: Boolean) extends ParsedStatement
+    ifNotExists: Boolean) extends ParsedStatement {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
 
 /**
  * ALTER TABLE ... RENAME PARTITION command, as parsed from SQL.
@@ -241,7 +243,9 @@ case class AlterTableDropPartitionStatement(
     specs: Seq[TablePartitionSpec],
     ifExists: Boolean,
     purge: Boolean,
-    retainData: Boolean) extends ParsedStatement
+    retainData: Boolean) extends ParsedStatement {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
 
 /**
  * ALTER TABLE ... SERDEPROPERTIES command, as parsed from SQL
