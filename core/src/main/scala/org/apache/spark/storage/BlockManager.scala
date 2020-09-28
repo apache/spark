@@ -243,8 +243,9 @@ private[spark] class BlockManager(
 
   private var blockReplicationPolicy: BlockReplicationPolicy = _
 
+  // visible for test
   // This is volatile since if it's defined we should not accept remote blocks.
-  @volatile private var decommissioner: Option[BlockManagerDecommissioner] = None
+  @volatile private[spark] var decommissioner: Option[BlockManagerDecommissioner] = None
 
   // A DownloadFileManager used to track all the files of remote blocks which are above the
   // specified memory threshold. Files will be deleted automatically based on weak reference.
