@@ -246,25 +246,33 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val p = 'p.string.at(1)
     val r = 'r.string.at(2)
 
-    val expr = RegExpReplace(s, p, r)
+    val expr = new RegExpReplace(s, p, r)
     checkEvaluation(expr, "num-num", row1)
     checkEvaluation(expr, "###-###", row2)
     checkEvaluation(expr, "100###200", row3)
     checkEvaluation(expr, null, row4)
     checkEvaluation(expr, null, row5)
     checkEvaluation(expr, null, row6)
+    // test position
+    val exprWithPos = RegExpReplace(s, p, r, 4)
+    checkEvaluation(exprWithPos, "100-num", row1)
+    checkEvaluation(exprWithPos, "100-###", row2)
+    checkEvaluation(exprWithPos, "100###200", row3)
+    checkEvaluation(exprWithPos, null, row4)
+    checkEvaluation(exprWithPos, null, row5)
+    checkEvaluation(exprWithPos, null, row6)
 
-    val nonNullExpr = RegExpReplace(Literal("100-200"), Literal("(\\d+)"), Literal("num"))
+    val nonNullExpr = new RegExpReplace(Literal("100-200"), Literal("(\\d+)"), Literal("num"))
     checkEvaluation(nonNullExpr, "num-num", row1)
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
-      RegExpReplace(Literal("\"quote"), Literal("\"quote"), Literal("\"quote")) :: Nil)
+      new RegExpReplace(Literal("\"quote"), Literal("\"quote"), Literal("\"quote")) :: Nil)
   }
 
   test("SPARK-22570: RegExpReplace should not create a lot of global variables") {
     val ctx = new CodegenContext
-    RegExpReplace(Literal("100"), Literal("(\\d+)"), Literal("num")).genCode(ctx)
+    new RegExpReplace(Literal("100"), Literal("(\\d+)"), Literal("num")).genCode(ctx)
     // four global variables (lastRegex, pattern, lastReplacement, and lastReplacementInUTF8)
     // are always required, which are allocated in type-based global array
     assert(ctx.inlinedMutableStates.length == 0)

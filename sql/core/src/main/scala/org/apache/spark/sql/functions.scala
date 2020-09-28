@@ -2538,7 +2538,7 @@ object functions {
    * @since 1.5.0
    */
   def regexp_replace(e: Column, pattern: String, replacement: String): Column = withExpr {
-    RegExpReplace(e.expr, lit(pattern).expr, lit(replacement).expr)
+    new RegExpReplace(e.expr, lit(pattern).expr, lit(replacement).expr)
   }
 
   /**
@@ -2548,7 +2548,7 @@ object functions {
    * @since 2.1.0
    */
   def regexp_replace(e: Column, pattern: Column, replacement: Column): Column = withExpr {
-    RegExpReplace(e.expr, pattern.expr, replacement.expr)
+    new RegExpReplace(e.expr, pattern.expr, replacement.expr)
   }
 
   /**
