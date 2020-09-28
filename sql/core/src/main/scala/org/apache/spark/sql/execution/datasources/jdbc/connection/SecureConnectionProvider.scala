@@ -32,14 +32,16 @@ private[jdbc] abstract class SecureConnectionProvider extends BasicConnectionPro
    */
   protected val driverClass: String
 
-  override def canHandle(driver: Driver, options: JDBCOptions): Boolean = {
-    options.keytab != null && options.principal != null &&
-      driverClass.equalsIgnoreCase(options.driverClass)
+  override def canHandle(driver: Driver, options: Map[String, String]): Boolean = {
+    val jdbcOptions = new JDBCOptions(options)
+    jdbcOptions.keytab != null && jdbcOptions.principal != null &&
+      driverClass.equalsIgnoreCase(jdbcOptions.driverClass)
   }
 
-  override def getConnection(driver: Driver, options: JDBCOptions): Connection = {
-    setAuthenticationConfigIfNeeded(driver, options)
-    super.getConnection(driver: Driver, options: JDBCOptions)
+  override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
+    val jdbcOptions = new JDBCOptions(options)
+    setAuthenticationConfigIfNeeded(driver, jdbcOptions)
+    super.getConnection(driver: Driver, options: Map[String, String])
   }
 
   /**

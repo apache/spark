@@ -31,15 +31,17 @@ private[sql] class DB2ConnectionProvider extends SecureConnectionProvider {
 
   override def appEntry(driver: Driver, options: JDBCOptions): String = "JaasClient"
 
-  override def getConnection(driver: Driver, options: JDBCOptions): Connection = {
-    setAuthenticationConfigIfNeeded(driver, options)
-    UserGroupInformation.loginUserFromKeytabAndReturnUGI(options.principal, options.keytab).doAs(
-      new PrivilegedExceptionAction[Connection]() {
-        override def run(): Connection = {
-          DB2ConnectionProvider.super.getConnection(driver, options)
+  override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
+    val jdbcOptions = new JDBCOptions(options)
+    setAuthenticationConfigIfNeeded(driver, jdbcOptions)
+    UserGroupInformation.loginUserFromKeytabAndReturnUGI(jdbcOptions.principal, jdbcOptions.keytab)
+      .doAs(
+        new PrivilegedExceptionAction[Connection]() {
+          override def run(): Connection = {
+            DB2ConnectionProvider.super.getConnection(driver, options)
+          }
         }
-      }
-    )
+      )
   }
 
   override def getAdditionalProperties(options: JDBCOptions): Properties = {

@@ -23,7 +23,6 @@ import java.util.ServiceLoader
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.util.Utils
 
 private[jdbc] object ConnectionProvider extends Logging {
@@ -48,7 +47,7 @@ private[jdbc] object ConnectionProvider extends Logging {
     providers
   }
 
-  def create(driver: Driver, options: JDBCOptions): Connection = {
+  def create(driver: Driver, options: Map[String, String]): Connection = {
     val filteredProviders = providers.filter(_.canHandle(driver, options))
     logDebug(s"Filtered providers: $filteredProviders")
     require(filteredProviders.size == 1,

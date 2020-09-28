@@ -23,15 +23,12 @@ import java.util.{Locale, Properties}
 import org.apache.commons.io.FilenameUtils
 
 import org.apache.spark.SparkFiles
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
 /**
- * ::DeveloperApi::
  * Options for the JDBC data source.
  */
-@DeveloperApi
 class JDBCOptions(
     @transient val parameters: CaseInsensitiveMap[String])
   extends Serializable with Logging {

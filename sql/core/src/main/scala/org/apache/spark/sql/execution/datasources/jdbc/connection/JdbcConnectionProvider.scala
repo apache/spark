@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 import java.sql.{Connection, Driver}
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 /**
  * ::DeveloperApi::
@@ -42,7 +41,7 @@ trait JdbcConnectionProvider {
    * @param options Driver options which initiates the connection
    * @return True if the connection provider can handle the driver with the given options.
    */
-  def canHandle(driver: Driver, options: JDBCOptions): Boolean
+  def canHandle(driver: Driver, options: Map[String, String]): Boolean
 
   /**
    * Opens connection toward the database.
@@ -50,5 +49,5 @@ trait JdbcConnectionProvider {
    * @param options Driver options which initiates the connection
    * @return a <code>Connection</code> object that represents a connection to the URL
    */
-  def getConnection(driver: Driver, options: JDBCOptions): Connection
+  def getConnection(driver: Driver, options: Map[String, String]): Connection
 }
