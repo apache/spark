@@ -19,24 +19,25 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 import java.sql.{Connection, Driver}
 
-import org.apache.spark.annotation.{DeveloperApi, Unstable}
+import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 
 /**
  * ::DeveloperApi::
  * Connection provider which opens connection toward various databases (database specific instance
  * needed). If any authentication required then it's the provider's responsibility to set all
  * the parameters. If global JVM security configuration is changed then
- * <code>SecurityConfigurationLock</code> must be used as lock to avoid race.
+ * `SecurityConfigurationLock` must be used as lock to avoid race.
  * Important to mention connection providers within a JVM used from multiple threads so adding
  * internal state is not advised. If any state added then it must be synchronized properly.
  */
 @DeveloperApi
 @Unstable
+@Since("3.1.0")
 trait JdbcConnectionProvider {
   /**
    * Checks if this connection provider instance can handle the connection initiated by the driver.
    * There must be exactly one active connection provider which can handle the connection for a
-   * specific driver. If this requirement doesn't met then <code>IllegalArgumentException</code>
+   * specific driver. If this requirement doesn't met then `IllegalArgumentException`
    * will be thrown by the provider framework.
    * @param driver Java driver which initiates the connection
    * @param options Driver options which initiates the connection
@@ -48,7 +49,7 @@ trait JdbcConnectionProvider {
    * Opens connection toward the database.
    * @param driver Java driver which initiates the connection
    * @param options Driver options which initiates the connection
-   * @return a <code>Connection</code> object that represents a connection to the URL
+   * @return a `Connection` object that represents a connection to the URL
    */
   def getConnection(driver: Driver, options: Map[String, String]): Connection
 }
