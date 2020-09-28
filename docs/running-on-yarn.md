@@ -551,12 +551,12 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>2.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.blacklist.executor.launch.blacklisting.enabled</code></td>
+  <td><code>spark.yarn.executor.launch.excludeOnFailure.enabled</code></td>
   <td>false</td>
   <td>
-  Flag to enable blacklisting of nodes having YARN resource allocation problems.
-  The error limit for blacklisting can be configured by
-  <code>spark.blacklist.application.maxFailedExecutorsPerNode</code>.
+  Flag to enable exclusion of nodes having YARN resource allocation problems.
+  The error limit for excluding can be configured by
+  <code>spark.excludeOnFailure.application.maxFailedExecutorsPerNode</code>.
   </td>
   <td>2.4.0</td>
 </tr>

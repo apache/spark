@@ -333,8 +333,8 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Called by the TaskSetManager when a taskset becomes unschedulable due to blacklisting and
-   * dynamic allocation is enabled.
+   * Called by the TaskSetManager when a taskset becomes unschedulable due to executors being
+   * excluded because of too many task failures and dynamic allocation is enabled.
    */
   def unschedulableTaskSetAdded(
       stageId: Int,

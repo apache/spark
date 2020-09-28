@@ -779,7 +779,7 @@ package object config {
       .createOptional
 
   private[spark] val EXCLUDE_ON_FAILURE_KILL_ENABLED =
-    ConfigBuilder("spark.excludeOnFailure.killBlockedExecutors")
+    ConfigBuilder("spark.excludeOnFailure.killExcludedExecutors")
       .version("2.2.0")
       .withAlternative("spark.blacklist.killBlacklistedExecutors")
       .booleanConf
@@ -1465,6 +1465,7 @@ package object config {
       .doc("The timeout in seconds to wait to acquire a new executor and schedule a task " +
         "before aborting a TaskSet which is unschedulable because of being completely blocked.")
       .version("2.4.1")
+      .withAlternative("spark.scheduler.blacklist.unschedulableTaskSetTimeout")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(v => v >= 0, "The value should be a non negative time value.")
       .createWithDefault(120)

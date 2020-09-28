@@ -315,7 +315,6 @@ $(document).ready(function () {
                 "allTotalInputBytes": allTotalInputBytes,
                 "allTotalShuffleRead": allTotalShuffleRead,
                 "allTotalShuffleWrite": allTotalShuffleWrite,
-                "allTotalBlacklisted": allTotalExcluded,
                 "allTotalExcluded": allTotalExcluded
             };
             var activeSummary = {
@@ -339,7 +338,6 @@ $(document).ready(function () {
                 "allTotalInputBytes": activeTotalInputBytes,
                 "allTotalShuffleRead": activeTotalShuffleRead,
                 "allTotalShuffleWrite": activeTotalShuffleWrite,
-                "allTotalBlacklisted": activeTotalExcluded,
                 "allTotalExcluded": activeTotalExcluded
             };
             var deadSummary = {
@@ -363,7 +361,6 @@ $(document).ready(function () {
                 "allTotalInputBytes": deadTotalInputBytes,
                 "allTotalShuffleRead": deadTotalShuffleRead,
                 "allTotalShuffleWrite": deadTotalShuffleWrite,
-                "allTotalBlacklisted": deadTotalExcluded,
                 "allTotalExcluded": deadTotalExcluded
             };
 
