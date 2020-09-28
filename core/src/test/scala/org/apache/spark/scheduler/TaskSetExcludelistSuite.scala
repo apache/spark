@@ -157,39 +157,39 @@ class TaskSetExcludelistSuite extends SparkFunSuite with BeforeAndAfterEach with
     val clock = new ManualClock
 
     val attemptId = 0
-    val taskSetBlacklist = new TaskSetExcludelist(
+    val taskSetExcludlist = new TaskSetExcludelist(
       listenerBusMock, conf, stageId = 0, stageAttemptId = attemptId, clock = clock)
 
     var time = 0
     clock.setTime(time)
     // Fail a task twice on hostA, exec:1
-    taskSetBlacklist.updateExcludedForFailedTask(
+    taskSetExcludlist.updateExcludedForFailedTask(
       "hostA", exec = "1", index = 0, failureReason = "testing")
-    taskSetBlacklist.updateExcludedForFailedTask(
+    taskSetExcludlist.updateExcludedForFailedTask(
       "hostA", exec = "1", index = 0, failureReason = "testing")
-    assert(taskSetBlacklist.isExecutorExcludedForTask("1", 0))
-    assert(!taskSetBlacklist.isNodeExcludedForTask("hostA", 0))
+    assert(taskSetExcludlist.isExecutorExcludedForTask("1", 0))
+    assert(!taskSetExcludlist.isNodeExcludedForTask("hostA", 0))
 
-    assert(!taskSetBlacklist.isExecutorExcludedForTaskSet("1"))
+    assert(!taskSetExcludlist.isExecutorExcludedForTaskSet("1"))
     verify(listenerBusMock, never()).post(
       SparkListenerExecutorExcludedForStage(time, "1", 2, 0, attemptId))
 
-    assert(!taskSetBlacklist.isNodeExcludedForTaskSet("hostA"))
+    assert(!taskSetExcludlist.isNodeExcludedForTaskSet("hostA"))
     verify(listenerBusMock, never()).post(
       SparkListenerNodeExcludedForStage(time, "hostA", 2, 0, attemptId))
 
     // Fail the same task once more on hostA, exec:2
     time += 1
     clock.setTime(time)
-    taskSetBlacklist.updateExcludedForFailedTask(
+    taskSetExcludlist.updateExcludedForFailedTask(
       "hostA", exec = "2", index = 0, failureReason = "testing")
-    assert(taskSetBlacklist.isNodeExcludedForTask("hostA", 0))
+    assert(taskSetExcludlist.isNodeExcludedForTask("hostA", 0))
 
-    assert(!taskSetBlacklist.isExecutorExcludedForTaskSet("2"))
+    assert(!taskSetExcludlist.isExecutorExcludedForTaskSet("2"))
     verify(listenerBusMock, never()).post(
       SparkListenerExecutorExcludedForStage(time, "2", 2, 0, attemptId))
 
-    assert(!taskSetBlacklist.isNodeExcludedForTaskSet("hostA"))
+    assert(!taskSetExcludlist.isNodeExcludedForTaskSet("hostA"))
     verify(listenerBusMock, never()).post(
       SparkListenerNodeExcludedForStage(time, "hostA", 2, 0, attemptId))
 
@@ -197,28 +197,28 @@ class TaskSetExcludelistSuite extends SparkFunSuite with BeforeAndAfterEach with
     // so its excluded
     time += 1
     clock.setTime(time)
-    taskSetBlacklist.updateExcludedForFailedTask(
+    taskSetExcludlist.updateExcludedForFailedTask(
       "hostA", exec = "1", index = 1, failureReason = "testing")
 
-    assert(taskSetBlacklist.isExecutorExcludedForTaskSet("1"))
+    assert(taskSetExcludlist.isExecutorExcludedForTaskSet("1"))
     verify(listenerBusMock)
       .post(SparkListenerExecutorExcludedForStage(time, "1", 2, 0, attemptId))
 
-    assert(!taskSetBlacklist.isNodeExcludedForTaskSet("hostA"))
+    assert(!taskSetExcludlist.isNodeExcludedForTaskSet("hostA"))
     verify(listenerBusMock, never())
       .post(isA(classOf[SparkListenerNodeExcludedForStage]))
 
     // Fail a third task on hostA, exec:2, so that exec is excluded for the whole task set
     time += 1
     clock.setTime(time)
-    taskSetBlacklist.updateExcludedForFailedTask(
+    taskSetExcludlist.updateExcludedForFailedTask(
       "hostA", exec = "2", index = 2, failureReason = "testing")
 
-    assert(taskSetBlacklist.isExecutorExcludedForTaskSet("2"))
+    assert(taskSetExcludlist.isExecutorExcludedForTaskSet("2"))
     verify(listenerBusMock)
       .post(SparkListenerExecutorExcludedForStage(time, "2", 2, 0, attemptId))
 
-    assert(!taskSetBlacklist.isNodeExcludedForTaskSet("hostA"))
+    assert(!taskSetExcludlist.isNodeExcludedForTaskSet("hostA"))
     verify(listenerBusMock, never())
       .post(isA(classOf[SparkListenerNodeExcludedForStage]))
 
@@ -226,16 +226,16 @@ class TaskSetExcludelistSuite extends SparkFunSuite with BeforeAndAfterEach with
     // excluded for the taskset, so exclude the whole node.
     time += 1
     clock.setTime(time)
-    taskSetBlacklist.updateExcludedForFailedTask(
+    taskSetExcludlist.updateExcludedForFailedTask(
       "hostA", exec = "3", index = 3, failureReason = "testing")
-    taskSetBlacklist.updateExcludedForFailedTask(
+    taskSetExcludlist.updateExcludedForFailedTask(
       "hostA", exec = "3", index = 4, failureReason = "testing")
 
-    assert(taskSetBlacklist.isExecutorExcludedForTaskSet("3"))
+    assert(taskSetExcludlist.isExecutorExcludedForTaskSet("3"))
     verify(listenerBusMock)
       .post(SparkListenerExecutorExcludedForStage(time, "3", 2, 0, attemptId))
 
-    assert(taskSetBlacklist.isNodeExcludedForTaskSet("hostA"))
+    assert(taskSetExcludlist.isNodeExcludedForTaskSet("hostA"))
     verify(listenerBusMock).post(
       SparkListenerNodeExcludedForStage(time, "hostA", 3, 0, attemptId))
   }
@@ -245,41 +245,41 @@ class TaskSetExcludelistSuite extends SparkFunSuite with BeforeAndAfterEach with
     // we exclude executors on two different hosts within one taskSet -- make sure that doesn't
     // lead to any node excluding
     val conf = new SparkConf().setAppName("test").setMaster("local")
-      .set(config.BLACKLIST_ENABLED.key, "true")
+      .set(config.EXCLUDE_ON_FAILURE_ENABLED.key, "true")
     val clock = new ManualClock
 
     val attemptId = 0
-    val taskSetBlacklist = new TaskSetExcludelist(
+    val taskSetExcludlist = new TaskSetExcludelist(
       listenerBusMock, conf, stageId = 0, stageAttemptId = attemptId, clock = clock)
     var time = 0
     clock.setTime(time)
-    taskSetBlacklist.updateExcludedForFailedTask(
+    taskSetExcludlist.updateExcludedForFailedTask(
       "hostA", exec = "1", index = 0, failureReason = "testing")
-    taskSetBlacklist.updateExcludedForFailedTask(
+    taskSetExcludlist.updateExcludedForFailedTask(
       "hostA", exec = "1", index = 1, failureReason = "testing")
 
-    assert(taskSetBlacklist.isExecutorExcludedForTaskSet("1"))
+    assert(taskSetExcludlist.isExecutorExcludedForTaskSet("1"))
     verify(listenerBusMock)
       .post(SparkListenerExecutorExcludedForStage(time, "1", 2, 0, attemptId))
 
-    assert(!taskSetBlacklist.isNodeExcludedForTaskSet("hostA"))
+    assert(!taskSetExcludlist.isNodeExcludedForTaskSet("hostA"))
     verify(listenerBusMock, never()).post(
       SparkListenerNodeExcludedForStage(time, "hostA", 2, 0, attemptId))
 
     time += 1
     clock.setTime(time)
-    taskSetBlacklist.updateExcludedForFailedTask(
+    taskSetExcludlist.updateExcludedForFailedTask(
       "hostB", exec = "2", index = 0, failureReason = "testing")
-    taskSetBlacklist.updateExcludedForFailedTask(
+    taskSetExcludlist.updateExcludedForFailedTask(
       "hostB", exec = "2", index = 1, failureReason = "testing")
-    assert(taskSetBlacklist.isExecutorExcludedForTaskSet("1"))
+    assert(taskSetExcludlist.isExecutorExcludedForTaskSet("1"))
 
-    assert(taskSetBlacklist.isExecutorExcludedForTaskSet("2"))
+    assert(taskSetExcludlist.isExecutorExcludedForTaskSet("2"))
     verify(listenerBusMock)
       .post(SparkListenerExecutorExcludedForStage(time, "2", 2, 0, attemptId))
 
-    assert(!taskSetBlacklist.isNodeExcludedForTaskSet("hostA"))
-    assert(!taskSetBlacklist.isNodeExcludedForTaskSet("hostB"))
+    assert(!taskSetExcludlist.isNodeExcludedForTaskSet("hostA"))
+    assert(!taskSetExcludlist.isNodeExcludedForTaskSet("hostB"))
     verify(listenerBusMock, never())
       .post(isA(classOf[SparkListenerNodeExcludedForStage]))
   }
