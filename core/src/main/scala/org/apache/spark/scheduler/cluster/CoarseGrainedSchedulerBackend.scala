@@ -493,6 +493,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // condition where `getPeer` request from the decommissioned executor comes first
     // before the BlockManagers are marked as decommissioned.
     if (conf.get(STORAGE_DECOMMISSION_ENABLED)) {
+      logInfo(s"Asking BlockManagers on executors (${executorsToDecommission.mkString(", ")}) " +
+        s"to decommissioning.")
       scheduler.sc.env.blockManager.master.decommissionBlockManagers(executorsToDecommission)
     }
 
