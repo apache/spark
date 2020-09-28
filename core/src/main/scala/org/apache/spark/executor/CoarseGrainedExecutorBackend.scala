@@ -211,13 +211,13 @@ private[spark] class CoarseGrainedExecutorBackend(
       decommissionSelf()
 
     case ExecutorSigPWRReceived =>
-      decommissionSelf()
       if (driver.nonEmpty) {
         // Tell driver that we are starting decommissioning so it stops trying to schedule us
         driver.get.askSync[Boolean](ExecutorDecommissioning(executorId))
       } else {
         logError("No driver to message decommissioning.")
       }
+      decommissionSelf()
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
