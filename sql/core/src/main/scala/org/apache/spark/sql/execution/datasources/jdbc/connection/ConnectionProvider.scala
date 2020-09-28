@@ -50,9 +50,9 @@ private[jdbc] object ConnectionProvider extends Logging {
 
   def create(driver: Driver, options: Map[String, String]): Connection = {
     val filteredProviders = providers.filter(_.canHandle(driver, options))
-    logDebug(s"Filtered providers: $filteredProviders")
     require(filteredProviders.size == 1,
-      "JDBC connection initiated but not exactly one connection provider found which can handle it")
+      "JDBC connection initiated but not exactly one connection provider found which can handle " +
+        s"it. Found active providers: ${filteredProviders.mkString(", ")}")
     filteredProviders.head.getConnection(driver, options)
   }
 }
