@@ -27,7 +27,7 @@ DEFAULT_HADOOP = "hadoop3.2"
 DEFAULT_HIVE = "hive2.3"
 SUPPORTED_HADOOP_VERSIONS = ["hadoop2.7", "hadoop3.2", "without-hadoop"]
 SUPPORTED_HIVE_VERSIONS = ["hive2.3"]
-UNSUPPORTED_COMBINATIONS = [
+UNSUPPORTED_COMBINATIONS = [  # type: ignore
 ]
 
 

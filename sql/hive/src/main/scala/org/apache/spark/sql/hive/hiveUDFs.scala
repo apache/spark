@@ -41,6 +41,11 @@ import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
+/**
+ * Here we cannot extends `ImplicitTypeCasts` to compatible with UDF input data type, the reason is:
+ * we use children data type to reflect UDF method first and will get exception if it fails so that
+ * we can never go into `ImplicitTypeCasts`.
+ */
 private[hive] case class HiveSimpleUDF(
     name: String, funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression

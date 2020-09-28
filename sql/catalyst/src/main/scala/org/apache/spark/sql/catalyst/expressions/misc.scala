@@ -113,7 +113,6 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
   since = "1.6.0")
 case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
-  override def foldable: Boolean = true
   override def nullable: Boolean = false
   override def prettyName: String = "current_database"
 }
@@ -131,7 +130,6 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
   since = "3.1.0")
 case class CurrentCatalog() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
-  override def foldable: Boolean = true
   override def nullable: Boolean = false
   override def prettyName: String = "current_catalog"
 }

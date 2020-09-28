@@ -174,7 +174,7 @@ case class CreateViewCommand(
       def verify(child: LogicalPlan) {
         child.collect {
           // Disallow creating permanent views based on temporary views.
-          case UnresolvedRelation(nameParts, _) if catalog.isTempView(nameParts) =>
+          case UnresolvedRelation(nameParts, _, _) if catalog.isTempView(nameParts) =>
             throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
               s"referencing a temporary view ${nameParts.quoted}. " +
               "Please create a temp view instead by CREATE TEMP VIEW")
