@@ -390,7 +390,7 @@ class KubernetesSuite extends SparkFunSuite
           .pods()
           .withName(driverPod.getMetadata.getName)
           .getLog
-          .matches(e),
+          .contains(e),
           s"The application did not complete, did not find str ${e}")
       }
     }
