@@ -505,6 +505,12 @@ class ResolveSessionCatalog(
         partitionSpecsAndLocs,
         ifNotExists)
 
+    case AlterTableAddPartitionStatement(r: ResolvedView, partitionSpecsAndLocs, ifNotExists) =>
+      AlterTableAddPartitionCommand(
+        r.identifier.asTableIdentifier,
+        partitionSpecsAndLocs,
+        ifNotExists)
+
     case AlterTableRenamePartitionStatement(tbl, from, to) =>
       val v1TableName = parseV1Table(tbl, "ALTER TABLE RENAME PARTITION")
       AlterTableRenamePartitionCommand(
@@ -515,6 +521,14 @@ class ResolveSessionCatalog(
     case AlterTableDropPartitionStatement(
         r @ ResolvedTable(_, _, _: V1Table), specs, ifExists, purge, retainData)
         if isSessionCatalog(r.catalog) =>
+      AlterTableDropPartitionCommand(
+        r.identifier.asTableIdentifier,
+        specs,
+        ifExists,
+        purge,
+        retainData)
+
+    case AlterTableDropPartitionStatement(r: ResolvedView, specs, ifExists, purge, retainData) =>
       AlterTableDropPartitionCommand(
         r.identifier.asTableIdentifier,
         specs,
