@@ -221,4 +221,36 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
       checkAnswer(sql("SELECT name, id FROM h2.test.abc"), Row("bob", 4))
     }
   }
+
+  test("dfwriter.jdbc") {
+    withTable("h2.test.abc") {
+      sql("CREATE TABLE h2.test.abc USING _ AS SELECT * FROM h2.test.people")
+      val df1 = Seq(("evan", 3)).toDF("NAME", "ID")
+      val df2 = Seq(("cathy", 4)).toDF("NAME", "ID")
+      val properties = new Properties()
+
+      df1.write
+        .mode("append")
+        .jdbc(url, "h2.test.abc", properties)
+      checkAnswer(sql("SELECT name, id FROM h2.test.abc"),
+        Seq(Row("fred", 1), Row("mary", 2), Row("evan", 3)))
+
+      df2.write
+        .mode("overwrite")
+        .jdbc(url, "h2.test.abc", properties)
+      checkAnswer(sql("SELECT name, id FROM h2.test.abc"), Seq(Row("cathy", 4)))
+
+      val e = intercept[IllegalArgumentException] {
+        properties.put("partitionColumn", "id")
+        properties.put("lowerBound", "0")
+        properties.put("upperBound", "3")
+        properties.put("numPartitions", "0")
+        df1.write
+          .mode("append")
+          .jdbc(url, "h2.test.abc", properties)
+      }.getMessage
+      assert(e.contains("Invalid value `0` for parameter `numPartitions` in table writing " +
+        "via JDBC. The minimum value is 1."))
+    }
+  }
 }
