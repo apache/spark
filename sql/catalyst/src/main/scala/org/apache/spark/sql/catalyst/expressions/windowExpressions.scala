@@ -671,7 +671,7 @@ case class NthValue(input: Expression, offsetExpr: Expression, ignoreNulls: Bool
 
   override def prettyName: String = "nth_value"
   override def sql: String =
-    s"$prettyName(${input.sql}, $offset)${if (ignoreNulls) " ignore nulls"}"
+    s"$prettyName(${input.sql}, ${offsetExpr.sql})${if (ignoreNulls) " ignore nulls" else ""}"
 }
 
 /**
