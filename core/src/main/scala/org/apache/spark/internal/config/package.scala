@@ -786,9 +786,10 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val EXCLUDE_ON_FAILURE_LEGACY_TIMEOUT_CONF =
-    ConfigBuilder("spark.scheduler.executorTaskBlacklistTime")
+    ConfigBuilder("spark.scheduler.executorTaskExcludeOnFailureTime")
       .internal()
       .version("1.0.0")
+      .withAlternative("spark.scheduler.executorTaskBlacklistTime")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
@@ -1463,7 +1464,8 @@ package object config {
   private[spark] val UNSCHEDULABLE_TASKSET_TIMEOUT =
     ConfigBuilder("spark.scheduler.excludeOnFailure.unschedulableTaskSetTimeout")
       .doc("The timeout in seconds to wait to acquire a new executor and schedule a task " +
-        "before aborting a TaskSet which is unschedulable because of being completely blocked.")
+        "before aborting a TaskSet which is unschedulable because all executors are " +
+        "excluded due to failures.")
       .version("2.4.1")
       .withAlternative("spark.scheduler.blacklist.unschedulableTaskSetTimeout")
       .timeConf(TimeUnit.SECONDS)

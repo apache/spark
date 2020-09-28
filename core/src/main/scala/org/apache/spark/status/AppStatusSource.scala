@@ -59,10 +59,11 @@ private[spark] class AppStatusSource extends Source {
 
   val SKIPPED_TASKS = getCounter("tasks", "skippedTasks")
 
-  // this is private but user visible from metrics so left here for now, should use
-  // excludedExecutors instead
+  // this is private but user visible from metrics so just deprecate
+  // @deprecated("use excludedExecutors instead", "3.1.0")
   val BLACKLISTED_EXECUTORS = getCounter("tasks", "blackListedExecutors")
 
+  @deprecated("use unexcludedExecutors instead", "3.1.0")
   val UNBLACKLISTED_EXECUTORS = getCounter("tasks", "unblackListedExecutors")
 
   val EXCLUDED_EXECUTORS = getCounter("tasks", "excludedExecutors")

@@ -158,6 +158,8 @@ private[spark] class BasicEventFilter(
   private val _acceptFn: PartialFunction[SparkListenerEvent, Boolean] = {
     case e: SparkListenerExecutorAdded => liveExecutors.contains(e.executorId)
     case e: SparkListenerExecutorRemoved => liveExecutors.contains(e.executorId)
+    case e: SparkListenerExecutorBlacklisted => liveExecutors.contains(e.executorId)
+    case e: SparkListenerExecutorUnblacklisted => liveExecutors.contains(e.executorId)
     case e: SparkListenerExecutorExcluded => liveExecutors.contains(e.executorId)
     case e: SparkListenerExecutorUnexcluded => liveExecutors.contains(e.executorId)
     case e: SparkListenerStageExecutorMetrics => liveExecutors.contains(e.execId)
