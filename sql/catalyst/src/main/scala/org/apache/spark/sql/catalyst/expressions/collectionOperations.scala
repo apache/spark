@@ -3502,6 +3502,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
   with ComplexTypeMergingExpression {
 
   private lazy val internalDataType: DataType = {
+    dataTypeCheck
     ArrayType(elementType,
       left.dataType.asInstanceOf[ArrayType].containsNull &&
         right.dataType.asInstanceOf[ArrayType].containsNull)
@@ -3745,7 +3746,12 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
 case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
 
-  override def dataType: DataType = left.dataType
+  private lazy val internalDataType: DataType = {
+    dataTypeCheck
+    left.dataType
+  }
+
+  override def dataType: DataType = internalDataType
 
   @transient lazy val evalExcept: (ArrayData, ArrayData) => ArrayData = {
     if (TypeUtils.typeWithProperEquals(elementType)) {
