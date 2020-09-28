@@ -77,7 +77,7 @@ Using Zipped Virtual Environment
 --------------------------------
 
 The idea of zipped environments is to zip your whole `virtual environment <https://docs.python.org/3/tutorial/venv.html>`_, 
-ship it to the cluster, unzip it remotly and target the Python interpreter from inside this zipped environment. Note that this
+ship it to the cluster, unzip it remotely and target the Python interpreter from inside this zipped environment. Note that this
 is currently supported *only for YARN*.
 
 Zip Virtual Environment
