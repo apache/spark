@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 import java.sql.{Connection, Driver}
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Unstable}
 
 /**
  * ::DeveloperApi::
@@ -31,6 +31,7 @@ import org.apache.spark.annotation.DeveloperApi
  * internal state is not advised. If any state added then it must be synchronized properly.
  */
 @DeveloperApi
+@Unstable
 trait JdbcConnectionProvider {
   /**
    * Checks if this connection provider instance can handle the connection initiated by the driver.
