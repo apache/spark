@@ -22,6 +22,7 @@ import java.util.Properties
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.jdbc.JdbcConnectionProvider
 
 private[jdbc] class BasicConnectionProvider extends JdbcConnectionProvider with Logging {
   /**

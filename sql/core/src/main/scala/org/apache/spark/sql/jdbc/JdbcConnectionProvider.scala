@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.jdbc.connection
+package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Driver}
 
@@ -33,13 +33,14 @@ import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 @DeveloperApi
 @Unstable
 @Since("3.1.0")
-trait JdbcConnectionProvider {
+abstract class JdbcConnectionProvider {
   /**
    * Checks if this connection provider instance can handle the connection initiated by the driver.
    * There must be exactly one active connection provider which can handle the connection for a
    * specific driver. If this requirement doesn't met then `IllegalArgumentException`
    * will be thrown by the provider framework.
-   * @param driver Java driver which initiates the connection
+   *
+   * @param driver  Java driver which initiates the connection
    * @param options Driver options which initiates the connection
    * @return True if the connection provider can handle the driver with the given options.
    */
@@ -47,7 +48,8 @@ trait JdbcConnectionProvider {
 
   /**
    * Opens connection toward the database.
-   * @param driver Java driver which initiates the connection
+   *
+   * @param driver  Java driver which initiates the connection
    * @param options Driver options which initiates the connection
    * @return a `Connection` object that represents a connection to the URL
    */

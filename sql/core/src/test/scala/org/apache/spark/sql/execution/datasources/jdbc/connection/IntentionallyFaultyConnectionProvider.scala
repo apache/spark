@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 import java.sql.{Connection, Driver}
 
+import org.apache.spark.sql.jdbc.JdbcConnectionProvider
+
 private class IntentionallyFaultyConnectionProvider extends JdbcConnectionProvider {
   IntentionallyFaultyConnectionProvider.constructed = true
   throw new IllegalArgumentException("Intentional Exception")

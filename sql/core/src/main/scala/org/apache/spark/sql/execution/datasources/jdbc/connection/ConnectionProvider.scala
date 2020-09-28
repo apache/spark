@@ -23,6 +23,7 @@ import java.util.ServiceLoader
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.jdbc.JdbcConnectionProvider
 import org.apache.spark.util.Utils
 
 private[jdbc] object ConnectionProvider extends Logging {
