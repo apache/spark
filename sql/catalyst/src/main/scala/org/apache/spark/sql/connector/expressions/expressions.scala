@@ -115,11 +115,10 @@ private[sql] final case class BucketTransform(
 }
 
 private[sql] object BucketTransform {
-  def unapply(transform: Transform): Option[(Int, NamedReference)] = transform match {
-    case NamedTransform("bucket", Seq(
-        Lit(value: Int, IntegerType),
-        Ref(seq: Seq[String]))) =>
-      Some((value, FieldReference(seq)))
+  def unapply(transform: Transform): Option[(Int, Seq[NamedReference])] = transform match {
+    case NamedTransform("bucket", Lit(value: Int, IntegerType) :: refs) =>
+      val fieldReferences = refs.collect { case Ref(seq: Seq[String]) => FieldReference(seq) }
+      Some((value, fieldReferences))
     case _ =>
       None
   }
@@ -162,8 +161,8 @@ private object Ref {
  * Convenience extractor for any Transform.
  */
 private[sql] object NamedTransform {
-  def unapply(transform: Transform): Some[(String, Seq[Expression])] = {
-    Some((transform.name, transform.arguments))
+  def unapply(transform: Transform): Some[(String, List[Expression])] = {
+    Some((transform.name, transform.arguments.toList))
   }
 }
 
@@ -176,7 +175,7 @@ private[sql] final case class IdentityTransform(
 
 private[sql] object IdentityTransform {
   def unapply(transform: Transform): Option[FieldReference] = transform match {
-    case NamedTransform("identity", Seq(Ref(parts))) =>
+    case NamedTransform("identity", List(Ref(parts))) =>
       Some(FieldReference(parts))
     case _ =>
       None
@@ -191,7 +190,7 @@ private[sql] final case class YearsTransform(
 
 private[sql] object YearsTransform {
   def unapply(transform: Transform): Option[FieldReference] = transform match {
-    case NamedTransform("years", Seq(Ref(parts))) =>
+    case NamedTransform("years", List(Ref(parts))) =>
       Some(FieldReference(parts))
     case _ =>
       None
@@ -206,7 +205,7 @@ private[sql] final case class MonthsTransform(
 
 private[sql] object MonthsTransform {
   def unapply(transform: Transform): Option[FieldReference] = transform match {
-    case NamedTransform("months", Seq(Ref(parts))) =>
+    case NamedTransform("months", List(Ref(parts))) =>
       Some(FieldReference(parts))
     case _ =>
       None
@@ -221,7 +220,7 @@ private[sql] final case class DaysTransform(
 
 private[sql] object DaysTransform {
   def unapply(transform: Transform): Option[FieldReference] = transform match {
-    case NamedTransform("days", Seq(Ref(parts))) =>
+    case NamedTransform("days", List(Ref(parts))) =>
       Some(FieldReference(parts))
     case _ =>
       None
@@ -236,7 +235,7 @@ private[sql] final case class HoursTransform(
 
 private[sql] object HoursTransform {
   def unapply(transform: Transform): Option[FieldReference] = transform match {
-    case NamedTransform("hours", Seq(Ref(parts))) =>
+    case NamedTransform("hours", List(Ref(parts))) =>
       Some(FieldReference(parts))
     case _ =>
       None

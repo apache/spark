@@ -1662,6 +1662,25 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("tableCreation: multiple bucket columns") {
+    withTable("t") {
+      sql(
+        """
+          |CREATE TABLE testcat.t (id int, `a.b` string, c string) USING foo
+          |CLUSTERED BY (`a.b`, c) INTO 4 BUCKETS
+          |OPTIONS ('allow-unsupported-transforms'=true)
+        """.stripMargin)
+
+      val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[InMemoryTableCatalog]
+      val table = testCatalog.loadTable(Identifier.of(Array.empty, "t"))
+      val partitioning = table.partitioning()
+      assert(partitioning.length == 1 && partitioning.head.name() == "bucket")
+      val references = partitioning.head.references()
+      assert(references.length == 2)
+      assert(references.flatMap(_.fieldNames()) === Array("a.b", "c"))
+    }
+  }
+
   test("tableCreation: column repeated in partition columns") {
     val errorMsg = "Found duplicate column(s) in the partitioning"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>

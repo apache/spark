@@ -130,23 +130,30 @@ class TransformExtractorSuite extends SparkFunSuite {
   }
 
   test("Bucket extractor") {
-    val col = ref("a", "b")
-    val bucketTransform = new Transform {
-      override def name: String = "bucket"
-      override def references: Array[NamedReference] = Array(col)
-      override def arguments: Array[Expression] = Array(lit(16), col)
-      override def describe: String = s"bucket(16, ${col.describe})"
+    def checkBucketTransform(cols: Seq[NamedReference], expectedBucketCols: Seq[String]): Unit = {
+      new Transform {
+        override def name: String = "bucket"
+        override def references: Array[NamedReference] = cols.toArray
+        override def arguments: Array[Expression] = Array(lit(16)) ++ cols
+        override def describe: String = s"bucket(${arguments.map(_.describe).mkString(", ")})"
+      } match {
+        case BucketTransform(numBuckets, fieldReferences) =>
+          val bucketColumns = fieldReferences.collect { case FieldReference(Seq(col)) => col }
+          assert(numBuckets === 16)
+          assert(bucketColumns === expectedBucketCols)
+        case _ =>
+          fail("Did not match BucketTransform extractor")
+      }
     }
 
-    bucketTransform match {
-      case BucketTransform(numBuckets, FieldReference(seq)) =>
-        assert(numBuckets === 16)
-        assert(seq === Seq("a", "b"))
-      case _ =>
-        fail("Did not match BucketTransform extractor")
-    }
+    // CLUSTERED BY (a, b)
+    checkBucketTransform(Seq(ref("a"), ref("b")), Seq("a", "b"))
+    // CLUSTERED BY (a.b) multipartIdentifierList is not supported
+    checkBucketTransform(Seq(ref("a", "b")), Nil)
+    // CLUSTERED BY (`a.b`) quoteIdentifierList should work
+    checkBucketTransform(Seq(ref("`a.b`")), Seq("`a.b`"))
 
-    transform("unknown", ref("a", "b")) match {
+    transform("unknown", ref("c")) match {
       case BucketTransform(_, _) =>
         fail("Matched unknown transform")
       case _ =>

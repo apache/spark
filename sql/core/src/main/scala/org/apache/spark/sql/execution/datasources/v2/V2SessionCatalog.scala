@@ -287,8 +287,10 @@ private[sql] object V2SessionCatalog {
       case IdentityTransform(FieldReference(Seq(col))) =>
         identityCols += col
 
-      case BucketTransform(numBuckets, FieldReference(Seq(col))) =>
-        bucketSpec = Some(BucketSpec(numBuckets, col :: Nil, Nil))
+      case BucketTransform(numBuckets, fieldReferences) =>
+        // CLUSTERED BY multipartIdentifierList is not supported
+        val bucketColumns = fieldReferences.collect { case FieldReference(Seq(col)) => col }
+        bucketSpec = Some(BucketSpec(numBuckets, bucketColumns, Nil))
 
       case transform =>
         throw new UnsupportedOperationException(
