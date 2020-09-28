@@ -132,8 +132,8 @@ private[spark] abstract class YarnSchedulerBackend(
 
   private[cluster] def prepareRequestExecutors(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int]): RequestExecutors = {
-    val blockedNodes: Set[String] = scheduler.blockedNodes()
-    // For locality preferences, ignore preferences for nodes that are blacklisted
+    val blockedNodes: Set[String] = scheduler.excludedNodes()
+    // For locality preferences, ignore preferences for nodes that are excluded
     val filteredRPHostToLocalTaskCount = rpHostToLocalTaskCount.map { case (rpid, v) =>
       (rpid, v.filter { case (host, count) => !blockedNodes.contains(host) })
     }

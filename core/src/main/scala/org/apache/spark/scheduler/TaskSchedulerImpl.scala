@@ -1061,10 +1061,10 @@ private[spark] class TaskSchedulerImpl(
   }
 
   /**
-   * Get a snapshot of the currently blocked nodes for the entire application. This is
+   * Get a snapshot of the currently excluded nodes for the entire application. This is
    * thread-safe -- it can be called without a lock on the TaskScheduler.
    */
-  def blockedNodes(): Set[String] = {
+  def excludedNodes(): Set[String] = {
     healthTrackerOpt.map(_.excludedNodeList()).getOrElse(Set.empty)
   }
 

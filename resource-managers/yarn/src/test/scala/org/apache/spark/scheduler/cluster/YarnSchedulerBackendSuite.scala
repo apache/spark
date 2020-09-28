@@ -46,7 +46,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
   private class TestTaskSchedulerImpl(sc: SparkContext) extends TaskSchedulerImpl(sc) {
     val blacklistedNodes = new AtomicReference[Set[String]]()
     def setNodeBlacklist(nodeBlacklist: Set[String]): Unit = blacklistedNodes.set(nodeBlacklist)
-    override def blockedNodes(): Set[String] = blacklistedNodes.get()
+    override def excludedNodes(): Set[String] = blacklistedNodes.get()
   }
 
   private class TestYarnSchedulerBackend(scheduler: TaskSchedulerImpl, sc: SparkContext)

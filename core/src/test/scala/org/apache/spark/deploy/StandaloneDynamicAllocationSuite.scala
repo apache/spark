@@ -509,7 +509,7 @@ class StandaloneDynamicAllocationSuite
       Map.empty, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
     val taskScheduler = mock(classOf[TaskSchedulerImpl])
-    when(taskScheduler.blockedNodes()).thenReturn(Set("blacklisted-host"))
+    when(taskScheduler.excludedNodes()).thenReturn(Set("blacklisted-host"))
     when(taskScheduler.resourceOffers(any(), any[Boolean])).thenReturn(Nil)
     when(taskScheduler.sc).thenReturn(sc)
 

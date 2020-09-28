@@ -345,7 +345,9 @@ private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extend
       Some(peakExecutorMetrics).filter(_.isSet),
       attributes,
       resources,
-      resourceProfileId)
+      resourceProfileId,
+      isExcluded,
+      excludedInStages)
     new ExecutorSummaryWrapper(info)
   }
 }

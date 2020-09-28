@@ -238,7 +238,7 @@ private[yarn] class YarnAllocator(
 
   def getNumExecutorsFailed: Int = failureTracker.numFailedExecutors
 
-  def isAllNodeBlocklisted: Boolean = allocatorNodeHealthTracker.isAllNodeExcluded
+  def isAllNodeExcluded: Boolean = allocatorNodeHealthTracker.isAllNodeExcluded
 
   /**
    * A sequence of pending container requests that have not yet been fulfilled.

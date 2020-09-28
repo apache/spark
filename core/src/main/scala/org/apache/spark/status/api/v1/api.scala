@@ -82,10 +82,11 @@ class ExecutorStageSummary private[spark](
     val shuffleWriteRecords : Long,
     val memoryBytesSpilled : Long,
     val diskBytesSpilled : Long,
-    val isBlacklistedForStage: Boolean,
+    val isBlacklistedForStage: Boolean, // deprecated - not sure how we remove unless go to v2 api?
     @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
     @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
-    val peakMemoryMetrics: Option[ExecutorMetrics])
+    val peakMemoryMetrics: Option[ExecutorMetrics],
+    val isExcludedForStage: Boolean)
 
 class ExecutorSummary private[spark](
     val id: String,
@@ -105,20 +106,22 @@ class ExecutorSummary private[spark](
     val totalInputBytes: Long,
     val totalShuffleRead: Long,
     val totalShuffleWrite: Long,
-    val isBlacklisted: Boolean,
+    val isBlacklisted: Boolean, // deprecated - not sure how we remove unless go to v2 api?
     val maxMemory: Long,
     val addTime: Date,
     val removeTime: Option[Date],
     val removeReason: Option[String],
     val executorLogs: Map[String, String],
     val memoryMetrics: Option[MemoryMetrics],
-    val blacklistedInStages: Set[Int],
+    val blacklistedInStages: Set[Int],  // deprecated - not sure how we remove unless go to v2 api?
     @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
     @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
     val peakMemoryMetrics: Option[ExecutorMetrics],
     val attributes: Map[String, String],
     val resources: Map[String, ResourceInformation],
-    val resourceProfileId: Int)
+    val resourceProfileId: Int,
+    val isExcluded: Boolean,
+    val excludedInStages: Set[Int])
 
 class MemoryMetrics private[spark](
     val usedOnHeapStorageMemory: Long,
