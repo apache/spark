@@ -70,7 +70,7 @@ packages and upload them. Using :meth:`pyspark.SparkContext.addPyFile` allows to
 even after having started your job.
 
 Note that it doesn't allow to add packages built as `Wheels <https://www.python.org/dev/peps/pep-0427/>`_ and therefore doesn't
-allowing to include dependencies with native code.
+allow to include dependencies with native code.
 
 
 Using Zipped Virtual Environment
