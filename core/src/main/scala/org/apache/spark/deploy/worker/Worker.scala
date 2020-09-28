@@ -677,7 +677,8 @@ private[deploy] class Worker(
 
     case WorkerSigPWRReceived =>
       decommissionSelf()
-      // Tell master we starts decommissioning so it stops trying to launch executor/driver on us
+      // Tell the Master that we are starting decommissioning
+      // so it stops trying to launch executor/driver on us
       sendToMaster(WorkerDecommissioning(workerId, self))
   }
 

@@ -213,7 +213,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     case ExecutorSigPWRReceived =>
       decommissionSelf()
       if (driver.nonEmpty) {
-        // Tell driver we starts decommissioning so it stops trying to schedule us
+        // Tell driver that we are starting decommissioning so it stops trying to schedule us
         driver.get.askSync[Boolean](ExecutorDecommissioning(executorId))
       } else {
         logError("No driver to message decommissioning.")
