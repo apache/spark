@@ -560,7 +560,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
         assert(table.rdd.partitions.length == 12)
       }
 
-      withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "8") {
+      withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "16") {
         val partitions = (1 to 12).map(i => s"file$i" -> 4 * 1024 * 1024)
         val table = createTable(files = partitions)
         assert(table.rdd.partitions.length == 24)
