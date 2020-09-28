@@ -1668,7 +1668,6 @@ class DataSourceV2SQLSuite
         """
           |CREATE TABLE testcat.t (id int, `a.b` string, c string) USING foo
           |CLUSTERED BY (`a.b`, c) INTO 4 BUCKETS
-          |OPTIONS ('allow-unsupported-transforms'=true)
         """.stripMargin)
 
       val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[InMemoryTableCatalog]

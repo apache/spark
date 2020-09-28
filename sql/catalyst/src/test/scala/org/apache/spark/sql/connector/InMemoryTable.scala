@@ -29,7 +29,7 @@ import org.scalatest.Assertions._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, HoursTransform, IdentityTransform, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.sources.{And, EqualTo, Filter, IsNotNull}
@@ -128,7 +128,8 @@ class InMemoryTable(
             ChronoUnit.HOURS.between(Instant.EPOCH, DateTimeUtils.microsToInstant(micros))
         }
       case BucketTransform(numBuckets, ref) =>
-        (extractor(ref.fieldNames, schema, row).hashCode() & Integer.MAX_VALUE) % numBuckets
+        val cols = ref.collect { case FieldReference(Seq(col)) => col }.toArray
+        (extractor(cols, schema, row).hashCode() & Integer.MAX_VALUE) % numBuckets
     }
   }
 
