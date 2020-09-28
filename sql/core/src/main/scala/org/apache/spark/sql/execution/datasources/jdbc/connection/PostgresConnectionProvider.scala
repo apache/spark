@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 import java.sql.Driver
 import java.util.Properties
 
-import org.apache.spark.security.SecurityConfigurationLock
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 private[jdbc] class PostgresConnectionProvider extends SecureConnectionProvider {
@@ -32,9 +31,7 @@ private[jdbc] class PostgresConnectionProvider extends SecureConnectionProvider 
     properties.getProperty("jaasApplicationName", "pgjdbc")
   }
 
-  override def setAuthenticationConfigIfNeeded(
-      driver: Driver,
-      options: JDBCOptions): Unit = SecurityConfigurationLock.synchronized {
+  override def setAuthenticationConfigIfNeeded(driver: Driver, options: JDBCOptions): Unit = {
     val (parent, configEntry) = getConfigWithAppEntry(driver, options)
     if (configEntry == null || configEntry.isEmpty) {
       setAuthenticationConfig(parent, driver, options)

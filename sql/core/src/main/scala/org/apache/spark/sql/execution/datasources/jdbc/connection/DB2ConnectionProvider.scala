@@ -23,7 +23,6 @@ import java.util.Properties
 
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.security.SecurityConfigurationLock
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 private[sql] class DB2ConnectionProvider extends SecureConnectionProvider {
@@ -52,9 +51,7 @@ private[sql] class DB2ConnectionProvider extends SecureConnectionProvider {
     result
   }
 
-  override def setAuthenticationConfigIfNeeded(
-      driver: Driver,
-      options: JDBCOptions): Unit = SecurityConfigurationLock.synchronized {
+  override def setAuthenticationConfigIfNeeded(driver: Driver, options: JDBCOptions): Unit = {
     val (parent, configEntry) = getConfigWithAppEntry(driver, options)
     if (configEntry == null || configEntry.isEmpty) {
       setAuthenticationConfig(parent, driver, options)

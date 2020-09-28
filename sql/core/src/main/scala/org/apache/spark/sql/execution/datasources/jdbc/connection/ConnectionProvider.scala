@@ -23,6 +23,7 @@ import java.util.ServiceLoader
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.security.SecurityConfigurationLock
 import org.apache.spark.sql.jdbc.JdbcConnectionProvider
 import org.apache.spark.util.Utils
 
@@ -54,6 +55,8 @@ private[jdbc] object ConnectionProvider extends Logging {
     require(filteredProviders.size == 1,
       "JDBC connection initiated but not exactly one connection provider found which can handle " +
         s"it. Found active providers: ${filteredProviders.mkString(", ")}")
-    filteredProviders.head.getConnection(driver, options)
+    SecurityConfigurationLock.synchronized {
+      filteredProviders.head.getConnection(driver, options)
+    }
   }
 }

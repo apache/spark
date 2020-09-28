@@ -23,7 +23,6 @@ import java.util.Properties
 
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.security.SecurityConfigurationLock
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
@@ -79,9 +78,7 @@ private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
     result
   }
 
-  override def setAuthenticationConfigIfNeeded(
-      driver: Driver,
-      options: JDBCOptions): Unit = SecurityConfigurationLock.synchronized {
+  override def setAuthenticationConfigIfNeeded(driver: Driver, options: JDBCOptions): Unit = {
     val (parent, configEntry) = getConfigWithAppEntry(driver, options)
     /**
      * Couple of things to mention here (v8.2.2 client):

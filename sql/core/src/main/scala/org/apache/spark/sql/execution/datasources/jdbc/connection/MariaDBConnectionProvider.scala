@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 import java.sql.Driver
 
-import org.apache.spark.security.SecurityConfigurationLock
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 private[jdbc] class MariaDBConnectionProvider extends SecureConnectionProvider {
@@ -28,9 +27,7 @@ private[jdbc] class MariaDBConnectionProvider extends SecureConnectionProvider {
   override def appEntry(driver: Driver, options: JDBCOptions): String =
     "Krb5ConnectorContext"
 
-  override def setAuthenticationConfigIfNeeded(
-      driver: Driver,
-      options: JDBCOptions): Unit = SecurityConfigurationLock.synchronized {
+  override def setAuthenticationConfigIfNeeded(driver: Driver, options: JDBCOptions): Unit = {
     val (parent, configEntry) = getConfigWithAppEntry(driver, options)
     /**
      * Couple of things to mention here (v2.5.4 client):

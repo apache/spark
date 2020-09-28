@@ -17,12 +17,8 @@
 
 package org.apache.spark.security
 
-import org.apache.spark.annotation.DeveloperApi
-
 /**
- * ::DeveloperApi::
  * There are cases when global JVM security configuration must be modified.
  * In order to avoid race the modification must be synchronized with this.
  */
-@DeveloperApi
 object SecurityConfigurationLock

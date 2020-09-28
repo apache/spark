@@ -25,8 +25,7 @@ import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
  * ::DeveloperApi::
  * Connection provider which opens connection toward various databases (database specific instance
  * needed). If any authentication required then it's the provider's responsibility to set all
- * the parameters. If global JVM security configuration is changed then
- * `SecurityConfigurationLock` must be used as lock to avoid race.
+ * the parameters.
  * Important to mention connection providers within a JVM used from multiple threads so adding
  * internal state is not advised. If any state added then it must be synchronized properly.
  */
@@ -47,7 +46,8 @@ abstract class JdbcConnectionProvider {
   def canHandle(driver: Driver, options: Map[String, String]): Boolean
 
   /**
-   * Opens connection toward the database.
+   * Opens connection toward the database. Since global JVM security configuration change may needed
+   * this API is called synchronized by `SecurityConfigurationLock` to avoid race.
    *
    * @param driver  Java driver which initiates the connection
    * @param options Driver options which initiates the connection
