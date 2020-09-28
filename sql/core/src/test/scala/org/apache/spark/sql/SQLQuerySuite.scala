@@ -3726,7 +3726,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       testInsert(s"INSERT INTO $table (c1, c3, c2, c4) values(1,2,3,4)", Row(1, 3, "2", "4"))
       testInsert(s"INSERT INTO $table (c1, c2, c3, c4) partition(c3='3',c4='4')" +
         s" values(1,2)", Row(1, 2, "3", "4"))
+      testInsert(s"INSERT INTO $table (c1, c2, c4) partition(c3='3',c4='4')" +
+        s" values(1,2)", Row(1, 2, "3", "4"))
+      testInsert(s"INSERT INTO $table (c4, c1, c2) partition(c3='3',c4='4')" +
+        s" values(1,2)", Row(1, 2, "3", "4"))
+      testInsert(s"INSERT INTO $table (c1, c2) partition(c3='3',c4='4')" +
+        s" values(1,2)", Row(1, 2, "3", "4"))
 
+      val e1 = intercept[AnalysisException] {
+        sql(s"INSERT INTO $table (c1) partition(c3='3',c4='4') values(1)")
+      }
+      assert(e1.getMessage.contains("target table has 4 column(s) but the specified part has" +
+        " only 1 column(s), and 2 partition column(s)"))
     }
   }
 }
