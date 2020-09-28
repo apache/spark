@@ -80,6 +80,13 @@ object Canonicalize {
       orderCommutative(a, { case And(l, r) if l.deterministic && r.deterministic => Seq(l, r)})
         .reduce(And)
 
+    case o: BitwiseOr =>
+      orderCommutative(o, { case BitwiseOr(l, r) => Seq(l, r) }).reduce(BitwiseOr)
+    case a: BitwiseAnd =>
+      orderCommutative(a, { case BitwiseAnd(l, r) => Seq(l, r) }).reduce(BitwiseAnd)
+    case x: BitwiseXor =>
+      orderCommutative(x, { case BitwiseXor(l, r) => Seq(l, r) }).reduce(BitwiseXor)
+
     case EqualTo(l, r) if l.hashCode() > r.hashCode() => EqualTo(r, l)
     case EqualNullSafe(l, r) if l.hashCode() > r.hashCode() => EqualNullSafe(r, l)
 
