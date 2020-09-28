@@ -529,29 +529,29 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
   }
 
   test("SPARK-32019: Add spark.sql.files.minPartitionNum config") {
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "1") {
+      val table =
+        createTable(files = Seq(
+          "file1" -> 1,
+          "file2" -> 1,
+          "file3" -> 1
+        ))
+      assert(table.rdd.partitions.length == 1)
+    }
+
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "10") {
+      val table =
+        createTable(files = Seq(
+          "file1" -> 1,
+          "file2" -> 1,
+          "file3" -> 1
+        ))
+      assert(table.rdd.partitions.length == 3)
+    }
+
     withSQLConf(
       SQLConf.FILES_MAX_PARTITION_BYTES.key -> "2MB",
       SQLConf.FILES_OPEN_COST_IN_BYTES.key -> String.valueOf(4 * 1024 * 1024)) {
-
-      withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "1") {
-        val table =
-          createTable(files = Seq(
-            "file1" -> 1,
-            "file2" -> 1,
-            "file3" -> 1
-          ))
-        assert(table.rdd.partitions.length == 3)
-      }
-
-      withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "10") {
-        val table =
-          createTable(files = Seq(
-            "file1" -> 1,
-            "file2" -> 1,
-            "file3" -> 1
-          ))
-        assert(table.rdd.partitions.length == 3)
-      }
 
       withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "8") {
         val partitions = (1 to 12).map(i => s"file$i" -> 2 * 1024 * 1024)
