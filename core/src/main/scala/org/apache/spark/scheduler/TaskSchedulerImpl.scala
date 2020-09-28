@@ -518,7 +518,7 @@ private[spark] class TaskSchedulerImpl(
     // Before making any offers, remove any nodes from the blocklist whose blocklist has expired. Do
     // this here to avoid a separate thread and added synchronization overhead, and also because
     // updating the blocklist is only relevant when task offers are being made.
-    healthTrackerOpt.foreach(_.applyBlocklistTimeout())
+    healthTrackerOpt.foreach(_.applyExcludeOnFailureTimeout())
 
     val filteredOffers = healthTrackerOpt.map { healthTracker =>
       offers.filter { offer =>

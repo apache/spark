@@ -118,7 +118,7 @@ case class SparkListenerExecutorRemoved(time: Long, executorId: String, reason: 
   extends SparkListenerEvent
 
 @DeveloperApi
-@deprecated("use SparkListenerExecutorExcluded instead")
+@deprecated("use SparkListenerExecutorExcluded instead", "3.1.0")
 case class SparkListenerExecutorBlacklisted(
     time: Long,
     executorId: String,
@@ -132,7 +132,7 @@ case class SparkListenerExecutorExcluded(
     taskFailures: Int)
   extends SparkListenerEvent
 
-@deprecated("use SparkListenerExecutorExcludedForStage instead")
+@deprecated("use SparkListenerExecutorExcludedForStage instead", "3.1.0")
 @DeveloperApi
 case class SparkListenerExecutorBlacklistedForStage(
     time: Long,
@@ -152,7 +152,7 @@ case class SparkListenerExecutorExcludedForStage(
     stageAttemptId: Int)
   extends SparkListenerEvent
 
-@deprecated("use SparkListenerNodeExcludedForStage instead")
+@deprecated("use SparkListenerNodeExcludedForStage instead", "3.1.0")
 @DeveloperApi
 case class SparkListenerNodeBlacklistedForStage(
     time: Long,
@@ -172,7 +172,7 @@ case class SparkListenerNodeExcludedForStage(
     stageAttemptId: Int)
   extends SparkListenerEvent
 
-@deprecated("use SparkListenerExecutorUnexcluded instead")
+@deprecated("use SparkListenerExecutorUnexcluded instead", "3.1.0")
 @DeveloperApi
 case class SparkListenerExecutorUnblacklisted(time: Long, executorId: String)
   extends SparkListenerEvent
@@ -182,7 +182,7 @@ case class SparkListenerExecutorUnblacklisted(time: Long, executorId: String)
 case class SparkListenerExecutorUnexcluded(time: Long, executorId: String)
   extends SparkListenerEvent
 
-@deprecated("use SparkListenerNodeExcluded instead")
+@deprecated("use SparkListenerNodeExcluded instead", "3.1.0")
 @DeveloperApi
 case class SparkListenerNodeBlacklisted(
     time: Long,
@@ -198,7 +198,7 @@ case class SparkListenerNodeExcluded(
     executorFailures: Int)
   extends SparkListenerEvent
 
-@deprecated("use SparkListenerNodeUnexcluded instead")
+@deprecated("use SparkListenerNodeUnexcluded instead", "3.1.0")
 @DeveloperApi
 case class SparkListenerNodeUnblacklisted(time: Long, hostId: String)
   extends SparkListenerEvent
@@ -371,7 +371,7 @@ private[spark] trait SparkListenerInterface {
   /**
    * Called when the driver excludes an executor for a Spark application.
    */
-  @deprecated("use onExecutorExcluded instead")
+  @deprecated("use onExecutorExcluded instead", "3.1.0")
   def onExecutorBlacklisted(executorBlacklisted: SparkListenerExecutorBlacklisted): Unit
 
   /**
@@ -382,7 +382,7 @@ private[spark] trait SparkListenerInterface {
   /**
    * Called when the driver excludes an executor for a stage.
    */
-  @deprecated("use onExecutorExcludedForStage instead")
+  @deprecated("use onExecutorExcludedForStage instead", "3.1.0")
   def onExecutorBlacklistedForStage(
       executorBlacklistedForStage: SparkListenerExecutorBlacklistedForStage): Unit
 
@@ -395,7 +395,7 @@ private[spark] trait SparkListenerInterface {
   /**
    * Called when the driver excludes a node for a stage.
    */
-  @deprecated("use onNodeExcludedForStage instead")
+  @deprecated("use onNodeExcludedForStage instead", "3.1.0")
   def onNodeBlacklistedForStage(nodeBlacklistedForStage: SparkListenerNodeBlacklistedForStage): Unit
 
   /**
@@ -406,7 +406,7 @@ private[spark] trait SparkListenerInterface {
   /**
    * Called when the driver re-enables a previously excluded executor.
    */
-  @deprecated("use onExecutorUnexcluded instead")
+  @deprecated("use onExecutorUnexcluded instead", "3.1.0")
   def onExecutorUnblacklisted(executorUnblacklisted: SparkListenerExecutorUnblacklisted): Unit
 
   /**
@@ -417,7 +417,7 @@ private[spark] trait SparkListenerInterface {
   /**
    * Called when the driver excludes a node for a Spark application.
    */
-  @deprecated("use onNodeExcluded instead")
+  @deprecated("use onNodeExcluded instead", "3.1.0")
   def onNodeBlacklisted(nodeBlacklisted: SparkListenerNodeBlacklisted): Unit
 
   /**
@@ -428,7 +428,7 @@ private[spark] trait SparkListenerInterface {
   /**
    * Called when the driver re-enables a previously excluded node.
    */
-  @deprecated("use onNodeUnexcluded instead")
+  @deprecated("use onNodeUnexcluded instead", "3.1.0")
   def onNodeUnblacklisted(nodeUnblacklisted: SparkListenerNodeUnblacklisted): Unit
 
   /**
