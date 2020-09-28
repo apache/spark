@@ -131,7 +131,7 @@ Using PEX
 ---------
 
 `PEX <https://github.com/pantsbuild/pex>`_ is a library for generating ``.pex`` (Python EXecutable) files.
-A PEX file is a self contained executable Python environment. It can be seen as the Python equivalent of Java uber-JARs (a.k.a. fat JARs).
+A PEX file is a self-contained executable Python environment. It can be seen as the Python equivalent of Java uber-JARs (a.k.a. fat JARs).
 
 You need to build the PEX file somewhere with all your requirements and then upload it to each Spark executor.
 
