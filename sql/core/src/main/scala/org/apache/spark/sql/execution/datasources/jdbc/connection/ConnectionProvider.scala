@@ -45,7 +45,8 @@ private[jdbc] object ConnectionProvider extends Logging {
           logError(s"Failed to load built in provider.", t)
       }
     }
-    providers
+    // Seems duplicate but it's needed for Scala 2.13
+    providers.toSeq
   }
 
   def create(driver: Driver, options: Map[String, String]): Connection = {
