@@ -100,7 +100,7 @@ Example with `conda-pack`:
 Upload to Spark Executors
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The unzip will be done by Spark when using target ``--archives`` option in spark-submit
+Unzipping will be done by Spark when using target ``--archives`` option in spark-submit
 or setting ``spark.yarn.dist.archives`` configuration.
 
 Example with ``spark-submit``:
