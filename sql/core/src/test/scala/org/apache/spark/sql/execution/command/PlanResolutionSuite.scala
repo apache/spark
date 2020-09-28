@@ -1171,7 +1171,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case Project(_, AsDataSourceV2Relation(r)) =>
           assert(r.catalog.exists(_ == catlogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _) =>
+        case InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _) =>
           assert(r.catalog.exists(_ == catlogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
         case DescribeRelation(r: ResolvedTable, _, _) =>

@@ -46,7 +46,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 
 /**
  * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
@@ -848,7 +848,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case u @ UnresolvedRelation(ident, _) =>
         lookupTempView(ident).getOrElse(u)
-      case i @ InsertIntoStatement(UnresolvedRelation(ident, _), _, _, _, _) =>
+      case i @ InsertIntoStatement(UnresolvedRelation(ident, _), _, _, _, _, _) =>
         lookupTempView(ident)
           .map(view => i.copy(table = view))
           .getOrElse(i)
@@ -911,7 +911,7 @@ class Analyzer(
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
-      case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
+      case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) if i.query.resolved =>
         lookupV2Relation(u.multipartIdentifier, u.options)
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
@@ -974,7 +974,7 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
-      case i @ InsertIntoStatement(table, _, _, _, _) if i.query.resolved =>
+      case i @ InsertIntoStatement(table, _, _, _, _, _) if i.query.resolved =>
         val relation = table match {
           case u: UnresolvedRelation =>
             lookupRelation(u.multipartIdentifier, u.options).getOrElse(u)
@@ -1045,7 +1045,7 @@ class Analyzer(
 
   object ResolveInsertInto extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _) if i.query.resolved =>
+      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _) if i.query.resolved =>
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
           throw new AnalysisException(
@@ -1065,6 +1065,21 @@ class Analyzer(
         } else {
           OverwriteByExpression.byPosition(r, query, staticDeleteExpression(r, staticPartitions))
         }
+
+      case i @ InsertIntoStatement(table, _, _, _, _, _) if table.resolved =>
+        val resolved = i.columns.map {
+          case u: UnresolvedAttribute => withPosition(u) {
+            table.resolve(u.nameParts, resolver).map(_.toAttribute)
+              .getOrElse(failAnalysis(s"Cannot resolve column name ${u.name}"))
+          }
+          case other => other
+        }
+        val newOutput = if (resolved.isEmpty) {
+          table.output
+        } else {
+          resolved
+        }
+        i.copy(columns = newOutput)
     }
 
     private def partitionColumnNames(table: Table): Seq[String] = {

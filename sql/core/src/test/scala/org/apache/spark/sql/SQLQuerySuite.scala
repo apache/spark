@@ -3691,6 +3691,44 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(sql("SELECT id FROM t WHERE (SELECT true)"), Row(0L))
     }
   }
+
+  test("Support column list specification in insert into statement") {
+    val table = "t1"
+
+    def testInsert(sqlStr: String, expectedAnswer: Row): Unit = {
+      sql(sqlStr)
+      checkAnswer(spark.table(table), expectedAnswer)
+      sql(s"TRUNCATE TABLE $table")
+    }
+
+    withTable(table) {
+      sql(s"CREATE TABLE $table(c1 INT, c2 INT, c3 INT) USING parquet")
+      testInsert(s"INSERT INTO $table (c1, c2, c3) values(1, 2, 3)", Row(1, 2, 3))
+      testInsert(s"INSERT INTO $table (c1, c3, c2) values(1, 3, 2)", Row(1, 2, 3))
+
+      val e1 = intercept[AnalysisException](sql(s"INSERT INTO $table (c1) values(1)"))
+      assert(e1.getMessage.contains("has 3 column(s) but the specified part has only 1"))
+
+      val e2 = intercept[AnalysisException](sql(s"INSERT INTO $table (c4) values(1)"))
+      assert(e2.getMessage.contains("Cannot resolve column name c4"))
+
+      val e3 = intercept[AnalysisException](sql(s"INSERT INTO $table (c1, c2, c2) values(1,3,4)"))
+      assert(e3.getMessage.contains("Found duplicate column(s) when inserting into"))
+
+      val e4 = intercept[AnalysisException](sql(s"INSERT INTO $table (c1, c2, c3) values(1,2,3,4)"))
+      assert(e4.getMessage.contains("has 3 column(s) but the inserted data has 4"))
+    }
+
+    withTable(table) {
+      sql(s"CREATE TABLE $table(c1 INT, c2 INT, c3 STRING, c4 STRING) " +
+        "USING parquet PARTITIONED BY (c3, c4)")
+      testInsert(s"INSERT INTO $table (c1, c2, c3, c4) values(1,2,3,4)", Row(1, 2, "3", "4"))
+      testInsert(s"INSERT INTO $table (c1, c3, c2, c4) values(1,2,3,4)", Row(1, 3, "2", "4"))
+      testInsert(s"INSERT INTO $table (c1, c2, c3, c4) partition(c3='3',c4='4')" +
+        s" values(1,2)", Row(1, 2, "3", "4"))
+
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
