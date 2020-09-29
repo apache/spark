@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Driver}
 
-import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
+import org.apache.spark.annotation.{DeveloperApi, Unstable}
 
 /**
  * ::DeveloperApi::
@@ -28,10 +28,11 @@ import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
  * the parameters.
  * Important to mention connection providers within a JVM used from multiple threads so adding
  * internal state is not advised. If any state added then it must be synchronized properly.
+ *
+ * @since 3.1.0
  */
 @DeveloperApi
 @Unstable
-@Since("3.1.0")
 abstract class JdbcConnectionProvider {
   /**
    * Checks if this connection provider instance can handle the connection initiated by the driver.
