@@ -56,8 +56,10 @@ private[sql] object PruneFileSourcePartitions
     val (partitionFilters, dataFilters) = normalizedFilters.partition(f =>
       f.references.subsetOf(partitionSet)
     )
+    val extraPartitionFilter =
+      dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
 
-    (ExpressionSet(partitionFilters), dataFilters)
+    (ExpressionSet(partitionFilters ++ extraPartitionFilter), dataFilters)
   }
 
   private def rebuildPhysicalOperation(
@@ -88,10 +90,8 @@ private[sql] object PruneFileSourcePartitions
             _,
             _))
         if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
-      val predicates = CNFWithGroupExpressionsByReference(filters.reduceLeft(And))
-      val finalPredicates = if (predicates.nonEmpty) predicates else filters
       val (partitionKeyFilters, _) = getPartitionKeyFiltersAndDataFilters(
-        fsRelation.sparkSession, logicalRelation, partitionSchema, finalPredicates,
+        fsRelation.sparkSession, logicalRelation, partitionSchema, filters,
         logicalRelation.output)
 
       if (partitionKeyFilters.nonEmpty) {

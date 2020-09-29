@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.scalatest.Matchers._
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._

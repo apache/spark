@@ -16,10 +16,8 @@
 #
 
 import sys
-if sys.version >= '3':
-    basestring = str
 
-from pyspark.rdd import RDD, ignore_unicode_prefix
+from pyspark.rdd import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import Matrix, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
@@ -157,7 +155,6 @@ class Statistics(object):
             return callMLlibFunc("corr", x.map(float), y.map(float), method)
 
     @staticmethod
-    @ignore_unicode_prefix
     def chiSqTest(observed, expected=None):
         """
         If `observed` is Vector, conduct Pearson's chi-squared goodness
@@ -199,9 +196,9 @@ class Statistics(object):
         >>> print(round(pearson.pValue, 4))
         0.8187
         >>> pearson.method
-        u'pearson'
+        'pearson'
         >>> pearson.nullHypothesis
-        u'observed follows the same distribution as expected.'
+        'observed follows the same distribution as expected.'
 
         >>> observed = Vectors.dense([21, 38, 43, 80])
         >>> expected = Vectors.dense([3, 5, 7, 20])
@@ -242,7 +239,6 @@ class Statistics(object):
         return ChiSqTestResult(jmodel)
 
     @staticmethod
-    @ignore_unicode_prefix
     def kolmogorovSmirnovTest(data, distName="norm", *params):
         """
         Performs the Kolmogorov-Smirnov (KS) test for data sampled from
@@ -282,7 +278,7 @@ class Statistics(object):
         >>> print(round(ksmodel.statistic, 3))
         0.175
         >>> ksmodel.nullHypothesis
-        u'Sample follows theoretical distribution'
+        'Sample follows theoretical distribution'
 
         >>> data = sc.parallelize([2.0, 3.0, 4.0])
         >>> ksmodel = kstest(data, "norm", 3.0, 1.0)
@@ -293,7 +289,7 @@ class Statistics(object):
         """
         if not isinstance(data, RDD):
             raise TypeError("data should be an RDD, got %s." % type(data))
-        if not isinstance(distName, basestring):
+        if not isinstance(distName, str):
             raise TypeError("distName should be a string, got %s." % type(distName))
 
         params = [float(param) for param in params]

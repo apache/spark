@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.Random
 
-import org.scalatest.Matchers._
+import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.stat.StatFunctions
@@ -412,8 +412,8 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     // Original bug was a NullPointerException exception caused by calling collect(), test for this
     val resultRow = result.collect()(0)
 
-    assert(resultRow.get(0).asInstanceOf[Seq[String]].toSet == Set("1", "2", "3"))
-    assert(resultRow.get(1).asInstanceOf[Seq[String]].toSet == Set("a", "b", null))
+    assert(resultRow.get(0).asInstanceOf[scala.collection.Seq[String]].toSet == Set("1", "2", "3"))
+    assert(resultRow.get(1).asInstanceOf[scala.collection.Seq[String]].toSet == Set("a", "b", null))
   }
 
   test("sampleBy") {

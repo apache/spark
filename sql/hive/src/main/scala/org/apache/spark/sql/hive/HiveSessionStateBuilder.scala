@@ -21,10 +21,10 @@ import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, ResolveSessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
-import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{SparkOptimizer, SparkPlanner}
+import org.apache.spark.sql.execution.SparkPlanner
+import org.apache.spark.sql.execution.aggregate.ResolveEncodersInScalaAgg
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
@@ -37,8 +37,11 @@ import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLo
  * Builder that produces a Hive-aware `SessionState`.
  */
 @Unstable
-class HiveSessionStateBuilder(session: SparkSession, parentState: Option[SessionState] = None)
-  extends BaseSessionStateBuilder(session, parentState) {
+class HiveSessionStateBuilder(
+    session: SparkSession,
+    parentState: Option[SessionState],
+    options: Map[String, String])
+  extends BaseSessionStateBuilder(session, parentState, options) {
 
   private def externalCatalog: ExternalCatalogWithListener = session.sharedState.externalCatalog
 
@@ -76,6 +79,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
+        ResolveEncodersInScalaAgg +:
         new ResolveSessionCatalog(
           catalogManager, conf, catalog.isTempView, catalog.isTempFunction) +:
         customResolutionRules
@@ -109,11 +113,12 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
       override val sparkSession: SparkSession = session
 
       override def extraPlanningStrategies: Seq[Strategy] =
-        super.extraPlanningStrategies ++ customPlanningStrategies ++ Seq(HiveTableScans, Scripts)
+        super.extraPlanningStrategies ++ customPlanningStrategies ++
+          Seq(HiveTableScans, HiveScripts)
     }
   }
 
-  override protected def newBuilder: NewBuilder = new HiveSessionStateBuilder(_, _)
+  override protected def newBuilder: NewBuilder = new HiveSessionStateBuilder(_, _, Map.empty)
 }
 
 class HiveSessionResourceLoader(

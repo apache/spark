@@ -80,7 +80,7 @@ object FilePartition extends Logging {
       currentFiles += file
     }
     closePartition()
-    partitions
+    partitions.toSeq
   }
 
   def maxSplitBytes(

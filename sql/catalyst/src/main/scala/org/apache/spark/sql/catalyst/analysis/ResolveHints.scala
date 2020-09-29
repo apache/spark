@@ -105,7 +105,7 @@ object ResolveHints {
 
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
-          case ResolvedHint(u @ UnresolvedRelation(ident), hint)
+          case ResolvedHint(u @ UnresolvedRelation(ident, _, _), hint)
               if matchedIdentifierInHint(ident) =>
             ResolvedHint(u, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
@@ -113,7 +113,7 @@ object ResolveHints {
               if matchedIdentifierInHint(extractIdentifier(r)) =>
             ResolvedHint(r, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
-          case UnresolvedRelation(ident) if matchedIdentifierInHint(ident) =>
+          case UnresolvedRelation(ident, _, _) if matchedIdentifierInHint(ident) =>
             ResolvedHint(plan, createHintInfo(hintName))
 
           case r: SubqueryAlias if matchedIdentifierInHint(extractIdentifier(r)) =>
@@ -276,6 +276,17 @@ object ResolveHints {
       case h: UnresolvedHint =>
         hintErrorHandler.hintNotRecognized(h.name, h.parameters)
         h.child
+    }
+  }
+
+  /**
+   * Removes all the hints when `spark.sql.optimizer.disableHints` is set.
+   * This is executed at the very beginning of the Analyzer to disable
+   * the hint functionality.
+   */
+  class DisableHints(conf: SQLConf) extends RemoveAllHints(conf: SQLConf) {
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      if (conf.getConf(SQLConf.DISABLE_HINTS)) super.apply(plan) else plan
     }
   }
 }

@@ -348,7 +348,6 @@ case class MergeIntoTable(
 
 sealed abstract class MergeAction extends Expression with Unevaluable {
   def condition: Option[Expression]
-  override def foldable: Boolean = false
   override def nullable: Boolean = false
   override def dataType: DataType = throw new UnresolvedException(this, "nullable")
   override def children: Seq[Expression] = condition.toSeq
@@ -369,7 +368,6 @@ case class InsertAction(
 }
 
 case class Assignment(key: Expression, value: Expression) extends Expression with Unevaluable {
-  override def foldable: Boolean = false
   override def nullable: Boolean = false
   override def dataType: DataType = throw new UnresolvedException(this, "nullable")
   override def children: Seq[Expression] = key ::  value :: Nil
@@ -463,9 +461,9 @@ case class SetCatalogAndNamespace(
 /**
  * The logical plan of the REFRESH TABLE command that works for v2 catalogs.
  */
-case class RefreshTable(
-    catalog: TableCatalog,
-    ident: Identifier) extends Command
+case class RefreshTable(child: LogicalPlan) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
 
 /**
  * The logical plan of the SHOW CURRENT NAMESPACE command that works for v2 catalogs.
@@ -515,4 +513,39 @@ case class CommentOnNamespace(child: LogicalPlan, comment: String) extends Comma
  */
 case class CommentOnTable(child: LogicalPlan, comment: String) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the REFRESH FUNCTION command that works for v2 catalogs.
+ */
+case class RefreshFunction(child: LogicalPlan) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the DESCRIBE FUNCTION command that works for v2 catalogs.
+ */
+case class DescribeFunction(child: LogicalPlan, isExtended: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the DROP FUNCTION command that works for v2 catalogs.
+ */
+case class DropFunction(
+    child: LogicalPlan,
+    ifExists: Boolean,
+    isTemp: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the SHOW FUNCTIONS command that works for v2 catalogs.
+ */
+case class ShowFunctions(
+    child: Option[LogicalPlan],
+    userScope: Boolean,
+    systemScope: Boolean,
+    pattern: Option[String]) extends Command {
+  override def children: Seq[LogicalPlan] = child.toSeq
 }

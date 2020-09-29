@@ -23,7 +23,7 @@ Suggests:
     testthat,
     e1071,
     survival,
-    arrow (>= 0.15.1)
+    arrow (>= 1.0.0)
 Collate:
     'schema.R'
     'generics.R'

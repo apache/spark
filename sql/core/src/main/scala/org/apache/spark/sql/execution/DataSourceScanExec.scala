@@ -55,7 +55,7 @@ trait DataSourceScanExec extends LeafExecNode {
   // Metadata that describes more details of this scan.
   protected def metadata: Map[String, String]
 
-  protected val maxMetadataValueLength = 100
+  protected val maxMetadataValueLength = sqlContext.sessionState.conf.maxMetadataStringLength
 
   override def simpleString(maxFields: Int): String = {
     val metadataEntries = metadata.toSeq.sorted.map {
@@ -99,16 +99,14 @@ trait DataSourceScanExec extends LeafExecNode {
 
 /** Physical plan node for scanning data from a relation. */
 case class RowDataSourceScanExec(
-    fullOutput: Seq[Attribute],
-    requiredColumnsIndex: Seq[Int],
+    output: Seq[Attribute],
+    requiredSchema: StructType,
     filters: Set[Filter],
     handledFilters: Set[Filter],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with InputRDDCodegen {
-
-  def output: Seq[Attribute] = requiredColumnsIndex.map(fullOutput)
 
   override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -136,14 +134,14 @@ case class RowDataSourceScanExec(
       if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
     }
     Map(
-      "ReadSchema" -> output.toStructType.catalogString,
+      "ReadSchema" -> requiredSchema.catalogString,
       "PushedFilters" -> markedFilters.mkString("[", ", ", "]"))
   }
 
   // Don't care about `rdd` and `tableIdentifier` when canonicalizing.
   override def doCanonicalize(): SparkPlan =
     copy(
-      fullOutput.map(QueryPlan.normalizeExpressions(_, fullOutput)),
+      output.map(QueryPlan.normalizeExpressions(_, output)),
       rdd = null,
       tableIdentifier = None)
 }
@@ -179,7 +177,7 @@ case class FileSourceScanExec(
 
   private lazy val needsUnsafeRowConversion: Boolean = {
     if (relation.fileFormat.isInstanceOf[ParquetSource]) {
-      SparkSession.getActiveSession.get.sessionState.conf.parquetVectorizedReaderEnabled
+      sqlContext.conf.parquetVectorizedReaderEnabled
     } else {
       false
     }
@@ -213,9 +211,6 @@ case class FileSourceScanExec(
     val ret =
       relation.location.listFiles(
         partitionFilters.filterNot(isDynamicPruningFilter), dataFilters)
-    if (relation.partitionSchemaOption.isDefined) {
-      driverMetrics("numPartitions") = ret.length
-    }
     setFilesNumAndSizeMetric(ret, true)
     val timeTakenMs = NANOSECONDS.toMillis(
       (System.nanoTime() - startTime) + optimizerMetadataTimeNs)
@@ -440,15 +435,16 @@ case class FileSourceScanExec(
       driverMetrics("staticFilesNum") = filesNum
       driverMetrics("staticFilesSize") = filesSize
     }
+    if (relation.partitionSchemaOption.isDefined) {
+      driverMetrics("numPartitions") = partitions.length
+    }
   }
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files read"),
     "metadataTime" -> SQLMetrics.createTimingMetric(sparkContext, "metadata time"),
-    "filesSize" -> SQLMetrics.createSizeMetric(sparkContext, "size of files read"),
-    "pruningTime" ->
-      SQLMetrics.createTimingMetric(sparkContext, "dynamic partition pruning time")
+    "filesSize" -> SQLMetrics.createSizeMetric(sparkContext, "size of files read")
   ) ++ {
     // Tracking scan time has overhead, we can't afford to do it for each row, and can only do
     // it for each batch.
@@ -459,9 +455,12 @@ case class FileSourceScanExec(
     }
   } ++ {
     if (relation.partitionSchemaOption.isDefined) {
-      Some("numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions read"))
+      Map(
+        "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions read"),
+        "pruningTime" ->
+          SQLMetrics.createTimingMetric(sparkContext, "dynamic partition pruning time"))
     } else {
-      None
+      Map.empty[String, SQLMetric]
     }
   } ++ staticMetrics
 
@@ -608,12 +607,20 @@ case class FileSourceScanExec(
     new FileScanRDD(fsRelation.sparkSession, readFile, partitions)
   }
 
+  // Filters unused DynamicPruningExpression expressions - one which has been replaced
+  // with DynamicPruningExpression(Literal.TrueLiteral) during Physical Planning
+  private def filterUnusedDynamicPruningExpressions(
+      predicates: Seq[Expression]): Seq[Expression] = {
+    predicates.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral))
+  }
+
   override def doCanonicalize(): FileSourceScanExec = {
     FileSourceScanExec(
       relation,
       output.map(QueryPlan.normalizeExpressions(_, output)),
       requiredSchema,
-      QueryPlan.normalizePredicates(partitionFilters, output),
+      QueryPlan.normalizePredicates(
+        filterUnusedDynamicPruningExpressions(partitionFilters), output),
       optionalBucketSet,
       optionalNumCoalescedBuckets,
       QueryPlan.normalizePredicates(dataFilters, output),

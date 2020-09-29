@@ -936,10 +936,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val answer = Seq(Row(Seq(2, 3)), Row(Seq(5)))
 
     checkAnswer(df.select(slice(df("x"), 2, 2)), answer)
+    checkAnswer(df.select(slice(df("x"), lit(2), lit(2))), answer)
     checkAnswer(df.selectExpr("slice(x, 2, 2)"), answer)
 
     val answerNegative = Seq(Row(Seq(3)), Row(Seq(5)))
     checkAnswer(df.select(slice(df("x"), -1, 1)), answerNegative)
+    checkAnswer(df.select(slice(df("x"), lit(-1), lit(1))), answerNegative)
     checkAnswer(df.selectExpr("slice(x, -1, 1)"), answerNegative)
   }
 

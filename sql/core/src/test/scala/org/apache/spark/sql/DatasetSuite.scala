@@ -1116,8 +1116,8 @@ class DatasetSuite extends QueryTest
       """+--------+
         ||       f|
         |+--------+
-        ||[foo, 1]|
-        ||[bar, 2]|
+        ||{foo, 1}|
+        ||{bar, 2}|
         |+--------+
         |""".stripMargin
 

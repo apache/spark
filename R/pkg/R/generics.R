@@ -638,7 +638,7 @@ setGeneric("union", function(x, y) { standardGeneric("union") })
 setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
 
 #' @rdname unionByName
-setGeneric("unionByName", function(x, y) { standardGeneric("unionByName") })
+setGeneric("unionByName", function(x, y, ...) { standardGeneric("unionByName") })
 
 #' @rdname unpersist
 setGeneric("unpersist", function(x, ...) { standardGeneric("unpersist") })
@@ -728,6 +728,9 @@ setGeneric("over", function(x, window) { standardGeneric("over") })
 
 #' @rdname eq_null_safe
 setGeneric("%<=>%", function(x, value) { standardGeneric("%<=>%") })
+
+#' @rdname withField
+setGeneric("withField", function(x, fieldName, col) { standardGeneric("withField") })
 
 ###################### WindowSpec Methods ##########################
 
@@ -1353,6 +1356,10 @@ setGeneric("substring_index", function(x, delim, count) { standardGeneric("subst
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
+
+#' @rdname column_datetime_functions
+#' @name timestamp_seconds
+setGeneric("timestamp_seconds", function(x) { standardGeneric("timestamp_seconds") })
 
 #' @rdname column_collection_functions
 #' @name NULL

@@ -694,7 +694,7 @@ private[hive] trait HiveInspectors {
         }
         data: Any => {
           if (data != null) {
-            InternalRow.fromSeq(unwrappers.map(_(data)))
+            InternalRow.fromSeq(unwrappers.map(_(data)).toSeq)
           } else {
             null
           }
@@ -872,7 +872,7 @@ private[hive] trait HiveInspectors {
       StructType(s.getAllStructFieldRefs.asScala.map(f =>
         types.StructField(
           f.getFieldName, inspectorToDataType(f.getFieldObjectInspector), nullable = true)
-      ))
+      ).toSeq)
     case l: ListObjectInspector => ArrayType(inspectorToDataType(l.getListElementObjectInspector))
     case m: MapObjectInspector =>
       MapType(
@@ -1046,8 +1046,8 @@ private[hive] trait HiveInspectors {
         getListTypeInfo(elemType.toTypeInfo)
       case StructType(fields) =>
         getStructTypeInfo(
-          java.util.Arrays.asList(fields.map(_.name) : _*),
-          java.util.Arrays.asList(fields.map(_.dataType.toTypeInfo) : _*))
+          java.util.Arrays.asList(fields.map(_.name): _*),
+          java.util.Arrays.asList(fields.map(_.dataType.toTypeInfo): _*))
       case MapType(keyType, valueType, _) =>
         getMapTypeInfo(keyType.toTypeInfo, valueType.toTypeInfo)
       case BinaryType => binaryTypeInfo
@@ -1063,6 +1063,9 @@ private[hive] trait HiveInspectors {
       case DateType => dateTypeInfo
       case TimestampType => timestampTypeInfo
       case NullType => voidTypeInfo
+      case dt =>
+        throw new AnalysisException(
+          s"${dt.catalogString} cannot be converted to Hive TypeInfo")
     }
   }
 }

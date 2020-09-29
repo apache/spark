@@ -139,7 +139,7 @@ test_that("utility function can be called", {
   expect_true(TRUE)
 })
 
-test_that("getClientModeSparkSubmitOpts() returns spark-submit args from whitelist", {
+test_that("getClientModeSparkSubmitOpts() returns spark-submit args from allowList", {
   e <- new.env()
   e[["spark.driver.memory"]] <- "512m"
   ops <- getClientModeSparkSubmitOpts("sparkrmain", e)

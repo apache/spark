@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import scala.concurrent.duration._
+
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Network._
@@ -53,6 +55,14 @@ private[spark] object RpcUtils {
   def lookupRpcTimeout(conf: SparkConf): RpcTimeout = {
     RpcTimeout(conf, Seq(RPC_LOOKUP_TIMEOUT.key, NETWORK_TIMEOUT.key), "120s")
   }
+
+  /**
+   * Infinite timeout is used internally, so there's no timeout configuration property that
+   * controls it. Therefore, we use "infinite" without any specific reason as its timeout
+   * configuration property. And its timeout property should never be accessed since infinite
+   * means we never timeout.
+   */
+  val INFINITE_TIMEOUT = new RpcTimeout(Long.MaxValue.nanos, "infinite")
 
   private val MAX_MESSAGE_SIZE_IN_MB = Int.MaxValue / 1024 / 1024
 

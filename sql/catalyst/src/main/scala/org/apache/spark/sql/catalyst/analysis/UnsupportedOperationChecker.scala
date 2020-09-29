@@ -91,7 +91,13 @@ object UnsupportedOperationChecker extends Logging {
 
     /** Collect all the streaming aggregates in a sub plan */
     def collectStreamingAggregates(subplan: LogicalPlan): Seq[Aggregate] = {
-      subplan.collect { case a: Aggregate if a.isStreaming => a }
+      subplan.collect {
+        case a: Aggregate if a.isStreaming => a
+        // Since the Distinct node will be replaced to Aggregate in the optimizer rule
+        // [[ReplaceDistinctWithAggregate]], here we also need to check all Distinct node by
+        // assuming it as Aggregate.
+        case d @ Distinct(c: LogicalPlan) if d.isStreaming => Aggregate(c.output, c.output, c)
+      }
     }
 
     val mapGroupsWithStates = plan.collect {
@@ -393,17 +399,6 @@ object UnsupportedOperationChecker extends Logging {
               _: DeserializeToObject | _: SerializeFromObject | _: SubqueryAlias |
               _: TypedFilter) =>
         case node if node.nodeName == "StreamingRelationV2" =>
-        case Repartition(1, false, _) =>
-        case node: Aggregate =>
-          val aboveSinglePartitionCoalesce = node.find {
-            case Repartition(1, false, _) => true
-            case _ => false
-          }.isDefined
-
-          if (!aboveSinglePartitionCoalesce) {
-            throwError(s"In continuous processing mode, coalesce(1) must be called before " +
-              s"aggregate operation ${node.nodeName}.")
-          }
         case node =>
           throwError(s"Continuous processing does not support ${node.nodeName} operations.")
       }

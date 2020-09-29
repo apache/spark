@@ -394,6 +394,25 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       checkAnswer(df, (0 until 3).map(i => Row(i)))
     }
   }
+
+  test("SPARK-32609: DataSourceV2 with different pushedfilters should be different") {
+    def getScanExec(query: DataFrame): BatchScanExec = {
+      query.queryExecution.executedPlan.collect {
+        case d: BatchScanExec => d
+      }.head
+    }
+
+    Seq(classOf[AdvancedDataSourceV2], classOf[JavaAdvancedDataSourceV2]).foreach { cls =>
+      withClue(cls.getName) {
+        val df = spark.read.format(cls.getName).load()
+        val q1 = df.select('i).filter('i > 6)
+        val q2 = df.select('i).filter('i > 5)
+        val scan1 = getScanExec(q1)
+        val scan2 = getScanExec(q2)
+        assert(!scan1.equals(scan2))
+      }
+    }
+  }
 }
 
 

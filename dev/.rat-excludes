@@ -47,9 +47,8 @@ jsonFormatter.min.js
 .*json
 .*data
 .*log
-pyspark-coverage-site/
-cloudpickle.py
-heapq3.py
+pyspark-coverage-site/*
+cloudpickle/*
 join.py
 SparkExprTyper.scala
 SparkILoop.scala
@@ -124,3 +123,5 @@ SessionHandler.java
 GangliaReporter.java
 application_1578436911597_0052
 config.properties
+app-20200706201101-0003
+py.typed

@@ -47,6 +47,6 @@ object ProcessUtils extends Logging {
     assert(proc.exitValue == 0,
       s"Failed to execute ${fullCommand.mkString(" ")}" +
         s"${if (dumpErrors) "\n" + outputLines.mkString("\n")}")
-    outputLines
+    outputLines.toSeq
   }
 }

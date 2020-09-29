@@ -336,7 +336,6 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.table("source")
         .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
         .writeTo("testcat.table_name")
-        .tableProperty("allow-unsupported-transforms", "true")
         .partitionedBy(years($"ts"))
         .create()
 
@@ -350,7 +349,6 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.table("source")
         .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
         .writeTo("testcat.table_name")
-        .tableProperty("allow-unsupported-transforms", "true")
         .partitionedBy(months($"ts"))
         .create()
 
@@ -364,7 +362,6 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.table("source")
         .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
         .writeTo("testcat.table_name")
-        .tableProperty("allow-unsupported-transforms", "true")
         .partitionedBy(days($"ts"))
         .create()
 
@@ -378,7 +375,6 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.table("source")
         .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
         .writeTo("testcat.table_name")
-        .tableProperty("allow-unsupported-transforms", "true")
         .partitionedBy(hours($"ts"))
         .create()
 
@@ -391,7 +387,6 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   test("Create: partitioned by bucket(4, id)") {
     spark.table("source")
         .writeTo("testcat.table_name")
-        .tableProperty("allow-unsupported-transforms", "true")
         .partitionedBy(bucket(4, $"id"))
         .create()
 
@@ -596,7 +591,6 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         lit("2019-09-02 07:00:00.000000").cast("timestamp") as "modified",
         lit("America/Los_Angeles") as "timezone"))
       .writeTo("testcat.table_name")
-      .tableProperty("allow-unsupported-transforms", "true")
       .partitionedBy(
         years($"ts.created"), months($"ts.created"), days($"ts.created"), hours($"ts.created"),
         years($"ts.modified"), months($"ts.modified"), days($"ts.modified"), hours($"ts.modified")
@@ -624,7 +618,6 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         lit("2019-09-02 07:00:00.000000").cast("timestamp") as "modified",
         lit("America/Los_Angeles") as "timezone"))
       .writeTo("testcat.table_name")
-      .tableProperty("allow-unsupported-transforms", "true")
       .partitionedBy(bucket(4, $"ts.timezone"))
       .create()
 

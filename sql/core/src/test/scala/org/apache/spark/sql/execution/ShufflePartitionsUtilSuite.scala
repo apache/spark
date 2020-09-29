@@ -198,9 +198,11 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
       // the size of data is 0.
       val bytesByPartitionId1 = Array[Long](0, 0, 0, 0, 0)
       val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0)
+      // Create at least one partition spec
+      val expectedPartitionSpecs = Seq(CoalescedPartitionSpec(0, 5))
       checkEstimation(
         Array(bytesByPartitionId1, bytesByPartitionId2),
-        Seq.empty, targetSize, minNumPartitions)
+        expectedPartitionSpecs, targetSize, minNumPartitions)
     }
 
 
@@ -248,16 +250,19 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
     val minNumPartitions = 2
 
     {
-      // 1 shuffle: All bytes per partition are 0, no partition spec created.
+      // 1 shuffle: All bytes per partition are 0, 1 empty partition spec created.
       val bytesByPartitionId = Array[Long](0, 0, 0, 0, 0)
-      checkEstimation(Array(bytesByPartitionId), Seq.empty, targetSize)
+      val expectedPartitionSpecs = Seq(CoalescedPartitionSpec(0, 5))
+      checkEstimation(Array(bytesByPartitionId), expectedPartitionSpecs, targetSize)
     }
 
     {
-      // 2 shuffles: All bytes per partition are 0, no partition spec created.
+      // 2 shuffles: All bytes per partition are 0, 1 empty partition spec created.
       val bytesByPartitionId1 = Array[Long](0, 0, 0, 0, 0)
       val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0)
-      checkEstimation(Array(bytesByPartitionId1, bytesByPartitionId2), Seq.empty, targetSize)
+      val expectedPartitionSpecs = Seq(CoalescedPartitionSpec(0, 5))
+      checkEstimation(
+        Array(bytesByPartitionId1, bytesByPartitionId2), expectedPartitionSpecs, targetSize)
     }
 
     {

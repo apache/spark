@@ -22,15 +22,9 @@ import sys
 import json
 import functools
 import subprocess
-if sys.version < '3':
-    from urllib2 import urlopen
-    from urllib2 import Request
-    from urllib2 import HTTPError, URLError
-else:
-    from urllib.request import urlopen
-    from urllib.request import Request
-    from urllib.error import HTTPError, URLError
-
+from urllib.request import urlopen
+from urllib.request import Request
+from urllib.error import HTTPError, URLError
 
 from sparktestsupport import SPARK_HOME, ERROR_CODES
 from sparktestsupport.shellutils import run_cmd

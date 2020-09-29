@@ -1,0 +1,74 @@
+TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_county]
+  WholeStageCodegen (12)
+    Project [total_sum,s_state,s_county,lochierarchy,rank_within_parent]
+      InputAdapter
+        Window [_w3,_w1,_w2]
+          WholeStageCodegen (11)
+            Sort [_w1,_w2,_w3]
+              InputAdapter
+                Exchange [_w1,_w2] #1
+                  WholeStageCodegen (10)
+                    HashAggregate [s_state,s_county,spark_grouping_id,sum] [sum(UnscaledValue(ss_net_profit)),total_sum,lochierarchy,_w1,_w2,_w3,sum]
+                      InputAdapter
+                        Exchange [s_state,s_county,spark_grouping_id] #2
+                          WholeStageCodegen (9)
+                            HashAggregate [s_state,s_county,spark_grouping_id,ss_net_profit] [sum,sum]
+                              Expand [ss_net_profit,s_state,s_county]
+                                Project [ss_net_profit,s_state,s_county]
+                                  BroadcastHashJoin [ss_store_sk,s_store_sk]
+                                    Project [ss_store_sk,ss_net_profit]
+                                      BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                        Filter [ss_sold_date_sk,ss_store_sk]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet default.store_sales [ss_sold_date_sk,ss_store_sk,ss_net_profit]
+                                        InputAdapter
+                                          BroadcastExchange #3
+                                            WholeStageCodegen (1)
+                                              Project [d_date_sk]
+                                                Filter [d_month_seq,d_date_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.date_dim [d_date_sk,d_month_seq]
+                                    InputAdapter
+                                      BroadcastExchange #4
+                                        WholeStageCodegen (8)
+                                          BroadcastHashJoin [s_state,s_state]
+                                            Filter [s_store_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.store [s_store_sk,s_county,s_state]
+                                            InputAdapter
+                                              BroadcastExchange #5
+                                                WholeStageCodegen (7)
+                                                  Project [s_state]
+                                                    Filter [ranking]
+                                                      InputAdapter
+                                                        Window [_w2,s_state]
+                                                          WholeStageCodegen (6)
+                                                            Sort [s_state,_w2]
+                                                              InputAdapter
+                                                                Exchange [s_state] #6
+                                                                  WholeStageCodegen (5)
+                                                                    HashAggregate [s_state,sum] [sum(UnscaledValue(ss_net_profit)),s_state,_w2,sum]
+                                                                      InputAdapter
+                                                                        Exchange [s_state] #7
+                                                                          WholeStageCodegen (4)
+                                                                            HashAggregate [s_state,ss_net_profit] [sum,sum]
+                                                                              Project [ss_net_profit,s_state]
+                                                                                BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                                                                  Project [ss_sold_date_sk,ss_net_profit,s_state]
+                                                                                    BroadcastHashJoin [ss_store_sk,s_store_sk]
+                                                                                      Filter [ss_store_sk,ss_sold_date_sk]
+                                                                                        ColumnarToRow
+                                                                                          InputAdapter
+                                                                                            Scan parquet default.store_sales [ss_sold_date_sk,ss_store_sk,ss_net_profit]
+                                                                                      InputAdapter
+                                                                                        BroadcastExchange #8
+                                                                                          WholeStageCodegen (2)
+                                                                                            Filter [s_store_sk]
+                                                                                              ColumnarToRow
+                                                                                                InputAdapter
+                                                                                                  Scan parquet default.store [s_store_sk,s_state]
+                                                                                  InputAdapter
+                                                                                    ReusedExchange [d_date_sk] #3

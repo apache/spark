@@ -170,6 +170,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testStorageLevel(StorageLevel.NONE)
     testStorageLevel(StorageLevel.DISK_ONLY)
     testStorageLevel(StorageLevel.DISK_ONLY_2)
+    testStorageLevel(StorageLevel.DISK_ONLY_3)
     testStorageLevel(StorageLevel.MEMORY_ONLY)
     testStorageLevel(StorageLevel.MEMORY_ONLY_2)
     testStorageLevel(StorageLevel.MEMORY_ONLY_SER)
@@ -334,7 +335,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val oldEvent = JsonProtocol.taskEndReasonToJson(fetchFailed)
       .removeField({ _._1 == "Map Index" })
     val expectedFetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 16L,
-      0, 19, "ignored")
+      Int.MinValue, 19, "ignored")
     assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
@@ -1111,18 +1112,18 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Details": "details",
       |    "Accumulables": [
       |      {
-      |        "ID": 2,
-      |        "Name": "Accumulable2",
-      |        "Update": "delta2",
-      |        "Value": "val2",
-      |        "Internal": false,
-      |        "Count Failed Values": false
-      |      },
-      |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
+      |        "Internal": false,
+      |        "Count Failed Values": false
+      |      },
+      |      {
+      |        "ID": 2,
+      |        "Name": "Accumulable2",
+      |        "Update": "delta2",
+      |        "Value": "val2",
       |        "Internal": false,
       |        "Count Failed Values": false
       |      }
@@ -1170,18 +1171,18 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Details": "details",
       |    "Accumulables": [
       |      {
-      |        "ID": 2,
-      |        "Name": "Accumulable2",
-      |        "Update": "delta2",
-      |        "Value": "val2",
-      |        "Internal": false,
-      |        "Count Failed Values": false
-      |      },
-      |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
+      |        "Internal": false,
+      |        "Count Failed Values": false
+      |      },
+      |      {
+      |        "ID": 2,
+      |        "Name": "Accumulable2",
+      |        "Update": "delta2",
+      |        "Value": "val2",
       |        "Internal": false,
       |        "Count Failed Values": false
       |      }
@@ -1694,18 +1695,18 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Details": "details",
       |      "Accumulables": [
       |        {
-      |          "ID": 2,
-      |          "Name": "Accumulable2",
-      |          "Update": "delta2",
-      |          "Value": "val2",
-      |          "Internal": false,
-      |          "Count Failed Values": false
-      |        },
-      |        {
       |          "ID": 1,
       |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
+      |          "Internal": false,
+      |          "Count Failed Values": false
+      |        },
+      |        {
+      |          "ID": 2,
+      |          "Name": "Accumulable2",
+      |          "Update": "delta2",
+      |          "Value": "val2",
       |          "Internal": false,
       |          "Count Failed Values": false
       |        }
@@ -1757,18 +1758,18 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Details": "details",
       |      "Accumulables": [
       |        {
-      |          "ID": 2,
-      |          "Name": "Accumulable2",
-      |          "Update": "delta2",
-      |          "Value": "val2",
-      |          "Internal": false,
-      |          "Count Failed Values": false
-      |        },
-      |        {
       |          "ID": 1,
       |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
+      |          "Internal": false,
+      |          "Count Failed Values": false
+      |        },
+      |        {
+      |          "ID": 2,
+      |          "Name": "Accumulable2",
+      |          "Update": "delta2",
+      |          "Value": "val2",
       |          "Internal": false,
       |          "Count Failed Values": false
       |        }
@@ -1837,18 +1838,18 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Details": "details",
       |      "Accumulables": [
       |        {
-      |          "ID": 2,
-      |          "Name": "Accumulable2",
-      |          "Update": "delta2",
-      |          "Value": "val2",
-      |          "Internal": false,
-      |          "Count Failed Values": false
-      |        },
-      |        {
       |          "ID": 1,
       |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
+      |          "Internal": false,
+      |          "Count Failed Values": false
+      |        },
+      |        {
+      |          "ID": 2,
+      |          "Name": "Accumulable2",
+      |          "Update": "delta2",
+      |          "Value": "val2",
       |          "Internal": false,
       |          "Count Failed Values": false
       |        }
@@ -1934,18 +1935,18 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Details": "details",
       |      "Accumulables": [
       |        {
-      |          "ID": 2,
-      |          "Name": "Accumulable2",
-      |          "Update": "delta2",
-      |          "Value": "val2",
-      |          "Internal": false,
-      |          "Count Failed Values": false
-      |        },
-      |        {
       |          "ID": 1,
       |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
+      |          "Internal": false,
+      |          "Count Failed Values": false
+      |        },
+      |        {
+      |          "ID": 2,
+      |          "Name": "Accumulable2",
+      |          "Update": "delta2",
+      |          "Value": "val2",
       |          "Internal": false,
       |          "Count Failed Values": false
       |        }

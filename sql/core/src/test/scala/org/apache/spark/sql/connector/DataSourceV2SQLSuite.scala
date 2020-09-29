@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.connector
 
+import java.sql.Timestamp
+import java.time.LocalDate
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkException
@@ -27,7 +30,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructField, StructType}
@@ -755,8 +758,9 @@ class DataSourceV2SQLSuite
 
   test("Relation: view text") {
     val t1 = "testcat.ns1.ns2.tbl"
+    val v1 = "view1"
     withTable(t1) {
-      withView("view1") { v1: String =>
+      withView(v1) {
         sql(s"CREATE TABLE $t1 USING foo AS SELECT id, data FROM source")
         sql(s"CREATE VIEW $v1 AS SELECT * from $t1")
         checkAnswer(sql(s"TABLE $v1"), spark.table("source"))
@@ -1647,7 +1651,6 @@ class DataSourceV2SQLSuite
         """
           |CREATE TABLE testcat.t (id int, `a.b` string) USING foo
           |CLUSTERED BY (`a.b`) INTO 4 BUCKETS
-          |OPTIONS ('allow-unsupported-transforms'=true)
         """.stripMargin)
 
       val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[InMemoryTableCatalog]
@@ -1723,6 +1726,23 @@ class DataSourceV2SQLSuite
       assert(!testCatalog.isTableInvalidated(identifier))
       sql(s"REFRESH TABLE $t")
       assert(testCatalog.isTableInvalidated(identifier))
+    }
+  }
+
+  test("SPARK-32990: REFRESH TABLE should resolve to a temporary view first") {
+    withTable("testcat.ns.t") {
+      withTempView("t") {
+        sql("CREATE TABLE testcat.ns.t (id bigint) USING foo")
+        sql("CREATE TEMPORARY VIEW t AS SELECT 2")
+        sql("USE testcat.ns")
+
+        val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[InMemoryTableCatalog]
+        val identifier = Identifier.of(Array("ns"), "t")
+
+        assert(!testCatalog.isTableInvalidated(identifier))
+        sql("REFRESH TABLE t")
+        assert(!testCatalog.isTableInvalidated(identifier))
+      }
     }
   }
 
@@ -2183,7 +2203,7 @@ class DataSourceV2SQLSuite
     val e = intercept[AnalysisException] {
       sql("DESCRIBE FUNCTION testcat.ns1.ns2.fun")
     }
-    assert(e.message.contains("DESCRIBE FUNCTION is only supported in v1 catalog"))
+    assert(e.message.contains("function is only supported in v1 catalog"))
 
     val e1 = intercept[AnalysisException] {
       sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
@@ -2198,14 +2218,14 @@ class DataSourceV2SQLSuite
     val e = intercept[AnalysisException] {
       sql(s"SHOW FUNCTIONS LIKE $function")
     }
-    assert(e.message.contains("SHOW FUNCTIONS is only supported in v1 catalog"))
+    assert(e.message.contains("function is only supported in v1 catalog"))
   }
 
   test("DROP FUNCTION: only support session catalog") {
     val e = intercept[AnalysisException] {
       sql("DROP FUNCTION testcat.ns1.ns2.fun")
     }
-    assert(e.message.contains("DROP FUNCTION is only supported in v1 catalog"))
+    assert(e.message.contains("function is only supported in v1 catalog"))
 
     val e1 = intercept[AnalysisException] {
       sql("DROP FUNCTION default.ns1.ns2.fun")
@@ -2218,10 +2238,23 @@ class DataSourceV2SQLSuite
     val e = intercept[AnalysisException] {
       sql("CREATE FUNCTION testcat.ns1.ns2.fun as 'f'")
     }
-    assert(e.message.contains("CREATE FUNCTION is only supported in v1 catalog"))
+    assert(e.message.contains("function is only supported in v1 catalog"))
 
     val e1 = intercept[AnalysisException] {
       sql("CREATE FUNCTION default.ns1.ns2.fun as 'f'")
+    }
+    assert(e1.message.contains(
+      "The namespace in session catalog must have exactly one name part: default.ns1.ns2.fun"))
+  }
+
+  test("REFRESH FUNCTION: only support session catalog") {
+    val e = intercept[AnalysisException] {
+      sql("REFRESH FUNCTION testcat.ns1.ns2.fun")
+    }
+    assert(e.message.contains("function is only supported in v1 catalog"))
+
+    val e1 = intercept[AnalysisException] {
+      sql("REFRESH FUNCTION default.ns1.ns2.fun")
     }
     assert(e1.message.contains(
       "The namespace in session catalog must have exactly one name part: default.ns1.ns2.fun"))
@@ -2491,6 +2524,38 @@ class DataSourceV2SQLSuite
         sql(s"SELECT ns1.ns2.ns3.tbl.* from $t")
       }
       assert(ex.getMessage.contains("cannot resolve 'ns1.ns2.ns3.tbl.*"))
+    }
+  }
+
+  test("SPARK-32168: INSERT OVERWRITE - hidden days partition - dynamic mode") {
+    def testTimestamp(daysOffset: Int): Timestamp = {
+      Timestamp.valueOf(LocalDate.of(2020, 1, 1 + daysOffset).atStartOfDay())
+    }
+
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        val df = spark.createDataFrame(Seq(
+          (testTimestamp(1), "a"),
+          (testTimestamp(2), "b"),
+          (testTimestamp(3), "c"))).toDF("ts", "data")
+        df.createOrReplaceTempView("source_view")
+
+        sql(s"CREATE TABLE $t1 (ts timestamp, data string) " +
+            s"USING $v2Format PARTITIONED BY (days(ts))")
+        sql(s"INSERT INTO $t1 VALUES " +
+            s"(CAST(date_add('2020-01-01', 2) AS timestamp), 'dummy'), " +
+            s"(CAST(date_add('2020-01-01', 4) AS timestamp), 'keep')")
+        sql(s"INSERT OVERWRITE TABLE $t1 SELECT ts, data FROM source_view")
+
+        val expected = spark.createDataFrame(Seq(
+          (testTimestamp(1), "a"),
+          (testTimestamp(2), "b"),
+          (testTimestamp(3), "c"),
+          (testTimestamp(4), "keep"))).toDF("ts", "data")
+
+        verifyTable(t1, expected)
+      }
     }
   }
 

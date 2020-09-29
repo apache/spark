@@ -296,7 +296,7 @@ object SparkBuild extends PomBuild {
       var failed = 0
       analysis.infos.allInfos.foreach { case (k, i) =>
         i.reportedProblems foreach { p =>
-          val deprecation = p.message.contains("is deprecated")
+          val deprecation = p.message.contains("deprecated")
 
           if (!deprecation) {
             failed = failed + 1
@@ -444,10 +444,10 @@ object SparkBuild extends PomBuild {
 object SparkParallelTestGrouping {
   // Settings for parallelizing tests. The basic strategy here is to run the slowest suites (or
   // collections of suites) in their own forked JVMs, allowing us to gain parallelism within a
-  // SBT project. Here, we take a whitelisting approach where the default behavior is to run all
+  // SBT project. Here, we take an opt-in approach where the default behavior is to run all
   // tests sequentially in a single JVM, requiring us to manually opt-in to the extra parallelism.
   //
-  // There are a reasons why such a whitelist approach is good:
+  // There are a reasons why such an opt-in approach is good:
   //
   //    1. Launching one JVM per suite adds significant overhead for short-running suites. In
   //       addition to JVM startup time and JIT warmup, it appears that initialization of Derby
@@ -469,13 +469,14 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.catalyst.expressions.MathExpressionsSuite",
     "org.apache.spark.sql.hive.HiveExternalCatalogSuite",
     "org.apache.spark.sql.hive.StatisticsSuite",
-    "org.apache.spark.sql.hive.execution.HiveCompatibilitySuite",
     "org.apache.spark.sql.hive.client.VersionsSuite",
     "org.apache.spark.sql.hive.client.HiveClientVersions",
     "org.apache.spark.sql.hive.HiveExternalCatalogVersionsSuite",
     "org.apache.spark.ml.classification.LogisticRegressionSuite",
     "org.apache.spark.ml.classification.LinearSVCSuite",
     "org.apache.spark.sql.SQLQueryTestSuite",
+    "org.apache.spark.sql.hive.client.HadoopVersionInfoSuite",
+    "org.apache.spark.sql.hive.thriftserver.SparkExecuteStatementOperationSuite",
     "org.apache.spark.sql.hive.thriftserver.ThriftServerQueryTestSuite",
     "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
@@ -484,9 +485,14 @@ object SparkParallelTestGrouping {
   )
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
+  private val HIVE_EXECUTION_TEST_GROUP = "hive_execution_test_group"
 
   private def testNameToTestGroup(name: String): String = name match {
     case _ if testsWhichShouldRunInTheirOwnDedicatedJvm.contains(name) => name
+    // Different with the cases in testsWhichShouldRunInTheirOwnDedicatedJvm, here we are grouping
+    // all suites of `org.apache.spark.sql.hive.execution.*` into a single group, instead of
+    // launching one JVM per suite.
+    case _ if name.contains("org.apache.spark.sql.hive.execution") => HIVE_EXECUTION_TEST_GROUP
     case _ => DEFAULT_TEST_GROUP
   }
 
@@ -832,6 +838,8 @@ object Unidoc {
         f.getCanonicalPath.contains("org/apache/spark/shuffle") &&
         !f.getCanonicalPath.contains("org/apache/spark/shuffle/api")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/executor")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/ExecutorAllocationClient")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/scheduler/cluster/CoarseGrainedSchedulerBackend")))
       .map(_.filterNot(f =>
         f.getCanonicalPath.contains("org/apache/spark/unsafe") &&
         !f.getCanonicalPath.contains("org/apache/spark/unsafe/types/CalendarInterval")))
@@ -844,6 +852,7 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive/test")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalog/v2/utils")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hive")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/v2/avro")))
   }
 
   private def ignoreClasspaths(classpaths: Seq[Classpath]): Seq[Classpath] = {
@@ -859,10 +868,10 @@ object Unidoc {
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, avro),
+        yarn, tags, streamingKafka010, sqlKafka010),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, avro),
+        yarn, tags, streamingKafka010, sqlKafka010),
 
     unidocAllClasspaths in (ScalaUnidoc, unidoc) := {
       ignoreClasspaths((unidocAllClasspaths in (ScalaUnidoc, unidoc)).value)
@@ -1013,6 +1022,15 @@ object TestSettings {
     testOptions in Test += Tests.Argument(TestFrameworks.JUnit,
       sys.props.get("test.exclude.tags").map { tags =>
         Seq("--exclude-categories=" + tags)
+      }.getOrElse(Nil): _*),
+    // Include tags defined in a system property
+    testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
+      sys.props.get("test.include.tags").map { tags =>
+        tags.split(",").flatMap { tag => Seq("-n", tag) }.toSeq
+      }.getOrElse(Nil): _*),
+    testOptions in Test += Tests.Argument(TestFrameworks.JUnit,
+      sys.props.get("test.include.tags").map { tags =>
+        Seq("--include-categories=" + tags)
       }.getOrElse(Nil): _*),
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),

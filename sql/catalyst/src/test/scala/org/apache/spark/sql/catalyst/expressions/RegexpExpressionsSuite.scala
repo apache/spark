@@ -303,6 +303,8 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row8 = create_row("100-200", "(\\d+)-(\\d+)", 3)
     val row9 = create_row("100-200", "(\\d+).*", 2)
     val row10 = create_row("100-200", "\\d+", 1)
+    val row11 = create_row("100-200", "(\\d+)-(\\d+)", -1)
+    val row12 = create_row("100-200", "\\d+", -1)
 
     checkExceptionInExpression[IllegalArgumentException](
       expr, row8, "Regex group count is 2, but the specified group index is 3")
@@ -310,10 +312,64 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       expr, row9, "Regex group count is 1, but the specified group index is 2")
     checkExceptionInExpression[IllegalArgumentException](
       expr, row10, "Regex group count is 0, but the specified group index is 1")
+    checkExceptionInExpression[IllegalArgumentException](
+      expr, row11, "The specified group index cannot be less than zero")
+    checkExceptionInExpression[IllegalArgumentException](
+      expr, row12, "The specified group index cannot be less than zero")
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
       RegExpExtract(Literal("\"quote"), Literal("\"quote"), Literal(1)) :: Nil)
+  }
+
+  test("RegexExtractAll") {
+    val row1 = create_row("100-200,300-400,500-600", "(\\d+)-(\\d+)", 0)
+    val row2 = create_row("100-200,300-400,500-600", "(\\d+)-(\\d+)", 1)
+    val row3 = create_row("100-200,300-400,500-600", "(\\d+)-(\\d+)", 2)
+    val row4 = create_row("100-200,300-400,500-600", "(\\d+).*", 1)
+    val row5 = create_row("100-200,300-400,500-600", "([a-z])", 1)
+    val row6 = create_row(null, "([a-z])", 1)
+    val row7 = create_row("100-200,300-400,500-600", null, 1)
+    val row8 = create_row("100-200,300-400,500-600", "([a-z])", null)
+
+    val s = 's.string.at(0)
+    val p = 'p.string.at(1)
+    val r = 'r.int.at(2)
+
+    val expr = RegExpExtractAll(s, p, r)
+    checkEvaluation(expr, Seq("100-200", "300-400", "500-600"), row1)
+    checkEvaluation(expr, Seq("100", "300", "500"), row2)
+    checkEvaluation(expr, Seq("200", "400", "600"), row3)
+    checkEvaluation(expr, Seq("100"), row4)
+    checkEvaluation(expr, Seq(), row5)
+    checkEvaluation(expr, null, row6)
+    checkEvaluation(expr, null, row7)
+    checkEvaluation(expr, null, row8)
+
+    val expr1 = new RegExpExtractAll(s, p)
+    checkEvaluation(expr1, Seq("100", "300", "500"), row2)
+
+    val nonNullExpr = RegExpExtractAll(Literal("100-200,300-400,500-600"),
+      Literal("(\\d+)-(\\d+)"), Literal(1))
+    checkEvaluation(nonNullExpr, Seq("100", "300", "500"), row2)
+
+    // invalid group index
+    val row9 = create_row("100-200,300-400,500-600", "(\\d+)-(\\d+)", 3)
+    val row10 = create_row("100-200,300-400,500-600", "(\\d+).*", 2)
+    val row11 = create_row("100-200,300-400,500-600", "\\d+", 1)
+    val row12 = create_row("100-200,300-400,500-600", "(\\d+)-(\\d+)", -1)
+    val row13 = create_row("100-200,300-400,500-600", "\\d+", -1)
+
+    checkExceptionInExpression[IllegalArgumentException](
+      expr, row9, "Regex group count is 2, but the specified group index is 3")
+    checkExceptionInExpression[IllegalArgumentException](
+      expr, row10, "Regex group count is 1, but the specified group index is 2")
+    checkExceptionInExpression[IllegalArgumentException](
+      expr, row11, "Regex group count is 0, but the specified group index is 1")
+    checkExceptionInExpression[IllegalArgumentException](
+      expr, row12, "The specified group index cannot be less than zero")
+    checkExceptionInExpression[IllegalArgumentException](
+      expr, row13, "The specified group index cannot be less than zero")
   }
 
   test("SPLIT") {

@@ -23,10 +23,11 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.log4j.Level
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -46,6 +47,13 @@ import org.apache.spark.sql.types._
 
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
+
+  test("fail for unresolved plan") {
+    intercept[AnalysisException] {
+      // `testRelation` does not have column `b`.
+      testRelation.select('b).analyze
+    }
+  }
 
   test("union project *") {
     val plan = (1 to 120)
@@ -883,5 +891,39 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisError(r5,
       Seq("Intersect can only be performed on tables with the compatible column types. " +
         "timestamp <> double at the second column of the second table"))
+  }
+
+  test("SPARK-31975: Throw user facing error when use WindowFunction directly") {
+    assertAnalysisError(testRelation2.select(RowNumber()),
+      Seq("Window function row_number() requires an OVER clause."))
+
+    assertAnalysisError(testRelation2.select(Sum(RowNumber())),
+      Seq("Window function row_number() requires an OVER clause."))
+
+    assertAnalysisError(testRelation2.select(RowNumber() + 1),
+      Seq("Window function row_number() requires an OVER clause."))
+  }
+
+  test("SPARK-32237: Hint in CTE") {
+    val plan = With(
+      Project(
+        Seq(UnresolvedAttribute("cte.a")),
+        UnresolvedRelation(TableIdentifier("cte"))
+      ),
+      Seq(
+        (
+          "cte",
+          SubqueryAlias(
+            AliasIdentifier("cte"),
+            UnresolvedHint(
+              "REPARTITION",
+              Seq(Literal(3)),
+              Project(testRelation.output, testRelation)
+            )
+          )
+        )
+      )
+    )
+    assertAnalysisSuccess(plan)
   }
 }

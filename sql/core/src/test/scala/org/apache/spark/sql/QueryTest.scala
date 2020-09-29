@@ -418,7 +418,7 @@ object QueryTest extends Assertions {
   }
 
   def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): Unit = {
-    getErrorMessageInCheckAnswer(df, expectedAnswer.asScala) match {
+    getErrorMessageInCheckAnswer(df, expectedAnswer.asScala.toSeq) match {
       case Some(errorMessage) => Assert.fail(errorMessage)
       case None =>
     }

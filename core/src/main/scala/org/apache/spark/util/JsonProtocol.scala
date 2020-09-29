@@ -328,12 +328,12 @@ private[spark] object JsonProtocol {
     ("Accumulables" -> accumulablesToJson(taskInfo.accumulables))
   }
 
-  private lazy val accumulableBlacklist = Set("internal.metrics.updatedBlockStatuses")
+  private lazy val accumulableExcludeList = Set("internal.metrics.updatedBlockStatuses")
 
   def accumulablesToJson(accumulables: Iterable[AccumulableInfo]): JArray = {
     JArray(accumulables
-        .filterNot(_.name.exists(accumulableBlacklist.contains))
-        .toList.map(accumulableInfoToJson))
+        .filterNot(_.name.exists(accumulableExcludeList.contains))
+        .toList.sortBy(_.id).map(accumulableInfoToJson))
   }
 
   def accumulableInfoToJson(accumulableInfo: AccumulableInfo): JValue = {
@@ -1078,8 +1078,12 @@ private[spark] object JsonProtocol {
         val blockManagerAddress = blockManagerIdFromJson(json \ "Block Manager Address")
         val shuffleId = (json \ "Shuffle ID").extract[Int]
         val mapId = (json \ "Map ID").extract[Long]
-        val mapIndex = (json \ "Map Index") match {
-          case JNothing => 0
+        val mapIndex = json \ "Map Index" match {
+          case JNothing =>
+            // Note, we use the invalid value Int.MinValue here to fill the map index for backward
+            // compatibility. Otherwise, the fetch failed event will be dropped when the history
+            // server loads the event log written by the Spark version before 3.0.
+            Int.MinValue
           case x => x.extract[Int]
         }
         val reduceId = (json \ "Reduce ID").extract[Int]
@@ -1210,7 +1214,8 @@ private[spark] object JsonProtocol {
       case Some(id) => id.extract[Int]
       case None => ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
     }
-    new ExecutorInfo(executorHost, totalCores, logUrls, attributes, resources, resourceProfileId)
+    new ExecutorInfo(executorHost, totalCores, logUrls, attributes.toMap, resources.toMap,
+      resourceProfileId)
   }
 
   def blockUpdatedInfoFromJson(json: JValue): BlockUpdatedInfo = {

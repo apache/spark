@@ -66,7 +66,7 @@ object SparkPlanGraph {
     val edges = mutable.ArrayBuffer[SparkPlanGraphEdge]()
     val exchanges = mutable.HashMap[SparkPlanInfo, SparkPlanGraphNode]()
     buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, null, null, exchanges)
-    new SparkPlanGraph(nodes, edges)
+    new SparkPlanGraph(nodes.toSeq, edges.toSeq)
   }
 
   private def buildSparkPlanGraphNode(

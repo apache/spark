@@ -1,0 +1,111 @@
+== Physical Plan ==
+TakeOrderedAndProject (19)
++- * HashAggregate (18)
+   +- Exchange (17)
+      +- * HashAggregate (16)
+         +- * Project (15)
+            +- * BroadcastHashJoin Inner BuildRight (14)
+               :- * Project (8)
+               :  +- * BroadcastHashJoin Inner BuildRight (7)
+               :     :- * ColumnarToRow (2)
+               :     :  +- Scan parquet default.store_sales (1)
+               :     +- BroadcastExchange (6)
+               :        +- * Filter (5)
+               :           +- * ColumnarToRow (4)
+               :              +- Scan parquet default.store_returns (3)
+               +- BroadcastExchange (13)
+                  +- * Project (12)
+                     +- * Filter (11)
+                        +- * ColumnarToRow (10)
+                           +- Scan parquet default.reason (9)
+
+
+(1) Scan parquet default.store_sales
+Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store_sales]
+ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_ticket_number:int,ss_quantity:int,ss_sales_price:decimal(7,2)>
+
+(2) ColumnarToRow [codegen id : 3]
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
+
+(3) Scan parquet default.store_returns
+Output [4]: [sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store_returns]
+PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number), IsNotNull(sr_reason_sk)]
+ReadSchema: struct<sr_item_sk:bigint,sr_reason_sk:bigint,sr_ticket_number:bigint,sr_return_quantity:int>
+
+(4) ColumnarToRow [codegen id : 1]
+Input [4]: [sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+
+(5) Filter [codegen id : 1]
+Input [4]: [sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+Condition : ((isnotnull(sr_item_sk#6) AND isnotnull(sr_ticket_number#8)) AND isnotnull(sr_reason_sk#7))
+
+(6) BroadcastExchange
+Input [4]: [sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false], input[2, bigint, false]),false), [id=#10]
+
+(7) BroadcastHashJoin [codegen id : 3]
+Left keys [2]: [cast(ss_item_sk#1 as bigint), cast(ss_ticket_number#3 as bigint)]
+Right keys [2]: [sr_item_sk#6, sr_ticket_number#8]
+Join condition: None
+
+(8) Project [codegen id : 3]
+Output [5]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#7, sr_return_quantity#9]
+Input [9]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5, sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+
+(9) Scan parquet default.reason
+Output [2]: [r_reason_sk#11, r_reason_desc#12]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/reason]
+PushedFilters: [IsNotNull(r_reason_desc), EqualTo(r_reason_desc,reason 28), IsNotNull(r_reason_sk)]
+ReadSchema: struct<r_reason_sk:int,r_reason_desc:string>
+
+(10) ColumnarToRow [codegen id : 2]
+Input [2]: [r_reason_sk#11, r_reason_desc#12]
+
+(11) Filter [codegen id : 2]
+Input [2]: [r_reason_sk#11, r_reason_desc#12]
+Condition : ((isnotnull(r_reason_desc#12) AND (r_reason_desc#12 = reason 28)) AND isnotnull(r_reason_sk#11))
+
+(12) Project [codegen id : 2]
+Output [1]: [r_reason_sk#11]
+Input [2]: [r_reason_sk#11, r_reason_desc#12]
+
+(13) BroadcastExchange
+Input [1]: [r_reason_sk#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#13]
+
+(14) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [sr_reason_sk#7]
+Right keys [1]: [cast(r_reason_sk#11 as bigint)]
+Join condition: None
+
+(15) Project [codegen id : 3]
+Output [2]: [ss_customer_sk#2, CASE WHEN isnotnull(sr_return_quantity#9) THEN CheckOverflow((promote_precision(cast(cast((ss_quantity#4 - sr_return_quantity#9) as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#5 as decimal(12,2)))), DecimalType(18,2), true) ELSE CheckOverflow((promote_precision(cast(cast(ss_quantity#4 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#5 as decimal(12,2)))), DecimalType(18,2), true) END AS act_sales#14]
+Input [6]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#7, sr_return_quantity#9, r_reason_sk#11]
+
+(16) HashAggregate [codegen id : 3]
+Input [2]: [ss_customer_sk#2, act_sales#14]
+Keys [1]: [ss_customer_sk#2]
+Functions [1]: [partial_sum(act_sales#14)]
+Aggregate Attributes [2]: [sum#15, isEmpty#16]
+Results [3]: [ss_customer_sk#2, sum#17, isEmpty#18]
+
+(17) Exchange
+Input [3]: [ss_customer_sk#2, sum#17, isEmpty#18]
+Arguments: hashpartitioning(ss_customer_sk#2, 5), true, [id=#19]
+
+(18) HashAggregate [codegen id : 4]
+Input [3]: [ss_customer_sk#2, sum#17, isEmpty#18]
+Keys [1]: [ss_customer_sk#2]
+Functions [1]: [sum(act_sales#14)]
+Aggregate Attributes [1]: [sum(act_sales#14)#20]
+Results [2]: [ss_customer_sk#2, sum(act_sales#14)#20 AS sumsales#21]
+
+(19) TakeOrderedAndProject
+Input [2]: [ss_customer_sk#2, sumsales#21]
+Arguments: 100, [sumsales#21 ASC NULLS FIRST, ss_customer_sk#2 ASC NULLS FIRST], [ss_customer_sk#2, sumsales#21]
+

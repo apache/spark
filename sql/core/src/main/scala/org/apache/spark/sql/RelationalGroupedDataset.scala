@@ -54,7 +54,11 @@ class RelationalGroupedDataset protected[sql](
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
     val aggregates = if (df.sparkSession.sessionState.conf.dataFrameRetainGroupColumns) {
-      groupingExprs ++ aggExprs
+      groupingExprs match {
+        // call `toList` because `Stream` can't serialize in scala 2.13
+        case s: Stream[Expression] => s.toList ++ aggExprs
+        case other => other ++ aggExprs
+      }
     } else {
       aggExprs
     }
@@ -479,7 +483,7 @@ class RelationalGroupedDataset protected[sql](
    * @since 2.4.0
    */
   def pivot(pivotColumn: Column, values: java.util.List[Any]): RelationalGroupedDataset = {
-    pivot(pivotColumn, values.asScala)
+    pivot(pivotColumn, values.asScala.toSeq)
   }
 
   /**

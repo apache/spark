@@ -68,14 +68,14 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
   }
 
   encryptionTest("Accessing TorrentBroadcast variables in a local cluster") { conf =>
-    val numSlaves = 4
+    val numWorkers = 4
     conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
     conf.set(config.BROADCAST_COMPRESS, true)
-    sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
+    sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numWorkers), "test", conf)
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
-    val results = sc.parallelize(1 to numSlaves).map(x => (x, broadcast.value.sum))
-    assert(results.collect().toSet === (1 to numSlaves).map(x => (x, 10)).toSet)
+    val results = sc.parallelize(1 to numWorkers).map(x => (x, broadcast.value.sum))
+    assert(results.collect().toSet === (1 to numWorkers).map(x => (x, 10)).toSet)
   }
 
   test("TorrentBroadcast's blockifyObject and unblockifyObject are inverses") {
@@ -99,12 +99,12 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
   }
 
   test("Test Lazy Broadcast variables with TorrentBroadcast") {
-    val numSlaves = 2
-    sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test")
-    val rdd = sc.parallelize(1 to numSlaves)
+    val numWorkers = 2
+    sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numWorkers), "test")
+    val rdd = sc.parallelize(1 to numWorkers)
     val results = new DummyBroadcastClass(rdd).doSomething()
 
-    assert(results.toSet === (1 to numSlaves).map(x => (x, false)).toSet)
+    assert(results.toSet === (1 to numWorkers).map(x => (x, false)).toSet)
   }
 
   test("Unpersisting TorrentBroadcast on executors only in local mode") {
@@ -196,27 +196,27 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
    */
   private def testUnpersistTorrentBroadcast(distributed: Boolean,
       removeFromDriver: Boolean): Unit = {
-    val numSlaves = if (distributed) 2 else 0
+    val numWorkers = if (distributed) 2 else 0
 
     // Verify that blocks are persisted only on the driver
     def afterCreation(broadcastId: Long, bmm: BlockManagerMaster): Unit = {
       var blockId = BroadcastBlockId(broadcastId)
-      var statuses = bmm.getBlockStatus(blockId, askSlaves = true)
+      var statuses = bmm.getBlockStatus(blockId, askStorageEndpoints = true)
       assert(statuses.size === 1)
 
       blockId = BroadcastBlockId(broadcastId, "piece0")
-      statuses = bmm.getBlockStatus(blockId, askSlaves = true)
+      statuses = bmm.getBlockStatus(blockId, askStorageEndpoints = true)
       assert(statuses.size === 1)
     }
 
     // Verify that blocks are persisted in both the executors and the driver
     def afterUsingBroadcast(broadcastId: Long, bmm: BlockManagerMaster): Unit = {
       var blockId = BroadcastBlockId(broadcastId)
-      val statuses = bmm.getBlockStatus(blockId, askSlaves = true)
-      assert(statuses.size === numSlaves + 1)
+      val statuses = bmm.getBlockStatus(blockId, askStorageEndpoints = true)
+      assert(statuses.size === numWorkers + 1)
 
       blockId = BroadcastBlockId(broadcastId, "piece0")
-      assert(statuses.size === numSlaves + 1)
+      assert(statuses.size === numWorkers + 1)
     }
 
     // Verify that blocks are unpersisted on all executors, and on all nodes if removeFromDriver
@@ -224,16 +224,16 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
     def afterUnpersist(broadcastId: Long, bmm: BlockManagerMaster): Unit = {
       var blockId = BroadcastBlockId(broadcastId)
       var expectedNumBlocks = if (removeFromDriver) 0 else 1
-      var statuses = bmm.getBlockStatus(blockId, askSlaves = true)
+      var statuses = bmm.getBlockStatus(blockId, askStorageEndpoints = true)
       assert(statuses.size === expectedNumBlocks)
 
       blockId = BroadcastBlockId(broadcastId, "piece0")
       expectedNumBlocks = if (removeFromDriver) 0 else 1
-      statuses = bmm.getBlockStatus(blockId, askSlaves = true)
+      statuses = bmm.getBlockStatus(blockId, askStorageEndpoints = true)
       assert(statuses.size === expectedNumBlocks)
     }
 
-    testUnpersistBroadcast(distributed, numSlaves, afterCreation,
+    testUnpersistBroadcast(distributed, numWorkers, afterCreation,
       afterUsingBroadcast, afterUnpersist, removeFromDriver)
   }
 
@@ -248,7 +248,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
    */
   private def testUnpersistBroadcast(
       distributed: Boolean,
-      numSlaves: Int,  // used only when distributed = true
+      numWorkers: Int,  // used only when distributed = true
       afterCreation: (Long, BlockManagerMaster) => Unit,
       afterUsingBroadcast: (Long, BlockManagerMaster) => Unit,
       afterUnpersist: (Long, BlockManagerMaster) => Unit,
@@ -256,10 +256,10 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
 
     sc = if (distributed) {
       val _sc =
-        new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test")
+        new SparkContext("local-cluster[%d, 1, 1024]".format(numWorkers), "test")
       // Wait until all salves are up
       try {
-        TestUtils.waitUntilExecutorsUp(_sc, numSlaves, 60000)
+        TestUtils.waitUntilExecutorsUp(_sc, numWorkers, 60000)
         _sc
       } catch {
         case e: Throwable =>
@@ -278,7 +278,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
 
     // Use broadcast variable on all executors
     val partitions = 10
-    assert(partitions > numSlaves)
+    assert(partitions > numWorkers)
     val results = sc.parallelize(1 to partitions, partitions).map(x => (x, broadcast.value.sum))
     assert(results.collect().toSet === (1 to partitions).map(x => (x, list.sum)).toSet)
     afterUsingBroadcast(broadcast.id, blockManagerMaster)

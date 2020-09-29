@@ -64,6 +64,8 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasInp
   /** @group getParam */
   def getMissingValue: Double = $(missingValue)
 
+  setDefault(strategy -> Imputer.mean, missingValue -> Double.NaN)
+
   /** Returns the input and output column names corresponding in pair. */
   private[feature] def getInOutCols(): (Array[String], Array[String]) = {
     if (isSet(inputCol)) {
@@ -143,8 +145,6 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
   /** @group expertSetParam */
   @Since("3.0.0")
   def setRelativeError(value: Double): this.type = set(relativeError, value)
-
-  setDefault(strategy -> Imputer.mean, missingValue -> Double.NaN)
 
   override def fit(dataset: Dataset[_]): ImputerModel = {
     transformSchema(dataset.schema, logging = true)

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
+import java.sql.Timestamp
 import java.util.{Locale, UUID}
 
 import scala.util.Random
@@ -995,5 +996,48 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
           Row(24, 48, 72), Row(25, 50, 75))
       )
     }
+  }
+
+  test("SPARK-32148 stream-stream join regression on Spark 3.0.0") {
+    val input1 = MemoryStream[(Timestamp, String, String)]
+    val df1 = input1.toDF
+      .selectExpr("_1 as eventTime", "_2 as id", "_3 as comment")
+      .withWatermark(s"eventTime", "2 minutes")
+
+    val input2 = MemoryStream[(Timestamp, String, String)]
+    val df2 = input2.toDF
+      .selectExpr("_1 as eventTime", "_2 as id", "_3 as name")
+      .withWatermark(s"eventTime", "4 minutes")
+
+    val joined = df1.as("left")
+      .join(df2.as("right"),
+        expr("""
+               |left.id = right.id AND left.eventTime BETWEEN
+               |  right.eventTime - INTERVAL 30 seconds AND
+               |  right.eventTime + INTERVAL 30 seconds
+             """.stripMargin),
+        joinType = "leftOuter")
+
+    val inputDataForInput1 = Seq(
+      (Timestamp.valueOf("2020-01-01 00:00:00"), "abc", "has no join partner"),
+      (Timestamp.valueOf("2020-01-02 00:00:00"), "abc", "joined with A"),
+      (Timestamp.valueOf("2020-01-02 01:00:00"), "abc", "joined with B"))
+
+    val inputDataForInput2 = Seq(
+      (Timestamp.valueOf("2020-01-02 00:00:10"), "abc", "A"),
+      (Timestamp.valueOf("2020-01-02 00:59:59"), "abc", "B"),
+      (Timestamp.valueOf("2020-01-02 02:00:00"), "abc", "C"))
+
+    val expectedOutput = Seq(
+      (Timestamp.valueOf("2020-01-01 00:00:00"), "abc", "has no join partner", null, null, null),
+      (Timestamp.valueOf("2020-01-02 00:00:00"), "abc", "joined with A",
+        Timestamp.valueOf("2020-01-02 00:00:10"), "abc", "A"),
+      (Timestamp.valueOf("2020-01-02 01:00:00"), "abc", "joined with B",
+        Timestamp.valueOf("2020-01-02 00:59:59"), "abc", "B"))
+
+    testStream(joined)(
+      MultiAddData((input1, inputDataForInput1), (input2, inputDataForInput2)),
+      CheckNewAnswer(expectedOutput.head, expectedOutput.tail: _*)
+    )
   }
 }

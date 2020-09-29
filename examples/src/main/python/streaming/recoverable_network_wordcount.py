@@ -35,8 +35,6 @@
  checkpoint data exists in ~/checkpoint/, then it will create StreamingContext from
  the checkpoint data.
 """
-from __future__ import print_function
-
 import os
 import sys
 
@@ -45,10 +43,10 @@ from pyspark.streaming import StreamingContext
 
 
 # Get or register a Broadcast variable
-def getWordBlacklist(sparkContext):
-    if ('wordBlacklist' not in globals()):
-        globals()['wordBlacklist'] = sparkContext.broadcast(["a", "b", "c"])
-    return globals()['wordBlacklist']
+def getWordExcludeList(sparkContext):
+    if ('wordExcludeList' not in globals()):
+        globals()['wordExcludeList'] = sparkContext.broadcast(["a", "b", "c"])
+    return globals()['wordExcludeList']
 
 
 # Get or register an Accumulator
@@ -74,14 +72,14 @@ def createContext(host, port, outputPath):
     wordCounts = words.map(lambda x: (x, 1)).reduceByKey(lambda x, y: x + y)
 
     def echo(time, rdd):
-        # Get or register the blacklist Broadcast
-        blacklist = getWordBlacklist(rdd.context)
+        # Get or register the excludeList Broadcast
+        excludeList = getWordExcludeList(rdd.context)
         # Get or register the droppedWordsCounter Accumulator
         droppedWordsCounter = getDroppedWordsCounter(rdd.context)
 
-        # Use blacklist to drop words and use droppedWordsCounter to count them
+        # Use excludeList to drop words and use droppedWordsCounter to count them
         def filterFunc(wordCount):
-            if wordCount[0] in blacklist.value:
+            if wordCount[0] in excludeList.value:
                 droppedWordsCounter.add(wordCount[1])
                 return False
             else:
