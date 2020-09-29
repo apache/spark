@@ -56,8 +56,8 @@ class AnalysisException protected[sql] (
 }
 
 /**
- * Thrown when a query failed for invalid function argument size, usually because query pass
- * throw argument number to function.
+ * Thrown when a query failed for invalid function argument size, usually because
+ * a SQL function is called with the wrong number of arguments.
  *
  * @Since 3.1.0
  */
