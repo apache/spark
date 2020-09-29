@@ -32,7 +32,7 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ PARTITIONED BY ( col_name2[:] col_type2 [ COMMENT col_comment2 ], ... ) 
         | ( col_name1, col_name2, ... ) ]
     [ CLUSTERED BY ( col_name1, col_name2, ...) 
-        [ SORTED BY ( col_name1 [ ASC | DESC ], col_name2 [ ASC | DESC ], ...) ] 
+        [ SORTED BY ( col_name1 [ ASC | DESC ], col_name2 [ ASC | DESC ], ... ) ] 
         INTO num_buckets BUCKETS ]
     [ ROW FORMAT row_format ]
     [ STORED AS file_format ]
@@ -231,7 +231,7 @@ CREATE TABLE clustered_by_test1 (ID INT, AGE STRING)
 --Use `CLUSTERED BY` clause to create bucket table with `SORTED BY`
 CREATE TABLE clustered_by_test2 (ID INT, NAME STRING)
     PARTITIONED BY (YEAR STRING)
-    CLUSTERED BY (ID,NAME)
+    CLUSTERED BY (ID, NAME)
     SORTED BY (ID ASC)
     INTO 3 BUCKETS
     STORED AS PARQUET
