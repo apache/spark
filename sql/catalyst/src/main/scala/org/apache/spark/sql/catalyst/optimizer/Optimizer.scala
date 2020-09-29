@@ -592,8 +592,7 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
           val rewrites = buildRewrites(u.children.head, child)
           Project(projectList.map(pushToRight(_, rewrites)), child)
         }
-        val newChildren = newFirstChild +: newOtherChildren
-        u.copy(children = newChildren, unionOutput = ResolveUnion.makeUnionOutput(newChildren))
+        u.copy(children = newFirstChild +: newOtherChildren)
       } else {
         p
       }
@@ -968,20 +967,17 @@ object CombineUnions extends Rule[LogicalPlan] {
     // rules (by position and by name) could cause incorrect results.
     while (stack.nonEmpty) {
       stack.pop() match {
-        case Distinct(Union(children, byName, allowMissingCol, _))
+        case Distinct(Union(children, byName, allowMissingCol))
             if flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
-        case Union(children, byName, allowMissingCol, _)
+        case Union(children, byName, allowMissingCol)
             if byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
         case child =>
           flattened += child
       }
     }
-    union.copy(
-      children = flattened,
-      unionOutput = ResolveUnion.makeUnionOutput(flattened)
-    )
+    union.copy(children = flattened.toSeq)
   }
 }
 
@@ -1693,8 +1689,7 @@ object RewriteExceptAll extends Rule[LogicalPlan] {
       val newColumnRight = Alias(Literal(-1L), "vcol")()
       val modifiedLeftPlan = Project(Seq(newColumnLeft) ++ left.output, left)
       val modifiedRightPlan = Project(Seq(newColumnRight) ++ right.output, right)
-      val unionOutput = ResolveUnion.makeUnionOutput(Seq(modifiedLeftPlan, modifiedRightPlan))
-      val unionPlan = Union(modifiedLeftPlan, modifiedRightPlan, output = unionOutput)
+      val unionPlan = Union(modifiedLeftPlan, modifiedRightPlan)
       val aggSumCol =
         Alias(AggregateExpression(Sum(unionPlan.output.head.toAttribute), Complete, false), "sum")()
       val aggOutputColumns = left.output ++ Seq(aggSumCol)
@@ -1758,12 +1753,7 @@ object RewriteIntersectAll extends Rule[LogicalPlan] {
       val leftPlanWithAddedVirtualCols = Project(Seq(trueVcol1, nullVcol2) ++ left.output, left)
       val rightPlanWithAddedVirtualCols = Project(Seq(nullVcol1, trueVcol2) ++ right.output, right)
 
-      val unionOutput = ResolveUnion.makeUnionOutput(
-        Seq(leftPlanWithAddedVirtualCols, rightPlanWithAddedVirtualCols))
-      val unionPlan = Union(
-        leftPlanWithAddedVirtualCols,
-        rightPlanWithAddedVirtualCols,
-        output = unionOutput)
+      val unionPlan = Union(leftPlanWithAddedVirtualCols, rightPlanWithAddedVirtualCols)
 
       // Expressions to compute count and minimum of both the counts.
       val vCol1AggrExpr =

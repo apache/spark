@@ -213,13 +213,8 @@ case class Except(
 
 /** Factory for constructing new `Union` nodes. */
 object Union {
-
-  def apply(left: LogicalPlan, right: LogicalPlan, output: Seq[Attribute]): Union = {
-    Union(left :: right :: Nil, unionOutput = output)
-  }
-
   def apply(left: LogicalPlan, right: LogicalPlan): Union = {
-    Union(left :: right :: Nil)
+    Union (left :: right :: Nil)
   }
 }
 
@@ -234,8 +229,7 @@ object Union {
 case class Union(
     children: Seq[LogicalPlan],
     byName: Boolean = false,
-    allowMissingCol: Boolean = false,
-    unionOutput: Seq[Attribute] = Seq.empty) extends LogicalPlan {
+    allowMissingCol: Boolean = false) extends LogicalPlan {
   assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
 
   override def maxRows: Option[Long] = {
@@ -262,7 +256,8 @@ case class Union(
       AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
   }
 
-  private def makeUnionOutput(): Seq[Attribute] = {
+  // updating nullability to make all the children consistent
+  override def output: Seq[Attribute] = {
     children.map(_.output).transpose.map { attrs =>
       val firstAttr = attrs.head
       val nullable = attrs.exists(_.nullable)
@@ -276,27 +271,17 @@ case class Union(
     }
   }
 
-  // updating nullability to make all the children consistent
-  override def output: Seq[Attribute] = {
-    assert(unionOutput.nonEmpty, "Union should have at least a single column")
-    unionOutput
-  }
-
-  def allChildrenCompatible: Boolean = {
+  override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
-    childrenResolved && children.tail.forall { child =>
-      // compare the attribute number with the first child
-      child.output.length == children.head.output.length &&
+    def allChildrenCompatible: Boolean =
+      children.tail.forall( child =>
+        // compare the attribute number with the first child
+        child.output.length == children.head.output.length &&
         // compare the data types with the first child
         child.output.zip(children.head.output).forall {
           case (l, r) => l.dataType.sameType(r.dataType)
-        }
-    }
-  }
-
-  override lazy val resolved: Boolean = {
-    children.length > 1 && !(byName || allowMissingCol) && allChildrenCompatible &&
-      unionOutput.nonEmpty
+        })
+    children.length > 1 && !(byName || allowMissingCol) && childrenResolved && allChildrenCompatible
   }
 
   /**
