@@ -643,7 +643,8 @@ object CatalogTypes {
  */
 case class UnresolvedCatalogRelation(
     tableMeta: CatalogTable,
-    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()) extends LeafNode {
+    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
+    override val isStreaming: Boolean = false) extends LeafNode {
   assert(tableMeta.identifier.database.isDefined)
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil

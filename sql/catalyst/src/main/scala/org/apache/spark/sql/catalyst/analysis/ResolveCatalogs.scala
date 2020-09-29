@@ -174,9 +174,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         writeOptions = c.writeOptions,
         ignoreIfExists = c.ifNotExists)
 
-    case RefreshTableStatement(NonSessionCatalogAndTable(catalog, tbl)) =>
-      RefreshTable(catalog.asTableCatalog, tbl.asIdentifier)
-
     case c @ ReplaceTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
       assertNoNullTypeInSchema(c.tableSchema)

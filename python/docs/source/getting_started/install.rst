@@ -48,6 +48,29 @@ If you want to install extra dependencies for a specific componenet, you can ins
 
     pip install pyspark[sql]
 
+For PySpark with a different Hadoop version, you can install it by using ``HADOOP_VERSION`` environment variables as below:
+
+.. code-block:: bash
+
+    HADOOP_VERSION=2.7 pip install pyspark
+
+The default distribution uses Hadoop 3.2 and Hive 2.3. If users specify different versions of Hadoop, the pip installation automatically
+downloads a different version and use it in PySpark. Downloading it can take a while depending on
+the network and the mirror chosen. ``PYSPARK_RELEASE_MIRROR`` can be set to manually choose the mirror for faster downloading.
+
+.. code-block:: bash
+
+    PYSPARK_RELEASE_MIRROR=http://mirror.apache-kr.org HADOOP_VERSION=2.7 pip install
+
+It is recommended to use ``-v`` option in ``pip`` to track the installation and download status.
+
+.. code-block:: bash
+
+    HADOOP_VERSION=2.7 pip install pyspark -v
+
+Supported versions of Hadoop are ``HADOOP_VERSION=2.7`` and ``HADOOP_VERSION=3.2`` (default).
+Note that this installation of PySpark with a different version of Hadoop is experimental. It can change or be removed between minor releases.
+
 
 Using Conda
 -----------
@@ -129,7 +152,7 @@ Package       Minimum supported version Note
 ============= ========================= ================
 `pandas`      0.23.2                    Optional for SQL
 `NumPy`       1.7                       Required for ML 
-`pyarrow`     0.15.1                    Optional for SQL
+`pyarrow`     1.0.0                     Optional for SQL
 `Py4J`        0.10.9                    Required
 ============= ========================= ================
 

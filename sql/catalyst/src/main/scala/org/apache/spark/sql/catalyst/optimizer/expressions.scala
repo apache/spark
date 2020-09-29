@@ -633,10 +633,15 @@ object FoldablePropagation extends Rule[LogicalPlan] {
         val (newChild, foldableMap) = propagateFoldables(p.child)
         val newProject =
           replaceFoldable(p.withNewChildren(Seq(newChild)).asInstanceOf[Project], foldableMap)
-        val newFoldableMap = AttributeMap(newProject.projectList.collect {
-          case a: Alias if a.child.foldable => (a.toAttribute, a)
-        })
+        val newFoldableMap = collectFoldables(newProject.projectList)
         (newProject, newFoldableMap)
+
+      case a: Aggregate =>
+        val (newChild, foldableMap) = propagateFoldables(a.child)
+        val newAggregate =
+          replaceFoldable(a.withNewChildren(Seq(newChild)).asInstanceOf[Aggregate], foldableMap)
+        val newFoldableMap = collectFoldables(newAggregate.aggregateExpressions)
+        (newAggregate, newFoldableMap)
 
       // We can not replace the attributes in `Expand.output`. If there are other non-leaf
       // operators that have the `output` field, we should put them here too.
@@ -703,6 +708,12 @@ object FoldablePropagation extends Rule[LogicalPlan] {
     }
   }
 
+  private def collectFoldables(expressions: Seq[NamedExpression]) = {
+    AttributeMap(expressions.collect {
+      case a: Alias if a.child.foldable => (a.toAttribute, a)
+    })
+  }
+
   /**
    * List of all [[UnaryNode]]s which allow foldable propagation.
    */
@@ -710,7 +721,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
     // Handling `Project` is moved to `propagateFoldables`.
     case _: Filter => true
     case _: SubqueryAlias => true
-    case _: Aggregate => true
+    // Handling `Aggregate` is moved to `propagateFoldables`.
     case _: Window => true
     case _: Sample => true
     case _: GlobalLimit => true
