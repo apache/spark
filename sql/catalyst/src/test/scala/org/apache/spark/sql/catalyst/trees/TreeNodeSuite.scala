@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, Inter
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions.DslString
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, NaturalJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, SubqueryAlias, Union}
 import org.apache.spark.sql.catalyst.plans.physical.{IdentityBroadcastMode, RoundRobinPartitioning, SinglePartition}
@@ -616,5 +616,40 @@ class TreeNodeSuite extends SparkFunSuite {
     val result = before.withNewChildren(Stream(Literal(1), Literal(3)))
     val expected = Coalesce(Stream(Literal(1), Literal(3)))
     assert(result === expected)
+  }
+
+  object MalformedClassObject extends Serializable {
+    // Backport notes: this class inline-expands TaggingExpression from Spark 3.1
+    case class MalformedNameExpression(child: Expression) extends UnaryExpression {
+      override def nullable: Boolean = child.nullable
+      override def dataType: DataType = child.dataType
+
+      override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+        child.genCode(ctx)
+
+      override def eval(input: InternalRow): Any = child.eval(input)
+    }
+  }
+
+  test("SPARK-32999: TreeNode.nodeName should not throw malformed class name error") {
+    val testTriggersExpectedError = try {
+      classOf[MalformedClassObject.MalformedNameExpression].getSimpleName
+      false
+    } catch {
+      case ex: java.lang.InternalError if ex.getMessage.contains("Malformed class name") =>
+        true
+      case ex: Throwable => throw ex
+    }
+    // This test case only applies on older JDK versions (e.g. JDK8u), and doesn't trigger the
+    // issue on newer JDK versions (e.g. JDK11u).
+    assume(testTriggersExpectedError, "the test case didn't trigger malformed class name error")
+
+    val expr = MalformedClassObject.MalformedNameExpression(Literal(1))
+    try {
+      expr.nodeName
+    } catch {
+      case ex: java.lang.InternalError if ex.getMessage.contains("Malformed class name") =>
+        fail("TreeNode.nodeName should not throw malformed class name error")
+    }
   }
 }
