@@ -167,7 +167,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             orCreate = orCreate) :: Nil
       }
 
-    case AppendData(r: DataSourceV2Relation, query, writeOptions, _) =>
+    case AppendData(r: DataSourceV2Relation, query, _, writeOptions, _) =>
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
           AppendDataExecV1(v1, writeOptions.asOptions, query) :: Nil
@@ -175,7 +175,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           AppendDataExec(v2, writeOptions.asOptions, planLater(query)) :: Nil
       }
 
-    case OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, writeOptions, _) =>
+    case OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, _, writeOptions, _) =>
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
       val filters = splitConjunctivePredicates(deleteExpr).map {
         filter => DataSourceStrategy.translateFilter(deleteExpr,
@@ -189,7 +189,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           OverwriteByExpressionExec(v2, filters, writeOptions.asOptions, planLater(query)) :: Nil
       }
 
-    case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, writeOptions, _) =>
+    case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, writeOptions, _) =>
       OverwritePartitionsDynamicExec(
         r.table.asWritable, writeOptions.asOptions, planLater(query)) :: Nil
 

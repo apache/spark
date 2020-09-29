@@ -512,7 +512,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     val command = mode match {
       case SaveMode.Append | SaveMode.ErrorIfExists | SaveMode.Ignore =>
-        AppendData.byPosition(table, df.logicalPlan, extraOptions.toMap)
+        AppendData.byPosition(table, df.logicalPlan, Nil, extraOptions.toMap)
 
       case SaveMode.Overwrite =>
         val conf = df.sparkSession.sessionState.conf
@@ -520,9 +520,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
 
         if (dynamicPartitionOverwrite) {
-          OverwritePartitionsDynamic.byPosition(table, df.logicalPlan, extraOptions.toMap)
+          OverwritePartitionsDynamic.byPosition(table, df.logicalPlan, Nil, extraOptions.toMap)
         } else {
-          OverwriteByExpression.byPosition(table, df.logicalPlan, Literal(true), extraOptions.toMap)
+          OverwriteByExpression.byPosition(
+            table, df.logicalPlan, Literal(true), Nil, extraOptions.toMap)
         }
     }
 

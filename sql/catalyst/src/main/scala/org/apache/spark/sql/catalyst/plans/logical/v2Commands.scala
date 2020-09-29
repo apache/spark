@@ -58,6 +58,7 @@ trait V2WriteCommand extends Command {
 case class AppendData(
     table: NamedRelation,
     query: LogicalPlan,
+    columns: Seq[Attribute],
     writeOptions: Map[String, String],
     isByName: Boolean) extends V2WriteCommand
 
@@ -66,14 +67,15 @@ object AppendData {
       table: NamedRelation,
       df: LogicalPlan,
       writeOptions: Map[String, String] = Map.empty): AppendData = {
-    new AppendData(table, df, writeOptions, isByName = true)
+    new AppendData(table, df, Nil, writeOptions, isByName = true)
   }
 
   def byPosition(
       table: NamedRelation,
       query: LogicalPlan,
+      columns: Seq[Attribute] = Nil,
       writeOptions: Map[String, String] = Map.empty): AppendData = {
-    new AppendData(table, query, writeOptions, isByName = false)
+    new AppendData(table, query, columns, writeOptions, isByName = false)
   }
 }
 
@@ -84,6 +86,7 @@ case class OverwriteByExpression(
     table: NamedRelation,
     deleteExpr: Expression,
     query: LogicalPlan,
+    columns: Seq[Attribute],
     writeOptions: Map[String, String],
     isByName: Boolean) extends V2WriteCommand {
   override lazy val resolved: Boolean = outputResolved && deleteExpr.resolved
@@ -95,15 +98,16 @@ object OverwriteByExpression {
       df: LogicalPlan,
       deleteExpr: Expression,
       writeOptions: Map[String, String] = Map.empty): OverwriteByExpression = {
-    OverwriteByExpression(table, deleteExpr, df, writeOptions, isByName = true)
+    OverwriteByExpression(table, deleteExpr, df, Nil, writeOptions, isByName = true)
   }
 
   def byPosition(
       table: NamedRelation,
       query: LogicalPlan,
       deleteExpr: Expression,
+      columns: Seq[Attribute] = Nil,
       writeOptions: Map[String, String] = Map.empty): OverwriteByExpression = {
-    OverwriteByExpression(table, deleteExpr, query, writeOptions, isByName = false)
+    OverwriteByExpression(table, deleteExpr, query, columns, writeOptions, isByName = false)
   }
 }
 
@@ -113,6 +117,7 @@ object OverwriteByExpression {
 case class OverwritePartitionsDynamic(
     table: NamedRelation,
     query: LogicalPlan,
+    columns: Seq[Attribute] = Nil,
     writeOptions: Map[String, String],
     isByName: Boolean) extends V2WriteCommand
 
@@ -121,14 +126,15 @@ object OverwritePartitionsDynamic {
       table: NamedRelation,
       df: LogicalPlan,
       writeOptions: Map[String, String] = Map.empty): OverwritePartitionsDynamic = {
-    OverwritePartitionsDynamic(table, df, writeOptions, isByName = true)
+    OverwritePartitionsDynamic(table, df, Nil, writeOptions, isByName = true)
   }
 
   def byPosition(
       table: NamedRelation,
       query: LogicalPlan,
+      columns: Seq[Attribute] = Nil,
       writeOptions: Map[String, String] = Map.empty): OverwritePartitionsDynamic = {
-    OverwritePartitionsDynamic(table, query, writeOptions, isByName = false)
+    OverwritePartitionsDynamic(table, query, columns, writeOptions, isByName = false)
   }
 }
 

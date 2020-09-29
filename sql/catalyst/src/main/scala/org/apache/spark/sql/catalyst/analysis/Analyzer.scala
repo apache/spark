@@ -1088,7 +1088,8 @@ class Analyzer(
 
   object ResolveInsertInto extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _) if i.query.resolved =>
+      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _)
+          if i.query.resolved  && i.columns.forall(_.resolved) =>
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
           throw new AnalysisException(
@@ -1102,22 +1103,13 @@ class Analyzer(
         val query = addStaticPartitionColumns(r, i.query, staticPartitions)
 
         if (!i.overwrite) {
-          AppendData.byPosition(r, query)
+          AppendData.byPosition(r, query, i.columns)
         } else if (conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
-          OverwritePartitionsDynamic.byPosition(r, query)
+          OverwritePartitionsDynamic.byPosition(r, query, i.columns)
         } else {
-          OverwriteByExpression.byPosition(r, query, staticDeleteExpression(r, staticPartitions))
+          OverwriteByExpression.byPosition(
+            r, query, staticDeleteExpression(r, staticPartitions), i.columns)
         }
-
-      case i @ InsertIntoStatement(table, _, _, _, _, _) if table.resolved =>
-        val resolved = i.columns.map {
-          case u: UnresolvedAttribute => withPosition(u) {
-            table.resolve(u.nameParts, resolver).map(_.toAttribute)
-              .getOrElse(failAnalysis(s"Cannot resolve column name ${u.name}"))
-          }
-          case other => other
-        }
-        i.copy(columns = resolved)
     }
 
     private def partitionColumnNames(table: Table): Seq[String] = {
@@ -3038,11 +3030,21 @@ class Analyzer(
    */
   object ResolveOutputRelation extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
-      case append @ AppendData(table, query, _, isByName)
+      case i @ InsertIntoStatement(table, _, _, _, _, _) if table.resolved =>
+        val resolved = i.columns.map {
+          case u: UnresolvedAttribute => withPosition(u) {
+            table.resolve(u.nameParts, resolver).map(_.toAttribute)
+              .getOrElse(failAnalysis(s"Cannot resolve column name ${u.name}"))
+          }
+          case other => other
+        }
+        i.copy(columns = resolved)
+
+      case append @ AppendData(table, query, cols, _, isByName)
           if table.resolved && query.resolved && !append.outputResolved =>
         validateStoreAssignmentPolicy()
-        val projection =
-          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
+        val projection = TableOutputResolver.resolveOutputColumns(table.name,
+          getOutput(table, cols), query, isByName, conf)
 
         if (projection != query) {
           append.copy(query = projection)
@@ -3050,11 +3052,11 @@ class Analyzer(
           append
         }
 
-      case overwrite @ OverwriteByExpression(table, _, query, _, isByName)
+      case overwrite @ OverwriteByExpression(table, _, query, cols, _, isByName)
           if table.resolved && query.resolved && !overwrite.outputResolved =>
         validateStoreAssignmentPolicy()
-        val projection =
-          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
+        val projection = TableOutputResolver.resolveOutputColumns(
+          table.name, getOutput(table, cols), query, isByName, conf)
 
         if (projection != query) {
           overwrite.copy(query = projection)
@@ -3062,17 +3064,30 @@ class Analyzer(
           overwrite
         }
 
-      case overwrite @ OverwritePartitionsDynamic(table, query, _, isByName)
+      case overwrite @ OverwritePartitionsDynamic(table, query, cols, _, isByName)
           if table.resolved && query.resolved && !overwrite.outputResolved =>
         validateStoreAssignmentPolicy()
-        val projection =
-          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
+        val projection = TableOutputResolver.resolveOutputColumns(
+          table.name, getOutput(table, cols), query, isByName, conf)
 
         if (projection != query) {
           overwrite.copy(query = projection)
         } else {
           overwrite
         }
+    }
+  }
+
+  private def getOutput(table: NamedRelation, expectedCols: Seq[Attribute]): Seq[Attribute] = {
+    if (expectedCols.isEmpty) {
+      table.output
+    } else {
+      if (table.output.size != expectedCols.size) {
+        failAnalysis(s"${table.name} requires that the data to be inserted have the same number" +
+          s" of columns as the target table that has ${table.output.size} column(s) but the" +
+          s" specified part has only ${expectedCols.length} column(s)")
+      }
+      expectedCols
     }
   }
 
