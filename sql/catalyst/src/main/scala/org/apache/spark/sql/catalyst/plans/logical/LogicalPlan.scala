@@ -218,19 +218,30 @@ object LogicalPlanIntegrity {
 
   /**
    * Since some logical plans (e.g., `Union`) can build `AttributeReference`s in their `output`,
-   * this method checks if the same `ExprId` refers to a semantically-equal attribute
-   * in a plan output.
+   * this method checks if the same `ExprId` refers to attributes having the same data type
+   * in plan output.
    */
   def hasUniqueExprIdsForOutput(plan: LogicalPlan): Boolean = {
-    val allOutputAttrs = plan.collect { case p if canGetOutputAttrs(p) =>
+    val exprIds = plan.collect { case p if canGetOutputAttrs(p) =>
       // NOTE: we still need to filter resolved expressions here because the output of
       // some resolved logical plans can have unresolved references,
       // e.g., outer references in `ExistenceJoin`.
-      p.output.filter(_.resolved).map(_.canonicalized.asInstanceOf[Attribute])
-    }
-    val groupedAttrsByExprId = allOutputAttrs
-      .flatten.groupBy(_.exprId).values.map(_.distinct)
-    groupedAttrsByExprId.forall(_.length == 1)
+      p.output.filter(_.resolved).map { a => (a.exprId, a.dataType) }
+    }.flatten
+
+    val ignoredExprIds = plan.collect {
+      // NOTE: `Union` currently reuses input `ExprId`s for output references, but we cannot
+      // simply modify the code for assigning new `ExprId`s in `Union#output` because
+      // the modification will make breaking changes (See SPARK-32741(#29585)).
+      // So, this check just ignores the `exprId`s of `Union` output.
+      case u: Union if u.resolved => u.output.map(_.exprId)
+    }.flatten.toSet
+
+    val groupedDataTypesByExprId = exprIds.filterNot { case (exprId, _) =>
+      ignoredExprIds.contains(exprId)
+    }.groupBy(_._1).values.map(_.distinct)
+
+    groupedDataTypesByExprId.forall(_.length == 1)
   }
 
   /**

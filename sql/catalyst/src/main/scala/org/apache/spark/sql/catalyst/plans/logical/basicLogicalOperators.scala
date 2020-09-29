@@ -266,7 +266,7 @@ case class Union(
         firstAttr.withNullability(nullable)
       } else {
         AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
-          NamedExpression.newExprId, firstAttr.qualifier)
+          firstAttr.exprId, firstAttr.qualifier)
       }
     }
   }
