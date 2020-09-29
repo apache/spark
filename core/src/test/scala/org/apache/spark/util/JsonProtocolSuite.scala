@@ -94,11 +94,17 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
+    val executorBlacklisted = SparkListenerExecutorBlacklisted(executorExcludedTime, "exec1", 22)
+    val executorUnblacklisted =
+      SparkListenerExecutorUnblacklisted(executorUnexcludedTime, "exec1")
+    val nodeBlacklisted = SparkListenerNodeBlacklisted(nodeExcludedTime, "node1", 33)
     val executorExcluded = SparkListenerExecutorExcluded(executorExcludedTime, "exec1", 22)
     val executorUnexcluded =
       SparkListenerExecutorUnexcluded(executorUnexcludedTime, "exec1")
-    val nodeBlacklisted = SparkListenerNodeExcluded(nodeExcludedTime, "node1", 33)
+    val nodeExcluded = SparkListenerNodeExcluded(nodeExcludedTime, "node1", 33)
     val nodeUnblacklisted =
+      SparkListenerNodeUnblacklisted(nodeUnexcludedTime, "node1")
+    val nodeUnexcluded =
       SparkListenerNodeUnexcluded(nodeUnexcludedTime, "node1")
     val executorMetricsUpdate = {
       // Use custom accum ID for determinism
@@ -145,10 +151,12 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(applicationEnd, applicationEndJsonString)
     testEvent(executorAdded, executorAddedJsonString)
     testEvent(executorRemoved, executorRemovedJsonString)
+    testEvent(executorBlacklisted, executorBlacklistedJsonString)
+    testEvent(executorUnblacklisted, executorUnblacklistedJsonString)
     testEvent(executorExcluded, executorBlacklistedJsonString)
     testEvent(executorUnexcluded, executorUnblacklistedJsonString)
-    testEvent(nodeBlacklisted, nodeBlacklistedJsonString)
-    testEvent(nodeUnblacklisted, nodeUnblacklistedJsonString)
+    testEvent(nodeExcluded, nodeBlacklistedJsonString)
+    testEvent(nodeUnexcluded, nodeUnblacklistedJsonString)
     testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
     testEvent(blockUpdated, blockUpdatedJsonString)
     testEvent(stageExecutorMetrics, stageExecutorMetricsJsonString)
