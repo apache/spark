@@ -82,7 +82,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
       case currentDate @ CurrentDate(Some(timeZoneId)) =>
         currentDates.getOrElseUpdate(timeZoneId, {
           Literal.create(
-            DateTimeUtils.microsToDays(timestamp, currentDate.zoneId),
+            DateTimeUtils.millisToDays(DateTimeUtils.toMillis(timestamp), currentDate.zoneId),
             DateType)
         })
       case CurrentTimestamp() | Now() => currentTime
