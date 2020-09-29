@@ -4426,3 +4426,36 @@ setMethod("timestamp_seconds",
         )
         column(jc)
     })
+
+#' @details
+#' \code{nth_value}: Window function: returns the value that is the \code{offset}th
+#' row of the window frame# (counting from 1), and \code{null} if the size of window
+#' frame is less than \code{offset} rows.
+#'
+#' @name column_window_functions
+#' @rdname column_window_functions
+#' @aliases nth_value nth_value,characterOrColumn-method
+#' @examples
+#' \dontrun{
+#' nth_value(df$c, 3)
+#' nth_value(df$c, 3, TRUE)
+#' }
+#' @note nth_value since 3.1.0
+setMethod("nth_value",
+          signature(x = "characterOrColumn", offset = "numeric"),
+          function(x, offset, ignoreNulls = FALSE) {
+              x <- if (is.character(x)) {
+                  column(x)
+              } else {
+                  x
+              }
+              offset <- as.integer(offset)
+              jc <- callJStatic(
+                  "org.apache.spark.sql.functions",
+                  "nth_value",
+                  x@jc,
+                  offset,
+                  ignoreNulls
+              )
+              column(jc)
+          })
