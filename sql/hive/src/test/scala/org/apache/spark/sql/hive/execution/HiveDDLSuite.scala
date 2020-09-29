@@ -994,7 +994,7 @@ class HiveDDLSuite
       |""".stripMargin)
     val newPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
     assert(newPart.storage.serde == Some(expectedSerde))
-    assert(newPart.storage.properties.filterKeys(expectedSerdeProps.contains) ==
+    assert(newPart.storage.properties.filterKeys(expectedSerdeProps.contains).toMap ==
       expectedSerdeProps)
   }
 
@@ -1192,7 +1192,7 @@ class HiveDDLSuite
       expectedDBUri,
       Map.empty))
     // the database directory was created
-    assert(fs.exists(dbPath) && fs.isDirectory(dbPath))
+    assert(fs.exists(dbPath) && fs.getFileStatus(dbPath).isDirectory)
     sql(s"USE $dbName")
 
     val tabName = "tab1"

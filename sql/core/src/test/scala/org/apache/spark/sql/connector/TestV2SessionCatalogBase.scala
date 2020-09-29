@@ -22,8 +22,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.connector.catalog.{DelegatingCatalogExtension, Identifier, Table}
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType
+import org.apache.spark.sql.connector.catalog.{DelegatingCatalogExtension, Identifier, Table, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
 
@@ -47,10 +47,13 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
       tables.get(ident)
     } else {
       // Table was created through the built-in catalog
-      val t = super.loadTable(ident)
-      val table = newTable(t.name(), t.schema(), t.partitioning(), t.properties())
-      tables.put(ident, table)
-      table
+      super.loadTable(ident) match {
+        case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW => v1Table
+        case t =>
+          val table = newTable(t.name(), t.schema(), t.partitioning(), t.properties())
+          tables.put(ident, table)
+          table
+      }
     }
   }
 

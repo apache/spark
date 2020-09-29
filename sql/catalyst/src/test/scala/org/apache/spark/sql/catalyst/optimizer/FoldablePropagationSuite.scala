@@ -180,4 +180,28 @@ class FoldablePropagationSuite extends PlanTest {
       .select((Literal(1) + 3).as('res)).analyze
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-32635: Replace references with foldables coming only from the node's children") {
+    val leftExpression = 'a.int
+    val left = LocalRelation(leftExpression).select('a)
+    val rightExpression = Alias(Literal(2), "a")(leftExpression.exprId)
+    val right = LocalRelation('b.int).select('b, rightExpression).select('b)
+    val join = left.join(right, joinType = LeftOuter, condition = Some('b === 'a))
+
+    val query = join.analyze
+    val optimized = Optimize.execute(query)
+    comparePlans(optimized, query)
+  }
+
+  test("SPARK-32951: Foldable propagation from Aggregate") {
+    val query = testRelation
+      .groupBy('a)('a, sum('b).as('b), Literal(1).as('c))
+      .select('a, 'b, 'c)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = testRelation
+      .groupBy('a)('a, sum('b).as('b), Literal(1).as('c))
+      .select('a, 'b, Literal(1).as('c)).analyze
+    comparePlans(optimized, correctAnswer)
+  }
 }

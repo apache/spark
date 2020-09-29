@@ -693,7 +693,7 @@ Output: []
 Arguments: `default`.`explain_view`, SELECT key, val FROM explain_temp1, false, false, PersistedView
 
 (3) UnresolvedRelation
-Arguments: [explain_temp1], []
+Arguments: [explain_temp1], [], false
 
 (4) Project
 Arguments: ['key, 'val]

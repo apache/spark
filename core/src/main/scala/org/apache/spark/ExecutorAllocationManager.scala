@@ -28,7 +28,7 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
-import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
+import org.apache.spark.internal.config.Tests.TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
 import org.apache.spark.resource.ResourceProfileManager
@@ -150,11 +150,7 @@ private[spark] class ExecutorAllocationManager(
   private var addTime: Long = NOT_SET
 
   // Polling loop interval (ms)
-  private val intervalMillis: Long = if (Utils.isTesting) {
-      conf.get(TEST_SCHEDULE_INTERVAL)
-    } else {
-      100
-    }
+  private val intervalMillis: Long = 100
 
   // Listener for Spark events that impact the allocation policy
   val listener = new ExecutorAllocationListener
@@ -247,7 +243,10 @@ private[spark] class ExecutorAllocationManager(
         }
       }
     }
-    executor.scheduleWithFixedDelay(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
+
+    if (!testing || conf.get(TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED)) {
+      executor.scheduleWithFixedDelay(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
+    }
 
     // copy the maps inside synchonize to ensure not being modified
     val (numExecutorsTarget, numLocalityAware) = synchronized {

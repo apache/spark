@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableProvider}
@@ -188,10 +189,18 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *
    * @since 2.0.0
    */
-  def load(): DataFrame = {
+  def load(): DataFrame = loadInternal(None)
+
+  private def loadInternal(path: Option[String]): DataFrame = {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "read files of Hive data source directly.")
+    }
+
+    val optionsWithPath = if (path.isEmpty) {
+      extraOptions
+    } else {
+      extraOptions + ("path" -> path.get)
     }
 
     val ds = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf).
@@ -203,7 +212,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       sparkSession,
       userSpecifiedSchema = userSpecifiedSchema,
       className = source,
-      options = extraOptions.toMap)
+      options = optionsWithPath.originalMap)
     val v1Relation = ds match {
       case _: StreamSourceProvider => Some(StreamingRelation(v1DataSource))
       case _ => None
@@ -213,8 +222,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       case provider: TableProvider if !provider.isInstanceOf[FileDataSourceV2] =>
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           source = provider, conf = sparkSession.sessionState.conf)
-        val options = sessionOptions ++ extraOptions.toMap
-        val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+        val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
+            optionsWithPath.originalMap
+        val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
         val table = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         table match {
@@ -222,7 +232,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
             Dataset.ofRows(
               sparkSession,
               StreamingRelationV2(
-                Some(provider), source, table, dsOptions, table.schema.toAttributes, v1Relation))
+                Some(provider), source, table, dsOptions,
+                table.schema.toAttributes, None, None, v1Relation))
 
           // fallback to v1
           // TODO (SPARK-27483): we should move this fallback logic to an analyzer rule.
@@ -247,7 +258,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
         "parameter. Either remove the path option, or call load() without the parameter. " +
         s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
     }
-    option("path", path).load()
+    loadInternal(Some(path))
   }
 
   /**
@@ -464,6 +475,23 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    */
   def parquet(path: String): DataFrame = {
     format("parquet").load(path)
+  }
+
+  /**
+   * Define a Streaming DataFrame on a Table. The DataSource corresponding to the table should
+   * support streaming mode.
+   * @param tableName The name of the table
+   * @since 3.1.0
+   */
+  def table(tableName: String): DataFrame = {
+    require(tableName != null, "The table name can't be null")
+    val identifier = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    Dataset.ofRows(
+      sparkSession,
+      UnresolvedRelation(
+        identifier,
+        new CaseInsensitiveStringMap(extraOptions.toMap.asJava),
+        isStreaming = true))
   }
 
   /**

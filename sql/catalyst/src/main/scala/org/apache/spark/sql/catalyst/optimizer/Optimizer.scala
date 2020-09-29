@@ -107,9 +107,11 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RewriteCorrelatedScalarSubquery,
         EliminateSerialization,
         RemoveRedundantAliases,
+        UnwrapCastInBinaryComparison,
         RemoveNoopOperators,
         CombineWithFields,
         SimplifyExtractValueOps,
+        OptimizeJsonExprs,
         CombineConcats) ++
         extendedOperatorOptimizationRules
 
@@ -142,7 +144,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteNonCorrelatedExists,
       ComputeCurrentTime,
       GetCurrentDatabaseAndCatalog(catalogManager),
-      RewriteDistinctAggregates,
       ReplaceDeduplicateWithAggregate) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
@@ -196,6 +197,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateSorts) :+
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) :+
+    // This batch must run after "Decimal Optimizations", as that one may change the
+    // aggregate distinct column
+    Batch("Distinct Aggregate Rewrite", Once,
+      RewriteDistinctAggregates) :+
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
       CombineTypedFilters,
@@ -1043,7 +1048,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
 
   private def isOrderIrrelevantAggs(aggs: Seq[NamedExpression]): Boolean = {
     def isOrderIrrelevantAggFunction(func: AggregateFunction): Boolean = func match {
-      case _: Min | _: Max | _: Count => true
+      case _: Min | _: Max | _: Count | _: BitAggregate => true
       // Arithmetic operations for floating-point values are order-sensitive
       // (they are not associative).
       case _: Sum | _: Average | _: CentralMomentAgg =>

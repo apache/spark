@@ -93,7 +93,7 @@ class AddFileTests(PySparkTestCase):
         # this job fails due to `userlibrary` not being on the Python path:
         # disable logging in log4j temporarily
         def func(x):
-            from userlibrary import UserClass
+            from userlibrary import UserClass  # type: ignore
             return UserClass().hello()
         with QuietTest(self.sc):
             self.assertRaises(Exception, self.sc.parallelize(range(2)).map(func).first)
@@ -137,7 +137,8 @@ class AddFileTests(PySparkTestCase):
         # To ensure that we're actually testing addPyFile's effects, check that
         # this fails due to `userlibrary` not being on the Python path:
         def func():
-            from userlib import UserClass  # noqa: F401
+            from userlib import UserClass  # type: ignore[import]
+            UserClass()
         self.assertRaises(ImportError, func)
         path = os.path.join(SPARK_HOME, "python/test_support/userlib-0.1.zip")
         self.sc.addPyFile(path)
@@ -147,11 +148,11 @@ class AddFileTests(PySparkTestCase):
     def test_overwrite_system_module(self):
         self.sc.addPyFile(os.path.join(SPARK_HOME, "python/test_support/SimpleHTTPServer.py"))
 
-        import SimpleHTTPServer
+        import SimpleHTTPServer  # type: ignore[import]
         self.assertEqual("My Server", SimpleHTTPServer.__name__)
 
         def func(x):
-            import SimpleHTTPServer
+            import SimpleHTTPServer  # type: ignore[import]
             return SimpleHTTPServer.__name__
 
         self.assertEqual(["My Server"], self.sc.parallelize(range(1)).map(func).collect())
@@ -321,7 +322,7 @@ if __name__ == "__main__":
     from pyspark.tests.test_context import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

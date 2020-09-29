@@ -550,7 +550,7 @@ private[spark] class MesosClusterScheduler(
     val driverConf = desc.conf.getAll
       .filter { case (key, _) => !replicatedOptionsExcludeList.contains(key) }
       .toMap
-    (defaultConf ++ driverConf).foreach { case (key, value) =>
+    (defaultConf ++ driverConf).toSeq.sortBy(_._1).foreach { case (key, value) =>
       options ++= Seq("--conf", s"${key}=${value}") }
 
     options.map(shellEscape)

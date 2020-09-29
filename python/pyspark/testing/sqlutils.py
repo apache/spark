@@ -147,7 +147,7 @@ class PythonOnlyPoint(ExamplePoint):
     """
     An example class to demonstrate UDT in only Python
     """
-    __UDT__ = PythonOnlyUDT()
+    __UDT__ = PythonOnlyUDT()  # type: ignore
 
 
 class MyObject(object):
