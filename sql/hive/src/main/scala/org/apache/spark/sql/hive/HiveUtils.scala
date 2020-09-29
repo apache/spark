@@ -90,7 +90,8 @@ private[spark] object HiveUtils extends Logging {
       |   <code>${builtinHiveVersion}</code> or not defined.
       | 2. "maven"
       |   Use Hive jars of specified version downloaded from Maven repositories.
-      | 3. A classpath in the standard format for both Hive and Hadoop.
+      | 3. A classpath in the standard format for both Hive and Hadoop, we should always
+      |   be fully qualified URL to indicate other file systems.
       """.stripMargin)
     .version("1.4.0")
     .stringConf
@@ -453,15 +454,13 @@ private[spark] object HiveUtils extends Logging {
         hiveMetastoreJars
           .split(";")
           .flatMap {
-            case path if path.contains("\\") =>
+            case path if Utils.isWindows =>
               addLocalHiveJars(new File(path))
             case path =>
               val uri = new Path(path).toUri
               uri.getScheme match {
-                case null | "file" =>
+                case "file" =>
                   addLocalHiveJars(new File(uri.getPath))
-                case "local" =>
-                  new File("file:" + uri.getPath).toURL :: Nil
                 case "http" | "https" | "ftp" =>
                   try {
                     // validate and fetch URI file
