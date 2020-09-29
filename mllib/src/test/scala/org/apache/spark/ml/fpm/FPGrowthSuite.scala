@@ -121,7 +121,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
     val prediction = model.transform(
       spark.createDataFrame(Seq(Tuple1(Array("1", "2")))).toDF("items")
-    ).first().getAs[Seq[String]]("prediction")
+    ).first().getAs[scala.collection.Seq[String]]("prediction")
 
     assert(prediction === Seq("3"))
   }
