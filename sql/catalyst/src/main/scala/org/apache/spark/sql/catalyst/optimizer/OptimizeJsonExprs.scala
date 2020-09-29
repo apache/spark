@@ -31,6 +31,11 @@ object OptimizeJsonExprs extends Rule[LogicalPlan] {
         StructsToJson(options2, child, timeZoneId2), timeZoneId1)
           if options1.isEmpty && options2.isEmpty && timeZoneId1 == timeZoneId2 &&
             jsonToStructs.dataType == child.dataType =>
+        // `StructsToJson` only fails when `JacksonGenerator` cannot convert data types to
+        // JSON. But `StructsToJson.checkInputDataTypes` verifies its child's data types
+        // is convertible to JSON. But in `StructsToJson(JsonToStructs(...))` case, we cannot
+        // verify input json string so `JsonToStructs` might throw error in runtime. Thus
+        // we cannot optimize this case similarly.
         child
     }
   }
