@@ -4432,7 +4432,10 @@ setMethod("timestamp_seconds",
 #' row of the window frame# (counting from 1), and \code{null} if the size of window
 #' frame is less than \code{offset} rows.
 #'
-#' @name column_window_functions
+#' @param offset a numeric indicating number of row to use as the value
+#' @param na.rm a logical which indicates that the Nth value should skip null in the
+#'        determination of which row to use
+#'
 #' @rdname column_window_functions
 #' @aliases nth_value nth_value,characterOrColumn-method
 #' @examples
@@ -4443,7 +4446,7 @@ setMethod("timestamp_seconds",
 #' @note nth_value since 3.1.0
 setMethod("nth_value",
           signature(x = "characterOrColumn", offset = "numeric"),
-          function(x, offset, ignoreNulls = FALSE) {
+          function(x, offset, na.rm = FALSE) {
               x <- if (is.character(x)) {
                   column(x)
               } else {
@@ -4455,7 +4458,7 @@ setMethod("nth_value",
                   "nth_value",
                   x@jc,
                   offset,
-                  ignoreNulls
+                  na.rm
               )
               column(jc)
           })
