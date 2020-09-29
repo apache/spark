@@ -449,8 +449,8 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
       }.getMessage()
       assert(excMsg === s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
         s"( = ${maxNodeAttempts}) was >= ${config.TASK_MAX_FAILURES.key} " +
-        s"( = ${maxTaskFailures} ).  Though excludeOnFailure is enabled, with this " +
-        s"configuration, Spark will not be robust to one bad node.  Decrease " +
+        s"( = ${maxTaskFailures} ). Though excludeOnFailure is enabled, with this " +
+        s"configuration, Spark will not be robust to one bad node. Decrease " +
         s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.TASK_MAX_FAILURES.key}, " +
         s"or disable excludeOnFailure with ${config.EXCLUDE_ON_FAILURE_ENABLED.key}")
     }
@@ -476,7 +476,7 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
     }
   }
 
-  test("excluding kills executors, configured by BLACKLIST_KILL_ENABLED") {
+  test("excluding kills executors, configured by EXCLUDE_ON_FAILURE_KILL_ENABLED") {
     val allocationClientMock = mock[ExecutorAllocationClient]
     when(allocationClientMock.killExecutors(any(), any(), any(), any())).thenReturn(Seq("called"))
     when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer { (_: InvocationOnMock) =>
@@ -547,7 +547,7 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
     verify(allocationClientMock).killExecutorsOnHost("hostA")
   }
 
-  test("fetch failure excluding kills executors, configured by BLACKLIST_KILL_ENABLED") {
+  test("fetch failure excluding kills executors, configured by EXCLUDE_ON_FAILURE_KILL_ENABLED") {
     val allocationClientMock = mock[ExecutorAllocationClient]
     when(allocationClientMock.killExecutors(any(), any(), any(), any())).thenReturn(Seq("called"))
     when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer { (_: InvocationOnMock) =>
