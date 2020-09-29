@@ -1048,11 +1048,6 @@ trait ComplexTypeMergingExpression extends Expression {
   @transient
   lazy val inputTypesForMerging: Seq[DataType] = children.map(_.dataType)
 
-  private lazy val internalDataType: DataType = {
-    dataTypeCheck
-    inputTypesForMerging.reduceLeft(TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(_, _).get)
-  }
-
   def dataTypeCheck: Unit = {
     require(
       inputTypesForMerging.nonEmpty,
@@ -1061,6 +1056,11 @@ trait ComplexTypeMergingExpression extends Expression {
       TypeCoercion.haveSameType(inputTypesForMerging),
       "All input types must be the same except nullable, containsNull, valueContainsNull flags." +
         s" The input types found are\n\t${inputTypesForMerging.mkString("\n\t")}")
+  }
+
+  private lazy val internalDataType: DataType = {
+    dataTypeCheck
+    inputTypesForMerging.reduceLeft(TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(_, _).get)
   }
 
   override def dataType: DataType = internalDataType
