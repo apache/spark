@@ -254,10 +254,10 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
       // filterApplicationStart: Some(false) & Some(false) => filter out
       writeEventToWriter(writer, SparkListenerApplicationStart("app", None, 0, "user", None))
 
-      // filterNodeBlacklisted: None & Some(true) => filter in
+      // filterNodeExcluded: None & Some(true) => filter in
       expectedLines += writeEventToWriter(writer, SparkListenerNodeExcluded(0, "host1", 1))
 
-      // filterNodeUnblacklisted: None & Some(false) => filter out
+      // filterNodeUnexcluded: None & Some(false) => filter out
       writeEventToWriter(writer, SparkListenerNodeUnexcluded(0, "host1"))
 
       // other events: None & None => filter in
