@@ -947,7 +947,8 @@ def nth_value(col, offset, ignoreNulls=False):
 
     :param col: name of column or expression
     :param offset: number of row to use as the value
-    :param ignoreNulls: default value
+    :param ignoreNulls: indicates the Nth value should skip null in the
+        determination of which row to use
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.nth_value(_to_java_column(col), offset, ignoreNulls))
