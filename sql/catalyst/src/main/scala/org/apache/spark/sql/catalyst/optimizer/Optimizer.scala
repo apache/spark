@@ -563,10 +563,11 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
   }
 
   /**
-   * Rewrites an expression so that it can be pushed to the left/right side of a
-   * Union or Except operator.
+   * Rewrites an expression so that it can be pushed to the right side of a
+   * Union or Except operator. This method relies on the fact that the output attributes
+   * of a union/intersect/except are always equal to the left child's output.
    */
-  private def rewriteExprs[A <: Expression](e: A, rewrites: AttributeMap[Attribute]) = {
+  private def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]) = {
     val result = e transform {
       case a: Attribute => rewrites(a)
     } match {
@@ -580,28 +581,21 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
     result.asInstanceOf[A]
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
 
     // Push down deterministic projection through UNION ALL
     case p @ Project(projectList, u: Union) =>
       assert(u.children.nonEmpty)
       if (projectList.forall(_.deterministic)) {
-        val firstRewrites = buildRewrites(u, u.children.head)
-        val newFirstChild = Project(
-          projectList.map(rewriteExprs(_, firstRewrites)), u.children.head)
+        val newFirstChild = Project(projectList, u.children.head)
         val newOtherChildren = u.children.tail.map { child =>
-          val otherRewrites = buildRewrites(u, child)
-          Project(projectList.map(rewriteExprs(_, otherRewrites)), child)
+          val rewrites = buildRewrites(u.children.head, child)
+          Project(projectList.map(pushToRight(_, rewrites)), child)
         }
         val newChildren = newFirstChild +: newOtherChildren
-        val newOutput = ResolveUnion.makeUnionOutput(newChildren)
-        val newPlan = u.copy(children = newChildren, unionOutput = newOutput)
-        val attrMapping = p.output.zip(newPlan.output).filter {
-          case (a1, a2) => a1.exprId != a2.exprId
-        }
-        newPlan -> attrMapping
+        u.copy(children = newChildren, unionOutput = ResolveUnion.makeUnionOutput(newChildren))
       } else {
-        p -> Nil
+        p
       }
   }
 }
@@ -672,9 +666,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, u: Union) =>
       if (!u.outputSet.subsetOf(p.references)) {
         val firstChild = u.children.head
-        val firstRewrites = AttributeMap(u.output.zip(firstChild.output))
-        val projRefs = AttributeSet(p.references.map(firstRewrites).toSeq)
-        val newOutput = prunedChild(firstChild, projRefs).output
+        val newOutput = prunedChild(firstChild, p.references).output
         // pruning the columns of all children based on the pruned first child.
         val newChildren = u.children.map { p =>
           val selected = p.output.zipWithIndex.filter { case (a, i) =>
@@ -682,8 +674,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
           }.map(_._1)
           Project(selected, p)
         }
-        val prunedUnionOutput = u.output.filter(p.references.contains)
-        p.copy(child = u.copy(children = newChildren, unionOutput = prunedUnionOutput))
+        p.copy(child = u.withNewChildren(newChildren))
       } else {
         p
       }
@@ -987,7 +978,10 @@ object CombineUnions extends Rule[LogicalPlan] {
           flattened += child
       }
     }
-    union.copy(children = flattened.toSeq)
+    union.copy(
+      children = flattened,
+      unionOutput = ResolveUnion.makeUnionOutput(flattened)
+    )
   }
 }
 
@@ -1691,8 +1685,8 @@ object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
  */
 
 object RewriteExceptAll extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
-    case e @ Except(left, right, true) =>
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Except(left, right, true) =>
       assert(left.output.size == right.output.size)
 
       val newColumnLeft = Alias(Literal(1L), "vcol")()
@@ -1703,23 +1697,18 @@ object RewriteExceptAll extends Rule[LogicalPlan] {
       val unionPlan = Union(modifiedLeftPlan, modifiedRightPlan, output = unionOutput)
       val aggSumCol =
         Alias(AggregateExpression(Sum(unionPlan.output.head.toAttribute), Complete, false), "sum")()
-      val newLeftOutput = unionPlan.output.drop(1)
-      val aggOutputColumns = newLeftOutput ++ Seq(aggSumCol)
-      val aggregatePlan = Aggregate(newLeftOutput, aggOutputColumns, unionPlan)
+      val aggOutputColumns = left.output ++ Seq(aggSumCol)
+      val aggregatePlan = Aggregate(left.output, aggOutputColumns, unionPlan)
       val filteredAggPlan = Filter(GreaterThan(aggSumCol.toAttribute, Literal(0L)), aggregatePlan)
       val genRowPlan = Generate(
-        ReplicateRows(Seq(aggSumCol.toAttribute) ++ newLeftOutput),
+        ReplicateRows(Seq(aggSumCol.toAttribute) ++ left.output),
         unrequiredChildIndex = Nil,
         outer = false,
         qualifier = None,
-        newLeftOutput,
+        left.output,
         filteredAggPlan
       )
-      val newPlan = Project(newLeftOutput, genRowPlan)
-      val attrMapping = e.output.zip(newPlan.output).filter {
-        case (a1, a2) => a1.exprId != a2.exprId
-      }
-      newPlan -> attrMapping
+      Project(left.output, genRowPlan)
   }
 }
 
@@ -1754,8 +1743,8 @@ object RewriteExceptAll extends Rule[LogicalPlan] {
  * }}}
  */
 object RewriteIntersectAll extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
-    case i @ Intersect(left, right, true) =>
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Intersect(left, right, true) =>
       assert(left.output.size == right.output.size)
 
       val trueVcol1 = Alias(Literal(true), "vcol1")()
@@ -1787,27 +1776,22 @@ object RewriteIntersectAll extends Rule[LogicalPlan] {
         vCol1AggrExpr.toAttribute
       ), "min_count")()
 
-      val newLeftOutput = unionPlan.output.drop(2)
-      val aggregatePlan = Aggregate(newLeftOutput,
-        Seq(vCol1AggrExpr, vCol2AggrExpr) ++ newLeftOutput, unionPlan)
+      val aggregatePlan = Aggregate(left.output,
+        Seq(vCol1AggrExpr, vCol2AggrExpr) ++ left.output, unionPlan)
       val filterPlan = Filter(And(GreaterThanOrEqual(vCol1AggrExpr.toAttribute, Literal(1L)),
         GreaterThanOrEqual(vCol2AggrExpr.toAttribute, Literal(1L))), aggregatePlan)
-      val projectMinPlan = Project(newLeftOutput ++ Seq(ifExpression), filterPlan)
+      val projectMinPlan = Project(left.output ++ Seq(ifExpression), filterPlan)
 
       // Apply the replicator to replicate rows based on min_count
       val genRowPlan = Generate(
-        ReplicateRows(Seq(ifExpression.toAttribute) ++ newLeftOutput),
+        ReplicateRows(Seq(ifExpression.toAttribute) ++ left.output),
         unrequiredChildIndex = Nil,
         outer = false,
         qualifier = None,
-        newLeftOutput,
+        left.output,
         projectMinPlan
       )
-      val newPlan = Project(newLeftOutput, genRowPlan)
-      val attrMapping = i.output.zip(newPlan.output).filter {
-        case (a1, a2) => a1.exprId != a2.exprId
-      }
-      newPlan -> attrMapping
+      Project(left.output, genRowPlan)
   }
 }
 

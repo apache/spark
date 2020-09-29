@@ -36,12 +36,11 @@ object ResolveUnion extends Rule[LogicalPlan] {
       val firstAttr = attrs.head
       val nullable = attrs.exists(_.nullable)
       val newDt = attrs.map(_.dataType).reduce(StructType.merge)
-      val newExprId = NamedExpression.newExprId
       if (firstAttr.dataType == newDt) {
-        firstAttr.withExprId(newExprId).withNullability(nullable)
+        firstAttr.withNullability(nullable)
       } else {
         AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
-          newExprId, firstAttr.qualifier)
+          NamedExpression.newExprId, firstAttr.qualifier)
       }
     }
   }

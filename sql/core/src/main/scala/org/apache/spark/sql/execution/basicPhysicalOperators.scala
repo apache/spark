@@ -634,11 +634,9 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
  * If we change how this is implemented physically, we'd need to update
  * [[org.apache.spark.sql.catalyst.plans.logical.Union.maxRowsPerPartition]].
  */
-case class UnionExec(children: Seq[SparkPlan], output: Seq[Attribute]) extends SparkPlan {
+case class UnionExec(children: Seq[SparkPlan], unionOutput: Seq[Attribute]) extends SparkPlan {
 
-  assert(output.nonEmpty, "Union should have at least a single column")
-
-  override def producedAttributes: AttributeSet = AttributeSet(output)
+  override def output: Seq[Attribute] = unionOutput
 
   protected override def doExecute(): RDD[InternalRow] =
     sparkContext.union(children.map(_.execute()))
