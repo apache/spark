@@ -75,13 +75,12 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
 
 /**
  * Returns the current date at the start of query evaluation.
- * All calls of current_date within the same query return the same value.
- *
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_() - Returns the current date at the start of query evaluation.
+    _FUNC_() - Returns the current date at the start of query evaluation. All calls of current_date within the same query return the same value.
 
     _FUNC_ - Returns the current date at the start of query evaluation.
   """,
@@ -97,6 +96,7 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
   """,
   group = "datetime_funcs",
   since = "1.5.0")
+// scalastyle:on line.size.limit
 case class CurrentDate(timeZoneId: Option[String] = None)
   extends LeafExpression with TimeZoneAwareExpression with CodegenFallback {
 
@@ -124,13 +124,12 @@ abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallbac
 
 /**
  * Returns the current timestamp at the start of query evaluation.
- * All calls of current_timestamp within the same query return the same value.
- *
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_() - Returns the current timestamp at the start of query evaluation.
+    _FUNC_() - Returns the current timestamp at the start of query evaluation. All calls of current_timestamp within the same query return the same value.
 
     _FUNC_ - Returns the current timestamp at the start of query evaluation.
   """,
@@ -146,6 +145,7 @@ abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallbac
   """,
   group = "datetime_funcs",
   since = "1.5.0")
+// scalastyle:on line.size.limit
 case class CurrentTimestamp() extends CurrentTimestampLike {
   override def prettyName: String = "current_timestamp"
 }
