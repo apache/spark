@@ -387,16 +387,10 @@ object ScalaReflection extends ScalaReflection {
         // }
         // the fullName of tpe is example.Foo.Foo, but we need example.Foo so that
         // we can call example.Foo.withName to deserialize string to enumeration.
-        val className = t.asInstanceOf[TypeRef].pre.typeSymbol.asClass.fullName
-        // this check is for spark-shell which give a default package name like '$line1.$read$$iw'
-        if (className.startsWith("$")) {
-          throw new UnsupportedOperationException(
-            s"Enumeration class required package name, but found $className")
-        }
-
-        val clazz = Utils.classForName(className)
+        val parent = t.asInstanceOf[TypeRef].pre.typeSymbol.asClass
+        val cls = mirror.runtimeClass(parent)
         StaticInvoke(
-          clazz,
+          cls,
           ObjectType(getClassFromType(t)),
           "withName",
           createDeserializerForString(path, false) :: Nil,
