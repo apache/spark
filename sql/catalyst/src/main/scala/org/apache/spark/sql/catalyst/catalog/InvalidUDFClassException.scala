@@ -22,8 +22,6 @@ import org.apache.spark.sql.AnalysisException
 /**
  * Thrown when a query failed for invalid function class, usually because a SQL
  * function's class does not follow the rules of the UDF/UDAF/UDTF class definition.
- *
- * @Since 3.1.0
  */
 class InvalidUDFClassException private[sql](message: String)
   extends AnalysisException(message, None, None, None, None) {

@@ -57,7 +57,7 @@ private[sql] class HiveSessionCatalog(
       parser,
       functionResourceLoader) {
 
-  def makeHiveFunctionExpression(
+  private def makeHiveFunctionExpression(
       name: String,
       clazz: Class[_],
       input: Seq[Expression]): Expression = {
@@ -122,15 +122,11 @@ private[sql] class HiveSessionCatalog(
       try {
         super.makeFunctionExpression(name, clazz, input)
       } catch {
+        // If `super.makeFunctionExpression` throw `InvalidUDFClassException`, we construct
+        // Hive UDF/UDAF/UDTF with function definition. Otherwise, we just throw it earlier.
         case _: InvalidUDFClassException =>
-          // If `super.makeFunctionExpression` throw `InvalidUDFClassException`, we construct
-          // Hive UDF/UDAF/UDTF with function definition.
           makeHiveFunctionExpression(name, clazz, input)
-        case e: AnalysisException =>
-          // If `super.makeFunctionExpression` not throw `InvalidUDFClassException`, it means
-          // function definition satisfy Spark mode UDAF but construct failed or arguments invalid.
-          // we should throw this earlier.
-          throw e
+        case e => throw e
       }
     }
   }
