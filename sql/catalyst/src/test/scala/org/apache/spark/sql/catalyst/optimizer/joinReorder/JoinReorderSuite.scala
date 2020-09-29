@@ -363,4 +363,51 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
 
     assertEqualJoinPlans(Optimize, originalPlan3, bestPlan3)
   }
+
+  test("SPARK-32995: Optimized plan should not get reordered to one with the same cost") {
+    // Define new columns and tables, so all join orders would have the same total cost
+    val columnInfo = AttributeMap(Seq(
+      attr("t1.col1") -> rangeColumnStat(5, 0),
+      attr("t1.col2") -> rangeColumnStat(5, 0),
+      attr("t2.col1") -> rangeColumnStat(5, 0),
+      attr("t2.col2") -> rangeColumnStat(5, 0),
+      attr("t3.col1") -> rangeColumnStat(5, 0),
+      attr("t3.col2") -> rangeColumnStat(5, 0)
+    ))
+
+    val nameToAttr = columnInfo.map(kv => kv._1.name -> kv._1)
+    val nameToColInfo = columnInfo.map(kv => kv._1.name -> kv)
+
+    val t1 = StatsTestPlan(
+      outputList = Seq("t1.col1", "t1.col2").map(nameToAttr),
+      rowCount = 1000,
+      size = Some(1000),
+      attributeStats = AttributeMap(Seq("t1.col1", "t1.col2").map(nameToColInfo)))
+    val t2 = StatsTestPlan(
+      outputList = Seq("t2.col1", "t2.col2").map(nameToAttr),
+      rowCount = 1000,
+      size = Some(1000),
+      attributeStats = AttributeMap(Seq("t2.col1", "t2.col2").map(nameToColInfo)))
+    val t3 = StatsTestPlan(
+      outputList = Seq("t3.col1", "t3.col2").map(nameToAttr),
+      rowCount = 1000,
+      size = Some(1000),
+      attributeStats = AttributeMap(Seq("t3.col1", "t3.col2").map(nameToColInfo)))
+
+    // Right-deep
+    val originalPlan = t1.join(
+      t2.join(t3, Inner, Some(nameToAttr("t2.col2") === nameToAttr("t3.col2"))),
+      Inner, Some(nameToAttr("t1.col1") === nameToAttr("t2.col1")))
+
+    // Left-deep with the plans in the same order
+    val expectedPlan =
+      t1.join(t2, Inner, Some(nameToAttr("t1.col1") === nameToAttr("t2.col1")))
+        .join(t3, Inner, Some(nameToAttr("t2.col2") === nameToAttr("t3.col2")))
+
+    // Right-deep gets turned into a left-deep
+    assertEqualJoinPlans(Optimize, originalPlan, expectedPlan)
+
+    // Left-deep is not changed (the rule is idempotent)
+    assertEqualJoinPlans(Optimize, expectedPlan, expectedPlan)
+  }
 }
