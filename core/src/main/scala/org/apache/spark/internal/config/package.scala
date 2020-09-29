@@ -781,7 +781,7 @@ package object config {
   private[spark] val EXCLUDE_ON_FAILURE_KILL_ENABLED =
     ConfigBuilder("spark.excludeOnFailure.killExcludedExecutors")
       .version("2.2.0")
-      .withAlternative("spark.blacklist.killBlacklistedExecutors")
+      .withAlternative("spark.excludeOnFailure.timeout")
       .booleanConf
       .createWithDefault(false)
 
@@ -796,7 +796,7 @@ package object config {
   private[spark] val EXCLUDE_ON_FAILURE_FETCH_FAILURE_ENABLED =
     ConfigBuilder("spark.excludeOnFailure.application.fetchFailure.enabled")
       .version("2.3.0")
-      .withAlternative("spark.blacklVist.application.fetchFailure.enabled")
+      .withAlternative("spark.blacklist.application.fetchFailure.enabled")
       .booleanConf
       .createWithDefault(false)
 

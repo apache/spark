@@ -612,7 +612,29 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.yarn.credentials.file.retention.days", "2.4.0", "Not used anymore."),
       DeprecatedConfig("spark.yarn.services", "3.0.0", "Feature no longer available."),
       DeprecatedConfig("spark.executor.plugins", "3.0.0",
-        "Feature replaced with new plugin API. See Monitoring documentation.")
+        "Feature replaced with new plugin API. See Monitoring documentation."),
+      DeprecatedConfig("spark.blacklist.enabled", "3.1.0",
+        "Please use spark.excludeOnFailure.enabled"),
+      DeprecatedConfig("spark.blacklist.task.maxTaskAttemptsPerExecutor", "3.1.0",
+        "Please use spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor"),
+      DeprecatedConfig("spark.blacklist.task.maxTaskAttemptsPerNode", "3.1.0",
+        "Please use spark.excludeOnFailure.task.maxTaskAttemptsPerNode"),
+      DeprecatedConfig("spark.blacklist.application.maxFailedTasksPerExecutor", "3.1.0",
+        "Please use spark.excludeOnFailure.application.maxFailedTasksPerExecutor"),
+      DeprecatedConfig("spark.blacklist.stage.maxFailedTasksPerExecutor", "3.1.0",
+        "Please use spark.excludeOnFailure.stage.maxFailedTasksPerExecutor"),
+      DeprecatedConfig("spark.blacklist.application.maxFailedExecutorsPerNode", "3.1.0",
+        "Please use spark.excludeOnFailure.application.maxFailedExecutorsPerNode"),
+      DeprecatedConfig("spark.blacklist.stage.maxFailedExecutorsPerNode", "3.1.0",
+        "Please use spark.excludeOnFailure.stage.maxFailedExecutorsPerNode"),
+      DeprecatedConfig("spark.blacklist.timeout", "3.1.0",
+        "Please use spark.excludeOnFailure.timeout"),
+      DeprecatedConfig("spark.scheduler.executorTaskBlacklistTime", "3.1.0",
+        "Please use spark.scheduler.executorTaskExcludeOnFailureTime"),
+      DeprecatedConfig("spark.blacklist.application.fetchFailure.enabled", "3.1.0",
+        "Please use spark.excludeOnFailure.application.fetchFailure.enabled"),
+      DeprecatedConfig("spark.scheduler.blacklist.unschedulableTaskSetTimeout", "3.1.0",
+        "Please use spark.scheduler.excludeOnFailure.unschedulableTaskSetTimeout")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
