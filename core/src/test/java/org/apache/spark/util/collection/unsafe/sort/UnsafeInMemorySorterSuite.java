@@ -20,6 +20,7 @@ package org.apache.spark.util.collection.unsafe.sort;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
+import org.apache.spark.unsafe.array.LongArray;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -35,7 +36,6 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.isIn;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
 public class UnsafeInMemorySorterSuite {
@@ -143,7 +143,7 @@ public class UnsafeInMemorySorterSuite {
   }
 
   @Test
-  public void freeAfterOOM() {
+  public void testNoOOMDuringReset() {
     final SparkConf sparkConf = new SparkConf();
     sparkConf.set("spark.memory.offHeap.enabled", "false");
 
@@ -152,12 +152,7 @@ public class UnsafeInMemorySorterSuite {
     final TaskMemoryManager memoryManager = new TaskMemoryManager(
             testMemoryManager, 0);
     final TestMemoryConsumer consumer = new TestMemoryConsumer(memoryManager);
-    final MemoryBlock dataPage = memoryManager.allocatePage(2048, consumer);
-    final Object baseObject = dataPage.getBaseObject();
-    // Write the records into the data page:
-    long position = dataPage.getBaseOffset();
 
-    final HashPartitioner hashPartitioner = new HashPartitioner(4);
     // Use integer comparison for comparing prefixes (which are partition ids, in this case)
     final PrefixComparator prefixComparator = PrefixComparators.LONG;
     final RecordComparator recordComparator = new RecordComparator() {
@@ -175,18 +170,24 @@ public class UnsafeInMemorySorterSuite {
     UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(consumer, memoryManager,
             recordComparator, prefixComparator, 100, shouldUseRadixSort());
 
-    testMemoryManager.markExecutionAsOutOfMemoryOnce();
-    try {
-      sorter.reset();
-      fail("expected OutOfMmoryError but it seems operation surprisingly succeeded");
-    } catch (OutOfMemoryError oom) {
-      // as expected
-    }
-    // [SPARK-21907] this failed on NPE at
-    // org.apache.spark.memory.MemoryConsumer.freeArray(MemoryConsumer.java:108)
-    sorter.free();
-    // simulate a 'back to back' free.
-    sorter.free();
+    // Ensure that the sorter does not OOM while freeing its memory.
+    testMemoryManager.markconsequentOOM(Integer.MAX_VALUE);
+    sorter.freeMemory();
+    testMemoryManager.resetConsequentOOM();
+    Assert.assertFalse(sorter.hasSpaceForAnotherRecord());
+
+    // Get the sorter in an usable state again by allocating a new pointer array.
+    LongArray array = consumer.allocateArray(1000);
+    sorter.expandPointerArray(array);
+
+    // Ensure that it is safe to call freeMemory() multiple times.
+    testMemoryManager.markconsequentOOM(Integer.MAX_VALUE);
+    sorter.freeMemory();
+    sorter.freeMemory();
+    testMemoryManager.resetConsequentOOM();
+    Assert.assertFalse(sorter.hasSpaceForAnotherRecord());
+
+    assertEquals(0L, memoryManager.cleanUpAllAllocatedMemory());
   }
 
 }

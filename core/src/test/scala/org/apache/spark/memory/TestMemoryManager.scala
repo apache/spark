@@ -69,8 +69,16 @@ class TestMemoryManager(conf: SparkConf)
     consequentOOM += n
   }
 
-  def limit(avail: Long): Unit = {
-    available = avail
+  /**
+   * Undos the effects of [[markExecutionAsOutOfMemoryOnce]] and [[markconsequentOOM]] and lets
+   * calls to [[acquireExecutionMemory()]] (if there is enough memory available).
+   */
+  def resetConsequentOOM(): Unit = synchronized {
+    consequentOOM = 0
   }
 
+  def limit(avail: Long): Unit = synchronized {
+    require(avail >= 0)
+    available = avail
+  }
 }
