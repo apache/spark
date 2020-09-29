@@ -225,6 +225,17 @@ trait InsertIntoSQLOnlyTests
     }
   }
 
+  protected def processInsert(
+      tableName: String, insert: DataFrame, cols: Seq[String], mode: SaveMode = null): Unit = {
+    val tmpView = "tmp_view"
+    val columnList = if (cols.nonEmpty) cols.mkString("(", ",", ")") else ""
+    withTempView(tmpView) {
+      insert.createOrReplaceTempView(tmpView)
+      val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
+      sql(s"INSERT $overwrite TABLE $tableName $columnList SELECT * FROM $tmpView")
+    }
+  }
+
   if (includeSQLOnlyTests) {
     test("InsertInto: when the table doesn't exist") {
       val t1 = s"${catalogAndNamespace}tbl"
@@ -476,6 +487,14 @@ trait InsertIntoSQLOnlyTests
 
         verifyTable(t1, spark.table(view))
       }
+    }
+
+    test("insertInto: append with column list") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+      processInsert(t1, df, Seq("id", "data"))
+      verifyTable(t1, df)
     }
   }
 }
