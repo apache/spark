@@ -103,7 +103,9 @@
   "blacklistedInStages" : [ ],
   "attributes" : { },
   "resources" : { },
-  "resourceProfileId" : 0
+  "resourceProfileId" : 0,
+  "isExcluded" : true,
+  "excludedInStages" : [ ]
 }, {
   "id" : "1",
   "hostPort" : "172.22.0.167:51490",
