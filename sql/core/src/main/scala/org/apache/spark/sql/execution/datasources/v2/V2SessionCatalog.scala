@@ -288,8 +288,9 @@ private[sql] object V2SessionCatalog {
         identityCols += col
 
       case BucketTransform(numBuckets, fieldReferences) =>
-        // CLUSTERED BY multipartIdentifierList is not supported
-        val bucketColumns = fieldReferences.collect { case FieldReference(Seq(col)) => col }
+        val bucketColumns = fieldReferences.collect {
+          case FieldReference(parts) => parts.mkString(".")
+        }
         bucketSpec = Some(BucketSpec(numBuckets, bucketColumns, Nil))
 
       case transform =>

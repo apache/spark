@@ -96,6 +96,15 @@ class InMemoryTable(
       }
     }
 
+    // get the hash code for object collection
+    def hashCode(objects: Seq[Object]): Int = {
+      var code = 0
+      for (o <- objects) {
+        code = (code * 31) + o.hashCode()
+      }
+      code
+    }
+
     partitioning.map {
       case IdentityTransform(ref) =>
         extractor(ref.fieldNames, schema, row)._1
@@ -128,8 +137,8 @@ class InMemoryTable(
             ChronoUnit.HOURS.between(Instant.EPOCH, DateTimeUtils.microsToInstant(micros))
         }
       case BucketTransform(numBuckets, ref) =>
-        val cols = ref.collect { case FieldReference(Seq(col)) => col }.toArray
-        (extractor(cols, schema, row).hashCode() & Integer.MAX_VALUE) % numBuckets
+        val fieldNamesSeq = ref.collect { case fr: FieldReference => fr.fieldNames }
+        (hashCode(fieldNamesSeq.map(extractor(_, schema, row))) & Integer.MAX_VALUE) % numBuckets
     }
   }
 

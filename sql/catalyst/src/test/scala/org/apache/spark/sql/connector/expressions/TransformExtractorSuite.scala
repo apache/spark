@@ -138,7 +138,9 @@ class TransformExtractorSuite extends SparkFunSuite {
         override def describe: String = s"bucket(${arguments.map(_.describe).mkString(", ")})"
       } match {
         case BucketTransform(numBuckets, fieldReferences) =>
-          val bucketColumns = fieldReferences.collect { case FieldReference(Seq(col)) => col }
+          val bucketColumns = fieldReferences.collect {
+            case FieldReference(parts) => parts.mkString(".")
+          }
           assert(numBuckets === 16)
           assert(bucketColumns === expectedBucketCols)
         case _ =>
@@ -148,9 +150,9 @@ class TransformExtractorSuite extends SparkFunSuite {
 
     // CLUSTERED BY (a, b)
     checkBucketTransform(Seq(ref("a"), ref("b")), Seq("a", "b"))
-    // CLUSTERED BY (a.b) multipartIdentifierList is not supported
-    checkBucketTransform(Seq(ref("a", "b")), Nil)
-    // CLUSTERED BY (`a.b`) quoteIdentifierList should work
+    // CLUSTERED BY (a.b)
+    checkBucketTransform(Seq(ref("a", "b")), Seq("a.b"))
+    checkBucketTransform(Seq(ref("a.b")), Seq("a.b"))
     checkBucketTransform(Seq(ref("`a.b`")), Seq("`a.b`"))
 
     transform("unknown", ref("c")) match {
