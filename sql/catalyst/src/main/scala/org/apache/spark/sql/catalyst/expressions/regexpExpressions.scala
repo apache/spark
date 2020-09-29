@@ -323,7 +323,7 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   usage = "_FUNC_(str, regexp, rep[, position]) - Replaces all substrings of `str` that match `regexp` with `rep`.",
   arguments = """
     Arguments:
-      * str - a string expression.
+      * str - a string expression to search for a regular expression pattern match.
       * regexp - a string representing a regular expression. The regex string should be a
           Java regular expression.
 
