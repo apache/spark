@@ -33,15 +33,23 @@ import org.apache.spark.sql.internal.SQLConf
  * query plan to check where bucketed table scan is unnecessary, and disable bucketed table
  * scan if:
  *
- * 1.The sub-plan from the nearest downstream [[hasInterestingPartition]] operator
+ * 1.The sub-plan from root to bucketed table scan, does not contain
+ * [[hasInterestingPartition]] operator.
+ *
+ * 2.The sub-plan from the nearest downstream [[hasInterestingPartition]] operator
  * to the bucketed table scan, contains only [[isAllowedUnaryExecNode]] operators
  * and at least one [[Exchange]].
  *
- * 2.The sub-plan from root to bucketed table scan, does not contain
- * [[hasInterestingPartition]] operator.
- *
  * Examples:
- * 1.join:
+ * 1.no [[hasInterestingPartition]] operator:
+ *                Project
+ *                   |
+ *                 Filter
+ *                   |
+ *             Scan(t1: i, j)
+ *  (bucketed on column j, DISABLE bucketed scan)
+ *
+ * 2.join:
  *         SortMergeJoin(t1.i = t2.j)
  *            /            \
  *        Sort(i)        Sort(j)
@@ -51,7 +59,7 @@ import org.apache.spark.sql.internal.SQLConf
  *   Scan(t1: i, j)
  * (bucketed on column j, DISABLE bucketed scan)
  *
- * 2.aggregate:
+ * 3.aggregate:
  *         HashAggregate(i, ..., Final)
  *                      |
  *                  Shuffle(i)
