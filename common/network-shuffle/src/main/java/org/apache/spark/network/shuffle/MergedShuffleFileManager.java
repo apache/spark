@@ -31,8 +31,8 @@ import org.apache.spark.network.shuffle.protocol.PushBlockStream;
  * along side {@link ExternalBlockHandler} and serves as an RPCHandler for
  * {@link org.apache.spark.network.server.RpcHandler#receiveStream}, where it processes the
  * remotely pushed streams of shuffle blocks to merge them into merged shuffle files. Right
- * now, push based shuffle can only be enabled when external shuffle service in YARN mode
- * is used.
+ * now, support for push based shuffle is only implemented for external shuffle service in
+ * YARN mode.
  */
 public interface MergedShuffleFileManager {
   /**

@@ -34,11 +34,19 @@ public class BlockPushException extends RuntimeException {
   /**
    * String constant used for generating exception messages indicating a block to be merged
    * arrives too late on the server side, and also for later checking such exceptions on the
-   * client side.
+   * client side. When we get a block push failure because of the block arrives too late, we
+   * will not retry pushing the block nor log the exception on the client side.
    */
   public static final String TOO_LATE_MESSAGE_SUFFIX =
       "received after merged shuffle is finalized";
 
+  /**
+   * String constant used for generating exception messages indicating the server couldn't
+   * append a block after all available attempts due to collision with other blocks belonging
+   * to the same shuffle partition, and also for later checking such exceptions on the client
+   * side. When we get a block push failure because of the block couldn't be written due to
+   * this reason, we will not log the exception on the client side.
+   */
   public static final String COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX =
       "Couldn't find an opportunity to write block";
 
