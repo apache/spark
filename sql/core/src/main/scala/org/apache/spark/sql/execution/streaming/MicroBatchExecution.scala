@@ -90,7 +90,7 @@ class MicroBatchExecution(
           StreamingExecutionRelation(source, output)(sparkSession)
         })
 
-      case s @ StreamingRelationV2(src, srcName, table: SupportsRead, options, output, v1) =>
+      case s @ StreamingRelationV2(src, srcName, table: SupportsRead, options, output, _, _, v1) =>
         val dsStr = if (src.nonEmpty) s"[${src.get}]" else ""
         val v2Disabled = disabledSources.contains(src.getOrElse(None).getClass.getCanonicalName)
         if (!v2Disabled && table.supports(TableCapability.MICRO_BATCH_READ)) {

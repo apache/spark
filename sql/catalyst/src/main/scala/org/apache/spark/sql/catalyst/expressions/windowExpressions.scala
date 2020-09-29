@@ -50,7 +50,6 @@ case class WindowSpecDefinition(
       frameSpecification.isInstanceOf[SpecifiedWindowFrame]
 
   override def nullable: Boolean = true
-  override def foldable: Boolean = false
   override def dataType: DataType = throw new UnsupportedOperationException("dataType")
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -144,7 +143,6 @@ case object RangeFrame extends FrameType {
 sealed trait SpecialFrameBoundary extends Expression with Unevaluable {
   override def children: Seq[Expression] = Nil
   override def dataType: DataType = NullType
-  override def foldable: Boolean = false
   override def nullable: Boolean = false
 }
 
@@ -168,7 +166,6 @@ case object CurrentRow extends SpecialFrameBoundary {
 sealed trait WindowFrame extends Expression with Unevaluable {
   override def children: Seq[Expression] = Nil
   override def dataType: DataType = throw new UnsupportedOperationException("dataType")
-  override def foldable: Boolean = false
   override def nullable: Boolean = false
 }
 
@@ -275,7 +272,6 @@ case class UnresolvedWindowExpression(
     windowSpec: WindowSpecReference) extends UnaryExpression with Unevaluable {
 
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 }
@@ -287,7 +283,6 @@ case class WindowExpression(
   override def children: Seq[Expression] = windowFunction :: windowSpec :: Nil
 
   override def dataType: DataType = windowFunction.dataType
-  override def foldable: Boolean = windowFunction.foldable
   override def nullable: Boolean = windowFunction.nullable
 
   override def toString: String = s"$windowFunction $windowSpec"
@@ -370,8 +365,11 @@ abstract class OffsetWindowFunction
    * OffsetWindowFunction is executed, the input expression and the default expression. Even when
    * both the input and the default expression are foldable, the result is still not foldable due to
    * the frame.
+   *
+   * Note, the value of foldable is set to false in the trait Unevaluable
+   *
+   * override def foldable: Boolean = false
    */
-  override def foldable: Boolean = false
 
   override def nullable: Boolean = default == null || default.nullable || input.nullable
 
@@ -671,7 +669,9 @@ case class NthValue(input: Expression, offsetExpr: Expression, ignoreNulls: Bool
 
   override lazy val evaluateExpression: AttributeReference = result
 
-  override def toString: String = s"$prettyName($input, $offset)${if (ignoreNulls) " ignore nulls"}"
+  override def prettyName: String = "nth_value"
+  override def sql: String =
+    s"$prettyName(${input.sql}, ${offsetExpr.sql})${if (ignoreNulls) " ignore nulls" else ""}"
 }
 
 /**

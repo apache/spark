@@ -46,6 +46,8 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
       table,
       CaseInsensitiveStringMap.empty(),
       TableCapabilityCheckSuite.schema.toAttributes,
+      None,
+      None,
       v1Relation)
   }
 
