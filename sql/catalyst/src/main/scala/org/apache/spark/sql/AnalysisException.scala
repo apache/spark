@@ -54,22 +54,3 @@ class AnalysisException protected[sql] (
     s"$message;$lineAnnotation$positionAnnotation"
   }
 }
-
-/**
- * Thrown when a query failed for invalid function argument size, usually because
- * a SQL function is called with the wrong number of arguments.
- *
- * @Since 3.1.0
- */
-class InvalidFunctionArgumentException protected[sql](message: String)
-  extends AnalysisException(message, None, None, None, None) {
-}
-
-/**
- * Thrown when a query failed for invalid function class, usually because a SQL
- * function's class does not follow the rules of the UDF/UDAF class definition.
- * @param message
- */
-class InvalidUDFClassException protected[sql](message: String)
-  extends AnalysisException(message, None, None, None, None) {
-}

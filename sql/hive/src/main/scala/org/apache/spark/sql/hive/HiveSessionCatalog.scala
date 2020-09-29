@@ -27,10 +27,10 @@ import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
-import org.apache.spark.sql.{AnalysisException, InvalidFunctionArgumentException, InvalidUDFClassException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, ExternalCatalog, FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
@@ -57,6 +57,56 @@ private[sql] class HiveSessionCatalog(
       parser,
       functionResourceLoader) {
 
+  def makeHiveFunctionExpression(
+      name: String,
+      clazz: Class[_],
+      input: Seq[Expression]): Expression = {
+    var udfExpr: Option[Expression] = None
+    try {
+      // When we instantiate hive UDF wrapper class, we may throw exception if the input
+      // expressions don't satisfy the hive UDF, such as type mismatch, input number
+      // mismatch, etc. Here we catch the exception and throw AnalysisException instead.
+      if (classOf[UDF].isAssignableFrom(clazz)) {
+        udfExpr = Some(HiveSimpleUDF(name, new HiveFunctionWrapper(clazz.getName), input))
+        udfExpr.get.dataType // Force it to check input data types.
+      } else if (classOf[GenericUDF].isAssignableFrom(clazz)) {
+        udfExpr = Some(HiveGenericUDF(name, new HiveFunctionWrapper(clazz.getName), input))
+        udfExpr.get.dataType // Force it to check input data types.
+      } else if (classOf[AbstractGenericUDAFResolver].isAssignableFrom(clazz)) {
+        udfExpr = Some(HiveUDAFFunction(name, new HiveFunctionWrapper(clazz.getName), input))
+        udfExpr.get.dataType // Force it to check input data types.
+      } else if (classOf[UDAF].isAssignableFrom(clazz)) {
+        udfExpr = Some(HiveUDAFFunction(
+          name,
+          new HiveFunctionWrapper(clazz.getName),
+          input,
+          isUDAFBridgeRequired = true))
+        udfExpr.get.dataType // Force it to check input data types.
+      } else if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
+        udfExpr = Some(HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), input))
+        // Force it to check data types.
+        udfExpr.get.asInstanceOf[HiveGenericUDTF].elementSchema
+      }
+    } catch {
+      case NonFatal(e) =>
+        val noHandlerMsg = s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e"
+        val errorMsg =
+          if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
+            s"$noHandlerMsg\nPlease make sure your function overrides " +
+              "`public StructObjectInspector initialize(ObjectInspector[] args)`."
+          } else {
+            noHandlerMsg
+          }
+        val analysisException = new AnalysisException(errorMsg)
+        analysisException.setStackTrace(e.getStackTrace)
+        throw analysisException
+    }
+    udfExpr.getOrElse {
+      throw new InvalidUDFClassException(
+        s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
+    }
+  }
+
   /**
    * Constructs a [[Expression]] based on the provided class that represents a function.
    *
@@ -72,53 +122,15 @@ private[sql] class HiveSessionCatalog(
       try {
         super.makeFunctionExpression(name, clazz, input)
       } catch {
-        case e: InvalidFunctionArgumentException =>
+        case _: InvalidUDFClassException =>
+          // If `super.makeFunctionExpression` throw `InvalidUDFClassException`, we construct
+          // Hive UDF/UDAF/UDTF with function definition.
+          makeHiveFunctionExpression(name, clazz, input)
+        case e: AnalysisException =>
+          // If `super.makeFunctionExpression` not throw `InvalidUDFClassException`, it means
+          // function definition satisfy Spark mode UDAF but construct failed or arguments invalid.
+          // we should throw this earlier.
           throw e
-        case _: Throwable =>
-          var udfExpr: Option[Expression] = None
-          try {
-            // When we instantiate hive UDF wrapper class, we may throw exception if the input
-            // expressions don't satisfy the hive UDF, such as type mismatch, input number
-            // mismatch, etc. Here we catch the exception and throw AnalysisException instead.
-            if (classOf[UDF].isAssignableFrom(clazz)) {
-              udfExpr = Some(HiveSimpleUDF(name, new HiveFunctionWrapper(clazz.getName), input))
-              udfExpr.get.dataType // Force it to check input data types.
-            } else if (classOf[GenericUDF].isAssignableFrom(clazz)) {
-              udfExpr = Some(HiveGenericUDF(name, new HiveFunctionWrapper(clazz.getName), input))
-              udfExpr.get.dataType // Force it to check input data types.
-            } else if (classOf[AbstractGenericUDAFResolver].isAssignableFrom(clazz)) {
-              udfExpr = Some(HiveUDAFFunction(name, new HiveFunctionWrapper(clazz.getName), input))
-              udfExpr.get.dataType // Force it to check input data types.
-            } else if (classOf[UDAF].isAssignableFrom(clazz)) {
-              udfExpr = Some(HiveUDAFFunction(
-                name,
-                new HiveFunctionWrapper(clazz.getName),
-                input,
-                isUDAFBridgeRequired = true))
-              udfExpr.get.dataType // Force it to check input data types.
-            } else if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
-              udfExpr = Some(HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), input))
-              // Force it to check data types.
-              udfExpr.get.asInstanceOf[HiveGenericUDTF].elementSchema
-            }
-          } catch {
-            case NonFatal(e) =>
-              val noHandlerMsg = s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e"
-              val errorMsg =
-                if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
-                  s"$noHandlerMsg\nPlease make sure your function overrides " +
-                    "`public StructObjectInspector initialize(ObjectInspector[] args)`."
-                } else {
-                  noHandlerMsg
-                }
-              val analysisException = new AnalysisException(errorMsg)
-              analysisException.setStackTrace(e.getStackTrace)
-              throw analysisException
-          }
-          udfExpr.getOrElse {
-            throw new InvalidUDFClassException(
-              s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
-          }
       }
     }
   }

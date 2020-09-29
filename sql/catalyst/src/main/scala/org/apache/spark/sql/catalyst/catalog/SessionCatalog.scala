@@ -30,7 +30,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, InvalidFunctionArgumentException, InvalidUDFClassException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -1299,7 +1299,7 @@ class SessionCatalog(
 
       // Check input argument size
       if (e.inputTypes.size != input.size) {
-        throw new InvalidFunctionArgumentException(s"Invalid number of arguments for " +
+        throw new AnalysisException(s"Invalid number of arguments for " +
           s"function $name. Expected: ${e.inputTypes.size}; Found: ${input.size}")
       }
       e
