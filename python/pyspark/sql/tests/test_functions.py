@@ -390,7 +390,6 @@ class FunctionsTests(ReusedSQLTestCase):
         with self.assertRaises(ValueError):
             transform(col("foo"), lambda x: 1)
 
-
     def test_window_functions(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
         w = Window.partitionBy("value").orderBy("key")
@@ -402,8 +401,7 @@ class FunctionsTests(ReusedSQLTestCase):
                         F.row_number().over(w),
                         F.rank().over(w),
                         F.dense_rank().over(w),
-                        F.ntile(2).over(w),
-                        F.nth_value("key", 2))
+                        F.ntile(2).over(w))
         rs = sorted(sel.collect())
         expected = [
             ("1", 1, 1, 1, 1, 1, 1, 1, 1),
