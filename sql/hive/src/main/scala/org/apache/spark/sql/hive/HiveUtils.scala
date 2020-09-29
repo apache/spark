@@ -459,7 +459,7 @@ private[spark] object HiveUtils extends Logging {
             case path =>
               val uri = new Path(path).toUri
               uri.getScheme match {
-                case "file" =>
+                case "file" | "local" =>
                   addLocalHiveJars(new File(uri.getPath))
                 case "http" | "https" | "ftp" =>
                   try {
