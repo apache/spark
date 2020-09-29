@@ -917,18 +917,7 @@ case class MapObjects private(
       customCollectionCls match {
         case Some(cls) if classOf[WrappedArray[_]].isAssignableFrom(cls) =>
           // Scala WrappedArray
-          val getBuilder = s"${cls.getName}$$.MODULE$$.newBuilder()"
-          val builder = ctx.freshName("collectionBuilder")
-          (
-            s"""
-               ${classOf[Builder[_, _]].getName} $builder = $getBuilder;
-               $builder.sizeHint($dataLength);
-             """,
-            (genValue: String) => s"$builder.$$plus$$eq($genValue);",
-            s"(${cls.getName}) ${classOf[WrappedArray[_]].getName}$$." +
-              s"MODULE$$.make(((${classOf[IndexedSeq[_]].getName})$builder" +
-              s".result()).toArray(scala.reflect.ClassTag$$.MODULE$$.Object()));"
-          )
+          MapObjectsCodeGenHelper.doCodeGenForWrappedArrayType(ctx, cls, dataLength)
         case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) ||
           classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
           // Scala sequence or set
