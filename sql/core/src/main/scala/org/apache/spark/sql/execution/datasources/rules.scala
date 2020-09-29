@@ -394,16 +394,21 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
 
-    val expectedColumns = insert.columns.filterNot(a => staticPartCols.contains(a.name))
-
-    if (expectedColumns.length !=
+    val expectedColumns = if (insert.columns.nonEmpty) {
+      val expected = insert.columns.filterNot(a => staticPartCols.contains(a.name))
+      if (expected.length !=
         insert.table.output.filterNot(a => staticPartCols.contains(a.name)).length) {
-      throw new AnalysisException(
-        s"$tblName requires that the data to be inserted have the same number of columns as the " +
-          s"target table: target table has ${insert.table.output.size} column(s) but the " +
-          s"specified part has only ${expectedColumns.length} column(s), " +
-          s"and ${staticPartCols.size} partition column(s) having constant value(s).")
+        throw new AnalysisException(
+          s"$tblName requires that the data to be inserted have the same number of columns as" +
+            s" the target table: target table has ${insert.table.output.size} column(s) but the " +
+            s"specified part has only ${expected.length} column(s), " +
+            s"and ${staticPartCols.size} partition column(s) having constant value(s).")
+      }
+      expected
+    } else {
+      insert.table.output.filterNot(a => staticPartCols.contains(a.name))
     }
+
     if (expectedColumns.length != insert.query.schema.length) {
       throw new AnalysisException(
         s"$tblName requires that the data to be inserted have the same number of columns as the " +

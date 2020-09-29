@@ -1117,12 +1117,7 @@ class Analyzer(
           }
           case other => other
         }
-        val newOutput = if (resolved.isEmpty) {
-          table.output
-        } else {
-          resolved
-        }
-        i.copy(columns = newOutput)
+        i.copy(columns = resolved)
     }
 
     private def partitionColumnNames(table: Table): Seq[String] = {
