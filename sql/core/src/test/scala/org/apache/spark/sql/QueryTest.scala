@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 
 
@@ -158,14 +157,6 @@ abstract class QueryTest extends PlanTest {
 
   protected def checkAnswer(df: => DataFrame, expectedAnswer: DataFrame): Unit = {
     checkAnswer(df, expectedAnswer.collect())
-  }
-
-  protected def checkAnswer(
-      df: => DataFrame,
-      expectedAnswer: Seq[Row],
-      expectedSchema: StructType): Unit = {
-    checkAnswer(df, expectedAnswer)
-    assert(df.schema == expectedSchema)
   }
 
   /**
