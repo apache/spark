@@ -4028,7 +4028,8 @@ setMethod("date_trunc",
           })
 
 #' @details
-#' \code{current_date}: Returns the current date as a date column.
+#' \code{current_date}: Returns the current date at the start of query evaluation as a date column.
+#' All calls of current_date within the same query return the same value.
 #'
 #' @rdname column_datetime_functions
 #' @aliases current_date current_date,missing-method
@@ -4044,7 +4045,8 @@ setMethod("current_date",
           })
 
 #' @details
-#' \code{current_timestamp}: Returns the current timestamp as a timestamp column.
+#' \code{current_timestamp}: Returns the current timestamp at the start of query evaluation as
+#' a timestamp column. All calls of current_timestamp within the same query return the same value.
 #'
 #' @rdname column_datetime_functions
 #' @aliases current_timestamp current_timestamp,missing-method
