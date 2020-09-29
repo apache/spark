@@ -27,10 +27,10 @@ import org.apache.spark.sql.catalyst.rules.Rule
 object OptimizeJsonExprs extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case p => p.transformExpressions {
-      case JsonToStructs(schema, options1,
+      case jsonToStructs @ JsonToStructs(schema, options1,
         StructsToJson(options2, child, timeZoneId2), timeZoneId1)
           if options1.isEmpty && options2.isEmpty && timeZoneId1 == timeZoneId2 &&
-            schema == child.dataType =>
+            jsonToStructs.dataType == child.dataType =>
         child
     }
   }
