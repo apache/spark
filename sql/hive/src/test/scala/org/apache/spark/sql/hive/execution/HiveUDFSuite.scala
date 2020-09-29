@@ -34,6 +34,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.command.FunctionsCommand
 import org.apache.spark.sql.functions.max
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -658,6 +659,25 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
   }
 
+  test("SPARK-32877: add test for Hive UDF complex decimal type") {
+    assume(HiveUtils.isHive23)
+    withUserDefinedFunction("testArraySum" -> false) {
+      sql(s"CREATE FUNCTION testArraySum AS '${classOf[ArraySumUDF].getName}'")
+      checkAnswer(
+        sql("SELECT testArraySum(array(1, 1.1, 1.2))"),
+        Seq(Row(3.3)))
+
+      val msg = intercept[AnalysisException] {
+        sql("SELECT testArraySum(1)")
+      }.getMessage
+      assert(msg.contains(s"No handler for UDF/UDAF/UDTF '${classOf[ArraySumUDF].getName}'"))
+
+      val msg2 = intercept[AnalysisException] {
+        sql("SELECT testArraySum(1, 2)")
+      }.getMessage
+      assert(msg2.contains(s"No handler for UDF/UDAF/UDTF '${classOf[ArraySumUDF].getName}'"))
+    }
+  }
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {
@@ -739,5 +759,16 @@ class StatelessUDF extends UDF {
   def evaluate(): LongWritable = {
     result.set(result.get() + 1)
     result
+  }
+}
+
+class ArraySumUDF extends UDF {
+  import scala.collection.JavaConverters._
+  def evaluate(values: java.util.List[java.lang.Double]): java.lang.Double = {
+    var r = 0d
+    for (v <- values.asScala) {
+      r += v
+    }
+    r
   }
 }

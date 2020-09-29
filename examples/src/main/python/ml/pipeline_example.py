@@ -62,8 +62,12 @@ if __name__ == "__main__":
     prediction = model.transform(test)
     selected = prediction.select("id", "text", "probability", "prediction")
     for row in selected.collect():
-        rid, text, prob, prediction = row
-        print("(%d, %s) --> prob=%s, prediction=%f" % (rid, text, str(prob), prediction))
+        rid, text, prob, prediction = row  # type: ignore
+        print(
+            "(%d, %s) --> prob=%s, prediction=%f" % (
+                rid, text, str(prob), prediction   # type: ignore
+            )
+        )
     # $example off$
 
     spark.stop()

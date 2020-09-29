@@ -26,18 +26,13 @@ from shutil import rmtree
 DEFAULT_HADOOP = "hadoop3.2"
 DEFAULT_HIVE = "hive2.3"
 SUPPORTED_HADOOP_VERSIONS = ["hadoop2.7", "hadoop3.2", "without-hadoop"]
-SUPPORTED_HIVE_VERSIONS = ["hive1.2", "hive2.3"]
-UNSUPPORTED_COMBINATIONS = [
-    ("without-hadoop", "hive1.2"),
-    ("hadoop3.2", "hive1.2"),
+SUPPORTED_HIVE_VERSIONS = ["hive2.3"]
+UNSUPPORTED_COMBINATIONS = [  # type: ignore
 ]
 
 
 def checked_package_name(spark_version, hadoop_version, hive_version):
-    if hive_version == "hive1.2":
-        return "%s-bin-%s-%s" % (spark_version, hadoop_version, hive_version)
-    else:
-        return "%s-bin-%s" % (spark_version, hadoop_version)
+    return "%s-bin-%s" % (spark_version, hadoop_version)
 
 
 def checked_versions(spark_version, hadoop_version, hive_version):
@@ -48,7 +43,7 @@ def checked_versions(spark_version, hadoop_version, hive_version):
     :param hadoop_version: Hadoop version. It should be X.X such as '2.7' or 'hadoop2.7'.
         'without' and 'without-hadoop' are supported as special keywords for Hadoop free
         distribution.
-    :param hive_version: Hive version. It should be X.X such as '1.2' or 'hive1.2'.
+    :param hive_version: Hive version. It should be X.X such as '2.3' or 'hive2.3'.
 
     :return it returns fully-qualified versions of Spark, Hadoop and Hive in a tuple.
         For example, spark-3.0.0, hadoop3.2 and hive2.3.
@@ -80,9 +75,6 @@ def checked_versions(spark_version, hadoop_version, hive_version):
             "one of [%s]" % (hive_version, ", ".join(
                 SUPPORTED_HADOOP_VERSIONS)))
 
-    if (hadoop_version, hive_version) in UNSUPPORTED_COMBINATIONS:
-        raise RuntimeError("Hive 1.2 should only be with Hadoop 2.7.")
-
     return spark_version, hadoop_version, hive_version
 
 
@@ -95,7 +87,7 @@ def install_spark(dest, spark_version, hadoop_version, hive_version):
     :param spark_version: Spark version. It should be spark-X.X.X form.
     :param hadoop_version: Hadoop version. It should be hadoopX.X
         such as 'hadoop2.7' or 'without-hadoop'.
-    :param hive_version: Hive version. It should be hiveX.X such as 'hive1.2'.
+    :param hive_version: Hive version. It should be hiveX.X such as 'hive2.3'.
     """
 
     package_name = checked_package_name(spark_version, hadoop_version, hive_version)
