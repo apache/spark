@@ -20,9 +20,14 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.types.StructType
 
 /**
  * Simplify redundant json related expressions.
+ *
+ * The optimization includes:
+ * 1. JsonToStructs(StructsToJson(child)) => child
+ * 2. Prune unnecessary columns from GetStructField + JsonToStructs.
  */
 object OptimizeJsonExprs extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -38,6 +43,10 @@ object OptimizeJsonExprs extends Rule[LogicalPlan] {
         // so `JsonToStructs` might throw error in runtime. Thus we cannot optimize
         // this case similarly.
         child
+
+      case g @ GetStructField(jsonToStructs: JsonToStructs, ordinal, _) =>
+        val prunedSchema = StructType(Seq(jsonToStructs.schema.asInstanceOf[StructType](ordinal)))
+        g.copy(child = jsonToStructs.copy(schema = prunedSchema), ordinal = 0)
     }
   }
 }

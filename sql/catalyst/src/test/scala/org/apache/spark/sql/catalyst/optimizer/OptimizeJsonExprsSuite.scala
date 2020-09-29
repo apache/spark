@@ -36,8 +36,10 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
   val schema = StructType.fromDDL("a int, b int")
 
   private val structAtt = 'struct.struct(schema).notNull
+  private val jsonAttr = 'json.string
 
   private val testRelation = LocalRelation(structAtt)
+  private val testRelation2 = LocalRelation(jsonAttr)
 
   test("SPARK-32948: optimize from_json + to_json") {
     val options = Map.empty[String, String]
@@ -139,6 +141,28 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
         StructsToJson(options, 'struct, UTC_OPT), UTC_OPT).as("struct"))
     val optimized2 = Optimizer.execute(query2.analyze)
     val expected2 = testRelation.select('struct.as("struct")).analyze
+    comparePlans(optimized2, expected2)
+  }
+
+  test("SPARK-32958: prune unnecessary columns from GetStructField + from_json") {
+    val options = Map.empty[String, String]
+
+    val query1 = testRelation2
+      .select(GetStructField(JsonToStructs(schema, options, 'json), 0))
+    val optimized1 = Optimizer.execute(query1.analyze)
+
+    val prunedSchema1 = StructType.fromDDL("a int")
+    val expected1 = testRelation2
+      .select(GetStructField(JsonToStructs(prunedSchema1, options, 'json), 0)).analyze
+    comparePlans(optimized1, expected1)
+
+    val query2 = testRelation2
+      .select(GetStructField(JsonToStructs(schema, options, 'json), 1))
+    val optimized2 = Optimizer.execute(query2.analyze)
+
+    val prunedSchema2 = StructType.fromDDL("b int")
+    val expected2 = testRelation2
+      .select(GetStructField(JsonToStructs(prunedSchema2, options, 'json), 0)).analyze
     comparePlans(optimized2, expected2)
   }
 }
