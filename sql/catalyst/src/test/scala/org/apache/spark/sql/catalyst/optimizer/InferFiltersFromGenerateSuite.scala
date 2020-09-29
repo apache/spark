@@ -32,10 +32,7 @@ class InferFiltersFromGenerateSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.array(IntegerType))
 
-  Seq(
-    (e: Expression) => Explode(e),
-    (e: Expression) => PosExplode(e)
-  ).foreach(f => {
+  Seq(Explode(_), PosExplode(_)).foreach { f =>
     val explode = f('a)
     test("Infer filters from " + explode) {
       val originalQuery = testRelation.generate(explode).analyze
@@ -59,5 +56,5 @@ class InferFiltersFromGenerateSuite extends PlanTest {
       val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)
     }
-  })
+  }
 }
