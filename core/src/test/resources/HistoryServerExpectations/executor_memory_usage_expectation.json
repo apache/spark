@@ -29,7 +29,9 @@
   "blacklistedInStages" : [ ],
   "attributes" : { },
   "resources" : { },
-  "resourceProfileId" : 0
+  "resourceProfileId" : 0,
+  "isExcluded" : true,
+  "excludedInStages" : [ ]
 }, {
   "id" : "3",
   "hostPort" : "172.22.0.167:51485",
@@ -64,7 +66,9 @@
   "blacklistedInStages" : [ ],
   "attributes" : { },
   "resources" : { },
-  "resourceProfileId" : 0
+  "resourceProfileId" : 0,
+  "isExcluded" : true,
+  "excludedInStages" : [ ]
 } ,{
   "id" : "2",
   "hostPort" : "172.22.0.167:51487",
@@ -134,7 +138,9 @@
   "blacklistedInStages" : [ ],
   "attributes" : { },
   "resources" : { },
-  "resourceProfileId" : 0
+  "resourceProfileId" : 0,
+  "isExcluded" : true,
+  "excludedInStages" : [ ]
 }, {
   "id" : "0",
   "hostPort" : "172.22.0.167:51491",
@@ -169,5 +175,7 @@
   "blacklistedInStages" : [ ],
   "attributes" : { },
   "resources" : { },
-  "resourceProfileId" : 0
+  "resourceProfileId" : 0,
+  "isExcluded" : true,
+  "excludedInStages" : [ ]
 } ]

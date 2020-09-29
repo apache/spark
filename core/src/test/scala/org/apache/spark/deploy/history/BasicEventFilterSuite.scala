@@ -133,6 +133,8 @@ class BasicEventFilterSuite extends SparkFunSuite {
     // live executors
     assert(Some(false) === acceptFn(
       SparkListenerStageExecutorMetrics(1.toString, 0, 0, new ExecutorMetrics)))
+    assert(Some(false) === acceptFn(SparkListenerExecutorBlacklisted(0, 1.toString, 1)))
+    assert(Some(false) === acceptFn(SparkListenerExecutorUnblacklisted(0, 1.toString)))
     assert(Some(false) === acceptFn(SparkListenerExecutorExcluded(0, 1.toString, 1)))
     assert(Some(false) === acceptFn(SparkListenerExecutorUnexcluded(0, 1.toString)))
     assert(Some(false) === acceptFn(createExecutorRemovedEvent(1)))
@@ -146,6 +148,10 @@ class BasicEventFilterSuite extends SparkFunSuite {
     assert(Some(true) === acceptFn(createExecutorAddedEvent(2)))
     assert(Some(true) === acceptFn(
       SparkListenerStageExecutorMetrics(2.toString, 0, 0, new ExecutorMetrics)))
+    assert(Some(true) === acceptFn(SparkListenerExecutorBlacklisted(0, 2.toString, 1)))
+    assert(Some(true) === acceptFn(SparkListenerExecutorUnblacklisted(0, 2.toString)))
+    assert(None === acceptFn(SparkListenerNodeBlacklisted(0, "host1", 1)))
+    assert(None === acceptFn(SparkListenerNodeUnblacklisted(0, "host1")))
     assert(Some(true) === acceptFn(SparkListenerExecutorExcluded(0, 2.toString, 1)))
     assert(Some(true) === acceptFn(SparkListenerExecutorUnexcluded(0, 2.toString)))
     assert(Some(true) === acceptFn(createExecutorRemovedEvent(2)))
