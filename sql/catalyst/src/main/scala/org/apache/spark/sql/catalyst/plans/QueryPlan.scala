@@ -220,23 +220,12 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
         val (planAfterRule, newAttrMapping) = CurrentOrigin.withOrigin(origin) {
           rule.applyOrElse(newPlan, (plan: PlanType) => plan -> Nil)
         }
+        newPlan = planAfterRule
 
-        val newValidAttrMapping = newAttrMapping.filter {
+        attrMapping ++= newAttrMapping.filter {
           case (a1, a2) => a1.exprId != a2.exprId
         }
-        // Updates the `attrMapping` entries that are obsoleted by generated entries in `rule`.
-        // For example, `attrMapping` has a mapping entry 'id#1 -> id#2' and `rule`
-        // generates a new entry 'id#2 -> id#3'. In this case, we need to update
-        // the corresponding old entry from 'id#1 -> id#2' to '#id#1 -> #id#3'.
-        val updatedAttrMap = AttributeMap(newValidAttrMapping)
-        val transferAttrMapping = attrMapping.map {
-          case (a1, a2) => (a1, updatedAttrMap.getOrElse(a2, a2))
-        }
-        val newOtherAttrMapping = {
-          val existingAttrMappingSet = transferAttrMapping.map(_._2).toSet
-          newValidAttrMapping.filterNot { case (_, a) => existingAttrMappingSet.contains(a) }
-        }
-        planAfterRule -> (transferAttrMapping ++ newOtherAttrMapping).toSeq
+        newPlan -> attrMapping.toSeq
       }
     }
     rewrite(this)._1

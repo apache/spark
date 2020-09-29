@@ -123,13 +123,12 @@ abstract class DataSourceV2ANSIAnalysisSuite extends DataSourceV2AnalysisBaseSui
   override def checkAnalysis(
       inputPlan: LogicalPlan,
       expectedPlan: LogicalPlan,
-      caseSensitive: Boolean,
-      maxIterations: Option[Int] = None): Unit = {
+      caseSensitive: Boolean): Unit = {
     val expectedPlanWithAnsiCast = expectedPlan transformAllExpressions {
       case c: Cast => AnsiCast(c.child, c.dataType, c.timeZoneId)
       case other => other
     }
-    super.checkAnalysis(inputPlan, expectedPlanWithAnsiCast, caseSensitive, maxIterations)
+    super.checkAnalysis(inputPlan, expectedPlanWithAnsiCast, caseSensitive)
   }
 }
 
@@ -204,7 +203,7 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
   protected def getSQLConf(caseSensitive: Boolean): SQLConf =
     new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
 
-  override def getAnalyzer(caseSensitive: Boolean, maxIterations: Option[Int] = None): Analyzer = {
+  override def getAnalyzer(caseSensitive: Boolean): Analyzer = {
     val conf = getSQLConf(caseSensitive)
     val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf)
     catalog.createDatabase(

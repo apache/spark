@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, ResolveUnion}
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{And, GreaterThan, GreaterThanOrEqual, If, Literal, Rand, ReplicateRows}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.BooleanType
 
 class SetOperationSuite extends PlanTest {
@@ -93,10 +92,8 @@ class SetOperationSuite extends PlanTest {
     //     query3  query2
     val unionQuery1 = Distinct(Union(Distinct(Union(query1, query2)), query3)).analyze
     val optimized1 = Optimize.execute(unionQuery1)
-    val children1 = query1 :: query2 :: query3 :: Nil
-    val unionOutput1 = ResolveUnion.makeUnionOutput(children1)
     val distinctUnionCorrectAnswer1 =
-      Distinct(Union(query1 :: query2 :: query3 :: Nil, unionOutput = Some(unionOutput1)))
+      Distinct(Union(query1 :: query2 :: query3 :: Nil))
     comparePlans(distinctUnionCorrectAnswer1, optimized1)
 
     //         query1
@@ -109,9 +106,8 @@ class SetOperationSuite extends PlanTest {
     val unionQuery2 = Distinct(Union(Union(query1, query2),
       Distinct(Union(query2, query3)))).analyze
     val optimized2 = Optimize.execute(unionQuery2)
-    val children2 = query1 :: query2 :: query2 :: query3 :: Nil
-    val unionOutput2 = ResolveUnion.makeUnionOutput(children2)
-    val distinctUnionCorrectAnswer2 = Distinct(Union(children2, unionOutput = Some(unionOutput2)))
+    val distinctUnionCorrectAnswer2 =
+      Distinct(Union(query1 :: query2 :: query2 :: query3 :: Nil))
     comparePlans(distinctUnionCorrectAnswer2, optimized2)
   }
 

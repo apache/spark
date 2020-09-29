@@ -62,7 +62,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         a.select(UnresolvedStar(None)).select($"a").union(b.select(UnresolvedStar(None)))
       }
 
-    assertAnalysisSuccess(plan, maxIterations = Some(150))
+    assertAnalysisSuccess(plan)
   }
 
   test("check project's resolved") {

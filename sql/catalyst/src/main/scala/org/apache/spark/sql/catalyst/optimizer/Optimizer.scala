@@ -595,7 +595,7 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
         }
         val newChildren = newFirstChild +: newOtherChildren
         val newOutput = ResolveUnion.makeUnionOutput(newChildren)
-        val newPlan = u.copy(children = newChildren, unionOutput = Some(newOutput))
+        val newPlan = u.copy(children = newChildren, unionOutput = newOutput)
         val attrMapping = p.output.zip(newPlan.output).filter {
           case (a1, a2) => a1.exprId != a2.exprId
         }
@@ -683,7 +683,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
           Project(selected, p)
         }
         val prunedUnionOutput = u.output.filter(p.references.contains)
-        p.copy(child = u.copy(children = newChildren, unionOutput = Some(prunedUnionOutput)))
+        p.copy(child = u.copy(children = newChildren, unionOutput = prunedUnionOutput))
       } else {
         p
       }
@@ -1804,7 +1804,9 @@ object RewriteIntersectAll extends Rule[LogicalPlan] {
         projectMinPlan
       )
       val newPlan = Project(newLeftOutput, genRowPlan)
-      val attrMapping = i.output.zip(newPlan.output)
+      val attrMapping = i.output.zip(newPlan.output).filter {
+        case (a1, a2) => a1.exprId != a2.exprId
+      }
       newPlan -> attrMapping
   }
 }

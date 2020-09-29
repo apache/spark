@@ -157,32 +157,28 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
       .union(tr2.where('e.attr > 10)
       .union(tr3.where('i.attr > 10)))
       .analyze.constraints.isEmpty)
-    val query1 = tr1
+
+    verifyConstraints(tr1
       .where('a.attr > 10)
       .union(tr2.where('d.attr > 10)
       .union(tr3.where('g.attr > 10)))
-      .analyze
-    verifyConstraints(query1.constraints,
-      ExpressionSet(Seq(resolveColumn(query1, "a") > 10,
-        IsNotNull(resolveColumn(query1, "a")))))
+      .analyze.constraints,
+      ExpressionSet(Seq(resolveColumn(tr1, "a") > 10,
+        IsNotNull(resolveColumn(tr1, "a")))))
 
-    val query2 = tr1
+    val a = resolveColumn(tr1, "a")
+    verifyConstraints(tr1
       .where('a.attr > 10)
       .union(tr2.where('d.attr > 11))
-      .analyze
-    verifyConstraints(query2.constraints,
-      ExpressionSet(Seq(resolveColumn(query2, "a") > 10 || resolveColumn(query2, "a") > 11,
-        IsNotNull(resolveColumn(query2, "a")))))
+      .analyze.constraints,
+      ExpressionSet(Seq(a > 10 || a > 11, IsNotNull(a))))
 
-
-    val query3 = tr1
+    val b = resolveColumn(tr1, "b")
+    verifyConstraints(tr1
       .where('a.attr > 10 && 'b.attr < 10)
       .union(tr2.where('d.attr > 11 && 'e.attr < 11))
-      .analyze
-    verifyConstraints(query3.constraints,
-      ExpressionSet(Seq(resolveColumn(query3, "a") > 10 || resolveColumn(query3, "a") > 11,
-        resolveColumn(query3, "b") < 10 || resolveColumn(query3, "b") < 11,
-        IsNotNull(resolveColumn(query3, "a")), IsNotNull(resolveColumn(query3, "b")))))
+      .analyze.constraints,
+      ExpressionSet(Seq(a > 10 || a > 11, b < 10 || b < 11, IsNotNull(a), IsNotNull(b))))
   }
 
   test("propagating constraints in intersect") {

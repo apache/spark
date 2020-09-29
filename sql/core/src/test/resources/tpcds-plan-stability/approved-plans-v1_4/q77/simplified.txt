@@ -7,7 +7,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
             HashAggregate [channel,id,spark_grouping_id,sales,returns,profit] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
               Expand [sales,returns,profit,channel,id]
                 InputAdapter
-                  Union [sales,returns,profit,channel,id]
+                  Union
                     WholeStageCodegen (8)
                       Project [sales,returns,profit,profit_loss,s_store_sk]
                         BroadcastHashJoin [s_store_sk,s_store_sk]

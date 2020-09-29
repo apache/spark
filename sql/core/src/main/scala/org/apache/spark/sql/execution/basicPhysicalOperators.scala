@@ -636,6 +636,8 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
  */
 case class UnionExec(children: Seq[SparkPlan], output: Seq[Attribute]) extends SparkPlan {
 
+  assert(output.nonEmpty, "Union should have at least a single column")
+
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
   protected override def doExecute(): RDD[InternalRow] =

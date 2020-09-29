@@ -1272,11 +1272,6 @@ class Analyzer(
           val newOutput = oldVersion.generatorOutput.map(_.newInstance())
           Seq((oldVersion, oldVersion.copy(generatorOutput = newOutput)))
 
-        case oldVersion: Union
-            if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
-          val newOutput = oldVersion.unionOutput.get.map(_.newInstance())
-          Seq((oldVersion, oldVersion.copy(unionOutput = Some(newOutput))))
-
         case oldVersion: Expand
             if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
           val producedAttributes = oldVersion.producedAttributes
