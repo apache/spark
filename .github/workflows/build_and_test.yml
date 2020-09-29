@@ -295,7 +295,7 @@ jobs:
         export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
         export MAVEN_CLI_OPTS="--no-transfer-progress"
         mkdir -p ~/.m2
-        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=11 install
+        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Phadoop-3.2 -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=11 install
         rm -rf ~/.m2/repository/org/apache/spark
 
   scala-213:
@@ -321,5 +321,5 @@ jobs:
         export MAVEN_CLI_OPTS="--no-transfer-progress"
         mkdir -p ~/.m2
         ./dev/change-scala-version.sh 2.13
-        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=11 -Pscala-2.13 install
+        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Phadoop-3.2 -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=11 -Pscala-2.13 install
         rm -rf ~/.m2/repository/org/apache/spark

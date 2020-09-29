@@ -26,8 +26,8 @@ if not (ENV['SKIP_API'] == '1')
     curr_dir = pwd
     cd("..")
 
-    puts "Running 'build/sbt -Pkinesis-asl clean compile unidoc' from " + pwd + "; this may take a few minutes..."
-    system("build/sbt -Pkinesis-asl clean compile unidoc") || raise("Unidoc generation failed")
+    puts "Running 'build/sbt -Pkinesis-asl -Phadoop-3.2 clean compile unidoc' from " + pwd + "; this may take a few minutes..."
+    system("build/sbt -Pkinesis-asl -Phadoop-3.2 clean compile unidoc") || raise("Unidoc generation failed")
 
     puts "Moving back into docs dir."
     cd("docs")
@@ -157,8 +157,8 @@ if not (ENV['SKIP_API'] == '1')
     curr_dir = pwd
     cd("..")
 
-    puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
-    system("build/sbt clean package -Phive") || raise("SQL doc generation failed")
+    puts "Running 'build/sbt clean package -Phive -Phadoop-3.2' from " + pwd + "; this may take a few minutes..."
+    system("build/sbt clean package -Phive -Phadoop-3.2") || raise("SQL doc generation failed")
 
     puts "Moving back into docs dir."
     cd("docs")
