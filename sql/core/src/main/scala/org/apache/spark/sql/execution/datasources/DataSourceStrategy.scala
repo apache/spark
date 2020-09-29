@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoSta
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.FileSourceStrategy.{extractPredicatesWithinOutputSet, logInfo}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.sources._
@@ -434,7 +435,7 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
   }
 }
 
-object DataSourceStrategy {
+object DataSourceStrategy extends PredicateHelper {
   /**
    * The attribute name may differ from the one in the schema if the query analyzer
    * is case insensitive. We should change attribute names to match the ones in the schema,
@@ -448,6 +449,20 @@ object DataSourceStrategy {
         case a: AttributeReference =>
           a.withName(attributes.find(_.semanticEquals(a)).getOrElse(a).name)
       }
+    }
+  }
+
+  private[sql] def getPushedDownFilters(
+      partitionColumns: Seq[Expression],
+      normalizedFilters: Seq[Expression]): ExpressionSet = {
+    if (partitionColumns.isEmpty) {
+      ExpressionSet(Nil)
+    } else {
+      val partitionSet = AttributeSet(partitionColumns)
+      val predicates = ExpressionSet(normalizedFilters
+        .flatMap(extractPredicatesWithinOutputSet(_, partitionSet)))
+      logInfo(s"Pruning directories with: ${predicates.mkString(",")}")
+      predicates
     }
   }
 

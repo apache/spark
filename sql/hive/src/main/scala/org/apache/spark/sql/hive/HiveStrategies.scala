@@ -254,22 +254,17 @@ private[hive] trait HiveStrategies {
    * Retrieves data using a HiveTableScan.  Partition pruning predicates are also detected and
    * applied.
    */
-  object HiveTableScans extends Strategy with PredicateHelper {
+  object HiveTableScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ScanOperation(projectList, filters, relation: HiveTableRelation) =>
         // Filter out all predicates that only deal with partition keys, these are given to the
         // hive table scan operator to be used for partition pruning.
         val partitionKeyIds = AttributeSet(relation.partitionCols)
-        val normalized = DataSourceStrategy.normalizeExprs(
+        val normalizedFilters = DataSourceStrategy.normalizeExprs(
           filters.filter(_.deterministic), relation.output)
-        val partitionKeyFilters = if (relation.partitionCols.isEmpty) {
-          ExpressionSet(Nil)
-        } else {
-          val predicates = ExpressionSet(normalized
-            .flatMap(extractPredicatesWithinOutputSet(_, partitionKeyIds)))
-          logInfo(s"Pruning partitions with: ${filters.mkString(",")}")
-          predicates
-        }
+
+        val partitionKeyFilters = DataSourceStrategy.getPushedDownFilters(relation.partitionCols,
+          normalizedFilters)
 
         pruneFilterProject(
           projectList,
