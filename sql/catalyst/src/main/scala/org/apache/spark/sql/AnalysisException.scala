@@ -64,3 +64,12 @@ class AnalysisException protected[sql] (
 class InvalidFunctionArgumentException protected[sql](message: String)
   extends AnalysisException(message, None, None, None, None) {
 }
+
+/**
+ * Thrown when a query failed for invalid function class, usually because a SQL
+ * function's class does not follow the rules of the UDF/UDAF class definition.
+ * @param message
+ */
+class InvalidUDFClassException protected[sql](message: String)
+  extends AnalysisException(message, None, None, None, None) {
+}

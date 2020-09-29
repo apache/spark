@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
-import org.apache.spark.sql.{AnalysisException, InvalidFunctionArgumentException}
+import org.apache.spark.sql.{AnalysisException, InvalidFunctionArgumentException, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, ExternalCatalog, FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
@@ -116,7 +116,8 @@ private[sql] class HiveSessionCatalog(
               throw analysisException
           }
           udfExpr.getOrElse {
-            throw new AnalysisException(s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
+            throw new InvalidUDFClassException(
+              s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
           }
       }
     }

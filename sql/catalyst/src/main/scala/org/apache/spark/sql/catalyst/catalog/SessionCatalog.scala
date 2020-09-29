@@ -30,7 +30,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, InvalidFunctionArgumentException}
+import org.apache.spark.sql.{AnalysisException, InvalidFunctionArgumentException, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -1304,7 +1304,7 @@ class SessionCatalog(
       }
       e
     } else {
-      throw new AnalysisException(s"No handler for UDAF '${clazz.getCanonicalName}'. " +
+      throw new InvalidUDFClassException(s"No handler for UDAF '${clazz.getCanonicalName}'. " +
         s"Use sparkSession.udf.register(...) instead.")
     }
   }
