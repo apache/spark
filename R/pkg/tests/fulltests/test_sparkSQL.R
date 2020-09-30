@@ -1424,7 +1424,8 @@ test_that("column functions", {
     date_trunc("quarter", c) + current_date() + current_timestamp()
   c25 <- overlay(c1, c2, c3, c3) + overlay(c1, c2, c3) + overlay(c1, c2, 1) +
     overlay(c1, c2, 3, 4)
-  c26 <- timestamp_seconds(c1)
+  c26 <- timestamp_seconds(c1) + vector_to_array(c) +
+    vector_to_array(c, "float32") + vector_to_array(c, "float64")
   c27 <- nth_value("x", 1L) + nth_value("y", 2, TRUE) +
     nth_value(column("v"), 3) + nth_value(column("z"), 4L, FALSE)
 
