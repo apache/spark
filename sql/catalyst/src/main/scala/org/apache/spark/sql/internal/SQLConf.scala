@@ -953,7 +953,6 @@ object SQLConf {
 
   val AUTO_BUCKETED_SCAN_ENABLED =
     buildConf("spark.sql.sources.bucketing.autoBucketedScan.enabled")
-      .internal()
       .doc("When true, decide whether to do bucketed scan on input tables based on query plan " +
         "automatically. Do not use bucketed scan if 1. query does not have operators to utilize " +
         "bucketing (e.g. join, group-by, etc), or 2. there's an exchange operator between these " +
