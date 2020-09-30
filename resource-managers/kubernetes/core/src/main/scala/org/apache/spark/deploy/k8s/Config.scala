@@ -439,6 +439,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_VOLUMES_MOUNT_READONLY_KEY = "mount.readOnly"
   val KUBERNETES_VOLUMES_OPTIONS_PATH_KEY = "options.path"
   val KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY = "options.claimName"
+  val KUBERNETES_VOLUMES_OPTIONS_CLAIM_STORAGE_CLASS_KEY = "options.storageClass"
   val KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY = "options.medium"
   val KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY = "options.sizeLimit"
   val KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY = "options.server"

@@ -296,15 +296,15 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
     """
 
     @keyword_only
-    def __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                 implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
-                 ratingCol="rating", nonnegative=False, checkpointInterval=10,
+    def __init__(self, *, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10,
+                 numItemBlocks=10, implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item",
+                 seed=None, ratingCol="rating", nonnegative=False, checkpointInterval=10,
                  intermediateStorageLevel="MEMORY_AND_DISK",
                  finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096):
         """
-        __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
-                 implicitPrefs=false, alpha=1.0, userCol="user", itemCol="item", seed=None, \
-                 ratingCol="rating", nonnegative=false, checkpointInterval=10, \
+        __init__(self, \\*, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10,
+                 numItemBlocks=10, implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", \
+                 seed=None, ratingCol="rating", nonnegative=False, checkpointInterval=10, \
                  intermediateStorageLevel="MEMORY_AND_DISK", \
                  finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096)
         """
@@ -315,15 +315,15 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
-                  ratingCol="rating", nonnegative=False, checkpointInterval=10,
+    def setParams(self, *, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10,
+                  numItemBlocks=10, implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item",
+                  seed=None, ratingCol="rating", nonnegative=False, checkpointInterval=10,
                   intermediateStorageLevel="MEMORY_AND_DISK",
                   finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096):
         """
-        setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
-                 implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None, \
-                 ratingCol="rating", nonnegative=False, checkpointInterval=10, \
+        setParams(self, \\*, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, \
+                 numItemBlocks=10, implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", \
+                 seed=None, ratingCol="rating", nonnegative=False, checkpointInterval=10, \
                  intermediateStorageLevel="MEMORY_AND_DISK", \
                  finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096)
         Sets params for ALS.

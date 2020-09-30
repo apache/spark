@@ -1417,8 +1417,10 @@ setMethod("quarter",
           })
 
 #' @details
-#' \code{percentile_approx} Returns the approximate percentile value of
-#' numeric column at the given percentage.
+#' \code{percentile_approx} Returns the approximate \code{percentile} of the numeric column
+#' \code{col} which is the smallest value in the ordered \code{col} values (sorted from least to
+#' greatest) such that no more than \code{percentage} of \code{col} values is less than the value
+#' or equal to that value.
 #'
 #' @param percentage Numeric percentage at which percentile should be computed
 #'                   All values should be between 0 and 1.
@@ -4380,7 +4382,8 @@ setMethod("date_trunc",
           })
 
 #' @details
-#' \code{current_date}: Returns the current date as a date column.
+#' \code{current_date}: Returns the current date at the start of query evaluation as a date column.
+#' All calls of current_date within the same query return the same value.
 #'
 #' @rdname column_datetime_functions
 #' @aliases current_date current_date,missing-method
@@ -4396,7 +4399,8 @@ setMethod("current_date",
           })
 
 #' @details
-#' \code{current_timestamp}: Returns the current timestamp as a timestamp column.
+#' \code{current_timestamp}: Returns the current timestamp at the start of query evaluation as
+#' a timestamp column. All calls of current_timestamp within the same query return the same value.
 #'
 #' @rdname column_datetime_functions
 #' @aliases current_timestamp current_timestamp,missing-method
@@ -4407,3 +4411,18 @@ setMethod("current_timestamp",
             jc <- callJStatic("org.apache.spark.sql.functions", "current_timestamp")
             column(jc)
           })
+
+#' @details
+#' \code{timestamp_seconds}: Creates timestamp from the number of seconds since UTC epoch.
+#'
+#' @rdname column_datetime_functions
+#' @aliases timestamp_seconds timestamp_seconds,Column-method
+#' @note timestamp_seconds since 3.1.0
+setMethod("timestamp_seconds",
+    signature(x = "Column"),
+    function(x) {
+        jc <- callJStatic(
+            "org.apache.spark.sql.functions", "timestamp_seconds", x@jc
+        )
+        column(jc)
+    })
