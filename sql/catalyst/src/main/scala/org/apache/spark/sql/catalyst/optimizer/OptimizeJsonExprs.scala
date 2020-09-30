@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{ArrayType, StructType}
 
 /**
  * Simplify redundant json related expressions.
@@ -47,6 +47,11 @@ object OptimizeJsonExprs extends Rule[LogicalPlan] {
       case g @ GetStructField(jsonToStructs: JsonToStructs, ordinal, _) =>
         val prunedSchema = StructType(Seq(jsonToStructs.schema.asInstanceOf[StructType](ordinal)))
         g.copy(child = jsonToStructs.copy(schema = prunedSchema), ordinal = 0)
+
+      case g @ GetArrayStructFields(jsonToStructs: JsonToStructs, _, _, _, _) =>
+        val prunedSchema = ArrayType(StructType(Seq(g.field)), g.containsNull)
+        g.copy(child = jsonToStructs.copy(schema = prunedSchema), ordinal = 0, numFields = 1)
+
     }
   }
 }

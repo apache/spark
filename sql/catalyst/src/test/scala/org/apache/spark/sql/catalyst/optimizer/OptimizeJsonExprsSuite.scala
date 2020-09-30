@@ -165,4 +165,38 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
       .select(GetStructField(JsonToStructs(prunedSchema2, options, 'json), 0)).analyze
     comparePlans(optimized2, expected2)
   }
+
+  test("SPARK-32958: prune unnecessary columns from GetArrayStructFields + from_json") {
+    val options = Map.empty[String, String]
+    val schema1 = ArrayType(StructType.fromDDL("a int, b int"), containsNull = true)
+    val field1 = schema1.elementType.asInstanceOf[StructType](0)
+
+    val query1 = testRelation2
+      .select(GetArrayStructFields(
+        JsonToStructs(schema1, options, 'json), field1, 0, 2, true).as("a"))
+    val optimized1 = Optimizer.execute(query1.analyze)
+
+    val prunedSchema1 = ArrayType(StructType.fromDDL("a int"), containsNull = true)
+    val expected1 = testRelation2
+      .select(GetArrayStructFields(
+        JsonToStructs(prunedSchema1, options, 'json), field1, 0, 1, true).as("a")).analyze
+    comparePlans(optimized1, expected1)
+
+    val schema2 = ArrayType(
+      StructType(
+        StructField("a", IntegerType, false) ::
+          StructField("b", IntegerType, false) :: Nil), containsNull = false)
+    val field2 = schema2.elementType.asInstanceOf[StructType](1)
+    val query2 = testRelation2
+      .select(GetArrayStructFields(
+        JsonToStructs(schema2, options, 'json), field2, 1, 2, false).as("b"))
+    val optimized2 = Optimizer.execute(query2.analyze)
+
+    val prunedSchema2 = ArrayType(
+      StructType(StructField("b", IntegerType, false) :: Nil), containsNull = false)
+    val expected2 = testRelation2
+      .select(GetArrayStructFields(
+        JsonToStructs(prunedSchema2, options, 'json), field2, 0, 1, false).as("b")).analyze
+    comparePlans(optimized2, expected2)
+  }
 }
