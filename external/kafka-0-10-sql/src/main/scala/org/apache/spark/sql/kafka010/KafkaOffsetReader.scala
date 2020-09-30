@@ -303,7 +303,8 @@ private[kafka010] class KafkaOffsetReader(
               }
             })
           }
-          incorrectOffsets
+          // toSeq seems redundant but it's needed for Scala 2.13
+          incorrectOffsets.toSeq
         }
 
         // Retry to fetch latest offsets when detecting incorrect offsets. We don't use
