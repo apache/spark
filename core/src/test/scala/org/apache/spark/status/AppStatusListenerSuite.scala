@@ -1351,6 +1351,67 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     assert(allJobs.head.numFailedStages == 1)
   }
 
+  test("SPARK-33033: get aggregated task metrics") {
+    val tmpDir = Utils.createTempDir()
+    val writeStore = new ElementTrackingStore(KVUtils.open(tmpDir, getClass().getName()), conf)
+    val listener = new AppStatusListener(writeStore, conf, false)
+
+    val stage1 = new StageInfo(1, 0, "stage1", 4, Nil, Nil, "details1",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    val stage2 = new StageInfo(2, 0, "stage2", 4, Nil, Nil, "details2",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+
+    // Start job
+    listener.onJobStart(SparkListenerJobStart(1, time, Seq(stage1, stage2), null))
+
+    // Start 2 stages
+    listener.onStageSubmitted(SparkListenerStageSubmitted(stage1, new Properties()))
+    listener.onStageSubmitted(SparkListenerStageSubmitted(stage2, new Properties()))
+
+    // Start 2 Tasks
+    val tasks = createTasks(2, Array("0", "1"))
+    tasks.foreach { task =>
+      listener.onTaskStart(SparkListenerTaskStart(stage1.stageId, stage1.attemptNumber, task))
+    }
+
+    // Task 1 Finished
+    time += 1
+    tasks(0).markFinished(TaskState.FINISHED, time)
+    listener.onTaskEnd(SparkListenerTaskEnd(
+      stage1.stageId, stage1.attemptNumber, "taskType", Success, tasks(0),
+      new ExecutorMetrics, null))
+
+    // Stage 1 Completed
+    stage1.failureReason = Some("Failed")
+    stage1.completionTime = Some(1)
+    listener.onStageCompleted(SparkListenerStageCompleted(stage1))
+
+    // Stop job 1
+    time += 1
+    listener.onJobEnd(SparkListenerJobEnd(1, time, JobSucceeded))
+
+    // Task 2 finished
+    time += 1
+    tasks(1).markFinished(TaskState.FINISHED, time)
+    val taskMetrics = new TaskMetrics()
+    taskMetrics.setJvmGCTime(1)
+    listener.onTaskEnd(
+      SparkListenerTaskEnd(stage1.stageId, stage1.attemptNumber, "taskType",
+        Success, tasks(1), new ExecutorMetrics, taskMetrics))
+
+    writeStore.close()
+    val readStore = new ElementTrackingStore(KVUtils.open(tmpDir, getClass().getName()), conf)
+    // Ensure killed task metrics are updated
+    val appResults = readStore.view(classOf[ApplicationStatisticsData]).asScala.toArray
+    assert(appResults.foldLeft(0L) {(r, d) => r + d.jobCount} === 1L)
+    assert(appResults.foldLeft(0L) {(r, d) => r + d.stageCount} === 1L)
+    assert(appResults.foldLeft(0L) {(r, d) => r + d.taskCount} === 2L)
+    assert(appResults.foldLeft(0L) {(r, d) => r + d.jvmGCTimeSum} === 1L)
+
+    readStore.close()
+    Utils.deleteRecursively(tmpDir)
+  }
+
   Seq(true, false).foreach { live =>
     test(s"Total tasks in the executor summary should match total stage tasks (live = $live)") {
 

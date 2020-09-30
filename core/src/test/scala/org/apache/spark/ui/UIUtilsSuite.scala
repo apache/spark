@@ -178,6 +178,12 @@ class UIUtilsSuite extends SparkFunSuite {
     assert(trim(generated(0)) == trim(expected))
   }
 
+  test("SPARK-33033: test time point discretization") {
+    assert(UIUtils.timePointDiscretized(1600839214763L, 60 * 1000) == 1600839240000L)
+    assert(UIUtils.timePointDiscretized(1600839240000L, 60 * 1000) == 1600839240000L)
+    assert(UIUtils.timePointDiscretized(1600839240001L, 60 * 1000) == 1600839300000L)
+  }
+
   private def verify(
       desc: String,
       expected: Node,

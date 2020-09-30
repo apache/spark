@@ -683,4 +683,10 @@ private[spark] object UIUtils extends Logging {
       Seq.empty[Node]
     }
   }
+
+  def timePointDiscretized(time: Long, interval: Long): Long = {
+    (math.ceil(time * 1.0 / interval) * interval)
+      .toLong
+  }
+
 }

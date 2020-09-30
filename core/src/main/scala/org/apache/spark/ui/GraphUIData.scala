@@ -21,6 +21,7 @@ import java.{util => ju}
 import java.lang.{Long => JLong}
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable
 import scala.collection.mutable.ArrayBuffer
 import scala.xml.{Node, Unparsed}
 
@@ -115,6 +116,42 @@ private[spark] class GraphUIData(
     jsCollector.addPreparedStatement(s"var $labels = $jsForLabels;")
     jsCollector.addStatement(
       s"drawAreaStack('#$timelineDivId', $labels, $dataJavaScriptName, $minX, $maxX, $minY, $maxY)")
+    <div id={timelineDivId}></div>
+  }
+
+  def generateBrushAreaStackHtmlWithData(
+      jsCollector: JsCollector,
+      values: Map[String, Seq[(Long, Double)]],
+      stageIdJSName: String,
+      longLegend: Boolean = false): Seq[Node] = {
+    val jsForData = values.flatMap(v => {
+      v._2.map {t =>
+        s"""{x:${t._1},y:${t._2},name:'${v._1}'}"""
+      }
+    }).mkString("[", ",", "]")
+    dataJavaScriptName = jsCollector.nextVariableName
+    jsCollector.addPreparedStatement(s"var $dataJavaScriptName = $jsForData;")
+    jsCollector.addStatement(
+      s"renderBrushStackAreaChart($dataJavaScriptName, '#$timelineDivId', '$unitY', $longLegend," +
+        s" ${UIUtils.getTimeZoneOffset()}, ${stageIdJSName})")
+    <div id={timelineDivId}></div>
+  }
+
+  def generateBrushMultiTimelineHtmlWithData(
+      jsCollector: JsCollector,
+      values: Map[String, Seq[(Long, Double)]],
+      stageIdJSName: String,
+      longLegend: Boolean = false): Seq[Node] = {
+    val jsForData = values.flatMap(v => {
+      v._2.map {t =>
+        s"""{x:${t._1},y:${t._2},name:'${v._1}'}"""
+      }
+    }).mkString("[", ",", "]")
+    dataJavaScriptName = jsCollector.nextVariableName
+    jsCollector.addPreparedStatement(s"var $dataJavaScriptName = $jsForData;")
+    jsCollector.addStatement(
+      s"renderBrushMultiLineChart($dataJavaScriptName, '#$timelineDivId', '$unitY', $longLegend," +
+        s" ${UIUtils.getTimeZoneOffset()}, ${stageIdJSName})")
     <div id={timelineDivId}></div>
   }
 }

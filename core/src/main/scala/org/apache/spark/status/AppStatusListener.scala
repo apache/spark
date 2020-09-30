@@ -27,12 +27,13 @@ import org.apache.spark._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CPUS_PER_TASK
+import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.resource.ResourceProfile.CPUS
 import org.apache.spark.scheduler._
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage._
-import org.apache.spark.ui.SparkUI
+import org.apache.spark.ui.{SparkUI, UIUtils}
 import org.apache.spark.ui.scope._
 
 /**
@@ -67,6 +68,8 @@ private[spark] class AppStatusListener(
 
   private val maxTasksPerStage = conf.get(MAX_RETAINED_TASKS_PER_STAGE)
   private val maxGraphRootNodes = conf.get(MAX_RETAINED_ROOT_NODES)
+  private val taskMetricsAggregationEnabled = conf.get(TASK_METRICS_AGGREGATION_ENABLED)
+  private val taskMetricsAggregationPeriod = conf.get(TASK_METRICS_AGGREGATION_PERIOD)
 
   // Keep track of live entities, so that task metrics can be efficiently updated (without
   // causing too many writes to the underlying store, and other expensive operations).
@@ -78,6 +81,9 @@ private[spark] class AppStatusListener(
   private val liveRDDs = new HashMap[Int, LiveRDD]()
   private val pools = new HashMap[String, SchedulerPool]()
   private val liveResourceProfiles = new HashMap[Int, LiveResourceProfile]()
+
+  private val applicationTimeSeriesStatistics =
+    new HashMap[Long, ApplicationTimeSeriesStatistics]()
 
   private val SQL_EXECUTION_ID_KEY = "spark.sql.execution.id"
   // Keep the active executor count as a separate variable to avoid having to do synchronization
@@ -489,6 +495,12 @@ private[spark] class AppStatusListener(
         kvstore.write(appSummary)
       }
     }
+
+    if (isTaskMetricsCollectingEnabled && event.time > 0) {
+      updateAppStatisticsData(
+        event.time,
+        (statistic) => statistic.updateJobCount())
+    }
   }
 
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
@@ -688,8 +700,9 @@ private[spark] class AppStatusListener(
         liveStages.remove((event.stageId, event.stageAttemptId))
       }
     }
-
+    var activeTasks = 0
     liveExecutors.get(event.taskInfo.executorId).foreach { exec =>
+      activeTasks = exec.activeTasks
       exec.activeTasks -= 1
       exec.completedTasks += completedDelta
       exec.failedTasks += failedDelta
@@ -717,6 +730,15 @@ private[spark] class AppStatusListener(
       } else {
         maybeUpdate(exec, now)
       }
+    }
+
+    if (isTaskMetricsCollectingEnabled && event.taskInfo.finishTime > 0) {
+      updateAppStatisticsData(
+        event.taskInfo.finishTime,
+        (statistic) => statistic.updateTaskInfo(
+          event.stageId + "/" + event.stageAttemptId,
+          event.taskInfo,
+          Option(event.taskMetrics)))
     }
   }
 
@@ -780,6 +802,14 @@ private[spark] class AppStatusListener(
 
     // remove any dead executors that were not running for any currently active stages
     deadExecutors.retain((execId, exec) => isExecutorActiveForLiveStages(exec))
+
+    if (isTaskMetricsCollectingEnabled) {
+      event.stageInfo.completionTime foreach { t =>
+        updateAppStatisticsData(
+          t,
+          (statistic) => statistic.updateStageCount())
+      }
+    }
   }
 
   private def removeBlackListedStageFrom(exec: LiveExecutor, stageId: Int, now: Long) = {
@@ -944,6 +974,7 @@ private[spark] class AppStatusListener(
     liveTasks.values.foreach(entityFlushFunc)
     liveRDDs.values.foreach(entityFlushFunc)
     pools.values.foreach(entityFlushFunc)
+    applicationTimeSeriesStatistics.values.foreach(entityFlushFunc)
   }
 
   /**
@@ -1285,6 +1316,36 @@ private[spark] class AppStatusListener(
     } else {
       0L
     }
+  }
+
+  private def isTaskMetricsCollectingEnabled(): Boolean = {
+    !live && taskMetricsAggregationEnabled
+  }
+
+  private def updateAppStatisticsData(
+    finishTime: Long,
+    doUpdate : ApplicationTimeSeriesStatistics => ApplicationTimeSeriesStatistics): Unit = {
+    val now = System.nanoTime()
+    val time = UIUtils.timePointDiscretized(finishTime, taskMetricsAggregationPeriod)
+    val appStatistics = applicationTimeSeriesStatistics
+      .get(time) match {
+      case Some(tempStatistics) =>
+        doUpdate(tempStatistics)
+      case None =>
+        val expiredKeys = applicationTimeSeriesStatistics.filter { pair =>
+          pair._1 < time - 3 * taskMetricsAggregationPeriod
+        } map (_._1)
+        expiredKeys foreach { key =>
+          applicationTimeSeriesStatistics.remove(key) map { statistics =>
+            update(statistics, now)
+          }
+        }
+        doUpdate(new ApplicationTimeSeriesStatistics(
+          time,
+          taskMetricsAggregationPeriod))
+    }
+
+    applicationTimeSeriesStatistics.update(time, appStatistics)
   }
 
 }

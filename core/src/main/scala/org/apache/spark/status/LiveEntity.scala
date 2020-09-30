@@ -22,9 +22,10 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.{HashSet, TreeSet}
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet => MutableHashset}
 
 import com.google.common.collect.Interners
+import org.apache.commons.math3.stat.StatUtils
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
@@ -649,6 +650,90 @@ private class SchedulerPool(name: String) extends LiveEntity {
     new PoolData(name, stageIds)
   }
 
+}
+
+private class ApplicationTimeSeriesStatistics(
+    val endTimeStamp: Long,
+    val groupingInterval: Long,
+    val associatedStageIds: MutableHashset[String] = new MutableHashset,
+    var taskCount: Long = 0,
+    var stageCount: Long = 0,
+    var jobCount: Long = 0,
+    var executorDeserializeTime: Long = 0,
+    var executorRunTime: Long = 0,
+    var jvmGCTime: Long = 0,
+    var resultSerializationTime: Long = 0,
+    var shuffleFetchWaitTime: Long = 0,
+    var shuffleWriteTime: Long = 0,
+    var gettingResultTime: Long = 0,
+    var duration: ArrayBuffer[Long] = new ArrayBuffer,
+    var shuffleTotalReadBytes: Long = 0,
+    var shuffleWriteBytes: Long = 0,
+    var readBytes: Long = 0) extends LiveEntity {
+  def updateTaskInfo(
+    stageAndAttemptId: String,
+    info: TaskInfo,
+    metrics: Option[TaskMetrics]) : ApplicationTimeSeriesStatistics = {
+    this.taskCount += 1
+    this.duration += info.duration
+    this.associatedStageIds += stageAndAttemptId
+    metrics.map { m =>
+      this.readBytes += m.inputMetrics.bytesRead
+      this.shuffleTotalReadBytes += m.shuffleReadMetrics.totalBytesRead
+      this.shuffleFetchWaitTime += m.shuffleReadMetrics.fetchWaitTime
+      this.shuffleWriteBytes += m.shuffleWriteMetrics.bytesWritten
+      this.shuffleWriteTime += m.shuffleWriteMetrics.writeTime
+      this.executorDeserializeTime += m.executorDeserializeTime
+      this.resultSerializationTime += m.resultSerializationTime
+      this.jvmGCTime += m.jvmGCTime
+      this.executorRunTime += m.executorRunTime
+      if (info.gettingResultTime > 0 && info.duration > 0) {
+        this.gettingResultTime += (info.launchTime + info.duration - info.gettingResultTime)
+      }
+    }
+
+    this
+  }
+
+  def updateJobCount(): ApplicationTimeSeriesStatistics = {
+    this.jobCount += 1
+    this
+  }
+
+  def updateStageCount(): ApplicationTimeSeriesStatistics = {
+    this.stageCount += 1
+    this
+  }
+
+  override protected def doUpdate(): Any = {
+    val stageIdsMaxLength = 30
+    var associatedStages = associatedStageIds
+      .toSeq
+      .sortBy(_.replace("/", "").toLong)
+      .take(stageIdsMaxLength).mkString(", ")
+    if (associatedStageIds.size > stageIdsMaxLength) {
+      associatedStages += "..."
+    }
+    new ApplicationStatisticsData(
+      endTimeStamp,
+      taskCount,
+      stageCount,
+      jobCount,
+      executorDeserializeTime,
+      executorRunTime,
+      jvmGCTime,
+      resultSerializationTime,
+      shuffleFetchWaitTime,
+      shuffleWriteTime,
+      gettingResultTime,
+      duration.foldLeft(0L) {(r, d) => r + d},
+      shuffleTotalReadBytes,
+      shuffleWriteBytes,
+      readBytes,
+      StatUtils.percentile(duration.map(_.toDouble).toArray, 50),
+      StatUtils.percentile(duration.map(_.toDouble).toArray, 90),
+      associatedStages)
+  }
 }
 
 private[spark] object LiveEntityHelpers {

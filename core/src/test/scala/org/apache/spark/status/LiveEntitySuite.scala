@@ -20,6 +20,8 @@ package org.apache.spark.status
 import java.util.Arrays
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.scheduler.{TaskInfo, TaskLocality}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{AccumulatorMetadata, CollectionAccumulator}
 
@@ -64,6 +66,25 @@ class LiveEntitySuite extends SparkFunSuite {
       .newAccumulatorInfos(Seq(acc.toInfo(Some(acc.value), Some(acc.value))))(0)
     assert(accuInfo.update.get == "[1,2,3,4,5,... 5 more items]")
     assert(accuInfo.value == "[1,2,3,4,5,... 5 more items]")
+  }
+
+  test("SPARK-33033: test ApplicationTimeSeriesStatistics update") {
+    val entry = new ApplicationTimeSeriesStatistics(System.currentTimeMillis(), 60)
+    val taskInfo = new TaskInfo(1, 1, 0, 0, "0", "localhost", TaskLocality.ANY,
+      false)
+    taskInfo.finishTime = 2
+    taskInfo.gettingResultTime = 1
+    val taskMetrics = new TaskMetrics()
+    taskMetrics.setJvmGCTime(1)
+    entry.updateTaskInfo("1/0", taskInfo, Some(taskMetrics))
+        .updateJobCount()
+        .updateStageCount()
+    assert(entry.taskCount === 1)
+    assert(entry.duration.head === 2)
+    assert(entry.jvmGCTime === 1)
+    assert(entry.gettingResultTime === 1)
+    assert(entry.jobCount === 1)
+    assert(entry.stageCount === 1)
   }
 
   private def checkSize(seq: Seq[_], expected: Int): Unit = {

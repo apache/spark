@@ -20,6 +20,7 @@ package org.apache.spark.ui.jobs
 import javax.servlet.http.HttpServletRequest
 
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.internal.config.History.TASK_METRICS_AGGREGATION_ENABLED
 import org.apache.spark.internal.config.SCHEDULER_MODE
 import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.status.AppStatusStore
@@ -43,8 +44,14 @@ private[ui] class JobsTab(parent: SparkUI, store: AppStatusStore)
 
   def getSparkUser: String = parent.getSparkUser
 
-  attachPage(new AllJobsPage(this, store))
+  var jobsMetricsGroupingEnabled =
+    !sc.isDefined && parent.conf.get(TASK_METRICS_AGGREGATION_ENABLED)
+
+  attachPage(new AllJobsPage(this, store, jobsMetricsGroupingEnabled))
   attachPage(new JobPage(this, store))
+  if(jobsMetricsGroupingEnabled) {
+    attachPage(new JobStatisticsPage(this, store, parent.conf))
+  }
 
   def handleKillRequest(request: HttpServletRequest): Unit = {
     if (killEnabled && parent.securityManager.checkModifyPermissions(request.getRemoteUser)) {

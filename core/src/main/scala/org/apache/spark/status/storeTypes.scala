@@ -451,6 +451,27 @@ private[spark] class PoolData(
     @KVIndexParam val name: String,
     val stageIds: Set[Int])
 
+
+private[spark] class ApplicationStatisticsData(
+    @KVIndexParam val endTimeStamp: Long,
+    val taskCount: Long,
+    val stageCount: Long,
+    val jobCount: Long,
+    val executorDeserializeTimeSum: Long,
+    val executorRunTimeSum: Long,
+    val jvmGCTimeSum: Long,
+    val resultSerializationTimeSum: Long,
+    val shuffleFetchWaitTimeSum: Long,
+    val shuffleWriteTimeSum: Long,
+    val gettingResultTimeSum: Long,
+    val durationSum: Long,
+    val shuffleTotalReadBytesSum: Long,
+    val shuffleWriteBytesSum: Long,
+    val readBytesSum: Long,
+    val durationP50: Double,
+    val durationP90: Double,
+    val associatedStageIds: String)
+
 /**
  * A class with information about an app, to be used by the UI. There's only one instance of
  * this summary per application, so its ID in the store is the class name.

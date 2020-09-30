@@ -211,4 +211,21 @@ private[spark] object History {
     .version("3.1.0")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("2g")
+
+  val TASK_METRICS_AGGREGATION_ENABLED =
+    ConfigBuilder("spark.history.ui.task.metrics.aggregation.enabled")
+    .doc("Whether to aggregate task metrics when parsing event log. When this config is enabled," +
+      "time series aggregated information is generated and stored in history server KVStore. " +
+      "Application statistics page is visible and application level metrics displaying in " +
+      "the page.")
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
+  val TASK_METRICS_AGGREGATION_PERIOD =
+    ConfigBuilder("spark.history.ui.task.metrics.aggregation.period")
+      .doc("Task metrics aggregation period, when task metrics aggregation is enabled.")
+      .version("3.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("60s")
 }

@@ -435,6 +435,11 @@ private[spark] class AppStatusStore(
       .asScala.map { exec => (exec.executorId -> exec.info) }.toMap
   }
 
+  def applicationStatistics(): Array[ApplicationStatisticsData] = {
+    store.view(classOf[ApplicationStatisticsData])
+      .asScala.toArray
+  }
+
   def rddList(cachedOnly: Boolean = true): Seq[v1.RDDStorageInfo] = {
     store.view(classOf[RDDStorageInfoWrapper]).asScala.map(_.info).filter { rdd =>
       !cachedOnly || rdd.numCachedPartitions > 0

@@ -36,7 +36,10 @@ import org.apache.spark.ui._
 import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished jobs */
-private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends WebUIPage("") {
+private[ui] class AllJobsPage(
+    parent: JobsTab,
+    store: AppStatusStore,
+    jobsMetricsGroupingEnabled: Boolean) extends WebUIPage("") {
 
   import ApiHelper._
 
@@ -323,6 +326,15 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
               <li>
                 <a href="#failed"><strong>Failed Jobs:</strong></a>
                 {failedJobs.size}
+              </li>
+            }
+          }
+          {
+            if (jobsMetricsGroupingEnabled) {
+              val metricsPagePath =
+                s"${UIUtils.prependBaseUri(request, parent.basePath)}/jobs/statistics/"
+              <li>
+                <a href={metricsPagePath}><strong>Application Statistics</strong></a>
               </li>
             }
           }
