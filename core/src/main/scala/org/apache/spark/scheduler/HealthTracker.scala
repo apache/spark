@@ -39,7 +39,7 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
  *  * many small stages -- this may prevent a bad executor for having many failures within one
  *      stage, but still many failures over the entire application
  *  * "flaky" executors -- they don't fail every task, but are still faulty enough to merit
- *      blocking
+ *      excluding
  *
  * See the design doc on SPARK-8425 for a more in-depth discussion.
  *
@@ -162,7 +162,7 @@ private[scheduler] class HealthTracker (
 
   private def killExcludedExecutor(exec: String): Unit = {
     if (conf.get(config.EXCLUDE_ON_FAILURE_KILL_ENABLED)) {
-      killExecutor(exec, s"Killing blocked executor id $exec since " +
+      killExecutor(exec, s"Killing excluded executor id $exec since " +
         s"${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
     }
   }

@@ -63,7 +63,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   with MesosScheduler
   with MesosSchedulerUtils {
 
-  // Exclude a agent after this many failures
+  // Exclude an agent after this many failures
   private val MAX_AGENT_FAILURES = 2
 
   private val maxCoresOption = conf.get(config.CORES_MAX)

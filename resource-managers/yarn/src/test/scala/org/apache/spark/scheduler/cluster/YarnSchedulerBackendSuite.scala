@@ -78,7 +78,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
       val request = Map(defaultResourceProf -> numRequested)
       val req = yarnSchedulerBackendExtended.prepareRequestExecutors(request)
       assert(req.resourceProfileToTotalExecs(defaultResourceProf) === numRequested)
-      assert(req.nodeBlocklist === excludelist)
+      assert(req.excludedNodes === excludelist)
       val hosts =
         req.hostToLocalTaskCount(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID).keySet
       assert(hosts.intersect(excludelist).isEmpty)
