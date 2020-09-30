@@ -787,7 +787,7 @@ private[spark] class ApplicationMaster(
               r.resourceProfileToTotalExecs,
               r.numLocalityAwareTasksPerResourceProfileId,
               r.hostToLocalTaskCount,
-              r.nodeBlocklist)) {
+              r.excludedNodes)) {
               resetAllocatorInterval()
             }
             context.reply(true)

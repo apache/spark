@@ -523,9 +523,10 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.getNumUnexpectedContainerRelease should be (2)
   }
 
-  test("excludeOnFailure nodes reflected in amClient requests") {
+  test("excluded nodes reflected in amClient requests") {
     // Internally we track the set of excluded nodes, but yarn wants us to send *changes*
-    // to it.  This makes sure we are sending the right updates.
+    // to it. Note the YARN api uses the term blacklist for excluded nodes.
+    // This makes sure we are sending the right updates.
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
     val (handler, _) = createAllocator(4, mockAmClient)
     val resourceProfileToTotalExecs = mutable.HashMap(defaultRP -> 1)

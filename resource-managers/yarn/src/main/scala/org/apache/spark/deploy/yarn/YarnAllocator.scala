@@ -358,15 +358,15 @@ private[yarn] class YarnAllocator(
    *                                                  placement hint.
    * @param hostToLocalTaskCount a map of preferred hostname to possible task counts for each
    *                             ResourceProfile id to be used as container placement hint.
-   * @param nodeBlocklist blocklisted nodes, which is passed in to avoid allocating new containers
-   *                      on them. It will be used to update the applications blocklist.
+   * @param excludedNodes excluded nodes, which is passed in to avoid allocating new containers
+   *                      on them. It will be used to update the applications excluded node list.
    * @return Whether the new requested total is different than the old value.
    */
   def requestTotalExecutorsWithPreferredLocalities(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int],
       numLocalityAwareTasksPerResourceProfileId: Map[Int, Int],
       hostToLocalTaskCountPerResourceProfileId: Map[Int, Map[String, Int]],
-      nodeBlocklist: Set[String]): Boolean = synchronized {
+      excludedNodes: Set[String]): Boolean = synchronized {
     this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
     this.hostToLocalTaskCountPerResourceProfileId = hostToLocalTaskCountPerResourceProfileId
 
@@ -377,7 +377,7 @@ private[yarn] class YarnAllocator(
         logInfo(s"Driver requested a total number of $numExecs executor(s) " +
           s"for resource profile id: ${rp.id}.")
         targetNumExecutorsPerResourceProfileId(rp.id) = numExecs
-        allocatorNodeHealthTracker.setSchedulerExcludedNodes(nodeBlocklist)
+        allocatorNodeHealthTracker.setSchedulerExcludedNodes(excludedNodes)
         true
       } else {
         false
@@ -827,7 +827,7 @@ private[yarn] class YarnAllocator(
               s"$diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key}."
             (true, message)
           case other_exit_status =>
-            // SPARK-26269: follow YARN's blocklisting behaviour(see https://github
+            // SPARK-26269: follow YARN's behaviour(see https://github
             // .com/apache/hadoop/blob/228156cfd1b474988bc4fedfbf7edddc87db41e3/had
             // oop-yarn-project/hadoop-yarn/hadoop-yarn-common/src/main/java/org/ap
             // ache/hadoop/yarn/util/Apps.java#L273 for details)
