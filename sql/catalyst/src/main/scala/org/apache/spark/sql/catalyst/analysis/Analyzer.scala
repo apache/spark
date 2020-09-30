@@ -3080,19 +3080,6 @@ class Analyzer(
     }
   }
 
-  private def getOutput(table: NamedRelation, expectedCols: Seq[Attribute]): Seq[Attribute] = {
-    if (expectedCols.isEmpty) {
-      table.output
-    } else {
-      if (table.output.size != expectedCols.size) {
-        failAnalysis(s"${table.name} requires that the data to be inserted have the same number" +
-          s" of columns as the target table that has ${table.output.size} column(s) but the" +
-          s" specified part has only ${expectedCols.length} column(s)")
-      }
-      expectedCols
-    }
-  }
-
   private def validateStoreAssignmentPolicy(): Unit = {
     // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2.
     if (conf.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY) {
