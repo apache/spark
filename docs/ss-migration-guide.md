@@ -26,7 +26,7 @@ Note that this migration guide describes the items specific to Structured Stream
 Many items of SQL migration can be applied when migrating Structured Streaming to higher versions.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.html).
 
-## Upgrading from Core 3.0 to 3.1
+## Upgrading from Structured Streaming 3.0 to 3.1
 
 - In Spark 3.0 and below, secure Kafka processing needed the following ACLs from driver perspective:
   * Topic resource describe operation
