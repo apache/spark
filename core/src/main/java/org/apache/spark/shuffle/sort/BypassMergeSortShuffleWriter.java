@@ -165,6 +165,18 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
 
       partitionLengths = writePartitionedData(mapOutputWriter);
+
+      // The segment file may be empty even after writer committing
+      // caused by disk/kernel in heavy load cluster, compare segment
+      // length with copied length to guard it, SPARK-33022.
+      for (int i = 0; i < numPartitions; i++) {
+        if (partitionWriterSegments[i].length() != partitionLengths[i]) {
+          throw new IllegalStateException(
+            partitionWriterSegments[i] +
+              " length do not equal to its underlying file length " + partitionLengths[i]);
+        }
+      }
+
       mapStatus = MapStatus$.MODULE$.apply(
         blockManager.shuffleServerId(), partitionLengths, mapId);
     } catch (Exception e) {
