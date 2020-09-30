@@ -1449,7 +1449,7 @@ setGeneric("var_pop", function(x) { standardGeneric("var_pop") })
 #' @name NULL
 setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
 
-#' @rdname column_mlunctions
+#' @rdname column_ml_functions
 #' @name NULL
 setGeneric("vector_to_array", function(x, ...) { standardGeneric("vector_to_array") })
 
