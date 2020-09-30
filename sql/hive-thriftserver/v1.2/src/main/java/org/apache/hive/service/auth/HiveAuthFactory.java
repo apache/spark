@@ -276,7 +276,7 @@ public class HiveAuthFactory {
   }
 
   public static TServerSocket getServerSSLSocket(String hiveHost, int portNum, String keyStorePath,
-      String keyStorePassWord, List<String> sslVersionsExcluded) throws TTransportException,
+      String keyStorePassWord, List<String> sslVersionBlacklist) throws TTransportException,
       UnknownHostException {
     TSSLTransportFactory.TSSLTransportParameters params =
         new TSSLTransportFactory.TSSLTransportParameters();
@@ -291,14 +291,14 @@ public class HiveAuthFactory {
     TServerSocket thriftServerSocket =
         TSSLTransportFactory.getServerSocket(portNum, 0, serverAddress.getAddress(), params);
     if (thriftServerSocket.getServerSocket() instanceof SSLServerSocket) {
-      List<String> sslVersionsExcludedLocal = new ArrayList<String>();
-      for (String sslVersion : sslVersionsExcluded) {
-        sslVersionsExcludedLocal.add(sslVersion.trim().toLowerCase(Locale.ROOT));
+      List<String> sslVersionBlacklistLocal = new ArrayList<String>();
+      for (String sslVersion : sslVersionBlacklist) {
+        sslVersionBlacklistLocal.add(sslVersion.trim().toLowerCase(Locale.ROOT));
       }
       SSLServerSocket sslServerSocket = (SSLServerSocket) thriftServerSocket.getServerSocket();
       List<String> enabledProtocols = new ArrayList<String>();
       for (String protocol : sslServerSocket.getEnabledProtocols()) {
-        if (sslVersionsExcludedLocal.contains(protocol.toLowerCase(Locale.ROOT))) {
+        if (sslVersionBlacklistLocal.contains(protocol.toLowerCase(Locale.ROOT))) {
           LOG.debug("Disabling SSL Protocol: " + protocol);
         } else {
           enabledProtocols.add(protocol);

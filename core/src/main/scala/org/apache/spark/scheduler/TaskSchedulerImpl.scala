@@ -381,7 +381,7 @@ private[spark] class TaskSchedulerImpl(
     : (Boolean, Option[TaskLocality]) = {
     var noDelayScheduleRejects = true
     var minLaunchedLocality: Option[TaskLocality] = None
-    // nodes and executors that are blocked for the entire application have already been
+    // nodes and executors that are excluded for the entire application have already been
     // filtered out by this point
     for (i <- 0 until shuffledOffers.size) {
       val execId = shuffledOffers(i).executorId
@@ -515,9 +515,9 @@ private[spark] class TaskSchedulerImpl(
       hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += host
     }
 
-    // Before making any offers, remove any nodes from the blocklist whose blocklist has expired. Do
+    // Before making any offers, include any nodes whose expireOnFailure timeout has expired. Do
     // this here to avoid a separate thread and added synchronization overhead, and also because
-    // updating the blocklist is only relevant when task offers are being made.
+    // updating the excluded executors and nodes is only relevant when task offers are being made.
     healthTrackerOpt.foreach(_.applyExcludeOnFailureTimeout())
 
     val filteredOffers = healthTrackerOpt.map { healthTracker =>
