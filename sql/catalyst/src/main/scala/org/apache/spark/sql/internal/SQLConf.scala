@@ -955,13 +955,13 @@ object SQLConf {
     buildConf("spark.sql.sources.bucketing.autoBucketedScan.enabled")
       .internal()
       .doc("When true, decide whether to do bucketed scan on input tables based on query plan " +
-        "automatically. Do not use bucketed scan if 1.query does not have operators to utilize " +
-        "bucketing (e.g. join, group-by, etc), or 2.there's an exchange operator between these " +
-        "operators and table scan. Note when spark.sql.sources.bucketing.enabled is set to " +
+        "automatically. Do not use bucketed scan if 1. query does not have operators to utilize " +
+        "bucketing (e.g. join, group-by, etc), or 2. there's an exchange operator between these " +
+        s"operators and table scan. Note when '${BUCKETING_ENABLED.key}' is set to " +
         "false, this configuration does not take any effect.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
