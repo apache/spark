@@ -26,6 +26,19 @@ Note that this migration guide describes the items specific to Structured Stream
 Many items of SQL migration can be applied when migrating Structured Streaming to higher versions.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.html).
 
+## Upgrading from Core 3.0 to 3.1
+
+- In Spark 3.0 and below, secure Kafka processing needed the following ACLs from driver perspective:
+  * Topic resource describe operation
+  * Topic resource read operation
+  * Group resource read operation
+
+  Since Spark 3.1, offsets are obtained with `AdminClient` instead of `KafkaConsumer` and now the following ACLs needed from driver perspective:
+  * Topic resource describe operation
+
+  Since `AdminClient` in driver is not connecting to consumer group, `group.id` based authorization will not work anymore (executors never done group based authorization).
+  Worth to mention executor side is behaving the exact same way like before (group prefix and override works).
+
 ## Upgrading from Structured Streaming 2.4 to 3.0
 
 - In Spark 3.0, Structured Streaming forces the source schema into nullable when file-based datasources such as text, json, csv, parquet and orc are used via `spark.readStream(...)`. Previously, it respected the nullability in source schema; however, it caused issues tricky to debug with NPE. To restore the previous behavior, set `spark.sql.streaming.fileSource.schema.forceNullable` to `false`.
