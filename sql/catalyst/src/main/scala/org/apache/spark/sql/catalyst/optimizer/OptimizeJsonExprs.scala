@@ -26,8 +26,8 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
  * Simplify redundant json related expressions.
  *
  * The optimization includes:
- * 1. JsonToStructs(StructsToJson(child)) => child
- * 2. Prune unnecessary columns from GetStructField + JsonToStructs.
+ * 1. JsonToStructs(StructsToJson(child)) => child.
+ * 2. Prune unnecessary columns from GetStructField/GetArrayStructFields + JsonToStructs.
  */
 object OptimizeJsonExprs extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
