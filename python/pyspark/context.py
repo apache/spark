@@ -956,6 +956,15 @@ class SparkContext(object):
         """
         self._jsc.sc().setCheckpointDir(dirName)
 
+    def getCheckpointDir(self):
+        """
+        Return the directory where RDDs are checkpointed. Returns None if no
+        checkpoint directory has been set.
+        """
+        if not self._jsc.sc().getCheckpointDir().isEmpty():
+            return self._jsc.sc().getCheckpointDir().get()
+        return None
+
     def _getJavaStorageLevel(self, storageLevel):
         """
         Returns a Java StorageLevel based on a pyspark.StorageLevel.
