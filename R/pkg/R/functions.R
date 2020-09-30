@@ -4471,7 +4471,8 @@ setMethod("timestamp_seconds",
           })
 
 #' @details
-#' \code{vector_to_array}
+#' \code{vector_to_array} Converts a column of MLlib sparse/dense vectors into
+#' a column of dense arrays.
 #'
 #' @param dtype The data type of the output array. Valid values: "float64" or "float32".
 #'
