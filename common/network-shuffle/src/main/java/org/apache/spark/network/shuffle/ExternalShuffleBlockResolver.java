@@ -100,7 +100,16 @@ public class ExternalShuffleBlockResolver {
       throws IOException {
     this(conf, registeredExecutorFile, Executors.newSingleThreadExecutor(
         // Add `spark` prefix because it will run in NM in Yarn mode.
-        NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")));
+        NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")),
+        null);
+  }
+
+  public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile, String extraKnownManager)
+      throws IOException {
+    this(conf, registeredExecutorFile, Executors.newSingleThreadExecutor(
+        // Add `spark` prefix because it will run in NM in Yarn mode.
+        NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")),
+        extraKnownManager);
   }
 
   // Allows tests to have more control over when directories are cleaned up.
@@ -108,7 +117,8 @@ public class ExternalShuffleBlockResolver {
   ExternalShuffleBlockResolver(
       TransportConf conf,
       File registeredExecutorFile,
-      Executor directoryCleaner) throws IOException {
+      Executor directoryCleaner,
+      String extraKnownManager) throws IOException {
     this.conf = conf;
     this.rddFetchEnabled =
       Boolean.valueOf(conf.get(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "false"));
@@ -135,6 +145,9 @@ public class ExternalShuffleBlockResolver {
       executors = Maps.newConcurrentMap();
     }
     this.directoryCleaner = directoryCleaner;
+    if (extraKnownManager != null) {
+      knownManagers.add(extraKnownManager);
+    }
   }
 
   public int getRegisteredExecutorsSize() {

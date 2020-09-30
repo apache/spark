@@ -61,6 +61,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
 
   private val shuffleServiceSource = new ExternalShuffleServiceSource
 
+  private val shuffleManagerName = sparkConf.get(config.SHUFFLE_MANAGER)
+
   protected def findRegisteredExecutorsDBFile(dbName: String): File = {
     val localDirs = sparkConf.getOption("spark.local.dir").map(_.split(",")).getOrElse(Array())
     if (localDirs.length >= 1) {
@@ -80,9 +82,10 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalBlockHandler = {
     if (sparkConf.get(config.SHUFFLE_SERVICE_DB_ENABLED) && enabled) {
-      new ExternalBlockHandler(conf, findRegisteredExecutorsDBFile(registeredExecutorsDB))
+      new ExternalBlockHandler(conf, findRegisteredExecutorsDBFile(registeredExecutorsDB),
+        shuffleManagerName)
     } else {
-      new ExternalBlockHandler(conf, null)
+      new ExternalBlockHandler(conf, null, shuffleManagerName)
     }
   }
 
