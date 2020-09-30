@@ -15,12 +15,13 @@
 # limitations under the License.
 #
 
+import sys
+
 from pyspark import keyword_only, since
-from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql import DataFrame
-from pyspark.ml.util import *
+from pyspark.ml.util import JavaMLWritable, JavaMLReadable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
-from pyspark.ml.param.shared import *
+from pyspark.ml.param.shared import HasPredictionCol, Param, TypeConverters, Params
 
 __all__ = ["FPGrowth", "FPGrowthModel", "PrefixSpan"]
 
@@ -55,6 +56,11 @@ class _FPGrowthParams(HasPredictionCol):
         "minConfidence will not affect the mining for frequent itemsets, " +
         "but will affect the association rules generation.",
         typeConverter=TypeConverters.toFloat)
+
+    def __init__(self, *args):
+        super(_FPGrowthParams, self).__init__(*args)
+        self._setDefault(minSupport=0.3, minConfidence=0.8,
+                         itemsCol="items", predictionCol="prediction")
 
     def getItemsCol(self):
         """
@@ -132,7 +138,6 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
         return self._call_java("associationRules")
 
 
-@ignore_unicode_prefix
 class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     r"""
     A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
@@ -180,43 +185,46 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     only showing top 5 rows
     ...
     >>> fpm.associationRules.show(5)
-    +----------+----------+----------+----+
-    |antecedent|consequent|confidence|lift|
-    +----------+----------+----------+----+
-    |    [t, s]|       [y]|       1.0| 2.0|
-    |    [t, s]|       [x]|       1.0| 1.5|
-    |    [t, s]|       [z]|       1.0| 1.2|
-    |       [p]|       [r]|       1.0| 2.0|
-    |       [p]|       [z]|       1.0| 1.2|
-    +----------+----------+----------+----+
+    +----------+----------+----------+----+------------------+
+    |antecedent|consequent|confidence|lift|           support|
+    +----------+----------+----------+----+------------------+
+    |    [t, s]|       [y]|       1.0| 2.0|0.3333333333333333|
+    |    [t, s]|       [x]|       1.0| 1.5|0.3333333333333333|
+    |    [t, s]|       [z]|       1.0| 1.2|0.3333333333333333|
+    |       [p]|       [r]|       1.0| 2.0|0.3333333333333333|
+    |       [p]|       [z]|       1.0| 1.2|0.3333333333333333|
+    +----------+----------+----------+----+------------------+
     only showing top 5 rows
     ...
     >>> new_data = spark.createDataFrame([(["t", "s"], )], ["items"])
     >>> sorted(fpm.transform(new_data).first().newPrediction)
-    [u'x', u'y', u'z']
+    ['x', 'y', 'z']
+    >>> model_path = temp_path + "/fpm_model"
+    >>> fpm.save(model_path)
+    >>> model2 = FPGrowthModel.load(model_path)
+    >>> fpm.transform(data).take(1) == model2.transform(data).take(1)
+    True
 
     .. versionadded:: 2.2.0
     """
     @keyword_only
-    def __init__(self, minSupport=0.3, minConfidence=0.8, itemsCol="items",
+    def __init__(self, *, minSupport=0.3, minConfidence=0.8, itemsCol="items",
                  predictionCol="prediction", numPartitions=None):
         """
-        __init__(self, minSupport=0.3, minConfidence=0.8, itemsCol="items", \
+        __init__(self, \\*, minSupport=0.3, minConfidence=0.8, itemsCol="items", \
                  predictionCol="prediction", numPartitions=None)
         """
         super(FPGrowth, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.FPGrowth", self.uid)
-        self._setDefault(minSupport=0.3, minConfidence=0.8,
-                         itemsCol="items", predictionCol="prediction")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.2.0")
-    def setParams(self, minSupport=0.3, minConfidence=0.8, itemsCol="items",
+    def setParams(self, *, minSupport=0.3, minConfidence=0.8, itemsCol="items",
                   predictionCol="prediction", numPartitions=None):
         """
-        setParams(self, minSupport=0.3, minConfidence=0.8, itemsCol="items", \
+        setParams(self, \\*, minSupport=0.3, minConfidence=0.8, itemsCol="items", \
                   predictionCol="prediction", numPartitions=None)
         """
         kwargs = self._input_kwargs
@@ -320,10 +328,10 @@ class PrefixSpan(JavaParams):
                         typeConverter=TypeConverters.toString)
 
     @keyword_only
-    def __init__(self, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000,
+    def __init__(self, *, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000,
                  sequenceCol="sequence"):
         """
-        __init__(self, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
+        __init__(self, \\*, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
                  sequenceCol="sequence")
         """
         super(PrefixSpan, self).__init__()
@@ -335,10 +343,10 @@ class PrefixSpan(JavaParams):
 
     @keyword_only
     @since("2.4.0")
-    def setParams(self, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000,
+    def setParams(self, *, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000,
                   sequenceCol="sequence"):
         """
-        setParams(self, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
+        setParams(self, \\*, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
                   sequenceCol="sequence")
         """
         kwargs = self._input_kwargs

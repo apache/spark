@@ -430,11 +430,6 @@ case class ShowPartitionsStatement(
     partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
 
 /**
- * A REFRESH TABLE statement, as parsed from SQL
- */
-case class RefreshTableStatement(tableName: Seq[String]) extends ParsedStatement
-
-/**
  * A SHOW COLUMNS statement, as parsed from SQL
  */
 case class ShowColumnsStatement(
@@ -445,30 +440,6 @@ case class ShowColumnsStatement(
  * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
  */
 case class ShowCurrentNamespaceStatement() extends ParsedStatement
-
-/**
- * A DESCRIBE FUNCTION statement, as parsed from SQL
- */
-case class DescribeFunctionStatement(
-    functionName: Seq[String],
-    isExtended: Boolean) extends ParsedStatement
-
-/**
- *  SHOW FUNCTIONS statement, as parsed from SQL
- */
-case class ShowFunctionsStatement(
-    userScope: Boolean,
-    systemScope: Boolean,
-    pattern: Option[String],
-    functionName: Option[Seq[String]]) extends ParsedStatement
-
-/**
- *  DROP FUNCTION statement, as parsed from SQL
- */
-case class DropFunctionStatement(
-    functionName: Seq[String],
-    ifExists: Boolean,
-    isTemp: Boolean) extends ParsedStatement
 
 /**
  *  CREATE FUNCTION statement, as parsed from SQL

@@ -43,7 +43,7 @@ case class DescribeTableExec(
     if (isExtended) {
       addTableDetails(rows)
     }
-    rows
+    rows.toSeq
   }
 
   private def addTableDetails(rows: ArrayBuffer[InternalRow]): Unit = {

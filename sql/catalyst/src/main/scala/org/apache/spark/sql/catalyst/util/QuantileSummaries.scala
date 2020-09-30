@@ -223,7 +223,7 @@ class QuantileSummaries(
         otherIdx += 1
       }
 
-      val comp = compressImmut(mergedSampled, 2 * mergedRelativeError * mergedCount)
+      val comp = compressImmut(mergedSampled.toIndexedSeq, 2 * mergedRelativeError * mergedCount)
       new QuantileSummaries(other.compressThreshold, mergedRelativeError, comp, mergedCount, true)
     }
   }
@@ -254,7 +254,7 @@ class QuantileSummaries(
 
     // Target rank
     val rank = math.ceil(quantile * count).toLong
-    val targetError = relativeError * count
+    val targetError = sampled.map(s => s.delta + s.g).max / 2
     // Minimum rank at current sample
     var minRank = 0L
     var i = 0

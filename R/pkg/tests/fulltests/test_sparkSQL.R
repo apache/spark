@@ -1424,6 +1424,7 @@ test_that("column functions", {
     date_trunc("quarter", c) + current_date() + current_timestamp()
   c25 <- overlay(c1, c2, c3, c3) + overlay(c1, c2, c3) + overlay(c1, c2, 1) +
     overlay(c1, c2, 3, 4)
+  c26 <- timestamp_seconds(c1)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1803,6 +1804,19 @@ test_that("column functions", {
   )
 
   expect_equal(actual, expected)
+
+  # Test withField
+  lines <- c("{\"Person\": {\"name\":\"Bob\", \"age\":24}}")
+  jsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
+  writeLines(lines, jsonPath)
+  df <- read.df(jsonPath, "json")
+  result <- collect(
+      select(
+          select(df, alias(withField(df$Person, "dummy", lit(42)), "Person")),
+          "Person.dummy"
+      )
+  )
+  expect_equal(result, data.frame(dummy = 42))
 })
 
 test_that("column binary mathfunctions", {
@@ -2695,6 +2709,19 @@ test_that("union(), unionByName(), rbind(), except(), and intersect() on a DataF
                "Names of input data frames are different.")
   expect_error(rbind(df, df2, df3),
                "Names of input data frames are different.")
+
+
+  df4 <- unionByName(df2, select(df2, "age"), TRUE)
+
+  expect_equal(
+      sum(collect(
+          select(df4, alias(isNull(df4$name), "missing_name")
+      ))$missing_name),
+      3
+  )
+
+  testthat::expect_error(unionByName(df2, select(df2, "age"), FALSE))
+  testthat::expect_error(unionByName(df2, select(df2, "age")))
 
   excepted <- arrange(except(df, df2), desc(df$age))
   expect_is(unioned, "SparkDataFrame")
@@ -3921,14 +3948,14 @@ test_that("No extra files are created in SPARK_HOME by starting session and maki
   # before creating a SparkSession with enableHiveSupport = T at the top of this test file
   # (filesBefore). The test here is to compare that (filesBefore) against the list of files before
   # any test is run in run-all.R (sparkRFilesBefore).
-  # sparkRWhitelistSQLDirs is also defined in run-all.R, and should contain only 2 whitelisted dirs,
+  # sparkRAllowedSQLDirs is also defined in run-all.R, and should contain only 2 allowed dirs,
   # here allow the first value, spark-warehouse, in the diff, everything else should be exactly the
   # same as before any test is run.
-  compare_list(sparkRFilesBefore, setdiff(filesBefore, sparkRWhitelistSQLDirs[[1]]))
+  compare_list(sparkRFilesBefore, setdiff(filesBefore, sparkRAllowedSQLDirs[[1]]))
   # third, ensure only spark-warehouse and metastore_db are created when enableHiveSupport = T
   # note: as the note above, after running all tests in this file while enableHiveSupport = T, we
-  # check the list of files again. This time we allow both whitelisted dirs to be in the diff.
-  compare_list(sparkRFilesBefore, setdiff(filesAfter, sparkRWhitelistSQLDirs))
+  # check the list of files again. This time we allow both dirs to be in the diff.
+  compare_list(sparkRFilesBefore, setdiff(filesAfter, sparkRAllowedSQLDirs))
 })
 
 unlink(parquetPath)

@@ -15,9 +15,7 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
-from py4j.java_gateway import java_import
+from py4j.java_gateway import java_import, is_instance_of
 
 from pyspark import RDD, SparkConf
 from pyspark.serializers import NoOpSerializer, UTF8Deserializer, CloudPickleSerializer
@@ -341,8 +339,17 @@ class StreamingContext(object):
             raise ValueError("All DStreams should have same serializer")
         if len(set(s._slideDuration for s in dstreams)) > 1:
             raise ValueError("All DStreams should have same slide duration")
-        cls = SparkContext._jvm.org.apache.spark.streaming.api.java.JavaDStream
-        jdstreams = SparkContext._gateway.new_array(cls, len(dstreams))
+        jdstream_cls = SparkContext._jvm.org.apache.spark.streaming.api.java.JavaDStream
+        jpair_dstream_cls = SparkContext._jvm.org.apache.spark.streaming.api.java.JavaPairDStream
+        gw = SparkContext._gateway
+        if is_instance_of(gw, dstreams[0]._jdstream, jdstream_cls):
+            cls = jdstream_cls
+        elif is_instance_of(gw, dstreams[0]._jdstream, jpair_dstream_cls):
+            cls = jpair_dstream_cls
+        else:
+            cls_name = dstreams[0]._jdstream.getClass().getCanonicalName()
+            raise TypeError("Unsupported Java DStream class %s" % cls_name)
+        jdstreams = gw.new_array(cls, len(dstreams))
         for i in range(0, len(dstreams)):
             jdstreams[i] = dstreams[i]._jdstream
         return DStream(self._jssc.union(jdstreams), self, dstreams[0]._jrdd_deserializer)

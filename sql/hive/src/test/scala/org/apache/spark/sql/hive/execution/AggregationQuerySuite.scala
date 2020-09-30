@@ -31,6 +31,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.unsafe.UnsafeAlignedOffset
 
 
@@ -780,7 +781,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     assert(math.abs(corr6 + 1.0) < 1e-12)
 
     // Test for udaf_corr in HiveCompatibilitySuite
-    // udaf_corr has been blacklisted due to numerical errors
+    // udaf_corr has been excluded due to numerical errors
     // We test it here:
     // SELECT corr(b, c) FROM covar_tab WHERE a < 1; => NULL
     // SELECT corr(b, c) FROM covar_tab WHERE a < 3; => NULL
@@ -1054,6 +1055,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 class HashAggregationQuerySuite extends AggregationQuerySuite
 
 
+@SlowHiveTest
 class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {

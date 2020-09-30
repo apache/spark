@@ -1,23 +1,22 @@
-vis-timeline and vis-graph2d
-https://visjs.github.io/vis-timeline/
+vis.js
+https://github.com/almende/vis
 
-Create a fully customizable, interactive timeline with items and ranges.
+A dynamic, browser-based visualization library.
 
-@version 7.3.4
-@date    2020-03-18T17:03:58.105Z
-
-@copyright (c) 2011-2017 Almende B.V, http://almende.com
-@copyright (c) 2017-2019 visjs contributors, https://github.com/visjs
+@version 4.20.1-SNAPSHOT
+@date    2017-10-12
 
 @license
-vis.js is dual licensed under both
+Copyright (C) 2011-2017 Almende B.V, http://almende.com
 
-  1. The Apache 2.0 License
-     http://www.apache.org/licenses/LICENSE-2.0
+Vis.js is dual licensed under both
 
-  and
+* The Apache 2.0 License
+  http://www.apache.org/licenses/LICENSE-2.0
 
-  2. The MIT License
-     http://opensource.org/licenses/MIT
+and
 
-vis.js may be distributed under either license.
+* The MIT License
+  http://opensource.org/licenses/MIT
+
+Vis.js may be distributed under either license.

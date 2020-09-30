@@ -76,6 +76,8 @@ class DetectAmbiguousSelfJoin(conf: SQLConf) extends Rule[LogicalPlan] {
     // We always remove the special metadata from `AttributeReference` at the end of this rule, so
     // Dataset column reference only exists in the root node via Dataset transformations like
     // `Dataset#select`.
+    if (plan.find(_.isInstanceOf[Join]).isEmpty) return stripColumnReferenceMetadataInPlan(plan)
+
     val colRefAttrs = plan.expressions.flatMap(_.collect {
       case a: AttributeReference if isColumnReference(a) => a
     })
@@ -153,6 +155,10 @@ class DetectAmbiguousSelfJoin(conf: SQLConf) extends Rule[LogicalPlan] {
       }
     }
 
+    stripColumnReferenceMetadataInPlan(plan)
+  }
+
+  private def stripColumnReferenceMetadataInPlan(plan: LogicalPlan): LogicalPlan = {
     plan.transformExpressions {
       case a: AttributeReference if isColumnReference(a) =>
         // Remove the special metadata from this `AttributeReference`, as the detection is done.

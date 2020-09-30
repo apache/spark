@@ -57,7 +57,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
       if (running.nonEmpty) {
         val runningPageTable =
-          executionsTable(request, "running", running, currentTime, true, true, true)
+          executionsTable(request, "running", running.toSeq, currentTime, true, true, true)
 
         _content ++=
           <span id="running" class="collapse-aggregated-runningExecutions collapse-table"
@@ -75,7 +75,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
       if (completed.nonEmpty) {
         val completedPageTable =
-          executionsTable(request, "completed", completed, currentTime, false, true, false)
+          executionsTable(request, "completed", completed.toSeq, currentTime, false, true, false)
 
         _content ++=
           <span id="completed" class="collapse-aggregated-completedExecutions collapse-table"
@@ -93,7 +93,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
       if (failed.nonEmpty) {
         val failedPageTable =
-          executionsTable(request, "failed", failed, currentTime, false, true, true)
+          executionsTable(request, "failed", failed.toSeq, currentTime, false, true, true)
 
         _content ++=
           <span id="failed" class="collapse-aggregated-failedExecutions collapse-table"
@@ -203,11 +203,10 @@ private[ui] class ExecutionPagedTable(
 
   private val (sortColumn, desc, pageSize) = getTableParameters(request, executionTag, "ID")
 
+  private val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
+
   override val dataSource = new ExecutionDataSource(
-    request,
-    parent,
     data,
-    basePath,
     currentTime,
     pageSize,
     sortColumn,
@@ -222,11 +221,9 @@ private[ui] class ExecutionPagedTable(
   override def tableId: String = s"$executionTag-table"
 
   override def tableCssClass: String =
-    "table table-bordered table-sm table-striped " +
-      "table-head-clickable table-cell-width-limited"
+    "table table-bordered table-sm table-striped table-head-clickable table-cell-width-limited"
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     parameterPath +
       s"&$pageNumberFormField=$page" +
       s"&$executionTag.sort=$encodedSortColumn" +
@@ -239,10 +236,8 @@ private[ui] class ExecutionPagedTable(
 
   override def pageNumberFormField: String = s"$executionTag.page"
 
-  override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
+  override def goButtonFormPath: String =
     s"$parameterPath&$executionTag.sort=$encodedSortColumn&$executionTag.desc=$desc#$tableHeaderId"
-  }
 
   override def headers: Seq[Node] = {
     // Information for each header: title, sortable, tooltip
@@ -348,7 +343,6 @@ private[ui] class ExecutionPagedTable(
 
 
 private[ui] class ExecutionTableRowData(
-    val submissionTime: Long,
     val duration: Long,
     val executionUIData: SQLExecutionUIData,
     val runningJobData: Seq[Int],
@@ -357,10 +351,7 @@ private[ui] class ExecutionTableRowData(
 
 
 private[ui] class ExecutionDataSource(
-    request: HttpServletRequest,
-    parent: SQLTab,
     executionData: Seq[SQLExecutionUIData],
-    basePath: String,
     currentTime: Long,
     pageSize: Int,
     sortColumn: String,
@@ -373,20 +364,13 @@ private[ui] class ExecutionDataSource(
   // in the table so that we can avoid creating duplicate contents during sorting the data
   private val data = executionData.map(executionRow).sorted(ordering(sortColumn, desc))
 
-  private var _sliceExecutionIds: Set[Int] = _
-
   override def dataSize: Int = data.size
 
-  override def sliceData(from: Int, to: Int): Seq[ExecutionTableRowData] = {
-    val r = data.slice(from, to)
-    _sliceExecutionIds = r.map(_.executionUIData.executionId.toInt).toSet
-    r
-  }
+  override def sliceData(from: Int, to: Int): Seq[ExecutionTableRowData] = data.slice(from, to)
 
   private def executionRow(executionUIData: SQLExecutionUIData): ExecutionTableRowData = {
-    val submissionTime = executionUIData.submissionTime
     val duration = executionUIData.completionTime.map(_.getTime())
-      .getOrElse(currentTime) - submissionTime
+      .getOrElse(currentTime) - executionUIData.submissionTime
 
     val runningJobData = if (showRunningJobs) {
       executionUIData.jobs.filter {
@@ -407,7 +391,6 @@ private[ui] class ExecutionDataSource(
     } else Seq.empty
 
     new ExecutionTableRowData(
-      submissionTime,
       duration,
       executionUIData,
       runningJobData,

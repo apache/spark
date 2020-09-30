@@ -21,7 +21,6 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.execution.adaptive.AdaptiveTestUtils.assertExceptionMessage
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -100,7 +99,7 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
             val e = intercept[SparkException] {
               sql("select * from test").count()
             }
-            assertExceptionMessage(e, "FileNotFoundException")
+            assert(e.getMessage.contains("FileNotFoundException"))
 
             // Test refreshing the cache.
             spark.catalog.refreshTable("test")
@@ -115,7 +114,7 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
             val e2 = intercept[SparkException] {
               sql("select * from test").count()
             }
-            assertExceptionMessage(e2, "FileNotFoundException")
+            assert(e.getMessage.contains("FileNotFoundException"))
             spark.catalog.refreshByPath(dir.getAbsolutePath)
             assert(sql("select * from test").count() == 3)
           }

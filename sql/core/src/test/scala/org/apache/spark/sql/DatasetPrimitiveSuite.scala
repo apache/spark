@@ -223,16 +223,6 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSparkSession {
     checkDataset(Seq(Queue(true)).toDS(), Queue(true))
     checkDataset(Seq(Queue("test")).toDS(), Queue("test"))
     checkDataset(Seq(Queue(Tuple1(1))).toDS(), Queue(Tuple1(1)))
-
-    checkDataset(Seq(ArrayBuffer(1)).toDS(), ArrayBuffer(1))
-    checkDataset(Seq(ArrayBuffer(1.toLong)).toDS(), ArrayBuffer(1.toLong))
-    checkDataset(Seq(ArrayBuffer(1.toDouble)).toDS(), ArrayBuffer(1.toDouble))
-    checkDataset(Seq(ArrayBuffer(1.toFloat)).toDS(), ArrayBuffer(1.toFloat))
-    checkDataset(Seq(ArrayBuffer(1.toByte)).toDS(), ArrayBuffer(1.toByte))
-    checkDataset(Seq(ArrayBuffer(1.toShort)).toDS(), ArrayBuffer(1.toShort))
-    checkDataset(Seq(ArrayBuffer(true)).toDS(), ArrayBuffer(true))
-    checkDataset(Seq(ArrayBuffer("test")).toDS(), ArrayBuffer("test"))
-    checkDataset(Seq(ArrayBuffer(Tuple1(1))).toDS(), ArrayBuffer(Tuple1(1)))
   }
 
   test("sequence and product combinations") {

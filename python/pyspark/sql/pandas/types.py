@@ -20,7 +20,9 @@ Type-specific codes between pandas and PyArrow. Also contains some utils to corr
 pandas instances during the type conversion.
 """
 
-from pyspark.sql.types import *
+from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, \
+    DoubleType, DecimalType, StringType, BinaryType, DateType, TimestampType, ArrayType, \
+    StructType, StructField, BooleanType
 
 
 def to_arrow_type(dt):
@@ -114,6 +116,8 @@ def from_arrow_type(at):
         return StructType(
             [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
              for field in at])
+    elif types.is_dictionary(at):
+        spark_type = from_arrow_type(at.value_type)
     else:
         raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
     return spark_type

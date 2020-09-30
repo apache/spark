@@ -226,8 +226,8 @@ class FPGrowthTests(SparkSessionTestCase):
         fpm = fp.fit(self.data)
 
         expected_association_rules = self.spark.createDataFrame(
-            [([3], [1], 1.0, 1.0), ([2], [1], 1.0, 1.0)],
-            ["antecedent", "consequent", "confidence", "lift"]
+            [([3], [1], 1.0, 1.0, 0.5), ([2], [1], 1.0, 1.0, 0.75)],
+            ["antecedent", "consequent", "confidence", "lift", "support"]
         )
         actual_association_rules = fpm.associationRules
 
@@ -330,10 +330,10 @@ class LinearRegressionTest(SparkSessionTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_algorithms import *
+    from pyspark.ml.tests.test_algorithms import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

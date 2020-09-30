@@ -27,32 +27,29 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 
 class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSparkContext {
   private val random = new java.util.Random()
-  private var taskContext: TaskContext = _
-
-  override def afterAll(): Unit = try {
-    TaskContext.unset()
-  } finally {
-    super.afterAll()
-  }
 
   private def withExternalArray(inMemoryThreshold: Int, spillThreshold: Int)
                                (f: ExternalAppendOnlyUnsafeRowArray => Unit): Unit = {
     sc = new SparkContext("local", "test", new SparkConf(false))
 
-    taskContext = MemoryTestingUtils.fakeTaskContext(SparkEnv.get)
+    val taskContext = MemoryTestingUtils.fakeTaskContext(SparkEnv.get)
     TaskContext.setTaskContext(taskContext)
 
-    val array = new ExternalAppendOnlyUnsafeRowArray(
-      taskContext.taskMemoryManager(),
-      SparkEnv.get.blockManager,
-      SparkEnv.get.serializerManager,
-      taskContext,
-      1024,
-      SparkEnv.get.memoryManager.pageSizeBytes,
-      inMemoryThreshold,
-      spillThreshold)
-    try f(array) finally {
-      array.clear()
+    try {
+      val array = new ExternalAppendOnlyUnsafeRowArray(
+        taskContext.taskMemoryManager(),
+        SparkEnv.get.blockManager,
+        SparkEnv.get.serializerManager,
+        taskContext,
+        1024,
+        SparkEnv.get.memoryManager.pageSizeBytes,
+        inMemoryThreshold,
+        spillThreshold)
+      try f(array) finally {
+        array.clear()
+      }
+    } finally {
+      TaskContext.unset()
     }
   }
 

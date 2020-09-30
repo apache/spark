@@ -214,7 +214,6 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     val someJobHasJobGroup = jobs.exists(_.jobGroup.isDefined)
     val jobIdTitle = if (someJobHasJobGroup) "Job Id (Job Group)" else "Job Id"
     val jobPage = Option(request.getParameter(jobTag + ".page")).map(_.toInt).getOrElse(1)
-    val currentTime = System.currentTimeMillis()
 
     try {
       new JobPagedTable(
@@ -226,7 +225,6 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         UIUtils.prependBaseUri(request, parent.basePath),
         "jobs", // subPath
         killEnabled,
-        currentTime,
         jobIdTitle
       ).table(jobPage)
     } catch {
@@ -261,11 +259,11 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     }
 
     val activeJobsTable =
-      jobsTable(request, "active", "activeJob", activeJobs, killEnabled = parent.killEnabled)
+      jobsTable(request, "active", "activeJob", activeJobs.toSeq, killEnabled = parent.killEnabled)
     val completedJobsTable =
-      jobsTable(request, "completed", "completedJob", completedJobs, killEnabled = false)
+      jobsTable(request, "completed", "completedJob", completedJobs.toSeq, killEnabled = false)
     val failedJobsTable =
-      jobsTable(request, "failed", "failedJob", failedJobs, killEnabled = false)
+      jobsTable(request, "failed", "failedJob", failedJobs.toSeq, killEnabled = false)
 
     val shouldShowActiveJobs = activeJobs.nonEmpty
     val shouldShowCompletedJobs = completedJobs.nonEmpty
@@ -332,7 +330,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       </div>
 
     var content = summary
-    content ++= makeTimeline(activeJobs ++ completedJobs ++ failedJobs,
+    content ++= makeTimeline((activeJobs ++ completedJobs ++ failedJobs).toSeq,
       store.executorList(false), startTime)
 
     if (shouldShowActiveJobs) {
@@ -399,7 +397,6 @@ private[ui] class JobDataSource(
     store: AppStatusStore,
     jobs: Seq[v1.JobData],
     basePath: String,
-    currentTime: Long,
     pageSize: Int,
     sortColumn: String,
     desc: Boolean) extends PagedDataSource[JobTableRowData](pageSize) {
@@ -410,15 +407,9 @@ private[ui] class JobDataSource(
   // so that we can avoid creating duplicate contents during sorting the data
   private val data = jobs.map(jobRow).sorted(ordering(sortColumn, desc))
 
-  private var _slicedJobIds: Set[Int] = null
-
   override def dataSize: Int = data.size
 
-  override def sliceData(from: Int, to: Int): Seq[JobTableRowData] = {
-    val r = data.slice(from, to)
-    _slicedJobIds = r.map(_.jobData.jobId).toSet
-    r
-  }
+  override def sliceData(from: Int, to: Int): Seq[JobTableRowData] = data.slice(from, to)
 
   private def jobRow(jobData: v1.JobData): JobTableRowData = {
     val duration: Option[Long] = JobDataUtil.getDuration(jobData)
@@ -479,17 +470,17 @@ private[ui] class JobPagedTable(
     basePath: String,
     subPath: String,
     killEnabled: Boolean,
-    currentTime: Long,
     jobIdTitle: String
   ) extends PagedTable[JobTableRowData] {
+
   private val (sortColumn, desc, pageSize) = getTableParameters(request, jobTag, jobIdTitle)
   private val parameterPath = basePath + s"/$subPath/?" + getParameterOtherTable(request, jobTag)
+  private val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
 
   override def tableId: String = jobTag + "-table"
 
   override def tableCssClass: String =
-    "table table-bordered table-sm table-striped " +
-      "table-head-clickable table-cell-width-limited"
+    "table table-bordered table-sm table-striped table-head-clickable table-cell-width-limited"
 
   override def pageSizeFormField: String = jobTag + ".pageSize"
 
@@ -499,13 +490,11 @@ private[ui] class JobPagedTable(
     store,
     data,
     basePath,
-    currentTime,
     pageSize,
     sortColumn,
     desc)
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     parameterPath +
       s"&$pageNumberFormField=$page" +
       s"&$jobTag.sort=$encodedSortColumn" +
@@ -514,10 +503,8 @@ private[ui] class JobPagedTable(
       s"#$tableHeaderId"
   }
 
-  override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
+  override def goButtonFormPath: String =
     s"$parameterPath&$jobTag.sort=$encodedSortColumn&$jobTag.desc=$desc#$tableHeaderId"
-  }
 
   override def headers: Seq[Node] = {
     // Information for each header: title, sortable, tooltip

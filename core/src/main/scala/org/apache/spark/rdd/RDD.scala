@@ -1780,10 +1780,9 @@ abstract class RDD[T: ClassTag](
    * It will result in new executors with the resources specified being acquired to
    * calculate the RDD.
    */
-  // PRIVATE for now, added for testing purposes, will be made public with SPARK-29150
   @Experimental
-  @Since("3.0.0")
-  private[spark] def withResources(rp: ResourceProfile): this.type = {
+  @Since("3.1.0")
+  def withResources(rp: ResourceProfile): this.type = {
     resourceProfile = Option(rp)
     sc.resourceProfileManager.addResourceProfile(resourceProfile.get)
     this
@@ -1794,10 +1793,9 @@ abstract class RDD[T: ClassTag](
    * @return the user specified ResourceProfile or null (for Java compatibility) if
    *         none was specified
    */
-  // PRIVATE for now, added for testing purposes, will be made public with SPARK-29150
   @Experimental
-  @Since("3.0.0")
-  private[spark] def getResourceProfile(): ResourceProfile = resourceProfile.getOrElse(null)
+  @Since("3.1.0")
+  def getResourceProfile(): ResourceProfile = resourceProfile.getOrElse(null)
 
   // =======================================================================
   // Other internal methods and fields

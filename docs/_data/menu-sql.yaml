@@ -139,7 +139,7 @@
             - text: REPAIR TABLE
               url: sql-ref-syntax-ddl-repair-table.html
             - text: USE DATABASE
-              url: sql-ref-syntax-qry-select-usedb.html
+              url: sql-ref-syntax-ddl-usedb.html
         - text: Data Manipulation Statements
           url: sql-ref-syntax-dml.html
           subitems:
@@ -171,22 +171,28 @@
                   url: sql-ref-syntax-qry-select-limit.html
                 - text: Common Table Expression
                   url: sql-ref-syntax-qry-select-cte.html
+                - text: Hints
+                  url: sql-ref-syntax-qry-select-hints.html
                 - text: Inline Table
                   url: sql-ref-syntax-qry-select-inline-table.html
                 - text: JOIN
                   url: sql-ref-syntax-qry-select-join.html
-                - text: Join Hints
-                  url: sql-ref-syntax-qry-select-hints.html
                 - text: LIKE Predicate
                   url: sql-ref-syntax-qry-select-like.html
                 - text: Set Operators
                   url: sql-ref-syntax-qry-select-setops.html
                 - text: TABLESAMPLE
-                  url: sql-ref-syntax-qry-sampling.html
+                  url: sql-ref-syntax-qry-select-sampling.html
                 - text: Table-valued Function
                   url: sql-ref-syntax-qry-select-tvf.html
                 - text: Window Function
-                  url: sql-ref-syntax-qry-window.html
+                  url: sql-ref-syntax-qry-select-window.html
+                - text: CASE Clause
+                  url: sql-ref-syntax-qry-select-case.html
+                - text: LATERAL VIEW Clause
+                  url: sql-ref-syntax-qry-select-lateral-view.html
+                - text: PIVOT Clause
+                  url: sql-ref-syntax-qry-select-pivot.html
             - text: EXPLAIN
               url: sql-ref-syntax-qry-explain.html
         - text: Auxiliary Statements
@@ -207,7 +213,9 @@
                 - text: CLEAR CACHE
                   url: sql-ref-syntax-aux-cache-clear-cache.html
                 - text: REFRESH TABLE
-                  url: sql-ref-syntax-aux-refresh-table.html
+                  url: sql-ref-syntax-aux-cache-refresh-table.html
+                - text: REFRESH FUNCTION
+                  url: sql-ref-syntax-aux-cache-refresh-function.html
                 - text: REFRESH
                   url: sql-ref-syntax-aux-cache-refresh.html
             - text: DESCRIBE
@@ -249,6 +257,8 @@
                   url: sql-ref-syntax-aux-conf-mgmt-set.html
                 - text: RESET
                   url: sql-ref-syntax-aux-conf-mgmt-reset.html
+                - text: SET TIME ZONE
+                  url: sql-ref-syntax-aux-conf-mgmt-set-timezone.html
             - text: RESOURCE MANAGEMENT
               url: sql-ref-syntax-aux-resource-mgmt.html
               subitems:

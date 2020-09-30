@@ -1,0 +1,107 @@
+TakeOrderedAndProject [sum_sales,avg_monthly_sales,d_moy,i_category,d_year,psum,nsum]
+  WholeStageCodegen (37)
+    Project [i_category,d_year,d_moy,avg_monthly_sales,sum_sales,sum_sales,sum_sales]
+      SortMergeJoin [i_category,i_brand,s_store_name,s_company_name,rn,i_category,i_brand,s_store_name,s_company_name,rn]
+        InputAdapter
+          WholeStageCodegen (25)
+            Project [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,sum_sales,avg_monthly_sales,rn,sum_sales]
+              SortMergeJoin [i_category,i_brand,s_store_name,s_company_name,rn,i_category,i_brand,s_store_name,s_company_name,rn]
+                InputAdapter
+                  WholeStageCodegen (13)
+                    Sort [i_category,i_brand,s_store_name,s_company_name,rn]
+                      InputAdapter
+                        Exchange [i_category,i_brand,s_store_name,s_company_name,rn] #1
+                          WholeStageCodegen (12)
+                            Filter [d_year,avg_monthly_sales,sum_sales,rn]
+                              InputAdapter
+                                Window [d_year,d_moy,i_category,i_brand,s_store_name,s_company_name]
+                                  WholeStageCodegen (11)
+                                    Sort [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy]
+                                      InputAdapter
+                                        Exchange [i_category,i_brand,s_store_name,s_company_name] #2
+                                          WholeStageCodegen (10)
+                                            Project [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,sum_sales,avg_monthly_sales]
+                                              InputAdapter
+                                                Window [_w0,i_category,i_brand,s_store_name,s_company_name,d_year]
+                                                  WholeStageCodegen (9)
+                                                    Sort [i_category,i_brand,s_store_name,s_company_name,d_year]
+                                                      InputAdapter
+                                                        Exchange [i_category,i_brand,s_store_name,s_company_name,d_year] #3
+                                                          WholeStageCodegen (8)
+                                                            HashAggregate [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,sum] [sum(UnscaledValue(ss_sales_price)),sum_sales,_w0,sum]
+                                                              InputAdapter
+                                                                Exchange [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy] #4
+                                                                  WholeStageCodegen (7)
+                                                                    HashAggregate [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,ss_sales_price] [sum,sum]
+                                                                      Project [i_brand,i_category,ss_sales_price,d_year,d_moy,s_store_name,s_company_name]
+                                                                        SortMergeJoin [ss_item_sk,i_item_sk]
+                                                                          InputAdapter
+                                                                            WholeStageCodegen (4)
+                                                                              Sort [ss_item_sk]
+                                                                                InputAdapter
+                                                                                  Exchange [ss_item_sk] #5
+                                                                                    WholeStageCodegen (3)
+                                                                                      Project [ss_item_sk,ss_sales_price,d_year,d_moy,s_store_name,s_company_name]
+                                                                                        BroadcastHashJoin [ss_store_sk,s_store_sk]
+                                                                                          Project [ss_item_sk,ss_store_sk,ss_sales_price,d_year,d_moy]
+                                                                                            BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                                                                              Filter [ss_item_sk,ss_sold_date_sk,ss_store_sk]
+                                                                                                ColumnarToRow
+                                                                                                  InputAdapter
+                                                                                                    Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_store_sk,ss_sales_price]
+                                                                                              InputAdapter
+                                                                                                BroadcastExchange #6
+                                                                                                  WholeStageCodegen (1)
+                                                                                                    Filter [d_year,d_moy,d_date_sk]
+                                                                                                      ColumnarToRow
+                                                                                                        InputAdapter
+                                                                                                          Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
+                                                                                          InputAdapter
+                                                                                            BroadcastExchange #7
+                                                                                              WholeStageCodegen (2)
+                                                                                                Filter [s_store_sk,s_store_name,s_company_name]
+                                                                                                  ColumnarToRow
+                                                                                                    InputAdapter
+                                                                                                      Scan parquet default.store [s_store_sk,s_store_name,s_company_name]
+                                                                          InputAdapter
+                                                                            WholeStageCodegen (6)
+                                                                              Sort [i_item_sk]
+                                                                                InputAdapter
+                                                                                  Exchange [i_item_sk] #8
+                                                                                    WholeStageCodegen (5)
+                                                                                      Filter [i_item_sk,i_category,i_brand]
+                                                                                        ColumnarToRow
+                                                                                          InputAdapter
+                                                                                            Scan parquet default.item [i_item_sk,i_brand,i_category]
+                InputAdapter
+                  WholeStageCodegen (24)
+                    Sort [i_category,i_brand,s_store_name,s_company_name,rn]
+                      InputAdapter
+                        Exchange [i_category,i_brand,s_store_name,s_company_name,rn] #9
+                          WholeStageCodegen (23)
+                            Project [i_category,i_brand,s_store_name,s_company_name,sum_sales,rn]
+                              Filter [rn]
+                                InputAdapter
+                                  Window [d_year,d_moy,i_category,i_brand,s_store_name,s_company_name]
+                                    WholeStageCodegen (22)
+                                      Sort [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy]
+                                        InputAdapter
+                                          Exchange [i_category,i_brand,s_store_name,s_company_name] #10
+                                            WholeStageCodegen (21)
+                                              HashAggregate [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,sum] [sum(UnscaledValue(ss_sales_price)),sum_sales,sum]
+                                                InputAdapter
+                                                  ReusedExchange [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,sum] #4
+        InputAdapter
+          WholeStageCodegen (36)
+            Sort [i_category,i_brand,s_store_name,s_company_name,rn]
+              InputAdapter
+                Exchange [i_category,i_brand,s_store_name,s_company_name,rn] #11
+                  WholeStageCodegen (35)
+                    Project [i_category,i_brand,s_store_name,s_company_name,sum_sales,rn]
+                      Filter [rn]
+                        InputAdapter
+                          Window [d_year,d_moy,i_category,i_brand,s_store_name,s_company_name]
+                            WholeStageCodegen (34)
+                              Sort [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy]
+                                InputAdapter
+                                  ReusedExchange [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,sum_sales] #10

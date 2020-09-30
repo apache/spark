@@ -551,4 +551,26 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       attributeStats = AttributeMap(Nil))
     assert(join.stats == expectedStats)
   }
+
+  test("SPARK-33018 Fix estimate statistics issue if child has 0 bytes") {
+    case class MyStatsTestPlan(
+        outputList: Seq[Attribute],
+        sizeInBytes: BigInt) extends LeafNode {
+      override def output: Seq[Attribute] = outputList
+      override def computeStats(): Statistics = Statistics(sizeInBytes = sizeInBytes)
+    }
+
+    val left = MyStatsTestPlan(
+      outputList = Seq("key-1-2", "key-2-4").map(nameToAttr),
+      sizeInBytes = BigInt(100))
+
+    val right = MyStatsTestPlan(
+      outputList = Seq("key-1-2", "key-2-3").map(nameToAttr),
+      sizeInBytes = BigInt(0))
+
+    val join = Join(left, right, LeftOuter,
+      Some(EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3"))), JoinHint.NONE)
+
+    assert(join.stats == Statistics(sizeInBytes = 100))
+  }
 }

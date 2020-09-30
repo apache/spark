@@ -69,7 +69,7 @@ case class AnalyzePartitionCommand(
     if (filteredSpec.isEmpty) {
       None
     } else {
-      Some(filteredSpec)
+      Some(filteredSpec.toMap)
     }
   }
 

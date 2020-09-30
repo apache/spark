@@ -276,12 +276,12 @@ case class MapElementsExec(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val (funcClass, methodName) = func match {
+    val (funcClass, funcName) = func match {
       case m: MapFunction[_, _] => classOf[MapFunction[_, _]] -> "call"
       case _ => FunctionUtils.getFunctionOneName(outputObjectType, child.output(0).dataType)
     }
     val funcObj = Literal.create(func, ObjectType(funcClass))
-    val callFunc = Invoke(funcObj, methodName, outputObjectType, child.output)
+    val callFunc = Invoke(funcObj, funcName, outputObjectType, child.output, propagateNull = false)
 
     val result = BindReferences.bindReference(callFunc, child.output).genCode(ctx)
 
@@ -567,7 +567,14 @@ case class FlatMapGroupsInRWithArrowExec(
       // binary in a batch due to the limitation of R API. See also ARROW-4512.
       val columnarBatchIter = runner.compute(groupedByRKey, -1)
       val outputProject = UnsafeProjection.create(output, output)
-      columnarBatchIter.flatMap(_.rowIterator().asScala).map(outputProject)
+      val outputTypes = StructType.fromAttributes(output).map(_.dataType)
+
+      columnarBatchIter.flatMap { batch =>
+        val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
+        assert(outputTypes == actualDataTypes, "Invalid schema from gapply(): " +
+          s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
+        batch.rowIterator().asScala
+      }.map(outputProject)
     }
   }
 }

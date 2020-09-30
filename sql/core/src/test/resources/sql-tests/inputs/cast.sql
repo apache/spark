@@ -70,6 +70,11 @@ select cast(' 1' as bigint);
 select cast(' 1' as float);
 select cast(' 1 ' as DOUBLE);
 select cast('1.0 ' as DEC);
+select cast('1中文' as tinyint);
+select cast('1中文' as smallint);
+select cast('1中文' as INT);
+select cast('中文1' as bigint);
+select cast('1中文' as bigint);
 
 -- trim string before cast to boolean
 select cast('\t\t true \n\r ' as boolean);

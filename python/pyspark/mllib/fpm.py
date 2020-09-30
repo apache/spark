@@ -20,7 +20,6 @@ import sys
 from collections import namedtuple
 
 from pyspark import since
-from pyspark.rdd import ignore_unicode_prefix
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
 from pyspark.mllib.util import JavaSaveable, JavaLoader, inherit_doc
 
@@ -28,7 +27,6 @@ __all__ = ['FPGrowth', 'FPGrowthModel', 'PrefixSpan', 'PrefixSpanModel']
 
 
 @inherit_doc
-@ignore_unicode_prefix
 class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     """
     A FP-Growth model for mining frequent itemsets
@@ -38,7 +36,7 @@ class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> rdd = sc.parallelize(data, 2)
     >>> model = FPGrowth.train(rdd, 0.6, 2)
     >>> sorted(model.freqItemsets().collect())
-    [FreqItemset(items=[u'a'], freq=4), FreqItemset(items=[u'c'], freq=3), ...
+    [FreqItemset(items=['a'], freq=4), FreqItemset(items=['c'], freq=3), ...
     >>> model_path = temp_path + "/fpm"
     >>> model.save(sc, model_path)
     >>> sameModel = FPGrowthModel.load(sc, model_path)
@@ -101,7 +99,6 @@ class FPGrowth(object):
 
 
 @inherit_doc
-@ignore_unicode_prefix
 class PrefixSpanModel(JavaModelWrapper):
     """
     Model fitted by PrefixSpan
@@ -114,7 +111,7 @@ class PrefixSpanModel(JavaModelWrapper):
     >>> rdd = sc.parallelize(data, 2)
     >>> model = PrefixSpan.train(rdd)
     >>> sorted(model.freqSequences().collect())
-    [FreqSequence(sequence=[[u'a']], freq=3), FreqSequence(sequence=[[u'a'], [u'a']], freq=1), ...
+    [FreqSequence(sequence=[['a']], freq=3), FreqSequence(sequence=[['a'], ['a']], freq=1), ...
 
     .. versionadded:: 1.6.0
     """

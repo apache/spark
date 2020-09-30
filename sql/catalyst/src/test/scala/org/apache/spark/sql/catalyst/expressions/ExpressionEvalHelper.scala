@@ -40,6 +40,11 @@ import org.apache.spark.util.Utils
 
 /**
  * A few helper functions for expression evaluation testing. Mixin this trait to use them.
+ *
+ * Note: when you write unit test for an expression and call `checkEvaluation` to check the result,
+ *       please make sure that you explore all the cases that can lead to null result (including
+ *       null in struct fields, array elements and map values). The framework will test the
+ *       nullability flag of the expression automatically.
  */
 trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestBase {
   self: SparkFunSuite =>

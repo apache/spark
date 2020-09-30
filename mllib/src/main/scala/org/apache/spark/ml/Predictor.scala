@@ -19,6 +19,7 @@ package org.apache.spark.ml
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -71,7 +72,7 @@ private[ml] trait PredictorParams extends Params
     val w = this match {
       case p: HasWeightCol =>
         if (isDefined(p.weightCol) && $(p.weightCol).nonEmpty) {
-          col($(p.weightCol)).cast(DoubleType)
+          checkNonNegativeWeight((col($(p.weightCol)).cast(DoubleType)))
         } else {
           lit(1.0)
         }

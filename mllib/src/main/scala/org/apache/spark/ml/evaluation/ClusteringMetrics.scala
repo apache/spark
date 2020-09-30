@@ -300,7 +300,6 @@ private[evaluation] object SquaredEuclideanSilhouette extends Silhouette {
             (featureSum: DenseVector, squaredNormSum: Double, weightSum: Double),
             (features, squaredNorm, weight)
             ) =>
-            require(weight >= 0.0, s"illegal weight value: $weight.  weight must be >= 0.0.")
             BLAS.axpy(weight, features, featureSum)
             (featureSum, squaredNormSum + squaredNorm * weight, weightSum + weight)
         },
@@ -503,7 +502,6 @@ private[evaluation] object CosineSilhouette extends Silhouette {
       seqOp = {
         case ((normalizedFeaturesSum: DenseVector, weightSum: Double),
         (normalizedFeatures, weight)) =>
-          require(weight >= 0.0, s"illegal weight value: $weight.  weight must be >= 0.0.")
           BLAS.axpy(weight, normalizedFeatures, normalizedFeaturesSum)
           (normalizedFeaturesSum, weightSum + weight)
       },

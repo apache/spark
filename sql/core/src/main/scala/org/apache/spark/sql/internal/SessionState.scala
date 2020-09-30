@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.streaming.StreamingQueryManager
@@ -73,7 +74,8 @@ private[sql] class SessionState(
     resourceLoaderBuilder: () => SessionResourceLoader,
     createQueryExecution: LogicalPlan => QueryExecution,
     createClone: (SparkSession, SessionState) => SessionState,
-    val columnarRules: Seq[ColumnarRule]) {
+    val columnarRules: Seq[ColumnarRule],
+    val queryStagePrepRules: Seq[Rule[SparkPlan]]) {
 
   // The following fields are lazy to avoid creating the Hive client when creating SessionState.
   lazy val catalog: SessionCatalog = catalogBuilder()
@@ -134,9 +136,10 @@ private[sql] object SessionState {
 @Unstable
 class SessionStateBuilder(
     session: SparkSession,
-    parentState: Option[SessionState] = None)
-  extends BaseSessionStateBuilder(session, parentState) {
-  override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _)
+    parentState: Option[SessionState],
+    options: Map[String, String])
+  extends BaseSessionStateBuilder(session, parentState, options) {
+  override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _, Map.empty)
 }
 
 /**

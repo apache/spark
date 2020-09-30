@@ -20,11 +20,12 @@ package org.apache.spark.sql.expressions
 import scala.collection.parallel.immutable.ParVector
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
 
@@ -104,11 +105,37 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     }
   }
 
+  test("SPARK-32870: Default expressions in FunctionRegistry should have their " +
+    "usage, examples and since filled") {
+    val ignoreSet = Set(
+      // Explicitly inherits NonSQLExpression, and has no ExpressionDescription
+      "org.apache.spark.sql.catalyst.expressions.TimeWindow",
+      // Cast aliases do not need examples
+      "org.apache.spark.sql.catalyst.expressions.Cast")
+
+    spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
+      val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
+      if (!ignoreSet.contains(info.getClassName)) {
+        withClue(s"Function '${info.getName}', Expression class '${info.getClassName}'") {
+          assert(info.getUsage.nonEmpty)
+          assert(info.getExamples.startsWith("\n    Examples:\n"))
+          assert(info.getExamples.endsWith("\n  "))
+          assert(info.getSince.matches("[0-9]+\\.[0-9]+\\.[0-9]+"))
+
+          if (info.getArguments.nonEmpty) {
+            assert(info.getArguments.startsWith("\n    Arguments:\n"))
+            assert(info.getArguments.endsWith("\n  "))
+          }
+        }
+      }
+    }
+  }
+
   test("check outputs of expression examples") {
     def unindentAndTrim(s: String): String = {
       s.replaceAll("\n\\s+", "\n").trim
     }
-    val beginSqlStmtRe = "  > ".r
+    val beginSqlStmtRe = "\n      > ".r
     val endSqlStmtRe = ";\n".r
     def checkExampleSyntax(example: String): Unit = {
       val beginStmtNum = beginSqlStmtRe.findAllIn(example).length
@@ -128,8 +155,15 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.Randn",
       "org.apache.spark.sql.catalyst.expressions.Shuffle",
       "org.apache.spark.sql.catalyst.expressions.Uuid",
+      // Other nondeterministic expressions
+      "org.apache.spark.sql.catalyst.expressions.MonotonicallyIncreasingID",
+      "org.apache.spark.sql.catalyst.expressions.SparkPartitionID",
+      "org.apache.spark.sql.catalyst.expressions.InputFileName",
+      "org.apache.spark.sql.catalyst.expressions.InputFileBlockStart",
+      "org.apache.spark.sql.catalyst.expressions.InputFileBlockLength",
       // The example calls methods that return unstable results.
-      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
+      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection",
+      "org.apache.spark.sql.catalyst.expressions.SparkVersion")
 
     val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
     parFuncs.foreach { funcId =>
@@ -152,6 +186,40 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
               assert(actual === expected)
             case _ =>
           }
+        }
+      }
+    }
+  }
+
+  test("Check whether SQL expressions should extend NullIntolerant") {
+    // Only check expressions extended from these expressions because these expressions are
+    // NullIntolerant by default.
+    val exprTypesToCheck = Seq(classOf[UnaryExpression], classOf[BinaryExpression],
+      classOf[TernaryExpression], classOf[QuaternaryExpression], classOf[SeptenaryExpression])
+
+    // Do not check these expressions, because these expressions extend NullIntolerant
+    // and override the eval method to avoid evaluating input1 if input2 is 0.
+    val ignoreSet = Set(classOf[IntegralDivide], classOf[Divide], classOf[Remainder], classOf[Pmod])
+
+    val candidateExprsToCheck = spark.sessionState.functionRegistry.listFunction()
+      .map(spark.sessionState.catalog.lookupFunctionInfo).map(_.getClassName)
+      .filterNot(c => ignoreSet.exists(_.getName.equals(c)))
+      .map(name => Utils.classForName(name))
+      .filterNot(classOf[NonSQLExpression].isAssignableFrom)
+
+    exprTypesToCheck.foreach { superClass =>
+      candidateExprsToCheck.filter(superClass.isAssignableFrom).foreach { clazz =>
+        val isEvalOverrode = clazz.getMethod("eval", classOf[InternalRow]) !=
+          superClass.getMethod("eval", classOf[InternalRow])
+        val isNullIntolerantMixedIn = classOf[NullIntolerant].isAssignableFrom(clazz)
+        if (isEvalOverrode && isNullIntolerantMixedIn) {
+          fail(s"${clazz.getName} should not extend ${classOf[NullIntolerant].getSimpleName}, " +
+            s"or add ${clazz.getName} in the ignoreSet of this test.")
+        } else if (!isEvalOverrode && !isNullIntolerantMixedIn) {
+          fail(s"${clazz.getName} should extend ${classOf[NullIntolerant].getSimpleName}.")
+        } else {
+          assert((!isEvalOverrode && isNullIntolerantMixedIn) ||
+            (isEvalOverrode && !isNullIntolerantMixedIn))
         }
       }
     }

@@ -27,11 +27,10 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.columnar.{DefaultCachedBatchSerializer, InMemoryRelation}
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
@@ -85,11 +84,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       val inMemoryRelation = sessionWithAqeOff.withActive {
         val qe = sessionWithAqeOff.sessionState.executePlan(planToCache)
         InMemoryRelation(
-          sessionWithAqeOff.sessionState.conf.useCompression,
-          sessionWithAqeOff.sessionState.conf.columnBatchSize, storageLevel,
-          qe.executedPlan,
-          tableName,
-          optimizedPlan = qe.optimizedPlan)
+          storageLevel,
+          qe,
+          tableName)
       }
 
       this.synchronized {
@@ -195,9 +192,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       val sessionWithAqeOff = getOrCloneSessionWithAqeOff(spark)
       val newCache = sessionWithAqeOff.withActive {
         val qe = sessionWithAqeOff.sessionState.executePlan(cd.plan)
-        InMemoryRelation(
-          cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = qe.executedPlan),
-          optimizedPlan = qe.optimizedPlan)
+        InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
       }
       val recomputedPlan = cd.copy(cachedRepresentation = newCache)
       this.synchronized {
@@ -248,12 +243,17 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * `HadoopFsRelation` node(s) as part of its logical plan.
    */
   def recacheByPath(spark: SparkSession, resourcePath: String): Unit = {
-    val (fs, qualifiedPath) = {
-      val path = new Path(resourcePath)
-      val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
-      (fs, fs.makeQualified(path))
-    }
+    val path = new Path(resourcePath)
+    val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
+    recacheByPath(spark, path, fs)
+  }
 
+  /**
+   * Tries to re-cache all the cache entries that contain `resourcePath` in one or more
+   * `HadoopFsRelation` node(s) as part of its logical plan.
+   */
+  def recacheByPath(spark: SparkSession, resourcePath: Path, fs: FileSystem): Unit = {
+    val qualifiedPath = fs.makeQualified(resourcePath)
     recacheByCondition(spark, _.plan.find(lookupAndRefresh(_, fs, qualifiedPath)).isDefined)
   }
 

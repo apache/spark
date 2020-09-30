@@ -23,7 +23,7 @@ import numpy
 
 from pyspark import RDD, since
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.regression import (
     LabeledPoint, LinearModel, _regression_train_wrapper,
     StreamingLinearAlgorithm)
@@ -102,6 +102,7 @@ class LogisticRegressionModel(LinearClassificationModel):
       in Multinomial Logistic Regression. By default, it is binary
       logistic regression so numClasses will be set to 2.
 
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> data = [
     ...     LabeledPoint(0.0, [0.0, 1.0]),
     ...     LabeledPoint(1.0, [1.0, 0.0]),
@@ -410,6 +411,7 @@ class SVMModel(LinearClassificationModel):
     :param intercept:
       Intercept computed for this model.
 
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> data = [
     ...     LabeledPoint(0.0, [0.0]),
     ...     LabeledPoint(1.0, [1.0]),
@@ -569,6 +571,7 @@ class NaiveBayesModel(Saveable, Loader):
       Log of class conditional probabilities, whose dimension is C-by-D,
       where D is number of features.
 
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> data = [
     ...     LabeledPoint(0.0, [0.0, 0.0]),
     ...     LabeledPoint(0.0, [0.0, 1.0]),

@@ -222,14 +222,13 @@ external/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaRe
 Python Software Foundation License
 ----------------------------------
 
-pyspark/heapq3.py
-python/docs/_static/copybutton.js
+python/docs/source/_static/copybutton.js
 
 BSD 3-Clause
 ------------
 
 python/lib/py4j-*-src.zip
-python/pyspark/cloudpickle.py
+python/pyspark/cloudpickle/*.py
 python/pyspark/join.py
 core/src/main/resources/org/apache/spark/ui/static/d3.min.js
 

@@ -36,7 +36,7 @@ Spark SQL is Apache Spark's module for working with structured data. The SQL Syn
  * [DROP VIEW](sql-ref-syntax-ddl-drop-view.html)
  * [REPAIR TABLE](sql-ref-syntax-ddl-repair-table.html)
  * [TRUNCATE TABLE](sql-ref-syntax-ddl-truncate-table.html)
- * [USE DATABASE](sql-ref-syntax-qry-select-usedb.html)
+ * [USE DATABASE](sql-ref-syntax-ddl-usedb.html)
 
 ### DML Statements
 
@@ -54,18 +54,21 @@ Spark SQL is Apache Spark's module for working with structured data. The SQL Syn
    * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
    * [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
    * [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+   * [Hints](sql-ref-syntax-qry-select-hints.html)
    * [Inline Table](sql-ref-syntax-qry-select-inline-table.html)
    * [JOIN](sql-ref-syntax-qry-select-join.html)
-   * [Join Hints](sql-ref-syntax-qry-select-hints.html)
    * [LIKE Predicate](sql-ref-syntax-qry-select-like.html)
    * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
    * [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
    * [Set Operators](sql-ref-syntax-qry-select-setops.html)
    * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
-   * [TABLESAMPLE](sql-ref-syntax-qry-sampling.html)
+   * [TABLESAMPLE](sql-ref-syntax-qry-select-sampling.html)
    * [Table-valued Function](sql-ref-syntax-qry-select-tvf.html)
    * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
-   * [Window Function](sql-ref-syntax-qry-window.html)
+   * [Window Function](sql-ref-syntax-qry-select-window.html)
+   * [CASE Clause](sql-ref-syntax-qry-select-case.html)
+   * [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
+   * [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)
  * [EXPLAIN](sql-ref-syntax-qry-explain.html)
 
 ### Auxiliary Statements
@@ -82,7 +85,8 @@ Spark SQL is Apache Spark's module for working with structured data. The SQL Syn
  * [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
  * [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
  * [REFRESH](sql-ref-syntax-aux-cache-refresh.html)
- * [REFRESH TABLE](sql-ref-syntax-aux-refresh-table.html)
+ * [REFRESH TABLE](sql-ref-syntax-aux-cache-refresh-table.html)
+ * [REFRESH FUNCTION](sql-ref-syntax-aux-cache-refresh-function.html)
  * [RESET](sql-ref-syntax-aux-conf-mgmt-reset.html)
  * [SET](sql-ref-syntax-aux-conf-mgmt-set.html)
  * [SHOW COLUMNS](sql-ref-syntax-aux-show-columns.html)

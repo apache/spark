@@ -298,6 +298,9 @@ abstract class Expression extends TreeNode[Expression] {
  */
 trait Unevaluable extends Expression {
 
+  /** Unevaluable is not foldable because we don't have an eval for it. */
+  final override def foldable: Boolean = false
+
   final override def eval(input: InternalRow = null): Any =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
@@ -318,7 +321,6 @@ trait Unevaluable extends Expression {
  */
 trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   override def nullable: Boolean = child.nullable
-  override def foldable: Boolean = child.foldable
   override def dataType: DataType = child.dataType
   // As this expression gets replaced at optimization with its `child" expression,
   // two `RuntimeReplaceable` are considered to be semantically equal if their "child" expressions

@@ -29,6 +29,7 @@ import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.hive.HiveExternalCatalog
@@ -225,9 +226,12 @@ case class InsertIntoHiveTable(
                 ExternalCatalogUtils.unescapePathName(splitPart(1))
             }.toMap
 
+            val caseInsensitiveDpMap = CaseInsensitiveMap(dpMap)
+
             val updatedPartitionSpec = partition.map {
               case (key, Some(value)) => key -> value
-              case (key, None) if dpMap.contains(key) => key -> dpMap(key)
+              case (key, None) if caseInsensitiveDpMap.contains(key) =>
+                key -> caseInsensitiveDpMap(key)
               case (key, _) =>
                 throw new SparkException(s"Dynamic partition key $key is not among " +
                   "written partition paths.")
@@ -241,7 +245,7 @@ case class InsertIntoHiveTable(
             if (fs.exists(partitionPath)) {
               if (!fs.delete(partitionPath, true)) {
                 throw new RuntimeException(
-                  "Cannot remove partition directory '" + partitionPath.toString)
+                  s"Cannot remove partition directory '$partitionPath'")
               }
             }
           }
@@ -307,7 +311,7 @@ case class InsertIntoHiveTable(
               if (fs.exists(path)) {
                 if (!fs.delete(path, true)) {
                   throw new RuntimeException(
-                    "Cannot remove partition directory '" + path.toString)
+                    s"Cannot remove partition directory '$path'")
                 }
                 // Don't let Hive do overwrite operation since it is slower.
                 doHiveOverwrite = false

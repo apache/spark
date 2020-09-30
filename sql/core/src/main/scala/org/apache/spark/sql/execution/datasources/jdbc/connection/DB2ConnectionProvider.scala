@@ -26,7 +26,7 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 private[sql] class DB2ConnectionProvider(driver: Driver, options: JDBCOptions)
-    extends SecureConnectionProvider(driver, options) {
+  extends SecureConnectionProvider(driver, options) {
   override val appEntry: String = "JaasClient"
 
   override def getConnection(): Connection = {
