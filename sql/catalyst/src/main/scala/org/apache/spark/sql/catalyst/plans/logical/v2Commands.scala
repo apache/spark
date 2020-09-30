@@ -60,7 +60,9 @@ case class AppendData(
     query: LogicalPlan,
     columns: Seq[Attribute],
     writeOptions: Map[String, String],
-    isByName: Boolean) extends V2WriteCommand
+    isByName: Boolean) extends V2WriteCommand {
+  override lazy val resolved: Boolean = outputResolved && columns.forall(_.resolved)
+}
 
 object AppendData {
   def byName(
@@ -89,7 +91,8 @@ case class OverwriteByExpression(
     columns: Seq[Attribute],
     writeOptions: Map[String, String],
     isByName: Boolean) extends V2WriteCommand {
-  override lazy val resolved: Boolean = outputResolved && deleteExpr.resolved
+  override lazy val resolved: Boolean =
+    outputResolved && deleteExpr.resolved && columns.forall(_.resolved)
 }
 
 object OverwriteByExpression {
@@ -119,7 +122,9 @@ case class OverwritePartitionsDynamic(
     query: LogicalPlan,
     columns: Seq[Attribute] = Nil,
     writeOptions: Map[String, String],
-    isByName: Boolean) extends V2WriteCommand
+    isByName: Boolean) extends V2WriteCommand {
+  override lazy val resolved: Boolean = outputResolved && columns.forall(_.resolved)
+}
 
 object OverwritePartitionsDynamic {
   def byName(

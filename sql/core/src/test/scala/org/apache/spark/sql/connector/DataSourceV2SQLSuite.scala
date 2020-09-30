@@ -53,7 +53,7 @@ class DataSourceV2SQLSuite
   }
 
   protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
-    processInsert(tableName, insert, Nil, mode)
+    processInsert(tableName, insert, mode = mode)
   }
 
   override def verifyTable(tableName: String, expected: DataFrame): Unit = {

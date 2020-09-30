@@ -226,13 +226,20 @@ trait InsertIntoSQLOnlyTests
   }
 
   protected def processInsert(
-      tableName: String, insert: DataFrame, cols: Seq[String], mode: SaveMode = null): Unit = {
+      tableName: String,
+      insert: DataFrame,
+      cols: Seq[String] = Nil,
+      partitionExprs: Seq[String] = Nil,
+      mode: SaveMode = null): Unit = {
     val tmpView = "tmp_view"
     val columnList = if (cols.nonEmpty) cols.mkString("(", ",", ")") else ""
+    val partitionList = if (partitionExprs.nonEmpty) {
+      partitionExprs.mkString("PARTITION (", ",", ")")
+    } else ""
     withTempView(tmpView) {
       insert.createOrReplaceTempView(tmpView)
       val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
-      sql(s"INSERT $overwrite TABLE $tableName $columnList SELECT * FROM $tmpView")
+      sql(s"INSERT $overwrite TABLE $tableName $columnList $partitionList SELECT * FROM $tmpView")
     }
   }
 
@@ -489,12 +496,57 @@ trait InsertIntoSQLOnlyTests
       }
     }
 
-    test("insertInto: append with column list") {
+    test("insertInto: with column list") {
       val t1 = s"${catalogAndNamespace}tbl"
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
-      val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
-      processInsert(t1, df, Seq("id", "data"))
-      verifyTable(t1, df)
+      val df = Seq(("1", "a"), ("2", "b"), ("3", "c")).toDF("i", "d")
+      Seq(SaveMode.Append, SaveMode.Overwrite).foreach { mode =>
+        withTable(t1) {
+          sql(s"CREATE TABLE $t1 (id string, data string) USING $v2Format")
+          processInsert(t1, df, Seq("id", "data"), mode = mode)
+          verifyTable(t1, df)
+          val e1 = intercept[AnalysisException](processInsert(t1, df, Seq("id"), mode = mode))
+          assert(e1.getMessage.contains("the specified part has only 1 column(s)"))
+
+          val e2 = intercept[AnalysisException](processInsert(t1, df, Seq("id", "da"), mode = mode))
+          assert(e2.getMessage.contains("Cannot resolve column name da"))
+
+          val e3 = intercept[AnalysisException] {
+            processInsert(t1, df, Seq("id", "ID"), mode = mode)
+          }
+          assert(e3.getMessage === "Found duplicate column(s) in the column list: `id`;")
+        }
+
+        withTable(t1) {
+          sql(s"CREATE TABLE $t1 (id string, data string) USING $v2Format")
+          processInsert(t1, df, Seq("data", "id"), mode = mode)
+          verifyTable(t1, df.selectExpr("d", "i"))
+        }
+
+        withTable(t1) {
+          sql(s"CREATE TABLE $t1 (id string, data string, p int) " +
+            s"USING $v2Format PARTITIONED BY (id, p)")
+          val partExprs = Seq("id='1'", "p=1")
+          val df2 = df.selectExpr("d")
+          processInsert(t1, df2, Seq("id", "data", "p"), partExprs, mode)
+          verifyTable(t1, Seq(("1", "a", 1), ("1", "b", 1), ("1", "c", 1)).toDF())
+
+          val e1 = intercept[AnalysisException]{
+            processInsert(t1, df2, Seq("id"), partExprs, mode = mode)
+          }
+          assert(e1.getMessage.contains("the specified part has only 1 column(s)"))
+
+          val e2 = intercept[AnalysisException] {
+            processInsert(
+              t1, df2, Seq("id", "data", "pp"), partExprs, mode = mode)
+          }
+          assert(e2.getMessage.contains("Cannot resolve column name pp"))
+
+          val e3 = intercept[AnalysisException] {
+            processInsert(t1, df2, Seq("id", "data", "data"), partExprs, mode = mode)
+          }
+          assert(e3.getMessage === "Found duplicate column(s) in the column list: `data`;")
+        }
+      }
     }
   }
 }

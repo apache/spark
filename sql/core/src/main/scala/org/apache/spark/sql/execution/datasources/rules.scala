@@ -193,7 +193,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       c.copy(
         tableDesc = existingTable,
         query = Some(TableOutputResolver.resolveOutputColumns(
-          tableDesc.qualifiedName, existingTable.schema.toAttributes, newQuery,
+          tableDesc.qualifiedName, existingTable.schema.toAttributes, Nil, newQuery,
           byName = true, conf)))
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
@@ -430,7 +430,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     }
 
     val newQuery = TableOutputResolver.resolveOutputColumns(
-      tblName, expectedColumns, insert.query, byName = false, conf)
+      tblName, expectedColumns, Nil, insert.query, byName = false, conf)
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw new AnalysisException(
