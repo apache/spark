@@ -4440,8 +4440,8 @@ setMethod("timestamp_seconds",
 #' @aliases nth_value nth_value,characterOrColumn-method
 #' @examples
 #' \dontrun{
-#' nth_value(df$c, 3)
-#' nth_value(df$c, 3, TRUE)
+#' nth_value(df$mpg, 3)
+#' nth_value(df$mpg, 3, TRUE)
 #' }
 #' @note nth_value since 3.1.0
 setMethod("nth_value",
