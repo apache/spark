@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Expression, IsNotNull}
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -46,39 +47,50 @@ abstract class PrunePartitionSuiteBase extends QueryTest with SQLTestUtils with 
         }
 
         assertPrunedPartitions(
-          "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)", 2, 1)
+          "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)", 2, 2)
         assertPrunedPartitions(
           "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (i = 1 OR p = '2')", 4, 0)
         assertPrunedPartitions(
-          "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '3' AND i = 3 )", 2, 1)
+          "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '3' AND i = 3 )", 2, 2)
         assertPrunedPartitions(
-          "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '2' OR p = '3')", 3, 1)
+          "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '2' OR p = '3')", 3, 3)
         assertPrunedPartitions(
           "SELECT * FROM t", 4, 0)
         assertPrunedPartitions(
-          "SELECT * FROM t WHERE p = '1' AND i = 2", 1, 2)
+          "SELECT * FROM t WHERE p = '1' AND i = 2", 1, 1)
         assertPrunedPartitions(
           """
             |SELECT i, COUNT(1) FROM (
             |SELECT * FROM t WHERE  p = '1' OR (p = '2' AND i = 1)
             |) tmp GROUP BY i
-          """.stripMargin, 2, 1)
+          """.stripMargin, 2, 2)
       }
     }
+  }
+
+  private def countEqualExpr(expression: Expression): Int = expression match {
+    case _: EqualTo =>
+      1
+    case _ =>
+      expression.children.map(child => countEqualExpr(child)).sum
   }
 
   protected def assertPrunedPartitions(
       query: String,
       expectedPartitionCount: Long,
-      expectedPushedDownFilterCount: Int): Unit = {
+      expectedPushedDownFilterExpCount: Int): Unit = {
     val qe = sql(query).queryExecution
     val plan = qe.sparkPlan
     assert(getScanExecPartitionSize(plan) == expectedPartitionCount)
+    
     val pushedDownPartitionFilters = qe.executedPlan.collectFirst {
       case scan: FileSourceScanExec => scan.partitionFilters
       case scan: HiveTableScanExec => scan.partitionPruningPred
-    }
-    assert(pushedDownPartitionFilters.map(_.length) == Some(expectedPushedDownFilterCount))
+    }.map(exps => exps.filterNot(e => e.isInstanceOf[IsNotNull]))
+
+    val countOfFilterExp = pushedDownPartitionFilters.map(filters =>
+      filters.map(f => countEqualExpr(f)).sum).getOrElse(0)
+    assert(countOfFilterExp == expectedPushedDownFilterExpCount)
   }
 
   protected def getScanExecPartitionSize(plan: SparkPlan): Long
