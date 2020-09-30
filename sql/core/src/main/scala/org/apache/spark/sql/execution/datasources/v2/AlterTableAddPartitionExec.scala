@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
+import org.apache.spark.sql.catalyst.catalog.ResolvedPartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsPartitionManagement}
 
@@ -29,7 +30,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement
  */
 case class AlterTableAddPartitionExec(
     table: SupportsPartitionManagement,
-    partitions: Seq[(InternalRow, Map[String, String])],
+    partSpecs: Seq[ResolvedPartitionSpec],
     ignoreIfExists: Boolean) extends V2CommandExec {
   import DataSourceV2Implicits._
 
@@ -37,19 +38,21 @@ case class AlterTableAddPartitionExec(
 
   override protected def run(): Seq[InternalRow] = {
     val (existsParts, notExistsParts) =
-      partitions.partition(p => table.partitionExists(p._1))
+      partSpecs.partition(p => table.partitionExists(p.spec))
 
     if (existsParts.nonEmpty && !ignoreIfExists) {
       throw new PartitionsAlreadyExistException(
-        table.name(), existsParts.map(_._1), table.partitionSchema())
+        table.name(), existsParts.map(_.spec), table.partitionSchema())
     }
 
     notExistsParts match {
       case Seq() => // Nothing will be done
-      case Seq((partIdent, partProp)) =>
-        table.createPartition(partIdent, partProp.asJava)
+      case Seq(partitionSpec) =>
+        val partProp = partitionSpec.location.map(loc => "location" -> loc).toMap
+        table.createPartition(partitionSpec.spec, partProp.asJava)
       case Seq(_ *) if table.isInstanceOf[SupportsAtomicPartitionManagement] =>
-        val (partIdents, partProps) = notExistsParts.unzip
+        val partIdents = notExistsParts.map(_.spec)
+        val partProps = notExistsParts.map(_.location.map(loc => "location" -> loc).toMap)
         table.asAtomicPartitionable
           .createPartitions(
             partIdents.toArray,

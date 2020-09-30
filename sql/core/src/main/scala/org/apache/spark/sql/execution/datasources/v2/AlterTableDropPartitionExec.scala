@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException
+import org.apache.spark.sql.catalyst.catalog.ResolvedPartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsPartitionManagement}
 
@@ -27,14 +28,15 @@ import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement
  */
 case class AlterTableDropPartitionExec(
     table: SupportsPartitionManagement,
-    partIdents: Seq[InternalRow],
+    partSpecs: Seq[ResolvedPartitionSpec],
     ignoreIfNotExists: Boolean) extends V2CommandExec {
   import DataSourceV2Implicits._
 
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    val (existsPartIdents, notExistsPartIdents) = partIdents.partition(table.partitionExists)
+    val (existsPartIdents, notExistsPartIdents) =
+      partSpecs.map(_.spec).partition(table.partitionExists)
 
     if (notExistsPartIdents.nonEmpty && !ignoreIfNotExists) {
       throw new NoSuchPartitionsException(

@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, SupportsPartitionManagement, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange}
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -231,30 +229,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case ShowCurrentNamespaceStatement() =>
       ShowCurrentNamespace(catalogManager)
-
-    case c @ AlterTableAddPartitionStatement(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), _, _) =>
-      val partitions = c.partitionSpecsAndLocs.map { case (spec, location) =>
-        val tableProperties = table.properties().asScala.toMap
-        val partParams =
-          location.map(locationUri => tableProperties + ("location" -> locationUri))
-            .getOrElse(tableProperties)
-        (spec.asPartitionIdentifier(table.partitionSchema()), partParams)
-      }
-      AlterTableAddPartition(
-        table,
-        partitions,
-        c.ifNotExists)
-
-    case c @ AlterTableDropPartitionStatement(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), _, _, _, _) =>
-      if (c.purge) {
-        logWarning("PURGE won't take effect here, please put it in table properties")
-      }
-      AlterTableDropPartition(
-        table,
-        c.specs.map(_.asPartitionIdentifier(table.partitionSchema())),
-        c.ifExists)
   }
 
   object NonSessionCatalogAndTable {

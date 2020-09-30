@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.PartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.connector.catalog._
@@ -554,7 +555,7 @@ case class ShowFunctions(
 }
 
 /**
- * The logical plan of the ALTER TABLE ADD PARTITION command that works for v2 tables.
+ * The logical plan of the ALTER TABLE ADD PARTITION command.
  *
  * The syntax of this command is:
  * {{{
@@ -563,12 +564,14 @@ case class ShowFunctions(
  * }}}
  */
 case class AlterTableAddPartition(
-    table: SupportsPartitionManagement,
-    parts: Seq[(InternalRow, Map[String, String])],
-    ignoreIfExists: Boolean) extends Command
+    child: LogicalPlan,
+    parts: Seq[PartitionSpec],
+    ignoreIfExists: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
 
 /**
- * The logical plan of the ALTER TABLE DROP PARTITION command that works for v2 tables.
+ * The logical plan of the ALTER TABLE DROP PARTITION command.
  * This may remove the data and metadata for this partition.
  *
  * The syntax of this command is:
@@ -577,6 +580,10 @@ case class AlterTableAddPartition(
  * }}}
  */
 case class AlterTableDropPartition(
-    table: SupportsPartitionManagement,
-    partIdents: Seq[InternalRow],
-    ignoreIfNotExists: Boolean) extends Command
+    child: LogicalPlan,
+    parts: Seq[PartitionSpec],
+    ignoreIfNotExists: Boolean,
+    purge: Boolean,
+    retainData: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}

@@ -21,10 +21,11 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable}
+import org.apache.spark.sql.catalyst.catalog.ResolvedPartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, TableCapability, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -276,10 +277,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case r @ ShowTableProperties(rt: ResolvedTable, propertyKey) =>
       ShowTablePropertiesExec(r.output, rt.table, propertyKey) :: Nil
 
-    case AlterTableAddPartition(table, parts, ignoreIfExists) =>
+    case AlterTableAddPartition(
+        ResolvedTable(_, _, table: SupportsPartitionManagement),
+        parts: Seq[ResolvedPartitionSpec], ignoreIfExists) =>
       AlterTableAddPartitionExec(table, parts, ignoreIfExists) :: Nil
 
-    case AlterTableDropPartition(table, partIdents, ignoreIfNotExists) =>
+    case AlterTableDropPartition(
+        ResolvedTable(_, _, table: SupportsPartitionManagement),
+        partIdents: Seq[ResolvedPartitionSpec], ignoreIfNotExists, _, _) =>
       AlterTableDropPartitionExec(table, partIdents, ignoreIfNotExists) :: Nil
 
     case _ => Nil

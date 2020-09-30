@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, FunctionResource, FunctionResourceType}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, FunctionResource, FunctionResourceType, UnresolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -3395,7 +3395,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create an [[AlterTableAddPartitionStatement]].
+   * Create an [[AlterTableAddPartition]].
    *
    * For example:
    * {{{
@@ -3415,11 +3415,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val specsAndLocs = ctx.partitionSpecLocation.asScala.map { splCtx =>
       val spec = visitNonOptionalPartitionSpec(splCtx.partitionSpec)
       val location = Option(splCtx.locationSpec).map(visitLocationSpec)
-      spec -> location
+      UnresolvedPartitionSpec(spec, location)
     }
-    AlterTableAddPartitionStatement(
+    AlterTableAddPartition(
       UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier)),
-      specsAndLocs.toSeq,
+      specsAndLocs,
       ctx.EXISTS != null)
   }
 
@@ -3440,7 +3440,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create an [[AlterTableDropPartitionStatement]]
+   * Create an [[AlterTableDropPartition]]
    *
    * For example:
    * {{{
@@ -3457,10 +3457,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     if (ctx.VIEW != null) {
       operationNotAllowed("ALTER VIEW ... DROP PARTITION", ctx)
     }
-    AlterTableDropPartitionStatement(
+    val partSpecs = ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec)
+      .map(spec => UnresolvedPartitionSpec(spec))
+    AlterTableDropPartition(
       UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier)),
-      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec).toSeq,
-      ifExists = ctx.EXISTS != null,
+      partSpecs,
+      ignoreIfNotExists = ctx.EXISTS != null,
       purge = ctx.PURGE != null,
       retainData = false)
   }
