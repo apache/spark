@@ -29,6 +29,7 @@
   <name>Spark Project Kubernetes</name>
   <properties>
     <sbt.project.name>kubernetes</sbt.project.name>
+    <!-- Note: Please update the kubernetes client version in kubernetes/integration-tests/pom.xml -->
     <kubernetes.client.version>4.10.3</kubernetes.client.version>
   </properties>
 
@@ -87,12 +88,6 @@
       <artifactId>guava</artifactId>
     </dependency>
     <!-- End of shaded deps. -->
-
-    <dependency>
-      <groupId>com.squareup.okhttp3</groupId>
-      <artifactId>okhttp</artifactId>
-      <version>3.8.1</version>
-    </dependency>
 
     <dependency>
       <groupId>org.mockito</groupId>
