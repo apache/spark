@@ -28,6 +28,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.codahale.metrics.Counter
+import com.gargoylesoftware.htmlunit.BrowserVersion
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
@@ -355,9 +356,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     contextHandler.addServlet(holder, "/")
     server.attachHandler(contextHandler)
 
-    implicit val webDriver: WebDriver = new HtmlUnitDriver(true) {
-      getWebClient.getOptions.setThrowExceptionOnScriptError(false)
-    }
+    implicit val webDriver: WebDriver =
+          new HtmlUnitDriver(BrowserVersion.INTERNET_EXPLORER_11, true)
 
     try {
       val url = s"http://localhost:$port"

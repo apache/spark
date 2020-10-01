@@ -104,7 +104,7 @@ $(document).ready(function() {
     });
 
     historySummary = $("#history-summary");
-    searchString = historySummary["context"]["location"]["search"];
+    searchString = window.location.search;
     requestedIncomplete = getParameterByName("showIncomplete", searchString);
     requestedIncomplete = (requestedIncomplete == "true" ? true : false);
 

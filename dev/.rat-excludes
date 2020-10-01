@@ -22,7 +22,7 @@ docs
 slaves
 spark-env.cmd
 bootstrap-tooltip.js
-jquery-1.12.4.min.js
+jquery-3.4.1.min.js
 d3.min.js
 dagre-d3.min.js
 graphlib-dot.min.js
