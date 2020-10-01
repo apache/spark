@@ -186,6 +186,30 @@ class TimestampType(AtomicType, metaclass=DataTypeSingleton):
             return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
 
 
+class CalendarIntervalType(DataType, metaclass=DataTypeSingleton):
+    """Calendar Interval type
+    """
+    @classmethod
+    def typeName(cls):
+        return "interval"
+
+    def needConversion(self):
+        return True
+
+    def simpleString(self):
+        return "interval"
+
+    def toInternal(self, di):
+        raise NotImplementedError(
+            "Conversion from external Python types to interval not supported"
+        )
+
+    def fromInternal(self, v):
+        raise NotImplementedError(
+            "Conversion from interval to external Python type not supported"
+        )
+
+
 class DecimalType(FractionalType):
     """Decimal (decimal.Decimal) data type.
 
@@ -765,7 +789,9 @@ class UserDefinedType(DataType):
 
 
 _atomic_types = [StringType, BinaryType, BooleanType, DecimalType, FloatType, DoubleType,
-                 ByteType, ShortType, IntegerType, LongType, DateType, TimestampType, NullType]
+                 ByteType, ShortType, IntegerType, LongType,
+                 DateType, TimestampType, CalendarIntervalType,
+                 NullType]
 _all_atomic_types = dict((t.typeName(), t) for t in _atomic_types)
 _all_complex_types = dict((v.typeName(), v)
                           for v in [ArrayType, MapType, StructType])

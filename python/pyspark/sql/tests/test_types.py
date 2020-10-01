@@ -30,7 +30,7 @@ from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.utils import AnalysisException
 from pyspark.sql.types import ByteType, ShortType, IntegerType, FloatType, DateType, \
     TimestampType, MapType, StringType, StructType, StructField, ArrayType, DoubleType, LongType, \
-    DecimalType, BinaryType, BooleanType, NullType
+    DecimalType, BinaryType, BooleanType, CalendarIntervalType, NullType
 from pyspark.sql.types import (  # type: ignore
     _array_signed_int_typecode_ctype_mappings, _array_type_mappings,
     _array_unsigned_int_typecode_ctype_mappings, _infer_type, _make_type_verifier, _merge_type
@@ -737,6 +737,12 @@ class TypesTests(ReusedSQLTestCase):
             with self.assertRaisesRegex(TypeError, "infer the type of the field myarray"):
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
+
+    def test_data_frame_with_interval_type(self):
+        self.assertIsInstance(
+            self.spark.sql("SELECT INTERVAL 1 day AS ti").schema["ti"].dataType,
+            CalendarIntervalType
+        )
 
 
 class DataTypeTests(unittest.TestCase):
