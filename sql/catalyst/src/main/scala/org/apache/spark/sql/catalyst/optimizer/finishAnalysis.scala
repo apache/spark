@@ -49,6 +49,7 @@ object ReplaceExpressions extends Rule[LogicalPlan] {
     case CountIf(predicate) => Count(new NullIf(predicate, Literal.FalseLiteral))
     case BoolOr(arg) => Max(arg)
     case BoolAnd(arg) => Min(arg)
+    case AssertTrue(arg) => If(arg, )
   }
 }
 

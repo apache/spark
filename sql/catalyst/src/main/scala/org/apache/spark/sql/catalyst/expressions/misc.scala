@@ -53,6 +53,32 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 }
 
 /**
+ * Throw with the result of an expression (used for debugging).
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Throws an exception with `expr`.",
+  since = "3.1.0")
+case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def dataType: DataType = NullType
+
+  override def prettyName: String = "raise_error"
+
+  protected override def nullSafeEval(input: Any): None = {
+    throw new RuntimeExpression(outputPrefix + input)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c =>
+      s"""
+         | throw new RuntimeException($c);
+       """.stripMargin)
+  }
+
+  override def sql: String = s"raise_error(${child.sql})"
+}
+
+/**
  * A function throws an exception if 'condition' is not true.
  */
 @ExpressionDescription(
@@ -63,41 +89,18 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
        NULL
   """,
   since = "2.0.0")
-case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class AssertTrue(left: Expression, right: Expression, child: Expression) extends RuntimeReplaceable {
 
-  override def nullable: Boolean = true
-
-  override def inputTypes: Seq[DataType] = Seq(BooleanType)
-
-  override def dataType: DataType = NullType
-
-  override def prettyName: String = "assert_true"
-
-  private val errMsg = s"'${child.simpleString(SQLConf.get.maxToStringFields)}' is not true!"
-
-  override def eval(input: InternalRow) : Any = {
-    val v = child.eval(input)
-    if (v == null || java.lang.Boolean.FALSE.equals(v)) {
-      throw new RuntimeException(errMsg)
-    } else {
-      null
-    }
+  def this(left: Expression) = {
+    this(left, Literal(s"'${left.simpleString(SQLConf.get.maxToStringFields)}' is not true!"))
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval = child.genCode(ctx)
-
-    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
-    // because errMsgField is used only when the value is null or false.
-    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
-    ExprCode(code = code"""${eval.code}
-       |if (${eval.isNull} || !${eval.value}) {
-       |  throw new RuntimeException($errMsgField);
-       |}""".stripMargin, isNull = TrueLiteral,
-      value = JavaCode.defaultLiteral(dataType))
+  def this(left: Expression, right: Expression) = {
+    this(left, right, If(left, Literal(null), RaiseError(right)))
   }
 
-  override def sql: String = s"assert_true(${child.sql})"
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
 }
 
 /**
