@@ -1030,9 +1030,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
           case shuffle: ShuffleExchangeExec => shuffle
         }.get
 
-        assert(!leftExchangesInJoined.children.head.isInstanceOf[ShuffleExchangeExec])
-        assert(!rightExchangeInJoined.children.head.isInstanceOf[ShuffleExchangeExec])
-
         val leftPartitioning = leftExchangesInJoined.outputPartitioning
         assert(leftPartitioning.numPartitions == 200)
         assert(leftPartitioning.satisfies(joinedPlan.requiredChildDistribution(0)))
