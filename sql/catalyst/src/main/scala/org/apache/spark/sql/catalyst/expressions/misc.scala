@@ -91,6 +91,8 @@ case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCa
   since = "2.0.0")
 case class AssertTrue(left: Expression, right: Expression, child: Expression) extends RuntimeReplaceable {
 
+  override def prettyName: String = "assert_true"
+
   def this(left: Expression) = {
     this(left, Literal(s"'${left.simpleString(SQLConf.get.maxToStringFields)}' is not true!"))
   }
