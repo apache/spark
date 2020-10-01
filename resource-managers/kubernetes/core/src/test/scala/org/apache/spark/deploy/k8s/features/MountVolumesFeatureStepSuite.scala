@@ -89,6 +89,23 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(executorPVC.getClaimName === s"pvc-spark-${KubernetesTestConf.EXECUTOR_ID}")
   }
 
+  test("Create and mounts persistentVolumeClaims in driver") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      "",
+      true,
+      KubernetesPVCVolumeConf("OnDemand")
+    )
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
+    val step = new MountVolumesFeatureStep(kubernetesConf)
+    val configuredPod = step.configurePod(SparkPod.initialPod())
+
+    assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
+    val pvcClaim = configuredPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
+    assert(pvcClaim.getClaimName.endsWith("-driver-pvc-0"))
+  }
+
   test("Create and mount persistentVolumeClaims in executors") {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",

@@ -24,4 +24,5 @@ User Guide
     :maxdepth: 2
 
     arrow_pandas
+    python_packaging
 

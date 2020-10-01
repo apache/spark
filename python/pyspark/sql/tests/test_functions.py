@@ -19,7 +19,7 @@ import datetime
 from itertools import chain
 import re
 
-from pyspark.sql import Row
+from pyspark.sql import Row, Window
 from pyspark.sql.functions import udf, input_file_name, col, percentile_approx, lit
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -367,6 +367,40 @@ class FunctionsTests(ReusedSQLTestCase):
 
         self.assertListEqual(actual, expected)
 
+    def test_nth_value(self):
+        from pyspark.sql import Window
+        from pyspark.sql.functions import nth_value
+
+        df = self.spark.createDataFrame([
+            ("a", 0, None),
+            ("a", 1, "x"),
+            ("a", 2, "y"),
+            ("a", 3, "z"),
+            ("a", 4, None),
+            ("b", 1, None),
+            ("b", 2, None)], schema=("key", "order", "value"))
+        w = Window.partitionBy("key").orderBy("order")
+
+        rs = df.select(
+            df.key,
+            df.order,
+            nth_value("value", 2).over(w),
+            nth_value("value", 2, False).over(w),
+            nth_value("value", 2, True).over(w)).collect()
+
+        expected = [
+            ("a", 0, None, None, None),
+            ("a", 1, "x", "x", None),
+            ("a", 2, "x", "x", "y"),
+            ("a", 3, "x", "x", "y"),
+            ("a", 4, "x", "x", "y"),
+            ("b", 1, None, None, None),
+            ("b", 2, None, None, None)
+        ]
+
+        for r, ex in zip(sorted(rs), sorted(expected)):
+            self.assertEqual(tuple(r), ex[:len(r)])
+
     def test_higher_order_function_failures(self):
         from pyspark.sql.functions import col, transform
 
@@ -389,6 +423,106 @@ class FunctionsTests(ReusedSQLTestCase):
         # Should fail if function doesn't return Column
         with self.assertRaises(ValueError):
             transform(col("foo"), lambda x: 1)
+
+    def test_window_functions(self):
+        df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
+        w = Window.partitionBy("value").orderBy("key")
+        from pyspark.sql import functions as F
+        sel = df.select(df.value, df.key,
+                        F.max("key").over(w.rowsBetween(0, 1)),
+                        F.min("key").over(w.rowsBetween(0, 1)),
+                        F.count("key").over(w.rowsBetween(float('-inf'), float('inf'))),
+                        F.row_number().over(w),
+                        F.rank().over(w),
+                        F.dense_rank().over(w),
+                        F.ntile(2).over(w))
+        rs = sorted(sel.collect())
+        expected = [
+            ("1", 1, 1, 1, 1, 1, 1, 1, 1),
+            ("2", 1, 1, 1, 3, 1, 1, 1, 1),
+            ("2", 1, 2, 1, 3, 2, 1, 1, 1),
+            ("2", 2, 2, 2, 3, 3, 3, 2, 2)
+        ]
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[:len(r)])
+
+    def test_window_functions_without_partitionBy(self):
+        df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
+        w = Window.orderBy("key", df.value)
+        from pyspark.sql import functions as F
+        sel = df.select(df.value, df.key,
+                        F.max("key").over(w.rowsBetween(0, 1)),
+                        F.min("key").over(w.rowsBetween(0, 1)),
+                        F.count("key").over(w.rowsBetween(float('-inf'), float('inf'))),
+                        F.row_number().over(w),
+                        F.rank().over(w),
+                        F.dense_rank().over(w),
+                        F.ntile(2).over(w))
+        rs = sorted(sel.collect())
+        expected = [
+            ("1", 1, 1, 1, 4, 1, 1, 1, 1),
+            ("2", 1, 1, 1, 4, 2, 2, 2, 1),
+            ("2", 1, 2, 1, 4, 3, 2, 2, 2),
+            ("2", 2, 2, 2, 4, 4, 4, 3, 2)
+        ]
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[:len(r)])
+
+    def test_window_functions_cumulative_sum(self):
+        df = self.spark.createDataFrame([("one", 1), ("two", 2)], ["key", "value"])
+        from pyspark.sql import functions as F
+
+        # Test cumulative sum
+        sel = df.select(
+            df.key,
+            F.sum(df.value).over(Window.rowsBetween(Window.unboundedPreceding, 0)))
+        rs = sorted(sel.collect())
+        expected = [("one", 1), ("two", 3)]
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[:len(r)])
+
+        # Test boundary values less than JVM's Long.MinValue and make sure we don't overflow
+        sel = df.select(
+            df.key,
+            F.sum(df.value).over(Window.rowsBetween(Window.unboundedPreceding - 1, 0)))
+        rs = sorted(sel.collect())
+        expected = [("one", 1), ("two", 3)]
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[:len(r)])
+
+        # Test boundary values greater than JVM's Long.MaxValue and make sure we don't overflow
+        frame_end = Window.unboundedFollowing + 1
+        sel = df.select(
+            df.key,
+            F.sum(df.value).over(Window.rowsBetween(Window.currentRow, frame_end)))
+        rs = sorted(sel.collect())
+        expected = [("one", 3), ("two", 2)]
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[:len(r)])
+
+    def test_collect_functions(self):
+        df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
+        from pyspark.sql import functions
+
+        self.assertEqual(
+            sorted(df.select(functions.collect_set(df.key).alias('r')).collect()[0].r),
+            [1, 2])
+        self.assertEqual(
+            sorted(df.select(functions.collect_list(df.key).alias('r')).collect()[0].r),
+            [1, 1, 1, 2])
+        self.assertEqual(
+            sorted(df.select(functions.collect_set(df.value).alias('r')).collect()[0].r),
+            ["1", "2"])
+        self.assertEqual(
+            sorted(df.select(functions.collect_list(df.value).alias('r')).collect()[0].r),
+            ["1", "2", "2", "2"])
+
+    def test_datetime_functions(self):
+        from pyspark.sql import functions
+        from datetime import date
+        df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
+        parse_result = df.select(functions.to_date(functions.col("dateCol"))).first()
+        self.assertEquals(date(2017, 1, 22), parse_result['to_date(dateCol)'])
 
 
 if __name__ == "__main__":

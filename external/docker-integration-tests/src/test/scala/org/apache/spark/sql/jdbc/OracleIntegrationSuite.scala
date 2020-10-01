@@ -518,4 +518,15 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
        """.stripMargin.replaceAll("\n", " "))
     assert(sql("select id, d, t from queryOption").collect.toSet == expectedResult)
   }
+
+  test("SPARK-32992: map Oracle's ROWID type to StringType") {
+    val rows = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT ROWID from datetime")
+      .load()
+      .collect()
+    val types = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(types(0).equals("class java.lang.String"))
+    assert(!rows(0).getString(0).isEmpty)
+  }
 }
