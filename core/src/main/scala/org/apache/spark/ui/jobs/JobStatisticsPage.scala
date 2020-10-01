@@ -274,7 +274,7 @@ private[ui] class JobStatisticsPage(
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
               <div>
-                <strong>Cluster Throughput
+                <strong>Execution Throughput
                   {UIUtils.tooltip("The sum of completed tasks, stages, and jobs per minute.", "right")}
                 </strong>
               </div>
