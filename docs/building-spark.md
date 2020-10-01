@@ -265,7 +265,7 @@ Change the major Scala version using (e.g. 2.13):
 
     ./dev/change-scala-version.sh 2.13
 
-Eenable the profile (e.g. 2.13):
+Enable the profile (e.g. 2.13):
 
     # For Maven
     ./build/mvn -Pscala-2.13 compile
