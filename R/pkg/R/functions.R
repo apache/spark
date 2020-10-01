@@ -3298,41 +3298,41 @@ setMethod("lead",
             column(jc)
           })
 
-  #' @details
-  #' \code{nth_value}: Window function: returns the value that is the \code{offset}th
-  #' row of the window frame# (counting from 1), and \code{null} if the size of window
-  #' frame is less than \code{offset} rows.
-  #'
-  #' @param offset a numeric indicating number of row to use as the value
-  #' @param na.rm a logical which indicates that the Nth value should skip null in the
-  #'        determination of which row to use
-  #'
-  #' @rdname column_window_functions
-  #' @aliases nth_value nth_value,characterOrColumn-method
-  #' @examples
-  #' \dontrun{
-  #' nth_value(df$mpg, 3)
-  #' nth_value(df$mpg, 3, TRUE)
-  #' }
-  #' @note nth_value since 3.1.0
-  setMethod("nth_value",
-            signature(x = "characterOrColumn", offset = "numeric"),
-            function(x, offset, na.rm = FALSE) {
-                x <- if (is.character(x)) {
-                    column(x)
-                } else {
-                    x
-                }
-                offset <- as.integer(offset)
-                jc <- callJStatic(
-                    "org.apache.spark.sql.functions",
-                    "nth_value",
-                    x@jc,
-                    offset,
-                    na.rm
-                )
-                column(jc)
-            })
+#' @details
+#' \code{nth_value}: Window function: returns the value that is the \code{offset}th
+#' row of the window frame# (counting from 1), and \code{null} if the size of window
+#' frame is less than \code{offset} rows.
+#'
+#' @param offset a numeric indicating number of row to use as the value
+#' @param na.rm a logical which indicates that the Nth value should skip null in the
+#'        determination of which row to use
+#'
+#' @rdname column_window_functions
+#' @aliases nth_value nth_value,characterOrColumn-method
+#' @examples
+#' \dontrun{
+#' nth_value(df$mpg, 3)
+#' nth_value(df$mpg, 3, TRUE)
+#' }
+#' @note nth_value since 3.1.0
+setMethod("nth_value",
+          signature(x = "characterOrColumn", offset = "numeric"),
+          function(x, offset, na.rm = FALSE) {
+            x <- if (is.character(x)) {
+              column(x)
+            } else {
+              x
+            }
+            offset <- as.integer(offset)
+            jc <- callJStatic(
+              "org.apache.spark.sql.functions",
+              "nth_value",
+              x@jc,
+              offset,
+              na.rm
+            )
+            column(jc)
+          })
 
 #' @details
 #' \code{ntile}: Returns the ntile group id (from 1 to n inclusive) in an ordered window
