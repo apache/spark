@@ -365,7 +365,7 @@ public class TransportConf {
 
   /**
    * The minimum size of a chunk when dividing a merged shuffle file into multiple chunks during
-   * push-based shuffle. 
+   * push-based shuffle.
    * A merged shuffle file consists of multiple small shuffle blocks. Fetching the
    * complete merged shuffle file in a single response increases the memory requirements for the
    * clients. Instead of serving the entire merged file, the shuffle service serves the
@@ -383,6 +383,6 @@ public class TransportConf {
    */
   public long mergedIndexCacheSize() {
     return JavaUtils.byteStringAsBytes(
-    conf.get("spark.shuffle.server.mergedIndexCacheSize", "100m"));
+        conf.get("spark.shuffle.server.mergedIndexCacheSize", "100m"));
   }
 }

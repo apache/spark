@@ -411,14 +411,4 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     ))
   }
 
-  test("NM local directories will be sorted") {
-    s1 = new YarnShuffleService
-    val localDir1 = "/tmp/b"
-    val localDir2 = "tmp/a"
-    yarnConfig.set(YarnConfiguration.NM_LOCAL_DIRS, localDir1 + "," + localDir2)
-
-    s1.init(yarnConfig)
-    val expected = Array(localDir1, localDir2).sorted
-    s1.shuffleMergeManager.getLocalDirs.map(path => path.toString) should equal(expected)
-  }
 }
