@@ -44,13 +44,15 @@ object OptimizeJsonExprs extends Rule[LogicalPlan] {
         // this case similarly.
         child
 
-      case g @ GetStructField(jsonToStructs: JsonToStructs, ordinal, _) =>
-        val prunedSchema = StructType(Seq(jsonToStructs.schema.asInstanceOf[StructType](ordinal)))
-        g.copy(child = jsonToStructs.copy(schema = prunedSchema), ordinal = 0)
+      case g @ GetStructField(j @ JsonToStructs(schema: StructType, _, _, _), ordinal, _)
+          if schema.length > 1 =>
+        val prunedSchema = StructType(Seq(schema(ordinal)))
+        g.copy(child = j.copy(schema = prunedSchema), ordinal = 0)
 
-      case g @ GetArrayStructFields(jsonToStructs: JsonToStructs, _, _, _, _) =>
+      case g @ GetArrayStructFields(j @ JsonToStructs(schema: ArrayType, _, _, _), _, _, _, _)
+          if schema.elementType.asInstanceOf[StructType].length > 1 =>
         val prunedSchema = ArrayType(StructType(Seq(g.field)), g.containsNull)
-        g.copy(child = jsonToStructs.copy(schema = prunedSchema), ordinal = 0, numFields = 1)
+        g.copy(child = j.copy(schema = prunedSchema), ordinal = 0, numFields = 1)
 
     }
   }
