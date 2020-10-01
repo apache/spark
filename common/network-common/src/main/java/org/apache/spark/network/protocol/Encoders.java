@@ -54,12 +54,11 @@ public class Encoders {
       // guarantees that the bitmap will always be compressed before being serialized.
       b.trim();
       b.runOptimize();
-      return 4 + b.serializedSizeInBytes();
+      return b.serializedSizeInBytes();
     }
 
     public static void encode(ByteBuf buf, RoaringBitmap b) {
       int encodedLength = b.serializedSizeInBytes();
-      buf.writeInt(encodedLength);
       // RoaringBitmap requires nio ByteBuffer for serde. We expose the netty ByteBuf as a nio
       // ByteBuffer. Here, we need to explicitly manage the index so we can write into the
       // ByteBuffer, and the write is reflected in the underneath ByteBuf.
@@ -68,13 +67,12 @@ public class Encoders {
     }
 
     public static RoaringBitmap decode(ByteBuf buf) {
-      int length = buf.readInt();
       RoaringBitmap bitmap = new RoaringBitmap();
       try {
         bitmap.deserialize(buf.nioBuffer());
         // RoaringBitmap deserialize does not advance the reader index of the underlying ByteBuf.
         // Manually update the index here.
-        buf.readerIndex(buf.readerIndex() + length);
+        buf.readerIndex(buf.readerIndex() + bitmap.serializedSizeInBytes());
       } catch (IOException e) {
         throw new RuntimeException("Exception while decoding bitmap", e);
       }
