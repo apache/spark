@@ -64,7 +64,7 @@ abstract class DisableUnnecessaryBucketedScanSuite extends QueryTest with SQLTes
   }
 
   test("SPARK-32859: disable unnecessary bucketed table scan - basic test") {
-    withTable("t1", "t2", "t3", "t4") {
+    withTable("t1", "t2", "t3") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("t1")
       df2.write.format("parquet").bucketBy(8, "i").saveAsTable("t2")
       df2.write.format("parquet").bucketBy(4, "i").saveAsTable("t3")
