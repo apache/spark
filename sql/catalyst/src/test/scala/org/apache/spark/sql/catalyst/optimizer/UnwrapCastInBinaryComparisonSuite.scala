@@ -142,7 +142,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     // Cases for rounding down
     var doubleValue = 100.6
     assertEquivalent(castDouble(f) > doubleValue, f > doubleValue.toShort)
-    assertEquivalent(castDouble(f) > doubleValue, f > doubleValue.toShort)
+    assertEquivalent(castDouble(f) >= doubleValue, f > doubleValue.toShort)
     assertEquivalent(castDouble(f) === doubleValue, falseIfNotNull(f))
     assertEquivalent(castDouble(f) <=> doubleValue, false)
     assertEquivalent(castDouble(f) <= doubleValue, f <= doubleValue.toShort)
@@ -223,7 +223,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
     if (evaluate) {
       Seq(
-        (100.toShort, 3.1415926.toFloat, decimal2(100)),
+        (100.toShort, 3.14.toFloat, decimal2(100)),
         (-300.toShort, 3.1415927.toFloat, decimal2(-3000.50)),
         (null, Float.NaN, decimal2(12345.6789)),
         (null, null, null),

@@ -56,8 +56,6 @@ import org.apache.spark.sql.types._
  *  - `cast(fromExp, toType) >= value` ==> `fromExp >= cast(value, fromType)`
  *  - `cast(fromExp, toType) === value` ==> if(isnull(fromExp), null, false)
  *  - `cast(fromExp, toType) <=> value` ==> false (if `fromExp` is deterministic)
- *  - `cast(fromExp, toType) <=> value` ==> `cast(fromExp, toType) <=> value` (if `fromExp` is
- *       non-deterministic)
  *  - `cast(fromExp, toType) <= value` ==> `fromExp < cast(value, fromType)`
  *  - `cast(fromExp, toType) < value` ==> `fromExp < cast(value, fromType)`
  *
@@ -71,8 +69,6 @@ import org.apache.spark.sql.types._
  *  - `cast(fromExp, toType) >= value` ==> if(isnull(fromExp), null, false)
  *  - `cast(fromExp, toType) === value` ==> if(isnull(fromExp), null, false)
  *  - `cast(fromExp, toType) <=> value` ==> false (if `fromExp` is deterministic)
- *  - `cast(fromExp, toType) <=> value` ==> cast(fromExp, toType) <=> value (if `fromExp` is
- *       non-deterministic)
  *  - `cast(fromExp, toType) <= value` ==> if(isnull(fromExp), null, true)
  *  - `cast(fromExp, toType) < value` ==> if(isnull(fromExp), null, true)
  *
