@@ -63,15 +63,9 @@ public class ExternalBlockHandler extends RpcHandler {
   private final ShuffleMetrics metrics;
 
   public ExternalBlockHandler(TransportConf conf, File registeredExecutorFile)
-      throws IOException {
-    this(new OneForOneStreamManager(),
-        new ExternalShuffleBlockResolver(conf, registeredExecutorFile));
-  }
-
-  public ExternalBlockHandler(TransportConf conf, File registeredExecutorFile, String extraKnownManager)
     throws IOException {
     this(new OneForOneStreamManager(),
-      new ExternalShuffleBlockResolver(conf, registeredExecutorFile, extraKnownManager));
+      new ExternalShuffleBlockResolver(conf, registeredExecutorFile));
   }
 
   @VisibleForTesting
