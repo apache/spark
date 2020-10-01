@@ -27,7 +27,7 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = "mysql:5.7.28"
+    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:5.7.31")
     override val env = Map(
       "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )
