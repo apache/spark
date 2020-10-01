@@ -34,40 +34,41 @@ object DecrementLiterals extends Rule[LogicalPlan] {
   }
 }
 
-class OptimizerMaxIterationsSuite extends PlanTest {
+class OptimizerSuite extends PlanTest {
   test("Adjust maxIterations") {
     val iterations = 5
     val maxIterationsNotEnough = 3
     val maxIterationsEnough = 10
     val analyzed = Project(Alias(Literal(iterations), "attr")() :: Nil, OneRowRelation()).analyze
 
-    conf.setConf(SQLConf.OPTIMIZER_MAX_ITERATIONS, maxIterationsNotEnough)
-    val optimizer = new SimpleTestOptimizer() {
-      override def defaultBatches: Seq[Batch] =
-        Batch("test", fixedPoint,
-          DecrementLiterals) :: Nil
+    withSQLConf(SQLConf.OPTIMIZER_MAX_ITERATIONS.key -> maxIterationsNotEnough.toString) {
+      val optimizer = new SimpleTestOptimizer() {
+        override def defaultBatches: Seq[Batch] =
+          Batch("test", fixedPoint,
+            DecrementLiterals) :: Nil
+      }
+
+      val message1 = intercept[TreeNodeException[LogicalPlan]] {
+        optimizer.execute(analyzed)
+      }.getMessage
+      assert(message1.startsWith(s"Max iterations ($maxIterationsNotEnough) reached for batch " +
+        s"test, please set '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}' to a larger value."))
+
+      withSQLConf(SQLConf.OPTIMIZER_MAX_ITERATIONS.key -> maxIterationsEnough.toString) {
+        try {
+          optimizer.execute(analyzed)
+        } catch {
+          case ex: TreeNodeException[LogicalPlan]
+            if ex.getMessage.contains(SQLConf.OPTIMIZER_MAX_ITERATIONS.key) =>
+              fail("optimizer.execute should not reach max iterations.")
+        }
+      }
+
+      val message2 = intercept[TreeNodeException[LogicalPlan]] {
+        optimizer.execute(analyzed)
+      }.getMessage
+      assert(message2.startsWith(s"Max iterations ($maxIterationsNotEnough) reached for batch " +
+        s"test, please set '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}' to a larger value."))
     }
-
-    val message1 = intercept[TreeNodeException[LogicalPlan]] {
-      optimizer.execute(analyzed)
-    }.getMessage
-    assert(message1.startsWith(s"Max iterations ($maxIterationsNotEnough) reached for batch " +
-      s"test, please set '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}' to a larger value."))
-
-    conf.setConf(SQLConf.OPTIMIZER_MAX_ITERATIONS, maxIterationsEnough)
-    try {
-      optimizer.execute(analyzed)
-    } catch {
-      case ex: TreeNodeException[LogicalPlan]
-        if ex.getMessage.contains(s"${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}") =>
-        fail("optimizer.execute should not reach max iterations.")
-    }
-
-    conf.setConf(SQLConf.OPTIMIZER_MAX_ITERATIONS, maxIterationsNotEnough)
-    val message2 = intercept[TreeNodeException[LogicalPlan]] {
-      optimizer.execute(analyzed)
-    }.getMessage
-    assert(message2.startsWith(s"Max iterations ($maxIterationsNotEnough) reached for batch " +
-      s"test, please set '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}' to a larger value."))
   }
 }
