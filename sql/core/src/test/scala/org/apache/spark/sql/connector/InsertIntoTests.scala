@@ -530,6 +530,7 @@ trait InsertIntoSQLOnlyTests
           processInsert(t1, df2, Seq("id", "data", "p"), partExprs, mode)
           verifyTable(t1, Seq(("1", "a", 1), ("1", "b", 1), ("1", "c", 1)).toDF())
 
+
           val e1 = intercept[AnalysisException]{
             processInsert(t1, df2, Seq("id"), partExprs, mode = mode)
           }
@@ -545,6 +546,20 @@ trait InsertIntoSQLOnlyTests
             processInsert(t1, df2, Seq("id", "data", "data"), partExprs, mode = mode)
           }
           assert(e3.getMessage === "Found duplicate column(s) in the column list: `data`;")
+        }
+
+        withTable(t1) {
+          sql(s"CREATE TABLE $t1 (id string, data string, p int) " +
+            s"USING $v2Format PARTITIONED BY (id, p)")
+          processInsert(t1, df, Seq("id", "data", "p"), Seq("id", "p=1"), mode)
+          verifyTable(t1, Seq(("1", "a", 1), ("2", "b", 1), ("3", "c", 1)).toDF())
+        }
+
+        withTable(t1) {
+          sql(s"CREATE TABLE $t1 (id string, data string, p int) " +
+            s"USING $v2Format PARTITIONED BY (id, p)")
+          processInsert(t1, df, Seq("data", "id", "p"), Seq("id", "p=1"), mode)
+          verifyTable(t1, Seq(("a", "1", 1), ("b", "2", 1), ("c", "3", 1)).toDF())
         }
       }
     }

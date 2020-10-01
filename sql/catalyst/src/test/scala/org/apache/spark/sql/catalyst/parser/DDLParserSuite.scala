@@ -956,6 +956,7 @@ class DDLParserSuite extends AnalysisTest {
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
         overwrite = true, ifPartitionNotExists = false))
   }
+
   test("insert table: overwrite with partition if not exists") {
     parseCompare(
       """

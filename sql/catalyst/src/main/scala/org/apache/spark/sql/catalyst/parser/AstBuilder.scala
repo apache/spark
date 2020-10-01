@@ -245,7 +245,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
   /**
    * Parameters used for writing query to a table:
-   *   (multipartIdentifier, partitionKeys, ifPartitionNotExists).
+   *   (multipartIdentifier, tableColumnList, partitionKeys, ifPartitionNotExists).
    */
   type InsertTableParams = (Seq[String], Seq[Attribute], Map[String, Option[String]], Boolean)
 

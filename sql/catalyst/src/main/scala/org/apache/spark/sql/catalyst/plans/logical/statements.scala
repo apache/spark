@@ -310,6 +310,7 @@ case class DescribeColumnStatement(
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.
+ * @param columns              the list of columns that belong to the table.
  * @param query                the logical plan representing data to write to.
  * @param overwrite            overwrite existing table or partitions.
  * @param partitionSpec        a map from the partition key to the partition value (optional).
