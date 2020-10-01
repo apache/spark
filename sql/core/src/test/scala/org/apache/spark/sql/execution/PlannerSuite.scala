@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, Disable
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1006,30 +1006,40 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "200") {
         val ordered = spark.range(1, 100).repartitionByRange(10, $"id".desc).orderBy($"id")
-        val orderedPlan = ordered.queryExecution.executedPlan
-        val exchangesInOrdered =
-          orderedPlan.collect { case s: ShuffleExchangeExec => s }
-        assert(exchangesInOrdered.size == 1)
+        val orderedPlan = ordered.queryExecution.executedPlan.collectFirst {
+          case sort: SortExec => sort
+        }.get
+        val exchangeInOrdered = orderedPlan.collectFirst {
+          case shuffle: ShuffleExchangeExec => shuffle
+        }.get
 
-        val partitioning = exchangesInOrdered.head.outputPartitioning
+        val partitioning = exchangeInOrdered.outputPartitioning
         assert(partitioning.numPartitions == 200)
-        assert(partitioning.isInstanceOf[RangePartitioning])
+        assert(partitioning.satisfies(orderedPlan.requiredChildDistribution.head))
 
-        val left = Seq(1, 2, 3).toDF.repartition(10, $"value")
-        val right = Seq(1, 2, 3).toDF
-        val joined = left.join(right, left("value") + 1 === right("value"))
-        val joinedPlan = joined.queryExecution.executedPlan
-        val exchangesInJoined =
-          joinedPlan.collect { case s: ShuffleExchangeExec => s }
-        assert(exchangesInJoined.size == 2)
+        val left = Seq(1, 2, 3).toDF.repartition(10)
+        val right = Seq(1, 2, 3).toDF.repartition(30, $"value")
+        val joined = left.join(right, left("value") + 1 === right("value") + 2)
+        val joinedPlan = joined.queryExecution.executedPlan.collectFirst {
+          case shuffledJoin: ShuffledJoin => shuffledJoin
+        }.get
+        val leftExchangesInJoined = joinedPlan.children(0).collectFirst {
+          case shuffle: ShuffleExchangeExec => shuffle
+        }.get
+        val rightExchangeInJoined = joinedPlan.children(1).collectFirst {
+          case shuffle: ShuffleExchangeExec => shuffle
+        }.get
 
-        val leftPartitioning = exchangesInJoined(0).outputPartitioning
+        assert(!leftExchangesInJoined.children.head.isInstanceOf[ShuffleExchangeExec])
+        assert(!rightExchangeInJoined.children.head.isInstanceOf[ShuffleExchangeExec])
+
+        val leftPartitioning = leftExchangesInJoined.outputPartitioning
         assert(leftPartitioning.numPartitions == 200)
-        assert(leftPartitioning.isInstanceOf[HashPartitioning])
+        assert(leftPartitioning.satisfies(joinedPlan.requiredChildDistribution(0)))
 
-        val rightPartitioning = exchangesInJoined(1).outputPartitioning
+        val rightPartitioning = rightExchangeInJoined.outputPartitioning
         assert(rightPartitioning.numPartitions == 200)
-        assert(rightPartitioning.isInstanceOf[HashPartitioning])
+        assert(rightPartitioning.satisfies(joinedPlan.requiredChildDistribution(1)))
       }
     }
   }
