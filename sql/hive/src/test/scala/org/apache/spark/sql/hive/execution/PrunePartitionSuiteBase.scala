@@ -47,38 +47,47 @@ abstract class PrunePartitionSuiteBase extends QueryTest with SQLTestUtils with 
         }
 
         assertPrunedPartitions(
-          "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)", 2, 2)
+          "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)", 2,
+          Set("`p`='1'", "`p`='2'"))
         assertPrunedPartitions(
-          "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (i = 1 OR p = '2')", 4, 0)
+          "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (i = 1 OR p = '2')", 4,
+          Set())
         assertPrunedPartitions(
-          "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '3' AND i = 3 )", 2, 2)
+          "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '3' AND i = 3 )", 2,
+          Set("`p`='1'", "`p`='3'"))
         assertPrunedPartitions(
-          "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '2' OR p = '3')", 3, 3)
+          "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '2' OR p = '3')", 3,
+          Set("`p`='1'", "`p`='2'", "`p`='3'"))
         assertPrunedPartitions(
-          "SELECT * FROM t", 4, 0)
+          "SELECT * FROM t", 4,
+          Set())
         assertPrunedPartitions(
-          "SELECT * FROM t WHERE p = '1' AND i = 2", 1, 1)
+          "SELECT * FROM t WHERE p = '1' AND i = 2", 1,
+          Set("`p`='1'"))
         assertPrunedPartitions(
           """
             |SELECT i, COUNT(1) FROM (
             |SELECT * FROM t WHERE  p = '1' OR (p = '2' AND i = 1)
             |) tmp GROUP BY i
-          """.stripMargin, 2, 2)
+          """.stripMargin, 2, Set("`p`='1'", "`p`='2'"))
       }
     }
   }
 
-  private def countEqualExpr(expression: Expression): Int = expression match {
-    case _: EqualTo =>
-      1
+  private def collectEqualExp(
+      expression: Expression,
+      currentSet: Set[String]): Set[String] = expression match {
+    case e: EqualTo =>
+      currentSet + (e.left.sql + e.symbol + e.right.sql)
+        .replaceAll("spark_catalog.default.t.", "")
     case _ =>
-      expression.children.map(child => countEqualExpr(child)).sum
+      expression.children.foldLeft(currentSet)((s, exp) => collectEqualExp(exp, s))
   }
 
   protected def assertPrunedPartitions(
       query: String,
       expectedPartitionCount: Long,
-      expectedPushedDownFilterExpCount: Int): Unit = {
+      expectedPushedDownFilters: Set[String]): Unit = {
     val qe = sql(query).queryExecution
     val plan = qe.sparkPlan
     assert(getScanExecPartitionSize(plan) == expectedPartitionCount)
@@ -87,10 +96,10 @@ abstract class PrunePartitionSuiteBase extends QueryTest with SQLTestUtils with 
       case scan: FileSourceScanExec => scan.partitionFilters
       case scan: HiveTableScanExec => scan.partitionPruningPred
     }.map(exps => exps.filterNot(e => e.isInstanceOf[IsNotNull]))
-
-    val countOfFilterExp = pushedDownPartitionFilters.map(filters =>
-      filters.map(f => countEqualExpr(f)).sum).getOrElse(0)
-    assert(countOfFilterExp == expectedPushedDownFilterExpCount)
+    val pushedFilters = pushedDownPartitionFilters.map(filters => {
+      filters.foldLeft(Set[String]())((set, filter) => collectEqualExp(filter, set))
+    })
+    assert(pushedFilters == Some(expectedPushedDownFilters))
   }
 
   protected def getScanExecPartitionSize(plan: SparkPlan): Long
