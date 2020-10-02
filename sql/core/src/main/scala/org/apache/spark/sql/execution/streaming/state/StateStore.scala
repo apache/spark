@@ -40,7 +40,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * `StateStore` represents a specific version of state data, and such instances are created
  * through a [[StateStoreProvider]].
  *
- * `close` method will be called when the task is completed - please clean up the resources in
+ * `abort` method will be called when the task is completed - please clean up the resources in
  * the method.
  */
 trait ReadStateStore {
@@ -82,8 +82,10 @@ trait ReadStateStore {
 
   /**
    * Clean up the resource.
+   *
+   * The method name is to respect backward compatibility on [[StateStore]].
    */
-  def close(): Unit = throw new UnsupportedOperationException("Not implemented")
+  def abort(): Unit
 }
 
 /**
@@ -91,12 +93,10 @@ trait ReadStateStore {
  * instance of a `StateStore` represents a specific version of state data, and such instances are
  * created through a [[StateStoreProvider]].
  *
- * `close` method will be called when the task is completed - please clean up the resources in
- * the method.
- *
- * Existing implementations which don't override `close` need to clean up the resources in both
- * `commit` and `abort` methods, with caution that there's a case `commit` and `abort` methods
- * can be called sequentially. The implementation needs to guard with double resource cleanup.
+ * Unlike [[ReadStateStore]], `abort` method may not be called if the `commit` method succeeds
+ * to commit the change. (`hasCommitted` returns `true`.) Otherwise, `abort` method will be called.
+ * Implementation should deal with resource cleanup in both methods, and also need to guard with
+ * double resource cleanup.
  */
 trait StateStore extends ReadStateStore {
 
@@ -122,7 +122,7 @@ trait StateStore extends ReadStateStore {
    * Abort all the updates that have been made to the store. Implementations should ensure that
    * no more updates (puts, removes) can be after an abort in order to avoid incorrect usage.
    */
-  def abort(): Unit
+  override def abort(): Unit
 
   /** Current metrics of the state store */
   def metrics: StateStoreMetrics
@@ -135,7 +135,6 @@ trait StateStore extends ReadStateStore {
 
 /** Wraps the instance of StateStore to make the instance read-only. */
 class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
-
   override def id: StateStoreId = store.id
 
   override def version: Long = store.version
@@ -144,10 +143,7 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
 
   override def iterator(): Iterator[UnsafeRowPair] = store.iterator()
 
-  override def close(): Unit = {
-    store.abort()
-    store.close()
-  }
+  override def abort(): Unit = store.abort()
 }
 
 /**
@@ -250,9 +246,7 @@ trait StateStoreProvider {
   /**
    * Return an instance of [[ReadStateStore]] representing state data of the given version.
    * By default it will return the same instance as getStore(version) but wrapped to prevent
-   * modification.
-   *
-   * Providers can override and return optimized version of [[ReadStateStore]]
+   * modification. Providers can override and return optimized version of [[ReadStateStore]]
    * based on the fact the instance will be only used for reading.
    */
   def getReadOnlyStore(version: Long): ReadStateStore =
