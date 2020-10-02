@@ -66,7 +66,6 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
   since = "3.1.0")
 case class RaiseError(child: Expression) extends UnaryExpression {
 
-  override def nullable: Boolean = true
   override def foldable: Boolean = false
   override def dataType: DataType = NullType
 
@@ -81,7 +80,7 @@ case class RaiseError(child: Expression) extends UnaryExpression {
     ExprCode(
       code = code"""${eval.code}
                    |if (true) {
-                   |  throw new RuntimeException(${eval.value}.toString());
+                   |  throw new RuntimeException(String.valueOf(${eval.value}));
                    |}
                  """.stripMargin,
       isNull = TrueLiteral,

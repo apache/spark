@@ -24,6 +24,7 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.matchers.should.Matchers._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
@@ -1536,5 +1537,58 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       df.withColumn("a", $"a".withField("a", lit(4)).getField("c")),
       Row(3) :: Row(null):: Nil,
       StructType(Seq(StructField("a", IntegerType, nullable = true))))
+  }
+
+  test("assert_true") {
+    // assert_true(condition, errMsgStr)
+    val booleanDf = Seq((true), (false)).toDF("cond")
+    checkAnswer(
+      booleanDf.filter("cond = true").select(assert_true($"cond")),
+      Row(null) :: Nil
+    )
+    val e1 = intercept[SparkException] {
+      booleanDf.select(assert_true($"cond", "custom error message")).collect()
+    }
+    assert(e1.getCause.isInstanceOf[RuntimeException])
+    assert(e1.getCause.getMessage == "custom error message")
+
+    // assert_true(condition, errMsgCol)
+    val nullDf = Seq(("first row", None), ("second row", Some(true))).toDF("n", "cond")
+    checkAnswer(
+      nullDf.filter("cond = true").select(assert_true($"cond", $"cond")),
+      Row(null) :: Nil
+    )
+    val e2 = intercept[SparkException] {
+      nullDf.select(assert_true($"cond", $"n")).collect()
+    }
+    assert(e2.getCause.isInstanceOf[RuntimeException])
+    assert(e2.getCause.getMessage == "first row")
+
+    // assert_true(condition)
+    val intDf = Seq((0, 1)).toDF("a", "b")
+    checkAnswer(intDf.select(assert_true($"a" < $"b")), Row(null) :: Nil)
+    val e3 = intercept[SparkException] {
+      intDf.select(assert_true($"a" > $"b")).collect()
+    }
+    assert(e3.getCause.isInstanceOf[RuntimeException])
+    assert(e3.getCause.getMessage == "'('a > 'b)' is not true!")
+  }
+
+  test("raise_error") {
+    val strDf = Seq(("hello")).toDF("a")
+
+    // raise_error(str)
+    val e1 = intercept[SparkException] {
+      strDf.select(raise_error("error message")).collect()
+    }
+    assert(e1.getCause.isInstanceOf[RuntimeException])
+    assert(e1.getCause.getMessage == "error message")
+
+    // raise_error(col)
+    val e2 = intercept[SparkException] {
+      strDf.select(raise_error($"a")).collect()
+    }
+    assert(e2.getCause.isInstanceOf[RuntimeException])
+    assert(e2.getCause.getMessage == "hello")
   }
 }
