@@ -222,7 +222,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("dfwriter.jdbc") {
+  test("DataFrameWriter: jdbc") {
     withTable("h2.test.abc") {
       sql("CREATE TABLE h2.test.abc USING _ AS SELECT * FROM h2.test.people")
       val df1 = Seq(("evan", 3)).toDF("NAME", "ID")

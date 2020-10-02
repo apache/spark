@@ -808,25 +808,23 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     assertNotBucketed("jdbc")
     // connectionProperties should override settings in extraOptions.
     this.extraOptions ++= connectionProperties.asScala
+    // explicit url should override all
     this.extraOptions ++= Seq("url" -> url)
 
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, NonSessionCatalogAndIdentifier}
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     val session = df.sparkSession
-    format("jdbc")
+    this.source = "jdbc"
 
     session.sessionState.sqlParser.parseMultipartIdentifier(table) match {
       case nameParts @ NonSessionCatalogAndIdentifier(catalog, tableIdentifier) =>
         saveAsTable(catalog.asTableCatalog, tableIdentifier, nameParts)
 
-      case AsTableIdentifier(_) =>
+      case _ =>
+        // explicit dbtable should override all
         this.extraOptions ++= Seq("dbtable" -> table)
         saveToV1Source(None)
-
-      case other =>
-        throw new AnalysisException(
-          s"Couldn't find a catalog to handle the identifier ${other.quoted}.")
     }
   }
 
