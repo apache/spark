@@ -35,7 +35,7 @@ object DecrementLiterals extends Rule[LogicalPlan] {
 }
 
 class OptimizerSuite extends PlanTest {
-  test("Adjust maxIterations") {
+  test("Optimizer exceeds max iterations") {
     val iterations = 5
     val maxIterationsNotEnough = 3
     val maxIterationsEnough = 10
