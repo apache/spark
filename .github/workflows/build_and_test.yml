@@ -168,12 +168,10 @@ jobs:
         python3.8 -m pip list
     # SparkR
     - name: Install R 4.0
+      uses: r-lib/actions/setup-r@v1
       if: contains(matrix.modules, 'sparkr')
-      run: |
-        sudo sh -c "echo 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran40/' >> /etc/apt/sources.list"
-        curl -sL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xE298A3A825C0D65DFD57CBB651716619E084DAB9" | sudo apt-key add
-        sudo apt-get update
-        sudo apt-get install -y r-base r-base-dev libcurl4-openssl-dev
+      with:
+        r-version: 4.0
     - name: Install R packages
       if: contains(matrix.modules, 'sparkr')
       run: |
@@ -232,11 +230,9 @@ jobs:
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
         pip3 install flake8 'sphinx<3.1.0' numpy pydata_sphinx_theme ipython nbsphinx
     - name: Install R 4.0
-      run: |
-        sudo sh -c "echo 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran40/' >> /etc/apt/sources.list"
-        curl -sL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xE298A3A825C0D65DFD57CBB651716619E084DAB9" | sudo apt-key add
-        sudo apt-get update
-        sudo apt-get install -y r-base r-base-dev libcurl4-openssl-dev
+      uses: r-lib/actions/setup-r@v1
+      with:
+        r-version: 4.0
     - name: Install R linter dependencies and SparkR
       run: |
         sudo apt-get install -y libcurl4-openssl-dev
