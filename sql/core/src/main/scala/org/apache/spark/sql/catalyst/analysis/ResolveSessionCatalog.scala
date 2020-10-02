@@ -256,16 +256,14 @@ class ResolveSessionCatalog(
     case RenameTableStatement(TempViewOrV1Table(oldName), newName, isView) =>
       AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
 
-    case DescribeRelation(r @ ResolvedTable(_, ident, _: V1Table), partitionSpec, isExtended)
-        if isSessionCatalog(r.catalog) =>
+    case DescribeRelation(r @ ResolvedTable(_, ident, _: V1Table), partitionSpec, isExtended) =>
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
     case DescribeRelation(ResolvedView(ident), partitionSpec, isExtended) =>
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
-    case DescribeColumn(r @ ResolvedTable(_, _, _: V1Table), colNameParts, isExtended)
-        if isSessionCatalog(r.catalog) =>
+    case DescribeColumn(r @ ResolvedTable(_, _, _: V1Table), colNameParts, isExtended) =>
       DescribeColumnCommand(r.identifier.asTableIdentifier, colNameParts, isExtended)
 
     case DescribeColumn(ResolvedView(ident), colNameParts, isExtended) =>
@@ -322,7 +320,7 @@ class ResolveSessionCatalog(
           ignoreIfExists = c.ifNotExists)
       }
 
-    case RefreshTable(r @ ResolvedTable(_, _, _: V1Table)) if isSessionCatalog(r.catalog) =>
+    case RefreshTable(r @ ResolvedTable(_, _, _: V1Table)) =>
       RefreshTableCommand(r.identifier.asTableIdentifier)
 
     case RefreshTable(r: ResolvedView) =>
@@ -577,7 +575,7 @@ class ResolveSessionCatalog(
       }
 
     case ShowTableProperties(
-        r @ ResolvedTable(_, _, _: V1Table), propertyKey) if isSessionCatalog(r.catalog) =>
+        r @ ResolvedTable(_, _, _: V1Table), propertyKey) =>
       ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
 
     case ShowTableProperties(r: ResolvedView, propertyKey) =>
