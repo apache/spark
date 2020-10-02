@@ -57,32 +57,30 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Throws an exception with `expr`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('custom error message');
+       java.lang.RuntimeException
+       'custom error message'
+  """,
   since = "3.1.0")
-case class RaiseError(child: Expression) extends UnaryExpression {
+case class RaiseError(child: Expression) extends UnaryExpression with CodegenFallback {
 
+  override def foldable: Boolean = false
+  override def nullable: Boolean = false
   override def dataType: DataType = NullType
 
   override def prettyName: String = "raise_error"
 
-  protected override def nullSafeEval(input: Any): Unit = {
+  override def nullSafeEval(input: Any): Unit =
     throw new RuntimeException(input.toString)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c =>
-      s"""
-         | throw new RuntimeException(${c.toString});
-       """.stripMargin)
-  }
-
-  override def sql: String = s"raise_error(${child.sql})"
 }
 
 /**
  * A function throws an exception if 'condition' is not true.
  */
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Throws an exception if `expr` is not true.",
+@ExpressionDescription(  usage = "_FUNC_(expr) - Throws an exception if `expr` is not true.",
+
   examples = """
     Examples:
       > SELECT _FUNC_(0 < 1);
