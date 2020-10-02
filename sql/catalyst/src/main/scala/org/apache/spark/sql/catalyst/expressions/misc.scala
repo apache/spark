@@ -61,7 +61,7 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
     Examples:
       > SELECT _FUNC_('custom error message');
        java.lang.RuntimeException
-       'custom error message'
+       custom error message
   """,
   since = "3.1.0")
 case class RaiseError(child: Expression) extends UnaryExpression with CodegenFallback {
