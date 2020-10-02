@@ -791,7 +791,7 @@ class RowMatrix @Since("1.0.0") (
       "Cannot compute aggregate depth heuristic based on a zero-size object to aggregate")
 
     val maxDriverResultSizeInBytes = rows.conf.get[Long](MAX_RESULT_SIZE)
-    if (maxDriverResultSizeInBytes == 0) {
+    if (maxDriverResultSizeInBytes <= 0) {
       // Unlimited result size, so 1 is OK
       return 1
     }

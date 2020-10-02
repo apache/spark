@@ -122,7 +122,7 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(objectBiggerThanResultSize.getMessage.contains("it's bigger than maxResultSize"))
   }
 
-  test("getTreeAggregateIdealDepth with unlimited driver size") {
+  test("SPARK-33043: getTreeAggregateIdealDepth with unlimited driver size") {
     val originalMaxResultSize = sc.conf.get[Long](MAX_RESULT_SIZE)
     sc.conf.set(MAX_RESULT_SIZE, 0L)
     try {
