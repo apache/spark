@@ -479,7 +479,7 @@ object FunctionRegistry {
 
     // misc functions
     expression[AssertTrue]("assert_true"),
-    expression[RaiserError]("raise_error"),
+    expression[RaiseError]("raise_error"),
     expression[Crc32]("crc32"),
     expression[Md5]("md5"),
     expression[Uuid]("uuid"),

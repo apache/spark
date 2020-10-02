@@ -113,3 +113,11 @@ SELECT nvl(st.col1, "value"), count(*) FROM from tempView1 GROUP BY nvl(st.col1,
 struct<nvl(st.col1, value):string,FROM:bigint>
 -- !query output
 gamma	1
+
+
+-- !query
+SELECT assert_true(true), assert_true(boolean(1))
+-- !query schema
+struct<assert_true(true):null,assert_true(CAST(1 AS BOOLEAN)):null>
+-- !query output
+true true

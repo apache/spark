@@ -994,12 +994,12 @@ class TypeCoercionSuite extends AnalysisTest {
       If(Literal.create(null, BooleanType), Literal(1), Literal(1)))
 
     ruleTest(rule,
-      If(AssertTrue(trueLit), Literal(1), Literal(2)),
-      If(Cast(AssertTrue(trueLit), BooleanType), Literal(1), Literal(2)))
+      If(new AssertTrue(trueLit), Literal(1), Literal(2)),
+      If(Cast(new AssertTrue(trueLit), BooleanType), Literal(1), Literal(2)))
 
     ruleTest(rule,
-      If(AssertTrue(falseLit), Literal(1), Literal(2)),
-      If(Cast(AssertTrue(falseLit), BooleanType), Literal(1), Literal(2)))
+      If(new AssertTrue(falseLit), Literal(1), Literal(2)),
+      If(Cast(new AssertTrue(falseLit), BooleanType), Literal(1), Literal(2)))
 
     ruleTest(rule,
       If(trueLit, intLit, doubleLit),

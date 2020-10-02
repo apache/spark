@@ -58,20 +58,20 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Throws an exception with `expr`.",
   since = "3.1.0")
-case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class RaiseError(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = NullType
 
   override def prettyName: String = "raise_error"
 
-  protected override def nullSafeEval(input: Any): None = {
-    throw new RuntimeExpression(outputPrefix + input)
+  protected override def nullSafeEval(input: Any): Unit = {
+    throw new RuntimeException(input.toString)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c =>
       s"""
-         | throw new RuntimeException($c);
+         | throw new RuntimeException(${c.toString});
        """.stripMargin)
   }
 
@@ -89,16 +89,17 @@ case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCa
        NULL
   """,
   since = "2.0.0")
-case class AssertTrue(left: Expression, right: Expression, child: Expression) extends RuntimeReplaceable {
+case class AssertTrue(left: Expression, right: Expression, child: Expression)
+  extends RuntimeReplaceable {
 
   override def prettyName: String = "assert_true"
 
-  def this(left: Expression) = {
-    this(left, Literal(s"'${left.simpleString(SQLConf.get.maxToStringFields)}' is not true!"))
-  }
-
   def this(left: Expression, right: Expression) = {
     this(left, right, If(left, Literal(null), RaiseError(right)))
+  }
+
+  def this(left: Expression) = {
+    this(left, Literal(s"'${left.simpleString(SQLConf.get.maxToStringFields)}' is not true!"))
   }
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)

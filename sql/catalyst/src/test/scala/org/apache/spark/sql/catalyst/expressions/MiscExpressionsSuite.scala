@@ -26,22 +26,22 @@ import org.apache.spark.sql.types._
 
 class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  test("assert_true") {
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Literal.create(false, BooleanType)), null)
-    }
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Cast(Literal(0), BooleanType)), null)
-    }
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Literal.create(null, NullType)), null)
-    }
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Literal.create(null, BooleanType)), null)
-    }
-    checkEvaluation(AssertTrue(Literal.create(true, BooleanType)), null)
-    checkEvaluation(AssertTrue(Cast(Literal(1), BooleanType)), null)
-  }
+//  test("assert_true") {
+//    intercept[RuntimeException] {
+//      checkEvaluationWithOptimization(new AssertTrue(Literal.create(false, BooleanType)), null)
+//    }
+//    intercept[RuntimeException] {
+//      checkEvaluationWithOptimization(new AssertTrue(Cast(Literal(0), BooleanType)), null)
+//    }
+//    intercept[RuntimeException] {
+//      checkEvaluationWithOptimization(new AssertTrue(Literal.create(null, NullType)), null)
+//    }
+//    intercept[RuntimeException] {
+//      checkEvaluationWithOptimization(new AssertTrue(Literal.create(null, BooleanType)), null)
+//    }
+//    checkEvaluationWithOptimization(new AssertTrue(Literal.create(true, BooleanType)), null)
+//    checkEvaluationWithOptimization(new AssertTrue(Cast(Literal(1), BooleanType)), null)
+//  }
 
   test("uuid") {
     checkEvaluation(Length(Uuid(Some(0))), 36)
