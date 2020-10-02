@@ -15,13 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.jdbc.connection
+package org.apache.spark.security
 
-class OracleConnectionProviderSuite extends ConnectionProviderSuiteBase {
-  test("setAuthenticationConfigIfNeeded must set authentication if not set") {
-    val provider = new OracleConnectionProvider()
-    val driver = registerDriver(provider.driverClass)
-
-    testSecureConnectionProvider(provider, driver, options("jdbc:oracle:thin:@//localhost/xe"))
-  }
-}
+/**
+ * There are cases when global JVM security configuration must be modified.
+ * In order to avoid race the modification must be synchronized with this.
+ */
+object SecurityConfigurationLock

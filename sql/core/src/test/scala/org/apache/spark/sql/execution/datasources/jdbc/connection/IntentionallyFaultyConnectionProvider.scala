@@ -17,11 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc.connection
 
-class OracleConnectionProviderSuite extends ConnectionProviderSuiteBase {
-  test("setAuthenticationConfigIfNeeded must set authentication if not set") {
-    val provider = new OracleConnectionProvider()
-    val driver = registerDriver(provider.driverClass)
+import java.sql.{Connection, Driver}
 
-    testSecureConnectionProvider(provider, driver, options("jdbc:oracle:thin:@//localhost/xe"))
-  }
+import org.apache.spark.sql.jdbc.JdbcConnectionProvider
+
+private class IntentionallyFaultyConnectionProvider extends JdbcConnectionProvider {
+  IntentionallyFaultyConnectionProvider.constructed = true
+  throw new IllegalArgumentException("Intentional Exception")
+  override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
+  override def getConnection(driver: Driver, options: Map[String, String]): Connection = null
+}
+
+private object IntentionallyFaultyConnectionProvider {
+  var constructed = false
 }
