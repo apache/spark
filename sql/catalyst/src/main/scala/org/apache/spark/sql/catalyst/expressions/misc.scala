@@ -64,16 +64,30 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
        custom error message
   """,
   since = "3.1.0")
-case class RaiseError(child: Expression) extends UnaryExpression with CodegenFallback {
+case class RaiseError(child: Expression) extends UnaryExpression {
 
+  override def nullable: Boolean = true
   override def foldable: Boolean = false
-  override def nullable: Boolean = false
   override def dataType: DataType = NullType
 
   override def prettyName: String = "raise_error"
 
   override def nullSafeEval(input: Any): Unit =
     throw new RuntimeException(input.toString)
+
+  // if (true) is to avoid codegen compilation exception that statement is unreachable
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
+    ExprCode(
+      code = code"""${eval.code}
+                   |if (true) {
+                   |  throw new RuntimeException(${eval.value}.toString());
+                   |}
+                 """.stripMargin,
+      isNull = TrueLiteral,
+      value = JavaCode.defaultLiteral(dataType)
+    )
+  }
 }
 
 /**
