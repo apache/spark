@@ -26,6 +26,13 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types.{ArrayType, DecimalType, FloatType, ShortType}
 import org.apache.spark.tags.DockerTest
 
+/**
+ * To run this test suite for a specific version (e.g., postgres:13.0):
+ * {{{
+ *   POSTGRES_DOCKER_IMAGE_NAME=postgres:13.0
+ *     ./build/sbt -Pdocker-integration-tests "test-only *PostgresIntegrationSuite"
+ * }}}
+ */
 @DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
