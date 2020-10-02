@@ -136,7 +136,7 @@
     <kafka.version>2.6.0</kafka.version>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.1</parquet.version>
-    <orc.version>1.5.10</orc.version>
+    <orc.version>1.5.12</orc.version>
     <orc.classifier></orc.classifier>
     <hive.parquet.group>com.twitter</hive.parquet.group>
     <hive.parquet.version>1.6.0</hive.parquet.version>
