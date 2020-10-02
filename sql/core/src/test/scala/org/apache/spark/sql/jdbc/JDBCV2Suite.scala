@@ -221,4 +221,21 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
       checkAnswer(sql("SELECT name, id FROM h2.test.abc"), Row("bob", 4))
     }
   }
+
+  test("DataFrameReader: jdbc") {
+    withTable("h2.test.abc") {
+      sql("CREATE TABLE h2.test.abc USING _ AS SELECT * FROM h2.test.people")
+      val properties = new Properties()
+      val df1 = spark.read.jdbc(url, "h2.test.abc", properties)
+      checkAnswer(df1, Seq(Row("fred", 1), Row("mary", 2)))
+
+      val df2 = spark.read.jdbc(url, "h2.test.abc", "id", 0, 3, 3, properties)
+      checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
+      assert(df2.rdd.getNumPartitions === 3)
+
+      val parts = Array[String]("id < 2", "id >= 2")
+      val df3 = spark.read.jdbc(url, "h2.test.abc", parts, properties)
+      checkAnswer(df3, Seq(Row("fred", 1), Row("mary", 2)))
+    }
+  }
 }

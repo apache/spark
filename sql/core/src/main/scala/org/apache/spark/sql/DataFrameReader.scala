@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailureSafeParser
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsCatalogOptions, SupportsRead}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
@@ -298,7 +298,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         case _: SupportsRead if table.supports(BATCH_READ) =>
           Dataset.ofRows(
             sparkSession,
-            DataSourceV2Relation.create(table, catalog, ident, dsOptions))
+            DataSourceV2Relation.create(table, catalog, ident, dsOptions, Array.empty[Partition]))
 
         case _ => loadV1Source(paths: _*)
       }
@@ -333,9 +333,22 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     assertNoSpecifiedSchema("jdbc")
     // properties should override settings in extraOptions.
     this.extraOptions ++= properties.asScala
-    // explicit url and dbtable should override all
-    this.extraOptions ++= Seq(JDBCOptions.JDBC_URL -> url, JDBCOptions.JDBC_TABLE_NAME -> table)
-    format("jdbc").load()
+    // explicit url should override all
+    this.extraOptions ++= Seq(JDBCOptions.JDBC_URL -> url)
+
+    import sparkSession.sessionState.analyzer.{AsTableIdentifier, NonSessionCatalogAndIdentifier}
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+    this.source = "jdbc"
+    sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table) match {
+      case nameParts @ NonSessionCatalogAndIdentifier(_, _) =>
+        this.table(table)
+
+      case _ =>
+        // explicit dbtable should override all
+        this.extraOptions ++= Seq(JDBCOptions.JDBC_TABLE_NAME -> table)
+        load
+    }
   }
 
   /**
@@ -406,12 +419,23 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     assertNoSpecifiedSchema("jdbc")
     // connectionProperties should override settings in extraOptions.
     val params = extraOptions ++ connectionProperties.asScala
-    val options = new JDBCOptions(url, table, params)
     val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
       JDBCPartition(part, i) : Partition
     }
-    val relation = JDBCRelation(parts, options)(sparkSession)
-    sparkSession.baseRelationToDataFrame(relation)
+
+    import sparkSession.sessionState.analyzer.{AsTableIdentifier, NonSessionCatalogAndIdentifier}
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+    sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table) match {
+      case nameParts @ NonSessionCatalogAndIdentifier(_, _) =>
+        Dataset.ofRows(sparkSession, UnresolvedRelation(nameParts,
+          new CaseInsensitiveStringMap(params.toMap.asJava), partitions = parts))
+
+      case _ =>
+        val options = new JDBCOptions(url, table, params)
+        val relation = JDBCRelation(parts, options)(sparkSession)
+        Dataset.ofRows(sparkSession, LogicalRelation(relation))
+    }
   }
 
   /**

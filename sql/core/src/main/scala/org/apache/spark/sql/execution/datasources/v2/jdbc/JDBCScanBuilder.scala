@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
+import org.apache.spark.Partition
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
@@ -35,6 +36,8 @@ case class JDBCScanBuilder(
   private var pushedFilter = Array.empty[Filter]
 
   private var prunedSchema = schema
+
+  var partition = Array.empty[Partition]
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
@@ -64,7 +67,11 @@ case class JDBCScanBuilder(
   override def build(): Scan = {
     val resolver = session.sessionState.conf.resolver
     val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
-    val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
-    JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), prunedSchema, pushedFilter)
+    val part = if (partition.isEmpty) {
+      JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
+    } else {
+      partition
+    }
+    JDBCScan(JDBCRelation(schema, part, jdbcOptions)(session), prunedSchema, pushedFilter)
   }
 }

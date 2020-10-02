@@ -21,6 +21,7 @@ import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.Partition
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedRelation}
@@ -362,7 +363,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               }
           }
 
-          val relation = DataSourceV2Relation.create(table, catalog, ident, dsOptions)
+          val relation = DataSourceV2Relation.create(table, catalog, ident, dsOptions,
+            Array.empty[Partition])
           checkPartitioningMatchesV2Table(table)
           if (mode == SaveMode.Append) {
             runCommand(df.sparkSession, "save") {

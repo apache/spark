@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.{Scan, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCScanBuilder
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
 
@@ -32,6 +33,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case ScanOperation(project, filters, relation: DataSourceV2Relation) =>
       val scanBuilder = relation.table.asReadable.newScanBuilder(relation.options)
+      scanBuilder match {
+        case jdbcScanBuilder: JDBCScanBuilder => jdbcScanBuilder.partition = relation.partitions
+      }
 
       val normalizedFilters = DataSourceStrategy.normalizeExprs(filters, relation.output)
       val (normalizedFiltersWithSubquery, normalizedFiltersWithoutSubquery) =

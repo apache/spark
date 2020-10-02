@@ -25,6 +25,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
+import org.apache.spark.Partition
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
@@ -852,9 +853,9 @@ class Analyzer(
    */
   object ResolveTempViews extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case u @ UnresolvedRelation(ident, _, isStreaming) =>
+      case u @ UnresolvedRelation(ident, _, isStreaming, _) =>
         lookupTempView(ident, isStreaming).getOrElse(u)
-      case i @ InsertIntoStatement(UnresolvedRelation(ident, _, false), _, _, _, _) =>
+      case i @ InsertIntoStatement(UnresolvedRelation(ident, _, false, _), _, _, _, _) =>
         lookupTempView(ident)
           .map(view => i.copy(table = view))
           .getOrElse(i)
@@ -908,7 +909,7 @@ class Analyzer(
   object ResolveTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case u: UnresolvedRelation =>
-        lookupV2Relation(u.multipartIdentifier, u.options, u.isStreaming)
+        lookupV2Relation(u.multipartIdentifier, u.options, u.isStreaming, u.partitions)
           .map { relation =>
             val (catalog, ident) = relation match {
               case ds: DataSourceV2Relation => (ds.catalog, ds.identifier.get)
@@ -927,9 +928,9 @@ class Analyzer(
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
-      case i @ InsertIntoStatement(u @ UnresolvedRelation(_, _, false), _, _, _, _)
+      case i @ InsertIntoStatement(u @ UnresolvedRelation(_, _, false, _), _, _, _, _)
           if i.query.resolved =>
-        lookupV2Relation(u.multipartIdentifier, u.options, false)
+        lookupV2Relation(u.multipartIdentifier, u.options, false, Array.empty[Partition])
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
 
@@ -948,7 +949,8 @@ class Analyzer(
     private def lookupV2Relation(
         identifier: Seq[String],
         options: CaseInsensitiveStringMap,
-        isStreaming: Boolean): Option[LogicalPlan] =
+        isStreaming: Boolean,
+        partitions: Array[Partition]): Option[LogicalPlan] =
       expandRelationName(identifier) match {
         case NonSessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident) match {
@@ -957,7 +959,8 @@ class Analyzer(
                 Some(StreamingRelationV2(None, table.name, table, options,
                   table.schema.toAttributes, Some(catalog), Some(ident), None))
               } else {
-                Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), options))
+                Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), options,
+                  partitions))
               }
             case None => None
           }
@@ -999,7 +1002,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
       case i @ InsertIntoStatement(table, _, _, _, _) if i.query.resolved =>
         val relation = table match {
-          case u @ UnresolvedRelation(_, _, false) =>
+          case u @ UnresolvedRelation(_, _, false, _) =>
             lookupRelation(u.multipartIdentifier, u.options, false).getOrElse(u)
           case other => other
         }
@@ -1076,7 +1079,8 @@ class Analyzer(
               } else {
                 SubqueryAlias(
                   catalog.name +: ident.asMultipartIdentifier,
-                  DataSourceV2Relation.create(table, Some(catalog), Some(ident), options))
+                  DataSourceV2Relation.create(table, Some(catalog), Some(ident), options,
+                    Array.empty[Partition]))
               }
           }
           val key = catalog.name +: ident.namespace :+ ident.name

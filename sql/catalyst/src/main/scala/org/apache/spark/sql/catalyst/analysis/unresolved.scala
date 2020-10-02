@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.Partition
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
@@ -46,7 +47,8 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
 case class UnresolvedRelation(
     multipartIdentifier: Seq[String],
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
-    override val isStreaming: Boolean = false)
+    override val isStreaming: Boolean = false,
+    partitions: Array[Partition] = Array.empty[Partition])
   extends LeafNode with NamedRelation {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -64,9 +66,10 @@ object UnresolvedRelation {
   def apply(
       tableIdentifier: TableIdentifier,
       extraOptions: CaseInsensitiveStringMap,
-      isStreaming: Boolean): UnresolvedRelation = {
-    UnresolvedRelation(
-      tableIdentifier.database.toSeq :+ tableIdentifier.table, extraOptions, isStreaming)
+      isStreaming: Boolean,
+      partitions: Array[Partition]): UnresolvedRelation = {
+    UnresolvedRelation(tableIdentifier.database.toSeq :+ tableIdentifier.table,
+      extraOptions, isStreaming, partitions)
   }
 
   def apply(tableIdentifier: TableIdentifier): UnresolvedRelation =

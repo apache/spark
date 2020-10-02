@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.Partition
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
@@ -43,7 +44,8 @@ case class DataSourceV2Relation(
     output: Seq[AttributeReference],
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
-    options: CaseInsensitiveStringMap)
+    options: CaseInsensitiveStringMap,
+    partitions: Array[Partition] = Array.empty[Partition])
   extends LeafNode with MultiInstanceRelation with NamedRelation {
 
   import DataSourceV2Implicits._
@@ -146,16 +148,17 @@ object DataSourceV2Relation {
       table: Table,
       catalog: Option[CatalogPlugin],
       identifier: Option[Identifier],
-      options: CaseInsensitiveStringMap): DataSourceV2Relation = {
+      options: CaseInsensitiveStringMap,
+      partitions: Array[Partition]): DataSourceV2Relation = {
     val output = table.schema().toAttributes
-    DataSourceV2Relation(table, output, catalog, identifier, options)
+    DataSourceV2Relation(table, output, catalog, identifier, options, partitions)
   }
 
   def create(
       table: Table,
       catalog: Option[CatalogPlugin],
       identifier: Option[Identifier]): DataSourceV2Relation =
-    create(table, catalog, identifier, CaseInsensitiveStringMap.empty)
+    create(table, catalog, identifier, CaseInsensitiveStringMap.empty, Array.empty[Partition])
 
   /**
    * This is used to transform data source v2 statistics to logical.Statistics.

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisSuite, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, TableCapabilityCheck}
@@ -58,7 +58,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
   test("batch scan: check missing capabilities") {
     val e = intercept[AnalysisException] {
       TableCapabilityCheck.apply(
-        DataSourceV2Relation.create(CapabilityTable(), None, None, emptyMap)
+        DataSourceV2Relation.create(CapabilityTable(), None, None, emptyMap, Array.empty)
       )
     }
     assert(e.message.contains("does not support batch scan"))
@@ -92,7 +92,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
 
   test("AppendData: check missing capabilities") {
     val plan = AppendData.byName(
-      DataSourceV2Relation.create(CapabilityTable(), None, None, emptyMap),
+      DataSourceV2Relation.create(CapabilityTable(), None, None, emptyMap, Array.empty),
       TestRelation)
 
     val exc = intercept[AnalysisException]{
@@ -105,7 +105,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
   test("AppendData: check correct capabilities") {
     Seq(BATCH_WRITE, V1_BATCH_WRITE).foreach { write =>
       val plan = AppendData.byName(
-        DataSourceV2Relation.create(CapabilityTable(write), None, None, emptyMap),
+        DataSourceV2Relation.create(CapabilityTable(write), None, None, emptyMap, Array.empty),
         TestRelation)
 
       TableCapabilityCheck.apply(plan)
@@ -120,7 +120,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
       CapabilityTable(OVERWRITE_BY_FILTER)).foreach { table =>
 
       val plan = OverwriteByExpression.byName(
-        DataSourceV2Relation.create(table, None, None, emptyMap),
+        DataSourceV2Relation.create(table, None, None, emptyMap, Array.empty),
         TestRelation,
         Literal(true))
 
@@ -139,7 +139,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
       CapabilityTable(V1_BATCH_WRITE, OVERWRITE_BY_FILTER)).foreach { table =>
 
       val plan = OverwriteByExpression.byName(
-        DataSourceV2Relation.create(table, None, None, emptyMap),
+        DataSourceV2Relation.create(table, None, None, emptyMap, Array.empty),
         TestRelation,
         Literal(true))
 
@@ -154,7 +154,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
       CapabilityTable(OVERWRITE_BY_FILTER)).foreach { table =>
 
       val plan = OverwriteByExpression.byName(
-        DataSourceV2Relation.create(table, None, None, emptyMap),
+        DataSourceV2Relation.create(table, None, None, emptyMap, Array.empty),
         TestRelation,
         EqualTo(AttributeReference("x", LongType)(), Literal(5)))
 
@@ -170,7 +170,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
     Seq(BATCH_WRITE, V1_BATCH_WRITE).foreach { write =>
       val table = CapabilityTable(write, OVERWRITE_BY_FILTER)
       val plan = OverwriteByExpression.byName(
-        DataSourceV2Relation.create(table, None, None, emptyMap),
+        DataSourceV2Relation.create(table, None, None, emptyMap, Array.empty),
         TestRelation,
         EqualTo(AttributeReference("x", LongType)(), Literal(5)))
 
@@ -184,7 +184,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
       CapabilityTable(OVERWRITE_DYNAMIC)).foreach { table =>
 
       val plan = OverwritePartitionsDynamic.byName(
-        DataSourceV2Relation.create(table, None, None, emptyMap),
+        DataSourceV2Relation.create(table, None, None, emptyMap, Array.empty),
         TestRelation)
 
       val exc = intercept[AnalysisException] {
@@ -198,7 +198,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
   test("OverwritePartitionsDynamic: check correct capabilities") {
     val table = CapabilityTable(BATCH_WRITE, OVERWRITE_DYNAMIC)
     val plan = OverwritePartitionsDynamic.byName(
-      DataSourceV2Relation.create(table, None, None, emptyMap),
+      DataSourceV2Relation.create(table, None, None, emptyMap, Array.empty),
       TestRelation)
 
     TableCapabilityCheck.apply(plan)
