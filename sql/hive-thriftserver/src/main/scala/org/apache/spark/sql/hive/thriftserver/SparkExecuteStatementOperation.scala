@@ -203,7 +203,7 @@ private[hive] class SparkExecuteStatementOperation(
 
     if (queryTimeout > 0) {
       Executors.newSingleThreadScheduledExecutor.schedule(new Runnable {
-          override def run(): Unit = timeoutCancel()
+          override def run(): Unit = cancel(OperationState.TIMEDOUT)
         }, queryTimeout, TimeUnit.SECONDS)
     }
 
@@ -335,26 +335,19 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  override def cancel(): Unit = {
+  private def cancel(stateAfterCancel: OperationState): Unit = {
     synchronized {
       if (!getStatus.getState.isTerminal) {
         logInfo(s"Cancel query with $statementId")
-        setState(OperationState.CANCELED)
+        setState(stateAfterCancel)
         cleanup()
         HiveThriftServer2.eventManager.onStatementCanceled(statementId)
       }
     }
   }
 
-  private def timeoutCancel(): Unit = {
-    synchronized {
-      if (!getStatus.getState.isTerminal) {
-        setState(OperationState.TIMEDOUT)
-        cleanup()
-        logInfo(s"Timeout and Cancel query with $statementId ")
-        HiveThriftServer2.eventManager.onStatementCanceled(statementId)
-      }
-    }
+  override def cancel(): Unit = {
+    cancel(OperationState.CANCELED)
   }
 
   override protected def cleanup(): Unit = {
