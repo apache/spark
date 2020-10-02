@@ -42,10 +42,10 @@ public class ErrorHandlerSuite {
   @Test
   public void testPushErrorLogging() {
     ErrorHandler.BlockPushErrorHandler handler = new ErrorHandler.BlockPushErrorHandler();
-    assert (!handler.shouldLogError(new RuntimeException(
+    assertFalse(handler.shouldLogError(new RuntimeException(
         new IllegalArgumentException(BlockPushException.TOO_LATE_MESSAGE_SUFFIX))));
-    assert (!handler.shouldLogError(new RuntimeException(
+    assertFalse(handler.shouldLogError(new RuntimeException(
         new IllegalArgumentException(BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX))));
-    assert (handler.shouldLogError(new Throwable()));
+    assertTrue(handler.shouldLogError(new Throwable()));
   }
 }
