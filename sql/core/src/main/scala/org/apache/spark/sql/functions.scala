@@ -1431,6 +1431,7 @@ object functions {
    * @return inverse hyperbolic cosine of `e`
    *
    * @group math_funcs
+   * @since 3.1.0
    */
   def acosh(e: Column): Column = withExpr { Acosh(e.expr) }
 
@@ -1438,6 +1439,7 @@ object functions {
    * @return inverse hyperbolic cosine of `columnName`
    *
    * @group math_funcs
+   * @since 3.1.0
    */
   def acosh(columnName: String): Column = acosh(Column(columnName))
 
@@ -1461,6 +1463,7 @@ object functions {
    * @return inverse hyperbolic sine of `e`
    *
    * @group math_funcs
+   * @since 3.1.0
    */
   def asinh(e: Column): Column = withExpr { Asinh(e.expr) }
 
@@ -1468,6 +1471,7 @@ object functions {
    * @return inverse hyperbolic sine of `columnName`
    *
    * @group math_funcs
+   * @since 3.1.0
    */
   def asinh(columnName: String): Column = asinh(Column(columnName))
 
@@ -1604,6 +1608,7 @@ object functions {
    * @return inverse hyperbolic tangent of `e`
    *
    * @group math_funcs
+   * @since 3.1.0
    */
   def atanh(e: Column): Column = withExpr { Atanh(e.expr) }
 
@@ -1611,6 +1616,7 @@ object functions {
    * @return inverse hyperbolic tangent of `columnName`
    *
    * @group math_funcs
+   * @since 3.1.0
    */
   def atanh(columnName: String): Column = atanh(Column(columnName))
 
