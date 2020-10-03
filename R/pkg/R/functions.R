@@ -4480,14 +4480,14 @@ setMethod("timestamp_seconds",
 #' @aliases vector_to_array vector_to_array,Column-method
 #' @note vector_to_array since 3.1.0
 setMethod("vector_to_array",
-    signature(x = "Column"),
-    function(x, dtype = c("float32", "float64")) {
-        dtype <- match.arg(dtype)
-        jc <- callJStatic(
-            "org.apache.spark.ml.functions",
-            "vector_to_array",
-            x@jc,
-            dtype
-        )
-        column(jc)
-    })
+          signature(x = "Column"),
+          function(x, dtype = c("float32", "float64")) {
+            dtype <- match.arg(dtype)
+            jc <- callJStatic(
+              "org.apache.spark.ml.functions",
+              "vector_to_array",
+              x@jc,
+              dtype
+            )
+            column(jc)
+          })
