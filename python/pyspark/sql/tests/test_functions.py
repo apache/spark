@@ -415,6 +415,25 @@ class FunctionsTests(ReusedSQLTestCase):
             df.select(assert_true(df.id < 2, 5))
         self.assertEquals("errMsg should be a Column or a str, got <class 'int'>", str(cm.exception))
 
+    def test_raise_error(self):
+        from pyspark.sql.functions import raise_error
+
+        df = self.spark.createDataFrame([Row(id="foobar")])
+
+        with self.assertRaises(Py4JJavaError) as cm:
+            df.select(raise_error(df.id)).collect()
+        self.assertIn("java.lang.RuntimeException", str(cm.exception))
+        self.assertIn("foobar", str(cm.exception))
+
+        with self.assertRaises(Py4JJavaError) as cm:
+            df.select(raise_error("barfoo")).collect()
+        self.assertIn("java.lang.RuntimeException", str(cm.exception))
+        self.assertIn("barfoo", str(cm.exception))
+
+        with self.assertRaises(TypeError) as cm:
+            df.select(raise_error(None))
+        self.assertEquals("errMsg should be a Column or a str, got <class 'NoneType'>", str(cm.exception))
+
 
 if __name__ == "__main__":
     import unittest

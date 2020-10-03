@@ -3453,13 +3453,13 @@ def assert_true(col, errMsg = None):
 
     >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
     >>> df.select(assert_true(df.a < df.b).alias('r')).collect()
-    [Row(r=[null])]
+    [Row(r=None)]
     >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
     >>> df.select(assert_true(df.a < df.b, df.a).alias('r')).collect()
-    [Row(r=[null])]
+    [Row(r=None)]
     >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
     >>> df.select(assert_true(df.a < df.b, 'error').alias('r')).collect()
-    [Row(r=[null])]
+    [Row(r=None)]
     """
     sc = SparkContext._active_spark_context
     if errMsg is None:
@@ -3481,10 +3481,6 @@ def assert_true(col, errMsg = None):
 def raise_error(errMsg):
     """
     Throws an exception with the provided error message.
-
-    >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
-    >>> df.select(raise_error(df.a).alias('r')).collect()
-    java.lang.RuntimeException
     """
     if not isinstance(errMsg, (str, Column)):
         raise TypeError(
