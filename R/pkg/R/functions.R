@@ -4451,10 +4451,10 @@ setMethod("current_timestamp",
 #' @aliases timestamp_seconds timestamp_seconds,Column-method
 #' @note timestamp_seconds since 3.1.0
 setMethod("timestamp_seconds",
-    signature(x = "Column"),
-    function(x) {
-        jc <- callJStatic(
-            "org.apache.spark.sql.functions", "timestamp_seconds", x@jc
-        )
-        column(jc)
-    })
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic(
+              "org.apache.spark.sql.functions", "timestamp_seconds", x@jc
+            )
+            column(jc)
+          })
