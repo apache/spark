@@ -811,7 +811,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     // explicit url should override all
     this.extraOptions ++= Seq("url" -> url)
 
-    import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, NonSessionCatalogAndIdentifier}
+    import df.sparkSession.sessionState.analyzer.NonSessionCatalogAndIdentifier
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     val session = df.sparkSession
