@@ -336,8 +336,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     // explicit url should override all
     this.extraOptions ++= Seq(JDBCOptions.JDBC_URL -> url)
 
-    import sparkSession.sessionState.analyzer.{AsTableIdentifier, NonSessionCatalogAndIdentifier}
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    import sparkSession.sessionState.analyzer.NonSessionCatalogAndIdentifier
 
     this.source = "jdbc"
     if (table.contains(" ")) { // if table is not a table name, e.g. a SELECT statement
@@ -428,8 +427,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       JDBCPartition(part, i) : Partition
     }
 
-    import sparkSession.sessionState.analyzer.{AsTableIdentifier, NonSessionCatalogAndIdentifier}
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    import sparkSession.sessionState.analyzer.NonSessionCatalogAndIdentifier
 
     sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table) match {
       case nameParts @ NonSessionCatalogAndIdentifier(_, _) =>
