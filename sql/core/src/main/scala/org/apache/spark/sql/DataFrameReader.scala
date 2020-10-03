@@ -340,14 +340,19 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     this.source = "jdbc"
-    sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table) match {
-      case nameParts @ NonSessionCatalogAndIdentifier(_, _) =>
-        this.table(table)
-
-      case _ =>
-        // explicit dbtable should override all
-        this.extraOptions ++= Seq(JDBCOptions.JDBC_TABLE_NAME -> table)
-        load
+    if (table.contains(" ")) { // if table is not a table name, e.g. a SELECT statement
+      // explicit dbtable should override all
+      this.extraOptions ++= Seq(JDBCOptions.JDBC_TABLE_NAME -> table)
+      load
+    } else {
+      sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table) match {
+        case nameParts@NonSessionCatalogAndIdentifier(_, _) =>
+          this.table(table)
+        case _ =>
+          // explicit dbtable should override all
+          this.extraOptions ++= Seq(JDBCOptions.JDBC_TABLE_NAME -> table)
+          load
+      }
     }
   }
 
