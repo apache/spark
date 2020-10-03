@@ -161,7 +161,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("atanh") {
     testOneToOneMathFunction(atanh,
-      (x: Double) => (0.5 * math.log1p(x) / math.log1p(-x)) )
+      (x: Double) => (0.5 * (math.log1p(x) - math.log1p(-x))) )
   }
 
   test("degrees") {
