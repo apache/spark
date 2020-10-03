@@ -20,9 +20,14 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.types.{ArrayType, StructType}
 
 /**
  * Simplify redundant json related expressions.
+ *
+ * The optimization includes:
+ * 1. JsonToStructs(StructsToJson(child)) => child.
+ * 2. Prune unnecessary columns from GetStructField/GetArrayStructFields + JsonToStructs.
  */
 object OptimizeJsonExprs extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -38,6 +43,17 @@ object OptimizeJsonExprs extends Rule[LogicalPlan] {
         // so `JsonToStructs` might throw error in runtime. Thus we cannot optimize
         // this case similarly.
         child
+
+      case g @ GetStructField(j @ JsonToStructs(schema: StructType, _, _, _), ordinal, _)
+          if schema.length > 1 =>
+        val prunedSchema = StructType(Seq(schema(ordinal)))
+        g.copy(child = j.copy(schema = prunedSchema), ordinal = 0)
+
+      case g @ GetArrayStructFields(j @ JsonToStructs(schema: ArrayType, _, _, _), _, _, _, _)
+          if schema.elementType.asInstanceOf[StructType].length > 1 =>
+        val prunedSchema = ArrayType(StructType(Seq(g.field)), g.containsNull)
+        g.copy(child = j.copy(schema = prunedSchema), ordinal = 0, numFields = 1)
+
     }
   }
 }
