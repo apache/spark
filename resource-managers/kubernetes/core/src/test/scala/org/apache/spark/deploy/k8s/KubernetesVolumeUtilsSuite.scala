@@ -96,7 +96,7 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(volumeSpec.mountReadOnly === false)
   }
 
-  test("Fails on missing mount key") {
+  test("Fails on missing mount key in emptyDir") {
     val sparkConf = new SparkConf(false)
     sparkConf.set("test.emptyDir.volumeName.mnt.path", "/path")
 
@@ -106,7 +106,7 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(e.getMessage.contains("emptyDir.volumeName.mount.path"))
   }
 
-  test("Fails on missing option key") {
+  test("Fails on missing option key in hostPath") {
     val sparkConf = new SparkConf(false)
     sparkConf.set("test.hostPath.volumeName.mount.path", "/path")
     sparkConf.set("test.hostPath.volumeName.mount.readOnly", "true")
@@ -116,6 +116,18 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
       KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.")
     }
     assert(e.getMessage.contains("hostPath.volumeName.options.path"))
+  }
+
+  test("Fails on missing option key in persistentVolumeClaim") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.persistentVolumeClaim.volumeName.mount.path", "/path")
+    sparkConf.set("test.persistentVolumeClaim.volumeName.mount.readOnly", "true")
+    sparkConf.set("test.persistentVolumeClaim.volumeName.options.clamName", "claimeName")
+
+    val e = intercept[NoSuchElementException] {
+      KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.")
+    }
+    assert(e.getMessage.contains("persistentVolumeClaim.volumeName.options.claimName"))
   }
 
   test("Parses read-only nfs volumes correctly") {
@@ -148,7 +160,7 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
       KubernetesNFSVolumeConf("/share", "nfs.example.com"))
   }
 
-  test("Fails on missing path option") {
+  test("Fails on missing path option in nfs") {
     val sparkConf = new SparkConf(false)
     sparkConf.set("test.nfs.volumeName.mount.path", "/path")
     sparkConf.set("test.nfs.volumeName.mount.readOnly", "true")
@@ -160,7 +172,7 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(e.getMessage.contains("nfs.volumeName.options.path"))
   }
 
-  test("Fails on missing server option") {
+  test("Fails on missing server option in nfs") {
     val sparkConf = new SparkConf(false)
     sparkConf.set("test.nfs.volumeName.mount.path", "/path")
     sparkConf.set("test.nfs.volumeName.mount.readOnly", "true")

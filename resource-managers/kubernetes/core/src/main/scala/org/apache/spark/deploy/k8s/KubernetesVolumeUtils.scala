@@ -16,8 +16,11 @@
  */
 package org.apache.spark.deploy.k8s
 
+import scala.util.Try
+
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
+
 
 private[spark] object KubernetesVolumeUtils {
   /**
@@ -38,7 +41,7 @@ private[spark] object KubernetesVolumeUtils {
       KubernetesVolumeSpec(
         volumeName = volumeName,
         mountPath = properties(pathKey),
-        mountSubPath = properties.get(subPathKey).getOrElse(""),
+        mountSubPath = properties.getOrElse(subPathKey, ""),
         mountReadOnly = properties.get(readOnlyKey).exists(_.toBoolean),
         volumeConf = parseVolumeSpecificConf(properties, volumeType, volumeName))
     }.toSeq
@@ -67,17 +70,31 @@ private[spark] object KubernetesVolumeUtils {
     volumeType match {
       case KUBERNETES_VOLUMES_HOSTPATH_TYPE =>
         val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY"
-        KubernetesHostPathVolumeConf(options(pathKey))
+        Try(KubernetesHostPathVolumeConf(options(pathKey)))
+          .fold(
+            _ => throw new NoSuchElementException(s"When using $KUBERNETES_VOLUMES_HOSTPATH_TYPE " +
+              "Kubernetes volumes, it is necessary to define " +
+              s"$KUBERNETES_VOLUMES_HOSTPATH_TYPE.volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY" +
+              s" property"),
+            kubernetesHostPathVolumeConf => kubernetesHostPathVolumeConf
+          )
 
       case KUBERNETES_VOLUMES_PVC_TYPE =>
         val claimNameKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY"
         val storageClassKey =
           s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_CLAIM_STORAGE_CLASS_KEY"
         val sizeLimitKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY"
-        KubernetesPVCVolumeConf(
+        Try(KubernetesPVCVolumeConf(
           options(claimNameKey),
           options.get(storageClassKey),
-          options.get(sizeLimitKey))
+          options.get(sizeLimitKey)))
+          .fold(
+            _ => throw new NoSuchElementException(s"When using $KUBERNETES_VOLUMES_PVC_TYPE " +
+              "Kubernetes volumes, it is necessary to define " +
+              s"$KUBERNETES_VOLUMES_PVC_TYPE.volumeName.$KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY"
+              + s" property"),
+            kubernetesPVCVolumeConf => kubernetesPVCVolumeConf
+          )
 
       case KUBERNETES_VOLUMES_EMPTYDIR_TYPE =>
         val mediumKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY"
@@ -87,9 +104,17 @@ private[spark] object KubernetesVolumeUtils {
       case KUBERNETES_VOLUMES_NFS_TYPE =>
         val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY"
         val serverKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY"
-        KubernetesNFSVolumeConf(
+        Try(KubernetesNFSVolumeConf(
           options(pathKey),
-          options(serverKey))
+          options(serverKey)))
+          .fold(
+            _ => throw new NoSuchElementException(s"When using $KUBERNETES_VOLUMES_NFS_TYPE " +
+              "Kubernetes volumes, it is necessary to define " +
+              s"$KUBERNETES_VOLUMES_NFS_TYPE.volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY and " +
+              s"$KUBERNETES_VOLUMES_NFS_TYPE.volumeName.$KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY" +
+              s" properties"),
+            kubernetesNFSVolumeConf => kubernetesNFSVolumeConf
+          )
 
       case _ =>
         throw new IllegalArgumentException(s"Kubernetes Volume type `$volumeType` is not supported")
