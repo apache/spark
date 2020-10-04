@@ -1164,6 +1164,10 @@ setGeneric("months_between", function(y, x, ...) { standardGeneric("months_betwe
 #' @rdname count
 setGeneric("n", function(x) { standardGeneric("n") })
 
+#' @rdname column_window_functions
+#' @name NULL
+setGeneric("nth_value", function(x, offset, ...) { standardGeneric("nth_value") })
+
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("nanvl", function(y, x) { standardGeneric("nanvl") })

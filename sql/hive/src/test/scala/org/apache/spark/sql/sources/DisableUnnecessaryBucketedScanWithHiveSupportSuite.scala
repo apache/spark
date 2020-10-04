@@ -15,13 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.jdbc.connection
+package org.apache.spark.sql.sources
 
-class OracleConnectionProviderSuite extends ConnectionProviderSuiteBase {
-  test("setAuthenticationConfigIfNeeded must set authentication if not set") {
-    val provider = new OracleConnectionProvider()
-    val driver = registerDriver(provider.driverClass)
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
-    testSecureConnectionProvider(provider, driver, options("jdbc:oracle:thin:@//localhost/xe"))
+class DisableUnnecessaryBucketedScanWithHiveSupportSuite
+  extends DisableUnnecessaryBucketedScanSuite
+  with TestHiveSingleton {
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    assert(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")
   }
 }

@@ -25,10 +25,17 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.{BooleanType, ByteType, ShortType, StructType}
 import org.apache.spark.tags.DockerTest
 
+/**
+ * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.4.0):
+ * {{{
+ *   DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.4.0
+ *     ./build/sbt -Pdocker-integration-tests "test-only *DB2IntegrationSuite"
+ * }}}
+ */
 @DockerTest
 class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = "ibmcom/db2:11.5.0.0a"
+    override val imageName = sys.env.getOrElse("DB2_DOCKER_IMAGE_NAME", "ibmcom/db2:11.5.4.0")
     override val env = Map(
       "DB2INST1_PASSWORD" -> "rootpass",
       "LICENSE" -> "accept",

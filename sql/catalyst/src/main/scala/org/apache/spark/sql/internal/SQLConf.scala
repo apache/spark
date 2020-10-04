@@ -951,6 +951,17 @@ object SQLConf {
     .checkValue(_ > 0, "the value of spark.sql.sources.bucketing.maxBuckets must be greater than 0")
     .createWithDefault(100000)
 
+  val AUTO_BUCKETED_SCAN_ENABLED =
+    buildConf("spark.sql.sources.bucketing.autoBucketedScan.enabled")
+      .doc("When true, decide whether to do bucketed scan on input tables based on query plan " +
+        "automatically. Do not use bucketed scan if 1. query does not have operators to utilize " +
+        "bucketing (e.g. join, group-by, etc), or 2. there's an exchange operator between these " +
+        s"operators and table scan. Note when '${BUCKETING_ENABLED.key}' is set to " +
+        "false, this configuration does not take any effect.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
@@ -3163,6 +3174,8 @@ class SQLConf extends Serializable with Logging {
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 
   def bucketingMaxBuckets: Int = getConf(SQLConf.BUCKETING_MAX_BUCKETS)
+
+  def autoBucketedScanEnabled: Boolean = getConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)

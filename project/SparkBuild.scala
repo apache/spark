@@ -94,21 +94,6 @@ object SparkBuild extends PomBuild {
       case Some(v) =>
         v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
-
-    // TODO: revisit for Scala 2.13 support
-    /*
-    Option(System.getProperty("scala.version"))
-      .filter(_.startsWith("2.11"))
-      .foreach { versionString =>
-        System.setProperty("scala-2.11", "true")
-      }
-    if (System.getProperty("scala-2.11") == "") {
-      // To activate scala-2.10 profile, replace empty property value to non-empty value
-      // in the same way as Maven which handles -Dname as -Dname=true before executes build process.
-      // see: https://github.com/apache/maven/blob/maven-3.0.4/maven-embedder/src/main/java/org/apache/maven/cli/MavenCli.java#L1082
-      System.setProperty("scala-2.11", "true")
-    }
-     */
     profiles
   }
 
@@ -965,17 +950,6 @@ object CopyDependencies {
 
 object TestSettings {
   import BuildCommons._
-
-  // TODO revisit for Scala 2.13 support
-  private val scalaBinaryVersion = "2.12"
-    /*
-    if (System.getProperty("scala-2.11") == "true") {
-      "2.11"
-    } else {
-      "2.12"
-    }
-     */
-
   private val defaultExcludedTags = Seq("org.apache.spark.tags.ChromeUITest")
 
   lazy val settings = Seq (
@@ -988,7 +962,7 @@ object TestSettings {
         (fullClasspath in Test).value.files.map(_.getAbsolutePath)
           .mkString(File.pathSeparator).stripSuffix(File.pathSeparator),
       "SPARK_PREPEND_CLASSES" -> "1",
-      "SPARK_SCALA_VERSION" -> scalaBinaryVersion,
+      "SPARK_SCALA_VERSION" -> scalaBinaryVersion.value,
       "SPARK_TESTING" -> "1",
       "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home"))),
     javaOptions in Test += s"-Djava.io.tmpdir=$testTempDir",
