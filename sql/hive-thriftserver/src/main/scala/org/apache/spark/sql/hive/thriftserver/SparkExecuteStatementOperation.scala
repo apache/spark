@@ -203,7 +203,10 @@ private[hive] class SparkExecuteStatementOperation(
 
     if (queryTimeout > 0) {
       Executors.newSingleThreadScheduledExecutor.schedule(new Runnable {
-          override def run(): Unit = cancel(OperationState.TIMEDOUT)
+          override def run(): Unit = {
+            logInfo(s"Query with $statementId timed out after $queryTimeout seconds")
+            cancel(OperationState.TIMEDOUT)
+          }
         }, queryTimeout, TimeUnit.SECONDS)
     }
 
