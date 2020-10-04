@@ -28,10 +28,36 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
  * The optimization includes:
  * 1. JsonToStructs(StructsToJson(child)) => child.
  * 2. Prune unnecessary columns from GetStructField/GetArrayStructFields + JsonToStructs.
+ * 3  struct(from_json.col1, from_json.col2, from_json.col3...) => struct(from_json)
  */
 object OptimizeJsonExprs extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case p => p.transformExpressions {
+
+      case c: CreateNamedStruct
+        if c.valExprs.forall(v => v.isInstanceOf[GetStructField] &&
+          v.asInstanceOf[GetStructField].child.isInstanceOf[JsonToStructs]) =>
+        val jsonToStructs = c.valExprs.map(_.children(0))
+        val semanticEqual = jsonToStructs.tail.forall(jsonToStructs.head.semanticEquals(_))
+        val sameFieldName = c.names.zip(c.valExprs).forall {
+          case (name, valExpr: GetStructField) =>
+            name.toString == valExpr.childSchema(valExpr.ordinal).name
+          case (_, _) => false
+        }
+
+        // If we create struct from various fields of the same `JsonToStructs` and we don't
+        // alias field names.
+        if (semanticEqual && sameFieldName) {
+          val fromJson = jsonToStructs.head.asInstanceOf[JsonToStructs].copy(schema = c.dataType)
+          val nullFields = c.children.grouped(2).map {
+            case Seq(name, value) => Seq(name, Literal(null, value.dataType))
+          }.flatten.toSeq
+
+          If(IsNull(fromJson.child), c.copy(children = nullFields), KnownNotNull(fromJson))
+        } else {
+          c
+        }
+
       case jsonToStructs @ JsonToStructs(_, options1,
         StructsToJson(options2, child, timeZoneId2), timeZoneId1)
           if options1.isEmpty && options2.isEmpty && timeZoneId1 == timeZoneId2 &&
