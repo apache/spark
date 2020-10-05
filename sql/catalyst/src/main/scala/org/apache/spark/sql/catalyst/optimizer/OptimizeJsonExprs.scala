@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
  * The optimization includes:
  * 1. JsonToStructs(StructsToJson(child)) => child.
  * 2. Prune unnecessary columns from GetStructField/GetArrayStructFields + JsonToStructs.
- * 3  struct(from_json.col1, from_json.col2, from_json.col3...) => struct(from_json)
+ * 3. struct(from_json.col1, from_json.col2, from_json.col3...) => struct(from_json)
  */
 object OptimizeJsonExprs extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -37,7 +37,7 @@ object OptimizeJsonExprs extends Rule[LogicalPlan] {
       case c: CreateNamedStruct
         if c.valExprs.forall(v => v.isInstanceOf[GetStructField] &&
           v.asInstanceOf[GetStructField].child.isInstanceOf[JsonToStructs]) =>
-        val jsonToStructs = c.valExprs.map(_.children(0))
+        val jsonToStructs = c.valExprs.map(_.children.head)
         val semanticEqual = jsonToStructs.tail.forall(jsonToStructs.head.semanticEquals(_))
         val sameFieldName = c.names.zip(c.valExprs).forall {
           case (name, valExpr: GetStructField) =>
@@ -45,13 +45,17 @@ object OptimizeJsonExprs extends Rule[LogicalPlan] {
           case (_, _) => false
         }
 
+        // Although `CreateNamedStruct` allows duplicated field names, e.g. "a int, a int",
+        // `JsonToStructs` does not support parsing json with duplicated field names.
+        val duplicateFields = c.names.map(_.toString).distinct.length != c.names.length
+
         // If we create struct from various fields of the same `JsonToStructs` and we don't
-        // alias field names.
-        if (semanticEqual && sameFieldName) {
+        // alias field names and there is not duplicated fields in the struct.
+        if (semanticEqual && sameFieldName && !duplicateFields) {
           val fromJson = jsonToStructs.head.asInstanceOf[JsonToStructs].copy(schema = c.dataType)
-          val nullFields = c.children.grouped(2).map {
+          val nullFields = c.children.grouped(2).flatMap {
             case Seq(name, value) => Seq(name, Literal(null, value.dataType))
-          }.flatten.toSeq
+          }.toSeq
 
           If(IsNull(fromJson.child), c.copy(children = nullFields), KnownNotNull(fromJson))
         } else {

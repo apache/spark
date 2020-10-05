@@ -233,5 +233,17 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
         "a1", GetStructField(JsonToStructs(field1, options, 'json), 0),
         "b", GetStructField(JsonToStructs(field2, options, 'json), 0)).as("struct")).analyze
     comparePlans(optimized2, expected2)
+
+    val query3 = testRelation2
+      .select(namedStruct(
+        "a", GetStructField(JsonToStructs(schema, options, 'json), 0),
+        "a", GetStructField(JsonToStructs(schema, options, 'json), 0)).as("struct"))
+    val optimized3 = Optimizer.execute(query3.analyze)
+
+    val expected3 = testRelation2
+      .select(namedStruct(
+        "a", GetStructField(JsonToStructs(field1, options, 'json), 0),
+        "a", GetStructField(JsonToStructs(field1, options, 'json), 0)).as("struct")).analyze
+    comparePlans(optimized3, expected3)
   }
 }
