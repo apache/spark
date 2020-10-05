@@ -3145,11 +3145,6 @@
     </profile>
 
     <profile>
-      <id>hive-1.2</id>
-      <!-- Exists only for backward compatibility. No-op. -->
-    </profile>
-
-    <profile>
       <id>hive-2.3</id>
       <!-- Default hive profile. Uses global properties. -->
     </profile>
