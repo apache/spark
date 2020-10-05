@@ -849,7 +849,7 @@ setGeneric("ascii", function(x) { standardGeneric("ascii") })
 
 #' @rdname column_misc_functions
 #' @name NULL
-setGeneric("assert_true", function(x, ...) { standardGeneric("assert_true") })
+setGeneric("assert_true", function(x, errMsg = NULL) { standardGeneric("assert_true") })
 
 #' @param x Column to compute on or a GroupedData object.
 #' @param ... additional argument(s) when \code{x} is a GroupedData object.
