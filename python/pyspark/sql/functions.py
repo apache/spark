@@ -1491,6 +1491,7 @@ def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
 
 # ---------------------------- misc functions ----------------------------------
 
+
 @since(1.5)
 def crc32(col):
     """
@@ -1568,6 +1569,57 @@ def xxhash64(*cols):
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.xxhash64(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
+
+
+@since(3.1)
+def assert_true(col, errMsg = None):
+    """
+    Returns null if the input column is true; throws an exception with the provided error message
+    otherwise.
+
+    >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
+    >>> df.select(assert_true(df.a < df.b).alias('r')).collect()
+    [Row(r=None)]
+    >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
+    >>> df.select(assert_true(df.a < df.b, df.a).alias('r')).collect()
+    [Row(r=None)]
+    >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
+    >>> df.select(assert_true(df.a < df.b, 'error').alias('r')).collect()
+    [Row(r=None)]
+    """
+    sc = SparkContext._active_spark_context
+    if errMsg is None:
+        return Column(sc._jvm.functions.assert_true(_to_java_column(col)))
+    if not isinstance(errMsg, (str, Column)):
+        raise TypeError(
+            "errMsg should be a Column or a str, got {}".format(type(errMsg))
+        )
+
+    errMsg = (
+            _create_column_from_literal(errMsg)
+            if isinstance(errMsg, str)
+            else _to_java_column(errMsg)
+    )
+    return Column(sc._jvm.functions.assert_true(_to_java_column(col), errMsg))
+
+
+@since(3.1)
+def raise_error(errMsg):
+    """
+    Throws an exception with the provided error message.
+    """
+    if not isinstance(errMsg, (str, Column)):
+        raise TypeError(
+            "errMsg should be a Column or a str, got {}".format(type(errMsg))
+        )
+
+    sc = SparkContext._active_spark_context
+    errMsg = (
+            _create_column_from_literal(errMsg)
+            if isinstance(errMsg, str)
+            else _to_java_column(errMsg)
+    )
+    return Column(sc._jvm.functions.raise_error(errMsg))
 
 
 # ---------------------- String/Binary functions ------------------------------
@@ -3443,57 +3495,6 @@ def bucket(numBuckets, col):
         else _to_java_column(numBuckets)
     )
     return Column(sc._jvm.functions.bucket(numBuckets, _to_java_column(col)))
-
-
-@since(3.1)
-def assert_true(col, errMsg = None):
-    """
-    Returns null if the input column is true; throws an exception with the provided error message
-    otherwise.
-
-    >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
-    >>> df.select(assert_true(df.a < df.b).alias('r')).collect()
-    [Row(r=None)]
-    >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
-    >>> df.select(assert_true(df.a < df.b, df.a).alias('r')).collect()
-    [Row(r=None)]
-    >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
-    >>> df.select(assert_true(df.a < df.b, 'error').alias('r')).collect()
-    [Row(r=None)]
-    """
-    sc = SparkContext._active_spark_context
-    if errMsg is None:
-        return Column(sc._jvm.functions.assert_true(_to_java_column(col)))
-    if not isinstance(errMsg, (str, Column)):
-        raise TypeError(
-            "errMsg should be a Column or a str, got {}".format(type(errMsg))
-        )
-
-    errMsg = (
-            _create_column_from_literal(errMsg)
-            if isinstance(errMsg, str)
-            else _to_java_column(errMsg)
-    )
-    return Column(sc._jvm.functions.assert_true(_to_java_column(col), errMsg))
-
-
-@since(3.1)
-def raise_error(errMsg):
-    """
-    Throws an exception with the provided error message.
-    """
-    if not isinstance(errMsg, (str, Column)):
-        raise TypeError(
-            "errMsg should be a Column or a str, got {}".format(type(errMsg))
-        )
-
-    sc = SparkContext._active_spark_context
-    errMsg = (
-            _create_column_from_literal(errMsg)
-            if isinstance(errMsg, str)
-            else _to_java_column(errMsg)
-    )
-    return Column(sc._jvm.functions.raise_error(errMsg))
 
 
 # ---------------------------- User Defined Function ----------------------------------

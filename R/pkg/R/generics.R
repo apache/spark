@@ -847,6 +847,10 @@ setGeneric("arrays_zip_with", function(x, y, f) { standardGeneric("arrays_zip_wi
 #' @name NULL
 setGeneric("ascii", function(x) { standardGeneric("ascii") })
 
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("assert_true", function(x, ...) { standardGeneric("assert_true") })
+
 #' @param x Column to compute on or a GroupedData object.
 #' @param ... additional argument(s) when \code{x} is a GroupedData object.
 #' @rdname avg
@@ -1215,6 +1219,10 @@ setGeneric("posexplode_outer", function(x) { standardGeneric("posexplode_outer")
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("quarter", function(x) { standardGeneric("quarter") })
+
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("raise_error", function(x) { standardGeneric("raise_error") })
 
 #' @rdname column_nonaggregate_functions
 #' @name NULL
