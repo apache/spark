@@ -1513,7 +1513,6 @@ def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
 
 # ---------------------------- misc functions ----------------------------------
 
-
 @since(1.5)
 def crc32(col):
     """

@@ -3933,10 +3933,13 @@ test_that("assert_true, raise_error", {
   filtered <- filter(df, "age < 20")
 
   expect_equal(collect(select(filtered, assert_true(filtered$age < 20)))$age, c(NULL))
-  expect_equal(collect(select(filtered, assert_true(filtered$age < 20, "custom error message")))$age, c(NULL))
-  expect_equal(collect(select(filtered, assert_true(filtered$age < 20, filtered$name)))$age, c(NULL))
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20, "error message")))$age,
+               c(NULL))
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20, filtered$name)))$age,
+               c(NULL))
   expect_error(collect(select(df, assert_true(df$age < 20))), "is not true!")
-  expect_error(collect(select(df, assert_true(df$age < 20, "custom error message"))), "custom error message")
+  expect_error(collect(select(df, assert_true(df$age < 20, "error message"))),
+               "custom error message")
   expect_error(collect(select(df, assert_true(df$age < 20, df$name))), "Michael")
 
   expect_error(collect(select(filtered, raise_error("error message"))), "error message")

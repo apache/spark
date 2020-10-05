@@ -26,6 +26,14 @@ import org.apache.spark.sql.types._
 
 class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
+  test("RaiseError") {
+    checkExceptionInExpression[RuntimeException](
+      RaiseError(Literal("error message")),
+      EmptyRow,
+      "error message"
+    )
+  }
+
   test("uuid") {
     checkEvaluation(Length(Uuid(Some(0))), 36)
     val r = new Random()

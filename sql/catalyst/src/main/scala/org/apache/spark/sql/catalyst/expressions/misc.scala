@@ -91,10 +91,10 @@ case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCa
 }
 
 /**
- * A function throws an exception if 'condition' is not true.
+ * A function that throws an exception if 'condition' is not true.
  */
-@ExpressionDescription(  usage = "_FUNC_(expr) - Throws an exception if `expr` is not true.",
-
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Throws an exception if `expr` is not true.",
   examples = """
     Examples:
       > SELECT _FUNC_(0 < 1);
