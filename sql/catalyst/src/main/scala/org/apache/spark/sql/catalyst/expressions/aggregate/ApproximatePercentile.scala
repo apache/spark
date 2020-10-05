@@ -187,9 +187,11 @@ case class ApproximatePercentile(
   override def nullable: Boolean = true
 
   // The result type is the same as the input type.
-  override def dataType: DataType = {
+  private lazy val internalDataType: DataType = {
     if (returnPercentileArray) ArrayType(child.dataType, false) else child.dataType
   }
+
+  override def dataType: DataType = internalDataType
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("percentile_approx")

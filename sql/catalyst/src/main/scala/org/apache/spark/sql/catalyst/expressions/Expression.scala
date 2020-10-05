@@ -1060,10 +1060,12 @@ trait ComplexTypeMergingExpression extends Expression {
         s" The input types found are\n\t${inputTypesForMerging.mkString("\n\t")}")
   }
 
-  override def dataType: DataType = {
+  private lazy val internalDataType: DataType = {
     dataTypeCheck
     inputTypesForMerging.reduceLeft(TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(_, _).get)
   }
+
+  override def dataType: DataType = internalDataType
 }
 
 /**
