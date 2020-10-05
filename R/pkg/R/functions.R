@@ -4481,7 +4481,7 @@ setMethod("timestamp_seconds",
 #' @note vector_to_array since 3.1.0
 setMethod("vector_to_array",
           signature(x = "Column"),
-          function(x, dtype = c("float32", "float64")) {
+          function(x, dtype = c("float64", "float32")) {
             dtype <- match.arg(dtype)
             jc <- callJStatic(
               "org.apache.spark.ml.functions",
