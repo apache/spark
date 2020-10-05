@@ -28,7 +28,9 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
  * The optimization includes:
  * 1. JsonToStructs(StructsToJson(child)) => child.
  * 2. Prune unnecessary columns from GetStructField/GetArrayStructFields + JsonToStructs.
- * 3. struct(from_json.col1, from_json.col2, from_json.col3...) => struct(from_json)
+ * 3. CreateNamedStruct(JsonToStructs(json).col1, JsonToStructs(json).col2, ...) =>
+ *      CreateNamedStruct(JsonToStructs(json)) if JsonToStructs(json) is shared among all
+ *      fields of CreateNamedStruct.
  */
 object OptimizeJsonExprs extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -45,7 +47,7 @@ object OptimizeJsonExprs extends Rule[LogicalPlan] {
         val sameFieldName = c.names.zip(c.valExprs).forall {
           case (name, valExpr: GetStructField) =>
             name.toString == valExpr.childSchema(valExpr.ordinal).name
-          case (_, _) => false
+          case _ => false
         }
 
         // Although `CreateNamedStruct` allows duplicated field names, e.g. "a int, a int",
