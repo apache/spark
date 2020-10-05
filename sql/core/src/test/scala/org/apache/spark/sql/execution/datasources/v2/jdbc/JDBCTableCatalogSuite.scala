@@ -63,6 +63,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   test("show tables") {
     checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people")))
+    // Check not existing namespace
+    checkAnswer(sql("SHOW TABLES IN h2.bad_test"), Seq())
   }
 
   test("drop a table and test whether the table exists") {
