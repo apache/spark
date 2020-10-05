@@ -163,6 +163,10 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       t = spark.table("h2.test.alt_table")
       expectedSchema = expectedSchema.add("C3", DoubleType)
       assert(t.schema === expectedSchema)
+      // Add already existing column
+      intercept[AnalysisException] {
+        sql(s"ALTER TABLE h2.test.alt_table ADD COLUMNS (C3 DOUBLE)")
+      }
     }
     // Add a column to not existing table and namespace
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
