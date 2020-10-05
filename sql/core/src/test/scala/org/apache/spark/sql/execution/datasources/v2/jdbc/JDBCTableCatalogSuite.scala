@@ -249,6 +249,10 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val t = spark.table("h2.test.alt_table")
       val expectedSchema = new StructType().add("ID", IntegerType, nullable = true)
       assert(t.schema === expectedSchema)
+      // Update nullability of not existing column
+      intercept[AnalysisException] {
+        sql("ALTER TABLE h2.test.alt_table ALTER COLUMN bad_column DROP NOT NULL")
+      }
     }
     // Update column nullability in not existing table and namespace
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
