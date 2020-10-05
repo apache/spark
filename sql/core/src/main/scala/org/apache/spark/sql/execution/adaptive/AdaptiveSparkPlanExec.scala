@@ -300,25 +300,39 @@ case class AdaptiveSparkPlanExec(
       maxFields,
       printNodeId,
       indent)
-    generateTreeStringWithHeader(
-      if (isFinalPlan) "Final Plan" else "Current Plan",
-      currentPhysicalPlan,
-      depth,
-      lastChildren,
-      append,
-      verbose,
-      maxFields,
-      printNodeId)
-    generateTreeStringWithHeader(
-      "Initial Plan",
-      initialPlan,
-      depth,
-      lastChildren,
-      append,
-      verbose,
-      maxFields,
-      printNodeId)
+    if (currentPhysicalPlan.fastEquals(initialPlan)) {
+      currentPhysicalPlan.generateTreeString(
+        depth + 1,
+        lastChildren :+ true,
+        append,
+        verbose,
+        prefix = "",
+        addSuffix = false,
+        maxFields,
+        printNodeId,
+        indent)
+    } else {
+      generateTreeStringWithHeader(
+        if (isFinalPlan) "Final Plan" else "Current Plan",
+        currentPhysicalPlan,
+        depth,
+        lastChildren,
+        append,
+        verbose,
+        maxFields,
+        printNodeId)
+      generateTreeStringWithHeader(
+        "Initial Plan",
+        initialPlan,
+        depth,
+        lastChildren,
+        append,
+        verbose,
+        maxFields,
+        printNodeId)
+    }
   }
+
 
   private def generateTreeStringWithHeader(
       header: String,

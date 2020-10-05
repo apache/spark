@@ -842,8 +842,8 @@ class AdaptiveQueryExecSuite
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       val df = sql("SELECT * FROM testData join testData2 ON key = a where value = '1'")
       val planBefore = df.queryExecution.executedPlan
-      assert(planBefore.toString.contains("== Current Plan =="))
-      assert(planBefore.toString.contains("== Initial Plan =="))
+      assert(!planBefore.toString.contains("== Current Plan =="))
+      assert(!planBefore.toString.contains("== Initial Plan =="))
       df.collect()
       val planAfter = df.queryExecution.executedPlan
       assert(planAfter.toString.contains("== Final Plan =="))
