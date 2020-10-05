@@ -354,6 +354,11 @@ NULL
 #' @name column_ml_functions
 #' @rdname column_ml_functions
 #' @family ml functions
+#' @examples
+#' \dontrun{
+#' df <- read.df("data/mllib/sample_libsvm_data.txt", source = "libsvm")
+#' head(select(df, vector_to_array(df$features)))
+#' }
 NULL
 
 #' @details
