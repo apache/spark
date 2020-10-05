@@ -55,7 +55,7 @@ private[kafka010] sealed trait ConsumerStrategy extends Logging {
       case (topic, topicDescription) =>
         topicDescription.partitions().asScala.map { topicPartitionInfo =>
           val partition = topicPartitionInfo.partition()
-          logDebug(s"Partition added: $topic:$partition")
+          logDebug(s"Partition found: $topic:$partition")
           new TopicPartition(topic, partition)
         }
     }.toSet
