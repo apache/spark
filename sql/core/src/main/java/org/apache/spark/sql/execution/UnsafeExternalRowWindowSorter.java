@@ -54,7 +54,8 @@ public final class UnsafeExternalRowWindowSorter extends AbstractUnsafeExternalR
   private final UnsafeExternalRowSorter.PrefixComputer prefixComputerInWindow;
   private final boolean canUseRadixSortInWindow;
   private final long pageSizeBytes;
-  private final int windowSorterMapMaxSize = 16;
+  private static final int windowSorterMapMaxSize = 3;
+  private static final int totalNumSorters = windowSorterMapMaxSize + 1;
   private final HashMap<UnsafeRow,AbstractUnsafeExternalRowSorter> windowSorterMap;
   private final UnsafeExternalRowSorter mainSorter;
   private final RowComparator partitionKeyComparator;
@@ -70,7 +71,7 @@ public final class UnsafeExternalRowWindowSorter extends AbstractUnsafeExternalR
           (Supplier<RecordComparator>)null,
           prefixComparatorInWindow,
           prefixComputerInWindow,
-          pageSizeBytes,
+          pageSizeBytes/totalNumSorters,
           false);
       } else {
         sorter = UnsafeExternalRowSorter.create(
@@ -78,7 +79,7 @@ public final class UnsafeExternalRowWindowSorter extends AbstractUnsafeExternalR
           this.orderingInWindow,
           this.prefixComparatorInWindow,
           this.prefixComputerInWindow,
-          this.pageSizeBytes,
+          this.pageSizeBytes/totalNumSorters,
           this.canUseRadixSortInWindow);
       }
     } catch (SparkOutOfMemoryError e) {
@@ -132,7 +133,7 @@ public final class UnsafeExternalRowWindowSorter extends AbstractUnsafeExternalR
       orderingAcrossWindows,
       prefixComparatorAcrossWindows,
       prefixComputerAcrossWindows,
-      pageSizeBytes,
+      pageSizeBytes/totalNumSorters,
       canUseRadixSortAcrossWindows);
 
     return new UnsafeExternalRowWindowSorter(
@@ -185,9 +186,10 @@ public final class UnsafeExternalRowWindowSorter extends AbstractUnsafeExternalR
   @Override
   public void insertRow(UnsafeRow row) throws IOException {
     UnsafeRow windowSorterKey = this.partitionSpecProjection.apply(row);
+    AbstractUnsafeExternalRowSorter windowSorter = this.windowSorterMap.get(windowSorterKey);
 
-    if (this.windowSorterMap.containsKey(windowSorterKey)) {
-      this.windowSorterMap.get(windowSorterKey).insertRow(row);
+    if (windowSorter != null) {
+      windowSorter.insertRow(row);
     } else if (this.windowSorterMap.size() == this.windowSorterMapMaxSize) {
       this.mainSorter.insertRow(row);
     } else {
@@ -217,6 +219,7 @@ public final class UnsafeExternalRowWindowSorter extends AbstractUnsafeExternalR
         RowIterator.fromScala(getSortedIteratorFromSorterMap()),
         RowIterator.fromScala(getSortedIteratorFromMainSorter()),
         orderingAcrossWindows);
+
       return mergeIterator.toScala();
     }
   }
@@ -289,6 +292,7 @@ public final class UnsafeExternalRowWindowSorter extends AbstractUnsafeExternalR
 
     partitionKeySortedSorterMap.putAll(this.windowSorterMap);
     Queue<RowIterator> queue = new LinkedList<>();
+
     for (Entry<UnsafeRow,AbstractUnsafeExternalRowSorter> entry:
         partitionKeySortedSorterMap.entrySet()) {
       if (orderingInWindow != null) {
@@ -365,6 +369,8 @@ public final class UnsafeExternalRowWindowSorter extends AbstractUnsafeExternalR
 
     private boolean hasStarted = false;
 
+    private boolean toAdvanceIter1 = false;
+
     SortBasedMergerIterator(
         RowIterator sortedIterator1,
         RowIterator sortedIterator2,
@@ -399,8 +405,7 @@ public final class UnsafeExternalRowWindowSorter extends AbstractUnsafeExternalR
         result = sortedIterator1.advanceNext();
         row1 = (UnsafeRow)sortedIterator1.getRow();
       } else {
-        int compareResult = compare(row1, row2);
-        if (compareResult <= 0) {
+        if (toAdvanceIter1) {
           sortedIterator1.advanceNext();
           row1 = (UnsafeRow)sortedIterator1.getRow();
         } else {
@@ -421,8 +426,10 @@ public final class UnsafeExternalRowWindowSorter extends AbstractUnsafeExternalR
         return row1;
       } else {
         if (compare(row1, row2) <= 0) {
+          toAdvanceIter1 = true;
           return row1;
         } else {
+          toAdvanceIter1 = false;
           return row2;
         }
       }
