@@ -17,20 +17,12 @@
 
 package org.apache.spark.sql.jdbc.v2
 
-import java.math.BigDecimal
-import java.net.ServerSocket
-import java.sql.{Connection, Date, Timestamp}
-import java.util.{Properties, TimeZone}
+import java.sql.Connection
 
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{Row, SaveMode}
-import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -61,8 +53,6 @@ import org.apache.spark.tags.DockerTest
  */
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSession {
-  import testImplicits._
-
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env("ORACLE_DOCKER_IMAGE_NAME")
     override val env = Map(
