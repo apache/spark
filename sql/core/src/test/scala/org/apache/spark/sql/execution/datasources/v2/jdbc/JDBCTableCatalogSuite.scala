@@ -184,6 +184,12 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val expectedSchema = new StructType().add("C", IntegerType)
       assert(t.schema === expectedSchema)
     }
+    // Rename a column in not existing table and namespace
+    Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
+      intercept[AnalysisException] {
+        sql(s"ALTER TABLE $table RENAME COLUMN ID TO C")
+      }
+    }
   }
 
   test("alter table ... drop column") {
