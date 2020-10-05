@@ -22,6 +22,7 @@ import java.sql.Connection
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -85,6 +86,14 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       t = spark.table("oracle.alt_table")
       expectedSchema = expectedSchema.add("C3", StringType)
       assert(t.schema === expectedSchema)
+      // Add already existing column
+      intercept[AnalysisException] {
+        sql(s"ALTER TABLE oracle.alt_table ADD COLUMNS (C3 DOUBLE)")
+      }
+    }
+    // Add a column to not existing table
+    intercept[AnalysisException] {
+      sql(s"ALTER TABLE oracle.not_existing_table ADD COLUMNS (C4 STRING)")
     }
   }
 
@@ -95,6 +104,18 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       val t = spark.table("oracle.alt_table")
       val expectedSchema = new StructType().add("ID", StringType)
       assert(t.schema === expectedSchema)
+      // Update not existing column
+      intercept[AnalysisException] {
+        sql("ALTER TABLE oracle.alt_table ALTER COLUMN bad_column TYPE DOUBLE")
+      }
+      // Update column to wrong type
+      intercept[AnalysisException] {
+        sql("ALTER TABLE oracle.alt_table ALTER COLUMN id TYPE bad_type")
+      }
+    }
+    // Update column type in not existing table
+    intercept[AnalysisException] {
+      sql(s"ALTER TABLE oracle.not_existing_table ALTER COLUMN id TYPE DOUBLE")
     }
   }
 
@@ -105,6 +126,14 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       val t = spark.table("oracle.alt_table")
       val expectedSchema = new StructType().add("ID", StringType, nullable = true)
       assert(t.schema === expectedSchema)
+      // Update nullability of not existing column
+      intercept[AnalysisException] {
+        sql("ALTER TABLE oracle.alt_table ALTER COLUMN bad_column DROP NOT NULL")
+      }
+    }
+    // Update column nullability in not existing table
+    intercept[AnalysisException] {
+      sql(s"ALTER TABLE oracle.not_existing_table ALTER COLUMN ID DROP NOT NULL")
     }
   }
 }
