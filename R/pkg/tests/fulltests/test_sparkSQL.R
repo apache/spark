@@ -3925,8 +3925,19 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   dropTempView("cars")
 })
 
-test_that("raise_error, assert_true", {
-  expect_equal(assert_true(), "default")
+test_that("assert_true, raise_error", {
+  df <- read.json(jsonPath)
+  filtered <- filter(df, "age < 20")
+
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20)))$age, c(NULL))
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20, "custom error message")))$age, c(NULL))
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20, filtered$name)))$age, c(NULL))
+  expect_error(collect(select(df, assert_true(df$age < 20))), "is not true!")
+  expect_error(collect(select(df, assert_true(df$age < 20, "custom error message"))), "custom error message")
+  expect_error(collect(select(df, assert_true(df$age < 20, df$name))), "Michael")
+
+  expect_error(collect(select(filtered, raise_error("error message"))), "error message")
+  expect_error(collect(select(filtered, raise_error(filtered$name))), "Justin")
 })
 
 compare_list <- function(list1, list2) {
