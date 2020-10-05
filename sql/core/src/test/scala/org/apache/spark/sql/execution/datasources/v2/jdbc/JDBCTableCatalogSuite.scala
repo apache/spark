@@ -270,5 +270,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
       assert(thrown.getMessage.contains("Unsupported TableChange"))
     }
+    // Update column comments in not existing table and namespace
+    Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
+      intercept[AnalysisException] {
+        sql(s"ALTER TABLE $table ALTER COLUMN ID COMMENT 'test'")
+      }
+    }
   }
 }
