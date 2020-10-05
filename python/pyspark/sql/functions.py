@@ -1594,7 +1594,7 @@ def xxhash64(*cols):
 
 
 @since(3.1)
-def assert_true(col, errMsg = None):
+def assert_true(col, errMsg=None):
     """
     Returns null if the input column is true; throws an exception with the provided error message
     otherwise.
@@ -1618,9 +1618,9 @@ def assert_true(col, errMsg = None):
         )
 
     errMsg = (
-            _create_column_from_literal(errMsg)
-            if isinstance(errMsg, str)
-            else _to_java_column(errMsg)
+        _create_column_from_literal(errMsg)
+        if isinstance(errMsg, str)
+        else _to_java_column(errMsg)
     )
     return Column(sc._jvm.functions.assert_true(_to_java_column(col), errMsg))
 
@@ -1637,9 +1637,9 @@ def raise_error(errMsg):
 
     sc = SparkContext._active_spark_context
     errMsg = (
-            _create_column_from_literal(errMsg)
-            if isinstance(errMsg, str)
-            else _to_java_column(errMsg)
+        _create_column_from_literal(errMsg)
+        if isinstance(errMsg, str)
+        else _to_java_column(errMsg)
     )
     return Column(sc._jvm.functions.raise_error(errMsg))
 
