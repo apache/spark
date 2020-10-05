@@ -104,6 +104,10 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       val t = spark.table("oracle.alt_table")
       val expectedSchema = new StructType().add("ID", StringType)
       assert(t.schema === expectedSchema)
+      // Update column type from STRING to INTEGER
+      sql("ALTER TABLE oracle.alt_table ALTER COLUMN id TYPE INTEGER")
+      val t2 = spark.table("oracle.alt_table")
+      assert(t2.schema === new StructType().add("ID", IntegerType))
       // Update not existing column
       intercept[AnalysisException] {
         sql("ALTER TABLE oracle.alt_table ALTER COLUMN bad_column TYPE DOUBLE")
