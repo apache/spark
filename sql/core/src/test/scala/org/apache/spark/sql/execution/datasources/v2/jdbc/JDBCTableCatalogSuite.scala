@@ -229,6 +229,10 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       intercept[AnalysisException] {
         sql("ALTER TABLE h2.test.alt_table ALTER COLUMN bad_column TYPE DOUBLE")
       }
+      // Update column to wrong type
+      intercept[AnalysisException] {
+        sql("ALTER TABLE h2.test.alt_table ALTER COLUMN id TYPE bad_type")
+      }
     }
     // Update column type in not existing table and namespace
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
