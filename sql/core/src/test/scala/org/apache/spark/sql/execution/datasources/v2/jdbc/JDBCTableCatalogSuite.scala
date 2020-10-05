@@ -210,6 +210,12 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         sql("ALTER TABLE h2.test.alt_table DROP COLUMN bad_column")
       }
     }
+    // Drop a column to not existing table and namespace
+    Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
+      intercept[AnalysisException] {
+        sql(s"ALTER TABLE $table DROP COLUMN C1")
+      }
+    }
   }
 
   test("alter table ... update column type") {
