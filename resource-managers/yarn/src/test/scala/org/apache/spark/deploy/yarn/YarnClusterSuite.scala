@@ -162,7 +162,12 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("run Python application in yarn-client mode") {
-    testPySpark(true)
+    testPySpark(
+      clientMode = true,
+      extraConf = Map(
+        "spark.python.worker.reuse" -> "false"
+      )
+    )
   }
 
   test("run Python application in yarn-cluster mode") {
