@@ -75,8 +75,10 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "to_drop"), Row("test", "people")))
     sql("DROP TABLE h2.test.to_drop")
     checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people")))
-    intercept[NoSuchTableException] {
-      sql("DROP TABLE h2.test.not_existing_table")
+    Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
+      intercept[NoSuchTableException] {
+        sql(s"DROP TABLE $table")
+      }
     }
   }
 
