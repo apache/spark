@@ -101,6 +101,20 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         sql(s"ALTER TABLE $table RENAME TO test.dst_table")
       }
     }
+    // Rename to an existing table
+    withTable("h2.test.dst_table") {
+      withConnection { conn =>
+        conn.prepareStatement("""CREATE TABLE "test"."dst_table" (id INTEGER)""").executeUpdate()
+      }
+      withTable("h2.test.src_table") {
+        withConnection { conn =>
+          conn.prepareStatement("""CREATE TABLE "test"."src_table" (id INTEGER)""").executeUpdate()
+        }
+        intercept[org.h2.jdbc.JdbcSQLException] {
+          sql(s"ALTER TABLE h2.test.src_table RENAME TO h2.test.dst_table")
+        }
+      }
+    }
   }
 
   test("load a table") {
