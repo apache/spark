@@ -354,6 +354,11 @@ NULL
 #' @name column_ml_functions
 #' @rdname column_ml_functions
 #' @family ml functions
+#' @examples
+#' \dontrun{
+#' df <- read.df("data/mllib/sample_libsvm_data.txt", source = "libsvm")
+#' head(select(df, vector_to_array(df$features)))
+#' }
 NULL
 
 #' @details
@@ -4481,7 +4486,7 @@ setMethod("timestamp_seconds",
 #' @note vector_to_array since 3.1.0
 setMethod("vector_to_array",
           signature(x = "Column"),
-          function(x, dtype = c("float32", "float64")) {
+          function(x, dtype = c("float64", "float32")) {
             dtype <- match.arg(dtype)
             jc <- callJStatic(
               "org.apache.spark.ml.functions",
