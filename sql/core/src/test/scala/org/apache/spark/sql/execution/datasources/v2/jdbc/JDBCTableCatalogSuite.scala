@@ -138,6 +138,12 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         sql("SHOW TABLES IN h2.test"),
         Seq(Row("test", "people"), Row("test", "new_table")))
     }
+    withTable("h2.test.new_table") {
+      sql("CREATE TABLE h2.test.new_table(i INT, j STRING) USING _")
+      intercept[AnalysisException] {
+        sql("CREATE TABLE h2.test.new_table(i INT, j STRING) USING _")
+      }
+    }
   }
 
   test("alter table ... add column") {
