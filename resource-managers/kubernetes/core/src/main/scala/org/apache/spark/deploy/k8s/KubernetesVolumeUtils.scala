@@ -16,11 +16,8 @@
  */
 package org.apache.spark.deploy.k8s
 
-import scala.util.Try
-
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
-
 
 private[spark] object KubernetesVolumeUtils {
   /**
@@ -41,7 +38,7 @@ private[spark] object KubernetesVolumeUtils {
       KubernetesVolumeSpec(
         volumeName = volumeName,
         mountPath = properties(pathKey),
-        mountSubPath = properties.getOrElse(subPathKey, ""),
+        mountSubPath = properties.get(subPathKey).getOrElse(""),
         mountReadOnly = properties.get(readOnlyKey).exists(_.toBoolean),
         volumeConf = parseVolumeSpecificConf(properties, volumeType, volumeName))
     }.toSeq
@@ -70,31 +67,19 @@ private[spark] object KubernetesVolumeUtils {
     volumeType match {
       case KUBERNETES_VOLUMES_HOSTPATH_TYPE =>
         val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY"
-        Try(KubernetesHostPathVolumeConf(options(pathKey)))
-          .fold(
-            _ => throw new NoSuchElementException(s"When using $KUBERNETES_VOLUMES_HOSTPATH_TYPE " +
-              "Kubernetes volumes, it is necessary to define " +
-              s"$KUBERNETES_VOLUMES_HOSTPATH_TYPE.volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY" +
-              s" property"),
-            kubernetesHostPathVolumeConf => kubernetesHostPathVolumeConf
-          )
+        verifyOptionKey(options, pathKey, KUBERNETES_VOLUMES_HOSTPATH_TYPE)
+        KubernetesHostPathVolumeConf(options(pathKey))
 
       case KUBERNETES_VOLUMES_PVC_TYPE =>
         val claimNameKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY"
         val storageClassKey =
           s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_CLAIM_STORAGE_CLASS_KEY"
         val sizeLimitKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY"
-        Try(KubernetesPVCVolumeConf(
+        verifyOptionKey(options, claimNameKey, KUBERNETES_VOLUMES_PVC_TYPE)
+        KubernetesPVCVolumeConf(
           options(claimNameKey),
           options.get(storageClassKey),
-          options.get(sizeLimitKey)))
-          .fold(
-            _ => throw new NoSuchElementException(s"When using $KUBERNETES_VOLUMES_PVC_TYPE " +
-              "Kubernetes volumes, it is necessary to define " +
-              s"$KUBERNETES_VOLUMES_PVC_TYPE.volumeName.$KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY"
-              + s" property"),
-            kubernetesPVCVolumeConf => kubernetesPVCVolumeConf
-          )
+          options.get(sizeLimitKey))
 
       case KUBERNETES_VOLUMES_EMPTYDIR_TYPE =>
         val mediumKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY"
@@ -104,20 +89,20 @@ private[spark] object KubernetesVolumeUtils {
       case KUBERNETES_VOLUMES_NFS_TYPE =>
         val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY"
         val serverKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY"
-        Try(KubernetesNFSVolumeConf(
+        verifyOptionKey(options, pathKey, KUBERNETES_VOLUMES_NFS_TYPE)
+        verifyOptionKey(options, serverKey, KUBERNETES_VOLUMES_NFS_TYPE)
+        KubernetesNFSVolumeConf(
           options(pathKey),
-          options(serverKey)))
-          .fold(
-            _ => throw new NoSuchElementException(s"When using $KUBERNETES_VOLUMES_NFS_TYPE " +
-              "Kubernetes volumes, it is necessary to define " +
-              s"$KUBERNETES_VOLUMES_NFS_TYPE.volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY and " +
-              s"$KUBERNETES_VOLUMES_NFS_TYPE.volumeName.$KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY" +
-              s" properties"),
-            kubernetesNFSVolumeConf => kubernetesNFSVolumeConf
-          )
+          options(serverKey))
 
       case _ =>
         throw new IllegalArgumentException(s"Kubernetes Volume type `$volumeType` is not supported")
+    }
+  }
+
+  private def verifyOptionKey(options: Map[String, String], key: String, msg: String): Unit = {
+    if (!options.isDefinedAt(key)) {
+      throw new NoSuchElementException(key + s" is required for $msg")
     }
   }
 }
