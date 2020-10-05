@@ -20,7 +20,7 @@ import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -103,6 +103,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       .add("NAME", StringType)
       .add("ID", IntegerType)
     assert(t.schema === expectedSchema)
+    Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
+      intercept[AnalysisException] {
+        spark.table(s"h2.$table").schema
+      }
+    }
   }
 
   test("create a table") {
