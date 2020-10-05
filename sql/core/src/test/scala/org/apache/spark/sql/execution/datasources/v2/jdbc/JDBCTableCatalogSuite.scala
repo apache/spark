@@ -144,6 +144,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         sql("CREATE TABLE h2.test.new_table(i INT, j STRING) USING _")
       }
     }
+    intercept[org.h2.jdbc.JdbcSQLException] {
+      sql("CREATE TABLE h2.bad_test.new_table(i INT, j STRING) USING _")
+    }
   }
 
   test("alter table ... add column") {
