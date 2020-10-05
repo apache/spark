@@ -669,7 +669,9 @@ case class NthValue(input: Expression, offsetExpr: Expression, ignoreNulls: Bool
 
   override lazy val evaluateExpression: AttributeReference = result
 
-  override def toString: String = s"$prettyName($input, $offset)${if (ignoreNulls) " ignore nulls"}"
+  override def prettyName: String = "nth_value"
+  override def sql: String =
+    s"$prettyName(${input.sql}, ${offsetExpr.sql})${if (ignoreNulls) " ignore nulls" else ""}"
 }
 
 /**

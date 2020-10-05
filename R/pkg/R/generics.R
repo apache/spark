@@ -1168,6 +1168,10 @@ setGeneric("months_between", function(y, x, ...) { standardGeneric("months_betwe
 #' @rdname count
 setGeneric("n", function(x) { standardGeneric("n") })
 
+#' @rdname column_window_functions
+#' @name NULL
+setGeneric("nth_value", function(x, offset, ...) { standardGeneric("nth_value") })
+
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("nanvl", function(y, x) { standardGeneric("nanvl") })
@@ -1452,6 +1456,10 @@ setGeneric("var_pop", function(x) { standardGeneric("var_pop") })
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
+
+#' @rdname column_ml_functions
+#' @name NULL
+setGeneric("vector_to_array", function(x, ...) { standardGeneric("vector_to_array") })
 
 #' @rdname column_datetime_functions
 #' @name NULL

@@ -136,7 +136,7 @@
     <kafka.version>2.6.0</kafka.version>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.1</parquet.version>
-    <orc.version>1.5.10</orc.version>
+    <orc.version>1.5.12</orc.version>
     <orc.classifier></orc.classifier>
     <hive.parquet.group>com.twitter</hive.parquet.group>
     <hive.parquet.version>1.6.0</hive.parquet.version>
@@ -237,7 +237,7 @@
     <hadoop.deps.scope>compile</hadoop.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
     <hive.parquet.scope>provided</hive.parquet.scope>
-    <hive.storage.version>2.7.1</hive.storage.version>
+    <hive.storage.version>2.7.2</hive.storage.version>
     <hive.storage.scope>compile</hive.storage.scope>
     <hive.common.scope>compile</hive.common.scope>
     <hive.llap.scope>compile</hive.llap.scope>

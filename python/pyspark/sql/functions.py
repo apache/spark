@@ -934,6 +934,26 @@ def lead(col, offset=1, default=None):
     return Column(sc._jvm.functions.lead(_to_java_column(col), offset, default))
 
 
+@since(3.1)
+def nth_value(col, offset, ignoreNulls=False):
+    """
+    Window function: returns the value that is the `offset`\\th row of the window frame
+    (counting from 1), and `null` if the size of window frame is less than `offset` rows.
+
+    It will return the `offset`\\th non-null value it sees when `ignoreNulls` is set to
+    true. If all values are null, then null is returned.
+
+    This is equivalent to the nth_value function in SQL.
+
+    :param col: name of column or expression
+    :param offset: number of row to use as the value
+    :param ignoreNulls: indicates the Nth value should skip null in the
+        determination of which row to use
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.nth_value(_to_java_column(col), offset, ignoreNulls))
+
+
 @since(1.4)
 def ntile(n):
     """
@@ -955,7 +975,8 @@ def ntile(n):
 @since(1.5)
 def current_date():
     """
-    Returns the current date as a :class:`DateType` column.
+    Returns the current date at the start of query evaluation as a :class:`DateType` column.
+    All calls of current_date within the same query return the same value.
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.current_date())
@@ -963,7 +984,8 @@ def current_date():
 
 def current_timestamp():
     """
-    Returns the current timestamp as a :class:`TimestampType` column.
+    Returns the current timestamp at the start of query evaluation as a :class:`TimestampType`
+    column. All calls of current_timestamp within the same query return the same value.
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.current_timestamp())

@@ -409,6 +409,7 @@ Functions
     months_between
     nanvl
     next_day
+    nth_value
     ntile
     overlay
     pandas_udf
