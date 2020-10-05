@@ -95,6 +95,12 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         sql("SHOW TABLES IN h2.test"),
         Seq(Row("test", "dst_table"), Row("test", "people")))
     }
+    // Rename not existing table or namespace
+    Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
+      intercept[org.h2.jdbc.JdbcSQLException] {
+        sql(s"ALTER TABLE $table RENAME TO test.dst_table")
+      }
+    }
   }
 
   test("load a table") {
