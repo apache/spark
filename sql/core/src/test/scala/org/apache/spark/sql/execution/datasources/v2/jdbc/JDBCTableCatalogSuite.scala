@@ -205,6 +205,10 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val t = spark.table("h2.test.alt_table")
       val expectedSchema = new StructType().add("C2", IntegerType)
       assert(t.schema === expectedSchema)
+      // Drop not existing column
+      intercept[AnalysisException] {
+        sql("ALTER TABLE h2.test.alt_table DROP COLUMN bad_column")
+      }
     }
   }
 
