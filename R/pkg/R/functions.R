@@ -345,6 +345,17 @@ NULL
 #' head(tmp)}
 NULL
 
+#' ML functions for Column operations
+#'
+#' ML functions defined for \code{Column}.
+#'
+#' @param x Column to compute on.
+#' @param ... additional argument(s).
+#' @name column_ml_functions
+#' @rdname column_ml_functions
+#' @family ml functions
+NULL
+
 #' @details
 #' \code{lit}: A new Column is created to represent the literal value.
 #' If the parameter is a Column, it is returned unchanged.
@@ -4455,6 +4466,28 @@ setMethod("timestamp_seconds",
           function(x) {
             jc <- callJStatic(
               "org.apache.spark.sql.functions", "timestamp_seconds", x@jc
+            )
+            column(jc)
+          })
+
+#' @details
+#' \code{vector_to_array} Converts a column of MLlib sparse/dense vectors into
+#' a column of dense arrays.
+#'
+#' @param dtype The data type of the output array. Valid values: "float64" or "float32".
+#'
+#' @rdname column_ml_functions
+#' @aliases vector_to_array vector_to_array,Column-method
+#' @note vector_to_array since 3.1.0
+setMethod("vector_to_array",
+          signature(x = "Column"),
+          function(x, dtype = c("float32", "float64")) {
+            dtype <- match.arg(dtype)
+            jc <- callJStatic(
+              "org.apache.spark.ml.functions",
+              "vector_to_array",
+              x@jc,
+              dtype
             )
             column(jc)
           })
