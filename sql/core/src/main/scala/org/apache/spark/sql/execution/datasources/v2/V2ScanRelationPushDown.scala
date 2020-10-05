@@ -35,6 +35,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
       val scanBuilder = relation.table.asReadable.newScanBuilder(relation.options)
       scanBuilder match {
         case jdbcScanBuilder: JDBCScanBuilder => jdbcScanBuilder.partition = relation.partitions
+        case _ =>
       }
 
       val normalizedFilters = DataSourceStrategy.normalizeExprs(filters, relation.output)
