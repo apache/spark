@@ -339,7 +339,9 @@ jobs:
         java-version: 11
     - name: Build with SBT
       run: |
-        mkdir -p ~/.ivy2
+        mkdir -p ~/.ivy2/local
+        mkdir -p ~/.m2
         ./dev/change-scala-version.sh 2.13
-        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Djava.version=11 -Pscala-2.13 publishLocal
-        rm -rf ~/.ivy2/cache/org.apache.spark
+        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Djava.version=11 -Pscala-2.13 test:compile publishLocal
+        rm -rf ~/.ivy2/local/org.apache.spark
+        rm -rf ~/.m2/repository/org/apache/spark
