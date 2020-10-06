@@ -87,14 +87,16 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       expectedSchema = expectedSchema.add("C3", StringType)
       assert(t.schema === expectedSchema)
       // Add already existing column
-      intercept[AnalysisException] {
+      val msg = intercept[AnalysisException] {
         sql(s"ALTER TABLE oracle.alt_table ADD COLUMNS (C3 DOUBLE)")
-      }
+      }.getMessage
+      assert(msg.contains("Cannot add column, because C3 already exists"))
     }
     // Add a column to not existing table
-    intercept[AnalysisException] {
+    val msg = intercept[AnalysisException] {
       sql(s"ALTER TABLE oracle.not_existing_table ADD COLUMNS (C4 STRING)")
-    }
+    }.getMessage
+    assert(msg.contains("Table not found"))
   }
 
   test("SPARK-33034: ALTER TABLE ... update column type") {
@@ -105,22 +107,26 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       val expectedSchema = new StructType().add("ID", StringType)
       assert(t.schema === expectedSchema)
       // Update column type from STRING to INTEGER
-      intercept[AnalysisException] {
+      val msg1 = intercept[AnalysisException] {
         sql("ALTER TABLE oracle.alt_table ALTER COLUMN id TYPE INTEGER")
-      }
+      }.getMessage
+      assert(msg1.contains("Cannot update alt_table field ID: string cannot be cast to int"))
       // Update not existing column
-      intercept[AnalysisException] {
+      val msg2 = intercept[AnalysisException] {
         sql("ALTER TABLE oracle.alt_table ALTER COLUMN bad_column TYPE DOUBLE")
-      }
+      }.getMessage
+      assert(msg2.contains("Cannot update missing field bad_column"))
       // Update column to wrong type
-      intercept[AnalysisException] {
+      val msg3 = intercept[AnalysisException] {
         sql("ALTER TABLE oracle.alt_table ALTER COLUMN id TYPE bad_type")
-      }
+      }.getMessage
+      assert(msg3.contains("DataType bad_type is not supported"))
     }
     // Update column type in not existing table
-    intercept[AnalysisException] {
+    val msg = intercept[AnalysisException] {
       sql(s"ALTER TABLE oracle.not_existing_table ALTER COLUMN id TYPE DOUBLE")
-    }
+    }.getMessage
+    assert(msg.contains("Table not found"))
   }
 
   test("SPARK-33034: ALTER TABLE ... update column nullability") {
@@ -131,13 +137,15 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       val expectedSchema = new StructType().add("ID", StringType, nullable = true)
       assert(t.schema === expectedSchema)
       // Update nullability of not existing column
-      intercept[AnalysisException] {
+      val msg = intercept[AnalysisException] {
         sql("ALTER TABLE oracle.alt_table ALTER COLUMN bad_column DROP NOT NULL")
-      }
+      }.getMessage
+      assert(msg.contains("Cannot update missing field bad_column"))
     }
     // Update column nullability in not existing table
-    intercept[AnalysisException] {
+    val msg = intercept[AnalysisException] {
       sql(s"ALTER TABLE oracle.not_existing_table ALTER COLUMN ID DROP NOT NULL")
-    }
+    }.getMessage
+    assert(msg.contains("Table not found"))
   }
 }
