@@ -152,14 +152,13 @@ object InMemoryFileIndex extends Logging {
       sc = sparkSession.sparkContext,
       paths = paths,
       hadoopConf = hadoopConf,
-      filter = filter,
+      filter = new PathFilterWrapper(filter),
       isRootLevel = isRootLevel,
       ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles,
       ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality,
       parallelismThreshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold,
-      parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism,
-      filterFun = Some(shouldFilterOut))
- }
+      parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism)
+  }
 
   /** Checks if we should filter out this path name. */
   def shouldFilterOut(pathName: String): Boolean = {
@@ -173,5 +172,11 @@ object InMemoryFileIndex extends Logging {
       pathName.startsWith(".") || pathName.endsWith("._COPYING_")
     val include = pathName.startsWith("_common_metadata") || pathName.startsWith("_metadata")
     exclude && !include
+  }
+}
+
+private class PathFilterWrapper(val filter: PathFilter) extends PathFilter with Serializable {
+  override def accept(path: Path): Boolean = {
+    (filter == null || filter.accept(path)) && !InMemoryFileIndex.shouldFilterOut(path.getName)
   }
 }

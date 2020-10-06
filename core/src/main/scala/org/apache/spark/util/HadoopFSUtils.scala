@@ -27,7 +27,6 @@ import org.apache.hadoop.fs.viewfs.ViewFileSystem
 import org.apache.hadoop.hdfs.DistributedFileSystem
 
 import org.apache.spark._
-import org.apache.spark.annotation.Private
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 
@@ -57,8 +56,6 @@ private[spark] object HadoopFSUtils extends Logging {
    * @param parallelismMax The maximum parallelism for listing. If the number of input paths is
    *                       larger than this value, parallelism will be throttled to this value
    *                       to avoid generating too many tasks.
-   * @param filterFun Optional predicate on the leaf files. Files who failed the check will be
-   *                  excluded from the results
    * @return for each input path, the set of discovered files for the path
    */
   def parallelListLeafFiles(
@@ -70,8 +67,7 @@ private[spark] object HadoopFSUtils extends Logging {
       ignoreMissingFiles: Boolean,
       ignoreLocality: Boolean,
       parallelismThreshold: Int,
-      parallelismMax: Int,
-      filterFun: Option[String => Boolean] = None): Seq[(Path, Seq[FileStatus])] = {
+      parallelismMax: Int): Seq[(Path, Seq[FileStatus])] = {
 
     // Short-circuits parallel listing when serial listing is likely to be faster.
     if (paths.size <= parallelismThreshold) {
@@ -85,8 +81,7 @@ private[spark] object HadoopFSUtils extends Logging {
           ignoreLocality = ignoreLocality,
           isRootPath = isRootLevel,
           parallelismThreshold = parallelismThreshold,
-          parallelismMax = parallelismMax,
-          filterFun = filterFun)
+          parallelismMax = parallelismMax)
         (path, leafFiles)
       }
     }
@@ -126,7 +121,6 @@ private[spark] object HadoopFSUtils extends Logging {
               ignoreMissingFiles = ignoreMissingFiles,
               ignoreLocality = ignoreLocality,
               isRootPath = isRootLevel,
-              filterFun = filterFun,
               parallelismThreshold = Int.MaxValue,
               parallelismMax = 0)
             (path, leafFiles)
@@ -197,7 +191,6 @@ private[spark] object HadoopFSUtils extends Logging {
       ignoreMissingFiles: Boolean,
       ignoreLocality: Boolean,
       isRootPath: Boolean,
-      filterFun: Option[String => Boolean],
       parallelismThreshold: Int,
       parallelismMax: Int): Seq[FileStatus] = {
 
@@ -245,16 +238,8 @@ private[spark] object HadoopFSUtils extends Logging {
         Array.empty[FileStatus]
     }
 
-    def doFilter(statuses: Array[FileStatus]) = filterFun match {
-      case Some(shouldFilterOut) =>
-        statuses.filterNot(status => shouldFilterOut(status.getPath.getName))
-      case None =>
-        statuses
-    }
-
-    val filteredStatuses = doFilter(statuses)
     val allLeafStatuses = {
-      val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
+      val (dirs, topLevelFiles) = statuses.partition(_.isDirectory)
       val nestedFiles: Seq[FileStatus] = contextOpt match {
         case Some(context) if dirs.size > parallelismThreshold =>
           parallelListLeafFiles(
@@ -265,7 +250,6 @@ private[spark] object HadoopFSUtils extends Logging {
             isRootLevel = false,
             ignoreMissingFiles = ignoreMissingFiles,
             ignoreLocality = ignoreLocality,
-            filterFun = filterFun,
             parallelismThreshold = parallelismThreshold,
             parallelismMax = parallelismMax
           ).flatMap(_._2)
@@ -279,7 +263,6 @@ private[spark] object HadoopFSUtils extends Logging {
               ignoreMissingFiles = ignoreMissingFiles,
               ignoreLocality = ignoreLocality,
               isRootPath = false,
-              filterFun = filterFun,
               parallelismThreshold = parallelismThreshold,
               parallelismMax = parallelismMax)
           }
@@ -289,8 +272,7 @@ private[spark] object HadoopFSUtils extends Logging {
     }
 
     val missingFiles = mutable.ArrayBuffer.empty[String]
-    val filteredLeafStatuses = doFilter(allLeafStatuses)
-    val resolvedLeafStatuses = filteredLeafStatuses.flatMap {
+    val resolvedLeafStatuses = allLeafStatuses.flatMap {
       case f: LocatedFileStatus =>
         Some(f)
 
