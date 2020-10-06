@@ -97,7 +97,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     }
     // Rename not existing table or namespace
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
-      intercept[org.h2.jdbc.JdbcSQLException] {
+      intercept[AnalysisException] {
         sql(s"ALTER TABLE $table RENAME TO test.dst_table")
       }
     }
@@ -110,7 +110,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         withConnection { conn =>
           conn.prepareStatement("""CREATE TABLE "test"."src_table" (id INTEGER)""").executeUpdate()
         }
-        intercept[org.h2.jdbc.JdbcSQLException] {
+        intercept[AnalysisException] {
           sql("ALTER TABLE h2.test.src_table RENAME TO h2.test.dst_table")
         }
       }
@@ -144,7 +144,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         sql("CREATE TABLE h2.test.new_table(i INT, j STRING) USING _")
       }
     }
-    intercept[org.h2.jdbc.JdbcSQLException] {
+    intercept[AnalysisException] {
       sql("CREATE TABLE h2.bad_test.new_table(i INT, j STRING) USING _")
     }
   }
@@ -265,9 +265,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("alter table ... update column comment not supported") {
     withTable("h2.test.alt_table") {
       sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")
-      val thrown = intercept[java.sql.SQLFeatureNotSupportedException] {
+      val thrown = intercept[AnalysisException] {
         sql("ALTER TABLE h2.test.alt_table ALTER COLUMN ID COMMENT 'test'")
-      }
+      }.cause.get
       assert(thrown.getMessage.contains("Unsupported TableChange"))
       // Update comment for not existing column
       intercept[AnalysisException] {
