@@ -164,9 +164,9 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   test("run Python application in yarn-client mode") {
     testPySpark(
       clientMode = true,
-      extraConf = Map(
-        "spark.python.worker.reuse" -> "false"
-      )
+      // This is a bandaid fix to send the path explicitly so executor sides pick the same
+      // Python executable. Otherwise, this test on GitHub Actions fails. See also SPARK-29250.
+      extraConf = Map("spark.executorEnv.PATH" -> sys.env("PATH"))
     )
   }
 
