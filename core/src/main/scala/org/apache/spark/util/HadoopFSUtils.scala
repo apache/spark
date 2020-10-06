@@ -44,8 +44,6 @@ private[spark] object HadoopFSUtils extends Logging {
    * @param paths Input paths to list
    * @param hadoopConf Hadoop configuration
    * @param filter Path filter used to exclude leaf files from result
-   * @param isRootLevel Whether the input paths are at the root level, i.e., they are the root
-   *                    paths as opposed to nested paths encountered during recursive calls of this.
    * @param ignoreMissingFiles Ignore missing files that happen during recursive listing
    *                           (e.g., due to race conditions)
    * @param ignoreLocality Whether to fetch data locality info when listing leaf files. If false,
@@ -59,6 +57,19 @@ private[spark] object HadoopFSUtils extends Logging {
    * @return for each input path, the set of discovered files for the path
    */
   def parallelListLeafFiles(
+    sc: SparkContext,
+    paths: Seq[Path],
+    hadoopConf: Configuration,
+    filter: PathFilter,
+    ignoreMissingFiles: Boolean,
+    ignoreLocality: Boolean,
+    parallelismThreshold: Int,
+    parallelismMax: Int): Seq[(Path, Seq[FileStatus])] = {
+    parallelListLeafFilesInternal(sc, paths, hadoopConf, filter, true, ignoreMissingFiles,
+      ignoreLocality, parallelismThreshold, parallelismMax)
+  }
+
+  private def parallelListLeafFilesInternal(
       sc: SparkContext,
       paths: Seq[Path],
       hadoopConf: Configuration,
@@ -206,7 +217,6 @@ private[spark] object HadoopFSUtils extends Logging {
             dirs.map(_.getPath),
             hadoopConf = hadoopConf,
             filter = filter,
-            isRootLevel = false,
             ignoreMissingFiles = ignoreMissingFiles,
             ignoreLocality = ignoreLocality,
             parallelismThreshold = parallelismThreshold,
