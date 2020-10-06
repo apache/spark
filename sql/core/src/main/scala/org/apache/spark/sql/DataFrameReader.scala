@@ -334,7 +334,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     // properties should override settings in extraOptions.
     this.extraOptions ++= properties.asScala
     // explicit url should override all
-    this.extraOptions ++= Seq(JDBCOptions.JDBC_URL -> url)
+    this.extraOptions += JDBCOptions.JDBC_URL -> url
 
     import sparkSession.sessionState.analyzer.NonSessionCatalogAndIdentifier
 
