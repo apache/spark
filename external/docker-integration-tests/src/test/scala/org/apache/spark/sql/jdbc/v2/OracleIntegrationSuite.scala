@@ -23,6 +23,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -117,7 +118,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       }.getMessage
       assert(msg2.contains("Cannot update missing field bad_column"))
       // Update column to wrong type
-      val msg3 = intercept[AnalysisException] {
+      val msg3 = intercept[ParseException] {
         sql("ALTER TABLE oracle.alt_table ALTER COLUMN id TYPE bad_type")
       }.getMessage
       assert(msg3.contains("DataType bad_type is not supported"))
