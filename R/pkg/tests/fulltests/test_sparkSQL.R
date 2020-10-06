@@ -3939,7 +3939,7 @@ test_that("assert_true, raise_error", {
                c(NULL))
   expect_error(collect(select(df, assert_true(df$age < 20))), "is not true!")
   expect_error(collect(select(df, assert_true(df$age < 20, "error message"))),
-               "custom error message")
+               "error message")
   expect_error(collect(select(df, assert_true(df$age < 20, df$name))), "Michael")
 
   expect_error(collect(select(filtered, raise_error("error message"))), "error message")

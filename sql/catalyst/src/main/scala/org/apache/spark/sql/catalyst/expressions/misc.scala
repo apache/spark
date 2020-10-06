@@ -64,7 +64,8 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
        custom error message
   """,
   since = "3.1.0")
-case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class RaiseError(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def foldable: Boolean = false
   override def dataType: DataType = NullType
