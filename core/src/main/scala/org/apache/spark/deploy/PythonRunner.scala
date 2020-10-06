@@ -45,6 +45,7 @@ object PythonRunner {
       .orElse(sys.env.get("PYSPARK_DRIVER_PYTHON"))
       .orElse(sys.env.get("PYSPARK_PYTHON"))
       .getOrElse("python")
+    throw new Exception(s"++++++++++++ ${pythonExec}")
 
     // Format python file paths before adding them to the PYTHONPATH
     val formattedPythonFile = formatPath(pythonFile)
