@@ -2038,10 +2038,10 @@ class Dataset[T] private[sql](
    * The difference between this function and [[union]] is that this function
    * resolves columns by name (not by position).
    *
-   * When the parameter `allowMissingColumns` is true, this function allows different set
-   * of column names between two Datasets. Missing columns at each side, will be filled with
-   * null values. The missing columns at left Dataset will be added at the end in the schema
-   * of the union result:
+   * When the parameter `allowMissingColumns` is `true`, the set of column names
+   * in this and other `Dataset` can differ; missing columns will be filled with null.
+   * Further, the missing columns of this `Dataset` will be added at the end
+   * in the schema of the union result:
    *
    * {{{
    *   val df1 = Seq((1, 2, 3)).toDF("col0", "col1", "col2")

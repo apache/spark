@@ -28,14 +28,11 @@ import org.apache.spark.sql.hive.test.TestHive
  * {{{
  *   1. without sbt: bin/spark-submit --class <this class>
  *        --jars <spark catalyst test jar>,<spark core test jar>,<spark hive jar>
- *        --packages org.spark-project.hive:hive-exec:1.2.1.spark2
  *        <spark hive test jar>
- *   2. build/sbt "hive/test:runMain <this class>" -Phive-1.2 or
- *      build/sbt "hive/test:runMain <this class>" -Phive-2.3
+ *   2. build/sbt "hive/test:runMain <this class>"
  *   3. generate result:
  *   SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "hive/test:runMain <this class>"
  *      Results will be written to "benchmarks/InsertIntoHiveTableBenchmark-hive2.3-results.txt".
- *   4. -Phive-1.2 does not work for JDK 11
  * }}}
  */
 object InsertIntoHiveTableBenchmark extends SqlBasedBenchmark {
@@ -136,5 +133,5 @@ object InsertIntoHiveTableBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  override def suffix: String = if (HiveUtils.isHive23) "-hive2.3" else "-hive1.2"
+  override def suffix: String = "-hive2.3"
 }

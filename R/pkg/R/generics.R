@@ -638,7 +638,7 @@ setGeneric("union", function(x, y) { standardGeneric("union") })
 setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
 
 #' @rdname unionByName
-setGeneric("unionByName", function(x, y) { standardGeneric("unionByName") })
+setGeneric("unionByName", function(x, y, ...) { standardGeneric("unionByName") })
 
 #' @rdname unpersist
 setGeneric("unpersist", function(x, ...) { standardGeneric("unpersist") })
@@ -728,6 +728,9 @@ setGeneric("over", function(x, window) { standardGeneric("over") })
 
 #' @rdname eq_null_safe
 setGeneric("%<=>%", function(x, value) { standardGeneric("%<=>%") })
+
+#' @rdname withField
+setGeneric("withField", function(x, fieldName, col) { standardGeneric("withField") })
 
 ###################### WindowSpec Methods ##########################
 
@@ -1161,6 +1164,10 @@ setGeneric("months_between", function(y, x, ...) { standardGeneric("months_betwe
 #' @rdname count
 setGeneric("n", function(x) { standardGeneric("n") })
 
+#' @rdname column_window_functions
+#' @name NULL
+setGeneric("nth_value", function(x, offset, ...) { standardGeneric("nth_value") })
+
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("nanvl", function(y, x) { standardGeneric("nanvl") })
@@ -1354,6 +1361,10 @@ setGeneric("substring_index", function(x, delim, count) { standardGeneric("subst
 #' @name NULL
 setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
 
+#' @rdname column_datetime_functions
+#' @name timestamp_seconds
+setGeneric("timestamp_seconds", function(x) { standardGeneric("timestamp_seconds") })
+
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("transform_keys", function(x, f) {  standardGeneric("transform_keys") })
@@ -1437,6 +1448,10 @@ setGeneric("var_pop", function(x) { standardGeneric("var_pop") })
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
+
+#' @rdname column_ml_functions
+#' @name NULL
+setGeneric("vector_to_array", function(x, ...) { standardGeneric("vector_to_array") })
 
 #' @rdname column_datetime_functions
 #' @name NULL

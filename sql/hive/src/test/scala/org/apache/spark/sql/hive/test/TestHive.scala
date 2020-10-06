@@ -224,7 +224,7 @@ private[hive] class TestHiveSparkSession(
 
   @transient
   override lazy val sessionState: SessionState = {
-    new TestHiveSessionStateBuilder(this, parentSessionState).build()
+    new TestHiveSessionStateBuilder(this, parentSessionState, Map.empty).build()
   }
 
   lazy val metadataHive: HiveClient = {
@@ -601,7 +601,7 @@ private[hive] class TestHiveQueryExecution(
     // Make sure any test tables referenced are loaded.
     val referencedTables =
       describedTables ++
-        logical.collect { case UnresolvedRelation(ident, _) => ident.asTableIdentifier }
+        logical.collect { case UnresolvedRelation(ident, _, _) => ident.asTableIdentifier }
     val resolver = sparkSession.sessionState.conf.resolver
     val referencedTestTables = referencedTables.flatMap { tbl =>
       val testTableOpt = sparkSession.testTables.keys.find(resolver(_, tbl.table))
@@ -650,8 +650,9 @@ private[hive] object TestHiveContext {
 
 private[sql] class TestHiveSessionStateBuilder(
     session: SparkSession,
-    state: Option[SessionState])
-  extends HiveSessionStateBuilder(session, state)
+    state: Option[SessionState],
+    options: Map[String, String])
+  extends HiveSessionStateBuilder(session, state, options)
   with WithTestConf {
 
   override def overrideConfs: Map[String, String] = TestHiveContext.overrideConfs
@@ -660,7 +661,7 @@ private[sql] class TestHiveSessionStateBuilder(
     new TestHiveQueryExecution(session.asInstanceOf[TestHiveSparkSession], plan)
   }
 
-  override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _)
+  override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _, Map.empty)
 }
 
 private[hive] object HiveTestJars {

@@ -66,9 +66,10 @@ class SQLContext(object):
         >>> df.rdd.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time, x.row.a, x.list)).collect()
         [(1, 'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
         """
-        warnings.warn(
-            "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
-            DeprecationWarning)
+        if sparkSession is None:
+            warnings.warn(
+                "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
+                DeprecationWarning)
 
         self._sc = sparkContext
         self._jsc = self._sc._jsc

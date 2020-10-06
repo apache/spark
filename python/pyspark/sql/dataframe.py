@@ -678,13 +678,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return self
 
     @since(1.3)
-    def persist(self, storageLevel=StorageLevel.MEMORY_AND_DISK):
+    def persist(self, storageLevel=StorageLevel.MEMORY_AND_DISK_DESER):
         """Sets the storage level to persist the contents of the :class:`DataFrame` across
         operations after the first time it is computed. This can only be used to assign
         a new storage level if the :class:`DataFrame` does not have a storage level set yet.
-        If no storage level is specified defaults to (`MEMORY_AND_DISK`).
+        If no storage level is specified defaults to (`MEMORY_AND_DISK_DESER`)
 
-        .. note:: The default storage level has changed to `MEMORY_AND_DISK` to match Scala in 2.0.
+        .. note:: The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala
+            in 3.0.
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
@@ -1568,11 +1569,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |   6|   4|   5|
         +----+----+----+
 
-        When the parameter `allowMissingColumns` is ``True``,
-        this function allows different set of column names between two :class:`DataFrame`\\s.
-        Missing columns at each side, will be filled with null values.
-        The missing columns at left :class:`DataFrame` will be added at the end in the schema
-        of the union result:
+        When the parameter `allowMissingColumns` is ``True``, the set of column names
+        in this and other :class:`DataFrame` can differ; missing columns will be filled with null.
+        Further, the missing columns of this :class:`DataFrame` will be added at the end
+        in the schema of the union result:
 
         >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
         >>> df2 = spark.createDataFrame([[4, 5, 6]], ["col1", "col2", "col3"])
