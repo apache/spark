@@ -341,7 +341,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     this.source = "jdbc"
     if (table.contains(" ")) { // if table is not a table name, e.g. a SELECT statement
       // explicit dbtable should override all
-      this.extraOptions ++= Seq(JDBCOptions.JDBC_TABLE_NAME -> table)
+      this.extraOptions += JDBCOptions.JDBC_TABLE_NAME -> table
       load
     } else {
       sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table) match {
