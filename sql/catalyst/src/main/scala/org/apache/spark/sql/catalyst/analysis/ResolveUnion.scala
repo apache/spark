@@ -83,7 +83,8 @@ object ResolveUnion extends Rule[LogicalPlan] {
           val newStruct = CreateNamedStruct(sorted)
           newStruct
         case other =>
-          throw new AnalysisException(s"`WithFields` has incorrect eval expression: $other")
+          throw new AnalysisException(s"`WithFields` has incorrect eval expression: $other. " +
+            "Please file a bug report with this error message, stack trace, and the query.")
       }
   }
 

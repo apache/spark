@@ -2726,7 +2726,10 @@ object SQLConf {
       .doc("When true, the `allowMissingColumns` feature of `Dataset.unionByName` supports " +
         "nested column in struct types. Missing nested columns of struct columns with same " +
         "name will also be filled with null values. This currently does not support nested " +
-        "columns in array and map types.")
+        "columns in array and map types. Note that if there is any missing nested columns " +
+        "to be filled, in order to make consistent schema between two sides of union, the " +
+        "nested fields of structs will be sorted after merging schema."
+      )
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
