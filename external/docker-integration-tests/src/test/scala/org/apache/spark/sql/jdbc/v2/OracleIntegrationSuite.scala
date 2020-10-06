@@ -72,7 +72,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   override val connectionTimeout = timeout(7.minutes)
   override def dataPreparation(conn: Connection): Unit = {}
 
-  test("SPARK-33034: alter table ... add column") {
+  test("SPARK-33034: ALTER TABLE ... add new columns") {
     withTable("oracle.alt_table") {
       sql("CREATE TABLE oracle.alt_table (ID STRING) USING _")
       sql("ALTER TABLE oracle.alt_table ADD COLUMNS (C1 STRING, C2 STRING)")
@@ -97,7 +97,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     }
   }
 
-  test("SPARK-33034: alter table ... update column type") {
+  test("SPARK-33034: ALTER TABLE ... update column type") {
     withTable("oracle.alt_table") {
       sql("CREATE TABLE oracle.alt_table (ID INTEGER) USING _")
       sql("ALTER TABLE oracle.alt_table ALTER COLUMN id TYPE STRING")
@@ -123,7 +123,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     }
   }
 
-  test("SPARK-33034: alter table ... update column nullability") {
+  test("SPARK-33034: ALTER TABLE ... update column nullability") {
     withTable("oracle.alt_table") {
       sql("CREATE TABLE oracle.alt_table (ID STRING NOT NULL) USING _")
       sql("ALTER TABLE oracle.alt_table ALTER COLUMN ID DROP NOT NULL")
