@@ -204,46 +204,66 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     val options = Map.empty[String, String]
     val schema = StructType.fromDDL("a int, b int, c long, d string")
 
-    val query1 = testRelation2
-      .select(namedStruct(
-        "a", GetStructField(JsonToStructs(schema, options, 'json), 0),
-        "b", GetStructField(JsonToStructs(schema, options, 'json), 1)).as("struct"))
-    val optimized1 = Optimizer.execute(query1.analyze)
-
     val prunedSchema1 = StructType.fromDDL("a int, b int")
     val nullStruct = namedStruct("a", Literal(null, IntegerType), "b", Literal(null, IntegerType))
-    val expected1 = testRelation2
-      .select(
-        If(IsNull('json),
-          nullStruct,
-          KnownNotNull(JsonToStructs(prunedSchema1, options, 'json))).as("struct")).analyze
-    comparePlans(optimized1, expected1)
 
-    // Skip it if `namedStruct` aliases field name.
+    val UTC_OPT = Option("UTC")
+    val json: BoundReference = 'json.string.canBeNull.at(0)
+
+    assertEquivalent(
+      testRelation2,
+      namedStruct(
+        "a", GetStructField(JsonToStructs(schema, options, json, UTC_OPT), 0),
+        "b", GetStructField(JsonToStructs(schema, options, json, UTC_OPT), 1)).as("struct"),
+      If(IsNull(json),
+        nullStruct,
+        KnownNotNull(JsonToStructs(prunedSchema1, options, json, UTC_OPT))).as("struct"))
+
     val field1 = StructType.fromDDL("a int")
     val field2 = StructType.fromDDL("b int")
-    val query2 = testRelation2
-      .select(namedStruct(
-        "a1", GetStructField(JsonToStructs(schema, options, 'json), 0),
-        "b", GetStructField(JsonToStructs(schema, options, 'json), 1)).as("struct"))
-    val optimized2 = Optimizer.execute(query2.analyze)
 
-    val expected2 = testRelation2
-      .select(namedStruct(
-        "a1", GetStructField(JsonToStructs(field1, options, 'json), 0),
-        "b", GetStructField(JsonToStructs(field2, options, 'json), 0)).as("struct")).analyze
-    comparePlans(optimized2, expected2)
+    // Skip optimization if `namedStruct` aliases field name.
+    assertEquivalent(
+      testRelation2,
+      namedStruct(
+        "a1", GetStructField(JsonToStructs(schema, options, json, UTC_OPT), 0),
+        "b", GetStructField(JsonToStructs(schema, options, json, UTC_OPT), 1)).as("struct"),
+      namedStruct(
+        "a1", GetStructField(JsonToStructs(field1, options, json, UTC_OPT), 0),
+        "b", GetStructField(JsonToStructs(field2, options, json, UTC_OPT), 0)).as("struct"))
 
-    val query3 = testRelation2
-      .select(namedStruct(
-        "a", GetStructField(JsonToStructs(schema, options, 'json), 0),
-        "a", GetStructField(JsonToStructs(schema, options, 'json), 0)).as("struct"))
-    val optimized3 = Optimizer.execute(query3.analyze)
+    assertEquivalent(
+      testRelation2,
+      namedStruct(
+        "a", GetStructField(JsonToStructs(schema, options, json, UTC_OPT), 0),
+        "a", GetStructField(JsonToStructs(schema, options, json, UTC_OPT), 0)).as("struct"),
+      namedStruct(
+        "a", GetStructField(JsonToStructs(field1, options, json, UTC_OPT), 0),
+        "a", GetStructField(JsonToStructs(field1, options, json, UTC_OPT), 0)).as("struct"))
 
-    val expected3 = testRelation2
-      .select(namedStruct(
-        "a", GetStructField(JsonToStructs(field1, options, 'json), 0),
-        "a", GetStructField(JsonToStructs(field1, options, 'json), 0)).as("struct")).analyze
-    comparePlans(optimized3, expected3)
+    val PST = getZoneId("-08:00")
+    // Skip optimization if `JsonToStructs`s are not the same.
+    assertEquivalent(
+      testRelation2,
+      namedStruct(
+        "a", GetStructField(JsonToStructs(schema, options, json, UTC_OPT), 0),
+        "b", GetStructField(JsonToStructs(schema, options, json, Option(PST.getId)), 1))
+        .as("struct"),
+      namedStruct(
+        "a", GetStructField(JsonToStructs(field1, options, json, UTC_OPT), 0),
+        "b", GetStructField(JsonToStructs(field2, options, json, Option(PST.getId)), 0))
+        .as("struct"))
+  }
+
+  private def assertEquivalent(relation: LocalRelation, e1: Expression, e2: Expression): Unit = {
+    val plan = relation.select(e1).analyze
+    val actual = Optimizer.execute(plan)
+    val expected = relation.select(e2).analyze
+    comparePlans(actual, expected)
+
+    Seq("""{"a":1, "b":2, "c": 123, "d": "test"}""", null).foreach(v => {
+      val row = create_row(v)
+      checkEvaluation(e1, e2.eval(row), row)
+    })
   }
 }

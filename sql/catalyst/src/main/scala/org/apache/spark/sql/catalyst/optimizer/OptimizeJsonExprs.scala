@@ -55,7 +55,7 @@ object OptimizeJsonExprs extends Rule[LogicalPlan] {
         val duplicateFields = c.names.map(_.toString).distinct.length != c.names.length
 
         // If we create struct from various fields of the same `JsonToStructs` and we don't
-        // alias field names and there is not duplicated fields in the struct.
+        // alias field names and there is not duplicated field in the struct.
         if (sameFieldName && !duplicateFields) {
           val fromJson = jsonToStructs.head.asInstanceOf[JsonToStructs].copy(schema = c.dataType)
           val nullFields = c.children.grouped(2).flatMap {
