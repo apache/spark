@@ -232,7 +232,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
       df1.write
         .mode("append")
         .jdbc(url, "h2.test.abc", properties)
-      checkAnswer(sql("SELECT name, id FROM h2.test.abc"),
+      checkAnswer(
+        sql("SELECT name, id FROM h2.test.abc"),
         Seq(Row("fred", 1), Row("mary", 2), Row("evan", 3)))
 
       df2.write
