@@ -349,7 +349,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
           this.table(table)
         case _ =>
           // explicit dbtable should override all
-          this.extraOptions ++= Seq(JDBCOptions.JDBC_TABLE_NAME -> table)
+          this.extraOptions += JDBCOptions.JDBC_TABLE_NAME -> table
           load
       }
     }
