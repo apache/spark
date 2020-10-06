@@ -32,6 +32,15 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       EmptyRow,
       "error message"
     )
+
+    checkExceptionInExpression[RuntimeException](
+      RaiseError(Literal.create(null, StringType)),
+      EmptyRow,
+      "null"
+    )
+
+    // Expects a string
+    assert(RaiseError(Literal(5)).checkInputDataTypes.isFailure)
   }
 
   test("uuid") {

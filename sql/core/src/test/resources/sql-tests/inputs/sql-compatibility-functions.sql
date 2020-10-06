@@ -22,12 +22,3 @@ SELECT string(1, 2);
 -- SPARK-21555: RuntimeReplaceable used in group by
 CREATE TEMPORARY VIEW tempView1 AS VALUES (1, NAMED_STRUCT('col1', 'gamma', 'col2', 'delta')) AS T(id, st);
 SELECT nvl(st.col1, "value"), count(*) FROM from tempView1 GROUP BY nvl(st.col1, "value");
-
--- Spark-32793: Rewrite AssertTrue with RaiseError
-SELECT assert_true(true), assert_true(boolean(1));
-SELECT assert_true(false);
-SELECT assert_true(boolean(0));
-SELECT assert_true(null);
-SELECT assert_true(boolean(null));
-SELECT assert_true(false, 'custom error message');
-SELECT raise_error('error message')

@@ -1399,56 +1399,6 @@ object functions {
     Column(parser.parseExpression(expr))
   }
 
-  /**
-   * Returns null if the condition is true, and throws an exception otherwise.
-   *
-   * @group normal_funcs
-   * @since 3.1.0
-   */
-  def assert_true(c: Column): Column = withExpr {
-    new AssertTrue(c.expr)
-  }
-
-  /**
-   * Returns null if the condition is true; throws an exception with the error message otherwise.
-   *
-   * @group normal_funcs
-   * @since 3.1.0
-   */
-  def assert_true(c: Column, e: Column): Column = withExpr {
-    new AssertTrue(c.expr, e.expr)
-  }
-
-  /**
-   * Returns null if the condition is true; throws an exception with the error message otherwise.
-   *
-   * @group normal_funcs
-   * @since 3.1.0
-   */
-  def assert_true(c: Column, e: String): Column = withExpr {
-    new AssertTrue(c.expr, Literal(e))
-  }
-
-  /**
-   * Throws an exception with the provided error message.
-   *
-   * @group normal_funcs
-   * @since 3.1.0
-   */
-  def raise_error(c: Column): Column = withExpr {
-    RaiseError(c.expr)
-  }
-
-  /**
-   * Throws an exception with the provided error message.
-   *
-   * @group normal_funcs
-   * @since 3.1.0
-   */
-  def raise_error(e: String): Column = withExpr {
-    RaiseError(Literal(e))
-  }
-
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Math Functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -2366,6 +2316,56 @@ object functions {
   @scala.annotation.varargs
   def xxhash64(cols: Column*): Column = withExpr {
     new XxHash64(cols.map(_.expr))
+  }
+
+  /**
+   * Returns null if the condition is true, and throws an exception otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.1.0
+   */
+  def assert_true(c: Column): Column = withExpr {
+    new AssertTrue(c.expr)
+  }
+
+  /**
+   * Returns null if the condition is true; throws an exception with the error message otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.1.0
+   */
+  def assert_true(c: Column, e: Column): Column = withExpr {
+    new AssertTrue(c.expr, e.expr)
+  }
+
+  /**
+   * Returns null if the condition is true; throws an exception with the error message otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.1.0
+   */
+  def assert_true(c: Column, e: String): Column = withExpr {
+    new AssertTrue(c.expr, Literal(e))
+  }
+
+  /**
+   * Throws an exception with the provided error message.
+   *
+   * @group misc_funcs
+   * @since 3.1.0
+   */
+  def raise_error(c: Column): Column = withExpr {
+    RaiseError(c.expr)
+  }
+
+  /**
+   * Throws an exception with the provided error message.
+   *
+   * @group misc_funcs
+   * @since 3.1.0
+   */
+  def raise_error(e: String): Column = withExpr {
+    RaiseError(Literal(e))
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////

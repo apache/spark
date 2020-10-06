@@ -200,8 +200,16 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       classOf[TernaryExpression], classOf[QuaternaryExpression], classOf[SeptenaryExpression])
 
     // Do not check these expressions, because these expressions extend NullIntolerant
-    // and override the eval method to avoid evaluating input1 if input2 is 0.
-    val ignoreSet = Set(classOf[IntegralDivide], classOf[Divide], classOf[Remainder], classOf[Pmod])
+    // and override the eval method
+    val ignoreSet = Set(
+      // Avoid evaluating input1 if input2 is 0
+      classOf[IntegralDivide],
+      classOf[Divide],
+      classOf[Remainder],
+      classOf[Pmod],
+      // Throws an exception
+      classOf[RaiseError]
+    )
 
     val candidateExprsToCheck = spark.sessionState.functionRegistry.listFunction()
       .map(spark.sessionState.catalog.lookupFunctionInfo).map(_.getClassName)

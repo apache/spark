@@ -64,8 +64,7 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
        custom error message
   """,
   since = "3.1.0")
-case class RaiseError(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def foldable: Boolean = false
   override def dataType: DataType = NullType
@@ -73,18 +72,25 @@ case class RaiseError(child: Expression)
 
   override def prettyName: String = "raise_error"
 
-  override def nullSafeEval(input: Any): Unit =
-    throw new RuntimeException(input.toString())
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      throw new RuntimeException("null")
+    }
+    throw new RuntimeException(value.toString())
+  }
 
   // if (true) is to avoid codegen compilation exception that statement is unreachable
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
     ExprCode(
       code = code"""${eval.code}
-                   |if (true) {
-                   |  throw new RuntimeException(${eval.value}.toString());
-                   |}
-                 """.stripMargin,
+        |if (true) {
+        |  if (${eval.value} == null) {
+        |    throw new RuntimeException("null");
+        |  }
+        |  throw new RuntimeException(${eval.value}.toString());
+        |}""".stripMargin,
       isNull = TrueLiteral,
       value = JavaCode.defaultLiteral(dataType)
     )
