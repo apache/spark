@@ -959,7 +959,11 @@ class Analyzer(
                 Some(StreamingRelationV2(None, table.name, table, options,
                   table.schema.toAttributes, Some(catalog), Some(ident), None))
               } else {
-                Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), options,
+                Some(DataSourceV2Relation.create(
+                  table,
+                  Some(catalog),
+                  Some(ident),
+                  options,
                   partitions))
               }
             case None => None
