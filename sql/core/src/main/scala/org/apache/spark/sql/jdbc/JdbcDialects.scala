@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuilder
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
@@ -233,6 +234,17 @@ abstract class JdbcDialect extends Serializable {
       }
     }
     updateClause.result()
+  }
+
+  /**
+   * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
+   * @param e The dialect specific exception.
+   * @return `AnalysisException` or its sub-class.
+   */
+  def classifyException(e: Throwable): AnalysisException = {
+    new AnalysisException(
+      message = "Failed on a JDBC dialect statement",
+      cause = Some(e))
   }
 }
 
