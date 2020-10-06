@@ -199,15 +199,14 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     val exprTypesToCheck = Seq(classOf[UnaryExpression], classOf[BinaryExpression],
       classOf[TernaryExpression], classOf[QuaternaryExpression], classOf[SeptenaryExpression])
 
-    // Do not check these expressions, because these expressions extend NullIntolerant
-    // and override the eval method
+    // Do not check these expressions, because these expressions override the eval method
     val ignoreSet = Set(
-      // Avoid evaluating input1 if input2 is 0
+      // Extend NullIntolerant and avoid evaluating input1 if input2 is 0
       classOf[IntegralDivide],
       classOf[Divide],
       classOf[Remainder],
       classOf[Pmod],
-      // Throws an exception
+      // Throws an exception, even if input is null
       classOf[RaiseError]
     )
 

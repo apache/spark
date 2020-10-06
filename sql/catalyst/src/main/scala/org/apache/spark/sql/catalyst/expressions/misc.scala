@@ -125,6 +125,10 @@ case class AssertTrue(left: Expression, right: Expression, child: Expression)
   override def exprsReplaced: Seq[Expression] = Seq(left, right)
 }
 
+object AssertTrue {
+  def apply(left: Expression): AssertTrue = new AssertTrue(left)
+}
+
 /**
  * Returns the current database of the SessionCatalog.
  */
