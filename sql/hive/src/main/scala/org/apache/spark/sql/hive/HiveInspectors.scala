@@ -304,12 +304,17 @@ private[hive] trait HiveInspectors {
         withNullSafe(o => getByteWritable(o))
       case _: ByteObjectInspector =>
         withNullSafe(o => o.asInstanceOf[java.lang.Byte])
-      case _: JavaHiveVarcharObjectInspector =>
+        // To spark HiveVarchar and HiveChar are same as string
+      case _: HiveVarcharObjectInspector if x.preferWritable() =>
+        withNullSafe(o => getStringWritable(o))
+      case _: HiveVarcharObjectInspector =>
         withNullSafe { o =>
             val s = o.asInstanceOf[UTF8String].toString
             new HiveVarchar(s, s.length)
         }
-      case _: JavaHiveCharObjectInspector =>
+      case _: HiveCharObjectInspector if x.preferWritable() =>
+        withNullSafe(o => getStringWritable(o))
+      case _: HiveCharObjectInspector =>
         withNullSafe { o =>
             val s = o.asInstanceOf[UTF8String].toString
             new HiveChar(s, s.length)
