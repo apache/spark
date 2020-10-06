@@ -58,6 +58,11 @@ private[kafka010] class KafkaOffsetReader(
    */
   val uninterruptibleThreadRunner = new UninterruptibleThreadRunner("Kafka Offset Reader")
 
+  /**
+   * An AdminClient used in the driver to query the latest Kafka offsets.
+   * This only queries the offsets because AdminClient has no functionality to commit offsets like
+   * KafkaConsumer.
+   */
   @volatile protected var _admin: Admin = null
 
   protected def admin: Admin = synchronized {
