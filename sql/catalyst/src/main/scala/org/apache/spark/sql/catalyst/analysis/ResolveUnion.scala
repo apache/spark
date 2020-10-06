@@ -69,11 +69,11 @@ object ResolveUnion extends Rule[LogicalPlan] {
   }
 
   /**
-   * This helper method sorts fields in a `WithFields` expression by field name.
+   * This helper method sorts fields in a `UpdateFields` expression by field name.
    */
   private def sortStructFieldsInWithFields(expr: Expression): Expression = expr transformUp {
-    case w: WithFields if w.resolved =>
-      w.evalExpr match {
+    case u: UpdateFields if u.resolved =>
+      u.evalExpr match {
         case i @ If(IsNull(_), _, CreateNamedStruct(fieldExprs)) =>
           val sorted = sortFieldExprs(fieldExprs)
           val newStruct = CreateNamedStruct(sorted)
@@ -83,27 +83,20 @@ object ResolveUnion extends Rule[LogicalPlan] {
           val newStruct = CreateNamedStruct(sorted)
           newStruct
         case other =>
-          throw new AnalysisException(s"`WithFields` has incorrect eval expression: $other. " +
+          throw new AnalysisException(s"`UpdateFields` has incorrect eval expression: $other. " +
             "Please file a bug report with this error message, stack trace, and the query.")
       }
   }
 
   def simplifyWithFields(expr: Expression): Expression = {
     expr.transformUp {
-      case WithFields(structExpr, names, values) if names.distinct.length != names.length =>
-        val newNames = mutable.ArrayBuffer.empty[String]
-        val newValues = mutable.ArrayBuffer.empty[Expression]
-        names.zip(values).reverse.foreach { case (name, value) =>
-          if (!newNames.contains(name)) {
-            newNames += name
-            newValues += value
-          }
-        }
-        WithFields(structExpr, names = newNames.reverse, valExprs = newValues.reverse)
-      case WithFields(WithFields(struct, names1, valExprs1), names2, valExprs2) =>
-        WithFields(struct, names1 ++ names2, valExprs1 ++ valExprs2)
-      case g @ GetStructField(WithFields(_, names, values), _, _)
-        if names.contains(g.extractFieldName) =>
+      case UpdateFields(UpdateFields(struct, fieldOps1), fieldOps2) =>
+        UpdateFields(struct, fieldOps1 ++ fieldOps2)
+      case g @ GetStructField(u: UpdateFields, _, _)
+          if u.fieldOps.forall(_.isInstanceOf[WithField]) &&
+            u.fieldOps.map(_.asInstanceOf[WithField].name).contains(g.extractFieldName) =>
+        val names = u.fieldOps.map(_.asInstanceOf[WithField].name)
+        val values = u.fieldOps.map(_.asInstanceOf[WithField].valExpr)
         names.zip(values).reverse.filter(p => p._1 == g.extractFieldName).head._2
     }
   }
@@ -160,13 +153,13 @@ object ResolveUnion extends Rule[LogicalPlan] {
             .find(f => resolver(f.name, field.name))
           if (colField.isEmpty) {
             // The whole struct is missing. Add a null.
-            WithFields(currCol, field.name, Literal(null, st))
+            UpdateFields(currCol, field.name, Literal(null, st))
           } else {
-            WithFields(currCol, field.name,
+            UpdateFields(currCol, field.name,
               addFieldsInto(ExtractValue(currCol, Literal(field.name), resolver), st.fields))
           }
         case dt =>
-          WithFields(currCol, field.name, Literal(null, dt))
+          UpdateFields(currCol, field.name, Literal(null, dt))
       }
     }
   }
