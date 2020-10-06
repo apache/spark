@@ -830,6 +830,8 @@ setMethod("xxhash64",
 #' \code{assert_true}: Returns null if the input column is true; throws an exception
 #' with the provided error message otherwise.
 #'
+#' @param errMsg (optional) The error message to be thrown.
+#'
 #' @rdname column_misc_functions
 #' @aliases assert_true assert_true,Column-method
 #' @examples
