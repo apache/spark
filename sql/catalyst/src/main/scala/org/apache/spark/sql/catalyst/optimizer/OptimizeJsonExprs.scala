@@ -29,8 +29,9 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
  * 1. JsonToStructs(StructsToJson(child)) => child.
  * 2. Prune unnecessary columns from GetStructField/GetArrayStructFields + JsonToStructs.
  * 3. CreateNamedStruct(JsonToStructs(json).col1, JsonToStructs(json).col2, ...) =>
- *      CreateNamedStruct(JsonToStructs(json)) if JsonToStructs(json) is shared among all
- *      fields of CreateNamedStruct.
+ *      If(IsNull(json), nullStruct, KnownNotNull(JsonToStructs(prunedSchema, ..., json)))
+ *      if JsonToStructs(json) is shared among all fields of CreateNamedStruct. `prunedSchema`
+ *      contains all accessed fields in original CreateNamedStruct.
  */
 object OptimizeJsonExprs extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
