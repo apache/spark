@@ -1569,11 +1569,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |   6|   4|   5|
         +----+----+----+
 
-        When the parameter `allowMissingColumns` is ``True``,
-        this function allows different set of column names between two :class:`DataFrame`\\s.
-        Missing columns at each side, will be filled with null values.
-        The missing columns at left :class:`DataFrame` will be added at the end in the schema
-        of the union result:
+        When the parameter `allowMissingColumns` is ``True``, the set of column names
+        in this and other :class:`DataFrame` can differ; missing columns will be filled with null.
+        Further, the missing columns of this :class:`DataFrame` will be added at the end
+        in the schema of the union result:
 
         >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
         >>> df2 = spark.createDataFrame([[4, 5, 6]], ["col1", "col2", "col3"])

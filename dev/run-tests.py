@@ -325,7 +325,6 @@ def get_hive_profiles(hive_version):
     """
 
     sbt_maven_hive_profiles = {
-        "hive1.2": ["-Phive-1.2"],
         "hive2.3": ["-Phive-2.3"],
     }
 

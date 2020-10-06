@@ -27,6 +27,7 @@ import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.sql.catalyst.util.NumberConverter
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.unsafe.types.UTF8String
 
 class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
@@ -355,8 +356,12 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(metaData.getColumnName(1) === "NULL")
         assert(metaData.getColumnTypeName(1) === "void")
         assert(metaData.getColumnType(1) === java.sql.Types.NULL)
-        assert(metaData.getPrecision(1) === 0)
-        assert(metaData.getScale(1) === 0)
+        if (HiveUtils.isHive23) {
+          // For Hive 1.2 the o.a.h.j.JdbcColumn.typeStringToHiveType can not recognize `null` as
+          // type name.
+          assert(metaData.getPrecision(1) === 0)
+          assert(metaData.getScale(1) === 0)
+        }
       }
     }
 

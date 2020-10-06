@@ -61,8 +61,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`SaveMode.ErrorIfExists`: throw an exception at runtime.</li>
    * </ul>
    * <p>
-   * When writing to data source v1, the default option is `ErrorIfExists`. When writing to data
-   * source v2, the default option is `Append`.
+   * The default option is `ErrorIfExists`.
    *
    * @since 1.4.0
    */

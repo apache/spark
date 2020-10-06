@@ -1128,7 +1128,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     def checkColStatsProps(expected: Map[String, String]): Unit = {
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS " + stats.keys.mkString(", "))
       val table = hiveClient.getTable("default", tableName)
-      val props = table.properties.filterKeys(_.startsWith("spark.sql.statistics.colStats"))
+      val props = table.properties.filterKeys(_.startsWith("spark.sql.statistics.colStats")).toMap
       assert(props == expected)
     }
 

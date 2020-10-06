@@ -32,14 +32,13 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils.{negativeInt, positiveInt}
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.SimpleMode
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.FilePartition
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileScan}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
-import org.apache.spark.sql.execution.datasources.v2.parquet.{ParquetScan, ParquetTable}
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -229,6 +228,20 @@ class FileBasedDataSourceSuite extends QueryTest
               }
               assert(exception.getMessage().contains("does not exist"))
             }
+        }
+      }
+    }
+  }
+
+  Seq("json", "orc").foreach { format =>
+    test(s"SPARK-32889: column name supports special characters using $format") {
+      Seq("$", " ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
+        withTempDir { dir =>
+          val dataDir = new File(dir, "file").getCanonicalPath
+          Seq(1).toDF(name).write.format(format).save(dataDir)
+          val schema = spark.read.format(format).load(dataDir).schema
+          assert(schema.size == 1)
+          assertResult(name)(schema.head.name)
         }
       }
     }
