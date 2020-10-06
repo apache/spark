@@ -1449,6 +1449,10 @@ setGeneric("var_pop", function(x) { standardGeneric("var_pop") })
 #' @name NULL
 setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
 
+#' @rdname column_ml_functions
+#' @name NULL
+setGeneric("vector_to_array", function(x, ...) { standardGeneric("vector_to_array") })
+
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
