@@ -732,10 +732,12 @@ object ColumnPruning extends Rule[LogicalPlan] {
  *    `GlobalLimit(LocalLimit)` pattern is also considered.
  */
 object CollapseProject extends Rule[LogicalPlan] {
-
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p1 @ Project(_, p2: Project) =>
-      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)) {
+      val maxCommonExprs = SQLConf.get.maxCommonExprsInCollapseProject
+
+      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList) ||
+        getLargestNumOfCommonOutput(p1.projectList, p2.projectList) >= maxCommonExprs) {
         p1
       } else {
         p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList))
@@ -764,6 +766,23 @@ object CollapseProject extends Rule[LogicalPlan] {
     AttributeMap(projectList.collect {
       case a: Alias => a.toAttribute -> a
     })
+  }
+
+  // Counts for the largest times common outputs from lower operator are used in upper operators.
+  private def getLargestNumOfCommonOutput(
+      upper: Seq[NamedExpression], lower: Seq[NamedExpression]): Int = {
+    val aliases = collectAliases(lower)
+    val exprMap = mutable.HashMap.empty[Attribute, Int]
+
+    upper.foreach(_.collect {
+      case a: Attribute if aliases.contains(a) => exprMap.update(a, exprMap.getOrElse(a, 0) + 1)
+    })
+
+    if (exprMap.size > 0) {
+      exprMap.maxBy(_._2)._2
+    } else {
+      0
+    }
   }
 
   private def haveCommonNonDeterministicOutput(

@@ -1926,6 +1926,19 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val MAX_COMMON_EXPRS_IN_COLLAPSE_PROJECT =
+    buildConf("spark.sql.optimizer.maxCommonExprsInCollapseProject")
+      .doc("An integer number indicates the maximum allowed number of a common expression " +
+        "can be collapsed into upper Project from lower Project by optimizer rule " +
+        "`CollapseProject`. Normally `CollapseProject` will collapse adjacent Project " +
+        "and merge expressions. But in some edge cases, expensive expressions might be " +
+        "duplicated many times in merged Project by this optimization. This config sets " +
+        "a maximum number. Once an expression is duplicated equal to or more than this number " +
+        "if merging two Project, Spark SQL will skip the merging.")
+      .version("3.1.0")
+      .intConf
+      .createWithDefault(20)
+
   val DECIMAL_OPERATIONS_ALLOW_PREC_LOSS =
     buildConf("spark.sql.decimalOperations.allowPrecisionLoss")
       .internal()
@@ -3288,6 +3301,8 @@ class SQLConf extends Serializable with Logging {
   def arrowSafeTypeConversion: Boolean = getConf(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
+
+  def maxCommonExprsInCollapseProject: Int = getConf(MAX_COMMON_EXPRS_IN_COLLAPSE_PROJECT)
 
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
 

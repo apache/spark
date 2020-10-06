@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Rand}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 
 class CollapseProjectSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -169,5 +170,35 @@ class CollapseProjectSuite extends PlanTest {
     val optimized = Optimize.execute(query)
     val expected = Sample(0.0, 0.6, false, 11L, relation.select('a as 'c)).analyze
     comparePlans(optimized, expected)
+  }
+
+  test("SPARK-32945: avoid collapsing projects if reaching max allowed common exprs") {
+    val options = Map.empty[String, String]
+    val schema = StructType.fromDDL("a int, b int, c string, d long")
+
+    Seq("1", "2", "3", "4").foreach { maxCommonExprs =>
+      withSQLConf(SQLConf.MAX_COMMON_EXPRS_IN_COLLAPSE_PROJECT.key -> maxCommonExprs) {
+        // If we collapse two Projects, `JsonToStructs` will be repeated three times.
+        val relation = LocalRelation('json.string)
+        val query = relation.select(
+          JsonToStructs(schema, options, 'json).as("struct"))
+          .select(
+            GetStructField('struct, 0).as("a"),
+            GetStructField('struct, 1).as("b"),
+            GetStructField('struct, 2).as("c")).analyze
+        val optimized = Optimize.execute(query)
+
+        if (maxCommonExprs.toInt <= 3) {
+          val expected = query
+          comparePlans(optimized, expected)
+        } else {
+          val expected = relation.select(
+            GetStructField(JsonToStructs(schema, options, 'json), 0).as("a"),
+            GetStructField(JsonToStructs(schema, options, 'json), 1).as("b"),
+            GetStructField(JsonToStructs(schema, options, 'json), 2).as("c")).analyze
+          comparePlans(optimized, expected)
+        }
+      }
+    }
   }
 }
