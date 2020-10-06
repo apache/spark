@@ -862,8 +862,7 @@ setMethod("assert_true",
 #' @aliases raise_error raise_error,characterOrColumn-method
 #' @examples
 #' \dontrun{
-#' tmp <- mutate(df, v1 = raise_error("error message),
-#'                   v2 = assert_true(df$model))
+#' tmp <- mutate(df, v1 = raise_error("error message"))
 #' head(tmp)}
 #' @note raise_error since 3.1.0
 setMethod("raise_error",
