@@ -179,7 +179,8 @@ public class YarnShuffleService extends AuxiliaryService {
 
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
       shuffleMergeManager = new RemoteBlockPushResolver(transportConf, APP_BASE_RELATIVE_PATH);
-      blockHandler = new ExternalBlockHandler(transportConf, registeredExecutorFile, shuffleMergeManager);
+      blockHandler = new ExternalBlockHandler(
+          transportConf, registeredExecutorFile, shuffleMergeManager);
 
       // If authentication is enabled, set up the shuffle server to use a
       // special RPC handler that filters out unauthenticated fetch requests
@@ -305,8 +306,6 @@ public class YarnShuffleService extends AuxiliaryService {
         secretManager.unregisterApp(appId);
       }
       blockHandler.applicationRemoved(appId, false /* clean up local dirs */);
-      // Set cleanupLocalDirs to false as these merged shuffle files should be deleted
-      // by yarn when the app finishes in Hadoop 2.10
       shuffleMergeManager.applicationRemoved(appId, false);
     } catch (Exception e) {
       logger.error("Exception when stopping application {}", appId, e);

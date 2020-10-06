@@ -65,7 +65,7 @@ import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
 /**
- * An implementation of MergedShuffleFileManager that provides the most essential shuffle
+ * An implementation of {@link MergedShuffleFileManager} that provides the most essential shuffle
  * service processing logic to support push based shuffle.
  */
 public class RemoteBlockPushResolver implements MergedShuffleFileManager {
@@ -81,6 +81,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   private final int minChunkSize;
   private final String relativeMergeDirPathPattern;
 
+  @SuppressWarnings("UnstableApiUsage")
   private final LoadingCache<File, ShuffleIndexInformation> indexCache;
 
   @SuppressWarnings("UnstableApiUsage")
@@ -92,7 +93,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         // Add `spark` prefix because it will run in NM in Yarn mode.
         NettyUtils.createThreadFactory("spark-shuffle-merged-shuffle-directory-cleaner"));
     this.minChunkSize = conf.minChunkSizeInMergedShuffleFile();
-    String indexCacheSize = conf.get("spark.shuffle.service.mergedIndex.cache.size", "100m");
     CacheLoader<File, ShuffleIndexInformation> indexCacheLoader =
         new CacheLoader<File, ShuffleIndexInformation>() {
           public ShuffleIndexInformation load(File file) throws IOException {
@@ -100,7 +100,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           }
         };
     indexCache = CacheBuilder.newBuilder()
-        .maximumWeight(JavaUtils.byteStringAsBytes(indexCacheSize))
+        .maximumWeight(conf.mergedIndexCacheSize())
         .weigher((Weigher<File, ShuffleIndexInformation>) (file, indexInfo) -> indexInfo.getSize())
         .build(indexCacheLoader);
     this.relativeMergeDirPathPattern = relativeMergeDirPathPattern;
@@ -208,7 +208,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     String relativePath = getRelativePath(appPathsInfo.user, appId);
     Path filePath = localDir.resolve(relativePath);
     File targetFile = new File(filePath.toFile(), filename);
-    logger.debug("Get the file for {}", targetFile.getAbsolutePath());
+    logger.debug("Get merged file {}", targetFile.getAbsolutePath());
     return targetFile;
   }
 
@@ -526,7 +526,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             long updatedPos = partitionInfo.getPosition() + length;
             boolean indexUpdated = false;
             if (updatedPos - partitionInfo.getLastChunkOffset() >= minChunkSize) {
-              partitionInfo.updateLastChunkOffset(updatedPos, mapId);
+              partitionInfo.updateChunkInfo(updatedPos, mapId);
               indexUpdated = true;
             }
             partitionInfo.setPosition(updatedPos);
@@ -568,8 +568,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         // to write the block data to disk, we should also ignore here.
         if (canWrite && partitionInfo != null && partitions.containsKey(partitionId)) {
           synchronized (partitionInfo) {
-            partitionInfo.setCurrentMapId(-1);
-            partitionInfo.setEncounteredFailure(true);
+            if (partitionInfo.getCurrentMapId() >= 0 && partitionInfo.getCurrentMapId() == mapId) {
+              partitionInfo.setCurrentMapId(-1);
+              partitionInfo.setEncounteredFailure(true);
+            }
           }
         }
       }
@@ -597,7 +599,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           try {
             partition.channel.truncate(partition.getPosition());
             if (partition.getPosition() != partition.getLastChunkOffset()) {
-              partition.updateLastChunkOffset(partition.getPosition(), partition.lastMergedMapId);
+              partition.updateChunkInfo(partition.getPosition(), partition.lastMergedMapId);
             }
             bitmaps.add(partition.mapTracker);
             reduceIds.add(partitionId.reduceId);
@@ -722,15 +724,19 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     private int currentMapId;
     // Bitmap tracking which mapper's blocks have been merged for this shuffle partition
     private RoaringBitmap mapTracker;
-    // The merged shuffle index file
+    // The index file for a particular merged shuffle contains the chunk offsets.
     private final FileChannel indexChannel;
+    /**
+     * The meta file for a particular merged shuffle contains all the map ids that belong to every
+     * chunk. The entry per chunk is a serialized bitmap.
+     */
     private final FileChannel metaChannel;
     private final DataOutputStream indexWriteStream;
     // The offset for the last chunk tracked in the index file for this shuffle partition
     private long lastChunkOffset;
-    private int lastMergedMapId;
+    private int lastMergedMapId = -1;
 
-    // Bitmap tracking which mapper's blocks are in shuffle chunk
+    // Bitmap tracking which mapper's blocks are in the current shuffle chunk
     private RoaringBitmap chunkTracker;
     ByteBuf trackerBuf = null;
 
@@ -746,7 +752,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       metaChannel = new FileOutputStream(metaFile, true).getChannel();
       this.currentMapId = -1;
       // Writing 0 offset so that we can reuse ShuffleIndexInformation.getIndex()
-      updateLastChunkOffset(0L, -1);
+      updateChunkInfo(0L, -1);
       this.position = 0;
       this.encounteredFailure = false;
       this.mapTracker = new RoaringBitmap();
@@ -791,14 +797,19 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       chunkTracker.clear();
     }
 
-    void updateLastChunkOffset(long lastChunkOffset, int mapId) throws IOException {
+    /**
+     * Appends the chunk offset to the index file and adds the mapId to the chunk tracker.
+     * @param chunkOffset the offset of the chunk in the data file.
+     * @param mapId           the mapId to be added to chunk tracker.
+     */
+    void updateChunkInfo(long chunkOffset, int mapId) throws IOException {
       long idxStartPos = -1;
       try {
         // update the chunk tracker to meta file before index file
         writeChunkTracker(mapId);
         idxStartPos = indexChannel.position();
-        logger.trace("{} updated index with offset {}", targetFile.getName(), lastChunkOffset);
-        indexWriteStream.writeLong(lastChunkOffset);
+        logger.trace("{} updated index with offset {}", targetFile.getName(), chunkOffset);
+        indexWriteStream.writeLong(chunkOffset);
       } catch (IOException ioe) {
         if (idxStartPos != -1) {
           // reset the position to avoid corrupting index files during exception.
@@ -807,7 +818,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         }
         throw ioe;
       }
-      this.lastChunkOffset = lastChunkOffset;
+      this.lastChunkOffset = chunkOffset;
     }
 
     private void writeChunkTracker(int mapId) throws IOException {
@@ -834,7 +845,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   }
 
   /**
-   * Wraps all the information related to the merge_dir of an application.
+   * Wraps all the information related to the merge directory of an application.
    */
   private static class AppPathsInfo {
 

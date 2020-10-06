@@ -364,15 +364,25 @@ public class TransportConf {
   }
 
   /**
-   * The minimum size of a chunk when dividing a merged shuffle file in push based shuffle into
-   * multiple chunks. This is an optimization so that when push based shuffle merges multiple
-   * shuffle blocks belonging to the same shuffle partition into a merged shuffle file, it
-   * divides the merged shuffle file into multiple MB-sized chunks to optimize reading it later.
-   * A corresponding index file for each merged shuffle file will be generated indicating chunk
-   * boundaries.
+   * The minimum size of a chunk when dividing a merged shuffle file into multiple chunks during
+   * push-based shuffle. 
+   * A merged shuffle file consists of multiple small shuffle blocks. Fetching the
+   * complete merged shuffle file in a single response increases the memory requirements for the
+   * clients. Instead of serving the entire merged file, the shuffle service serves the
+   * merged file in `chunks`. A `chunk` constitutes few shuffle blocks in entirety and this
+   * configuration controls how big a chunk can get. A corresponding index file for each merged
+   * shuffle file will be generated indicating chunk boundaries.
    */
   public int minChunkSizeInMergedShuffleFile() {
     return Ints.checkedCast(JavaUtils.byteStringAsBytes(
         conf.get("spark.shuffle.server.minChunkSizeInMergedShuffleFile", "2m")));
+  }
+
+  /**
+   * The size of cache used in push-based shuffle for storing merged index files.
+   */
+  public long mergedIndexCacheSize() {
+    return JavaUtils.byteStringAsBytes(
+    conf.get("spark.shuffle.server.mergedIndexCacheSize", "100m"));
   }
 }
