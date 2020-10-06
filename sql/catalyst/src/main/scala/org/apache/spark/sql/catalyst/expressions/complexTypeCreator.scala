@@ -586,7 +586,7 @@ case class WithField(name: String, valExpr: Expression)
       }
     }
     if (!hasMatch) result += newFieldExpr
-    result
+    result.toSeq
   }
 
   override def children: Seq[Expression] = valExpr :: Nil
