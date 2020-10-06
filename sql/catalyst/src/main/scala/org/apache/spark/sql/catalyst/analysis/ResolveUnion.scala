@@ -92,12 +92,6 @@ object ResolveUnion extends Rule[LogicalPlan] {
     expr.transformUp {
       case UpdateFields(UpdateFields(struct, fieldOps1), fieldOps2) =>
         UpdateFields(struct, fieldOps1 ++ fieldOps2)
-      case g @ GetStructField(u: UpdateFields, _, _)
-          if u.fieldOps.forall(_.isInstanceOf[WithField]) &&
-            u.fieldOps.map(_.asInstanceOf[WithField].name).contains(g.extractFieldName) =>
-        val names = u.fieldOps.map(_.asInstanceOf[WithField].name)
-        val values = u.fieldOps.map(_.asInstanceOf[WithField].valExpr)
-        names.zip(values).reverse.filter(p => p._1 == g.extractFieldName).head._2
     }
   }
 
