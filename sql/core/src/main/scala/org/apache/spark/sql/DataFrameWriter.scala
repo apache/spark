@@ -809,7 +809,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     // connectionProperties should override settings in extraOptions.
     this.extraOptions ++= connectionProperties.asScala
     // explicit url should override all
-    this.extraOptions ++= Seq("url" -> url)
+    this.extraOptions += "url" -> url
 
     import df.sparkSession.sessionState.analyzer.NonSessionCatalogAndIdentifier
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -823,7 +823,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       case _ =>
         // explicit dbtable should override all
-        this.extraOptions ++= Seq("dbtable" -> table)
+        this.extraOptions += "dbtable" -> table
         saveToV1Source(None)
     }
   }
