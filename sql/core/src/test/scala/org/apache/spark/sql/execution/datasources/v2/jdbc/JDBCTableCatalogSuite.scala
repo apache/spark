@@ -111,7 +111,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           conn.prepareStatement("""CREATE TABLE "test"."src_table" (id INTEGER)""").executeUpdate()
         }
         intercept[org.h2.jdbc.JdbcSQLException] {
-          sql(s"ALTER TABLE h2.test.src_table RENAME TO h2.test.dst_table")
+          sql("ALTER TABLE h2.test.src_table RENAME TO h2.test.dst_table")
         }
       }
     }
@@ -165,7 +165,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       assert(t.schema === expectedSchema)
       // Add already existing column
       intercept[AnalysisException] {
-        sql(s"ALTER TABLE h2.test.alt_table ADD COLUMNS (C3 DOUBLE)")
+        sql("ALTER TABLE h2.test.alt_table ADD COLUMNS (C3 DOUBLE)")
       }
     }
     // Add a column to not existing table and namespace
