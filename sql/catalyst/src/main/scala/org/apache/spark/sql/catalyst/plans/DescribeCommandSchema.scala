@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.types.{MetadataBuilder, StringType}
 
-private[sql] object DescribeTableSchema {
+private[sql] object DescribeCommandSchema {
   def describeTableAttributes(): Seq[AttributeReference] = Seq(
     AttributeReference("col_name", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "name of the column").build())(),
