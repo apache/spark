@@ -126,7 +126,7 @@ private[sql] class HiveSessionCatalog(
         // Hive UDF/UDAF/UDTF with function definition. Otherwise, we just throw it earlier.
         case _: InvalidUDFClassException =>
           makeHiveFunctionExpression(name, clazz, input)
-        case e => throw e
+        case NonFatal(e) => throw e
       }
     }
   }
