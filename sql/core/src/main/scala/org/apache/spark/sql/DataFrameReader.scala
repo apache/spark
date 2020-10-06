@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailureSafeParser}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsCatalogOptions, SupportsRead}
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -339,11 +340,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     import sparkSession.sessionState.analyzer.NonSessionCatalogAndIdentifier
 
     this.source = "jdbc"
-    if (table.contains(" ")) { // if table is not a table name, e.g. a SELECT statement
-      // explicit dbtable should override all
-      this.extraOptions += JDBCOptions.JDBC_TABLE_NAME -> table
-      load
-    } else {
+
+    try {
       sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table) match {
         case _ @ NonSessionCatalogAndIdentifier(_, _) =>
           this.table(table)
@@ -352,6 +350,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
           this.extraOptions += JDBCOptions.JDBC_TABLE_NAME -> table
           load
       }
+    } catch {
+      case e: ParseException =>
+        // if table is not a table name, parseMultipartIdentifier(table) fails with ParseException
+        // explicit dbtable should override all
+        this.extraOptions += JDBCOptions.JDBC_TABLE_NAME -> table
+        load
     }
   }
 
