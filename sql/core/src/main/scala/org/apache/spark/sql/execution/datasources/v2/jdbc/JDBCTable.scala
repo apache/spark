@@ -20,6 +20,7 @@ import java.util
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.Partition
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -41,7 +42,7 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
   override def newScanBuilder(options: CaseInsensitiveStringMap): JDBCScanBuilder = {
     val mergedOptions = new JDBCOptions(
       jdbcOptions.parameters.originalMap ++ options.asCaseSensitiveMap().asScala)
-    JDBCScanBuilder(SparkSession.active, schema, mergedOptions)
+    JDBCScanBuilder(SparkSession.active, schema, mergedOptions, Seq.empty[Partition])
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {

@@ -364,7 +364,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           }
 
           val relation = DataSourceV2Relation.create(table, catalog, ident, dsOptions,
-            Array.empty[Partition])
+            Seq.empty[Partition])
           checkPartitioningMatchesV2Table(table)
           if (mode == SaveMode.Append) {
             runCommand(df.sparkSession, "save") {

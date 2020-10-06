@@ -32,9 +32,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case ScanOperation(project, filters, relation: DataSourceV2Relation) =>
-      val scanBuilder = relation.table.asReadable.newScanBuilder(relation.options)
+      var scanBuilder = relation.table.asReadable.newScanBuilder(relation.options)
       scanBuilder match {
-        case jdbcScanBuilder: JDBCScanBuilder => jdbcScanBuilder.partition = relation.partitions
+        case jdbcScanBuilder: JDBCScanBuilder =>
+          scanBuilder = jdbcScanBuilder.copy(partitions = relation.partitions)
         case _ =>
       }
 

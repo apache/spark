@@ -48,7 +48,7 @@ case class UnresolvedRelation(
     multipartIdentifier: Seq[String],
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
     override val isStreaming: Boolean = false,
-    partitions: Array[Partition] = Array.empty[Partition])
+    partitions: Seq[Partition] = Seq.empty[Partition])
   extends LeafNode with NamedRelation {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -67,7 +67,7 @@ object UnresolvedRelation {
       tableIdentifier: TableIdentifier,
       extraOptions: CaseInsensitiveStringMap,
       isStreaming: Boolean,
-      partitions: Array[Partition]): UnresolvedRelation = {
+      partitions: Seq[Partition]): UnresolvedRelation = {
     UnresolvedRelation(tableIdentifier.database.toSeq :+ tableIdentifier.table,
       extraOptions, isStreaming, partitions)
   }

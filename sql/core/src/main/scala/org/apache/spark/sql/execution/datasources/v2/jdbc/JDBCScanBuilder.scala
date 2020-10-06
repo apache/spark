@@ -28,7 +28,8 @@ import org.apache.spark.sql.types.StructType
 case class JDBCScanBuilder(
     session: SparkSession,
     schema: StructType,
-    jdbcOptions: JDBCOptions)
+    jdbcOptions: JDBCOptions,
+    partitions: Seq[Partition])
   extends ScanBuilder with SupportsPushDownFilters with SupportsPushDownRequiredColumns {
 
   private val isCaseSensitive = session.sessionState.conf.caseSensitiveAnalysis
@@ -36,8 +37,6 @@ case class JDBCScanBuilder(
   private var pushedFilter = Array.empty[Filter]
 
   private var prunedSchema = schema
-
-  var partition = Array.empty[Partition]
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
@@ -67,11 +66,11 @@ case class JDBCScanBuilder(
   override def build(): Scan = {
     val resolver = session.sessionState.conf.resolver
     val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
-    val part = if (partition.isEmpty) {
+    val parts = if (partitions.isEmpty) {
       JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
     } else {
-      partition
+      partitions.toArray
     }
-    JDBCScan(JDBCRelation(schema, part, jdbcOptions)(session), prunedSchema, pushedFilter)
+    JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), prunedSchema, pushedFilter)
   }
 }

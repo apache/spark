@@ -930,7 +930,7 @@ class Analyzer(
 
       case i @ InsertIntoStatement(u @ UnresolvedRelation(_, _, false, _), _, _, _, _)
           if i.query.resolved =>
-        lookupV2Relation(u.multipartIdentifier, u.options, false, Array.empty[Partition])
+        lookupV2Relation(u.multipartIdentifier, u.options, false, Seq.empty[Partition])
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
 
@@ -950,7 +950,7 @@ class Analyzer(
         identifier: Seq[String],
         options: CaseInsensitiveStringMap,
         isStreaming: Boolean,
-        partitions: Array[Partition]): Option[LogicalPlan] =
+        partitions: Seq[Partition]): Option[LogicalPlan] =
       expandRelationName(identifier) match {
         case NonSessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident) match {
@@ -1080,7 +1080,7 @@ class Analyzer(
                 SubqueryAlias(
                   catalog.name +: ident.asMultipartIdentifier,
                   DataSourceV2Relation.create(table, Some(catalog), Some(ident), options,
-                    Array.empty[Partition]))
+                    Seq.empty[Partition]))
               }
           }
           val key = catalog.name +: ident.namespace :+ ident.name

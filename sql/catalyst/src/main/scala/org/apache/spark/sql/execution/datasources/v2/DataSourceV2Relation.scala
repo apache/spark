@@ -45,7 +45,7 @@ case class DataSourceV2Relation(
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
     options: CaseInsensitiveStringMap,
-    partitions: Array[Partition] = Array.empty[Partition])
+    partitions: Seq[Partition])
   extends LeafNode with MultiInstanceRelation with NamedRelation {
 
   import DataSourceV2Implicits._
@@ -149,7 +149,7 @@ object DataSourceV2Relation {
       catalog: Option[CatalogPlugin],
       identifier: Option[Identifier],
       options: CaseInsensitiveStringMap,
-      partitions: Array[Partition]): DataSourceV2Relation = {
+      partitions: Seq[Partition]): DataSourceV2Relation = {
     val output = table.schema().toAttributes
     DataSourceV2Relation(table, output, catalog, identifier, options, partitions)
   }
@@ -158,7 +158,7 @@ object DataSourceV2Relation {
       table: Table,
       catalog: Option[CatalogPlugin],
       identifier: Option[Identifier]): DataSourceV2Relation =
-    create(table, catalog, identifier, CaseInsensitiveStringMap.empty, Array.empty[Partition])
+    create(table, catalog, identifier, CaseInsensitiveStringMap.empty, Seq.empty[Partition])
 
   /**
    * This is used to transform data source v2 statistics to logical.Statistics.

@@ -298,7 +298,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         case _: SupportsRead if table.supports(BATCH_READ) =>
           Dataset.ofRows(
             sparkSession,
-            DataSourceV2Relation.create(table, catalog, ident, dsOptions, Array.empty[Partition]))
+            DataSourceV2Relation.create(table, catalog, ident, dsOptions, Seq.empty[Partition]))
 
         case _ => loadV1Source(paths: _*)
       }
