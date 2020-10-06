@@ -345,7 +345,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       load
     } else {
       sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table) match {
-        case nameParts@NonSessionCatalogAndIdentifier(_, _) =>
+        case _ @ NonSessionCatalogAndIdentifier(_, _) =>
           this.table(table)
         case _ =>
           // explicit dbtable should override all
