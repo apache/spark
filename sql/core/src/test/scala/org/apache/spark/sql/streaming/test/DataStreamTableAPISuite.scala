@@ -208,10 +208,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
 
   test("write: write to non-exist table with custom catalog") {
     val tableIdentifier = "testcat.nonexisttable"
-    val existTableIdentifier = "testcat.ns.nonexisttable"
-
     spark.sql("CREATE NAMESPACE testcat.ns")
-    spark.sql(s"CREATE TABLE $existTableIdentifier (id bigint, data string) USING foo")
 
     withTempDir { checkpointDir =>
       val exc = intercept[NoSuchTableException] {
