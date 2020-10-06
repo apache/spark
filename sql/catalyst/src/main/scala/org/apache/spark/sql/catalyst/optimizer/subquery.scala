@@ -597,9 +597,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
       attrMap: AttributeMap[Attribute]): Seq[E] = {
     if (attrMap.nonEmpty) {
       val newExprs = exprs.map { _.transform {
-        case a: AttributeReference if attrMap.contains(a) =>
-          val exprId = attrMap.getOrElse(a, a).exprId
-          a.withExprId(exprId)
+        case a: AttributeReference if attrMap.contains(a) => attrMap(a)
       }}
       newExprs.asInstanceOf[Seq[E]]
     } else {
