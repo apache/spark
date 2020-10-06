@@ -23,34 +23,53 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class InferFiltersFromGenerateSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Infer Filters", Once, InferFiltersFromGenerate) :: Nil
   }
 
-  val testRelation = LocalRelation('a.array(IntegerType))
+  val testRelation = LocalRelation('a.array(StructType(Seq(
+    StructField("x", IntegerType),
+    StructField("y", IntegerType)
+  ))))
 
-  Seq(Explode(_), PosExplode(_)).foreach { f =>
-    val explode = f('a)
-    test("Infer filters from " + explode) {
-      val originalQuery = testRelation.generate(explode).analyze
+  Seq(Explode(_), PosExplode(_), Inline(_)).foreach { f =>
+    val generator = f('a)
+    test("Infer filters from " + generator) {
+      val originalQuery = testRelation.generate(generator).analyze
       val correctAnswer = testRelation
         .where(IsNotNull('a) && Size('a) > 0)
-        .generate(explode)
+        .generate(generator)
         .analyze
       val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, correctAnswer)
     }
 
-    test("Don't infer filters from outer " + explode) {
-      val originalQuery = testRelation.generate(explode, outer = true).analyze
+    test("Don't infer duplicate filters from " + generator) {
+      val originalQuery = testRelation
+        .where(IsNotNull('a) && Size('a) > 0)
+        .generate(generator)
+        .analyze
+      val correctAnswer = testRelation
+        .where(IsNotNull('a) && Size('a) > 0)
+        .generate(generator)
+        .analyze
+      val optimized = Optimize.execute(originalQuery)
+      comparePlans(optimized, correctAnswer)
+    }
+
+    test("Don't infer filters from outer " + generator) {
+      val originalQuery = testRelation.generate(generator, outer = true).analyze
       val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)
     }
 
-    val foldableExplode = f(CreateArray(Seq(Literal(0), Literal(1))))
+    val foldableExplode = f(CreateArray(Seq(
+      CreateStruct(Seq(Literal(0), Literal(1))),
+      CreateStruct(Seq(Literal(2), Literal(3)))
+    )))
     test("Don't infer filters from " + foldableExplode) {
       val originalQuery = testRelation.generate(foldableExplode).analyze
       val optimized = Optimize.execute(originalQuery)

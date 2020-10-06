@@ -1850,23 +1850,35 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
 }
 
 /**
- * Generates filters for exploded expression, such that rows that would have been removed
+ * Infers filters from [[Generate]], such that rows that would have been removed
  * by this [[Generate]] can be removed earlier - before joins and in data sources.
  */
 object InferFiltersFromGenerate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case g @ Generate(e: ExplodeBase, _, false, _, _, child)
+    case generate @ Generate(e: ExplodeBase, _, false, _, _, _)
       if e.deterministic && !e.child.foldable =>
 
-      // Exclude child's constraints to guarantee idempotency
-      val inferredFilters = ExpressionSet(
-        Seq(GreaterThan(Size(e.child), Literal(0)), IsNotNull(e.child))
-      ) -- child.constraints
+      inferFiltersForExplodeLike(generate, e)
 
-      if (inferredFilters.nonEmpty) {
-        g.copy(child = Filter(inferredFilters.reduce(And), child))
-      } else {
-        g
-      }
+    case generate @ Generate(e: Inline, _, false, _, _, _)
+      if e.deterministic && !e.child.foldable =>
+
+      inferFiltersForExplodeLike(generate, e)
+  }
+
+  private def inferFiltersForExplodeLike(generate: Generate, expr: UnaryExpression): Generate = {
+    // Exclude child's constraints to guarantee idempotency
+    val inferredFilters = ExpressionSet(
+      Seq(
+        GreaterThan(Size(expr.child), Literal(0)),
+        IsNotNull(expr.child)
+      )
+    ) -- generate.child.constraints
+
+    if (inferredFilters.nonEmpty) {
+      generate.copy(child = Filter(inferredFilters.reduce(And), generate.child))
+    } else {
+      generate
+    }
   }
 }
