@@ -264,11 +264,12 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDataFrame_with_incorrect_schema(self):
         pdf = self.create_pandas_data_frame()
         fields = list(self.schema)
-        fields[0], fields[1] = fields[1], fields[0]  # swap str with int
+        fields[5], fields[6] = fields[6], fields[5]  # swap decimal with date
         wrong_schema = StructType(fields)
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, "integer.*required"):
-                self.spark.createDataFrame(pdf, schema=wrong_schema)
+        with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(Exception, "[D|d]ecimal.*got.*date"):
+                    self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):
         pdf = self.create_pandas_data_frame()
