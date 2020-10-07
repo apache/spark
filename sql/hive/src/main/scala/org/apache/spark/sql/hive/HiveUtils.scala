@@ -502,17 +502,17 @@ private[spark] object HiveUtils extends Logging {
         hiveMetastoreJars
           .split(File.pathSeparator)
           .flatMap {
-            case path if new File(path).getName == "*" =>
-              val files = new File(path).getParentFile.listFiles()
-              if (files == null) {
-                logWarning(s"Hive jar path '$path' does not exist.")
-                Nil
-              } else {
-                files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).toSeq
-              }
-            case path =>
-              new File(path) :: Nil
-          }
+          case path if new File(path).getName == "*" =>
+            val files = new File(path).getParentFile.listFiles()
+            if (files == null) {
+              logWarning(s"Hive jar path '$path' does not exist.")
+              Nil
+            } else {
+              files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).toSeq
+            }
+          case path =>
+            new File(path) :: Nil
+        }
           .map(_.toURI.toURL)
 
       logInfo(
