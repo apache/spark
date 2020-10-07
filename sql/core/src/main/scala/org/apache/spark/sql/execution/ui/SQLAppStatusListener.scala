@@ -341,7 +341,7 @@ class SQLAppStatusListener(
 
     val exec = getOrCreateExecution(executionId)
     exec.physicalPlanDescription = physicalPlanDescription
-    exec.metrics = sqlPlanMetrics
+    exec.metrics = exec.metrics ++ sqlPlanMetrics
     update(exec)
   }
 
