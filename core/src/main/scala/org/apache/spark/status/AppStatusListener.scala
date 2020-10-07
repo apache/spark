@@ -111,8 +111,10 @@ private[spark] class AppStatusListener(
       updateExclusionStatus(executorId, true)
     case SparkListenerExecutorBlacklistedForStage(_, executorId, _, stageId, stageAttemptId) =>
        updateExclusionForStageStatus(executorId, stageId, stageAttemptId)
-    case SparkListenerExecutorUnblacklisted(_, executorId) => updateExclusionStatus(executorId, false)
-    case SparkListenerNodeBlacklisted(time, hostId, executorFailures) => updateNodeExcluded(hostId, true)
+    case SparkListenerExecutorUnblacklisted(_, executorId) =>
+      updateExclusionStatus(executorId, false)
+    case SparkListenerNodeBlacklisted(time, hostId, executorFailures) =>
+      updateNodeExcluded(hostId, true)
     case SparkListenerNodeBlacklistedForStage(_, hostId, _, stageId, stageAttemptId) =>
        updateNodeExclusionForStage(hostId, stageId, stageAttemptId)
     case SparkListenerNodeUnblacklisted(_, hostId) => updateNodeExcluded(hostId, false)
