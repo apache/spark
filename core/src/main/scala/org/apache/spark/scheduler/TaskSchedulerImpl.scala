@@ -638,7 +638,7 @@ private[spark] class TaskSchedulerImpl(
                     }
                   } else {
                     // Abort Immediately
-                    logInfo("Cannot schedule any task because all executor excluded from " +
+                    logInfo("Cannot schedule any task because all executors excluded from " +
                       "failures. No idle executors can be found to kill. Aborting stage " +
                       s"${taskSet.stageId}.")
                     taskSet.abortSinceCompletelyExcludedOnFailure(taskIndex)

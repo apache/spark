@@ -41,7 +41,8 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
  *  * "flaky" executors -- they don't fail every task, but are still faulty enough to merit
  *      excluding
  *
- * See the design doc on SPARK-8425 for a more in-depth discussion.
+ * See the design doc on SPARK-8425 for a more in-depth discussion. Note SPARK-32037 renamed
+ * the feature.
  *
  * THREADING: As with most helpers of TaskSchedulerImpl, this is not thread-safe.  Though it is
  * called by multiple threads, callers must already have a lock on the TaskSchedulerImpl.  The

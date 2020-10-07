@@ -909,7 +909,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   /**
    * Checks whether the executor is excluded due to failure(s). This is called when the executor
-   *  tries to register with the scheduler, and will deny registration if this method returns true.
+   * tries to register with the scheduler, and will deny registration if this method returns true.
    *
    * This is in addition to the exclude list kept by the task scheduler, so custom implementations
    * don't need to check there.
