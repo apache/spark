@@ -955,6 +955,20 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         .set(EXECUTOR_ALLOW_SPARK_CONTEXT, true)).stop()
     }
   }
+
+  test("ivy path") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+    sc.addJar("ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0")
+    assert(sc.listJars().find(_.contains("scalajs-test-interface_2.12")).nonEmpty)
+
+    sc.addJar("ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0?transitive=true")
+    assert(sc.listJars().find(_.contains("scalajs-library_2.12")).nonEmpty)
+
+    sc.addJar("ivy://org.apache.hive:hive-contrib:2.3.7" +
+      "?exclude=org.pentaho:pentaho-aggdesigner-algorithm&transitive=false")
+    assert(sc.listJars().find(_.contains("org.apache.hive_hive-contrib-2.3.7.jar")).nonEmpty)
+    assert(sc.listJars().find(_.contains("org.apache.hive_hive-exec-2.3.7.jar")).isEmpty)
+  }
 }
 
 object SparkContextSuite {

@@ -1342,6 +1342,7 @@ private[spark] object SparkSubmitUtils {
       coordinates: String,
       ivySettings: IvySettings,
       exclusions: Seq[String] = Nil,
+      transitive: Boolean = true,
       isTest: Boolean = false): String = {
     if (coordinates == null || coordinates.trim.isEmpty) {
       ""
@@ -1370,7 +1371,7 @@ private[spark] object SparkSubmitUtils {
         val ivy = Ivy.newInstance(ivySettings)
         // Set resolve options to download transitive dependencies as well
         val resolveOptions = new ResolveOptions
-        resolveOptions.setTransitive(true)
+        resolveOptions.setTransitive(transitive)
         val retrieveOptions = new RetrieveOptions
         // Turn downloading and logging off for testing
         if (isTest) {

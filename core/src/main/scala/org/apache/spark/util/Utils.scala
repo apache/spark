@@ -58,7 +58,7 @@ import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
 
 import org.apache.spark._
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.{SparkHadoopUtil, SparkSubmitUtils}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Streaming._
@@ -2970,6 +2970,69 @@ private[spark] object Utils extends Logging {
     }
     metadata.append("]")
     metadata.toString
+  }
+
+  def resolveMavenDependencies(uri: URI): String = {
+    val Seq(repositories, ivyRepoPath, ivySettingsPath) =
+      Seq(
+        "spark.jars.repositories",
+        "spark.jars.ivy",
+        "spark.jars.ivySettings"
+      ).map(sys.props.get(_).orNull)
+    // Create the IvySettings, either load from file or build defaults
+    val ivySettings = Option(ivySettingsPath) match {
+      case Some(path) =>
+        SparkSubmitUtils.loadIvySettings(path, Option(repositories), Option(ivyRepoPath))
+
+      case None =>
+        SparkSubmitUtils.buildIvySettings(Option(repositories), Option(ivyRepoPath))
+    }
+    SparkSubmitUtils.resolveMavenCoordinates(uri.getAuthority, ivySettings,
+      parseExcludeList(uri.getQuery), parseTransitive(uri.getQuery))
+  }
+
+  /**
+   * @param queryString
+   * @return Exclude list which contains grape parameters of exclude.
+   *         Example: Input:  exclude=org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http
+   *         Output:  [org.mortbay.jetty:jetty, org.eclipse.jetty:jetty-http]
+   */
+  private def parseExcludeList(queryString: String): Array[String] = {
+    if (queryString == null || queryString.isEmpty) {
+      Array.empty[String]
+    } else {
+      val mapTokens: Array[String] = queryString.split("&")
+      assert(mapTokens.forall(_.split("=").length == 2), "Invalid query string: " + queryString)
+      mapTokens.map(_.split("=")).map(kv => (kv(0), kv(1))).filter(_._1 == "exclude")
+        .flatMap { case (_, excludeString) =>
+          val excludes: Array[String] = excludeString.split(",")
+          assert(excludes.forall(_.split(":").length == 2),
+            "Invalid exclude string: expected 'org:module,org:module,..', found " + excludeString)
+          excludes
+        }
+    }
+  }
+
+  /**
+   * @param queryString
+   * @return Exclude list which contains grape parameters of exclude.
+   *         Example: Input:  exclude=org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http
+   *         Output:  [org.mortbay.jetty:jetty, org.eclipse.jetty:jetty-http]
+   */
+  private def parseTransitive(queryString: String): Boolean = {
+    if (queryString == null || queryString.isEmpty) {
+      false
+    } else {
+      val mapTokens: Array[String] = queryString.split("&")
+      assert(mapTokens.forall(_.split("=").length == 2), "Invalid query string: " + queryString)
+      val transitive = mapTokens.map(_.split("=")).map(kv => (kv(0), kv(1)))
+        .filter(_._1 == "transitive")
+      if (transitive.isEmpty) {
+        false
+      } else {
+        transitive.last._2.toBoolean
+      }
+    }
   }
 }
 

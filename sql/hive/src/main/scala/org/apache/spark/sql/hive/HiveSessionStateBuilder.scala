@@ -127,7 +127,9 @@ class HiveSessionResourceLoader(
   extends SessionResourceLoader(session) {
   private lazy val client = clientBuilder()
   override def addJar(path: String): Unit = {
-    client.addJar(path)
-    super.addJar(path)
+    resolveJars(path).foreach { p =>
+      client.addJar(p)
+      super.addJar(p)
+    }
   }
 }
