@@ -80,6 +80,7 @@ target/
 unit-tests.log
 work/
 docs/.jekyll-metadata
+docs/.jekyll-cache
 
 # For Hive
 TempStatsStore/

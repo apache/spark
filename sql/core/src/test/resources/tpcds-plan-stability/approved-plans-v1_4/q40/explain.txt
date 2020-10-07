@@ -36,7 +36,7 @@ TakeOrderedAndProject (32)
 (1) Scan parquet default.catalog_sales
 Output [5]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_order_number#4, cs_sales_price#5]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/catalog_sales]
+Location [not included in comparison]/{warehouse_dir}/catalog_sales]
 PushedFilters: [IsNotNull(cs_warehouse_sk), IsNotNull(cs_item_sk), IsNotNull(cs_sold_date_sk)]
 ReadSchema: struct<cs_sold_date_sk:int,cs_warehouse_sk:int,cs_item_sk:int,cs_order_number:int,cs_sales_price:decimal(7,2)>
 
@@ -50,7 +50,7 @@ Condition : ((isnotnull(cs_warehouse_sk#2) AND isnotnull(cs_item_sk#3)) AND isno
 (4) Scan parquet default.catalog_returns
 Output [3]: [cr_item_sk#6, cr_order_number#7, cr_refunded_cash#8]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/catalog_returns]
+Location [not included in comparison]/{warehouse_dir}/catalog_returns]
 PushedFilters: [IsNotNull(cr_order_number), IsNotNull(cr_item_sk)]
 ReadSchema: struct<cr_item_sk:int,cr_order_number:int,cr_refunded_cash:decimal(7,2)>
 
@@ -77,7 +77,7 @@ Input [8]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_order_number#
 (10) Scan parquet default.warehouse
 Output [2]: [w_warehouse_sk#10, w_state#11]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/warehouse]
+Location [not included in comparison]/{warehouse_dir}/warehouse]
 PushedFilters: [IsNotNull(w_warehouse_sk)]
 ReadSchema: struct<w_warehouse_sk:int,w_state:string>
 
@@ -104,7 +104,7 @@ Input [7]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_sales_price#5
 (16) Scan parquet default.item
 Output [3]: [i_item_sk#13, i_item_id#14, i_current_price#15]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_current_price), GreaterThanOrEqual(i_current_price,0.99), LessThanOrEqual(i_current_price,1.49), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_item_id:string,i_current_price:decimal(7,2)>
 
@@ -135,7 +135,7 @@ Input [7]: [cs_sold_date_sk#1, cs_item_sk#3, cs_sales_price#5, cr_refunded_cash#
 (23) Scan parquet default.date_dim
 Output [2]: [d_date_sk#17, d_date#18]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-02-10), LessThanOrEqual(d_date,2000-04-10), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 

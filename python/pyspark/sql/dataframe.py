@@ -31,7 +31,7 @@ from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.streaming import DataStreamWriter
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
@@ -678,13 +678,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return self
 
     @since(1.3)
-    def persist(self, storageLevel=StorageLevel.MEMORY_AND_DISK):
+    def persist(self, storageLevel=StorageLevel.MEMORY_AND_DISK_DESER):
         """Sets the storage level to persist the contents of the :class:`DataFrame` across
         operations after the first time it is computed. This can only be used to assign
         a new storage level if the :class:`DataFrame` does not have a storage level set yet.
-        If no storage level is specified defaults to (`MEMORY_AND_DISK`).
+        If no storage level is specified defaults to (`MEMORY_AND_DISK_DESER`)
 
-        .. note:: The default storage level has changed to `MEMORY_AND_DISK` to match Scala in 2.0.
+        .. note:: The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala
+            in 3.0.
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
@@ -1548,7 +1549,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return self.union(other)
 
     @since(2.3)
-    def unionByName(self, other):
+    def unionByName(self, other, allowMissingColumns=False):
         """ Returns a new :class:`DataFrame` containing union of rows in this and another
         :class:`DataFrame`.
 
@@ -1567,8 +1568,27 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |   1|   2|   3|
         |   6|   4|   5|
         +----+----+----+
+
+        When the parameter `allowMissingColumns` is ``True``, the set of column names
+        in this and other :class:`DataFrame` can differ; missing columns will be filled with null.
+        Further, the missing columns of this :class:`DataFrame` will be added at the end
+        in the schema of the union result:
+
+        >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
+        >>> df2 = spark.createDataFrame([[4, 5, 6]], ["col1", "col2", "col3"])
+        >>> df1.unionByName(df2, allowMissingColumns=True).show()
+        +----+----+----+----+
+        |col0|col1|col2|col3|
+        +----+----+----+----+
+        |   1|   2|   3|null|
+        |null|   4|   5|   6|
+        +----+----+----+----+
+
+        .. versionchanged:: 3.1.0
+           Added optional argument `allowMissingColumns` to specify whether to allow
+           missing columns.
         """
-        return DataFrame(self._jdf.unionByName(other._jdf), self.sql_ctx)
+        return DataFrame(self._jdf.unionByName(other._jdf, allowMissingColumns), self.sql_ctx)
 
     @since(1.3)
     def intersect(self, other):

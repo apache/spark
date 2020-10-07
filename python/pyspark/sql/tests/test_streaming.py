@@ -21,7 +21,7 @@ import tempfile
 import time
 
 from pyspark.sql.functions import lit
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StructField, IntegerType, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -68,9 +68,12 @@ class StreamingTests(ReusedSQLTestCase):
     def test_stream_read_options_overwrite(self):
         bad_schema = StructType([StructField("test", IntegerType(), False)])
         schema = StructType([StructField("data", StringType(), False)])
-        df = self.spark.readStream.format('csv').option('path', 'python/test_support/sql/fake') \
-            .schema(bad_schema)\
-            .load(path='python/test_support/sql/streaming', schema=schema, format='text')
+        # SPARK-32516 disables the overwrite behavior by default.
+        with self.sql_conf({"spark.sql.legacy.pathOptionBehavior.enabled": True}):
+            df = self.spark.readStream.format('csv')\
+                .option('path', 'python/test_support/sql/fake')\
+                .schema(bad_schema)\
+                .load(path='python/test_support/sql/streaming', schema=schema, format='text')
         self.assertTrue(df.isStreaming)
         self.assertEqual(df.schema.simpleString(), "struct<data:string>")
 
@@ -110,10 +113,12 @@ class StreamingTests(ReusedSQLTestCase):
         chk = os.path.join(tmpPath, 'chk')
         fake1 = os.path.join(tmpPath, 'fake1')
         fake2 = os.path.join(tmpPath, 'fake2')
-        q = df.writeStream.option('checkpointLocation', fake1)\
-            .format('memory').option('path', fake2) \
-            .queryName('fake_query').outputMode('append') \
-            .start(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
+        # SPARK-32516 disables the overwrite behavior by default.
+        with self.sql_conf({"spark.sql.legacy.pathOptionBehavior.enabled": True}):
+            q = df.writeStream.option('checkpointLocation', fake1)\
+                .format('memory').option('path', fake2) \
+                .queryName('fake_query').outputMode('append') \
+                .start(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
 
         try:
             self.assertEqual(q.name, 'this_query')
@@ -570,7 +575,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.test_streaming import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

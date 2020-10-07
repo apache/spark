@@ -127,8 +127,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             propsWithOwner, writeOptions, ifNotExists) :: Nil
       }
 
-    case RefreshTable(catalog, ident) =>
-      RefreshTableExec(catalog, ident) :: Nil
+    case RefreshTable(r: ResolvedTable) =>
+      RefreshTableExec(r.catalog, r.identifier) :: Nil
 
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)

@@ -33,6 +33,7 @@ Core Classes
     Column
     Row
     GroupedData
+    PandasCogroupedOps
     DataFrameNaFunctions
     DataFrameStatFunctions
     Window
@@ -408,6 +409,7 @@ Functions
     months_between
     nanvl
     next_day
+    nth_value
     ntile
     overlay
     pandas_udf
@@ -539,4 +541,5 @@ Grouping
     GroupedData.min
     GroupedData.pivot
     GroupedData.sum
+    PandasCogroupedOps.applyInPandas
 

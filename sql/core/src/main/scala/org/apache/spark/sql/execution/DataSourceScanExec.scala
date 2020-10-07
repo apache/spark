@@ -55,7 +55,7 @@ trait DataSourceScanExec extends LeafExecNode {
   // Metadata that describes more details of this scan.
   protected def metadata: Map[String, String]
 
-  protected val maxMetadataValueLength = 100
+  protected val maxMetadataValueLength = sqlContext.sessionState.conf.maxMetadataStringLength
 
   override def simpleString(maxFields: Int): String = {
     val metadataEntries = metadata.toSeq.sorted.map {
@@ -156,7 +156,9 @@ case class RowDataSourceScanExec(
  * @param optionalBucketSet Bucket ids for bucket pruning.
  * @param optionalNumCoalescedBuckets Number of coalesced buckets.
  * @param dataFilters Filters on non-partition columns.
- * @param tableIdentifier identifier for the table in the metastore.
+ * @param tableIdentifier Identifier for the table in the metastore.
+ * @param disableBucketedScan Disable bucketed scan based on physical query plan, see rule
+ *                            [[DisableUnnecessaryBucketedScan]] for details.
  */
 case class FileSourceScanExec(
     @transient relation: HadoopFsRelation,
@@ -166,7 +168,8 @@ case class FileSourceScanExec(
     optionalBucketSet: Option[BitSet],
     optionalNumCoalescedBuckets: Option[Int],
     dataFilters: Seq[Expression],
-    tableIdentifier: Option[TableIdentifier])
+    tableIdentifier: Option[TableIdentifier],
+    disableBucketedScan: Boolean = false)
   extends DataSourceScanExec {
 
   // Note that some vals referring the file-based relation are lazy intentionally
@@ -177,7 +180,7 @@ case class FileSourceScanExec(
 
   private lazy val needsUnsafeRowConversion: Boolean = {
     if (relation.fileFormat.isInstanceOf[ParquetSource]) {
-      SparkSession.getActiveSession.get.sessionState.conf.parquetVectorizedReaderEnabled
+      sqlContext.conf.parquetVectorizedReaderEnabled
     } else {
       false
     }
@@ -211,9 +214,6 @@ case class FileSourceScanExec(
     val ret =
       relation.location.listFiles(
         partitionFilters.filterNot(isDynamicPruningFilter), dataFilters)
-    if (relation.partitionSchemaOption.isDefined) {
-      driverMetrics("numPartitions") = ret.length
-    }
     setFilesNumAndSizeMetric(ret, true)
     val timeTakenMs = NANOSECONDS.toMillis(
       (System.nanoTime() - startTime) + optimizerMetadataTimeNs)
@@ -260,7 +260,8 @@ case class FileSourceScanExec(
 
   // exposed for testing
   lazy val bucketedScan: Boolean = {
-    if (relation.sparkSession.sessionState.conf.bucketingEnabled && relation.bucketSpec.isDefined) {
+    if (relation.sparkSession.sessionState.conf.bucketingEnabled && relation.bucketSpec.isDefined
+      && !disableBucketedScan) {
       val spec = relation.bucketSpec.get
       val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
       bucketColumns.size == spec.bucketColumnNames.size
@@ -351,20 +352,23 @@ case class FileSourceScanExec(
         "DataFilters" -> seqToString(dataFilters),
         "Location" -> locationDesc)
 
-    val withSelectedBucketsCount = relation.bucketSpec.map { spec =>
-      val numSelectedBuckets = optionalBucketSet.map { b =>
-        b.cardinality()
+    // TODO(SPARK-32986): Add bucketed scan info in explain output of FileSourceScanExec
+    if (bucketedScan) {
+      relation.bucketSpec.map { spec =>
+        val numSelectedBuckets = optionalBucketSet.map { b =>
+          b.cardinality()
+        } getOrElse {
+          spec.numBuckets
+        }
+        metadata + ("SelectedBucketsCount" ->
+          (s"$numSelectedBuckets out of ${spec.numBuckets}" +
+            optionalNumCoalescedBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
       } getOrElse {
-        spec.numBuckets
+        metadata
       }
-      metadata + ("SelectedBucketsCount" ->
-        (s"$numSelectedBuckets out of ${spec.numBuckets}" +
-          optionalNumCoalescedBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
-    } getOrElse {
+    } else {
       metadata
     }
-
-    withSelectedBucketsCount
   }
 
   override def verboseStringWithOperatorId(): String = {
@@ -438,15 +442,16 @@ case class FileSourceScanExec(
       driverMetrics("staticFilesNum") = filesNum
       driverMetrics("staticFilesSize") = filesSize
     }
+    if (relation.partitionSchemaOption.isDefined) {
+      driverMetrics("numPartitions") = partitions.length
+    }
   }
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files read"),
     "metadataTime" -> SQLMetrics.createTimingMetric(sparkContext, "metadata time"),
-    "filesSize" -> SQLMetrics.createSizeMetric(sparkContext, "size of files read"),
-    "pruningTime" ->
-      SQLMetrics.createTimingMetric(sparkContext, "dynamic partition pruning time")
+    "filesSize" -> SQLMetrics.createSizeMetric(sparkContext, "size of files read")
   ) ++ {
     // Tracking scan time has overhead, we can't afford to do it for each row, and can only do
     // it for each batch.
@@ -457,9 +462,12 @@ case class FileSourceScanExec(
     }
   } ++ {
     if (relation.partitionSchemaOption.isDefined) {
-      Some("numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions read"))
+      Map(
+        "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions read"),
+        "pruningTime" ->
+          SQLMetrics.createTimingMetric(sparkContext, "dynamic partition pruning time"))
     } else {
-      None
+      Map.empty[String, SQLMetric]
     }
   } ++ staticMetrics
 
@@ -538,6 +546,7 @@ case class FileSourceScanExec(
           .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
       }
 
+    // TODO(SPARK-32985): Decouple bucket filter pruning and bucketed table scan
     val prunedFilesGroupedToBuckets = if (optionalBucketSet.isDefined) {
       val bucketSet = optionalBucketSet.get
       filesGroupedToBuckets.filter {
@@ -623,6 +632,7 @@ case class FileSourceScanExec(
       optionalBucketSet,
       optionalNumCoalescedBuckets,
       QueryPlan.normalizePredicates(dataFilters, output),
-      None)
+      None,
+      disableBucketedScan)
   }
 }

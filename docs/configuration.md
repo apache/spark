@@ -1764,8 +1764,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>1</td>
   <td>
     The file output committer algorithm version, valid algorithm version number: 1 or 2.
-    Version 2 may have better performance, but version 1 may handle failures better in certain situations,
-    as per <a href="https://issues.apache.org/jira/browse/MAPREDUCE-4815">MAPREDUCE-4815</a>.
+    Note that 2 may cause a correctness issue like MAPREDUCE-7282.
   </td>
   <td>2.2.0</td>
 </tr>

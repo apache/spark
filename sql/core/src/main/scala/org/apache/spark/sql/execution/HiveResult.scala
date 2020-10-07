@@ -106,7 +106,7 @@ object HiveResult {
     case (n, _: NumericType) => n.toString
     case (s: String, StringType) => if (nested) "\"" + s + "\"" else s
     case (interval: CalendarInterval, CalendarIntervalType) => interval.toString
-    case (seq: Seq[_], ArrayType(typ, _)) =>
+    case (seq: scala.collection.Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(e => toHiveString(e, true, formatters)).mkString("[", ",", "]")
     case (m: Map[_, _], MapType(kType, vType, _)) =>
       m.map { case (key, value) =>

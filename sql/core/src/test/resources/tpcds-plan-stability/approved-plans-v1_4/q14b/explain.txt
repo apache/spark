@@ -104,7 +104,7 @@ TakeOrderedAndProject (100)
 (1) Scan parquet default.store_sales
 Output [4]: [ss_sold_date_sk#1, ss_item_sk#2, ss_quantity#3, ss_list_price#4]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_sold_date_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_quantity:int,ss_list_price:decimal(7,2)>
 
@@ -118,8 +118,8 @@ Condition : (isnotnull(ss_item_sk#2) AND isnotnull(ss_sold_date_sk#1))
 (4) Scan parquet default.item
 Output [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/item]
-PushedFilters: [IsNotNull(i_class_id), IsNotNull(i_brand_id), IsNotNull(i_category_id)]
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_brand_id), IsNotNull(i_class_id), IsNotNull(i_category_id)]
 ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_class_id:int,i_category_id:int>
 
 (5) ColumnarToRow [codegen id : 11]
@@ -127,12 +127,12 @@ Input [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
 
 (6) Filter [codegen id : 11]
 Input [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
-Condition : ((isnotnull(i_class_id#7) AND isnotnull(i_brand_id#6)) AND isnotnull(i_category_id#8))
+Condition : ((isnotnull(i_brand_id#6) AND isnotnull(i_class_id#7)) AND isnotnull(i_category_id#8))
 
 (7) Scan parquet default.store_sales
 Output [2]: [ss_sold_date_sk#1, ss_item_sk#2]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_sold_date_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int>
 
@@ -146,8 +146,8 @@ Condition : (isnotnull(ss_item_sk#2) AND isnotnull(ss_sold_date_sk#1))
 (10) Scan parquet default.item
 Output [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/item]
-PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_brand_id), IsNotNull(i_category_id), IsNotNull(i_class_id)]
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_brand_id), IsNotNull(i_class_id), IsNotNull(i_category_id)]
 ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_class_id:int,i_category_id:int>
 
 (11) ColumnarToRow [codegen id : 1]
@@ -155,7 +155,7 @@ Input [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
 
 (12) Filter [codegen id : 1]
 Input [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
-Condition : (((isnotnull(i_item_sk#5) AND isnotnull(i_brand_id#6)) AND isnotnull(i_category_id#8)) AND isnotnull(i_class_id#7))
+Condition : (((isnotnull(i_item_sk#5) AND isnotnull(i_brand_id#6)) AND isnotnull(i_class_id#7)) AND isnotnull(i_category_id#8))
 
 (13) BroadcastExchange
 Input [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
@@ -173,7 +173,7 @@ Input [6]: [ss_sold_date_sk#1, ss_item_sk#2, i_item_sk#5, i_brand_id#6, i_class_
 (16) Scan parquet default.date_dim
 Output [2]: [d_date_sk#10, d_year#11]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), GreaterThanOrEqual(d_year,1999), LessThanOrEqual(d_year,2001), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
@@ -204,7 +204,7 @@ Input [5]: [ss_sold_date_sk#1, i_brand_id#6, i_class_id#7, i_category_id#8, d_da
 (23) Scan parquet default.catalog_sales
 Output [2]: [cs_sold_date_sk#16, cs_item_sk#17]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/catalog_sales]
+Location [not included in comparison]/{warehouse_dir}/catalog_sales]
 PushedFilters: [IsNotNull(cs_item_sk), IsNotNull(cs_sold_date_sk)]
 ReadSchema: struct<cs_sold_date_sk:int,cs_item_sk:int>
 
@@ -218,7 +218,7 @@ Condition : (isnotnull(cs_item_sk#17) AND isnotnull(cs_sold_date_sk#16))
 (26) Scan parquet default.item
 Output [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_class_id:int,i_category_id:int>
 
@@ -266,7 +266,7 @@ Join condition: None
 (37) Scan parquet default.web_sales
 Output [2]: [ws_sold_date_sk#20, ws_item_sk#21]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/web_sales]
+Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_item_sk), IsNotNull(ws_sold_date_sk)]
 ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int>
 
@@ -367,8 +367,8 @@ Join condition: None
 (58) Scan parquet default.item
 Output [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/item]
-PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_class_id), IsNotNull(i_category_id), IsNotNull(i_brand_id)]
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_brand_id), IsNotNull(i_class_id), IsNotNull(i_category_id)]
 ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_class_id:int,i_category_id:int>
 
 (59) ColumnarToRow [codegen id : 23]
@@ -376,7 +376,7 @@ Input [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
 
 (60) Filter [codegen id : 23]
 Input [4]: [i_item_sk#5, i_brand_id#6, i_class_id#7, i_category_id#8]
-Condition : (((isnotnull(i_item_sk#5) AND isnotnull(i_class_id#7)) AND isnotnull(i_category_id#8)) AND isnotnull(i_brand_id#6))
+Condition : (((isnotnull(i_item_sk#5) AND isnotnull(i_brand_id#6)) AND isnotnull(i_class_id#7)) AND isnotnull(i_category_id#8))
 
 (61) ReusedExchange [Reuses operator id: 56]
 Output [1]: [ss_item_sk#25]
@@ -402,7 +402,7 @@ Input [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_quantity#3, ss_list_price#4, i_i
 (66) Scan parquet default.date_dim
 Output [2]: [d_date_sk#10, d_week_seq#28]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_week_seq), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_week_seq:int>
 
@@ -446,20 +446,20 @@ Input [6]: [i_brand_id#6, i_class_id#7, i_category_id#8, sum#35, isEmpty#36, cou
 Keys [3]: [i_brand_id#6, i_class_id#7, i_category_id#8]
 Functions [2]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true)), count(1)]
 Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#39, count(1)#40]
-Results [7]: [store AS channel#41, i_brand_id#6, i_class_id#7, i_category_id#8, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#39 AS sales#42, count(1)#40 AS number_sales#43, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#39 AS sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#44]
+Results [6]: [i_brand_id#6, i_class_id#7, i_category_id#8, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#39 AS sales#41, count(1)#40 AS number_sales#42, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#39 AS sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#43]
 
 (76) Filter [codegen id : 52]
-Input [7]: [channel#41, i_brand_id#6, i_class_id#7, i_category_id#8, sales#42, number_sales#43, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#44]
-Condition : (isnotnull(sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#44) AND (cast(sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#44 as decimal(32,6)) > cast(Subquery scalar-subquery#45, [id=#46] as decimal(32,6))))
+Input [6]: [i_brand_id#6, i_class_id#7, i_category_id#8, sales#41, number_sales#42, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#43]
+Condition : (isnotnull(sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#43) AND (cast(sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#43 as decimal(32,6)) > cast(Subquery scalar-subquery#44, [id=#45] as decimal(32,6))))
 
 (77) Project [codegen id : 52]
-Output [6]: [channel#41, i_brand_id#6, i_class_id#7, i_category_id#8, sales#42, number_sales#43]
-Input [7]: [channel#41, i_brand_id#6, i_class_id#7, i_category_id#8, sales#42, number_sales#43, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#44]
+Output [6]: [store AS channel#46, i_brand_id#6, i_class_id#7, i_category_id#8, sales#41, number_sales#42]
+Input [6]: [i_brand_id#6, i_class_id#7, i_category_id#8, sales#41, number_sales#42, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#43]
 
 (78) Scan parquet default.store_sales
 Output [4]: [ss_sold_date_sk#1, ss_item_sk#2, ss_quantity#3, ss_list_price#4]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_sold_date_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_quantity:int,ss_list_price:decimal(7,2)>
 
@@ -493,7 +493,7 @@ Input [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_quantity#3, ss_list_price#4, i_i
 (86) Scan parquet default.date_dim
 Output [2]: [d_date_sk#10, d_week_seq#28]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_week_seq), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_week_seq:int>
 
@@ -537,18 +537,18 @@ Input [6]: [i_brand_id#48, i_class_id#49, i_category_id#50, sum#57, isEmpty#58, 
 Keys [3]: [i_brand_id#48, i_class_id#49, i_category_id#50]
 Functions [2]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true)), count(1)]
 Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#61, count(1)#62]
-Results [7]: [store AS channel#63, i_brand_id#48, i_class_id#49, i_category_id#50, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#61 AS sales#64, count(1)#62 AS number_sales#65, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#61 AS sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#66]
+Results [6]: [i_brand_id#48, i_class_id#49, i_category_id#50, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#61 AS sales#63, count(1)#62 AS number_sales#64, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#61 AS sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#65]
 
 (96) Filter [codegen id : 51]
-Input [7]: [channel#63, i_brand_id#48, i_class_id#49, i_category_id#50, sales#64, number_sales#65, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#66]
-Condition : (isnotnull(sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#66) AND (cast(sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#66 as decimal(32,6)) > cast(ReusedSubquery Subquery scalar-subquery#45, [id=#46] as decimal(32,6))))
+Input [6]: [i_brand_id#48, i_class_id#49, i_category_id#50, sales#63, number_sales#64, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#65]
+Condition : (isnotnull(sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#65) AND (cast(sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#65 as decimal(32,6)) > cast(ReusedSubquery Subquery scalar-subquery#44, [id=#45] as decimal(32,6))))
 
 (97) Project [codegen id : 51]
-Output [6]: [channel#63, i_brand_id#48, i_class_id#49, i_category_id#50, sales#64, number_sales#65]
-Input [7]: [channel#63, i_brand_id#48, i_class_id#49, i_category_id#50, sales#64, number_sales#65, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#66]
+Output [6]: [store AS channel#66, i_brand_id#48, i_class_id#49, i_category_id#50, sales#63, number_sales#64]
+Input [6]: [i_brand_id#48, i_class_id#49, i_category_id#50, sales#63, number_sales#64, sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price#4 as decimal(12,2)))), DecimalType(18,2), true))#65]
 
 (98) BroadcastExchange
-Input [6]: [channel#63, i_brand_id#48, i_class_id#49, i_category_id#50, sales#64, number_sales#65]
+Input [6]: [channel#66, i_brand_id#48, i_class_id#49, i_category_id#50, sales#63, number_sales#64]
 Arguments: HashedRelationBroadcastMode(List(input[1, int, true], input[2, int, true], input[3, int, true]),false), [id=#67]
 
 (99) BroadcastHashJoin [codegen id : 52]
@@ -557,12 +557,12 @@ Right keys [3]: [i_brand_id#48, i_class_id#49, i_category_id#50]
 Join condition: None
 
 (100) TakeOrderedAndProject
-Input [12]: [channel#41, i_brand_id#6, i_class_id#7, i_category_id#8, sales#42, number_sales#43, channel#63, i_brand_id#48, i_class_id#49, i_category_id#50, sales#64, number_sales#65]
-Arguments: 100, [channel#41 ASC NULLS FIRST, i_brand_id#6 ASC NULLS FIRST, i_class_id#7 ASC NULLS FIRST, i_category_id#8 ASC NULLS FIRST], [channel#41, i_brand_id#6, i_class_id#7, i_category_id#8, sales#42, number_sales#43, channel#63, i_brand_id#48, i_class_id#49, i_category_id#50, sales#64, number_sales#65]
+Input [12]: [channel#46, i_brand_id#6, i_class_id#7, i_category_id#8, sales#41, number_sales#42, channel#66, i_brand_id#48, i_class_id#49, i_category_id#50, sales#63, number_sales#64]
+Arguments: 100, [i_brand_id#6 ASC NULLS FIRST, i_class_id#7 ASC NULLS FIRST, i_category_id#8 ASC NULLS FIRST], [channel#46, i_brand_id#6, i_class_id#7, i_category_id#8, sales#41, number_sales#42, channel#66, i_brand_id#48, i_class_id#49, i_category_id#50, sales#63, number_sales#64]
 
 ===== Subqueries =====
 
-Subquery:1 Hosting operator id = 76 Hosting Expression = Subquery scalar-subquery#45, [id=#46]
+Subquery:1 Hosting operator id = 76 Hosting Expression = Subquery scalar-subquery#44, [id=#45]
 * HashAggregate (126)
 +- Exchange (125)
    +- * HashAggregate (124)
@@ -594,7 +594,7 @@ Subquery:1 Hosting operator id = 76 Hosting Expression = Subquery scalar-subquer
 (101) Scan parquet default.store_sales
 Output [3]: [ss_sold_date_sk#1, ss_quantity#3, ss_list_price#4]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_sold_date_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_quantity:int,ss_list_price:decimal(7,2)>
 
@@ -608,7 +608,7 @@ Condition : isnotnull(ss_sold_date_sk#1)
 (104) Scan parquet default.date_dim
 Output [2]: [d_date_sk#10, d_year#11]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), GreaterThanOrEqual(d_year,1999), LessThanOrEqual(d_year,2001), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
@@ -639,7 +639,7 @@ Input [4]: [ss_sold_date_sk#1, ss_quantity#3, ss_list_price#4, d_date_sk#10]
 (111) Scan parquet default.catalog_sales
 Output [3]: [cs_sold_date_sk#16, cs_quantity#71, cs_list_price#72]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/catalog_sales]
+Location [not included in comparison]/{warehouse_dir}/catalog_sales]
 PushedFilters: [IsNotNull(cs_sold_date_sk)]
 ReadSchema: struct<cs_sold_date_sk:int,cs_quantity:int,cs_list_price:decimal(7,2)>
 
@@ -665,7 +665,7 @@ Input [4]: [cs_sold_date_sk#16, cs_quantity#71, cs_list_price#72, d_date_sk#10]
 (117) Scan parquet default.web_sales
 Output [3]: [ws_sold_date_sk#20, ws_quantity#75, ws_list_price#76]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/web_sales]
+Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_sold_date_sk)]
 ReadSchema: struct<ws_sold_date_sk:int,ws_quantity:int,ws_list_price:decimal(7,2)>
 
@@ -718,8 +718,8 @@ Subquery:2 Hosting operator id = 68 Hosting Expression = Subquery scalar-subquer
 (127) Scan parquet default.date_dim
 Output [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/date_dim]
-PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), IsNotNull(d_dom), EqualTo(d_year,2000), EqualTo(d_moy,12), EqualTo(d_dom,11)]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), IsNotNull(d_dom), EqualTo(d_year,2000), EqualTo(d_moy,12), EqualTo(d_dom,11)]
 ReadSchema: struct<d_week_seq:int,d_year:int,d_moy:int,d_dom:int>
 
 (128) ColumnarToRow [codegen id : 1]
@@ -727,13 +727,13 @@ Input [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
 
 (129) Filter [codegen id : 1]
 Input [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
-Condition : (((((isnotnull(d_moy#86) AND isnotnull(d_year#11)) AND isnotnull(d_dom#87)) AND (d_year#11 = 2000)) AND (d_moy#86 = 12)) AND (d_dom#87 = 11))
+Condition : (((((isnotnull(d_year#11) AND isnotnull(d_moy#86)) AND isnotnull(d_dom#87)) AND (d_year#11 = 2000)) AND (d_moy#86 = 12)) AND (d_dom#87 = 11))
 
 (130) Project [codegen id : 1]
 Output [1]: [d_week_seq#28]
 Input [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
 
-Subquery:3 Hosting operator id = 96 Hosting Expression = ReusedSubquery Subquery scalar-subquery#45, [id=#46]
+Subquery:3 Hosting operator id = 96 Hosting Expression = ReusedSubquery Subquery scalar-subquery#44, [id=#45]
 
 Subquery:4 Hosting operator id = 88 Hosting Expression = Subquery scalar-subquery#51, [id=#52]
 * Project (134)
@@ -745,8 +745,8 @@ Subquery:4 Hosting operator id = 88 Hosting Expression = Subquery scalar-subquer
 (131) Scan parquet default.date_dim
 Output [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/date_dim]
-PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), IsNotNull(d_dom), EqualTo(d_year,1999), EqualTo(d_moy,12), EqualTo(d_dom,11)]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), IsNotNull(d_dom), EqualTo(d_year,1999), EqualTo(d_moy,12), EqualTo(d_dom,11)]
 ReadSchema: struct<d_week_seq:int,d_year:int,d_moy:int,d_dom:int>
 
 (132) ColumnarToRow [codegen id : 1]
@@ -754,7 +754,7 @@ Input [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
 
 (133) Filter [codegen id : 1]
 Input [4]: [d_week_seq#28, d_year#11, d_moy#86, d_dom#87]
-Condition : (((((isnotnull(d_moy#86) AND isnotnull(d_year#11)) AND isnotnull(d_dom#87)) AND (d_year#11 = 1999)) AND (d_moy#86 = 12)) AND (d_dom#87 = 11))
+Condition : (((((isnotnull(d_year#11) AND isnotnull(d_moy#86)) AND isnotnull(d_dom#87)) AND (d_year#11 = 1999)) AND (d_moy#86 = 12)) AND (d_dom#87 = 11))
 
 (134) Project [codegen id : 1]
 Output [1]: [d_week_seq#28]

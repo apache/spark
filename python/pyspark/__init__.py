@@ -50,15 +50,14 @@ from functools import wraps
 import types
 
 from pyspark.conf import SparkConf
-from pyspark.context import SparkContext
 from pyspark.rdd import RDD, RDDBarrier
 from pyspark.files import SparkFiles
+from pyspark.status import StatusTracker, SparkJobInfo, SparkStageInfo
 from pyspark.util import InheritableThread
 from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast
 from pyspark.serializers import MarshalSerializer, PickleSerializer
-from pyspark.status import *
 from pyspark.taskcontext import TaskContext, BarrierTaskContext, BarrierTaskInfo
 from pyspark.profiler import Profiler, BasicProfiler
 from pyspark.version import __version__  # noqa: F401
@@ -113,6 +112,8 @@ def keyword_only(func):
         return func(self, **kwargs)
     return wrapper
 
+# To avoid circular dependencies
+from pyspark.context import SparkContext
 
 # for back compatibility
 from pyspark.sql import SQLContext, HiveContext, Row  # noqa: F401

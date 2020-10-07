@@ -11,15 +11,15 @@ TakeOrderedAndProject (77)
    :              :     :- * Project (17)
    :              :     :  +- * BroadcastHashJoin Inner BuildRight (16)
    :              :     :     :- * Project (10)
-   :              :     :     :  +- * BroadcastHashJoin Inner BuildLeft (9)
-   :              :     :     :     :- BroadcastExchange (5)
-   :              :     :     :     :  +- * Project (4)
-   :              :     :     :     :     +- * Filter (3)
-   :              :     :     :     :        +- * ColumnarToRow (2)
-   :              :     :     :     :           +- Scan parquet default.date_dim (1)
-   :              :     :     :     +- * Filter (8)
-   :              :     :     :        +- * ColumnarToRow (7)
-   :              :     :     :           +- Scan parquet default.store_sales (6)
+   :              :     :     :  +- * BroadcastHashJoin Inner BuildRight (9)
+   :              :     :     :     :- * Filter (3)
+   :              :     :     :     :  +- * ColumnarToRow (2)
+   :              :     :     :     :     +- Scan parquet default.store_sales (1)
+   :              :     :     :     +- BroadcastExchange (8)
+   :              :     :     :        +- * Project (7)
+   :              :     :     :           +- * Filter (6)
+   :              :     :     :              +- * ColumnarToRow (5)
+   :              :     :     :                 +- Scan parquet default.date_dim (4)
    :              :     :     +- BroadcastExchange (15)
    :              :     :        +- * Project (14)
    :              :     :           +- * Filter (13)
@@ -43,11 +43,11 @@ TakeOrderedAndProject (77)
    :              :     :- * Project (45)
    :              :     :  +- * BroadcastHashJoin Inner BuildRight (44)
    :              :     :     :- * Project (38)
-   :              :     :     :  +- * BroadcastHashJoin Inner BuildLeft (37)
-   :              :     :     :     :- ReusedExchange (33)
-   :              :     :     :     +- * Filter (36)
-   :              :     :     :        +- * ColumnarToRow (35)
-   :              :     :     :           +- Scan parquet default.store_sales (34)
+   :              :     :     :  +- * BroadcastHashJoin Inner BuildRight (37)
+   :              :     :     :     :- * Filter (35)
+   :              :     :     :     :  +- * ColumnarToRow (34)
+   :              :     :     :     :     +- Scan parquet default.store_sales (33)
+   :              :     :     :     +- ReusedExchange (36)
    :              :     :     +- BroadcastExchange (43)
    :              :     :        +- * Project (42)
    :              :     :           +- * Filter (41)
@@ -65,11 +65,11 @@ TakeOrderedAndProject (77)
                   :     :- * Project (63)
                   :     :  +- * BroadcastHashJoin Inner BuildRight (62)
                   :     :     :- * Project (60)
-                  :     :     :  +- * BroadcastHashJoin Inner BuildLeft (59)
-                  :     :     :     :- ReusedExchange (55)
-                  :     :     :     +- * Filter (58)
-                  :     :     :        +- * ColumnarToRow (57)
-                  :     :     :           +- Scan parquet default.store_sales (56)
+                  :     :     :  +- * BroadcastHashJoin Inner BuildRight (59)
+                  :     :     :     :- * Filter (57)
+                  :     :     :     :  +- * ColumnarToRow (56)
+                  :     :     :     :     +- Scan parquet default.store_sales (55)
+                  :     :     :     +- ReusedExchange (58)
                   :     :     +- ReusedExchange (61)
                   :     +- ReusedExchange (64)
                   +- BroadcastExchange (70)
@@ -78,56 +78,56 @@ TakeOrderedAndProject (77)
                            +- Scan parquet default.item (67)
 
 
-(1) Scan parquet default.date_dim
-Output [2]: [d_date_sk#1, d_year#2]
+(1) Scan parquet default.store_sales
+Output [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilityWithStatsSuite/date_dim]
-PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), LessThanOrEqual(d_date_sk,2451910), GreaterThanOrEqual(d_date_sk,2451545), IsNotNull(d_date_sk)]
-ReadSchema: struct<d_date_sk:int,d_year:int>
-
-(2) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date_sk#1, d_year#2]
-
-(3) Filter [codegen id : 1]
-Input [2]: [d_date_sk#1, d_year#2]
-Condition : ((((isnotnull(d_year#2) AND (d_year#2 = 2000)) AND (d_date_sk#1 <= 2451910)) AND (d_date_sk#1 >= 2451545)) AND isnotnull(d_date_sk#1))
-
-(4) Project [codegen id : 1]
-Output [1]: [d_date_sk#1]
-Input [2]: [d_date_sk#1, d_year#2]
-
-(5) BroadcastExchange
-Input [1]: [d_date_sk#1]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#3]
-
-(6) Scan parquet default.store_sales
-Output [8]: [ss_sold_date_sk#4, ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
-Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilityWithStatsSuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_sold_date_sk), GreaterThanOrEqual(ss_sold_date_sk,2451545), LessThanOrEqual(ss_sold_date_sk,2451910), IsNotNull(ss_cdemo_sk), IsNotNull(ss_store_sk), IsNotNull(ss_item_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_cdemo_sk:int,ss_store_sk:int,ss_quantity:int,ss_list_price:decimal(7,2),ss_sales_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
 
-(7) ColumnarToRow
-Input [8]: [ss_sold_date_sk#4, ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
+(2) ColumnarToRow [codegen id : 5]
+Input [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
 
-(8) Filter
-Input [8]: [ss_sold_date_sk#4, ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
-Condition : (((((isnotnull(ss_sold_date_sk#4) AND (ss_sold_date_sk#4 >= 2451545)) AND (ss_sold_date_sk#4 <= 2451910)) AND isnotnull(ss_cdemo_sk#6)) AND isnotnull(ss_store_sk#7)) AND isnotnull(ss_item_sk#5))
+(3) Filter [codegen id : 5]
+Input [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
+Condition : (((((isnotnull(ss_sold_date_sk#1) AND (ss_sold_date_sk#1 >= 2451545)) AND (ss_sold_date_sk#1 <= 2451910)) AND isnotnull(ss_cdemo_sk#3)) AND isnotnull(ss_store_sk#4)) AND isnotnull(ss_item_sk#2))
+
+(4) Scan parquet default.date_dim
+Output [2]: [d_date_sk#9, d_year#10]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), GreaterThanOrEqual(d_date_sk,2451545), LessThanOrEqual(d_date_sk,2451910), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int>
+
+(5) ColumnarToRow [codegen id : 1]
+Input [2]: [d_date_sk#9, d_year#10]
+
+(6) Filter [codegen id : 1]
+Input [2]: [d_date_sk#9, d_year#10]
+Condition : ((((isnotnull(d_year#10) AND (d_year#10 = 2000)) AND (d_date_sk#9 >= 2451545)) AND (d_date_sk#9 <= 2451910)) AND isnotnull(d_date_sk#9))
+
+(7) Project [codegen id : 1]
+Output [1]: [d_date_sk#9]
+Input [2]: [d_date_sk#9, d_year#10]
+
+(8) BroadcastExchange
+Input [1]: [d_date_sk#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#11]
 
 (9) BroadcastHashJoin [codegen id : 5]
-Left keys [1]: [d_date_sk#1]
-Right keys [1]: [ss_sold_date_sk#4]
+Left keys [1]: [ss_sold_date_sk#1]
+Right keys [1]: [d_date_sk#9]
 Join condition: None
 
 (10) Project [codegen id : 5]
-Output [7]: [ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
-Input [9]: [d_date_sk#1, ss_sold_date_sk#4, ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
+Output [7]: [ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
+Input [9]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, d_date_sk#9]
 
 (11) Scan parquet default.customer_demographics
 Output [4]: [cd_demo_sk#12, cd_gender#13, cd_marital_status#14, cd_education_status#15]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilityWithStatsSuite/customer_demographics]
-PushedFilters: [IsNotNull(cd_education_status), IsNotNull(cd_gender), IsNotNull(cd_marital_status), EqualTo(cd_gender,F), EqualTo(cd_marital_status,D), EqualTo(cd_education_status,Primary), IsNotNull(cd_demo_sk)]
+Location [not included in comparison]/{warehouse_dir}/customer_demographics]
+PushedFilters: [IsNotNull(cd_gender), IsNotNull(cd_marital_status), IsNotNull(cd_education_status), EqualTo(cd_gender,F), EqualTo(cd_marital_status,D), EqualTo(cd_education_status,Primary), IsNotNull(cd_demo_sk)]
 ReadSchema: struct<cd_demo_sk:int,cd_gender:string,cd_marital_status:string,cd_education_status:string>
 
 (12) ColumnarToRow [codegen id : 2]
@@ -135,7 +135,7 @@ Input [4]: [cd_demo_sk#12, cd_gender#13, cd_marital_status#14, cd_education_stat
 
 (13) Filter [codegen id : 2]
 Input [4]: [cd_demo_sk#12, cd_gender#13, cd_marital_status#14, cd_education_status#15]
-Condition : ((((((isnotnull(cd_education_status#15) AND isnotnull(cd_gender#13)) AND isnotnull(cd_marital_status#14)) AND (cd_gender#13 = F)) AND (cd_marital_status#14 = D)) AND (cd_education_status#15 = Primary)) AND isnotnull(cd_demo_sk#12))
+Condition : ((((((isnotnull(cd_gender#13) AND isnotnull(cd_marital_status#14)) AND isnotnull(cd_education_status#15)) AND (cd_gender#13 = F)) AND (cd_marital_status#14 = D)) AND (cd_education_status#15 = Primary)) AND isnotnull(cd_demo_sk#12))
 
 (14) Project [codegen id : 2]
 Output [1]: [cd_demo_sk#12]
@@ -146,18 +146,18 @@ Input [1]: [cd_demo_sk#12]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#16]
 
 (16) BroadcastHashJoin [codegen id : 5]
-Left keys [1]: [ss_cdemo_sk#6]
+Left keys [1]: [ss_cdemo_sk#3]
 Right keys [1]: [cd_demo_sk#12]
 Join condition: None
 
 (17) Project [codegen id : 5]
-Output [6]: [ss_item_sk#5, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
-Input [8]: [ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11, cd_demo_sk#12]
+Output [6]: [ss_item_sk#2, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
+Input [8]: [ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, cd_demo_sk#12]
 
 (18) Scan parquet default.store
 Output [2]: [s_store_sk#17, s_state#18]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilityWithStatsSuite/store]
+Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [In(s_state, [TN,AL,SD]), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_state:string>
 
@@ -173,18 +173,18 @@ Input [2]: [s_store_sk#17, s_state#18]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#19]
 
 (22) BroadcastHashJoin [codegen id : 5]
-Left keys [1]: [ss_store_sk#7]
+Left keys [1]: [ss_store_sk#4]
 Right keys [1]: [s_store_sk#17]
 Join condition: None
 
 (23) Project [codegen id : 5]
-Output [6]: [ss_item_sk#5, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11, s_state#18]
-Input [8]: [ss_item_sk#5, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11, s_store_sk#17, s_state#18]
+Output [6]: [ss_item_sk#2, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, s_state#18]
+Input [8]: [ss_item_sk#2, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, s_store_sk#17, s_state#18]
 
 (24) Scan parquet default.item
 Output [2]: [i_item_sk#20, i_item_id#21]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilityWithStatsSuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_item_id:string>
 
@@ -200,13 +200,13 @@ Input [2]: [i_item_sk#20, i_item_id#21]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#22]
 
 (28) BroadcastHashJoin [codegen id : 5]
-Left keys [1]: [ss_item_sk#5]
+Left keys [1]: [ss_item_sk#2]
 Right keys [1]: [i_item_sk#20]
 Join condition: None
 
 (29) Project [codegen id : 5]
-Output [6]: [i_item_id#21, s_state#18, ss_quantity#8 AS agg1#23, ss_list_price#9 AS agg2#24, ss_coupon_amt#11 AS agg3#25, ss_sales_price#10 AS agg4#26]
-Input [8]: [ss_item_sk#5, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11, s_state#18, i_item_sk#20, i_item_id#21]
+Output [6]: [i_item_id#21, s_state#18, ss_quantity#5 AS agg1#23, ss_list_price#6 AS agg2#24, ss_coupon_amt#8 AS agg3#25, ss_sales_price#7 AS agg4#26]
+Input [8]: [ss_item_sk#2, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, s_state#18, i_item_sk#20, i_item_id#21]
 
 (30) HashAggregate [codegen id : 5]
 Input [6]: [i_item_id#21, s_state#18, agg1#23, agg2#24, agg3#25, agg4#26]
@@ -226,36 +226,36 @@ Functions [4]: [avg(cast(agg1#23 as bigint)), avg(UnscaledValue(agg2#24)), avg(U
 Aggregate Attributes [4]: [avg(cast(agg1#23 as bigint))#44, avg(UnscaledValue(agg2#24))#45, avg(UnscaledValue(agg3#25))#46, avg(UnscaledValue(agg4#26))#47]
 Results [7]: [i_item_id#21, s_state#18, 0 AS g_state#48, avg(cast(agg1#23 as bigint))#44 AS agg1#49, cast((avg(UnscaledValue(agg2#24))#45 / 100.0) as decimal(11,6)) AS agg2#50, cast((avg(UnscaledValue(agg3#25))#46 / 100.0) as decimal(11,6)) AS agg3#51, cast((avg(UnscaledValue(agg4#26))#47 / 100.0) as decimal(11,6)) AS agg4#52]
 
-(33) ReusedExchange [Reuses operator id: 5]
-Output [1]: [d_date_sk#1]
-
-(34) Scan parquet default.store_sales
-Output [8]: [ss_sold_date_sk#4, ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
+(33) Scan parquet default.store_sales
+Output [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilityWithStatsSuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_sold_date_sk), GreaterThanOrEqual(ss_sold_date_sk,2451545), LessThanOrEqual(ss_sold_date_sk,2451910), IsNotNull(ss_cdemo_sk), IsNotNull(ss_store_sk), IsNotNull(ss_item_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_cdemo_sk:int,ss_store_sk:int,ss_quantity:int,ss_list_price:decimal(7,2),ss_sales_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
 
-(35) ColumnarToRow
-Input [8]: [ss_sold_date_sk#4, ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
+(34) ColumnarToRow [codegen id : 11]
+Input [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
 
-(36) Filter
-Input [8]: [ss_sold_date_sk#4, ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
-Condition : (((((isnotnull(ss_sold_date_sk#4) AND (ss_sold_date_sk#4 >= 2451545)) AND (ss_sold_date_sk#4 <= 2451910)) AND isnotnull(ss_cdemo_sk#6)) AND isnotnull(ss_store_sk#7)) AND isnotnull(ss_item_sk#5))
+(35) Filter [codegen id : 11]
+Input [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
+Condition : (((((isnotnull(ss_sold_date_sk#1) AND (ss_sold_date_sk#1 >= 2451545)) AND (ss_sold_date_sk#1 <= 2451910)) AND isnotnull(ss_cdemo_sk#3)) AND isnotnull(ss_store_sk#4)) AND isnotnull(ss_item_sk#2))
+
+(36) ReusedExchange [Reuses operator id: 8]
+Output [1]: [d_date_sk#9]
 
 (37) BroadcastHashJoin [codegen id : 11]
-Left keys [1]: [d_date_sk#1]
-Right keys [1]: [ss_sold_date_sk#4]
+Left keys [1]: [ss_sold_date_sk#1]
+Right keys [1]: [d_date_sk#9]
 Join condition: None
 
 (38) Project [codegen id : 11]
-Output [7]: [ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
-Input [9]: [d_date_sk#1, ss_sold_date_sk#4, ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
+Output [7]: [ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
+Input [9]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, d_date_sk#9]
 
 (39) Scan parquet default.store
 Output [2]: [s_store_sk#17, s_state#18]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilityWithStatsSuite/store]
+Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [In(s_state, [TN,AL,SD]), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_state:string>
 
@@ -275,37 +275,37 @@ Input [1]: [s_store_sk#17]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#53]
 
 (44) BroadcastHashJoin [codegen id : 11]
-Left keys [1]: [ss_store_sk#7]
+Left keys [1]: [ss_store_sk#4]
 Right keys [1]: [s_store_sk#17]
 Join condition: None
 
 (45) Project [codegen id : 11]
-Output [6]: [ss_item_sk#5, ss_cdemo_sk#6, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
-Input [8]: [ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11, s_store_sk#17]
+Output [6]: [ss_item_sk#2, ss_cdemo_sk#3, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
+Input [8]: [ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, s_store_sk#17]
 
 (46) ReusedExchange [Reuses operator id: 15]
 Output [1]: [cd_demo_sk#12]
 
 (47) BroadcastHashJoin [codegen id : 11]
-Left keys [1]: [ss_cdemo_sk#6]
+Left keys [1]: [ss_cdemo_sk#3]
 Right keys [1]: [cd_demo_sk#12]
 Join condition: None
 
 (48) Project [codegen id : 11]
-Output [5]: [ss_item_sk#5, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
-Input [7]: [ss_item_sk#5, ss_cdemo_sk#6, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11, cd_demo_sk#12]
+Output [5]: [ss_item_sk#2, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
+Input [7]: [ss_item_sk#2, ss_cdemo_sk#3, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, cd_demo_sk#12]
 
 (49) ReusedExchange [Reuses operator id: 27]
 Output [2]: [i_item_sk#20, i_item_id#21]
 
 (50) BroadcastHashJoin [codegen id : 11]
-Left keys [1]: [ss_item_sk#5]
+Left keys [1]: [ss_item_sk#2]
 Right keys [1]: [i_item_sk#20]
 Join condition: None
 
 (51) Project [codegen id : 11]
-Output [5]: [i_item_id#21, ss_quantity#8 AS agg1#23, ss_list_price#9 AS agg2#24, ss_coupon_amt#11 AS agg3#25, ss_sales_price#10 AS agg4#26]
-Input [7]: [ss_item_sk#5, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11, i_item_sk#20, i_item_id#21]
+Output [5]: [i_item_id#21, ss_quantity#5 AS agg1#23, ss_list_price#6 AS agg2#24, ss_coupon_amt#8 AS agg3#25, ss_sales_price#7 AS agg4#26]
+Input [7]: [ss_item_sk#2, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, i_item_sk#20, i_item_id#21]
 
 (52) HashAggregate [codegen id : 11]
 Input [5]: [i_item_id#21, agg1#23, agg2#24, agg3#25, agg4#26]
@@ -325,60 +325,60 @@ Functions [4]: [avg(cast(agg1#23 as bigint)), avg(UnscaledValue(agg2#24)), avg(U
 Aggregate Attributes [4]: [avg(cast(agg1#23 as bigint))#71, avg(UnscaledValue(agg2#24))#72, avg(UnscaledValue(agg3#25))#73, avg(UnscaledValue(agg4#26))#74]
 Results [7]: [i_item_id#21, null AS s_state#75, 1 AS g_state#76, avg(cast(agg1#23 as bigint))#71 AS agg1#77, cast((avg(UnscaledValue(agg2#24))#72 / 100.0) as decimal(11,6)) AS agg2#78, cast((avg(UnscaledValue(agg3#25))#73 / 100.0) as decimal(11,6)) AS agg3#79, cast((avg(UnscaledValue(agg4#26))#74 / 100.0) as decimal(11,6)) AS agg4#80]
 
-(55) ReusedExchange [Reuses operator id: 5]
-Output [1]: [d_date_sk#1]
-
-(56) Scan parquet default.store_sales
-Output [8]: [ss_sold_date_sk#4, ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
+(55) Scan parquet default.store_sales
+Output [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilityWithStatsSuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_sold_date_sk), GreaterThanOrEqual(ss_sold_date_sk,2451545), LessThanOrEqual(ss_sold_date_sk,2451910), IsNotNull(ss_cdemo_sk), IsNotNull(ss_store_sk), IsNotNull(ss_item_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_cdemo_sk:int,ss_store_sk:int,ss_quantity:int,ss_list_price:decimal(7,2),ss_sales_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
 
-(57) ColumnarToRow
-Input [8]: [ss_sold_date_sk#4, ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
+(56) ColumnarToRow [codegen id : 17]
+Input [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
 
-(58) Filter
-Input [8]: [ss_sold_date_sk#4, ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
-Condition : (((((isnotnull(ss_sold_date_sk#4) AND (ss_sold_date_sk#4 >= 2451545)) AND (ss_sold_date_sk#4 <= 2451910)) AND isnotnull(ss_cdemo_sk#6)) AND isnotnull(ss_store_sk#7)) AND isnotnull(ss_item_sk#5))
+(57) Filter [codegen id : 17]
+Input [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
+Condition : (((((isnotnull(ss_sold_date_sk#1) AND (ss_sold_date_sk#1 >= 2451545)) AND (ss_sold_date_sk#1 <= 2451910)) AND isnotnull(ss_cdemo_sk#3)) AND isnotnull(ss_store_sk#4)) AND isnotnull(ss_item_sk#2))
+
+(58) ReusedExchange [Reuses operator id: 8]
+Output [1]: [d_date_sk#9]
 
 (59) BroadcastHashJoin [codegen id : 17]
-Left keys [1]: [d_date_sk#1]
-Right keys [1]: [ss_sold_date_sk#4]
+Left keys [1]: [ss_sold_date_sk#1]
+Right keys [1]: [d_date_sk#9]
 Join condition: None
 
 (60) Project [codegen id : 17]
-Output [7]: [ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
-Input [9]: [d_date_sk#1, ss_sold_date_sk#4, ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
+Output [7]: [ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
+Input [9]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, d_date_sk#9]
 
 (61) ReusedExchange [Reuses operator id: 43]
 Output [1]: [s_store_sk#17]
 
 (62) BroadcastHashJoin [codegen id : 17]
-Left keys [1]: [ss_store_sk#7]
+Left keys [1]: [ss_store_sk#4]
 Right keys [1]: [s_store_sk#17]
 Join condition: None
 
 (63) Project [codegen id : 17]
-Output [6]: [ss_item_sk#5, ss_cdemo_sk#6, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
-Input [8]: [ss_item_sk#5, ss_cdemo_sk#6, ss_store_sk#7, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11, s_store_sk#17]
+Output [6]: [ss_item_sk#2, ss_cdemo_sk#3, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
+Input [8]: [ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, s_store_sk#17]
 
 (64) ReusedExchange [Reuses operator id: 15]
 Output [1]: [cd_demo_sk#12]
 
 (65) BroadcastHashJoin [codegen id : 17]
-Left keys [1]: [ss_cdemo_sk#6]
+Left keys [1]: [ss_cdemo_sk#3]
 Right keys [1]: [cd_demo_sk#12]
 Join condition: None
 
 (66) Project [codegen id : 17]
-Output [5]: [ss_item_sk#5, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11]
-Input [7]: [ss_item_sk#5, ss_cdemo_sk#6, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11, cd_demo_sk#12]
+Output [5]: [ss_item_sk#2, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
+Input [7]: [ss_item_sk#2, ss_cdemo_sk#3, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, cd_demo_sk#12]
 
 (67) Scan parquet default.item
 Output [1]: [i_item_sk#20]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilityWithStatsSuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int>
 
@@ -394,13 +394,13 @@ Input [1]: [i_item_sk#20]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#81]
 
 (71) BroadcastHashJoin [codegen id : 17]
-Left keys [1]: [ss_item_sk#5]
+Left keys [1]: [ss_item_sk#2]
 Right keys [1]: [i_item_sk#20]
 Join condition: None
 
 (72) Project [codegen id : 17]
-Output [4]: [ss_quantity#8 AS agg1#23, ss_list_price#9 AS agg2#24, ss_coupon_amt#11 AS agg3#25, ss_sales_price#10 AS agg4#26]
-Input [6]: [ss_item_sk#5, ss_quantity#8, ss_list_price#9, ss_sales_price#10, ss_coupon_amt#11, i_item_sk#20]
+Output [4]: [ss_quantity#5 AS agg1#23, ss_list_price#6 AS agg2#24, ss_coupon_amt#8 AS agg3#25, ss_sales_price#7 AS agg4#26]
+Input [6]: [ss_item_sk#2, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8, i_item_sk#20]
 
 (73) HashAggregate [codegen id : 17]
 Input [4]: [agg1#23, agg2#24, agg3#25, agg4#26]

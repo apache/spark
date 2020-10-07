@@ -169,7 +169,6 @@ private[spark] class TaskSetManager(
 
   // Task index, start and finish time for each task attempt (indexed by task ID)
   private[scheduler] val taskInfos = new HashMap[Long, TaskInfo]
-  private[scheduler] val tidToExecutorKillTimeMapping = new HashMap[Long, Long]
 
   // Use a MedianHeap to record durations of successful tasks so we know when to launch
   // speculative tasks. This is only used when speculation is enabled, to avoid the overhead
@@ -943,7 +942,6 @@ private[spark] class TaskSetManager(
 
   /** If the given task ID is in the set of running tasks, removes it. */
   def removeRunningTask(tid: Long): Unit = {
-    tidToExecutorKillTimeMapping.remove(tid)
     if (runningTasksSet.remove(tid) && parent != null) {
       parent.decreaseRunningTasks(1)
     }
@@ -952,6 +950,9 @@ private[spark] class TaskSetManager(
   override def getSchedulableByName(name: String): Schedulable = {
     null
   }
+
+  override def isSchedulable: Boolean = !isZombie &&
+    (pendingTasks.all.nonEmpty || pendingSpeculatableTasks.all.nonEmpty)
 
   override def addSchedulable(schedulable: Schedulable): Unit = {}
 
@@ -990,7 +991,7 @@ private[spark] class TaskSetManager(
     for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
       val exitCausedByApp: Boolean = reason match {
         case exited: ExecutorExited => exited.exitCausedByApp
-        case ExecutorKilled => false
+        case ExecutorKilled | ExecutorDecommission(_) => false
         case ExecutorProcessLost(_, _, false) => false
         case _ => true
       }
@@ -1054,15 +1055,21 @@ private[spark] class TaskSetManager(
       logDebug("Task length threshold for speculation: " + threshold)
       for (tid <- runningTasksSet) {
         var speculated = checkAndSubmitSpeculatableTask(tid, time, threshold)
-        if (!speculated && tidToExecutorKillTimeMapping.contains(tid)) {
-          // Check whether this task will finish before the exectorKillTime assuming
-          // it will take medianDuration overall. If this task cannot finish within
-          // executorKillInterval, then this task is a candidate for speculation
-          val taskEndTimeBasedOnMedianDuration = taskInfos(tid).launchTime + medianDuration
-          val canExceedDeadline = tidToExecutorKillTimeMapping(tid) <
-            taskEndTimeBasedOnMedianDuration
-          if (canExceedDeadline) {
-            speculated = checkAndSubmitSpeculatableTask(tid, time, 0)
+        if (!speculated && executorDecommissionKillInterval.isDefined) {
+          val taskInfo = taskInfos(tid)
+          val decomState = sched.getExecutorDecommissionState(taskInfo.executorId)
+          if (decomState.isDefined) {
+            // Check if this task might finish after this executor is decommissioned.
+            // We estimate the task's finish time by using the median task duration.
+            // Whereas the time when the executor might be decommissioned is estimated using the
+            // config executorDecommissionKillInterval. If the task is going to finish after
+            // decommissioning, then we will eagerly speculate the task.
+            val taskEndTimeBasedOnMedianDuration = taskInfos(tid).launchTime + medianDuration
+            val executorDecomTime = decomState.get.startTime + executorDecommissionKillInterval.get
+            val canExceedDeadline = executorDecomTime < taskEndTimeBasedOnMedianDuration
+            if (canExceedDeadline) {
+              speculated = checkAndSubmitSpeculatableTask(tid, time, 0)
+            }
           }
         }
         foundTasks |= speculated
@@ -1123,14 +1130,6 @@ private[spark] class TaskSetManager(
 
   def executorDecommission(execId: String): Unit = {
     recomputeLocality()
-    if (speculationEnabled) {
-      executorDecommissionKillInterval.foreach { interval =>
-        val executorKillTime = clock.getTimeMillis() + interval
-        runningTasksSet.filter(taskInfos(_).executorId == execId).foreach { tid =>
-          tidToExecutorKillTimeMapping(tid) = executorKillTime
-        }
-      }
-    }
   }
 
   def recomputeLocality(): Unit = {

@@ -842,8 +842,8 @@ class AdaptiveQueryExecSuite
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       val df = sql("SELECT * FROM testData join testData2 ON key = a where value = '1'")
       val planBefore = df.queryExecution.executedPlan
-      assert(planBefore.toString.contains("== Current Plan =="))
-      assert(planBefore.toString.contains("== Initial Plan =="))
+      assert(!planBefore.toString.contains("== Current Plan =="))
+      assert(!planBefore.toString.contains("== Initial Plan =="))
       df.collect()
       val planAfter = df.queryExecution.executedPlan
       assert(planAfter.toString.contains("== Final Plan =="))
@@ -1184,6 +1184,25 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-32717: AQEOptimizer should respect excludedRules configuration") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
+      // This test is a copy of test(SPARK-32573), in order to test the configuration
+      // `spark.sql.adaptive.optimizer.excludedRules` works as expect.
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> EliminateJoinToEmptyRelation.ruleName) {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData2 t1 WHERE t1.b NOT IN (SELECT b FROM testData3)")
+      val bhj = findTopLevelBroadcastHashJoin(plan)
+      assert(bhj.size == 1)
+      val join = findTopLevelBaseJoin(adaptivePlan)
+      // this is different compares to test(SPARK-32573) due to the rule
+      // `EliminateJoinToEmptyRelation` has been excluded.
+      assert(join.nonEmpty)
+      checkNumLocalShuffleReaders(adaptivePlan)
+    }
+  }
+
   test("SPARK-32649: Eliminate inner and semi join to empty relation") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
@@ -1203,6 +1222,40 @@ class AdaptiveQueryExecSuite
         assert(join.isEmpty)
         checkNumLocalShuffleReaders(adaptivePlan)
       })
+    }
+  }
+
+  test("SPARK-32753: Only copy tags to node with no tags") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withTempView("v1") {
+        spark.range(10).union(spark.range(10)).createOrReplaceTempView("v1")
+
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT id FROM v1 GROUP BY id DISTRIBUTE BY id")
+        assert(collect(adaptivePlan) {
+          case s: ShuffleExchangeExec => s
+        }.length == 1)
+      }
+    }
+  }
+
+  test("Logging plan changes for AQE") {
+    val testAppender = new LogAppender("plan changes")
+    withLogAppender(testAppender) {
+      withSQLConf(
+          SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "INFO",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        sql("SELECT * FROM testData JOIN testData2 ON key = a " +
+          "WHERE value = (SELECT max(a) FROM testData3)").collect()
+      }
+      Seq("=== Result of Batch AQE Preparations ===",
+          "=== Result of Batch AQE Post Stage Creation ===",
+          "=== Result of Batch AQE Replanning ===",
+          "=== Result of Batch AQE Query Stage Optimization ===",
+          "=== Result of Batch AQE Final Query Stage Optimization ===").foreach { expectedMsg =>
+        assert(testAppender.loggingEvents.exists(_.getRenderedMessage.contains(expectedMsg)))
+      }
     }
   }
 }

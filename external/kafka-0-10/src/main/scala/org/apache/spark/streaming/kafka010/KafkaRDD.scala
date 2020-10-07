@@ -248,7 +248,7 @@ private class KafkaRDDIterator[K, V](
     }
   }
 
-  override def hasNext(): Boolean = requestOffset < part.untilOffset
+  override def hasNext: Boolean = requestOffset < part.untilOffset
 
   override def next(): ConsumerRecord[K, V] = {
     if (!hasNext) {
@@ -291,7 +291,7 @@ private class CompactedKafkaRDDIterator[K, V](
 
   private var okNext: Boolean = true
 
-  override def hasNext(): Boolean = okNext
+  override def hasNext: Boolean = okNext
 
   override def next(): ConsumerRecord[K, V] = {
     if (!hasNext) {

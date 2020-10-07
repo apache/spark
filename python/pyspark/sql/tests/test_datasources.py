@@ -19,7 +19,7 @@ import shutil
 import tempfile
 
 from pyspark.sql import Row
-from pyspark.sql.types import *
+from pyspark.sql.types import IntegerType, StructField, StructType, LongType, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -164,7 +164,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.test_datasources import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

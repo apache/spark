@@ -48,6 +48,7 @@ import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.Utils
 
 /**
  * A command to create a table with the same definition of the given existing table.
@@ -489,6 +490,7 @@ case class TruncateTableCommand(
       }
     val hadoopConf = spark.sessionState.newHadoopConf()
     val ignorePermissionAcl = SQLConf.get.truncateTableIgnorePermissionAcl
+    val isTrashEnabled = SQLConf.get.truncateTrashEnabled
     locations.foreach { location =>
       if (location.isDefined) {
         val path = new Path(location.get)
@@ -513,7 +515,7 @@ case class TruncateTableCommand(
             }
           }
 
-          fs.delete(path, true)
+          Utils.moveToTrashOrDelete(fs, path, isTrashEnabled, hadoopConf)
 
           // We should keep original permission/acl of the path.
           // For owner/group, only super-user can set it, for example on HDFS. Because
@@ -1377,5 +1379,24 @@ case class ShowCreateTableAsSerdeCommand(table: TableIdentifier)
         builder ++= s"  OUTPUTFORMAT '${escapeSingleQuotedString(format)}'\n"
       }
     }
+  }
+}
+
+/**
+ * A command to refresh all cached entries associated with the table.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   REFRESH TABLE [db_name.]table_name
+ * }}}
+ */
+case class RefreshTableCommand(tableIdent: TableIdentifier)
+  extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    // Refresh the given table's metadata. If this table is cached as an InMemoryRelation,
+    // drop the original cached version and make the new version cached lazily.
+    sparkSession.catalog.refreshTable(tableIdent.quotedString)
+    Seq.empty[Row]
   }
 }

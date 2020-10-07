@@ -57,7 +57,7 @@ TakeOrderedAndProject (53)
 (1) Scan parquet default.store_sales
 Output [3]: [ss_sold_date_sk#1, ss_store_sk#2, ss_net_profit#3]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_sold_date_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_store_sk:int,ss_net_profit:decimal(7,2)>
 
@@ -71,7 +71,7 @@ Condition : (isnotnull(ss_sold_date_sk#1) AND isnotnull(ss_store_sk#2))
 (4) Scan parquet default.date_dim
 Output [3]: [d_date_sk#4, d_year#5, d_qoy#6]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_qoy), IsNotNull(d_year), EqualTo(d_qoy,2), EqualTo(d_year,1998), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_qoy:int>
 
@@ -102,7 +102,7 @@ Input [4]: [ss_sold_date_sk#1, ss_store_sk#2, ss_net_profit#3, d_date_sk#4]
 (11) Scan parquet default.store
 Output [3]: [s_store_sk#8, s_store_name#9, s_zip#10]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/store]
+Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_store_sk), IsNotNull(s_zip)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string,s_zip:string>
 
@@ -137,7 +137,7 @@ Arguments: [substr(s_zip#10, 1, 2) ASC NULLS FIRST], false, 0
 (19) Scan parquet default.customer_address
 Output [1]: [ca_zip#13]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/customer_address]
+Location [not included in comparison]/{warehouse_dir}/customer_address]
 ReadSchema: struct<ca_zip:string>
 
 (20) ColumnarToRow [codegen id : 11]
@@ -150,7 +150,7 @@ Condition : (substr(ca_zip#13, 1, 5) INSET (56910,69952,63792,39371,74351,11101,
 (22) Scan parquet default.customer_address
 Output [2]: [ca_address_sk#14, ca_zip#13]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/customer_address]
+Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_zip:string>
 
@@ -172,7 +172,7 @@ Arguments: [ca_address_sk#14 ASC NULLS FIRST], false, 0
 (27) Scan parquet default.customer
 Output [2]: [c_current_addr_sk#16, c_preferred_cust_flag#17]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/customer]
+Location [not included in comparison]/{warehouse_dir}/customer]
 PushedFilters: [IsNotNull(c_preferred_cust_flag), EqualTo(c_preferred_cust_flag,Y), IsNotNull(c_current_addr_sk)]
 ReadSchema: struct<c_current_addr_sk:int,c_preferred_cust_flag:string>
 

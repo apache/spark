@@ -151,7 +151,8 @@ class Catalog(object):
         return self.createTable(tableName, path, source, schema, **options)
 
     @since(2.2)
-    def createTable(self, tableName, path=None, source=None, schema=None, **options):
+    def createTable(
+            self, tableName, path=None, source=None, schema=None, description=None, **options):
         """Creates a table based on the dataset in a data source.
 
         It returns the DataFrame associated with the table.
@@ -164,19 +165,25 @@ class Catalog(object):
         Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
         created table.
 
+        .. versionchanged:: 3.1
+           Added the ``description`` parameter.
+
         :return: :class:`DataFrame`
         """
         if path is not None:
             options["path"] = path
         if source is None:
             source = self._sparkSession._wrapped._conf.defaultDataSourceName()
+        if description is None:
+            description = ""
         if schema is None:
-            df = self._jcatalog.createTable(tableName, source, options)
+            df = self._jcatalog.createTable(tableName, source, description, options)
         else:
             if not isinstance(schema, StructType):
                 raise TypeError("schema should be StructType")
             scala_datatype = self._jsparkSession.parseDataType(schema.json())
-            df = self._jcatalog.createTable(tableName, source, scala_datatype, options)
+            df = self._jcatalog.createTable(
+                tableName, source, scala_datatype, description, options)
         return DataFrame(df, self._sparkSession._wrapped)
 
     @since(2.0)

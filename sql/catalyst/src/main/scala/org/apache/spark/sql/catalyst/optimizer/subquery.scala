@@ -338,15 +338,20 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
 object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
   /**
    * Extract all correlated scalar subqueries from an expression. The subqueries are collected using
-   * the given collector. The expression is rewritten and returned.
+   * the given collector. To avoid the reuse of `exprId`s, this method generates new `exprId`
+   * for the subqueries and rewrite references in the given `expression`.
+   * This method returns extracted subqueries and the corresponding `exprId`s and these values
+   * will be used later in `constructLeftJoins` for building the child plan that
+   * returns subquery output with the `exprId`s.
    */
   private def extractCorrelatedScalarSubqueries[E <: Expression](
       expression: E,
-      subqueries: ArrayBuffer[ScalarSubquery]): E = {
+      subqueries: ArrayBuffer[(ScalarSubquery, ExprId)]): E = {
     val newExpression = expression transform {
       case s: ScalarSubquery if s.children.nonEmpty =>
-        subqueries += s
-        s.plan.output.head
+        val newExprId = NamedExpression.newExprId
+        subqueries += s -> newExprId
+        s.plan.output.head.withExprId(newExprId)
     }
     newExpression.asInstanceOf[E]
   }
@@ -510,16 +515,16 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
    */
   private def constructLeftJoins(
       child: LogicalPlan,
-      subqueries: ArrayBuffer[ScalarSubquery]): LogicalPlan = {
+      subqueries: ArrayBuffer[(ScalarSubquery, ExprId)]): LogicalPlan = {
     subqueries.foldLeft(child) {
-      case (currentChild, ScalarSubquery(query, conditions, _)) =>
+      case (currentChild, (ScalarSubquery(query, conditions, _), newExprId)) =>
         val origOutput = query.output.head
 
         val resultWithZeroTups = evalSubqueryOnZeroTups(query)
         if (resultWithZeroTups.isEmpty) {
           // CASE 1: Subquery guaranteed not to have the COUNT bug
           Project(
-            currentChild.output :+ origOutput,
+            currentChild.output :+ Alias(origOutput, origOutput.name)(exprId = newExprId),
             Join(currentChild, query, LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
         } else {
           // Subquery might have the COUNT bug. Add appropriate corrections.
@@ -544,7 +549,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
                 Alias(
                   If(IsNull(alwaysTrueRef),
                     resultWithZeroTups.get,
-                    aggValRef), origOutput.name)(exprId = origOutput.exprId),
+                    aggValRef), origOutput.name)(exprId = newExprId),
               Join(currentChild,
                 Project(query.output :+ alwaysTrueExpr, query),
                 LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
@@ -571,7 +576,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
               (IsNull(alwaysTrueRef), resultWithZeroTups.get),
               (Not(havingNode.get.condition), Literal.create(null, aggValRef.dataType))),
               aggValRef),
-              origOutput.name)(exprId = origOutput.exprId)
+              origOutput.name)(exprId = newExprId)
 
             Project(
               currentChild.output :+ caseExpr,
@@ -588,36 +593,42 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
    * Rewrite [[Filter]], [[Project]] and [[Aggregate]] plans containing correlated scalar
    * subqueries.
    */
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
     case a @ Aggregate(grouping, expressions, child) =>
-      val subqueries = ArrayBuffer.empty[ScalarSubquery]
+      val subqueries = ArrayBuffer.empty[(ScalarSubquery, ExprId)]
       val newExpressions = expressions.map(extractCorrelatedScalarSubqueries(_, subqueries))
       if (subqueries.nonEmpty) {
         // We currently only allow correlated subqueries in an aggregate if they are part of the
         // grouping expressions. As a result we need to replace all the scalar subqueries in the
         // grouping expressions by their result.
         val newGrouping = grouping.map { e =>
-          subqueries.find(_.semanticEquals(e)).map(_.plan.output.head).getOrElse(e)
+          subqueries.find(_._1.semanticEquals(e)).map(_._1.plan.output.head).getOrElse(e)
         }
-        Aggregate(newGrouping, newExpressions, constructLeftJoins(child, subqueries))
+        val newAgg = Aggregate(newGrouping, newExpressions, constructLeftJoins(child, subqueries))
+        val attrMapping = a.output.zip(newAgg.output)
+        newAgg -> attrMapping
       } else {
-        a
+        a -> Nil
       }
     case p @ Project(expressions, child) =>
-      val subqueries = ArrayBuffer.empty[ScalarSubquery]
+      val subqueries = ArrayBuffer.empty[(ScalarSubquery, ExprId)]
       val newExpressions = expressions.map(extractCorrelatedScalarSubqueries(_, subqueries))
       if (subqueries.nonEmpty) {
-        Project(newExpressions, constructLeftJoins(child, subqueries))
+        val newProj = Project(newExpressions, constructLeftJoins(child, subqueries))
+        val attrMapping = p.output.zip(newProj.output)
+        newProj -> attrMapping
       } else {
-        p
+        p -> Nil
       }
     case f @ Filter(condition, child) =>
-      val subqueries = ArrayBuffer.empty[ScalarSubquery]
+      val subqueries = ArrayBuffer.empty[(ScalarSubquery, ExprId)]
       val newCondition = extractCorrelatedScalarSubqueries(condition, subqueries)
       if (subqueries.nonEmpty) {
-        Project(f.output, Filter(newCondition, constructLeftJoins(child, subqueries)))
+        val newProj = Project(f.output, Filter(newCondition, constructLeftJoins(child, subqueries)))
+        val attrMapping = f.output.zip(newProj.output)
+        newProj -> attrMapping
       } else {
-        f
+        f -> Nil
       }
   }
 }

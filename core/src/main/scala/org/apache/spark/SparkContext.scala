@@ -1881,7 +1881,7 @@ class SparkContext(config: SparkConf) extends Logging {
           if (!fs.exists(hadoopPath)) {
             throw new FileNotFoundException(s"Jar ${path} not found")
           }
-          if (fs.isDirectory(hadoopPath)) {
+          if (fs.getFileStatus(hadoopPath).isDirectory) {
             throw new IllegalArgumentException(
               s"Directory ${path} is not allowed for addJar")
           }
@@ -1899,7 +1899,7 @@ class SparkContext(config: SparkConf) extends Logging {
     if (path == null || path.isEmpty) {
       logWarning("null or empty path specified as parameter to addJar")
     } else {
-      val key = if (path.contains("\\")) {
+      val key = if (path.contains("\\") && Utils.isWindows) {
         // For local paths with backslashes on Windows, URI throws an exception
         addLocalJarFile(new File(path))
       } else {

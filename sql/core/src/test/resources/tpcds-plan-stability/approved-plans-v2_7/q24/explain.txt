@@ -48,7 +48,7 @@
 (1) Scan parquet default.store_sales
 Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk), IsNotNull(ss_store_sk), IsNotNull(ss_customer_sk)]
 ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ticket_number:int,ss_net_paid:decimal(7,2)>
 
@@ -62,7 +62,7 @@ Condition : (((isnotnull(ss_ticket_number#4) AND isnotnull(ss_item_sk#1)) AND is
 (4) Scan parquet default.store_returns
 Output [2]: [sr_item_sk#6, sr_ticket_number#7]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/store_returns]
+Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
 ReadSchema: struct<sr_item_sk:bigint,sr_ticket_number:bigint>
 
@@ -89,7 +89,7 @@ Input [7]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, s
 (10) Scan parquet default.store
 Output [5]: [s_store_sk#9, s_store_name#10, s_market_id#11, s_state#12, s_zip#13]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/store]
+Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_market_id), EqualTo(s_market_id,8), IsNotNull(s_store_sk), IsNotNull(s_zip)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string,s_market_id:int,s_state:string,s_zip:string>
 
@@ -120,7 +120,7 @@ Input [8]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_net_paid#5, s_stor
 (17) Scan parquet default.item
 Output [6]: [i_item_sk#15, i_current_price#16, i_size#17, i_color#18, i_units#19, i_manager_id#20]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_color), EqualTo(i_color,pale), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_size:string,i_color:string,i_units:string,i_manager_id:int>
 
@@ -147,8 +147,8 @@ Input [12]: [ss_item_sk#1, ss_customer_sk#2, ss_net_paid#5, s_store_name#10, s_s
 (23) Scan parquet default.customer
 Output [5]: [c_customer_sk#22, c_current_addr_sk#23, c_first_name#24, c_last_name#25, c_birth_country#26]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/customer]
-PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_birth_country), IsNotNull(c_current_addr_sk)]
+Location [not included in comparison]/{warehouse_dir}/customer]
+PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_current_addr_sk), IsNotNull(c_birth_country)]
 ReadSchema: struct<c_customer_sk:int,c_current_addr_sk:int,c_first_name:string,c_last_name:string,c_birth_country:string>
 
 (24) ColumnarToRow [codegen id : 4]
@@ -156,7 +156,7 @@ Input [5]: [c_customer_sk#22, c_current_addr_sk#23, c_first_name#24, c_last_name
 
 (25) Filter [codegen id : 4]
 Input [5]: [c_customer_sk#22, c_current_addr_sk#23, c_first_name#24, c_last_name#25, c_birth_country#26]
-Condition : ((isnotnull(c_customer_sk#22) AND isnotnull(c_birth_country#26)) AND isnotnull(c_current_addr_sk#23))
+Condition : ((isnotnull(c_customer_sk#22) AND isnotnull(c_current_addr_sk#23)) AND isnotnull(c_birth_country#26))
 
 (26) BroadcastExchange
 Input [5]: [c_customer_sk#22, c_current_addr_sk#23, c_first_name#24, c_last_name#25, c_birth_country#26]
@@ -174,8 +174,8 @@ Input [15]: [ss_customer_sk#2, ss_net_paid#5, s_store_name#10, s_state#12, s_zip
 (29) Scan parquet default.customer_address
 Output [4]: [ca_address_sk#28, ca_state#29, ca_zip#30, ca_country#31]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/customer_address]
-PushedFilters: [IsNotNull(ca_address_sk), IsNotNull(ca_zip), IsNotNull(ca_country)]
+Location [not included in comparison]/{warehouse_dir}/customer_address]
+PushedFilters: [IsNotNull(ca_address_sk), IsNotNull(ca_country), IsNotNull(ca_zip)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string,ca_zip:string,ca_country:string>
 
 (30) ColumnarToRow [codegen id : 5]
@@ -183,7 +183,7 @@ Input [4]: [ca_address_sk#28, ca_state#29, ca_zip#30, ca_country#31]
 
 (31) Filter [codegen id : 5]
 Input [4]: [ca_address_sk#28, ca_state#29, ca_zip#30, ca_country#31]
-Condition : ((isnotnull(ca_address_sk#28) AND isnotnull(ca_zip#30)) AND isnotnull(ca_country#31))
+Condition : ((isnotnull(ca_address_sk#28) AND isnotnull(ca_country#31)) AND isnotnull(ca_zip#30))
 
 (32) BroadcastExchange
 Input [4]: [ca_address_sk#28, ca_state#29, ca_zip#30, ca_country#31]
@@ -298,7 +298,7 @@ Subquery:1 Hosting operator id = 41 Hosting Expression = Subquery scalar-subquer
 (45) Scan parquet default.store_sales
 Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk), IsNotNull(ss_store_sk), IsNotNull(ss_customer_sk)]
 ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ticket_number:int,ss_net_paid:decimal(7,2)>
 
@@ -312,7 +312,7 @@ Condition : (((isnotnull(ss_ticket_number#4) AND isnotnull(ss_item_sk#1)) AND is
 (48) Scan parquet default.store_returns
 Output [2]: [sr_item_sk#6, sr_ticket_number#7]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/store_returns]
+Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
 ReadSchema: struct<sr_item_sk:bigint,sr_ticket_number:bigint>
 
@@ -339,7 +339,7 @@ Input [7]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, s
 (54) Scan parquet default.store
 Output [5]: [s_store_sk#9, s_store_name#10, s_market_id#11, s_state#12, s_zip#13]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/store]
+Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_market_id), EqualTo(s_market_id,8), IsNotNull(s_store_sk), IsNotNull(s_zip)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string,s_market_id:int,s_state:string,s_zip:string>
 
@@ -370,7 +370,7 @@ Input [8]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_net_paid#5, s_stor
 (61) Scan parquet default.item
 Output [6]: [i_item_sk#15, i_current_price#16, i_size#17, i_color#18, i_units#19, i_manager_id#20]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_size:string,i_color:string,i_units:string,i_manager_id:int>
 
@@ -397,8 +397,8 @@ Input [12]: [ss_item_sk#1, ss_customer_sk#2, ss_net_paid#5, s_store_name#10, s_s
 (67) Scan parquet default.customer
 Output [5]: [c_customer_sk#22, c_current_addr_sk#23, c_first_name#24, c_last_name#25, c_birth_country#26]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/customer]
-PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_birth_country), IsNotNull(c_current_addr_sk)]
+Location [not included in comparison]/{warehouse_dir}/customer]
+PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_current_addr_sk), IsNotNull(c_birth_country)]
 ReadSchema: struct<c_customer_sk:int,c_current_addr_sk:int,c_first_name:string,c_last_name:string,c_birth_country:string>
 
 (68) ColumnarToRow [codegen id : 4]
@@ -406,7 +406,7 @@ Input [5]: [c_customer_sk#22, c_current_addr_sk#23, c_first_name#24, c_last_name
 
 (69) Filter [codegen id : 4]
 Input [5]: [c_customer_sk#22, c_current_addr_sk#23, c_first_name#24, c_last_name#25, c_birth_country#26]
-Condition : ((isnotnull(c_customer_sk#22) AND isnotnull(c_birth_country#26)) AND isnotnull(c_current_addr_sk#23))
+Condition : ((isnotnull(c_customer_sk#22) AND isnotnull(c_current_addr_sk#23)) AND isnotnull(c_birth_country#26))
 
 (70) BroadcastExchange
 Input [5]: [c_customer_sk#22, c_current_addr_sk#23, c_first_name#24, c_last_name#25, c_birth_country#26]
@@ -424,8 +424,8 @@ Input [15]: [ss_customer_sk#2, ss_net_paid#5, s_store_name#10, s_state#12, s_zip
 (73) Scan parquet default.customer_address
 Output [4]: [ca_address_sk#28, ca_state#29, ca_zip#30, ca_country#31]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/customer_address]
-PushedFilters: [IsNotNull(ca_address_sk), IsNotNull(ca_zip), IsNotNull(ca_country)]
+Location [not included in comparison]/{warehouse_dir}/customer_address]
+PushedFilters: [IsNotNull(ca_address_sk), IsNotNull(ca_country), IsNotNull(ca_zip)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string,ca_zip:string,ca_country:string>
 
 (74) ColumnarToRow [codegen id : 5]
@@ -433,7 +433,7 @@ Input [4]: [ca_address_sk#28, ca_state#29, ca_zip#30, ca_country#31]
 
 (75) Filter [codegen id : 5]
 Input [4]: [ca_address_sk#28, ca_state#29, ca_zip#30, ca_country#31]
-Condition : ((isnotnull(ca_address_sk#28) AND isnotnull(ca_zip#30)) AND isnotnull(ca_country#31))
+Condition : ((isnotnull(ca_address_sk#28) AND isnotnull(ca_country#31)) AND isnotnull(ca_zip#30))
 
 (76) BroadcastExchange
 Input [4]: [ca_address_sk#28, ca_state#29, ca_zip#30, ca_country#31]

@@ -23,7 +23,7 @@ from py4j.java_gateway import java_import
 from pyspark import since, keyword_only
 from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StructField, StringType
 from pyspark.sql.utils import ForeachBatchFunction, StreamingQueryException
 
 __all__ = ["StreamingQuery", "StreamingQueryManager", "DataStreamReader", "DataStreamWriter"]
@@ -923,7 +923,7 @@ class DataStreamWriter(object):
 
     @keyword_only
     @since(2.0)
-    def trigger(self, processingTime=None, once=None, continuous=None):
+    def trigger(self, *, processingTime=None, once=None, continuous=None):
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
 
@@ -1239,8 +1239,8 @@ def _test():
     globs = pyspark.sql.streaming.__dict__.copy()
     try:
         spark = SparkSession.builder.getOrCreate()
-    except py4j.protocol.Py4JError:
-        spark = SparkSession(sc)
+    except py4j.protocol.Py4JError:  # noqa: F821
+        spark = SparkSession(sc)  # noqa: F821
 
     globs['tempfile'] = tempfile
     globs['os'] = os

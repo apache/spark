@@ -171,7 +171,7 @@ class SymmetricHashJoinStateManager(
         return null
       }
 
-      override def close: Unit = {}
+      override def close(): Unit = {}
     }
   }
 
@@ -280,7 +280,7 @@ class SymmetricHashJoinStateManager(
         return reusedRet.withNew(currentKey, currentValue.value, currentValue.matched)
       }
 
-      override def close: Unit = {}
+      override def close(): Unit = {}
     }
   }
 
