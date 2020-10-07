@@ -16,4 +16,7 @@ SELECT assert_true(boolean(0));
 SELECT assert_true(null);
 SELECT assert_true(boolean(null));
 SELECT assert_true(false, 'custom error message');
+
+CREATE TEMPORARY VIEW tbl_misc AS SELECT * FROM (VALUES (1), (8), (2)) AS T(v);
 SELECT raise_error('error message');
+SELECT if(v > 5, raise_error('too big: ' || v), v + 1) FROM tbl_misc;

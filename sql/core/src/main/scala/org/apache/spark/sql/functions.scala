@@ -2339,16 +2339,6 @@ object functions {
   }
 
   /**
-   * Returns null if the condition is true; throws an exception with the error message otherwise.
-   *
-   * @group misc_funcs
-   * @since 3.1.0
-   */
-  def assert_true(c: Column, e: String): Column = withExpr {
-    new AssertTrue(c.expr, Literal(e))
-  }
-
-  /**
    * Throws an exception with the provided error message.
    *
    * @group misc_funcs
@@ -2356,16 +2346,6 @@ object functions {
    */
   def raise_error(c: Column): Column = withExpr {
     RaiseError(c.expr)
-  }
-
-  /**
-   * Throws an exception with the provided error message.
-   *
-   * @group misc_funcs
-   * @since 3.1.0
-   */
-  def raise_error(e: String): Column = withExpr {
-    RaiseError(Literal(e))
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////

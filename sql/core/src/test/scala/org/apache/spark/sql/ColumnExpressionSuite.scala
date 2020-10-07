@@ -2304,19 +2304,18 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("assert_true") {
-    // assert_true(condition, errMsgStr)
+    // assert_true(condition, errMsgCol)
     val booleanDf = Seq((true), (false)).toDF("cond")
     checkAnswer(
       booleanDf.filter("cond = true").select(assert_true($"cond")),
       Row(null) :: Nil
     )
     val e1 = intercept[SparkException] {
-      booleanDf.select(assert_true($"cond", "custom error message")).collect()
+      booleanDf.select(assert_true($"cond", lit(null.asInstanceOf[String]))).collect()
     }
     assert(e1.getCause.isInstanceOf[RuntimeException])
-    assert(e1.getCause.getMessage == "custom error message")
+    assert(e1.getCause.getMessage == null)
 
-    // assert_true(condition, errMsgCol)
     val nullDf = Seq(("first row", None), ("second row", Some(true))).toDF("n", "cond")
     checkAnswer(
       nullDf.filter("cond = true").select(assert_true($"cond", $"cond")),
@@ -2341,14 +2340,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   test("raise_error") {
     val strDf = Seq(("hello")).toDF("a")
 
-    // raise_error(str)
     val e1 = intercept[SparkException] {
-      strDf.select(raise_error("error message")).collect()
+      strDf.select(raise_error(lit(null.asInstanceOf[String]))).collect()
     }
     assert(e1.getCause.isInstanceOf[RuntimeException])
-    assert(e1.getCause.getMessage == "error message")
+    assert(e1.getCause.getMessage == null)
 
-    // raise_error(col)
     val e2 = intercept[SparkException] {
       strDf.select(raise_error($"a")).collect()
     }

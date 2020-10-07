@@ -67,6 +67,7 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def foldable: Boolean = false
+  override def nullable: Boolean = true
   override def dataType: DataType = NullType
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
@@ -75,9 +76,9 @@ case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCa
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
     if (value == null) {
-      throw new RuntimeException("null")
+      throw new RuntimeException()
     }
-    throw new RuntimeException(value.toString())
+    throw new RuntimeException(value.toString)
   }
 
   // if (true) is to avoid codegen compilation exception that statement is unreachable
@@ -86,8 +87,8 @@ case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCa
     ExprCode(
       code = code"""${eval.code}
         |if (true) {
-        |  if (${eval.value} == null) {
-        |    throw new RuntimeException("null");
+        |  if (${eval.isNull}) {
+        |    throw new RuntimeException();
         |  }
         |  throw new RuntimeException(${eval.value}.toString());
         |}""".stripMargin,
