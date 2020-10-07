@@ -589,7 +589,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
           }
         }
     }
-    (newChild, AttributeMap(subqueryAttrMapping))
+    (newChild, AttributeMap(subqueryAttrMapping.toSeq))
   }
 
   private def updateAttrs[E <: Expression](
