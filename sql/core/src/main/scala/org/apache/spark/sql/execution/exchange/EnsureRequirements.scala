@@ -211,12 +211,9 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
           .orElse(reorderJoinKeysRecursively(
             leftKeys, rightKeys, leftPartitioning, None))
       case (Some(PartitioningCollection(partitionings)), _) =>
-        partitionings.foreach { p =>
-          reorderJoinKeysRecursively(leftKeys, rightKeys, Some(p), rightPartitioning).map { k =>
-            return Some(k)
-          }
-        }
-        reorderJoinKeysRecursively(leftKeys, rightKeys, None, rightPartitioning)
+        partitionings.foldLeft(Option.empty[(Seq[Expression], Seq[Expression])]) { (res, p) =>
+          res.orElse(reorderJoinKeysRecursively(leftKeys, rightKeys, Some(p), rightPartitioning))
+        }.orElse(reorderJoinKeysRecursively(leftKeys, rightKeys, None, rightPartitioning))
       case (_, Some(PartitioningCollection(partitionings))) =>
         partitionings.foreach { p =>
           reorderJoinKeysRecursively(leftKeys, rightKeys, leftPartitioning, Some(p)).map { k =>

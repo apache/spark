@@ -41,14 +41,12 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       exprB :: exprA :: Nil, exprA :: exprB :: Nil, Inner, None, plan1, plan2)
     EnsureRequirements(spark.sessionState.conf).apply(smjExec1) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-        SortExec(_, _,
-          DummySparkPlan(_, _, PartitioningCollection(leftPartitionings), _, _), _),
-        SortExec(_, _,
-          ShuffleExchangeExec(HashPartitioning(rightPartitioningExpressions, _), _, _), _), _) =>
+        SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _), _), _) =>
         assert(leftKeys !== smjExec1.leftKeys)
         assert(rightKeys !== smjExec1.rightKeys)
-        assert(leftKeys === leftPartitionings.head.asInstanceOf[HashPartitioning].expressions)
-        assert(rightKeys === rightPartitioningExpressions)
+        assert(leftKeys === Seq(exprA, exprB))
+        assert(rightKeys === Seq(exprB, exprA))
       case other => fail(other.toString)
     }
 
@@ -57,14 +55,12 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       exprA :: exprB :: Nil, exprB :: exprA :: Nil, Inner, None, plan2, plan1)
     EnsureRequirements(spark.sessionState.conf).apply(smjExec2) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-        SortExec(_, _,
-          ShuffleExchangeExec(HashPartitioning(leftPartitioningExpressions, _), _, _), _),
-        SortExec(_, _,
-          DummySparkPlan(_, _, PartitioningCollection(rightPartitionings), _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _), _),
+        SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _), _) =>
         assert(leftKeys !== smjExec2.leftKeys)
         assert(rightKeys !== smjExec2.rightKeys)
-        assert(leftKeys === leftPartitioningExpressions)
-        assert(rightKeys === rightPartitionings.head.asInstanceOf[HashPartitioning].expressions)
+        assert(leftKeys === Seq(exprB, exprA))
+        assert(rightKeys === Seq(exprA, exprB))
       case other => fail(other.toString)
     }
 
@@ -74,14 +70,12 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       exprA :: exprC :: Nil, exprB :: exprA :: Nil, Inner, None, plan1, plan1)
     EnsureRequirements(spark.sessionState.conf).apply(smjExec3) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-        SortExec(_, _,
-          ShuffleExchangeExec(HashPartitioning(leftPartitioningExpressions, _), _, _), _),
-        SortExec(_, _,
-          DummySparkPlan(_, _, PartitioningCollection(rightPartitionings), _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _), _),
+        SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _), _) =>
         assert(leftKeys !== smjExec3.leftKeys)
         assert(rightKeys !== smjExec3.rightKeys)
-        assert(leftKeys === leftPartitioningExpressions)
-        assert(rightKeys === rightPartitionings.head.asInstanceOf[HashPartitioning].expressions)
+        assert(leftKeys === Seq(exprC, exprA))
+        assert(rightKeys === Seq(exprA, exprB))
       case other => fail(other.toString)
     }
   }
@@ -97,14 +91,12 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       exprA :: exprB :: Nil, exprC :: exprB :: Nil, Inner, None, plan1, plan2)
     EnsureRequirements(spark.sessionState.conf).apply(smjExec1) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-        SortExec(_, _,
-          ShuffleExchangeExec(HashPartitioning(leftPartitioningExpressions, _), _, _), _),
-        SortExec(_, _,
-          DummySparkPlan(_, _, HashPartitioning(rightPartitioningExpressions, _), _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _), _),
+        SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _), _) =>
         assert(leftKeys !== smjExec1.leftKeys)
         assert(rightKeys !== smjExec1.rightKeys)
-        assert(leftKeys === leftPartitioningExpressions)
-        assert(rightKeys === rightPartitioningExpressions)
+        assert(leftKeys === Seq(exprB, exprA))
+        assert(rightKeys === Seq(exprB, exprC))
       case other => fail(other.toString)
     }
 
@@ -115,14 +107,12 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       exprA :: exprB :: Nil, exprC :: exprB :: Nil, Inner, None, plan1, plan3)
     EnsureRequirements(spark.sessionState.conf).apply(smjExec2) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-        SortExec(_, _,
-          ShuffleExchangeExec(HashPartitioning(leftPartitioningExpressions, _), _, _), _),
-        SortExec(_, _,
-          DummySparkPlan(_, _, PartitioningCollection(rightPartitionings), _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _), _),
+        SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _), _) =>
         assert(leftKeys !== smjExec2.leftKeys)
         assert(rightKeys !== smjExec2.rightKeys)
-        assert(leftKeys === leftPartitioningExpressions)
-        assert(rightKeys === rightPartitionings.head.asInstanceOf[HashPartitioning].expressions)
+        assert(leftKeys === Seq(exprB, exprA))
+        assert(rightKeys === Seq(exprB, exprC))
       case other => fail(other.toString)
     }
 
@@ -132,14 +122,12 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       exprC :: exprB :: Nil, exprA :: exprB :: Nil, Inner, None, plan3, plan1)
     EnsureRequirements(spark.sessionState.conf).apply(smjExec3) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-        SortExec(_, _,
-          DummySparkPlan(_, _, PartitioningCollection(leftPartitionings), _, _), _),
-        SortExec(_, _,
-          ShuffleExchangeExec(HashPartitioning(rightPartitioningExpressions, _), _, _), _), _) =>
+        SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _), _), _) =>
         assert(leftKeys !== smjExec3.leftKeys)
         assert(rightKeys !== smjExec3.rightKeys)
-        assert(leftKeys === leftPartitionings.head.asInstanceOf[HashPartitioning].expressions)
-        assert(rightKeys === rightPartitioningExpressions)
+        assert(leftKeys === Seq(exprB, exprC))
+        assert(rightKeys === Seq(exprB, exprA))
       case other => fail(other.toString)
     }
   }
