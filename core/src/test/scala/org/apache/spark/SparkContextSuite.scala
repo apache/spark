@@ -956,7 +956,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
-  test("ivy path") {
+  test("SPARK-33084: Add jar support ivy url") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
     sc.addJar("ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0")
     assert(sc.listJars().find(_.contains("scalajs-test-interface_2.12")).nonEmpty)
