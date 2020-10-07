@@ -870,6 +870,38 @@ object TransposeWindow extends Rule[LogicalPlan] {
 }
 
 /**
+ * Infers filters from [[Generate]], such that rows that would have been removed
+ * by this [[Generate]] can be removed earlier - before joins and in data sources.
+ */
+object InferFiltersFromGenerate extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case generate @ Generate(e, _, _, _, _, _)
+      if !e.deterministic || e.children.forall(_.foldable) => generate
+
+    case generate @ Generate(g, _, false, _, _, _) if canInferFilters(g) =>
+      // Exclude child's constraints to guarantee idempotency
+      val inferredFilters = ExpressionSet(
+        Seq(
+          GreaterThan(Size(g.children.head), Literal(0)),
+          IsNotNull(g.children.head)
+        )
+      ) -- generate.child.constraints
+
+      if (inferredFilters.nonEmpty) {
+        generate.copy(child = Filter(inferredFilters.reduce(And), generate.child))
+      } else {
+        generate
+      }
+  }
+
+  private def canInferFilters(g: Generator): Boolean = g match {
+    case _: ExplodeBase => true
+    case _: Inline => true
+    case _ => false
+  }
+}
+
+/**
  * Generate a list of additional filters from an operator's existing constraint but remove those
  * that are either already part of the operator's condition or are part of the operator's child
  * constraints. These filters are currently inserted to the existing conditions in the Filter
@@ -1853,39 +1885,5 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
     // Replace Local Limit 0 nodes with empty Local Relation
     case ll @ LocalLimit(IntegerLiteral(0), _) =>
       empty(ll)
-  }
-}
-
-/**
- * Infers filters from [[Generate]], such that rows that would have been removed
- * by this [[Generate]] can be removed earlier - before joins and in data sources.
- */
-object InferFiltersFromGenerate extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case generate @ Generate(e: ExplodeBase, _, false, _, _, _)
-      if e.deterministic && !e.child.foldable =>
-
-      inferFiltersForExplodeLike(generate, e)
-
-    case generate @ Generate(e: Inline, _, false, _, _, _)
-      if e.deterministic && !e.child.foldable =>
-
-      inferFiltersForExplodeLike(generate, e)
-  }
-
-  private def inferFiltersForExplodeLike(generate: Generate, expr: UnaryExpression): Generate = {
-    // Exclude child's constraints to guarantee idempotency
-    val inferredFilters = ExpressionSet(
-      Seq(
-        GreaterThan(Size(expr.child), Literal(0)),
-        IsNotNull(expr.child)
-      )
-    ) -- generate.child.constraints
-
-    if (inferredFilters.nonEmpty) {
-      generate.copy(child = Filter(inferredFilters.reduce(And), generate.child))
-    } else {
-      generate
-    }
   }
 }
