@@ -115,9 +115,9 @@ private[spark] class YarnAllocatorNodeHealthTracker(
 
   private def refreshExcludedNodes(): Unit = {
     removeExpiredYarnExcludedNodes()
-    val allExcludeddNodes =
+    val allExcludedNodes =
       excludeNodes ++ schedulerExcludedNodeList ++ allocatorExcludedNodeList.keySet
-    synchronizeExcludedNodesWithYarn(allExcludeddNodes)
+    synchronizeExcludedNodesWithYarn(allExcludedNodes)
   }
 
   private def synchronizeExcludedNodesWithYarn(nodesToExclude: Set[String]): Unit = {
