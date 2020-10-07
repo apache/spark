@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
+import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier, CaseInsensitiveMap}
 import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
@@ -597,7 +597,7 @@ case class TruncateTableCommand(
 }
 
 abstract class DescribeCommandBase extends RunnableCommand {
-  override val output = DescribeTableSchema.describeTableAttributes()
+  override val output = DescribeCommandSchema.describeTableAttributes()
 
   protected def describeSchema(
       schema: StructType,
@@ -760,14 +760,7 @@ case class DescribeColumnCommand(
     isExtended: Boolean)
   extends RunnableCommand {
 
-  override val output: Seq[Attribute] = {
-    Seq(
-      AttributeReference("info_name", StringType, nullable = false,
-        new MetadataBuilder().putString("comment", "name of the column info").build())(),
-      AttributeReference("info_value", StringType, nullable = false,
-        new MetadataBuilder().putString("comment", "value of the column info").build())()
-    )
-  }
+  override val output: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
