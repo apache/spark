@@ -212,7 +212,7 @@ abstract class JdbcDialect extends Serializable {
         case add: AddColumn if add.fieldNames.length == 1 =>
           val dataType = JdbcUtils.getJdbcType(add.dataType(), this).databaseTypeDefinition
           val name = add.fieldNames
-          updateClause += s"ALTER TABLE $tableName ADD COLUMN ${name(0)} $dataType"
+          updateClause += getAddColumnQuery(tableName, name(0), dataType)
         case rename: RenameColumn if rename.fieldNames.length == 1 =>
           val name = rename.fieldNames
           updateClause += s"ALTER TABLE $tableName RENAME COLUMN ${name(0)} TO ${rename.newName}"
@@ -223,16 +223,35 @@ abstract class JdbcDialect extends Serializable {
           val name = updateColumnType.fieldNames
           val dataType = JdbcUtils.getJdbcType(updateColumnType.newDataType(), this)
             .databaseTypeDefinition
-          updateClause += s"ALTER TABLE $tableName ALTER COLUMN ${name(0)} $dataType"
+          updateClause += getUpdateColumnTypeQuery(tableName, name(0), dataType)
         case updateNull: UpdateColumnNullability if updateNull.fieldNames.length == 1 =>
           val name = updateNull.fieldNames
           val nullable = if (updateNull.nullable()) "NULL" else "NOT NULL"
-          updateClause += s"ALTER TABLE $tableName ALTER COLUMN ${name(0)} SET $nullable"
+          updateClause += getUpdateColumnNullabilityQuery(tableName, name(0), updateNull.nullable())
         case _ =>
           throw new SQLFeatureNotSupportedException(s"Unsupported TableChange $change")
       }
     }
     updateClause.result()
+  }
+
+  def getAddColumnQuery(tableName: String, columnName: String, dataType: String): String = {
+    s"ALTER TABLE $tableName ADD COLUMN $columnName $dataType"
+  }
+
+  def getUpdateColumnTypeQuery(
+      tableName: String,
+      columnName: String,
+      newDataType: String): String = {
+    s"ALTER TABLE $tableName ALTER COLUMN $columnName $newDataType"
+  }
+
+  def getUpdateColumnNullabilityQuery(
+      tableName: String,
+      columnName: String,
+      isNullable: Boolean): String = {
+    val nullable = if (isNullable) "NULL" else "NOT NULL"
+    s"ALTER TABLE $tableName ALTER COLUMN $columnName SET $nullable"
   }
 }
 

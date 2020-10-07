@@ -98,7 +98,13 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
   val connectionTimeout = timeout(2.minutes)
 
   private var docker: DockerClient = _
-  protected var externalPort: Int = _
+  // Configure networking (necessary for boot2docker / Docker Machine)
+  protected lazy val externalPort: Int = {
+    val sock = new ServerSocket(0)
+    val port = sock.getLocalPort
+    sock.close()
+    port
+  }
   private var containerId: String = _
   protected var jdbcUrl: String = _
 
@@ -121,13 +127,6 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
         case e: ImageNotFoundException =>
           log.warn(s"Docker image ${db.imageName} not found; pulling image from registry")
           docker.pull(db.imageName)
-      }
-      // Configure networking (necessary for boot2docker / Docker Machine)
-      externalPort = {
-        val sock = new ServerSocket(0)
-        val port = sock.getLocalPort
-        sock.close()
-        port
       }
       val hostConfigBuilder = HostConfig.builder()
         .privileged(db.privileged)
