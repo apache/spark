@@ -388,7 +388,6 @@ setMethod("withField",
             column(jc)
           })
 
-
 #' dropFields
 #'
 #' Drops fields in a struct \code{Column} by name.
