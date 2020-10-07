@@ -191,12 +191,20 @@ private[spark] object HiveUtils extends Logging {
    * The location of the jars that should be used to instantiate the HiveMetastoreClient.  This
    * property can be one of three options:
    *  - a classpath in the standard format for both hive and hadoop.
+   *  - path - attempt to discover the jars with paths configured bt `HIVE_METASTORE_JARS_PATH`
    *  - builtin - attempt to discover the jars that were used to load Spark SQL and use those. This
    *              option is only valid when using the execution version of Hive.
    *  - maven - download the correct version of hive on demand from maven.
    */
   private def hiveMetastoreJars(conf: SQLConf): String = {
     conf.getConf(HIVE_METASTORE_JARS)
+  }
+
+  /**
+   * Hive jars paths, only work when `HIVE_METASTORE_JARS` is `path`.
+   */
+  private def hiveMetastoreJarsPath(conf: SQLConf): Seq[String] = {
+    conf.getConf(HIVE_METASTORE_JARS_PATH)
   }
 
   /**
@@ -461,8 +469,7 @@ private[spark] object HiveUtils extends Logging {
 
       // Convert to files and expand any directories.
       val jars =
-        hiveMetastoreJars
-          .split(";")
+        HiveUtils.hiveMetastoreJarsPath(sqlConf)
           .flatMap {
             case path if Utils.isWindows =>
               addLocalHiveJars(new File(path))
