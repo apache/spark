@@ -60,7 +60,7 @@ class HadoopVersionInfoSuite extends SparkFunSuite {
       sparkConf.set(HiveUtils.HIVE_METASTORE_VERSION, "2.0")
       sparkConf.set(
         HiveUtils.HIVE_METASTORE_JARS,
-        jars.map(_.getCanonicalPath).mkString(";"))
+        jars.map(_.getCanonicalPath).mkString(File.pathSeparator))
       HiveClientBuilder.buildConf(Map.empty).foreach { case (k, v) =>
         hadoopConf.set(k, v)
       }
