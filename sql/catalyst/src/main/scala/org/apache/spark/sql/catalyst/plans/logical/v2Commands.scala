@@ -53,6 +53,7 @@ trait V2WriteCommand extends Command {
   }
 
   def withNewQuery(newQuery: LogicalPlan): V2WriteCommand
+  def withNewTable(newTable: NamedRelation): V2WriteCommand
 }
 
 /**
@@ -64,6 +65,7 @@ case class AppendData(
     writeOptions: Map[String, String],
     isByName: Boolean) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
+  override def withNewTable(newTable: NamedRelation): AppendData = copy(table = newTable)
 }
 
 object AppendData {
@@ -97,6 +99,9 @@ case class OverwriteByExpression(
   override def withNewQuery(newQuery: LogicalPlan): OverwriteByExpression = {
     copy(query = newQuery)
   }
+  override def withNewTable(newTable: NamedRelation): OverwriteByExpression = {
+    copy(table = newTable)
+  }
 }
 
 object OverwriteByExpression {
@@ -127,6 +132,9 @@ case class OverwritePartitionsDynamic(
     isByName: Boolean) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): OverwritePartitionsDynamic = {
     copy(query = newQuery)
+  }
+  override def withNewTable(newTable: NamedRelation): OverwritePartitionsDynamic = {
+    copy(table = newTable)
   }
 }
 
