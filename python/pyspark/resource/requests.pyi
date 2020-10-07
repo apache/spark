@@ -39,11 +39,11 @@ class ExecutorResourceRequest:
 
 class ExecutorResourceRequests:
     @overload
-    def __init__(self, _jvm: None = ...) -> None: ...
+    def __init__(self, _jvm: JVMView) -> None: ...
     @overload
     def __init__(
         self,
-        _jvm: JVMView,
+        _jvm: None = ...,
         _requests: Optional[Dict[str, ExecutorResourceRequest]] = ...,
     ) -> None: ...
     def memory(self, amount: str) -> ExecutorResourceRequests: ...
@@ -70,11 +70,11 @@ class TaskResourceRequest:
 
 class TaskResourceRequests:
     @overload
-    def __init__(self, _jvm: None = ...) -> None: ...
+    def __init__(self, _jvm: JVMView) -> None: ...
     @overload
     def __init__(
         self,
-        _jvm: JVMView,
+        _jvm: None = ...,
         _requests: Optional[Dict[str, TaskResourceRequest]] = ...,
     ) -> None: ...
     def cpus(self, amount: int) -> TaskResourceRequests: ...

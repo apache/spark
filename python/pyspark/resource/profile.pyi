@@ -29,12 +29,12 @@ class ResourceProfile:
     @overload
     def __init__(
         self,
-        _java_resource_profile: Optional[JavaObject] = ...,
+        _java_resource_profile: JavaObject,
     ) -> None: ...
     @overload
     def __init__(
         self,
-        *,
+        _java_resource_profile: None = ...,
         _exec_req: Dict[str, ExecutorResourceRequest] = ...,
         _task_req: Dict[str, TaskResourceRequest] = ...,
     ) -> None: ...
