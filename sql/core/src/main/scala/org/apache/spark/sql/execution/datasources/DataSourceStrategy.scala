@@ -474,7 +474,7 @@ object DataSourceStrategy extends PredicateHelper {
    * is case insensitive. We should change attribute names to match the ones in the schema,
    * so we do not need to worry about case sensitivity anymore.
    */
-  protected[sql] def normalizeExprs(
+  def normalizeExprs(
       exprs: Seq[Expression],
       attributes: Seq[AttributeReference]): Seq[Expression] = {
     exprs.map { e =>
@@ -485,7 +485,7 @@ object DataSourceStrategy extends PredicateHelper {
     }
   }
 
-  private[sql] def getPushedDownFilters(
+  def getPushedDownFilters(
       partitionColumns: Seq[Expression],
       normalizedFilters: Seq[Expression]): ExpressionSet = {
     if (partitionColumns.isEmpty) {
