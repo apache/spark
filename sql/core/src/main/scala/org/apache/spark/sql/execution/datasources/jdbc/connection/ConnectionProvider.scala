@@ -43,7 +43,8 @@ private[jdbc] object ConnectionProvider extends Logging {
         providers += provider
       } catch {
         case t: Throwable =>
-          logError(s"Failed to load built in provider.", t)
+          logError("Failed to load built in provider.")
+          logInfo("Loading of the provider failed with the exception:", t)
       }
     }
     // Seems duplicate but it's needed for Scala 2.13
