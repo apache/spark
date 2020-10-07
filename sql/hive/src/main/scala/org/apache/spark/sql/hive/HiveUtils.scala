@@ -90,12 +90,21 @@ private[spark] object HiveUtils extends Logging {
       |   <code>${builtinHiveVersion}</code> or not defined.
       | 2. "maven"
       |   Use Hive jars of specified version downloaded from Maven repositories.
-      | 3. A classpath in the standard format for both Hive and Hadoop, we should always
+      | 3. "path"
+      |    A classpath configured by `spark.sql.hive.metastore.jars.path` in the standard format
+      |    for both Hive and Hadoop.
+      | 4. A classpath in the standard format for both Hive and Hadoop, we should always
       |   be fully qualified URL to indicate other file systems.
       """.stripMargin)
     .version("1.4.0")
     .stringConf
     .createWithDefault("builtin")
+
+  val HIVE_METASTORE_JARS_PATH = buildStaticConf("spark.sql.hive.metastore.jars.path")
+    .doc(s"When ${HIVE_METASTORE_JARS} is set as `path`, use Hive jars configured by this")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
 
   val CONVERT_METASTORE_PARQUET = buildConf("spark.sql.hive.convertMetastoreParquet")
     .doc("When set to true, the built-in Parquet reader and writer are used to process " +
@@ -399,7 +408,7 @@ private[spark] object HiveUtils extends Logging {
         config = configurations,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
-    } else {
+    } else if (hiveMetastoreJars =="path") {
 
       def addLocalHiveJars(file: File): Seq[URL] = {
         if (file.getName == "*") {
@@ -477,7 +486,38 @@ private[spark] object HiveUtils extends Logging {
 
       logInfo(
         s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion " +
-          s"using ${jars.mkString(";")}")
+          s"using path: ${jars.mkString(";")}")
+      new IsolatedClientLoader(
+        version = metaVersion,
+        sparkConf = conf,
+        hadoopConf = hadoopConf,
+        execJars = jars.toSeq,
+        config = configurations,
+        isolationOn = true,
+        barrierPrefixes = hiveMetastoreBarrierPrefixes,
+        sharedPrefixes = hiveMetastoreSharedPrefixes)
+    } else {
+      // Convert to files and expand any directories.
+      val jars =
+        hiveMetastoreJars
+          .split(File.pathSeparator)
+          .flatMap {
+            case path if new File(path).getName == "*" =>
+              val files = new File(path).getParentFile.listFiles()
+              if (files == null) {
+                logWarning(s"Hive jar path '$path' does not exist.")
+                Nil
+              } else {
+                files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).toSeq
+              }
+            case path =>
+              new File(path) :: Nil
+          }
+          .map(_.toURI.toURL)
+
+      logInfo(
+        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion " +
+          s"using ${jars.mkString(":")}")
       new IsolatedClientLoader(
         version = metaVersion,
         sparkConf = conf,
