@@ -737,7 +737,7 @@ object CollapseProject extends Rule[LogicalPlan] {
       val maxCommonExprs = SQLConf.get.maxCommonExprsInCollapseProject
 
       if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList) ||
-        getLargestNumOfCommonOutput(p1.projectList, p2.projectList) >= maxCommonExprs) {
+        getLargestNumOfCommonOutput(p1.projectList, p2.projectList) > maxCommonExprs) {
         p1
       } else {
         p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList))

@@ -1933,7 +1933,7 @@ object SQLConf {
         "`CollapseProject`. Normally `CollapseProject` will collapse adjacent Project " +
         "and merge expressions. But in some edge cases, expensive expressions might be " +
         "duplicated many times in merged Project by this optimization. This config sets " +
-        "a maximum number. Once an expression is duplicated equal to or more than this number " +
+        "a maximum number. Once an expression is duplicated more than this number " +
         "if merging two Project, Spark SQL will skip the merging.")
       .version("3.1.0")
       .intConf

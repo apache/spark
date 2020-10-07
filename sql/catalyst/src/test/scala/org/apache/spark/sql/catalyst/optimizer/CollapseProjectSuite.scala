@@ -188,7 +188,7 @@ class CollapseProjectSuite extends PlanTest {
             GetStructField('struct, 2).as("c")).analyze
         val optimized = Optimize.execute(query)
 
-        if (maxCommonExprs.toInt <= 3) {
+        if (maxCommonExprs.toInt < 3) {
           val expected = query
           comparePlans(optimized, expected)
         } else {
