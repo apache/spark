@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.planning
 
+import scala.collection.mutable
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -108,6 +110,8 @@ object ScanOperation extends OperationHelper with PredicateHelper {
   type ScanReturnType = Option[(Option[Seq[NamedExpression]],
     Seq[Expression], LogicalPlan, AttributeMap[Expression])]
 
+  val maxCommonExprs = SQLConf.get.maxCommonExprsInCollapseProject
+
   def unapply(plan: LogicalPlan): Option[ReturnType] = {
     collectProjectsAndFilters(plan) match {
       case Some((fields, filters, child, _)) =>
@@ -124,14 +128,34 @@ object ScanOperation extends OperationHelper with PredicateHelper {
     }.exists(!_.deterministic))
   }
 
+  def equalOrMoreThanMaxAllowedCommonOutput(
+       expr: Seq[NamedExpression],
+       aliases: AttributeMap[Expression]): Boolean = {
+    val exprMap = mutable.HashMap.empty[Attribute, Int]
+
+    expr.foreach(_.collect {
+      case a: Attribute if aliases.contains(a) => exprMap.update(a, exprMap.getOrElse(a, 0) + 1)
+    })
+
+    val commonOutputs = if (exprMap.size > 0) {
+      exprMap.maxBy(_._2)._2
+    } else {
+      0
+    }
+
+    commonOutputs >= maxCommonExprs
+  }
+
   private def collectProjectsAndFilters(plan: LogicalPlan): ScanReturnType = {
     plan match {
       case Project(fields, child) =>
         collectProjectsAndFilters(child) match {
           case Some((_, filters, other, aliases)) =>
             // Follow CollapseProject and only keep going if the collected Projects
-            // do not have common non-deterministic expressions.
-            if (!hasCommonNonDeterministic(fields, aliases)) {
+            // do not have common non-deterministic expressions, or do not have equal to/more than
+            // maximum allowed common outputs.
+            if (!hasCommonNonDeterministic(fields, aliases)
+                || !equalOrMoreThanMaxAllowedCommonOutput(fields, aliases)) {
               val substitutedFields =
                 fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
               Some((Some(substitutedFields), filters, other, collectAliases(substitutedFields)))
