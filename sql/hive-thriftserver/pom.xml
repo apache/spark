@@ -146,9 +146,7 @@
             </goals>
             <configuration>
               <sources>
-                <source>v${hive.version.short}/src/gen/java</source>
-                <source>v${hive.version.short}/src/main/java</source>
-                <source>v${hive.version.short}/src/main/scala</source>
+                <source>src/gen/java</source>
               </sources>
             </configuration>
           </execution>

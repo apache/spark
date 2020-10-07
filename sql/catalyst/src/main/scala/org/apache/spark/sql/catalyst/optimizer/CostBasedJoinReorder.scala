@@ -114,7 +114,7 @@ case class OrderedJoin(
 /**
  * Reorder the joins using a dynamic programming algorithm. This implementation is based on the
  * paper: Access Path Selection in a Relational Database Management System.
- * http://www.inf.ed.ac.uk/teaching/courses/adbs/AccessPath.pdf
+ * https://dl.acm.org/doi/10.1145/582095.582099
  *
  * First we put all items (basic joined nodes) into level 0, then we build all two-way joins
  * at level 1 from plans at level 0 (single items), then build all 3-way joins from plans
