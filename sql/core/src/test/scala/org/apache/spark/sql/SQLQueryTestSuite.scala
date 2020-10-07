@@ -502,7 +502,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       case _: DescribeCommandBase
           | _: DescribeColumnCommand
           | _: DescribeRelation
-          | _: DescribeColumnStatement => true
+          | _: DescribeColumn => true
       case PhysicalOperation(_, _, Sort(_, true, _)) => true
       case _ => plan.children.iterator.exists(isSorted)
     }
