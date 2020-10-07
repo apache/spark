@@ -660,7 +660,6 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("SPARK-32877: add test for Hive UDF complex decimal type") {
-    assume(HiveUtils.isHive23)
     withUserDefinedFunction("testArraySum" -> false) {
       sql(s"CREATE FUNCTION testArraySum AS '${classOf[ArraySumUDF].getName}'")
       checkAnswer(

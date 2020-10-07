@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -735,5 +735,24 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     testMetricsInSparkPlanOperator(exchanges.head,
       Map("dataSize" -> 3200, "shuffleRecordsWritten" -> 100))
     testMetricsInSparkPlanOperator(exchanges(1), Map("dataSize" -> 0, "shuffleRecordsWritten" -> 0))
+  }
+
+  test("Add numRows to metric of BroadcastExchangeExec") {
+    withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+      withTable("t1", "t2") {
+        spark.range(2).write.saveAsTable("t1")
+        spark.range(2).write.saveAsTable("t2")
+        val df = sql("SELECT t1.* FROM t1 JOIN t2 ON t1.id = t2.id")
+        df.collect()
+        val plan = df.queryExecution.executedPlan
+
+        val exchanges = plan.collect {
+          case s: BroadcastExchangeExec => s
+        }
+
+        assert(exchanges.size === 1)
+        testMetricsInSparkPlanOperator(exchanges.head, Map("numRows" -> 2))
+      }
+    }
   }
 }
