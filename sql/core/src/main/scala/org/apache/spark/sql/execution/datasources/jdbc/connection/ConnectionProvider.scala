@@ -39,11 +39,11 @@ private[jdbc] object ConnectionProvider extends Logging {
     while (iterator.hasNext) {
       try {
         val provider = iterator.next
-        logDebug(s"Loaded built in provider: $provider")
+        logDebug(s"Loaded built-in provider: $provider")
         providers += provider
       } catch {
         case t: Throwable =>
-          logError("Failed to load built in provider.")
+          logError("Failed to load built-in provider.")
           logInfo("Loading of the provider failed with the exception:", t)
       }
     }
