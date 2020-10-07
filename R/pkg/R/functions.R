@@ -847,12 +847,10 @@ setMethod("assert_true",
             jc <- if (is.null(errMsg)) {
               callJStatic("org.apache.spark.sql.functions", "assert_true", x@jc)
             } else {
-              errMsgCol <- if (class(errMsg) == "Column") {
-                errMsg@jc
-              } else {
-                errMsg
+              if (is.character(errMsg) && length(errMsg) == 1) {
+                errMsg <- lit(errMsg)
               }
-              callJStatic("org.apache.spark.sql.functions", "assert_true", x@jc, errMsgCol)
+              callJStatic("org.apache.spark.sql.functions", "assert_true", x@jc, errMsg@jc)
             }
             column(jc)
           })
@@ -870,12 +868,10 @@ setMethod("assert_true",
 setMethod("raise_error",
           signature(x = "characterOrColumn"),
           function(x) {
-            col <- if (class(x) == "Column") {
-              x@jc
-            } else {
-              x
+            if (is.character(x) && length(x) == 1) {
+              x <- lit(x)
             }
-            jc <- callJStatic("org.apache.spark.sql.functions", "raise_error", col)
+            jc <- callJStatic("org.apache.spark.sql.functions", "raise_error", x@jc)
             column(jc)
           })
 
