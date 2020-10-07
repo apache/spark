@@ -24,8 +24,12 @@ import org.apache.spark.{ShuffleDependency, TaskContext}
  * and on each executor, based on the spark.shuffle.manager setting. The driver registers shuffles
  * with it, and executors (or tasks running locally in the driver) can ask to read and write data.
  *
- * NOTE: this will be instantiated by SparkEnv so its constructor can take a SparkConf and
+ * NOTE:
+ * 1. This will be instantiated by SparkEnv so its constructor can take a SparkConf and
  * boolean isDriver as parameters.
+ * 2. This contains a method ShuffleBlockResolver which interacts with External Shuffle Service
+ * when it is enabled. Need to pay attention to that, if implementing a custom ShuffleManager, to
+ * make sure the custom ShuffleManager could co-exist with External Shuffle Service.
  */
 private[spark] trait ShuffleManager {
 

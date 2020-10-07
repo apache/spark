@@ -17,9 +17,11 @@
 # under the License.
 
 import threading
-from typing import Any, Generic, Optional, TypeVar
+from typing import Any, Dict, Generic, Optional, TypeVar
 
 T = TypeVar("T")
+
+_broadcastRegistry: Dict[int, Broadcast]
 
 class Broadcast(Generic[T]):
     def __init__(

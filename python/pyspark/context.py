@@ -28,7 +28,7 @@ from tempfile import NamedTemporaryFile
 from py4j.protocol import Py4JError
 from py4j.java_gateway import is_instance_of
 
-from pyspark import accumulators
+from pyspark import accumulators, since
 from pyspark.accumulators import Accumulator
 from pyspark.broadcast import Broadcast, BroadcastPickleRegistry
 from pyspark.conf import SparkConf
@@ -955,6 +955,16 @@ class SparkContext(object):
         directory must be an HDFS path if running on a cluster.
         """
         self._jsc.sc().setCheckpointDir(dirName)
+
+    @since(3.1)
+    def getCheckpointDir(self):
+        """
+        Return the directory where RDDs are checkpointed. Returns None if no
+        checkpoint directory has been set.
+        """
+        if not self._jsc.sc().getCheckpointDir().isEmpty():
+            return self._jsc.sc().getCheckpointDir().get()
+        return None
 
     def _getJavaStorageLevel(self, storageLevel):
         """
