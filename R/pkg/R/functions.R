@@ -338,7 +338,8 @@ NULL
 #' tmp <- mutate(df, dist = over(cume_dist(), ws), dense_rank = over(dense_rank(), ws),
 #'               lag = over(lag(df$mpg), ws), lead = over(lead(df$mpg, 1), ws),
 #'               percent_rank = over(percent_rank(), ws),
-#'               rank = over(rank(), ws), row_number = over(row_number(), ws))
+#'               rank = over(rank(), ws), row_number = over(row_number(), ws),
+#'               nth_value = over(nth_value(df$mpg, 3), ws))
 #' # Get ntile group id (1-4) for hp
 #' tmp <- mutate(tmp, ntile = over(ntile(4), ws))
 #' head(tmp)}
@@ -3299,6 +3300,37 @@ setMethod("lead",
           })
 
 #' @details
+#' \code{nth_value}: Window function: returns the value that is the \code{offset}th
+#' row of the window frame# (counting from 1), and \code{null} if the size of window
+#' frame is less than \code{offset} rows.
+#'
+#' @param offset a numeric indicating number of row to use as the value
+#' @param na.rm a logical which indicates that the Nth value should skip null in the
+#'        determination of which row to use
+#'
+#' @rdname column_window_functions
+#' @aliases nth_value nth_value,characterOrColumn-method
+#' @note nth_value since 3.1.0
+setMethod("nth_value",
+          signature(x = "characterOrColumn", offset = "numeric"),
+          function(x, offset, na.rm = FALSE) {
+            x <- if (is.character(x)) {
+              column(x)
+            } else {
+              x
+            }
+            offset <- as.integer(offset)
+            jc <- callJStatic(
+              "org.apache.spark.sql.functions",
+              "nth_value",
+              x@jc,
+              offset,
+              na.rm
+            )
+            column(jc)
+          })
+
+#' @details
 #' \code{ntile}: Returns the ntile group id (from 1 to n inclusive) in an ordered window
 #' partition. For example, if n is 4, the first quarter of the rows will get value 1, the second
 #' quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
@@ -4382,7 +4414,8 @@ setMethod("date_trunc",
           })
 
 #' @details
-#' \code{current_date}: Returns the current date as a date column.
+#' \code{current_date}: Returns the current date at the start of query evaluation as a date column.
+#' All calls of current_date within the same query return the same value.
 #'
 #' @rdname column_datetime_functions
 #' @aliases current_date current_date,missing-method
@@ -4398,7 +4431,8 @@ setMethod("current_date",
           })
 
 #' @details
-#' \code{current_timestamp}: Returns the current timestamp as a timestamp column.
+#' \code{current_timestamp}: Returns the current timestamp at the start of query evaluation as
+#' a timestamp column. All calls of current_timestamp within the same query return the same value.
 #'
 #' @rdname column_datetime_functions
 #' @aliases current_timestamp current_timestamp,missing-method
@@ -4417,10 +4451,10 @@ setMethod("current_timestamp",
 #' @aliases timestamp_seconds timestamp_seconds,Column-method
 #' @note timestamp_seconds since 3.1.0
 setMethod("timestamp_seconds",
-    signature(x = "Column"),
-    function(x) {
-        jc <- callJStatic(
-            "org.apache.spark.sql.functions", "timestamp_seconds", x@jc
-        )
-        column(jc)
-    })
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic(
+              "org.apache.spark.sql.functions", "timestamp_seconds", x@jc
+            )
+            column(jc)
+          })

@@ -391,7 +391,7 @@ SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'nthvalue(spark_catalog.default.tenk1.`four`, 0)' due to data type mismatch: The 'offset' argument of nth_value must be greater than zero but it is 0.; line 1 pos 7
+cannot resolve 'nth_value(spark_catalog.default.tenk1.`four`, 0)' due to data type mismatch: The 'offset' argument of nth_value must be greater than zero but it is 0.; line 1 pos 7
 
 
 -- !query

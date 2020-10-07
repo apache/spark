@@ -265,15 +265,13 @@ Change the major Scala version using (e.g. 2.13):
 
     ./dev/change-scala-version.sh 2.13
 
-For Maven, please enable the profile (e.g. 2.13):
+Enable the profile (e.g. 2.13):
 
+    # For Maven
     ./build/mvn -Pscala-2.13 compile
 
-For SBT, specify a complete scala version using (e.g. 2.13.0):
-
-    ./build/sbt -Dscala.version=2.13.0
-
-Otherwise, the sbt-pom-reader plugin will use the `scala.version` specified in the spark-parent pom.
+    # For sbt
+    ./build/sbt -Pscala-2.13 compile
 
 ## Running Jenkins tests with Github Enterprise
 
