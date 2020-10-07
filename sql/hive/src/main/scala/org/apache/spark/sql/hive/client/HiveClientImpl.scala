@@ -169,9 +169,7 @@ private[hive] class HiveClientImpl(
     // since HIVE-11878, and ADDJarCommand will add jars to clientLoader.classLoader.
     // For this reason we cannot load the jars added by ADDJarCommand because of class loader
     // got changed. We reset it to clientLoader.ClassLoader here.
-    if (HiveUtils.isHive23) {
-      state.getConf.setClassLoader(clientLoader.classLoader)
-    }
+    state.getConf.setClassLoader(clientLoader.classLoader)
     SessionState.start(state)
     state.out = new PrintStream(outputBuffer, true, UTF_8.name())
     state.err = new PrintStream(outputBuffer, true, UTF_8.name())
@@ -179,9 +177,7 @@ private[hive] class HiveClientImpl(
   }
 
   /** Returns the configuration for the current session. */
-  def conf: HiveConf = if (!HiveUtils.isHive23) {
-    state.getConf
-  } else {
+  def conf: HiveConf = {
     val hiveConf = state.getConf
     // Hive changed the default of datanucleus.schema.autoCreateAll from true to false
     // and hive.metastore.schema.verification from false to true since Hive 2.0.
@@ -293,8 +289,7 @@ private[hive] class HiveClientImpl(
     val ret = try {
       f
     } catch {
-      case e: NoClassDefFoundError
-        if HiveUtils.isHive23 && e.getMessage.contains("org/apache/hadoop/hive/serde2/SerDe") =>
+      case e: NoClassDefFoundError if e.getMessage.contains("apache/hadoop/hive/serde2/SerDe") =>
         throw new ClassNotFoundException("The SerDe interface removed since Hive 2.3(HIVE-15167)." +
           " Please migrate your custom SerDes to Hive 2.3. See HIVE-15167 for more details.", e)
     } finally {

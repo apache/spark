@@ -81,21 +81,13 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
       (predicate: Predicate, stringExpr: String)
       (implicit df: DataFrame): Unit = {
     def checkLogicalOperator(filter: SearchArgument) = {
-      if (HiveUtils.isHive23) {
-        assert(filter.toString == stringExpr.replace("\n", ", "))
-      } else {
-        assert(filter.toString == stringExpr)
-      }
+      assert(filter.toString == stringExpr.replace("\n", ", "))
     }
     checkFilterPredicate(df, predicate, checkLogicalOperator)
   }
 
   private def assertResultWithDiffHiveVersion(expected : String)(c : scala.Any) = {
-    if (HiveUtils.isHive23) {
-      assertResult(expected.replace("\n", ", "))(c)
-    } else {
-      assertResult(expected)(c)
-    }
+    assertResult(expected.replace("\n", ", "))(c)
   }
 
   private def checkNoFilterPredicate
@@ -353,13 +345,6 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
     // BinaryType
     withOrcDataFrame((1 to 4).map(i => Tuple1(i.b))) { implicit df =>
       checkNoFilterPredicate($"_1" <=> 1.b)
-    }
-    // DateType
-    if (!HiveUtils.isHive23) {
-      val stringDate = "2015-01-01"
-      withOrcDataFrame(Seq(Tuple1(Date.valueOf(stringDate)))) { implicit df =>
-        checkNoFilterPredicate($"_1" === Date.valueOf(stringDate))
-      }
     }
     // MapType
     withOrcDataFrame((1 to 4).map(i => Tuple1(Map(i -> i)))) { implicit df =>
