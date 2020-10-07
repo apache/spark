@@ -23,7 +23,7 @@ from pyspark.resource.requests import (  # noqa: F401
     TaskResourceRequests as TaskResourceRequests,
 )
 from typing import overload, Dict, Optional, Union
-from py4j.java_gateway import JavaObject  # type: ignore
+from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 class ResourceProfile:
     @overload
