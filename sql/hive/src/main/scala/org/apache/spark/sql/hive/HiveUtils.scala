@@ -91,8 +91,8 @@ private[spark] object HiveUtils extends Logging {
       | 2. "maven"
       |   Use Hive jars of specified version downloaded from Maven repositories.
       | 3. "path"
-      |    A classpath configured by `spark.sql.hive.metastore.jars.path` in the standard format
-      |    for both Hive and Hadoop.
+      |   Use Hive jars configured by `spark.sql.hive.metastore.jars.path` in comma separated format
+      |   support both local or remote paths.
       | 4. A classpath in the standard format for both Hive and Hadoop, we should always
       |   be fully qualified URL to indicate other file systems.
       """.stripMargin)
@@ -101,7 +101,8 @@ private[spark] object HiveUtils extends Logging {
     .createWithDefault("builtin")
 
   val HIVE_METASTORE_JARS_PATH = buildStaticConf("spark.sql.hive.metastore.jars.path")
-    .doc(s"When ${HIVE_METASTORE_JARS} is set as `path`, use Hive jars configured by this")
+    .doc(s"Comma separated path of Hive jars, both support local and remote paths." +
+      s"When ${HIVE_METASTORE_JARS} is set as `path`, we will use Hive jars configured by this")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
