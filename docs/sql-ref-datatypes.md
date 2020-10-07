@@ -317,46 +317,48 @@ SELECT COUNT(*), c2 FROM test GROUP BY c2;
 
 #### Data type compatibility
 
+#### Type Coercion in operations between different types 
+
 The following is the hierarchy of data type compatibility and the possible implicit conversions that can be made. In an operation involving different and compatible data types, these will be promoted to the lowest common top type to perform the operation.
 
 For example, if you have an add operation between an integer and a float, the integer will be treated as a float, the least common compatible type, resulting the operation in a float.
 
-The most common operations where this hierarchy is applied are:
-* Parse Csv files
-* Parse Json files
-* Expressions (in, sum, avg, if, ...)
-* Date time expressions (date_add, date_sub, ...)
-
 |Data type|Hierarchy compatible types|
 |---------|--------------------------|
-|ByteType |ByteType,ShortType, IntegerType, LongType, FloatType, DoubleType|
-|ShortType |ShortType,IntegerType, LongType, FloatType, DoubleType|
-|IntegerType |IntegerType,LongType, FloatType, DoubleType|
-|LongType |LongType,FloatType, DoubleType|
-|FloatType |FloatType,DoubleType|
+|ByteType |ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType|
+|ShortType |ShortType, IntegerType, LongType, FloatType, DoubleType|
+|IntegerType |IntegerType, LongType, FloatType, DoubleType|
+|LongType |LongType, FloatType, DoubleType|
+|FloatType |FloatType, DoubleType|
 |DoubleType |DoubleType|
-|StringType |StringType|
+|StringType |DoubleType (in numeric operations), StringType |
 |BinaryType |BinaryType|
 |BooleanType |BooleanType|
 |TimestampType |TimestampType, DateType|
 |DateType |DateType|
 
-In the case of CSV and JSON parsing, if the types being parsed in the same column are not compatible, the result will be cast into StringType
-
 The case of DecimalType, is treated differently, for example, there is no common type for double and decimal because double's range is larger than decimal, and yet decimal is more precise than double, but in an operation, we would cast the decimal into double.
 
-The following table shows the matrix of compatible types for implicit conversions. The direction of the conversion is as shown in the previous table.
+#### Explicit casting and store assignment casting
+
+When you are using explicit casting by CAST or doing INSERT INTO operations that need to cast types to different store types, the following matrix shows if the conversion is allowed
 
 |         |ByteType  |ShortType |IntegerType |LongType |FloatType |DoubleType |StringType |BinaryType |BooleanType |TimestampType |DateType|
 |---------|----------|----------|------------|---------|----------|-----------|-----------|-----------|------------|--------------|--------|
-|ByteType |--        |X         |X           |X        |X         |X          |X          |           |            |              |        |
-|ShortType|X         |--        |X           |X        |X         |X          |X          |           |            |              |        |
-|IntegerType|X       |X         |--          |X        |X         |X          |X          |           |            |              |        |
-|LongType |X         |X         |X           |--       |X         |X          |X          |           |            |              |        |
-|FloatType |X        |X         |X           |X        |--        |X          |X          |           |            |              |        |
-|DoubleType |X       |X         |X           |X        |X         |--         |X          |           |            |              |        |
-|StringType |X       |X         |X           |X        |X         |X          |--         |           |X           |X             |X       |
+|ByteType |--        |X         |X           |X        |X         |X          |X          |X          |X           |X             |        |
+|ShortType|*         |--        |X           |X        |X         |X          |X          |X          |X           |X             |        |
+|IntegerType|*       |*         |--          |X        |X         |X          |X          |X          |X           |X             |        |
+|LongType |*         |*         |*           |--       |X         |X          |X          |X          |X           |X             |        |
+|FloatType |*        |*         |*           |*        |--        |X          |X          |           |X           |X             |        |
+|DoubleType |*       |*         |*           |*        |*         |--         |X          |           |X           |X             |        |
+|StringType |*       |*         |*           |*        |*         |*          |--         |X          |X           |X             |X       |
 |BinaryType |        |          |            |         |          |           |           |--         |            |              |        |
-|BooleanType |       |          |            |         |          |           |X          |           |--          |              |        |
-|TimestampType |     |          |            |         |          |           |X          |           |            |--            |X       |
-|DateType |          |          |            |         |          |           |X          |           |            |X             |--      |
+|BooleanType |X      |X         |X           |X        |X         |X          |X          |           |--          |              |        |
+|TimestampType |*    |*         |*           |X        |X         |X          |X          |           |            |--            |X       |
+|DateType |*         |*         |X           |X        |X         |X          |X          |           |            |X             |--      |
+
+X: Conversion allowed (cast ByteType in ShortType)  
+*: An overflow can occur, check ANSI compliance for the result in this case (cast ShortType in ByteType)
+
+
+
