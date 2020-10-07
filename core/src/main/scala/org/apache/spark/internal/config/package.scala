@@ -596,6 +596,13 @@ package object config {
       .version("1.2.0")
       .fallbackConf(DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT)
 
+  private[spark] val DYN_ALLOCATION_SCALEDOWN_HEURISTIC =
+    ConfigBuilder("spark.dynamicAllocation.heuristic")
+      .doc("A class implementing comparator<ExecutorStoredInfo> used to select")
+      .version("3.1.0")
+      .stringConf
+      .createOptional
+
   private[spark] val LEGACY_LOCALITY_WAIT_RESET =
     ConfigBuilder("spark.locality.wait.legacyResetOnTaskLaunch")
     .doc("Whether to use the legacy behavior of locality wait, which resets the delay timer " +

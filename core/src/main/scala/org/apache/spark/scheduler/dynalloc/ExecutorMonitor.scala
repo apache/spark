@@ -31,6 +31,11 @@ import org.apache.spark.scheduler._
 import org.apache.spark.storage.{RDDBlockId, ShuffleDataBlockId}
 import org.apache.spark.util.Clock
 
+trait ExecutorStoredInfo {
+  def cacheBlockIds: immutable.HashSet[Int, Timestamp]
+  def shuffleIds: immutable.HashSet[Int, Timestamp]
+}
+
 /**
  * A monitor for executor activity, used by ExecutorAllocationManager to detect idle executors.
  */
@@ -524,9 +529,12 @@ private[spark] class ExecutorMonitor(
     // This should only be used in the event thread.
     val cachedBlocks = new mutable.HashMap[Int, mutable.BitSet]()
 
+    private val cachedBlockAccessTime = if (heuristic.isDefined) new mutable.HashMap[Int, Timestamp]()
+
     // The set of shuffles for which shuffle data is held by the executor.
     // This should only be used in the event thread.
     private val shuffleIds = if (shuffleTrackingEnabled) new mutable.HashSet[Int]() else null
+    private val shuffleIdAccessTimes = if (shuffleTrackingEnabled && heuristc.isDefined) new mutable.HashSet[Int]() else null
 
     def isIdle: Boolean = idleStart >= 0 && !hasActiveShuffle
 
