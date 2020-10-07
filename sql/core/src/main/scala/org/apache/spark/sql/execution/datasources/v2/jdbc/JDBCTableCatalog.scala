@@ -70,7 +70,7 @@ class JDBCTableCatalog extends TableCatalog with Logging {
     checkNamespace(ident.namespace())
     val writeOptions = new JdbcOptionsInWrite(
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
-    classifyException {
+    classifyException(s"Failed table existence check: $ident") {
       withConnection(JdbcUtils.tableExists(_, writeOptions))
     }
   }
@@ -90,7 +90,7 @@ class JDBCTableCatalog extends TableCatalog with Logging {
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
     checkNamespace(oldIdent.namespace())
     withConnection { conn =>
-      classifyException {
+      classifyException(s"Failed table renaming from $oldIdent to $newIdent") {
         JdbcUtils.renameTable(conn, getTableName(oldIdent), getTableName(newIdent), options)
       }
     }
@@ -127,7 +127,7 @@ class JDBCTableCatalog extends TableCatalog with Logging {
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
     val caseSensitive = SQLConf.get.caseSensitiveAnalysis
     withConnection { conn =>
-      classifyException {
+      classifyException(s"Failed table creation: $ident") {
         JdbcUtils.createTable(conn, getTableName(ident), schema, caseSensitive, writeOptions)
       }
     }
@@ -138,7 +138,7 @@ class JDBCTableCatalog extends TableCatalog with Logging {
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     checkNamespace(ident.namespace())
     withConnection { conn =>
-      classifyException {
+      classifyException(s"Failed table altering: $ident") {
         JdbcUtils.alterTable(conn, getTableName(ident), changes, options)
       }
       loadTable(ident)
@@ -165,11 +165,11 @@ class JDBCTableCatalog extends TableCatalog with Logging {
     (ident.namespace() :+ ident.name()).map(dialect.quoteIdentifier).mkString(".")
   }
 
-  private def classifyException[T](f: => T): T = {
+  private def classifyException[T](message: String)(f: => T): T = {
     try {
       f
     } catch {
-      case e: Throwable => throw dialect.classifyException(e)
+      case e: Throwable => throw dialect.classifyException(message, e)
     }
   }
 }

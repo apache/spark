@@ -257,13 +257,12 @@ abstract class JdbcDialect extends Serializable {
 
   /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
+   * @param message The error message to be placed to the returned exception.
    * @param e The dialect specific exception.
    * @return `AnalysisException` or its sub-class.
    */
-  def classifyException(e: Throwable): AnalysisException = {
-    new AnalysisException(
-      message = "Failed on a JDBC dialect statement",
-      cause = Some(e))
+  def classifyException(message: String, e: Throwable): AnalysisException = {
+    new AnalysisException(message, cause = Some(e))
   }
 }
 
@@ -309,6 +308,7 @@ object JdbcDialects {
   registerDialect(DerbyDialect)
   registerDialect(OracleDialect)
   registerDialect(TeradataDialect)
+  registerDialect(H2Dialect)
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.

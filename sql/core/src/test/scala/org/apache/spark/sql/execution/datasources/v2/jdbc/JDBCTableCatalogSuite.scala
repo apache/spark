@@ -21,7 +21,7 @@ import java.util.Properties
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -101,15 +101,18 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         Seq(Row("test", "dst_table"), Row("test", "people")))
     }
     // Rename not existing table or namespace
-    Seq(
-      "h2.test.not_existing_table" -> "Table \"not_existing_table\" not found",
-      "h2.bad_test.not_existing_table" -> "Schema \"bad_test\" not found"
-    ).foreach { case (table, expectedMsg) =>
-      val msg = intercept[org.h2.jdbc.JdbcSQLException] {
-        sql(s"ALTER TABLE $table RENAME TO test.dst_table")
-      }.getMessage
-      assert(msg.contains(expectedMsg))
+    val exp1 = intercept[NoSuchTableException] {
+      sql(s"ALTER TABLE h2.test.not_existing_table RENAME TO test.dst_table")
     }
+    assert(exp1.getMessage.contains(
+      "Failed table renaming from test.not_existing_table to test.dst_table"))
+    assert(exp1.cause.get.getMessage.contains("Table \"not_existing_table\" not found"))
+    val exp2 = intercept[NoSuchNamespaceException] {
+      sql(s"ALTER TABLE h2.bad_test.not_existing_table RENAME TO test.dst_table")
+    }
+    assert(exp2.getMessage.contains(
+      "Failed table renaming from bad_test.not_existing_table to test.dst_table"))
+    assert(exp2.cause.get.getMessage.contains("Schema \"bad_test\" not found"))
     // Rename to an existing table
     withTable("h2.test.dst_table") {
       withConnection { conn =>
@@ -119,10 +122,12 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         withConnection { conn =>
           conn.prepareStatement("""CREATE TABLE "test"."src_table" (id INTEGER)""").executeUpdate()
         }
-        val msg = intercept[org.h2.jdbc.JdbcSQLException] {
+        val exp = intercept[TableAlreadyExistsException] {
           sql("ALTER TABLE h2.test.src_table RENAME TO test.dst_table")
-        }.getMessage
-        assert(msg.contains("Table \"dst_table\" already exists"))
+        }
+        assert(exp.getMessage.contains(
+          "Failed table renaming from test.src_table to test.dst_table"))
+        assert(exp.cause.get.getMessage.contains("Table \"dst_table\" already exists"))
       }
     }
   }
@@ -156,10 +161,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }.getMessage
       assert(msg.contains("Table test.new_table already exists"))
     }
-    val msg = intercept[org.h2.jdbc.JdbcSQLException] {
+    val exp = intercept[NoSuchNamespaceException] {
       sql("CREATE TABLE h2.bad_test.new_table(i INT, j STRING) USING _")
-    }.getMessage
-    assert(msg.contains("Schema \"bad_test\" not found"))
+    }
+    assert(exp.getMessage.contains("Failed table creation: bad_test.new_table"))
+    assert(exp.cause.get.getMessage.contains("Schema \"bad_test\" not found"))
   }
 
   test("alter table ... add column") {
@@ -289,15 +295,16 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("alter table ... update column comment not supported") {
     withTable("h2.test.alt_table") {
       sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")
-      val msg1 = intercept[java.sql.SQLFeatureNotSupportedException] {
+      val exp = intercept[AnalysisException] {
         sql("ALTER TABLE h2.test.alt_table ALTER COLUMN ID COMMENT 'test'")
-      }.getMessage
-      assert(msg1.contains("Unsupported TableChange"))
+      }
+      assert(exp.getMessage.contains("Failed table altering: test.alt_table"))
+      assert(exp.cause.get.getMessage.contains("Unsupported TableChange"))
       // Update comment for not existing column
-      val msg2 = intercept[AnalysisException] {
+      val msg = intercept[AnalysisException] {
         sql("ALTER TABLE h2.test.alt_table ALTER COLUMN bad_column COMMENT 'test'")
       }.getMessage
-      assert(msg2.contains("Cannot update missing field bad_column in test.alt_table"))
+      assert(msg.contains("Cannot update missing field bad_column in test.alt_table"))
     }
     // Update column comments in not existing table and namespace
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
