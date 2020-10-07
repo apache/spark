@@ -71,8 +71,7 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
 
   override def configurePod(pod: SparkPod): SparkPod = {
     if (!shouldMountSecret) {
-      pod.copy(pod = buildPodWithServiceAccount(driverServiceAccount, pod)
-        .getOrElse(pod.pod))
+      pod.copy(pod = buildPodWithServiceAccount(driverServiceAccount, pod).getOrElse(pod.pod))
     } else {
       val driverPodWithMountedKubernetesCredentials =
         new PodBuilder(pod.pod)

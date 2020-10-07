@@ -85,10 +85,10 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
   }
 
   test("All pods have the same service account by default", k8sTestTag) {
-      runSparkPiAndVerifyCompletion(
-        executorPodChecker = (executorPod: Pod) => {
-          doExecutorServiceAccountCheck(executorPod, kubernetesTestComponents.serviceAccountName)
-        })
+    runSparkPiAndVerifyCompletion(
+      executorPodChecker = (executorPod: Pod) => {
+        doExecutorServiceAccountCheck(executorPod, kubernetesTestComponents.serviceAccountName)
+      })
   }
 
   test("Run extraJVMOptions check on driver", k8sTestTag) {
