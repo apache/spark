@@ -1708,6 +1708,21 @@ object MimaExcludes {
       ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasLoss.getLoss"),
       ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasLoss.loss")
     )
+    ) ++ Seq(
+      // [SPARK-32037][CORE] Rename blacklisting feature
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkFirehoseListener.onExecutorBlacklisted")
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkFirehoseListener.onExecutorBlacklistedForStage")
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkFirehoseListener.onNodeBlacklistedForStage")
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkFirehoseListener.onExecutorUnblacklisted")
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkFirehoseListener.onNodeBlacklisted")
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkFirehoseListener.onNodeUnblacklisted")
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListener.onExecutorBlacklisted")
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListener.onExecutorBlacklistedForStage")
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListener.onNodeBlacklistedForStage")
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListener.onExecutorUnblacklisted")
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListener.onNodeBlacklisted")
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListener.onNodeUnblacklisted")
+    )
   }
 
   def excludes(version: String) = version match {
