@@ -65,5 +65,15 @@ class InferFiltersFromGenerateSuite extends PlanTest {
       val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)
     }
+
+    val foldableExplode = f(CreateArray(Seq(
+      CreateStruct(Seq(Literal(0), Literal(1))),
+      CreateStruct(Seq(Literal(2), Literal(3)))
+    )))
+    test("Don't infer filters from " + foldableExplode) {
+      val originalQuery = testRelation.generate(foldableExplode).analyze
+      val optimized = Optimize.execute(originalQuery)
+      comparePlans(optimized, originalQuery)
+    }
   }
 }
