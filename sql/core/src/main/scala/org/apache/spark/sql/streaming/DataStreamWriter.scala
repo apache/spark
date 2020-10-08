@@ -295,6 +295,20 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   @throws[TimeoutException]
   def start(): StreamingQuery = startInternal(None)
 
+  /**
+   * Starts the execution of the streaming query, which will continually output results to the given
+   * table as new data arrives. The returned [[StreamingQuery]] object can be used to interact with
+   * the stream.
+   *
+   * @since 3.1.0
+   */
+  @throws[TimeoutException]
+  def saveAsTable(tableName: String): StreamingQuery = {
+    this.source = SOURCE_NAME_TABLE
+    this.tableName = tableName
+    startInternal(None)
+  }
+
   private def startInternal(path: Option[String]): StreamingQuery = {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
@@ -382,23 +396,24 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         createV1Sink(optionsWithPath)
       }
 
-      startQuery(sink, optionsWithPath.originalMap)
+      startQuery(sink, optionsWithPath)
     }
   }
 
   private def startQuery(
       sink: Table,
-      newOptions: Map[String, String],
+      newOptions: CaseInsensitiveMap[String],
       recoverFromCheckpoint: Boolean = true): StreamingQuery = {
-    val queryName = extraOptions.get("queryName")
-    val checkpointLocation = extraOptions.get("checkpointLocation")
+    val options = newOptions.originalMap
+    val queryName = options.get("queryName")
+    val checkpointLocation = options.get("checkpointLocation")
     val useTempCheckpointLocation = SOURCES_ALLOW_ONE_TIME_QUERY.contains(source)
 
     df.sparkSession.sessionState.streamingQueryManager.startQuery(
       queryName,
       checkpointLocation,
       df,
-      newOptions,
+      options,
       sink,
       outputMode,
       useTempCheckpointLocation = useTempCheckpointLocation,
@@ -468,17 +483,6 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   @Evolving
   def foreachBatch(function: VoidFunction2[Dataset[T], java.lang.Long]): DataStreamWriter[T] = {
     foreachBatch((batchDs: Dataset[T], batchId: Long) => function.call(batchDs, batchId))
-  }
-
-  /**
-   * Specifies the underlying output table.
-   *
-   * @since 3.1.0
-   */
-  def table(tableName: String): DataStreamWriter[T] = {
-    this.source = SOURCE_NAME_TABLE
-    this.tableName = tableName
-    this
   }
 
   private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
