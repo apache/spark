@@ -277,5 +277,3 @@ private[r] class RBackendHandler(server: RBackend)
     None
   }
 }
-
-

@@ -21,6 +21,7 @@ import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable
 import scala.collection.mutable
 
 import org.apache.spark._
@@ -29,11 +30,11 @@ import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{RDDBlockId, ShuffleDataBlockId}
-import org.apache.spark.util.Clock
+import org.apache.spark.util.{Clock, Utils}
 
 trait ExecutorStoredInfo {
-  def cacheBlockIds: immutable.HashSet[Int, Timestamp]
-  def shuffleIds: immutable.HashSet[Int, Timestamp]
+  def cacheBlockIds: immutable.HashMap[Int, Long]
+  def shuffleIds: immutable.HashMap[Int, Long]
 }
 
 /**
@@ -56,6 +57,9 @@ private[spark] class ExecutorMonitor(
     conf.get(SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
   private val shuffleTrackingEnabled = !conf.get(SHUFFLE_SERVICE_ENABLED) &&
     conf.get(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)
+  private val heuristic = conf.get(DYN_ALLOCATION_SCALEDOWN_HEURISTIC).map { x =>
+      Utils.classForName(x).newInstance.asInstanceOf[java.util.Comparator[ExecutorStoredInfo]]
+  }
 
   private val executors = new ConcurrentHashMap[String, Tracker]()
   private val execResourceProfileCount = new ConcurrentHashMap[Int, Int]()
@@ -529,12 +533,18 @@ private[spark] class ExecutorMonitor(
     // This should only be used in the event thread.
     val cachedBlocks = new mutable.HashMap[Int, mutable.BitSet]()
 
-    private val cachedBlockAccessTime = if (heuristic.isDefined) new mutable.HashMap[Int, Timestamp]()
+    private val cachedBlockAccessTime = if (heuristic.isDefined) new mutable.HashMap[Int, Long]()
 
     // The set of shuffles for which shuffle data is held by the executor.
     // This should only be used in the event thread.
     private val shuffleIds = if (shuffleTrackingEnabled) new mutable.HashSet[Int]() else null
-    private val shuffleIdAccessTimes = if (shuffleTrackingEnabled && heuristc.isDefined) new mutable.HashSet[Int]() else null
+    private val shuffleIdAccessTimes = {
+      if (shuffleTrackingEnabled && heuristic.isDefined) {
+        new mutable.HashMap[Int, Long]()
+      } else {
+        null
+      }
+    }
 
     def isIdle: Boolean = idleStart >= 0 && !hasActiveShuffle
 
@@ -578,6 +588,9 @@ private[spark] class ExecutorMonitor(
     def addShuffle(id: Int): Unit = {
       if (shuffleIds.add(id)) {
         hasActiveShuffle = true
+        if (heuristic.isDefined) {
+          shuffleIdAccessTimes(id) = clock.getTimeMillis()
+        }
       }
     }
 
@@ -587,6 +600,9 @@ private[spark] class ExecutorMonitor(
         if (isIdle) {
           updateTimeout()
         }
+        if (heuristic.isDefined) {
+          shuffleIdAccessTimes.remove(id)
+        }
       }
     }
 
@@ -595,6 +611,11 @@ private[spark] class ExecutorMonitor(
       hasActiveShuffle = ids.exists(shuffleIds.contains)
       if (hadActiveShuffle && isIdle) {
         updateTimeout()
+      }
+      if (heuristic.isDefined) {
+        ids.filter(shuffleIdAccessTimes.contains(_)).foreach { id =>
+          shuffleIdAccessTimes(id) = clock.getTimeMillis()
+        }
       }
     }
   }
