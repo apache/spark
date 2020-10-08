@@ -77,7 +77,7 @@ private[spark] class MetricsSystem private (
   private[this] val metricsConfig = new MetricsConfig(conf)
 
   private val sinks = new mutable.ArrayBuffer[Sink]
-  private val sourceToListeners = new mutable.HashMap[Source, MetricRegistryListener]
+  private val sourcesWithListeners = new mutable.HashMap[Source, MetricRegistryListener]
 
   private var running: Boolean = false
 
@@ -111,7 +111,7 @@ private[spark] class MetricsSystem private (
     if (running) {
       sinks.foreach(_.stop)
       registry.removeMatching((_: String, _: Metric) => true)
-      sourceToListeners.keySet.foreach(removeSource)
+      sourcesWithListeners.keySet.foreach(removeSource)
     } else {
       logWarning("Stopping a MetricsSystem that is not running")
     }
@@ -157,13 +157,13 @@ private[spark] class MetricsSystem private (
   }
 
   def getSourcesByName(sourceName: String): Seq[Source] =
-    sourceToListeners.keySet.filter(_.sourceName == sourceName).toSeq
+    sourcesWithListeners.keySet.filter(_.sourceName == sourceName).toSeq
 
   def registerSource(source: Source): Unit = {
     try {
       val listener = new MetricsSystemListener(buildRegistryName(source))
       source.metricRegistry.addListener(listener)
-      sourceToListeners += source -> listener
+      sourcesWithListeners += source -> listener
     } catch {
       case e: IllegalArgumentException => logInfo("Metrics already registered", e)
     }
@@ -172,8 +172,8 @@ private[spark] class MetricsSystem private (
   def removeSource(source: Source): Unit = {
     val regName = buildRegistryName(source)
     registry.removeMatching((name: String, _: Metric) => name.startsWith(regName))
-    sourceToListeners.get(source).foreach(source.metricRegistry.removeListener)
-    sourceToListeners.remove(source)
+    sourcesWithListeners.get(source).foreach(source.metricRegistry.removeListener)
+    sourcesWithListeners.remove(source)
   }
 
   private def registerSources(): Unit = {
