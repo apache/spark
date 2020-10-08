@@ -268,7 +268,7 @@ private[hive] trait HiveStrategies {
 
         pruneFilterProject(
           projectList,
-          (ExpressionSet(filters) -- partitionKeyFilters).toSeq,
+          filters.filter(f => f.references.isEmpty || !f.references.subsetOf(partitionKeyIds)),
           identity[Seq[Expression]],
           HiveTableScanExec(_, relation, partitionKeyFilters.toSeq)(sparkSession)) :: Nil
       case _ =>
