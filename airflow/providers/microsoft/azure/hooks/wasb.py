@@ -34,6 +34,8 @@ class WasbHook(BaseHook):
     """
     Interacts with Azure Blob Storage through the ``wasb://`` protocol.
 
+    These parameters have to be passed in Airflow Data Base: account_name and account_key.
+
     Additional options passed in the 'extra' field of the connection will be
     passed to the `BlockBlockService()` constructor. For example, authenticate
     using a SAS token by adding {"sas_token": "YOUR_TOKEN"}.
