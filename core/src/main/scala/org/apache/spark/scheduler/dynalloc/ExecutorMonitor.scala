@@ -21,7 +21,6 @@ import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable
 import scala.collection.mutable
 
 import org.apache.spark._
@@ -33,8 +32,8 @@ import org.apache.spark.storage.{RDDBlockId, ShuffleDataBlockId}
 import org.apache.spark.util.{Clock, Utils}
 
 trait ExecutorStoredInfo {
-  def cacheBlockIds: immutable.HashMap[Int, Long]
-  def shuffleIds: immutable.HashMap[Int, Long]
+  def getCachedBlockIdAccessTimes: mutable.HashMap[Int, Long]
+  def getShuffleIdAccessTimes: mutable.HashMap[Int, Long]
 }
 
 /**
@@ -58,7 +57,7 @@ private[spark] class ExecutorMonitor(
   private val shuffleTrackingEnabled = !conf.get(SHUFFLE_SERVICE_ENABLED) &&
     conf.get(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)
   private val heuristic = conf.get(DYN_ALLOCATION_SCALEDOWN_HEURISTIC).map { x =>
-      Utils.classForName(x).newInstance.asInstanceOf[java.util.Comparator[ExecutorStoredInfo]]
+      Utils.classForName(x).newInstance.asInstanceOf[scala.math.Ordering[ExecutorStoredInfo]]
   }
 
   private val executors = new ConcurrentHashMap[String, Tracker]()
@@ -122,7 +121,7 @@ private[spark] class ExecutorMonitor(
       nextTimeout.set(Long.MaxValue)
 
       var newNextTimeout = Long.MaxValue
-      timedOutExecs = executors.asScala
+      val timedOutExecutors = executors.asScala
         .filter { case (_, exec) =>
           !exec.pendingRemoval && !exec.hasActiveShuffle && !exec.decommissioning}
         .filter { case (_, exec) =>
@@ -136,8 +135,17 @@ private[spark] class ExecutorMonitor(
             true
           }
         }
-        .map { case (name, exec) => (name, exec.resourceProfileId)}
-        .toSeq
+      // Apply the comparator on the value if defined
+      val priorityTimedOutExecs = heuristic match {
+        case Some(h) =>
+          val ordering: scala.math.Ordering[ExecutorStoredInfo] = h
+          timedOutExecutors.toSeq.sortBy(_._2.asInstanceOf[ExecutorStoredInfo])(ordering)
+        case None =>
+          timedOutExecutors
+      }
+      timedOutExecs = priorityTimedOutExecs.map {
+        case (name, exec) => (name, exec.resourceProfileId)
+      }.toSeq
       updateNextTimeout(newNextTimeout)
     }
     timedOutExecs
@@ -515,7 +523,7 @@ private[spark] class ExecutorMonitor(
     }
   }
 
-  private class Tracker(var resourceProfileId: Int) {
+  private class Tracker(var resourceProfileId: Int) extends ExecutorStoredInfo {
     @volatile var timeoutAt: Long = Long.MaxValue
 
     // Tracks whether this executor is thought to be timed out. It's used to detect when the list
@@ -533,17 +541,19 @@ private[spark] class ExecutorMonitor(
     // This should only be used in the event thread.
     val cachedBlocks = new mutable.HashMap[Int, mutable.BitSet]()
 
-    private val cachedBlockAccessTime = if (heuristic.isDefined) new mutable.HashMap[Int, Long]()
+    private lazy val cachedBlockAccessTime = new mutable.HashMap[Int, Long]()
+
+    override def getCachedBlockIdAccessTimes(): mutable.HashMap[Int, Long] = {
+      cachedBlockAccessTime
+    }
 
     // The set of shuffles for which shuffle data is held by the executor.
     // This should only be used in the event thread.
     private val shuffleIds = if (shuffleTrackingEnabled) new mutable.HashSet[Int]() else null
-    private val shuffleIdAccessTimes = {
-      if (shuffleTrackingEnabled && heuristic.isDefined) {
-        new mutable.HashMap[Int, Long]()
-      } else {
-        null
-      }
+    private lazy val shuffleIdAccessTimes = new mutable.HashMap[Int, Long]()
+
+    override def getShuffleIdAccessTimes(): mutable.HashMap[Int, Long] = {
+      shuffleIdAccessTimes
     }
 
     def isIdle: Boolean = idleStart >= 0 && !hasActiveShuffle

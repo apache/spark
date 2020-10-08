@@ -598,7 +598,7 @@ package object config {
 
   private[spark] val DYN_ALLOCATION_SCALEDOWN_HEURISTIC =
     ConfigBuilder("spark.dynamicAllocation.heuristic")
-      .doc("A class implementing comparator<ExecutorStoredInfo> used to select")
+      .doc("A class implementing scala.math.Ordering<ExecutorStoredInfo> used to select")
       .version("3.1.0")
       .stringConf
       .createOptional
