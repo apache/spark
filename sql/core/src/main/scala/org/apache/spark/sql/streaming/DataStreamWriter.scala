@@ -404,16 +404,13 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       sink: Table,
       newOptions: CaseInsensitiveMap[String],
       recoverFromCheckpoint: Boolean = true): StreamingQuery = {
-    val options = newOptions.originalMap
-    val queryName = options.get("queryName")
-    val checkpointLocation = options.get("checkpointLocation")
     val useTempCheckpointLocation = SOURCES_ALLOW_ONE_TIME_QUERY.contains(source)
 
     df.sparkSession.sessionState.streamingQueryManager.startQuery(
-      queryName,
-      checkpointLocation,
+      newOptions.get("queryName"),
+      newOptions.get("checkpointLocation"),
       df,
-      options,
+      newOptions.originalMap,
       sink,
       outputMode,
       useTempCheckpointLocation = useTempCheckpointLocation,
