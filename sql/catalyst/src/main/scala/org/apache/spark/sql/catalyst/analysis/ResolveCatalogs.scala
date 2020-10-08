@@ -142,10 +142,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       }
       RenameTable(catalog.asTableCatalog, oldName.asIdentifier, newNameParts.asIdentifier)
 
-    case DescribeColumnStatement(
-         NonSessionCatalogAndTable(catalog, tbl), colNameParts, isExtended) =>
-      throw new AnalysisException("Describing columns is not supported for v2 tables.")
-
     case c @ CreateTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
       assertNoNullTypeInSchema(c.tableSchema)
@@ -173,9 +169,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
         writeOptions = c.writeOptions,
         ignoreIfExists = c.ifNotExists)
-
-    case RefreshTableStatement(NonSessionCatalogAndTable(catalog, tbl)) =>
-      RefreshTable(catalog.asTableCatalog, tbl.asIdentifier)
 
     case c @ ReplaceTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>

@@ -479,6 +479,7 @@ object FunctionRegistry {
 
     // misc functions
     expression[AssertTrue]("assert_true"),
+    expression[RaiseError]("raise_error"),
     expression[Crc32]("crc32"),
     expression[Md5]("md5"),
     expression[Uuid]("uuid"),
@@ -510,6 +511,7 @@ object FunctionRegistry {
     expression[Lag]("lag"),
     expression[RowNumber]("row_number"),
     expression[CumeDist]("cume_dist"),
+    expression[NthValue]("nth_value"),
     expression[NTile]("ntile"),
     expression[Rank]("rank"),
     expression[DenseRank]("dense_rank"),
@@ -661,7 +663,7 @@ object FunctionRegistry {
     val clazz = scala.reflect.classTag[Cast].runtimeClass
     val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
     val expressionInfo =
-      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "", "", "")
+      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "", "2.0.1", "")
     (name, (expressionInfo, builder))
   }
 

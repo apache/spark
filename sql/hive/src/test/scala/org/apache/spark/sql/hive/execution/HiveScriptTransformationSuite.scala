@@ -38,8 +38,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
   import ScriptTransformationIOSchema._
 
-  override def isHive23OrSpark: Boolean = HiveUtils.isHive23
-
   override def createScriptTransformationExec(
       input: Seq[Expression],
       script: String,

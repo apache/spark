@@ -136,7 +136,7 @@
     <kafka.version>2.6.0</kafka.version>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.1</parquet.version>
-    <orc.version>1.5.10</orc.version>
+    <orc.version>1.5.12</orc.version>
     <orc.classifier></orc.classifier>
     <hive.parquet.group>com.twitter</hive.parquet.group>
     <hive.parquet.version>1.6.0</hive.parquet.version>
@@ -237,7 +237,7 @@
     <hadoop.deps.scope>compile</hadoop.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
     <hive.parquet.scope>provided</hive.parquet.scope>
-    <hive.storage.version>2.7.1</hive.storage.version>
+    <hive.storage.version>2.7.2</hive.storage.version>
     <hive.storage.scope>compile</hive.storage.scope>
     <hive.common.scope>compile</hive.common.scope>
     <hive.llap.scope>compile</hive.llap.scope>
@@ -2970,13 +2970,9 @@
           <sourceDirectories>
             <directory>${basedir}/src/main/java</directory>
             <directory>${basedir}/src/main/scala</directory>
-            <directory>${basedir}/v${hive.version.short}/src/main/java</directory>
-            <directory>${basedir}/v${hive.version.short}/src/main/scala</directory>
           </sourceDirectories>
           <testSourceDirectories>
             <directory>${basedir}/src/test/java</directory>
-            <directory>${basedir}/v${hive.version.short}/src/test/java</directory>
-            <directory>${basedir}/v${hive.version.short}/src/test/scala</directory>
           </testSourceDirectories>
           <configLocation>dev/checkstyle.xml</configLocation>
           <outputFile>${basedir}/target/checkstyle-output.xml</outputFile>
@@ -3146,27 +3142,6 @@
     <profile>
       <id>hadoop-3.2</id>
       <!-- Default hadoop profile. Uses global properties. -->
-    </profile>
-
-    <profile>
-      <id>hive-1.2</id>
-      <properties>
-        <hive.group>org.spark-project.hive</hive.group>
-        <hive.classifier></hive.classifier>
-        <!-- Version used in Maven Hive dependency -->
-        <hive.version>1.2.1.spark2</hive.version>
-        <!-- Version used for internal directory structure -->
-        <hive.version.short>1.2</hive.version.short>
-        <hive.parquet.scope>${hive.deps.scope}</hive.parquet.scope>
-        <hive.storage.version>2.6.0</hive.storage.version>
-        <hive.storage.scope>provided</hive.storage.scope>
-        <hive.common.scope>provided</hive.common.scope>
-        <hive.llap.scope>provided</hive.llap.scope>
-        <hive.serde.scope>provided</hive.serde.scope>
-        <hive.shims.scope>provided</hive.shims.scope>
-        <orc.classifier>nohive</orc.classifier>
-        <datanucleus-core.version>3.2.10</datanucleus-core.version>
-      </properties>
     </profile>
 
     <profile>

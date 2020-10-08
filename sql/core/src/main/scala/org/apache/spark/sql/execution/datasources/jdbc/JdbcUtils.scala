@@ -63,7 +63,7 @@ object JdbcUtils extends Logging {
         throw new IllegalStateException(
           s"Did not find registered driver with class $driverClass")
       }
-      val connection = ConnectionProvider.create(driver, options).getConnection()
+      val connection = ConnectionProvider.create(driver, options.parameters)
       require(connection != null,
         s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
 

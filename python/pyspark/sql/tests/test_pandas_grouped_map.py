@@ -41,7 +41,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
 class GroupedMapInPandasTests(ReusedSQLTestCase):
 
     @property
@@ -446,15 +446,16 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         def column_name_typo(pdf):
             return pd.DataFrame({'iid': pdf.id, 'v': pdf.v})
 
-        @pandas_udf('id long, v int', PandasUDFType.GROUPED_MAP)
+        @pandas_udf('id long, v decimal', PandasUDFType.GROUPED_MAP)
         def invalid_positional_types(pdf):
-            return pd.DataFrame([(u'a', 1.2)])
+            return pd.DataFrame([(1, datetime.date(2020, 10, 5))])
 
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, "KeyError: 'id'"):
-                grouped_df.apply(column_name_typo).collect()
-            with self.assertRaisesRegexp(Exception, "an integer is required"):
-                grouped_df.apply(invalid_positional_types).collect()
+        with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(Exception, "KeyError: 'id'"):
+                    grouped_df.apply(column_name_typo).collect()
+                with self.assertRaisesRegexp(Exception, "[D|d]ecimal.*got.*date"):
+                    grouped_df.apply(invalid_positional_types).collect()
 
     def test_positional_assignment_conf(self):
         with self.sql_conf({
@@ -611,7 +612,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.test_pandas_grouped_map import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

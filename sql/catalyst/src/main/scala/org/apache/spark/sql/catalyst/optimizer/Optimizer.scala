@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
@@ -44,9 +43,11 @@ abstract class Optimizer(catalogManager: CatalogManager)
   // Currently we check after the execution of each rule if a plan:
   // - is still resolved
   // - only host special expressions in supported operators
+  // - has globally-unique attribute IDs
   override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
     !Utils.isTesting || (plan.resolved &&
-      plan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty)
+      plan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
+      LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(plan))
   }
 
   override protected val excludedOnceBatches: Set[String] =
@@ -109,8 +110,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RemoveRedundantAliases,
         UnwrapCastInBinaryComparison,
         RemoveNoopOperators,
-        CombineWithFields,
+        CombineUpdateFields,
         SimplifyExtractValueOps,
+        OptimizeJsonExprs,
         CombineConcats) ++
         extendedOperatorOptimizationRules
 
@@ -143,7 +145,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteNonCorrelatedExists,
       ComputeCurrentTime,
       GetCurrentDatabaseAndCatalog(catalogManager),
-      RewriteDistinctAggregates,
       ReplaceDeduplicateWithAggregate) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
@@ -197,6 +198,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateSorts) :+
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) :+
+    // This batch must run after "Decimal Optimizations", as that one may change the
+    // aggregate distinct column
+    Batch("Distinct Aggregate Rewrite", Once,
+      RewriteDistinctAggregates) :+
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
       CombineTypedFilters,
@@ -218,7 +223,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
-    Batch("ReplaceWithFieldsExpression", Once, ReplaceWithFieldsExpression)
+    Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)
 
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
     batches.filter(_.rules.nonEmpty)
@@ -252,7 +257,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
-      ReplaceWithFieldsExpression.ruleName :: Nil
+      ReplaceUpdateFieldsExpression.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
@@ -1581,14 +1586,14 @@ object ReplaceDistinctWithAggregate extends Rule[LogicalPlan] {
  * Replaces logical [[Deduplicate]] operator with an [[Aggregate]] operator.
  */
 object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Deduplicate(keys, child) if !child.isStreaming =>
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
+    case d @ Deduplicate(keys, child) if !child.isStreaming =>
       val keyExprIds = keys.map(_.exprId)
       val aggCols = child.output.map { attr =>
         if (keyExprIds.contains(attr.exprId)) {
           attr
         } else {
-          Alias(new First(attr).toAggregateExpression(), attr.name)(attr.exprId)
+          Alias(new First(attr).toAggregateExpression(), attr.name)()
         }
       }
       // SPARK-22951: Physical aggregate operators distinguishes global aggregation and grouping
@@ -1597,7 +1602,9 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
       // we append a literal when the grouping key list is empty so that the result aggregate
       // operator is properly treated as a grouping aggregation.
       val nonemptyKeys = if (keys.isEmpty) Literal(1) :: Nil else keys
-      Aggregate(nonemptyKeys, aggCols, child)
+      val newAgg = Aggregate(nonemptyKeys, aggCols, child)
+      val attrMapping = d.output.zip(newAgg.output)
+      newAgg -> attrMapping
   }
 }
 

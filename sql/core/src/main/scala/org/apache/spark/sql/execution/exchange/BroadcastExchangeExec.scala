@@ -78,6 +78,7 @@ case class BroadcastExchangeExec(
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "numRows" -> SQLMetrics.createMetric(sparkContext, "number of rows"),
     "collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build"),
     "broadcastTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to broadcast"))
@@ -90,7 +91,8 @@ case class BroadcastExchangeExec(
 
   override def runtimeStatistics: Statistics = {
     val dataSize = metrics("dataSize").value
-    Statistics(dataSize)
+    val numRows = metrics("numRows").value
+    Statistics(dataSize, Some(numRows))
   }
 
   @transient
@@ -118,6 +120,7 @@ case class BroadcastExchangeExec(
               throw new SparkException(
                 s"Cannot broadcast the table over $MAX_BROADCAST_TABLE_ROWS rows: $numRows rows")
             }
+            longMetric("numRows") += numRows
 
             val beforeBuild = System.nanoTime()
             longMetric("collectTime") += NANOSECONDS.toMillis(beforeBuild - beforeCollect)

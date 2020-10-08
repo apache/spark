@@ -2206,38 +2206,62 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  test("SPARK-21912 ORC/Parquet table should not create invalid column names") {
+  test("SPARK-21912 Parquet table should not create invalid column names") {
     Seq(" ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
-      Seq("ORC", "PARQUET").foreach { source =>
-        withTable("t21912") {
-          val m = intercept[AnalysisException] {
-            sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
-          }.getMessage
-          assert(m.contains(s"contains invalid character(s)"))
+      val source = "PARQUET"
+      withTable("t21912") {
+        val m = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
+        }.getMessage
+        assert(m.contains(s"contains invalid character(s)"))
 
-          val m1 = intercept[AnalysisException] {
-            sql(s"CREATE TABLE t21912 STORED AS $source AS SELECT 1 `col$name`")
-          }.getMessage
-          assert(m1.contains(s"contains invalid character(s)"))
+        val m1 = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t21912 STORED AS $source AS SELECT 1 `col$name`")
+        }.getMessage
+        assert(m1.contains(s"contains invalid character(s)"))
 
-          val m2 = intercept[AnalysisException] {
-            sql(s"CREATE TABLE t21912 USING $source AS SELECT 1 `col$name`")
-          }.getMessage
-          assert(m2.contains(s"contains invalid character(s)"))
+        val m2 = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t21912 USING $source AS SELECT 1 `col$name`")
+        }.getMessage
+        assert(m2.contains(s"contains invalid character(s)"))
 
-          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
-            val m3 = intercept[AnalysisException] {
-              sql(s"CREATE TABLE t21912(`col$name` INT) USING hive OPTIONS (fileFormat '$source')")
-            }.getMessage
-            assert(m3.contains(s"contains invalid character(s)"))
-          }
-
-          sql(s"CREATE TABLE t21912(`col` INT) USING $source")
-          val m4 = intercept[AnalysisException] {
-            sql(s"ALTER TABLE t21912 ADD COLUMNS(`col$name` INT)")
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+          val m3 = intercept[AnalysisException] {
+            sql(s"CREATE TABLE t21912(`col$name` INT) USING hive OPTIONS (fileFormat '$source')")
           }.getMessage
-          assert(m4.contains(s"contains invalid character(s)"))
+          assert(m3.contains(s"contains invalid character(s)"))
         }
+
+        sql(s"CREATE TABLE t21912(`col` INT) USING $source")
+        val m4 = intercept[AnalysisException] {
+          sql(s"ALTER TABLE t21912 ADD COLUMNS(`col$name` INT)")
+        }.getMessage
+        assert(m4.contains(s"contains invalid character(s)"))
+      }
+    }
+  }
+
+  test("SPARK-32889: ORC table column name supports special characters") {
+    // " " "," is not allowed.
+    Seq("$", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
+      val source = "ORC"
+      Seq(s"CREATE TABLE t32889(`$name` INT) USING $source",
+          s"CREATE TABLE t32889 STORED AS $source AS SELECT 1 `$name`",
+          s"CREATE TABLE t32889 USING $source AS SELECT 1 `$name`",
+          s"CREATE TABLE t32889(`$name` INT) USING hive OPTIONS (fileFormat '$source')")
+      .foreach { command =>
+        withTable("t32889") {
+          sql(command)
+          assertResult(name)(
+            sessionState.catalog.getTableMetadata(TableIdentifier("t32889")).schema.fields(0).name)
+        }
+      }
+
+      withTable("t32889") {
+        sql(s"CREATE TABLE t32889(`col` INT) USING $source")
+        sql(s"ALTER TABLE t32889 ADD COLUMNS(`$name` INT)")
+        assertResult(name)(
+          sessionState.catalog.getTableMetadata(TableIdentifier("t32889")).schema.fields(1).name)
       }
     }
   }

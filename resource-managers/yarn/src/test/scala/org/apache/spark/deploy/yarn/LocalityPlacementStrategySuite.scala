@@ -43,7 +43,7 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
       }
     }
 
-    val thread = new Thread(new ThreadGroup("test"), runnable, "test-thread", 32 * 1024)
+    val thread = new Thread(new ThreadGroup("test"), runnable, "test-thread", 256 * 1024)
     thread.start()
     thread.join()
 

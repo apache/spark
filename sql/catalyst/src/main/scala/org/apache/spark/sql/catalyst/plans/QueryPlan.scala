@@ -201,11 +201,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
           case (oldAttr, _) => plan.references.contains(oldAttr)
         }
 
-        val (planAfterRule, newAttrMapping) = CurrentOrigin.withOrigin(origin) {
-          rule.applyOrElse(newPlan, (plan: PlanType) => plan -> Nil)
-        }
-        newPlan = planAfterRule
-
         if (attrMappingForCurrentPlan.nonEmpty) {
           assert(!attrMappingForCurrentPlan.groupBy(_._1.exprId)
             .exists(_._2.map(_._2.exprId).distinct.length > 1),
@@ -222,10 +217,27 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
           }
         }
 
-        attrMapping ++= newAttrMapping.filter {
+        val (planAfterRule, newAttrMapping) = CurrentOrigin.withOrigin(origin) {
+          rule.applyOrElse(newPlan, (plan: PlanType) => plan -> Nil)
+        }
+
+        val newValidAttrMapping = newAttrMapping.filter {
           case (a1, a2) => a1.exprId != a2.exprId
         }
-        newPlan -> attrMapping.toSeq
+
+        // Updates the `attrMapping` entries that are obsoleted by generated entries in `rule`.
+        // For example, `attrMapping` has a mapping entry 'id#1 -> id#2' and `rule`
+        // generates a new entry 'id#2 -> id#3'. In this case, we need to update
+        // the corresponding old entry from 'id#1 -> id#2' to '#id#1 -> #id#3'.
+        val updatedAttrMap = AttributeMap(newValidAttrMapping)
+        val transferAttrMapping = attrMapping.map {
+          case (a1, a2) => (a1, updatedAttrMap.getOrElse(a2, a2))
+        }
+        val newOtherAttrMapping = {
+          val existingAttrMappingSet = transferAttrMapping.map(_._2).toSet
+          newValidAttrMapping.filterNot { case (_, a) => existingAttrMappingSet.contains(a) }
+        }
+        planAfterRule -> (transferAttrMapping ++ newOtherAttrMapping).toSeq
       }
     }
     rewrite(this)._1
