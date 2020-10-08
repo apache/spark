@@ -74,7 +74,7 @@ object MimaExcludes {
     ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.classification.BinaryLogisticRegressionSummary.weightCol"),
 
     // [SPARK-32879] Pass SparkSession.Builder options explicitly to SparkSession
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SparkSession.this")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SparkSession.this"),
 
     // [SPARK-32037][CORE] Rename blacklisting feature
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkFirehoseListener.onExecutorBlacklisted"),
