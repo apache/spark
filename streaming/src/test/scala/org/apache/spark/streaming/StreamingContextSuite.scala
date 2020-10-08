@@ -1029,7 +1029,7 @@ object testPackage extends Assertions {
  */
 private object StreamingContextSuite extends PrivateMethodTester {
   private val _sources =
-    PrivateMethod[mutable.HashMap[Source, MetricRegistryListener]](Symbol("sources"))
+    PrivateMethod[mutable.HashMap[Source, MetricRegistryListener]](Symbol("sourceToListeners"))
   private def getSources(metricsSystem: MetricsSystem):
       mutable.HashMap[Source, MetricRegistryListener] = {
     metricsSystem.invokePrivate(_sources())
