@@ -1809,7 +1809,7 @@ test_that("column functions", {
   expect_equal(actual, expected)
 
   # Test withField
-  lines <- c("{\"Person\": {\"name\":\"Bob\", \"age\":24}}")
+  lines <- c("{\"Person\": {\"name\":\"Bob\", \"age\":24, \"height\": 170}}")
   jsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   writeLines(lines, jsonPath)
   df <- read.df(jsonPath, "json")
@@ -1820,6 +1820,23 @@ test_that("column functions", {
       )
   )
   expect_equal(result, data.frame(dummy = 42))
+
+  # Test dropFields
+  expect_setequal(
+    colnames(select(
+      withColumn(df, "Person", dropFields(df$Person, "age")),
+      column("Person.*")
+    )),
+    c("name", "height")
+  )
+
+  expect_equal(
+    colnames(select(
+      withColumn(df, "Person", dropFields(df$Person, "height", "name")),
+      column("Person.*")
+    )),
+    "age"
+  )
 })
 
 test_that("column binary mathfunctions", {

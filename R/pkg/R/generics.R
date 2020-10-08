@@ -732,6 +732,9 @@ setGeneric("%<=>%", function(x, value) { standardGeneric("%<=>%") })
 #' @rdname withField
 setGeneric("withField", function(x, fieldName, col) { standardGeneric("withField") })
 
+#' @rdname dropFields
+setGeneric("dropFields", function(x, ...) { standardGeneric("dropFields") })
+
 ###################### WindowSpec Methods ##########################
 
 #' @rdname partitionBy

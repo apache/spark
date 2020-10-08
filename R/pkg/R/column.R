@@ -387,3 +387,72 @@ setMethod("withField",
             jc <- callJMethod(x@jc, "withField", fieldName, col@jc)
             column(jc)
           })
+
+#' dropFields
+#'
+#' Drops fields in a struct \code{Column} by name.
+#'
+#' @param x a Column
+#' @param ... names of the fields to be dropped.
+#'
+#' @rdname dropFields
+#' @aliases dropFields dropFields,Column-method
+#' @examples
+#' \dontrun{
+#' df <- select(
+#'   createDataFrame(iris),
+#'   alias(
+#'     struct(
+#'       column("Sepal_Width"), column("Sepal_Length"),
+#'       alias(
+#'         struct(
+#'           column("Petal_Width"), column("Petal_Length"),
+#'           alias(
+#'             column("Petal_Width") * column("Petal_Length"),
+#'             "Petal_Product"
+#'           )
+#'         ),
+#'         "Petal"
+#'       )
+#'     ),
+#'     "dimensions"
+#'   )
+#' )
+#' head(withColumn(df, "dimensions", dropFields(df$dimensions, "Petal")))
+#'
+#' head(
+#'   withColumn(
+#'     df, "dimensions",
+#'     dropFields(df$dimensions, "Sepal_Width", "Sepal_Length")
+#'   )
+#' )
+#'
+#' # This method supports dropping multiple nested fields directly e.g.
+#' head(
+#'   withColumn(
+#'     df, "dimensions",
+#'     dropFields(df$dimensions, "Petal.Petal_Width", "Petal.Petal_Length")
+#'   )
+#' )
+#'
+#' # However, if you are going to add/replace multiple nested fields,
+#' # it is preffered to extract out the nested struct before
+#' # adding/replacing multiple fields e.g.
+#' head(
+#'   withColumn(
+#'     df, "dimensions",
+#'     withField(
+#'       column("dimensions"),
+#'       "Petal",
+#'       dropFields(column("dimensions.Petal"), "Petal_Width", "Petal_Length")
+#'     )
+#'   )
+#' )
+#' }
+#' @note dropFields since 3.1.0
+setMethod("dropFields",
+          signature(x = "Column"),
+          function(x, ...) {
+            jc <- callJMethod(x@jc, "dropFields", list(...))
+            column(jc)
+          })
