@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 private[sql] class OracleConnectionProvider extends SecureConnectionProvider {
   override val driverClass = "oracle.jdbc.OracleDriver"
 
-  override def name: String = "oracle"
+  override val name: String = "oracle"
 
   override def appEntry(driver: Driver, options: JDBCOptions): String = "kprb5module"
 

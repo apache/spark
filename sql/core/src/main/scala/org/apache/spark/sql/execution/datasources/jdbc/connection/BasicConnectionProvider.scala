@@ -30,7 +30,7 @@ private[jdbc] class BasicConnectionProvider extends JdbcConnectionProvider with 
    */
   def getAdditionalProperties(options: JDBCOptions): Properties = new Properties()
 
-  override def name: String = "basic"
+  override val name: String = "basic"
 
   override def canHandle(driver: Driver, options: Map[String, String]): Boolean = {
     val jdbcOptions = new JDBCOptions(options)

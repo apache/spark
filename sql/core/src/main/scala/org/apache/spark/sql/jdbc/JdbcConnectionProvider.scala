@@ -38,7 +38,7 @@ abstract class JdbcConnectionProvider {
    * Name of the service to provide JDBC connections. This name should be unique. Spark will
    * internally use this name to differentiate JDBC connection providers.
    */
-  def name: String
+  val name: String
 
   /**
    * Checks if this connection provider instance can handle the connection initiated by the driver.

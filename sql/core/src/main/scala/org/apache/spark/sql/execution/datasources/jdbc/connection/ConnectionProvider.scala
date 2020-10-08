@@ -22,15 +22,13 @@ import java.util.ServiceLoader
 
 import scala.collection.mutable
 
-import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.security.SecurityConfigurationLock
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcConnectionProvider
 import org.apache.spark.util.Utils
 
 private[jdbc] object ConnectionProvider extends Logging {
-  private val providerEnabledConfig = "spark.security.jdbc.connection.provider.%s.enabled"
-
   private val providers = loadProviders()
 
   def loadProviders(): Seq[JdbcConnectionProvider] = {
@@ -50,12 +48,9 @@ private[jdbc] object ConnectionProvider extends Logging {
       }
     }
 
+    val disabledProviders = SQLConf.get.disabledJdbcConnectionProviders.split(",")
     // toSeq seems duplicate but it's needed for Scala 2.13
-    val sparkConf = SparkEnv.get.conf
-    providers.filter { p =>
-      val key = providerEnabledConfig.format(p.name)
-      sparkConf.getOption(key).forall(_.toBoolean)
-    }.toSeq
+    providers.filterNot(p => disabledProviders.contains(p.name)).toSeq
   }
 
   def create(driver: Driver, options: Map[String, String]): Connection = {

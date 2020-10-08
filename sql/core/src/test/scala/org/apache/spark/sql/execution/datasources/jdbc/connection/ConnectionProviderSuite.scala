@@ -19,38 +19,11 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 import javax.security.auth.login.Configuration
 
-import org.mockito.Mockito.mock
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 
-import org.apache.spark.{SparkConf, SparkEnv}
-
-class ConnectionProviderSuite extends ConnectionProviderSuiteBase {
-
-  private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
-
-  private var savedSparkEnv: SparkEnv = _
-
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    savedSparkEnv = SparkEnv.get
-  }
-
-  override def afterEach(): Unit = {
-    try {
-      SparkEnv.set(savedSparkEnv)
-    } finally {
-      super.afterEach()
-    }
-  }
-
-  private def setSparkEnv(settings: Iterable[(String, String)]): Unit = {
-    val conf = new SparkConf().setAll(settings)
-    val env = mock(classOf[SparkEnv])
-    doReturn(conf).when(env).conf
-    SparkEnv.set(env)
-  }
-
+class ConnectionProviderSuite extends ConnectionProviderSuiteBase with SharedSparkSession {
   test("All built-in providers must be loaded") {
-    setSparkEnv(Map())
     IntentionallyFaultyConnectionProvider.constructed = false
     val providers = ConnectionProvider.loadProviders()
     assert(providers.exists(_.isInstanceOf[BasicConnectionProvider]))
@@ -65,10 +38,11 @@ class ConnectionProviderSuite extends ConnectionProviderSuiteBase {
   }
 
   test("Disabled provider must not be loaded") {
-    setSparkEnv(Map("spark.security.jdbc.connection.provider.db2.enabled" -> "false"))
-    val providers = ConnectionProvider.loadProviders()
-    assert(!providers.exists(_.isInstanceOf[DB2ConnectionProvider]))
-    assert(providers.size === 5)
+    withSQLConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST.key -> "db2") {
+      val providers = ConnectionProvider.loadProviders()
+      assert(!providers.exists(_.isInstanceOf[DB2ConnectionProvider]))
+      assert(providers.size === 5)
+    }
   }
 
   test("Multiple security configs must be reachable") {
