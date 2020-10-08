@@ -1282,6 +1282,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     // This is to avoid running a spark job to list of files in parallel
     // by the InMemoryFileIndex.
     spark.sessionState.conf.setConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD, numFiles * 2)
+    spark.sessionState.conf.setConf(SQLConf.IGNORE_DATA_LOCALITY, true)
 
     withTempDirs { case (root, tmp) =>
       val src = new File(root, "a=1")
@@ -1946,6 +1947,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     val originClassForLocalFileSystem = spark.conf.getOption(optionKey)
     try {
       spark.conf.set(optionKey, classOf[CountListingLocalFileSystem].getName)
+      spark.conf.set(SQLConf.IGNORE_DATA_LOCALITY.key, "true")
       body
     } finally {
       originClassForLocalFileSystem match {

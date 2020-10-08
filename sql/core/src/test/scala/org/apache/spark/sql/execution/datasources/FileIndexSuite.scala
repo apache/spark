@@ -214,9 +214,9 @@ class FileIndexSuite extends SharedSparkSession {
               assert(leafFiles.isEmpty)
             } else {
               assert(raceCondition == classOf[FileDeletionRaceFileSystem])
-              // One of the two leaf files was missing, but we should still list the other:
-              assert(leafFiles.size == 1)
-              assert(leafFiles.head.getPath == nonDeletedLeafFilePath)
+              // listLocatedStatus will fail as a whole because the default impl calls
+              // getFileBlockLocations
+              assert(leafFiles.isEmpty)
             }
           } else {
             // We're NOT ignoring missing files, so catalog construction should fail

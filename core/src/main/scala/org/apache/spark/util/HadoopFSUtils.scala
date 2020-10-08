@@ -207,18 +207,14 @@ private[spark] object HadoopFSUtils extends Logging {
     // Note that statuses only include FileStatus for the files and dirs directly under path,
     // and does not include anything else recursively.
     val statuses: Array[FileStatus] = try {
-      fs match {
-        // DistributedFileSystem overrides listLocatedStatus to make 1 single call to namenode
-        // to retrieve the file status with the file block location. The reason to still fallback
-        // to listStatus is because the default implementation would potentially throw a
-        // FileNotFoundException which is better handled by doing the lookups manually below.
-        case (_: DistributedFileSystem | _: ViewFileSystem) if !ignoreLocality =>
-          val remoteIter = fs.listLocatedStatus(path)
-          new Iterator[LocatedFileStatus]() {
-            def next(): LocatedFileStatus = remoteIter.next
-            def hasNext(): Boolean = remoteIter.hasNext
-          }.toArray
-        case _ => fs.listStatus(path)
+      if (ignoreLocality) {
+        fs.listStatus(path)
+      } else {
+        val remoteIter = fs.listLocatedStatus(path)
+        new Iterator[LocatedFileStatus]() {
+          def next(): LocatedFileStatus = remoteIter.next
+          def hasNext(): Boolean = remoteIter.hasNext
+        }.toArray
       }
     } catch {
       // If we are listing a root path for SQL (e.g. a top level directory of a table), we need to
@@ -288,55 +284,7 @@ private[spark] object HadoopFSUtils extends Logging {
       if (filter != null) allFiles.filter(f => filter.accept(f.getPath)) else allFiles
     }
 
-    val missingFiles = mutable.ArrayBuffer.empty[String]
-    val filteredLeafStatuses = doFilter(allLeafStatuses)
-    val resolvedLeafStatuses = filteredLeafStatuses.flatMap {
-      case f: LocatedFileStatus =>
-        Some(f)
-
-      // NOTE:
-      //
-      // - Although S3/S3A/S3N file system can be quite slow for remote file metadata
-      //   operations, calling `getFileBlockLocations` does no harm here since these file system
-      //   implementations don't actually issue RPC for this method.
-      //
-      // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should not
-      //   be a big deal since we always use to `parallelListLeafFiles` when the number of
-      //   paths exceeds threshold.
-      case f if !ignoreLocality =>
-        // The other constructor of LocatedFileStatus will call FileStatus.getPermission(),
-        // which is very slow on some file system (RawLocalFileSystem, which is launch a
-        // subprocess and parse the stdout).
-        try {
-          val locations = fs.getFileBlockLocations(f, 0, f.getLen).map { loc =>
-            // Store BlockLocation objects to consume less memory
-            if (loc.getClass == classOf[BlockLocation]) {
-              loc
-            } else {
-              new BlockLocation(loc.getNames, loc.getHosts, loc.getOffset, loc.getLength)
-            }
-          }
-          val lfs = new LocatedFileStatus(f.getLen, f.isDirectory, f.getReplication, f.getBlockSize,
-            f.getModificationTime, 0, null, null, null, null, f.getPath, locations)
-          if (f.isSymlink) {
-            lfs.setSymlink(f.getSymlink)
-          }
-          Some(lfs)
-        } catch {
-          case _: FileNotFoundException if ignoreMissingFiles =>
-            missingFiles += f.getPath.toString
-            None
-        }
-
-      case f => Some(f)
-    }
-
-    if (missingFiles.nonEmpty) {
-      logWarning(
-        s"the following files were missing during file scan:\n  ${missingFiles.mkString("\n  ")}")
-    }
-
-    resolvedLeafStatuses
+    doFilter(allLeafStatuses)
   }
   // scalastyle:on argcount
 
