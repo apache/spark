@@ -1799,6 +1799,16 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
       assert(version === SPARK_VERSION_SHORT)
     }
   }
+
+  test("SPARK-33089: should propagate Hadoop config from DS options to underlying file system") {
+    withSQLConf(
+      "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
+      "fs.file.impl.disable.cache" -> "true") {
+      val conf = Map("ds_option" -> "value")
+      val path = "file:" + testAvro.stripPrefix("file:")
+      spark.read.format("avro").options(conf).load(path)
+    }
+  }
 }
 
 class AvroV1Suite extends AvroSuite {
