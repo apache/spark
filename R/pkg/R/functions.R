@@ -827,6 +827,55 @@ setMethod("xxhash64",
           })
 
 #' @details
+#' \code{assert_true}: Returns null if the input column is true; throws an exception
+#' with the provided error message otherwise.
+#'
+#' @param errMsg (optional) The error message to be thrown.
+#'
+#' @rdname column_misc_functions
+#' @aliases assert_true assert_true,Column-method
+#' @examples
+#' \dontrun{
+#' tmp <- mutate(df, v1 = assert_true(df$vs < 2),
+#'                   v2 = assert_true(df$vs < 2, "custom error message"),
+#'                   v3 = assert_true(df$vs < 2, df$vs))
+#' head(tmp)}
+#' @note assert_true since 3.1.0
+setMethod("assert_true",
+          signature(x = "Column"),
+          function(x, errMsg = NULL) {
+            jc <- if (is.null(errMsg)) {
+              callJStatic("org.apache.spark.sql.functions", "assert_true", x@jc)
+            } else {
+              if (is.character(errMsg) && length(errMsg) == 1) {
+                errMsg <- lit(errMsg)
+              }
+              callJStatic("org.apache.spark.sql.functions", "assert_true", x@jc, errMsg@jc)
+            }
+            column(jc)
+          })
+
+#' @details
+#' \code{raise_error}: Throws an exception with the provided error message.
+#'
+#' @rdname column_misc_functions
+#' @aliases raise_error raise_error,characterOrColumn-method
+#' @examples
+#' \dontrun{
+#' tmp <- mutate(df, v1 = raise_error("error message"))
+#' head(tmp)}
+#' @note raise_error since 3.1.0
+setMethod("raise_error",
+          signature(x = "characterOrColumn"),
+          function(x) {
+            if (is.character(x) && length(x) == 1) {
+              x <- lit(x)
+            }
+            jc <- callJStatic("org.apache.spark.sql.functions", "raise_error", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{dayofmonth}: Extracts the day of the month as an integer from a
 #' given date/timestamp/string.
 #'

@@ -3945,6 +3945,24 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   dropTempView("cars")
 })
 
+test_that("assert_true, raise_error", {
+  df <- read.json(jsonPath)
+  filtered <- filter(df, "age < 20")
+
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20)))$age, c(NULL))
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20, "error message")))$age,
+               c(NULL))
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20, filtered$name)))$age,
+               c(NULL))
+  expect_error(collect(select(df, assert_true(df$age < 20))), "is not true!")
+  expect_error(collect(select(df, assert_true(df$age < 20, "error message"))),
+               "error message")
+  expect_error(collect(select(df, assert_true(df$age < 20, df$name))), "Michael")
+
+  expect_error(collect(select(filtered, raise_error("error message"))), "error message")
+  expect_error(collect(select(filtered, raise_error(filtered$name))), "Justin")
+})
+
 compare_list <- function(list1, list2) {
   # get testthat to show the diff by first making the 2 lists equal in length
   expect_equal(length(list1), length(list2))
