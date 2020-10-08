@@ -875,6 +875,10 @@ object TransposeWindow extends Rule[LogicalPlan] {
  */
 object InferFiltersFromGenerate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    // Don't infer filters from foldable expressions to avoid
+    // constant filters like 'size([1, 2, 3]) > 0'. These can add
+    // unnecessary overhead and these will not show up in the childs
+    // constraints, breaking this rules idempotency.
     case generate @ Generate(e, _, _, _, _, _)
       if !e.deterministic || e.children.forall(_.foldable) => generate
 
