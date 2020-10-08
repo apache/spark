@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuilder
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
@@ -253,6 +254,16 @@ abstract class JdbcDialect extends Serializable {
     val nullable = if (isNullable) "NULL" else "NOT NULL"
     s"ALTER TABLE $tableName ALTER COLUMN $columnName SET $nullable"
   }
+
+  /**
+   * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
+   * @param message The error message to be placed to the returned exception.
+   * @param e The dialect specific exception.
+   * @return `AnalysisException` or its sub-class.
+   */
+  def classifyException(message: String, e: Throwable): AnalysisException = {
+    new AnalysisException(message, cause = Some(e))
+  }
 }
 
 /**
@@ -297,6 +308,7 @@ object JdbcDialects {
   registerDialect(DerbyDialect)
   registerDialect(OracleDialect)
   registerDialect(TeradataDialect)
+  registerDialect(H2Dialect)
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
