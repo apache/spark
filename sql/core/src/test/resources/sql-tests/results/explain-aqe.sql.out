@@ -51,7 +51,7 @@ struct<plan:string>
 -- !query output
 == Parsed Logical Plan ==
 'Project [unresolvedalias('sum(distinct 'val), None)]
-+- 'UnresolvedRelation [explain_temp1], []
++- 'UnresolvedRelation [explain_temp1], [], false
 
 == Analyzed Logical Plan ==
 sum(DISTINCT val): bigint
