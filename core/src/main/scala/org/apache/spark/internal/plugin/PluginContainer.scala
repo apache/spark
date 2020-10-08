@@ -31,6 +31,9 @@ sealed abstract class PluginContainer {
 
   def shutdown(): Unit
   def registerMetrics(appId: String): Unit
+  def onTaskStart(): Unit
+  def onTaskSucceeded(): Unit
+  def onTaskFailed(failureReason: Throwable): Unit
 
 }
 
@@ -85,6 +88,17 @@ private class DriverPluginContainer(
     }
   }
 
+  override def onTaskStart(): Unit = {
+    throw new IllegalStateException("Should not be called for the driver container.")
+  }
+
+  override def onTaskSucceeded(): Unit = {
+    throw new IllegalStateException("Should not be called for the driver container.")
+  }
+
+  override def onTaskFailed(throwable: Throwable): Unit = {
+    throw new IllegalStateException("Should not be called for the driver container.")
+  }
 }
 
 private class ExecutorPluginContainer(
@@ -131,6 +145,39 @@ private class ExecutorPluginContainer(
       } catch {
         case t: Throwable =>
           logInfo(s"Exception while shutting down plugin $name.", t)
+      }
+    }
+  }
+
+  override def onTaskStart(): Unit = {
+    executorPlugins.foreach { case (name, plugin) =>
+      try {
+        plugin.onTaskStart()
+      } catch {
+        case t: Throwable =>
+          logInfo(s"Exception while calling onTaskStart on plugin $name.", t)
+      }
+    }
+  }
+
+  override def onTaskSucceeded(): Unit = {
+    executorPlugins.foreach { case (name, plugin) =>
+      try {
+        plugin.onTaskSucceeded()
+      } catch {
+        case t: Throwable =>
+          logInfo(s"Exception while calling onTaskSucceeded on plugin $name.", t)
+      }
+    }
+  }
+
+  override def onTaskFailed(failureReason: Throwable): Unit = {
+    executorPlugins.foreach { case (name, plugin) =>
+      try {
+        plugin.onTaskFailed(failureReason)
+      } catch {
+        case t: Throwable =>
+          logInfo(s"Exception while calling onTaskFailed on plugin $name.", t)
       }
     }
   }
