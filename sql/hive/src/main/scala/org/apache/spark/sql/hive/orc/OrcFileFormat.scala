@@ -296,7 +296,7 @@ private[orc] class OrcOutputWriter(
 
   override def close(): Unit = {
     if (recordWriterInstantiated) {
-      // Hive 1.2.1 ORC initializes its private `writer` field at the first write.
+      // Hive ORC initializes its private `writer` field at the first write.
       OrcFileFormat.addSparkVersionMetadata(recordWriter)
       recordWriter.close(Reporter.NULL)
     }

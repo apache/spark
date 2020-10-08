@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.orc
 
 import java.nio.charset.StandardCharsets
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import scala.collection.JavaConverters._
 
@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types._
 
@@ -296,11 +295,6 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
 
   test("filter pushdown - combinations with logical operators") {
     withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i)))) { implicit df =>
-      // Because `ExpressionTree` is not accessible at Hive 1.2.x, this should be checked
-      // in string form in order to check filter creation including logical operators
-      // such as `and`, `or` or `not`. So, this function uses `SearchArgument.toString()`
-      // to produce string expression and then compare it to given string expression below.
-      // This might have to be changed after Hive version is upgraded.
       checkFilterPredicateWithDiffHiveVersion(
         $"_1".isNotNull,
         """leaf-0 = (IS_NULL _1)
