@@ -48,7 +48,7 @@ private[jdbc] object ConnectionProvider extends Logging {
       }
     }
 
-    val disabledProviders = SQLConf.get.disabledJdbcConnectionProviders.split(",")
+    val disabledProviders = Utils.stringToSeq(SQLConf.get.disabledJdbcConnectionProviders)
     // toSeq seems duplicate but it's needed for Scala 2.13
     providers.filterNot(p => disabledProviders.contains(p.name)).toSeq
   }
