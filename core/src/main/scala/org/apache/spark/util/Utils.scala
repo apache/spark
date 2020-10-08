@@ -2972,6 +2972,12 @@ private[spark] object Utils extends Logging {
     metadata.toString
   }
 
+  /**
+   * Download Ivy URIs dependent jars.
+   *
+   * @param uri Ivy uri need to be downloaded.
+   * @return Comma separated string list of URIs of downloaded jars
+   */
   def resolveMavenDependencies(uri: URI): String = {
     val Seq(repositories, ivyRepoPath, ivySettingsPath) =
       Seq(
@@ -2992,7 +2998,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * @param queryString
+   * @param queryString Ivy URI query part string.
    * @return Exclude list which contains grape parameters of exclude.
    *         Example: Input:  exclude=org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http
    *         Output:  [org.mortbay.jetty:jetty, org.eclipse.jetty:jetty-http]
@@ -3014,10 +3020,10 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * @param queryString
-   * @return Exclude list which contains grape parameters of exclude.
-   *         Example: Input:  exclude=org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http
-   *         Output:  [org.mortbay.jetty:jetty, org.eclipse.jetty:jetty-http]
+   * @param queryString Ivy URI query part string.
+   * @return Exclude list which contains grape parameters of transitive.
+   *         Example: Input:  exclude=org.mortbay.jetty:jetty&transitive=true
+   *         Output:  true
    */
   private def parseTransitive(queryString: String): Boolean = {
     if (queryString == null || queryString.isEmpty) {
