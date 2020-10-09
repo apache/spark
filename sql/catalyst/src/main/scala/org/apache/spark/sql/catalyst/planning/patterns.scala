@@ -110,8 +110,6 @@ object ScanOperation extends OperationHelper with PredicateHelper {
   type ScanReturnType = Option[(Option[Seq[NamedExpression]],
     Seq[Expression], LogicalPlan, AttributeMap[Expression])]
 
-  val maxCommonExprs = SQLConf.get.maxCommonExprsInCollapseProject
-
   def unapply(plan: LogicalPlan): Option[ReturnType] = {
     collectProjectsAndFilters(plan) match {
       case Some((fields, filters, child, _)) =>
@@ -143,7 +141,7 @@ object ScanOperation extends OperationHelper with PredicateHelper {
       0
     }
 
-    commonOutputs > maxCommonExprs
+    commonOutputs > SQLConf.get.maxCommonExprsInCollapseProject
   }
 
   private def collectProjectsAndFilters(plan: LogicalPlan): ScanReturnType = {
@@ -152,9 +150,9 @@ object ScanOperation extends OperationHelper with PredicateHelper {
         collectProjectsAndFilters(child) match {
           case Some((_, filters, other, aliases)) =>
             // Follow CollapseProject and only keep going if the collected Projects
-            // do not have common non-deterministic expressions, or do not have equal to/more than
+            // do not have common non-deterministic expressions, and do not have more than
             // maximum allowed common outputs.
-            if (!hasCommonNonDeterministic(fields, aliases) ||
+            if (!hasCommonNonDeterministic(fields, aliases) &&
                 !moreThanMaxAllowedCommonOutput(fields, aliases)) {
               val substitutedFields =
                 fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]

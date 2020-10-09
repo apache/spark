@@ -32,12 +32,13 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.Uuid
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{FilterExec, ProjectExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
@@ -2566,6 +2567,51 @@ class DataFrameSuite extends QueryTest
     val l = c.select("col2")
     val df = l.join(r, $"col2" === $"col4", "LeftOuter")
     checkAnswer(df, Row("2", "2"))
+  }
+
+  test("SPARK-32945: Avoid collapsing projects if reaching max allowed common exprs") {
+    val options = Map.empty[String, String]
+    val schema = StructType.fromDDL("a int, b int, c long, d string")
+
+    withTable("test_table") {
+      val jsonDF = Seq("""{"a":1, "b":2, "c": 123, "d": "test"}""").toDF("json")
+      jsonDF.write.saveAsTable("test_table")
+
+      Seq("1", "2", "3", "4").foreach { maxCommonExprs =>
+        withSQLConf(SQLConf.MAX_COMMON_EXPRS_IN_COLLAPSE_PROJECT.key -> maxCommonExprs) {
+
+          val jsonDF = spark.read.table("test_table")
+          val jsonStruct = UnresolvedAttribute("struct")
+          val df = jsonDF
+            .select(from_json('json, schema, options).as("struct"))
+            .select(
+              Column(GetStructField(jsonStruct, 0)).as("a"),
+              Column(GetStructField(jsonStruct, 1)).as("b"),
+              Column(GetStructField(jsonStruct, 2)).as("c"),
+              Column(GetStructField(jsonStruct, 3)).as("d"))
+
+          val numProjects = df.queryExecution.executedPlan.collect {
+            case p: ProjectExec => p
+          }.size
+
+          val numFromJson = df.queryExecution.executedPlan.collect {
+            case p: ProjectExec => p.projectList.flatMap(_.collect {
+              case j: JsonToStructs => j
+            })
+          }.flatten.size
+
+          if (maxCommonExprs.toInt < 4) {
+            assert(numProjects == 2)
+            assert(numFromJson == 1)
+          } else {
+            assert(numProjects == 1)
+            assert(numFromJson == 4)
+          }
+
+          checkAnswer(df, Row(1, 2, 123L, "test"))
+        }
+      }
+    }
   }
 }
 
