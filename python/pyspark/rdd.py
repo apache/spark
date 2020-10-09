@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+# spurious comment
+
 import copy
 import sys
 import os

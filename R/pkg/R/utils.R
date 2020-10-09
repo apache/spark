@@ -199,7 +199,7 @@ serializeToString <- function(rdd) {
 # Fast append to list by using an accumulator.
 # http://stackoverflow.com/questions/17046336/here-we-go-again-append-an-element-to-a-list-in-r
 #
-# The accumulator should has three fields size, counter and data.
+# The accumulator should have three fields: size, counter and data.
 # This function amortizes the allocation cost by doubling
 # the size of the list every time it fills up.
 addItemToAccumulator <- function(acc, item) {
