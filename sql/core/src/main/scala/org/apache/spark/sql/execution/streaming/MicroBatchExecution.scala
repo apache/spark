@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relat
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
-import org.apache.spark.util.Clock
+import org.apache.spark.util.{Clock, Utils}
 
 class MicroBatchExecution(
     sparkSession: SparkSession,
@@ -76,7 +76,7 @@ class MicroBatchExecution(
     // transformation is responsible for replacing attributes with their final values.
 
     val disabledSources =
-      sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders.split(",")
+      Utils.stringToSeq(sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders)
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {
