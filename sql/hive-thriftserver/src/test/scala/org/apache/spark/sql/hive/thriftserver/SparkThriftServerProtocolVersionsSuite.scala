@@ -356,12 +356,8 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(metaData.getColumnName(1) === "NULL")
         assert(metaData.getColumnTypeName(1) === "void")
         assert(metaData.getColumnType(1) === java.sql.Types.NULL)
-        if (HiveUtils.isHive23) {
-          // For Hive 1.2 the o.a.h.j.JdbcColumn.typeStringToHiveType can not recognize `null` as
-          // type name.
-          assert(metaData.getPrecision(1) === 0)
-          assert(metaData.getScale(1) === 0)
-        }
+        assert(metaData.getPrecision(1) === 0)
+        assert(metaData.getScale(1) === 0)
       }
     }
 

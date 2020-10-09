@@ -1592,6 +1592,57 @@ def xxhash64(*cols):
     return Column(jc)
 
 
+@since(3.1)
+def assert_true(col, errMsg=None):
+    """
+    Returns null if the input column is true; throws an exception with the provided error message
+    otherwise.
+
+    >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
+    >>> df.select(assert_true(df.a < df.b).alias('r')).collect()
+    [Row(r=None)]
+    >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
+    >>> df.select(assert_true(df.a < df.b, df.a).alias('r')).collect()
+    [Row(r=None)]
+    >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
+    >>> df.select(assert_true(df.a < df.b, 'error').alias('r')).collect()
+    [Row(r=None)]
+    """
+    sc = SparkContext._active_spark_context
+    if errMsg is None:
+        return Column(sc._jvm.functions.assert_true(_to_java_column(col)))
+    if not isinstance(errMsg, (str, Column)):
+        raise TypeError(
+            "errMsg should be a Column or a str, got {}".format(type(errMsg))
+        )
+
+    errMsg = (
+        _create_column_from_literal(errMsg)
+        if isinstance(errMsg, str)
+        else _to_java_column(errMsg)
+    )
+    return Column(sc._jvm.functions.assert_true(_to_java_column(col), errMsg))
+
+
+@since(3.1)
+def raise_error(errMsg):
+    """
+    Throws an exception with the provided error message.
+    """
+    if not isinstance(errMsg, (str, Column)):
+        raise TypeError(
+            "errMsg should be a Column or a str, got {}".format(type(errMsg))
+        )
+
+    sc = SparkContext._active_spark_context
+    errMsg = (
+        _create_column_from_literal(errMsg)
+        if isinstance(errMsg, str)
+        else _to_java_column(errMsg)
+    )
+    return Column(sc._jvm.functions.raise_error(errMsg))
+
+
 # ---------------------- String/Binary functions ------------------------------
 
 _string_functions = {
@@ -3448,14 +3499,14 @@ def bucket(numBuckets, col):
     ... ).createOrReplace()
 
     .. warning::
-        This function can be used only in combinatiion with
+        This function can be used only in combination with
         :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
         method of the `DataFrameWriterV2`.
 
     """
     if not isinstance(numBuckets, (int, Column)):
         raise TypeError(
-            "numBuckets should be a Column or and int, got {}".format(type(numBuckets))
+            "numBuckets should be a Column or an int, got {}".format(type(numBuckets))
         )
 
     sc = SparkContext._active_spark_context

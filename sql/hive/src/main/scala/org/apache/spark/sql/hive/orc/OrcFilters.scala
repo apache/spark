@@ -71,21 +71,7 @@ private[orc] object OrcFilters extends Logging {
   }
 
   def createFilter(schema: StructType, filters: Array[Filter]): Option[SearchArgument] = {
-    if (HiveUtils.isHive23) {
-      DatasourceOrcFilters.createFilter(schema, filters).asInstanceOf[Option[SearchArgument]]
-    } else {
-      val dataTypeMap = schema.map(f => quoteIfNeeded(f.name) -> f.dataType).toMap
-      // TODO (SPARK-25557): ORC doesn't support nested predicate pushdown, so they are removed.
-      val newFilters = filters.filter(!_.containsNestedColumn)
-      // Combines all convertible filters using `And` to produce a single conjunction
-      val conjunctionOptional = buildTree(convertibleFilters(schema, dataTypeMap, newFilters))
-      conjunctionOptional.map { conjunction =>
-        // Then tries to build a single ORC `SearchArgument` for the conjunction predicate.
-        // The input predicate is fully convertible. There should not be any empty result in the
-        // following recursive method call `buildSearchArgument`.
-        buildSearchArgument(dataTypeMap, conjunction, newBuilder).build()
-      }
-    }
+    DatasourceOrcFilters.createFilter(schema, filters).asInstanceOf[Option[SearchArgument]]
   }
 
   def convertibleFilters(

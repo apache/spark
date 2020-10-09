@@ -161,46 +161,26 @@ private[hive] object HiveShim {
     }
 
     def deserializePlan[UDFType](is: java.io.InputStream, clazz: Class[_]): UDFType = {
-      if (HiveUtils.isHive23) {
-        val borrowKryo = serUtilClass.getMethod("borrowKryo")
-        val kryo = borrowKryo.invoke(serUtilClass)
-        val deserializeObjectByKryo = findMethod(serUtilClass, deserializeMethodName,
-          kryo.getClass.getSuperclass, classOf[InputStream], classOf[Class[_]])
-        try {
-          deserializeObjectByKryo.invoke(null, kryo, is, clazz).asInstanceOf[UDFType]
-        } finally {
-          serUtilClass.getMethod("releaseKryo", kryo.getClass.getSuperclass).invoke(null, kryo)
-        }
-      } else {
-        val runtimeSerializationKryo = utilClass.getField("runtimeSerializationKryo")
-        val threadLocalValue = runtimeSerializationKryo.get(utilClass)
-        val getMethod = threadLocalValue.getClass.getMethod("get")
-        val kryo = getMethod.invoke(threadLocalValue)
-        val deserializeObjectByKryo = findMethod(utilClass, deserializeMethodName,
-          kryo.getClass, classOf[InputStream], classOf[Class[_]])
+      val borrowKryo = serUtilClass.getMethod("borrowKryo")
+      val kryo = borrowKryo.invoke(serUtilClass)
+      val deserializeObjectByKryo = findMethod(serUtilClass, deserializeMethodName,
+        kryo.getClass.getSuperclass, classOf[InputStream], classOf[Class[_]])
+      try {
         deserializeObjectByKryo.invoke(null, kryo, is, clazz).asInstanceOf[UDFType]
+      } finally {
+        serUtilClass.getMethod("releaseKryo", kryo.getClass.getSuperclass).invoke(null, kryo)
       }
     }
 
     def serializePlan(function: AnyRef, out: java.io.OutputStream): Unit = {
-      if (HiveUtils.isHive23) {
-        val borrowKryo = serUtilClass.getMethod("borrowKryo")
-        val kryo = borrowKryo.invoke(serUtilClass)
-        val serializeObjectByKryo = findMethod(serUtilClass, serializeMethodName,
-          kryo.getClass.getSuperclass, classOf[Object], classOf[OutputStream])
-        try {
-          serializeObjectByKryo.invoke(null, kryo, function, out)
-        } finally {
-          serUtilClass.getMethod("releaseKryo", kryo.getClass.getSuperclass).invoke(null, kryo)
-        }
-      } else {
-        val runtimeSerializationKryo = utilClass.getField("runtimeSerializationKryo")
-        val threadLocalValue = runtimeSerializationKryo.get(utilClass)
-        val getMethod = threadLocalValue.getClass.getMethod("get")
-        val kryo = getMethod.invoke(threadLocalValue)
-        val serializeObjectByKryo = findMethod(utilClass, serializeMethodName,
-          kryo.getClass, classOf[Object], classOf[OutputStream])
+      val borrowKryo = serUtilClass.getMethod("borrowKryo")
+      val kryo = borrowKryo.invoke(serUtilClass)
+      val serializeObjectByKryo = findMethod(serUtilClass, serializeMethodName,
+        kryo.getClass.getSuperclass, classOf[Object], classOf[OutputStream])
+      try {
         serializeObjectByKryo.invoke(null, kryo, function, out)
+      } finally {
+        serUtilClass.getMethod("releaseKryo", kryo.getClass.getSuperclass).invoke(null, kryo)
       }
     }
 

@@ -350,19 +350,11 @@ private[hive] case class HiveUDAFFunction(
     }
 
     val clazz = Utils.classForName(classOf[SimpleGenericUDAFParameterInfo].getName)
-    if (HiveUtils.isHive23) {
-      val ctor = clazz.getDeclaredConstructor(
-        classOf[Array[ObjectInspector]], JBoolean.TYPE, JBoolean.TYPE, JBoolean.TYPE)
-      val args = Array[AnyRef](inputInspectors, JBoolean.FALSE, JBoolean.FALSE, JBoolean.FALSE)
-      val parameterInfo = ctor.newInstance(args: _*).asInstanceOf[SimpleGenericUDAFParameterInfo]
-      resolver.getEvaluator(parameterInfo)
-    } else {
-      val ctor = clazz.getDeclaredConstructor(
-        classOf[Array[ObjectInspector]], JBoolean.TYPE, JBoolean.TYPE)
-      val args = Array[AnyRef](inputInspectors, JBoolean.FALSE, JBoolean.FALSE)
-      val parameterInfo = ctor.newInstance(args: _*).asInstanceOf[SimpleGenericUDAFParameterInfo]
-      resolver.getEvaluator(parameterInfo)
-    }
+    val ctor = clazz.getDeclaredConstructor(
+      classOf[Array[ObjectInspector]], JBoolean.TYPE, JBoolean.TYPE, JBoolean.TYPE)
+    val args = Array[AnyRef](inputInspectors, JBoolean.FALSE, JBoolean.FALSE, JBoolean.FALSE)
+    val parameterInfo = ctor.newInstance(args: _*).asInstanceOf[SimpleGenericUDAFParameterInfo]
+    resolver.getEvaluator(parameterInfo)
   }
 
   private case class HiveEvaluator(
