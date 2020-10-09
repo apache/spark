@@ -573,4 +573,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     // the date formatter for `java.sql.LocalDate` must output negative years with sign.
     runCliWithin(1.minute)("SELECT MAKE_DATE(-44, 3, 15);" -> "-0044-03-15")
   }
+
+  test("SPARK-33110: Support parse the sql statements with c-style comments") {
+    runCliWithin(1.minute)("/* SELECT 'test';*/ SELECT 'test';" -> "test" )
+  }
 }

@@ -519,13 +519,17 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // Note: [SPARK-31595] if there is a `'` in a double quoted string, or a `"` in a single quoted
   // string, the origin implementation from Hive will not drop the trailing semicolon as expected,
   // hence we refined this function a little bit.
+  // Note: [SPARK-33110] Ignore the content inside C-style comment
   private def splitSemiColon(line: String): JList[String] = {
     var insideSingleQuote = false
     var insideDoubleQuote = false
-    var insideComment = false
+    var insideDashComment = false
+    var insideCStyleComment = false
     var escape = false
     var beginIndex = 0
     val ret = new JArrayList[String]
+
+    def insideComment: Boolean = insideDashComment || insideCStyleComment
 
     for (index <- 0 until line.length) {
       if (line.charAt(index) == '\'' && !insideComment) {
@@ -550,8 +554,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           // Sample query: select "quoted value --"
           //                                    ^^ avoids starting a comment if it's inside quotes.
         } else if (hasNext && line.charAt(index + 1) == '-') {
-          // ignore quotes and ;
-          insideComment = true
+          // ignore quotes and ; in dash-comment
+          insideDashComment = true
         }
       } else if (line.charAt(index) == ';') {
         if (insideSingleQuote || insideDoubleQuote || insideComment) {
@@ -562,9 +566,22 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           beginIndex = index + 1
         }
       } else if (line.charAt(index) == '\n') {
-        // with a new line the inline comment should end.
+        // with a new line the inline dash-comment should end.
         if (!escape) {
-          insideComment = false
+          insideDashComment = false
+        }
+      } else if (line.charAt(index) == '/' && !insideComment) {
+        val hasNext = index + 1 < line.length
+        if (insideSingleQuote || insideDoubleQuote) {
+          // Ignores '/' in any case of quotes
+        } else if (hasNext && line.charAt(index + 1) == '*') {
+          // ignore quotes and ; in C-style comment
+          insideCStyleComment = true
+        }
+      } else if (line.charAt(index) == '/' && insideCStyleComment) {
+        if (line.charAt(index - 1) == '*') {
+          // end C-style comment
+          insideCStyleComment = false
         }
       }
       // set the escape
