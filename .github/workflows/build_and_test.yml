@@ -294,8 +294,8 @@ jobs:
         ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=11 install
         rm -rf ~/.m2/repository/org/apache/spark
 
-  scala-213-sbt:
-    name: Scala 2.13 build with SBT
+  scala-213:
+    name: Scala 2.13 build
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Spark repository
@@ -313,9 +313,5 @@ jobs:
         java-version: 11
     - name: Build with SBT
       run: |
-        mkdir -p ~/.ivy2/local
-        mkdir -p ~/.m2
         ./dev/change-scala-version.sh 2.13
-        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Djava.version=11 -Pscala-2.13 test:compile publishLocal
-        rm -rf ~/.ivy2/local/org.apache.spark
-        rm -rf ~/.m2/repository/org/apache/spark
+        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Djava.version=11 -Pscala-2.13 compile test:compile
