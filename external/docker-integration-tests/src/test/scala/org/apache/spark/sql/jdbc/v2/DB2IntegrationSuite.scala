@@ -19,15 +19,11 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
-import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
-import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -38,7 +34,8 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSession {
+class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
+  override val catalogName: String = "db2"
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("DB2_DOCKER_IMAGE_NAME", "ibmcom/db2:11.5.4.0")
     override val env = Map(
@@ -61,53 +58,16 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSes
 
   override def dataPreparation(conn: Connection): Unit = {}
 
-  test("SPARK-33034: ALTER TABLE ... update column type") {
-    withTable("db2.alt_table") {
-      sql("CREATE TABLE db2.alt_table (ID INTEGER) USING _")
-      sql("ALTER TABLE db2.alt_table ALTER COLUMN id TYPE DOUBLE")
-      val t = spark.table("db2.alt_table")
-      val expectedSchema = new StructType().add("ID", DoubleType)
-      assert(t.schema === expectedSchema)
-      // Update column type from DOUBLE to STRING
-      val msg1 = intercept[AnalysisException] {
-        sql("ALTER TABLE db2.alt_table ALTER COLUMN id TYPE VARCHAR(10)")
-      }.getMessage
-      assert(msg1.contains("Cannot update alt_table field ID: double cannot be cast to varchar"))
-      // Update not existing column
-      val msg2 = intercept[AnalysisException] {
-        sql("ALTER TABLE db2.alt_table ALTER COLUMN bad_column TYPE DOUBLE")
-      }.getMessage
-      assert(msg2.contains("Cannot update missing field bad_column"))
-      // Update column to wrong type
-      val msg3 = intercept[ParseException] {
-        sql("ALTER TABLE db2.alt_table ALTER COLUMN id TYPE bad_type")
-      }.getMessage
-      assert(msg3.contains("DataType bad_type is not supported"))
-    }
-    // Update column type in not existing table
-    val msg = intercept[AnalysisException] {
-      sql(s"ALTER TABLE db2.not_existing_table ALTER COLUMN id TYPE DOUBLE")
+  override def updateColumnType: Unit = {
+    sql(s"CREATE TABLE $catalogName.alt_table (ID INTEGER) USING _")
+    sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN id TYPE DOUBLE")
+    val t = spark.table(s"$catalogName.alt_table")
+    val expectedSchema = new StructType().add("ID", DoubleType)
+    assert(t.schema === expectedSchema)
+    // Update column type from DOUBLE to STRING
+    val msg1 = intercept[AnalysisException] {
+      sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN id TYPE VARCHAR(10)")
     }.getMessage
-    assert(msg.contains("Table not found"))
-  }
-
-  test("SPARK-33034: ALTER TABLE ... update column nullability") {
-    withTable("db2.alt_table") {
-      sql("CREATE TABLE db2.alt_table (ID STRING NOT NULL) USING _")
-      sql("ALTER TABLE db2.alt_table ALTER COLUMN ID DROP NOT NULL")
-      val t = spark.table("db2.alt_table")
-      val expectedSchema = new StructType().add("ID", StringType, nullable = true)
-      assert(t.schema === expectedSchema)
-      // Update nullability of not existing column
-      val msg = intercept[AnalysisException] {
-        sql("ALTER TABLE db2.alt_table ALTER COLUMN bad_column DROP NOT NULL")
-      }.getMessage
-      assert(msg.contains("Cannot update missing field bad_column"))
-    }
-    // Update column nullability in not existing table
-    val msg = intercept[AnalysisException] {
-      sql(s"ALTER TABLE db2.not_existing_table ALTER COLUMN ID DROP NOT NULL")
-    }.getMessage
-    assert(msg.contains("Table not found"))
+    assert(msg1.contains("Cannot update alt_table field ID: double cannot be cast to varchar"))
   }
 }
