@@ -417,7 +417,7 @@ private[spark] object HiveUtils extends Logging {
         config = configurations,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
-    } else if (hiveMetastoreJars =="path") {
+    } else if (hiveMetastoreJars == "path") {
 
       def addLocalHiveJars(file: File): Seq[URL] = {
         if (file.getName == "*") {
