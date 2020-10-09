@@ -154,6 +154,9 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         l.resolve(
           fsRelation.partitionSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
       val partitionSet = AttributeSet(partitionColumns)
+
+      // this partitionKeyFilters should be the same with the ones being executed in
+      // PruneFileSourcePartitions
       val partitionKeyFilters = DataSourceStrategy.getPushedDownFilters(partitionColumns,
         normalizedFilters)
 
