@@ -65,8 +65,8 @@ private[spark] object HadoopFSUtils extends Logging {
     ignoreLocality: Boolean,
     parallelismThreshold: Int,
     parallelismMax: Int): Seq[(Path, Seq[FileStatus])] = {
-    parallelListLeafFilesInternal(sc, paths, hadoopConf, filter, true, ignoreMissingFiles,
-      ignoreLocality, parallelismThreshold, parallelismMax)
+    parallelListLeafFilesInternal(sc, paths, hadoopConf, filter, isRootLevel = true,
+      ignoreMissingFiles, ignoreLocality, parallelismThreshold, parallelismMax)
   }
 
   private def parallelListLeafFilesInternal(
@@ -212,11 +212,12 @@ private[spark] object HadoopFSUtils extends Logging {
       val (dirs, topLevelFiles) = statuses.partition(_.isDirectory)
       val nestedFiles: Seq[FileStatus] = contextOpt match {
         case Some(context) if dirs.size > parallelismThreshold =>
-          parallelListLeafFiles(
+          parallelListLeafFilesInternal(
             context,
             dirs.map(_.getPath),
             hadoopConf = hadoopConf,
             filter = filter,
+            isRootLevel = false,
             ignoreMissingFiles = ignoreMissingFiles,
             ignoreLocality = ignoreLocality,
             parallelismThreshold = parallelismThreshold,
