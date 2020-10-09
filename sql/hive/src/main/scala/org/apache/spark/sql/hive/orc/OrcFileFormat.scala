@@ -67,8 +67,8 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     OrcFileOperator.readSchema(
       files.map(_.getPath.toString),
       Some(sparkSession.sessionState.newHadoopConfWithOptions(options)),
-      ignoreCorruptFiles,
-      options)
+      ignoreCorruptFiles
+    )
   }
 
   override def prepareWrite(
