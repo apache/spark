@@ -77,10 +77,10 @@ object OrcUtils extends Logging {
     }
   }
 
-  def readSchema(sparkSession: SparkSession, files: Seq[FileStatus])
+  def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
       : Option[StructType] = {
     val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
-    val conf = sparkSession.sessionState.newHadoopConf()
+    val conf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     // TODO: We need to support merge schema. Please see SPARK-11412.
     files.toIterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
       case Some(schema) =>

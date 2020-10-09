@@ -31,7 +31,7 @@ import org.apache.orc.impl.RecordReaderImpl
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SPARK_VERSION_SHORT
-import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{FakeFileSystemRequiringDSOption, Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
@@ -259,6 +259,19 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       val reader = OrcFile.createReader(orcFilePath, readerOptions)
       val version = UTF_8.decode(reader.getMetadataValue(SPARK_VERSION_METADATA_KEY)).toString
       assert(version === SPARK_VERSION_SHORT)
+    }
+  }
+
+  test("SPARK-33094: should propagate Hadoop config from DS options to underlying file system") {
+    withSQLConf(
+      "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
+      "fs.file.impl.disable.cache" -> "true") {
+      withTempPath { dir =>
+        val path = dir.getAbsolutePath
+        val conf = Map("ds_option" -> "value")
+        spark.range(1).write.options(conf).orc(path)
+        checkAnswer(spark.read.options(conf).orc(path), Row(0))
+      }
     }
   }
 }
