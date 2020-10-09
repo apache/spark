@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import java.io.File
+import java.io.{File, FilenameFilter}
 import java.net.URI
 
 import org.apache.log4j.Level
@@ -26,6 +26,9 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.connector.SimpleWritableDataSource
+import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
@@ -36,6 +39,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 class AdaptiveQueryExecSuite
@@ -1260,24 +1264,56 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-32932: Do not use local shuffle reader at final stage on DataWritingCommand") {
+  test("SPARK-32932: Do not use local shuffle reader at final stage on write command") {
     withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString,
       SQLConf.SHUFFLE_PARTITIONS.key -> "5",
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true") {
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val data = for (
+        i <- 1L to 10L;
+        j <- 1L to 3L
+      ) yield (i, j)
+
+      val df = data.toDF("i", "j")
+        .repartition($"j")
+
       withTable("t") {
-        val data = for (
-          i <- 1 to 10;
-          j <- 1 to 3
-        ) yield (i, j)
-        data.toDF("a", "b")
-          .repartition($"b")
-          .write
-          .partitionBy("b")
-          .mode("overwrite")
+        df.write
+          .partitionBy("j")
           .saveAsTable("t")
         assert(spark.read.table("t").inputFiles.length == 3)
       }
+
+      // Test DataSource v2
+      withTempPath { f =>
+        val path = f.getCanonicalPath
+        val format = classOf[V2Source].getName
+        df.write
+          .format(format)
+          .partitionBy("j")
+          .mode("overwrite")
+          .save(path)
+
+        assert(f.listFiles(new FilenameFilter {
+          override def accept(dir: File, name: String): Boolean = {
+            !name.startsWith("_") && !name.startsWith(".")
+          }
+        }).length == 3)
+      }
     }
+  }
+}
+
+class V2Source extends SimpleWritableDataSource {
+
+  class TestingTable(options: CaseInsensitiveStringMap)
+    extends MyTable(options) {
+
+    override def partitioning(): Array[Transform] = {
+      Array(IdentityTransform(FieldReference("j")))
+    }
+  }
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new TestingTable(options)
   }
 }

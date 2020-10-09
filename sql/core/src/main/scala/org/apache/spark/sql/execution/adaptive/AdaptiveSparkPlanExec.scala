@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
+import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
@@ -105,8 +106,10 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val finalStageOptimizerRules: Seq[Rule[SparkPlan]] =
     context.qe.sparkPlan match {
-      case _: DataWritingCommandExec =>
-        queryStageOptimizerRules.filterNot(_.isInstanceOf[OptimizeLocalShuffleReader])
+      case _: DataWritingCommandExec | _: V2TableWriteExec =>
+        // SPARK-32932: Local shuffle reader could break partitioning that works best
+        // for the following writing command
+       queryStageOptimizerRules.filterNot(_.isInstanceOf[OptimizeLocalShuffleReader])
       case _ =>
         queryStageOptimizerRules
     }
