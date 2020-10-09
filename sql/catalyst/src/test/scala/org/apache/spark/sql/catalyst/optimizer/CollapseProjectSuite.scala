@@ -180,23 +180,48 @@ class CollapseProjectSuite extends PlanTest {
       withSQLConf(SQLConf.MAX_COMMON_EXPRS_IN_COLLAPSE_PROJECT.key -> maxCommonExprs) {
         // If we collapse two Projects, `JsonToStructs` will be repeated three times.
         val relation = LocalRelation('json.string)
-        val query = relation.select(
+        val query1 = relation.select(
           JsonToStructs(schema, options, 'json).as("struct"))
           .select(
             GetStructField('struct, 0).as("a"),
             GetStructField('struct, 1).as("b"),
-            GetStructField('struct, 2).as("c")).analyze
-        val optimized = Optimize.execute(query)
+            GetStructField('struct, 2).as("c"),
+            GetStructField('struct, 3).as("d")).analyze
+        val optimized1 = Optimize.execute(query1)
 
-        if (maxCommonExprs.toInt < 3) {
-          val expected = query
-          comparePlans(optimized, expected)
+        val query2 = relation
+          .select('json, JsonToStructs(schema, options, 'json).as("struct"))
+          .select('json, 'struct, GetStructField('struct, 0).as("a"))
+          .select('json, 'struct, 'a, GetStructField('struct, 1).as("b"))
+          .select('json, 'struct, 'a, 'b, GetStructField('struct, 2).as("c"))
+          .analyze
+        val optimized2 = Optimize.execute(query2)
+
+        if (maxCommonExprs.toInt < 4) {
+          val expected1 = query1
+          comparePlans(optimized1, expected1)
+
+          val expected2 = relation
+            .select('json, JsonToStructs(schema, options, 'json).as("struct"))
+            .select('json, 'struct,
+              GetStructField('struct, 0).as("a"),
+              GetStructField('struct, 1).as("b"),
+              GetStructField('struct, 2).as("c"))
+            .analyze
+          comparePlans(optimized2, expected2)
         } else {
-          val expected = relation.select(
+          val expected1 = relation.select(
+            GetStructField(JsonToStructs(schema, options, 'json), 0).as("a"),
+            GetStructField(JsonToStructs(schema, options, 'json), 1).as("b"),
+            GetStructField(JsonToStructs(schema, options, 'json), 2).as("c"),
+            GetStructField(JsonToStructs(schema, options, 'json), 3).as("d")).analyze
+          comparePlans(optimized1, expected1)
+
+          val expected2 = relation.select('json, JsonToStructs(schema, options, 'json).as("struct"),
             GetStructField(JsonToStructs(schema, options, 'json), 0).as("a"),
             GetStructField(JsonToStructs(schema, options, 'json), 1).as("b"),
             GetStructField(JsonToStructs(schema, options, 'json), 2).as("c")).analyze
-          comparePlans(optimized, expected)
+          comparePlans(optimized2, expected2)
         }
       }
     }

@@ -726,22 +726,16 @@ object ColumnPruning extends Rule[LogicalPlan] {
 /**
  * Combines two [[Project]] operators into one and perform alias substitution,
  * merging the expressions into one single expression for the following cases.
- * 1. When two [[Project]] operators are adjacent.
+ * 1. When two [[Project]] operators are adjacent, if the number of common expressions in the
+ *    combined [[Project]] is not more than `spark.sql.optimizer.maxCommonExprsInCollapseProject`.
  * 2. When two [[Project]] operators have LocalLimit/Sample/Repartition operator between them
  *    and the upper project consists of the same number of columns which is equal or aliasing.
  *    `GlobalLimit(LocalLimit)` pattern is also considered.
  */
 object CollapseProject extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case p1 @ Project(_, p2: Project) =>
-      val maxCommonExprs = SQLConf.get.maxCommonExprsInCollapseProject
-
-      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList) ||
-        getLargestNumOfCommonOutput(p1.projectList, p2.projectList) > maxCommonExprs) {
-        p1
-      } else {
-        p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList))
-      }
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case p @ Project(_, _: Project) =>
+      collapseProjects(p)
     case p @ Project(_, agg: Aggregate) =>
       if (haveCommonNonDeterministicOutput(p.projectList, agg.aggregateExpressions)) {
         p
@@ -760,6 +754,20 @@ object CollapseProject extends Rule[LogicalPlan] {
       r.copy(child = p.copy(projectList = buildCleanedProjectList(l1, p.projectList)))
     case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
       s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
+  }
+
+  private def collapseProjects(plan: LogicalPlan): LogicalPlan = plan match {
+    case p1 @ Project(_, p2: Project) =>
+      val maxCommonExprs = SQLConf.get.maxCommonExprsInCollapseProject
+
+      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList) ||
+          getLargestNumOfCommonOutput(p1.projectList, p2.projectList) > maxCommonExprs) {
+        p1
+      } else {
+        collapseProjects(
+          p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList)))
+      }
+    case _ => plan
   }
 
   private def collectAliases(projectList: Seq[NamedExpression]): AttributeMap[Alias] = {

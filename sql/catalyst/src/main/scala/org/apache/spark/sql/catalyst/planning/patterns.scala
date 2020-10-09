@@ -129,8 +129,8 @@ object ScanOperation extends OperationHelper with PredicateHelper {
   }
 
   def moreThanMaxAllowedCommonOutput(
-       expr: Seq[NamedExpression],
-       aliases: AttributeMap[Expression]): Boolean = {
+      expr: Seq[NamedExpression],
+      aliases: AttributeMap[Expression]): Boolean = {
     val exprMap = mutable.HashMap.empty[Attribute, Int]
 
     expr.foreach(_.collect {
@@ -154,8 +154,8 @@ object ScanOperation extends OperationHelper with PredicateHelper {
             // Follow CollapseProject and only keep going if the collected Projects
             // do not have common non-deterministic expressions, or do not have equal to/more than
             // maximum allowed common outputs.
-            if (!hasCommonNonDeterministic(fields, aliases)
-                || !moreThanMaxAllowedCommonOutput(fields, aliases)) {
+            if (!hasCommonNonDeterministic(fields, aliases) ||
+                !moreThanMaxAllowedCommonOutput(fields, aliases)) {
               val substitutedFields =
                 fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
               Some((Some(substitutedFields), filters, other, collectAliases(substitutedFields)))
