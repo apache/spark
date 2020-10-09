@@ -213,7 +213,7 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext with 
     }
   }
 
-  test("SPARK-XXXXX: should propagate Hadoop config from DS options to underlying file system") {
+  test("SPARK-33101: should propagate Hadoop config from DS options to underlying file system") {
     withSQLConf(
       "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
       "fs.file.impl.disable.cache" -> "true") {
