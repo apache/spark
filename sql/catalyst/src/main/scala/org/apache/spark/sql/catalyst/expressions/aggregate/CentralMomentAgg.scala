@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -174,7 +175,8 @@ case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === 1.0, Double.NaN, sqrt(m2 / (n - 1.0))))
+      If(n === 1.0, if (SQLConf.get.legacyCentralMomentAggBehavior) Double.NaN else 0.0,
+        sqrt(m2 / (n - 1.0))))
   }
 
   override def prettyName: String =
@@ -218,7 +220,8 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === 1.0, Double.NaN, m2 / (n - 1.0)))
+      If(n === 1.0, if (SQLConf.get.legacyCentralMomentAggBehavior) Double.NaN else 0.0,
+        m2 / (n - 1.0)))
   }
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("var_samp")
