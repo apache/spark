@@ -604,7 +604,7 @@ class HasBlockSizeInMB(Params):
     Mixin for param blockSizeInMB: maximum memory in MB for stacking input data in blocks. Data is stacked within partitions. If more than remaining data size in a partition then it is adjusted to the data size. If 0, try to infer an appropriate value based on the statistics of dataset. Must be >= 0.
     """
 
-    blockSizeInMB = Param(Params._dummy(), "blockSizeInMB", "maximum memory in MB for stacking input data in blocks. Data is stacked within partitions. If more than remaining data size in a partition then it is adjusted to the data size. If 0, try to infer an appropriate value based on the statistics of dataset. Must be >= 0.", typeConverter=TypeConverters.toDouble)
+    blockSizeInMB = Param(Params._dummy(), "blockSizeInMB", "maximum memory in MB for stacking input data in blocks. Data is stacked within partitions. If more than remaining data size in a partition then it is adjusted to the data size. If 0, try to infer an appropriate value based on the statistics of dataset. Must be >= 0.", typeConverter=TypeConverters.toFloat)
 
     def __init__(self):
         super(HasBlockSizeInMB, self).__init__()
