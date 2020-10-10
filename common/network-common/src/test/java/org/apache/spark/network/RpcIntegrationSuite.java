@@ -19,7 +19,6 @@ package org.apache.spark.network;
 
 import java.io.*;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
@@ -169,7 +168,6 @@ public class RpcIntegrationSuite {
   static class RpcResult {
     public Set<String> successMessages;
     public Set<String> errorMessages;
-    public Set<String> successResponses;
   }
 
   private RpcResult sendRPC(String ... commands) throws Exception {
@@ -212,7 +210,6 @@ public class RpcIntegrationSuite {
     RpcResult res = new RpcResult();
     res.successMessages = Collections.synchronizedSet(new HashSet<>());
     res.errorMessages = Collections.synchronizedSet(new HashSet<>());
-    res.successResponses = Collections.synchronizedSet(new HashSet<>());
 
     for (String stream : streams) {
       int idx = stream.lastIndexOf('/');
@@ -250,7 +247,6 @@ public class RpcIntegrationSuite {
     @Override
     public void onSuccess(ByteBuffer message) {
       res.successMessages.add(streamId);
-      res.successResponses.add(JavaUtils.bytesToString(message));
       sem.release();
     }
 
@@ -330,7 +326,6 @@ public class RpcIntegrationSuite {
       RpcResult res = sendRpcWithStream(stream);
       assertTrue("there were error messages!" + res.errorMessages, res.errorMessages.isEmpty());
       assertEquals(Sets.newHashSet(stream), res.successMessages);
-      assertEquals(Sets.newHashSet(stream), res.successResponses);
     }
   }
 
@@ -341,9 +336,7 @@ public class RpcIntegrationSuite {
       streams[i] = StreamTestHelper.STREAMS[i % StreamTestHelper.STREAMS.length];
     }
     RpcResult res = sendRpcWithStream(streams);
-    Set<String> streamSet = Sets.newHashSet(StreamTestHelper.STREAMS);
-    assertEquals(streamSet, res.successMessages);
-    assertEquals(streamSet, res.successResponses);
+    assertEquals(Sets.newHashSet(StreamTestHelper.STREAMS), res.successMessages);
     assertTrue(res.errorMessages.isEmpty());
   }
 
@@ -351,42 +344,20 @@ public class RpcIntegrationSuite {
   public void sendRpcWithStreamFailures() throws Exception {
     // when there is a failure reading stream data, we don't try to keep the channel usable,
     // just send back a decent error msg.
-    String failStream = "fail/exception-ondata/smallBuffer";
     RpcResult exceptionInCallbackResult =
-        sendRpcWithStream(failStream, "smallBuffer");
+        sendRpcWithStream("fail/exception-ondata/smallBuffer", "smallBuffer");
     assertErrorAndClosed(exceptionInCallbackResult, "Destination failed while reading stream");
-    assertDecodedErrorsContain(exceptionInCallbackResult.errorMessages, failStream);
 
-    failStream = "fail/null/smallBuffer";
     RpcResult nullStreamHandler =
-        sendRpcWithStream(failStream, "smallBuffer");
+        sendRpcWithStream("fail/null/smallBuffer", "smallBuffer");
     assertErrorAndClosed(exceptionInCallbackResult, "Destination failed while reading stream");
-    assertDecodedErrorsContain(nullStreamHandler.errorMessages, failStream);
 
     // OTOH, if there is a failure during onComplete, the channel should still be fine
-    failStream = "fail/exception-oncomplete/smallBuffer";
     RpcResult exceptionInOnComplete =
-        sendRpcWithStream(failStream, "smallBuffer");
+        sendRpcWithStream("fail/exception-oncomplete/smallBuffer", "smallBuffer");
     assertErrorsContain(exceptionInOnComplete.errorMessages,
         Sets.newHashSet("Failure post-processing"));
-    assertDecodedErrorsContain(exceptionInOnComplete.errorMessages, failStream);
     assertEquals(Sets.newHashSet("smallBuffer"), exceptionInOnComplete.successMessages);
-  }
-
-  private void assertDecodedErrorsContain(Set<String> errors, String contain) {
-    Set<String> decodedErrors = Sets.newHashSet();
-    for (String error : errors) {
-      ByteBuffer rawBuffer = ByteBuffer.wrap(error.getBytes(StandardCharsets.ISO_8859_1));
-      decodedErrors.add(JavaUtils.bytesToString(rawBuffer));
-    }
-    boolean foundMatch = false;
-    for (String error : decodedErrors) {
-      if (error.contains(contain)) {
-        foundMatch = true;
-        break;
-      }
-    }
-    assertTrue("Could not find decoded error containing " + contain, foundMatch);
   }
 
   private void assertErrorsContain(Set<String> errors, Set<String> contains) {

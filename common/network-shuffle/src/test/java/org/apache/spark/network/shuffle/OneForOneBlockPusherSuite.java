@@ -37,7 +37,6 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
-import org.apache.spark.network.util.JavaUtils;
 
 
 public class OneForOneBlockPusherSuite {
@@ -97,11 +96,11 @@ public class OneForOneBlockPusherSuite {
   }
 
   @Test
-  public void testServerClientFailures() {
+  public void testHandlingRetriableFailures() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
     blocks.put("b0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
-    blocks.put("b1", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
-    blocks.put("b2", null);
+    blocks.put("b1", null);
+    blocks.put("b2", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
     BlockFetchingListener listener = pushBlocks(
@@ -112,15 +111,15 @@ public class OneForOneBlockPusherSuite {
             new PushBlockStream("app-id", "b2", 2)));
 
     verify(listener, times(1)).onBlockFetchSuccess(eq("b0"), any());
-    verify(listener, times(1)).onBlockFetchFailure(eq("b0"), any());
-    verify(listener, times(2)).onBlockFetchFailure(eq("b1"), any());
-    verify(listener, times(1)).onBlockFetchFailure(eq("b2"), any());
+    verify(listener, times(0)).onBlockFetchFailure(eq("b0"), any());
+    verify(listener, times(1)).onBlockFetchFailure(eq("b1"), any());
+    verify(listener, times(2)).onBlockFetchFailure(eq("b2"), any());
   }
 
   /**
    * Begins a push on the given set of blocks by mocking the response from server side.
-   * If a block is an empty byte, a server side exception will be thrown.
-   * If a block is null, a client side exception will be thrown.
+   * If a block is an empty byte, a server side retriable exception will be thrown.
+   * If a block is null, a non-retriable exception will be thrown.
    */
   private static BlockFetchingListener pushBlocks(
       LinkedHashMap<String, ManagedBuffer> blocks,
@@ -142,10 +141,10 @@ public class OneForOneBlockPusherSuite {
       if (block != null && block.nioByteBuffer().capacity() > 0) {
         callback.onSuccess(header);
       } else if (block != null) {
-        callback.onFailure(new RuntimeException(JavaUtils.encodeHeaderIntoErrorString(header,
-            new RuntimeException("Failed " + entry.getKey()))));
+        callback.onFailure(new RuntimeException("Failed " + entry.getKey()));
       } else {
-        callback.onFailure(new RuntimeException("Quick fail " + entry.getKey()));
+        callback.onFailure(new RuntimeException("Quick fail " + entry.getKey()
+            + ErrorHandler.BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX));
       }
       assertEquals(msgIterator.next(), message);
       return null;

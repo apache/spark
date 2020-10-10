@@ -31,21 +31,21 @@ public class ErrorHandlerSuite {
   @Test
   public void testPushErrorRetry() {
     ErrorHandler.BlockPushErrorHandler handler = new ErrorHandler.BlockPushErrorHandler();
-    assertFalse(handler.shouldRetryError(new RuntimeException(
-        new IllegalArgumentException(BlockPushException.TOO_LATE_MESSAGE_SUFFIX))));
+    assertFalse(handler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
+        ErrorHandler.BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX))));
     assertFalse(handler.shouldRetryError(new RuntimeException(new ConnectException())));
-    assertTrue(handler.shouldRetryError(new RuntimeException(
-        new IllegalArgumentException(BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX))));
+    assertTrue(handler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
+        ErrorHandler.BlockPushErrorHandler.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX))));
     assertTrue(handler.shouldRetryError(new Throwable()));
   }
 
   @Test
   public void testPushErrorLogging() {
     ErrorHandler.BlockPushErrorHandler handler = new ErrorHandler.BlockPushErrorHandler();
-    assertFalse(handler.shouldLogError(new RuntimeException(
-        new IllegalArgumentException(BlockPushException.TOO_LATE_MESSAGE_SUFFIX))));
-    assertFalse(handler.shouldLogError(new RuntimeException(
-        new IllegalArgumentException(BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX))));
+    assertFalse(handler.shouldLogError(new RuntimeException(new IllegalArgumentException(
+        ErrorHandler.BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX))));
+    assertFalse(handler.shouldLogError(new RuntimeException(new IllegalArgumentException(
+        ErrorHandler.BlockPushErrorHandler.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX))));
     assertTrue(handler.shouldLogError(new Throwable()));
   }
 }

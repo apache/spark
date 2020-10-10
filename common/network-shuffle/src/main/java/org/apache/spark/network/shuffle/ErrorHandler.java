@@ -28,6 +28,7 @@ import java.net.ConnectException;
  */
 
 public interface ErrorHandler {
+
   boolean shouldRetryError(Throwable t);
 
   default boolean shouldLogError(Throwable t) {
@@ -43,6 +44,25 @@ public interface ErrorHandler {
    * The error handler for pushing shuffle blocks to remote shuffle services.
    */
   class BlockPushErrorHandler implements ErrorHandler {
+    /**
+     * String constant used for generating exception messages indicating a block to be merged
+     * arrives too late on the server side, and also for later checking such exceptions on the
+     * client side. When we get a block push failure because of the block arrives too late, we
+     * will not retry pushing the block nor log the exception on the client side.
+     */
+    public static final String TOO_LATE_MESSAGE_SUFFIX =
+        "received after merged shuffle is finalized";
+
+    /**
+     * String constant used for generating exception messages indicating the server couldn't
+     * append a block after all available attempts due to collision with other blocks belonging
+     * to the same shuffle partition, and also for later checking such exceptions on the client
+     * side. When we get a block push failure because of the block couldn't be written due to
+     * this reason, we will not log the exception on the client side.
+     */
+    public static final String COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX =
+        "Couldn't find an opportunity to write block";
+
 
     @Override
     public boolean shouldRetryError(Throwable t) {
@@ -52,21 +72,21 @@ public interface ErrorHandler {
       }
       // If the block is too late, there is no need to retry it
       return (t.getMessage() == null ||
-          !t.getMessage().contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX)) &&
+          !t.getMessage().contains(TOO_LATE_MESSAGE_SUFFIX)) &&
           (t.getCause() == null || t.getCause().getMessage() == null ||
-          !t.getCause().getMessage().contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX));
+          !t.getCause().getMessage().contains(TOO_LATE_MESSAGE_SUFFIX));
     }
 
     @Override
     public boolean shouldLogError(Throwable t) {
       return (t.getMessage() == null ||
-          (!t.getMessage().contains(BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX) &&
-          !t.getMessage().contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX))) &&
+          (!t.getMessage().contains(COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX) &&
+          !t.getMessage().contains(TOO_LATE_MESSAGE_SUFFIX))) &&
           (t.getCause() == null || t.getCause().getMessage() == null ||
           (!t.getCause().getMessage()
-              .contains(BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX) &&
+              .contains(COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX) &&
           !t.getCause().getMessage()
-              .contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX)));
+              .contains(TOO_LATE_MESSAGE_SUFFIX)));
     }
   }
 }
