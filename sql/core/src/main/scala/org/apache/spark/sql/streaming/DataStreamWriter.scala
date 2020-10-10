@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 /**
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
@@ -366,7 +367,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       startQuery(sink, extraOptions)
     } else {
       val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
-      val disabledSources = df.sparkSession.sqlContext.conf.disabledV2StreamingWriters.split(",")
+      val disabledSources =
+        Utils.stringToSeq(df.sparkSession.sqlContext.conf.disabledV2StreamingWriters)
       val useV1Source = disabledSources.contains(cls.getCanonicalName) ||
         // file source v2 does not support streaming yet.
         classOf[FileDataSourceV2].isAssignableFrom(cls)
