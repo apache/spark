@@ -576,5 +576,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   test("SPARK-33110: Support parse the sql statements with c-style comments") {
     runCliWithin(1.minute)("/* SELECT 'test';*/ SELECT 'test';" -> "test" )
+    runCliWithin(1.minute)("SELECT 'test'; -- SELECT 'test'" -> "test")
+    runCliWithin(1.minute)("SELECT 'test'; /* SELECT 'test';*/" -> "test")
   }
 }

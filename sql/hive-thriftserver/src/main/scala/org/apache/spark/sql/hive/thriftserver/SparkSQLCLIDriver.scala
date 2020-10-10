@@ -519,19 +519,29 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // Note: [SPARK-31595] if there is a `'` in a double quoted string, or a `"` in a single quoted
   // string, the origin implementation from Hive will not drop the trailing semicolon as expected,
   // hence we refined this function a little bit.
-  // Note: [SPARK-33110] Ignore the content inside C-style comment
+  // Note: [SPARK-33110] Ignore the content inside C-style comment and ignore the comment without
+  // content
   private def splitSemiColon(line: String): JList[String] = {
     var insideSingleQuote = false
     var insideDoubleQuote = false
     var insideDashComment = false
     var insideCStyleComment = false
+    var cStyleCommentRightBound = -1
     var escape = false
     var beginIndex = 0
+    var contentBegin = false
     val ret = new JArrayList[String]
 
     def insideComment: Boolean = insideDashComment || insideCStyleComment
+    def isContent(char: Char): Boolean = !insideComment && !s"$char".trim.isEmpty
 
     for (index <- 0 until line.length) {
+      if (insideCStyleComment && index == cStyleCommentRightBound + 1) {
+        // end c-style comment
+        insideCStyleComment = false
+        cStyleCommentRightBound = -1
+      }
+
       if (line.charAt(index) == '\'' && !insideComment) {
         // take a look to see if it is escaped
         // See the comment above about SPARK-31595
@@ -564,6 +574,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           // split, do not include ; itself
           ret.add(line.substring(beginIndex, index))
           beginIndex = index + 1
+          contentBegin = false
         }
       } else if (line.charAt(index) == '\n') {
         // with a new line the inline dash-comment should end.
@@ -580,8 +591,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         }
       } else if (line.charAt(index) == '/' && insideCStyleComment) {
         if (line.charAt(index - 1) == '*') {
-          // end C-style comment
-          insideCStyleComment = false
+          // record the right bound of c-style comment
+          cStyleCommentRightBound = index
         }
       }
       // set the escape
@@ -590,8 +601,14 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       } else if (line.charAt(index) == '\\') {
         escape = true
       }
+
+      if (!contentBegin && index > beginIndex && isContent(line.charAt(index))) {
+        contentBegin = true
+      }
     }
-    ret.add(line.substring(beginIndex))
+    if (contentBegin) {
+      ret.add(line.substring(beginIndex))
+    }
     ret
   }
 }
