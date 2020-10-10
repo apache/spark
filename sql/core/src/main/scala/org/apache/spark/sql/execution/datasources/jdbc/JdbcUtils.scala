@@ -648,6 +648,7 @@ object JdbcUtils extends Logging {
       }
     }
     val supportsTransactions = finalIsolationLevel != Connection.TRANSACTION_NONE
+    val supportsBatchUpdates = conn.getMetaData.supportsBatchUpdates()
     var totalRowCount = 0L
     try {
       if (supportsTransactions) {
@@ -675,15 +676,19 @@ object JdbcUtils extends Logging {
             }
             i = i + 1
           }
-          stmt.addBatch()
-          rowCount += 1
-          totalRowCount += 1
-          if (rowCount % batchSize == 0) {
-            stmt.executeBatch()
-            rowCount = 0
+          if (supportsBatchUpdates) {
+            stmt.addBatch()
+            rowCount += 1
+            if (rowCount % batchSize == 0) {
+              stmt.executeBatch()
+              rowCount = 0
+            }
+          } else {
+            stmt.execute();
           }
+          totalRowCount += 1
         }
-        if (rowCount > 0) {
+        if (supportsBatchUpdates && rowCount > 0) {
           stmt.executeBatch()
         }
       } finally {
