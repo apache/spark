@@ -456,30 +456,50 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("zero moments") {
-    Seq(true, false).foreach { legacyCentralMomentAggBehavior =>
-      withSQLConf(
-        SQLConf.LEGACY_CENTRAL_MOMENT_AGG_BEHAVIOR.key -> legacyCentralMomentAggBehavior.toString) {
-        val result: Double = if (legacyCentralMomentAggBehavior) Double.NaN else 0.0
-        val input = Seq((1, 2)).toDF("a", "b")
-        checkAnswer(
-          input.agg(stddev($"a"), stddev_samp($"a"), stddev_pop($"a"), variance($"a"),
-            var_samp($"a"), var_pop($"a"), skewness($"a"), kurtosis($"a")),
-          Row(result, result, 0.0, result, result, 0.0,
-            Double.NaN, Double.NaN))
+    withSQLConf(SQLConf.LEGACY_CENTRAL_MOMENT_AGG.key -> "true") {
+      val input = Seq((1, 2)).toDF("a", "b")
+      checkAnswer(
+        input.agg(stddev($"a"), stddev_samp($"a"), stddev_pop($"a"), variance($"a"),
+          var_samp($"a"), var_pop($"a"), skewness($"a"), kurtosis($"a")),
+        Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
+          Double.NaN, Double.NaN))
 
-        checkAnswer(
-          input.agg(
-            expr("stddev(a)"),
-            expr("stddev_samp(a)"),
-            expr("stddev_pop(a)"),
-            expr("variance(a)"),
-            expr("var_samp(a)"),
-            expr("var_pop(a)"),
-            expr("skewness(a)"),
-            expr("kurtosis(a)")),
-          Row(result, result, 0.0, result, result, 0.0,
-            Double.NaN, Double.NaN))
-      }
+      checkAnswer(
+        input.agg(
+          expr("stddev(a)"),
+          expr("stddev_samp(a)"),
+          expr("stddev_pop(a)"),
+          expr("variance(a)"),
+          expr("var_samp(a)"),
+          expr("var_pop(a)"),
+          expr("skewness(a)"),
+          expr("kurtosis(a)")),
+        Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
+          Double.NaN, Double.NaN))
+    }
+  }
+
+  test("SPARK-13860: zero moments LEGACY_CENTRAL_MOMENT_AGG off") {
+    withSQLConf(SQLConf.LEGACY_CENTRAL_MOMENT_AGG.key -> "false") {
+      val input = Seq((1, 2)).toDF("a", "b")
+      checkAnswer(
+        input.agg(stddev($"a"), stddev_samp($"a"), stddev_pop($"a"), variance($"a"),
+          var_samp($"a"), var_pop($"a"), skewness($"a"), kurtosis($"a")),
+        Row(null, null, 0.0, null, null, 0.0,
+          null, null))
+
+      checkAnswer(
+        input.agg(
+          expr("stddev(a)"),
+          expr("stddev_samp(a)"),
+          expr("stddev_pop(a)"),
+          expr("variance(a)"),
+          expr("var_samp(a)"),
+          expr("var_pop(a)"),
+          expr("skewness(a)"),
+          expr("kurtosis(a)")),
+        Row(null, null, 0.0, null, null, 0.0,
+          null, null))
     }
   }
 

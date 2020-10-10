@@ -175,7 +175,8 @@ case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === 1.0, if (SQLConf.get.legacyCentralMomentAggBehavior) Double.NaN else 0.0,
+      If(n === 1.0,
+        if (SQLConf.get.legacyCentralMomentAgg) Double.NaN else Literal.create(null, DoubleType),
         sqrt(m2 / (n - 1.0))))
   }
 
@@ -220,7 +221,8 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === 1.0, if (SQLConf.get.legacyCentralMomentAggBehavior) Double.NaN else 0.0,
+      If(n === 1.0,
+        if (SQLConf.get.legacyCentralMomentAgg) Double.NaN else Literal.create(null, DoubleType),
         m2 / (n - 1.0)))
   }
 
@@ -246,7 +248,9 @@ case class Skewness(child: Expression) extends CentralMomentAgg(child) {
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(m2 === 0.0, Double.NaN, sqrt(n) * m3 / sqrt(m2 * m2 * m2)))
+      If(m2 === 0.0,
+        if (SQLConf.get.legacyCentralMomentAgg) Double.NaN else Literal.create(null, DoubleType),
+        sqrt(n) * m3 / sqrt(m2 * m2 * m2)))
   }
 }
 
@@ -267,7 +271,9 @@ case class Kurtosis(child: Expression) extends CentralMomentAgg(child) {
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(m2 === 0.0, Double.NaN, n * m4 / (m2 * m2) - 3.0))
+      If(m2 === 0.0,
+        if (SQLConf.get.legacyCentralMomentAgg) Double.NaN else Literal.create(null, DoubleType),
+        n * m4 / (m2 * m2) - 3.0))
   }
 
   override def prettyName: String = "kurtosis"
