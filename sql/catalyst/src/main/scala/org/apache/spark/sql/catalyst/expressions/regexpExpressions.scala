@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.text.StringEscapeUtils
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
@@ -174,6 +175,199 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
       })
     }
   }
+}
+
+abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with NullIntolerant {
+  def value: Expression
+  def list: Seq[Expression]
+  def isNot: Boolean
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    val arrayOrStr = TypeCollection(ArrayType(StringType), StringType)
+    StringType +: Seq.fill(children.size - 1)(arrayOrStr)
+  }
+
+  override def dataType: DataType = BooleanType
+
+  override def children: Seq[Expression] = value +: list
+
+  override def foldable: Boolean = value.foldable && list.forall(_.foldable)
+
+  override def nullable: Boolean = true
+
+  def escape(v: String): String = StringUtils.escapeLikeRegex(v, '\\')
+
+  def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
+
+  override def eval(input: InternalRow): Any = {
+    val evaluatedValue = value.eval(input)
+    if (evaluatedValue == null) {
+      null
+    } else {
+      list.foreach { e =>
+        val str = e.eval(input)
+        if (str == null) {
+          return null
+        }
+        val regex = Pattern.compile(escape(str.asInstanceOf[UTF8String].toString))
+        if(regex == null) {
+          return null
+        } else if (isNot && matches(regex, evaluatedValue.asInstanceOf[UTF8String].toString)) {
+          return false
+        } else if (!isNot && !matches(regex, evaluatedValue.asInstanceOf[UTF8String].toString)) {
+          return false
+        }
+      }
+      return true
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val patternClass = classOf[Pattern].getName
+    val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
+    val javaDataType = CodeGenerator.javaType(value.dataType)
+    val valueGen = value.genCode(ctx)
+    val listGen = list.map(_.genCode(ctx))
+    val pattern = ctx.freshName("pattern")
+    val rightStr = ctx.freshName("rightStr")
+    val escapedEscapeChar = StringEscapeUtils.escapeJava("\\")
+    val hasNull = ctx.freshName("hasNull")
+    val matched = ctx.freshName("matched")
+    val valueArg = ctx.freshName("valueArg")
+    // All the blocks are meant to be inside a do { ... } while (false); loop.
+    // The evaluation of variables can be stopped when we find a matching value.
+    val listCode = listGen.map(x =>
+      s"""
+         |${x.code}
+         |if (${x.isNull}) {
+         |  $hasNull = true; // ${ev.isNull} = true;
+         |} else if (!$hasNull && $matched) {
+         |  String $rightStr = ${x.value}.toString();
+         |  $patternClass $pattern =
+         |    $patternClass.compile($escapeFunc($rightStr, '$escapedEscapeChar'));
+         |  if ($isNot && $pattern.matcher($valueArg.toString()).matches()) {
+         |    $matched = false;
+         |  } else if (!$isNot && !$pattern.matcher($valueArg.toString()).matches()) {
+         |    $matched = false;
+         |  }
+         |}
+       """.stripMargin)
+
+    val resultType = CodeGenerator.javaType(dataType)
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = listCode,
+      funcName = "likeAll",
+      extraArguments = (javaDataType, valueArg) :: (CodeGenerator.JAVA_BOOLEAN, hasNull) ::
+        (resultType, matched) :: Nil,
+      returnType = resultType,
+      makeSplitFunction = body =>
+        s"""
+           |if (!$hasNull && $matched) {
+           |  $body;
+           |}
+         """.stripMargin,
+      foldFunctions = _.map { funcCall =>
+        s"""
+           |if (!$hasNull && $matched) {
+           |  $funcCall;
+           |}
+         """.stripMargin
+      }.mkString("\n"))
+    ev.copy(code =
+      code"""
+            |${valueGen.code}
+            |boolean $hasNull = false;
+            |boolean $matched = true;
+            |if (${valueGen.isNull}) {
+            |  $hasNull = true;
+            |} else {
+            |  $javaDataType $valueArg = ${valueGen.value};
+            |  $codes
+            |}
+            |final boolean ${ev.isNull} = ($hasNull == true);
+            |final boolean ${ev.value} = ($matched == true);
+      """.stripMargin)
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "str _FUNC_ patterns [, isNot]  - Returns true if `str` matches all the pattern string " +
+    ", null if any arguments are null, false otherwise.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+      * patterns - a list of string expression. Each pattern is a string which is matched literally, with
+          exception to the following special symbols:
+
+          _ matches any one character in the input (similar to . in posix regular expressions)
+
+          % matches zero or more characters in the input (similar to .* in posix regular
+          expressions)
+
+          Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
+          to match "\abc", the pattern should be "\\abc".
+
+          When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it fallbacks
+          to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
+          enabled, the pattern to match "\abc" should be "\abc".
+  """,
+  examples = """
+    Examples:
+      > SELECT 'foo' _FUNC_('%foo%', '%oo');
+       true
+      > SELECT 'foo' _FUNC_('%foo%', '%bar%');
+       false
+      > SELECT 'foo' _FUNC_('%foo%', null);
+       null
+  """,
+  note = """
+    x LIKE ALL ('A%','%B','%C%') is equivalent to x LIKE 'A%' AND x LIKE '%B' AND x LIKE '%C%'.
+  """,
+  since = "3.1.0")
+// scalastyle:on line.size.limit
+case class LikeAll(value: Expression, list: Seq[Expression]) extends LikeAllBase {
+  override def isNot: Boolean = false
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "str _FUNC_ patterns [, isNot]  - Returns true if `str` not matches all the pattern string" +
+    ", null if any arguments are null, false otherwise.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+      * patterns - a list of string expression. Each pattern is a string which is matched literally, with
+          exception to the following special symbols:
+
+          _ matches any one character in the input (similar to . in posix regular expressions)
+
+          % matches zero or more characters in the input (similar to .* in posix regular
+          expressions)
+
+          Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
+          to match "\abc", the pattern should be "\\abc".
+
+          When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it fallbacks
+          to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
+          enabled, the pattern to match "\abc" should be "\abc".
+  """,
+  examples = """
+    Examples:
+      > SELECT 'foo' _FUNC_('tee', '%yoo%');
+       true
+      > SELECT 'foo' _FUNC_('%oo%', '%yoo%');
+       false
+      > SELECT 'foo' _FUNC_('%yoo%', null);
+       null
+  """,
+  note = """
+    x NOT LIKE ALL ('A%','%B','%C%') is equivalent to x NOT LIKE 'A%' AND x NOT LIKE '%B' AND x NOT LIKE '%C%'.
+  """,
+  since = "3.1.0")
+// scalastyle:on line.size.limit
+case class NotLikeAll(value: Expression, list: Seq[Expression]) extends LikeAllBase {
+  override def isNot: Boolean = true
 }
 
 // scalastyle:off line.contains.tab

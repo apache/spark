@@ -48,6 +48,27 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(mkExpr(regex), expected, create_row(input)) // check row input
   }
 
+  test("LIKE ALL") {
+    checkEvaluation(Literal.create("foo", StringType).likeAll(
+      Literal.create("%foo%", StringType),
+      Literal.create("%oo", StringType)), true)
+    checkEvaluation(Literal.create("foo", StringType).likeAll(
+      Literal.create("%foo%", StringType),
+        Literal.create("%bar%", StringType)), false)
+    checkEvaluation(Literal.create("foo", StringType).likeAll(
+      Literal.create("%foo%", StringType),
+      Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create("foo", StringType).notLikeAll(
+      Literal.create("tee", StringType),
+      Literal.create("%yoo%", StringType)), true)
+    checkEvaluation(Literal.create("foo", StringType).notLikeAll(
+      Literal.create("%oo%", StringType),
+      Literal.create("%yoo%", StringType)), false)
+    checkEvaluation(Literal.create("foo", StringType).notLikeAll(
+      Literal.create("%yoo%", StringType),
+      Literal.create(null, StringType)), null)
+  }
+
   test("LIKE Pattern") {
 
     // null handling

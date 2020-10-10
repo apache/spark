@@ -344,6 +344,8 @@ object FunctionRegistry {
     expression[Length]("length"),
     expression[Levenshtein]("levenshtein"),
     expression[Like]("like"),
+    expression[LikeAll]("like_all"),
+    expression[NotLikeAll]("not_like_all"),
     expression[Lower]("lower"),
     expression[OctetLength]("octet_length"),
     expression[StringLocate]("locate"),
