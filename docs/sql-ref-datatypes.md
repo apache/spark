@@ -348,7 +348,7 @@ Time expresions:
 #### Type coercion examples
 
 ```sql
-DESCRIBE TABLE numericTable
+DESCRIBE TABLE numericTable;
 +-------------+---------+-------+
 |col_name     |data_type|comment|
 +-------------+---------+-------+
@@ -356,7 +356,7 @@ DESCRIBE TABLE numericTable
 |doubleColumn |double   |null   |
 +-------------+---------+-------+
 
-DESCRIBE SELECT integerColumn + doubleColumn as result FROM numericTable
+DESCRIBE SELECT integerColumn + doubleColumn as result FROM numericTable;
 +--------+---------+-------+
 |col_name|data_type|comment|
 +--------+---------+-------+
@@ -366,7 +366,7 @@ DESCRIBE SELECT integerColumn + doubleColumn as result FROM numericTable
 ```
 
 ```sql
-DESCRIBE dateTable
+DESCRIBE dateTable;
 +---------------+---------+-------+
 |       col_name|data_type|comment|
 +---------------+---------+-------+
@@ -374,7 +374,7 @@ DESCRIBE dateTable
 |timestampColumn|timestamp|   null|
 +---------------+---------+-------+
 
-SELECT MONTHS_BETWEEN(dateColumn,timestampColumn) FROM dateTable
+SELECT MONTHS_BETWEEN(dateColumn,timestampColumn) FROM dateTable;
 
 ```
 
@@ -405,7 +405,7 @@ Otherwise, a truncate value will be used. See more on [Ansi Compliance](sql-ref-
 #### Type Casting examples
 
 ```sql
-DESCRIBE castTable
+DESCRIBE castTable;
 +-------------+---------+-------+
 |     col_name|data_type|comment|
 +-------------+---------+-------+
@@ -414,7 +414,7 @@ DESCRIBE castTable
 |  FloatColumn|    float|   null|
 +-------------+---------+-------+
 
-DESCRIBE SELECT CAST(IntegerColumn AS LONG), CAST(longColumn AS DOUBLE), CAST(FloatColumn AS INTEGER) FROM castTable
+DESCRIBE SELECT CAST(IntegerColumn AS LONG), CAST(longColumn AS DOUBLE), CAST(FloatColumn AS INTEGER) FROM castTable;
 +-------------+---------+-------+
 |     col_name|data_type|comment|
 +-------------+---------+-------+
@@ -428,7 +428,7 @@ DESCRIBE SELECT CAST(IntegerColumn AS LONG), CAST(longColumn AS DOUBLE), CAST(Fl
 #### Store assignment casting examples
 
 ```sql
-DESCRIBE storeTable
+DESCRIBE storeTable;
 +-------------+---------+-------+
 |     col_name|data_type|comment|
 +-------------+---------+-------+
@@ -436,6 +436,6 @@ DESCRIBE storeTable
 |   longColumn|   bigint|   null|
 +-------------+---------+-------+
 
-INSERT INTO storeTable SELECT CAST(FloatColumn AS DOUBLE), CAST(longColumn AS DOUBLE) FROM storeTable
+INSERT INTO storeTable SELECT CAST(FloatColumn AS DOUBLE), CAST(longColumn AS DOUBLE) FROM storeTable;
 
 ```
