@@ -255,7 +255,7 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
 
     withJdbcStatement() { statement =>
       val metaData = statement.getConnection.getMetaData
-      checkResult(metaData.getTypeInfo, ThriftserverShimUtils.supportedType().map(_.getName))
+      checkResult(metaData.getTypeInfo, SparkGetTypeInfoUtil.supportedType.map(_.getName))
     }
   }
 
