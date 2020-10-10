@@ -519,7 +519,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // Note: [SPARK-31595] if there is a `'` in a double quoted string, or a `"` in a single quoted
   // string, the origin implementation from Hive will not drop the trailing semicolon as expected,
   // hence we refined this function a little bit.
-  // Note: [SPARK-33110] Ignore the content inside bracketed comment and ignore the comment without
+  // Note: [SPARK-33100] Ignore the content inside bracketed comment and ignore the comment without
   // content.
   private def splitSemiColon(line: String): JList[String] = {
     var insideSingleQuote = false
