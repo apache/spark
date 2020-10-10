@@ -244,8 +244,6 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       // stream, it's not worth trying to recover.
       channel.pipeline().fireExceptionCaught(e);
     } finally {
-      // Make sure we always release the original metadata buffer by the time we exit the
-      // invocation of this method. Otherwise, we see memory issues fairly quickly in benchmarks.
       req.meta.release();
     }
   }
