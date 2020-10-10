@@ -574,9 +574,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(1.minute)("SELECT MAKE_DATE(-44, 3, 15);" -> "-0044-03-15")
   }
 
-  test("SPARK-33110: Support parse the sql statements with c-style comments") {
-    runCliWithin(1.minute)("/* SELECT 'test';*/ SELECT 'test';" -> "test" )
-    runCliWithin(1.minute)("SELECT 'test'; -- SELECT 'test'" -> "")
-    runCliWithin(1.minute)("SELECT 'test'; /* SELECT 'test';*/" -> "")
+  test("SPARK-33110: Fix the issue when parsing sql statements with bracketed comments") {
+    runCliWithin(1.minute)("/* SELECT 1;*/ SELECT 1;" -> "1" )
+    runCliWithin(1.minute)(";;/* SELECT 1;*/ SELECT 1;" -> "1" )
+    runCliWithin(1.minute)("/* SELECT 1;*/;; SELECT 1;" -> "1" )
+    runCliWithin(1.minute)("SELECT '1'; -- SELECT '1';" -> "")
+    runCliWithin(1.minute)("SELECT '1'; /* SELECT '1';*/" -> "")
+    runCliWithin(1.minute)("/* SELECT 1;*/;; SELECT 1; /*\n SELECT '1';\n*/" -> "" )
   }
 }

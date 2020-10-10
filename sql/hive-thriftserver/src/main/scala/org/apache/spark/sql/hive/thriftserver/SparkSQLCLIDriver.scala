@@ -519,27 +519,27 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // Note: [SPARK-31595] if there is a `'` in a double quoted string, or a `"` in a single quoted
   // string, the origin implementation from Hive will not drop the trailing semicolon as expected,
   // hence we refined this function a little bit.
-  // Note: [SPARK-33110] Ignore the content inside C-style comment and ignore the comment without
-  // content
+  // Note: [SPARK-33110] Ignore the content inside bracketed comment and ignore the comment without
+  // content.
   private def splitSemiColon(line: String): JList[String] = {
     var insideSingleQuote = false
     var insideDoubleQuote = false
     var insideDashComment = false
-    var insideCStyleComment = false
-    var cStyleCommentRightBound = -1
+    var insideBracketedComment = false
+    var bracketedCommentRightBound = -1
     var escape = false
     var beginIndex = 0
     var contentBegin = false
     val ret = new JArrayList[String]
 
-    def insideComment: Boolean = insideDashComment || insideCStyleComment
+    def insideComment: Boolean = insideDashComment || insideBracketedComment
     def isContent(char: Char): Boolean = !insideComment && !s"$char".trim.isEmpty
 
     for (index <- 0 until line.length) {
-      if (insideCStyleComment && index == cStyleCommentRightBound + 1) {
-        // end c-style comment
-        insideCStyleComment = false
-        cStyleCommentRightBound = -1
+      if (insideBracketedComment && index == bracketedCommentRightBound + 1) {
+        // end bracketed comment
+        insideBracketedComment = false
+        bracketedCommentRightBound = -1
       }
 
       if (line.charAt(index) == '\'' && !insideComment) {
@@ -586,13 +586,13 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         if (insideSingleQuote || insideDoubleQuote) {
           // Ignores '/' in any case of quotes
         } else if (hasNext && line.charAt(index + 1) == '*') {
-          // ignore quotes and ; in C-style comment
-          insideCStyleComment = true
+          // ignore quotes and ; in bracketed comment
+          insideBracketedComment = true
         }
-      } else if (line.charAt(index) == '/' && insideCStyleComment) {
+      } else if (line.charAt(index) == '/' && insideBracketedComment) {
         if (line.charAt(index - 1) == '*') {
-          // record the right bound of c-style comment
-          cStyleCommentRightBound = index
+          // record the right bound of bracketed comment
+          bracketedCommentRightBound = index
         }
       }
       // set the escape
