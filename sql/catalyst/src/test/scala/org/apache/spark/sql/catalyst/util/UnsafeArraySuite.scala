@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time.{ZoneId, ZoneOffset}
 
-import scala.reflect.runtime.universe.TypeTag
+import scala.reflect.Manifest
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
@@ -72,9 +72,9 @@ class UnsafeArraySuite extends SparkFunSuite {
     arrayData
   }
 
-  private def toUnsafeArray[T : TypeTag](array: Array[T]): ArrayData = {
+  private def toUnsafeArray[T: Manifest](array: Array[T]): ArrayData = {
     val converted = ExpressionEncoder[Array[T]].createSerializer().apply(array).getArray(0)
-    assert(converted.isInstanceOf[T])
+    assert(manifest[T].runtimeClass.isInstance(converted))
     assert(converted.numElements == array.length)
     converted
   }

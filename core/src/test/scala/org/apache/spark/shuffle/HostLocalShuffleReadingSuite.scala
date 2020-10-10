@@ -58,6 +58,7 @@ class HostLocalShuffleReadingSuite extends SparkFunSuite with Matchers with Loca
     val conf = new SparkConf()
       .set(SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, true)
 
+    import scala.language.existentials
     val (essStatus, blockStoreClientClass) = if (isESSEnabled) {
       // LocalSparkCluster will disable the ExternalShuffleService by default. Therefore,
       // we have to manually setup an server which embedded with ExternalBlockHandler to
