@@ -30,6 +30,7 @@ import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.internal.SQLConf
@@ -167,6 +168,18 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val tablePath = new Path(relation.tableMeta.location)
     val fileFormat = fileFormatClass.getConstructor().newInstance()
 
+    val hiveVersion012 = Seq("0.", "1.", "2.")
+    val hiveVersion = SQLConf.get.getConf(HiveUtils.HIVE_METASTORE_VERSION)
+    val bucketSpec =
+      if (hiveVersion012.exists(hiveVersion.startsWith)) {
+        relation.tableMeta.bucketSpec
+      } else {
+        // TODO(SPARK-32710/32711): Write Hive 3.x ORC/Parquet bucketed table
+        None
+      }
+    val optionsWithHiveInfo = options.updated(DDLUtils.PROVIDER, DDLUtils.HIVE_PROVIDER)
+      .updated(DDLUtils.HIVE_VERSION, SQLConf.get.getConf(HiveUtils.HIVE_METASTORE_VERSION))
+
     val result = if (relation.isPartitioned) {
       val partitionSchema = relation.tableMeta.partitionSchema
       val rootPaths: Seq[Path] = if (lazyPruningEnabled) {
@@ -211,12 +224,12 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
           // Spark SQL's data source table now support static and dynamic partition insert. Source
           // table converted from Hive table should always use dynamic.
-          val enableDynamicPartition = options.updated("partitionOverwriteMode", "dynamic")
+          val enableDynamicPartition = optionsWithHiveInfo.updated("partitionOverwriteMode", "dynamic")
           val fsRelation = HadoopFsRelation(
             location = fileIndex,
             partitionSchema = partitionSchema,
             dataSchema = updatedTable.dataSchema,
-            bucketSpec = None,
+            bucketSpec = bucketSpec,
             fileFormat = fileFormat,
             options = enableDynamicPartition)(sparkSession = sparkSession)
           val created = LogicalRelation(fsRelation, updatedTable)
@@ -243,8 +256,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 sparkSession = sparkSession,
                 paths = rootPath.toString :: Nil,
                 userSpecifiedSchema = Option(updatedTable.dataSchema),
-                bucketSpec = None,
-                options = options,
+                bucketSpec = bucketSpec,
+                options = optionsWithHiveInfo,
                 className = fileType).resolveRelation(),
               table = updatedTable)
 

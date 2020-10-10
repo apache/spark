@@ -79,18 +79,20 @@ abstract class FileCommitProtocol extends Logging {
    * A full file path consists of the following parts:
    *  1. the base path
    *  2. some sub-directory within the base path, used to specify partitioning
-   *  3. file prefix, usually some unique job id with the task id
-   *  4. bucket id
-   *  5. source specific file extension, e.g. ".snappy.parquet"
+   *  3. source specific file prefix, e.g. bucket id to be compatible with other SQL engines
+   *  4. file prefix, usually some unique job id with the task id
+   *  5. bucket id
+   *  6. source specific file extension, e.g. ".snappy.parquet"
    *
-   * The "dir" parameter specifies 2, and "ext" parameter specifies both 4 and 5, and the rest
-   * are left to the commit protocol implementation to decide.
+   * The "dir" parameter specifies 2, "prefix" parameter specifies 3, and "ext" parameter specifies
+   * both 5 and 6, and the rest are left to the commit protocol implementation to decide.
    *
    * Important: it is the caller's responsibility to add uniquely identifying content to "ext"
    * if a task is going to write out multiple files to the same dir. The file commit protocol only
    * guarantees that files written by different tasks will not conflict.
    */
-  def newTaskTempFile(taskContext: TaskAttemptContext, dir: Option[String], ext: String): String
+  def newTaskTempFile(
+      taskContext: TaskAttemptContext, dir: Option[String], prefix: String, ext: String): String
 
   /**
    * Similar to newTaskTempFile(), but allows files to committed to an absolute output location.
@@ -101,7 +103,7 @@ abstract class FileCommitProtocol extends Logging {
    * guarantees that files written by different tasks will not conflict.
    */
   def newTaskTempFileAbsPath(
-      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String
+      taskContext: TaskAttemptContext, absoluteDir: String, prefix: String, ext: String): String
 
   /**
    * Commits a task after the writes succeed. Must be called on the executors when running tasks.

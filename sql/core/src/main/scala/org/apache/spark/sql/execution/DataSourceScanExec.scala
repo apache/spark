@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -260,7 +261,7 @@ case class FileSourceScanExec(
   // exposed for testing
   lazy val bucketedScan: Boolean = {
     if (relation.sparkSession.sessionState.conf.bucketingEnabled && relation.bucketSpec.isDefined
-      && !disableBucketedScan) {
+      && !disableBucketedScan && !DDLUtils.isHiveTable(relation.options.get(DDLUtils.PROVIDER))) {
       val spec = relation.bucketSpec.get
       val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
       bucketColumns.size == spec.bucketColumnNames.size

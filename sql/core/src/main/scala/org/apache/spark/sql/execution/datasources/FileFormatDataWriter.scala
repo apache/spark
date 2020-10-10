@@ -118,6 +118,7 @@ class SingleDirectoryDataWriter(
     val currentPath = committer.newTaskTempFile(
       taskAttemptContext,
       None,
+      "",
       f"-c$fileCounter%03d" + ext)
 
     currentWriter = description.outputWriterFactory.newInstance(
@@ -220,6 +221,11 @@ class DynamicPartitionDataWriter(
     val partDir = partitionValues.map(getPartitionPath(_))
     partDir.foreach(updatedPartitions.add)
 
+    val prefix = (description.bucketFileNamePrefix, bucketId) match {
+      case (Some(prefix), Some(id)) => prefix(id)
+      case _ => ""
+    }
+
     val bucketIdStr = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
 
     // This must be in a form that matches our bucketing format. See BucketingUtils.
@@ -230,9 +236,9 @@ class DynamicPartitionDataWriter(
       description.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
     }
     val currentPath = if (customPath.isDefined) {
-      committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, ext)
+      committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, prefix, ext)
     } else {
-      committer.newTaskTempFile(taskAttemptContext, partDir, ext)
+      committer.newTaskTempFile(taskAttemptContext, partDir, prefix, ext)
     }
 
     currentWriter = description.outputWriterFactory.newInstance(
@@ -286,6 +292,7 @@ class WriteJobDescription(
     val dataColumns: Seq[Attribute],
     val partitionColumns: Seq[Attribute],
     val bucketIdExpression: Option[Expression],
+    val bucketFileNamePrefix: Option[Int => String],
     val path: String,
     val customPartitionLocations: Map[TablePartitionSpec, String],
     val maxRecordsPerFile: Long,

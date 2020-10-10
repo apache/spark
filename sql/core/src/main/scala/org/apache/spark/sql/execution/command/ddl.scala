@@ -837,7 +837,9 @@ case class AlterTableSetLocationCommand(
 
 
 object DDLUtils {
+  val PROVIDER = "provider"
   val HIVE_PROVIDER = "hive"
+  val HIVE_VERSION = "hive_version"
 
   def isHiveTable(table: CatalogTable): Boolean = {
     isHiveTable(table.provider)

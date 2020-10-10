@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
@@ -68,6 +69,17 @@ object FileFormatWriter extends Logging {
       })
     }
   }
+
+  /**
+   * A function that gets bucket file name prefix given bucket id.
+   * The new bucket file name is following Hive and Presto conversion, so this makes sure
+   * Hive bucketed table written by Spark, can be read by other SQL engines like Hive and Presto.
+   *
+   * Hive bucketing naming: `org.apache.hadoop.hive.ql.exec.Utilities#getBucketIdFromFile()`.
+   * Presto bucketing naming (prestosql here):
+   * `io.prestosql.plugin.hive.BackgroundHiveSplitLoader#BUCKET_PATTERNS`.
+   */
+  def compatibleBucketFileNamePrefix(bucketId: Int): String = f"$bucketId%05d_0_"
 
   /**
    * Basic work flow of this command is:
@@ -113,12 +125,32 @@ object FileFormatWriter extends Logging {
     }
     val empty2NullPlan = if (needConvert) ProjectExec(projectList, plan) else plan
 
-    val bucketIdExpression = bucketSpec.map { spec =>
+    var bucketFileNamePrefix: Option[Int => String] = None
+    val bucketIdExpression = bucketSpec.flatMap { spec =>
       val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
-      // Use `HashPartitioning.partitionIdExpression` as our bucket id expression, so that we can
-      // guarantee the data distribution is same between shuffle and bucketed data source, which
-      // enables us to only shuffle one side when join a bucketed table and a normal one.
-      HashPartitioning(bucketColumns, spec.numBuckets).partitionIdExpression
+      if (DDLUtils.isHiveTable(options.get(DDLUtils.PROVIDER))) {
+        val hiveVersion = options.getOrElse(DDLUtils.HIVE_VERSION, "")
+        val hiveVersion012 = Seq("0.", "1.", "2.")
+        if (hiveVersion012.exists(hiveVersion.startsWith)) {
+          bucketFileNamePrefix = Some(compatibleBucketFileNamePrefix)
+          // For Hive bucketed table, use `HiveHash` and bitwise-and as our bucket id expression.
+          // Without the extra bitwise-and operation, we can get wrong bucket id when hash value
+          // of columns is negative. See Hive implementation in
+          // `org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils#getBucketNumber()`.
+          val bucketId = HiveHash(bucketColumns)
+          val bucketIdAfterAnd = BitwiseAnd(bucketId, Literal(Int.MaxValue))
+          Some(Pmod(bucketIdAfterAnd, Literal(spec.numBuckets)))
+        } else {
+          // TODO(SPARK-32710/32711): Write Hive 3.x ORC/Parquet bucketed table
+          None
+        }
+      } else {
+        // For Spark data source bucketed table, use `HashPartitioning.partitionIdExpression`
+        // as our bucket id expression, so that we can guarantee the data distribution is same
+        // between shuffle and bucketed data source, which enables us to only shuffle one side
+        // when join a bucketed table and a normal one.
+        Some(HashPartitioning(bucketColumns, spec.numBuckets).partitionIdExpression)
+      }
     }
     val sortColumns = bucketSpec.toSeq.flatMap {
       spec => spec.sortColumnNames.map(c => dataColumns.find(_.name == c).get)
@@ -140,6 +172,7 @@ object FileFormatWriter extends Logging {
       dataColumns = dataColumns,
       partitionColumns = partitionColumns,
       bucketIdExpression = bucketIdExpression,
+      bucketFileNamePrefix = bucketFileNamePrefix,
       path = outputSpec.outputPath,
       customPartitionLocations = outputSpec.customPartitionLocations,
       maxRecordsPerFile = caseInsensitiveOptions.get("maxRecordsPerFile").map(_.toLong)
