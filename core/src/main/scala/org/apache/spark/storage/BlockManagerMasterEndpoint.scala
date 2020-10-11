@@ -163,7 +163,9 @@ class BlockManagerMasterEndpoint(
       context.reply(true)
 
     case DecommissionBlockManagers(executorIds) =>
-      decommissioningBlockManagerSet ++= executorIds.flatMap(blockManagerIdByExecutor.get)
+      val bms = executorIds.flatMap(blockManagerIdByExecutor.get)
+      logInfo(s"Mark BlockManagers (${bms.mkString(", ")}) as decommissioned.")
+      decommissioningBlockManagerSet ++= bms
       context.reply(true)
 
     case GetReplicateInfoForRDDBlocks(blockManagerId) =>
