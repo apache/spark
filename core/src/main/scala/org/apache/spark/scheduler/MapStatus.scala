@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.io.{Externalizable, ObjectInput, ObjectOutput, Serializable}
 
 import scala.collection.mutable
 
@@ -52,6 +52,13 @@ private[spark] sealed trait MapStatus {
    * partitionId of the task or taskContext.taskAttemptId is used.
    */
   def mapId: Long
+
+  /**
+   * Extra metadata for map status. This could be used by different ShuffleManager implementation
+   * to store information they need. For example, a Remote Shuffle Service ShuffleManager could
+   * store shuffle server information and let reducer task know where to fetch shuffle data.
+   */
+  def metadata: Option[Serializable]
 }
 
 
@@ -73,6 +80,18 @@ private[spark] object MapStatus {
       HighlyCompressedMapStatus(loc, uncompressedSizes, mapTaskId)
     } else {
       new CompressedMapStatus(loc, uncompressedSizes, mapTaskId)
+    }
+  }
+
+  def apply(
+      loc: BlockManagerId,
+      uncompressedSizes: Array[Long],
+      mapTaskId: Long,
+      metadata: Option[Serializable]): MapStatus = {
+    if (uncompressedSizes.length > minPartitionsToUseHighlyCompressMapStatus) {
+      HighlyCompressedMapStatus(loc, uncompressedSizes, mapTaskId, metadata)
+    } else {
+      new CompressedMapStatus(loc, uncompressedSizes, mapTaskId, metadata)
     }
   }
 
@@ -117,7 +136,8 @@ private[spark] object MapStatus {
 private[spark] class CompressedMapStatus(
     private[this] var loc: BlockManagerId,
     private[this] var compressedSizes: Array[Byte],
-    private[this] var _mapTaskId: Long)
+    private[this] var _mapTaskId: Long,
+    private[this] var _metadata: Option[Serializable] = None)
   extends MapStatus with Externalizable {
 
   // For deserialization only
@@ -125,6 +145,11 @@ private[spark] class CompressedMapStatus(
 
   def this(loc: BlockManagerId, uncompressedSizes: Array[Long], mapTaskId: Long) {
     this(loc, uncompressedSizes.map(MapStatus.compressSize), mapTaskId)
+  }
+
+  def this(loc: BlockManagerId, uncompressedSizes: Array[Long], mapTaskId: Long,
+           metadata: Option[Serializable]) {
+    this(loc, uncompressedSizes.map(MapStatus.compressSize), mapTaskId, metadata)
   }
 
   override def location: BlockManagerId = loc
@@ -139,11 +164,19 @@ private[spark] class CompressedMapStatus(
 
   override def mapId: Long = _mapTaskId
 
+  override def metadata: Option[Serializable] = _metadata
+
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)
     out.writeInt(compressedSizes.length)
     out.write(compressedSizes)
     out.writeLong(_mapTaskId)
+    if (_metadata.isEmpty) {
+      out.writeBoolean(false)
+    } else {
+      out.writeBoolean(true)
+      out.writeObject(_metadata.get)
+    }
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -152,6 +185,10 @@ private[spark] class CompressedMapStatus(
     compressedSizes = new Array[Byte](len)
     in.readFully(compressedSizes)
     _mapTaskId = in.readLong()
+    val hasMetadata = in.readBoolean()
+    if (hasMetadata) {
+      _metadata = Some(in.readObject().asInstanceOf[Serializable])
+    }
   }
 }
 
@@ -173,7 +210,8 @@ private[spark] class HighlyCompressedMapStatus private (
     private[this] var emptyBlocks: RoaringBitmap,
     private[this] var avgSize: Long,
     private[this] var hugeBlockSizes: scala.collection.Map[Int, Byte],
-    private[this] var _mapTaskId: Long)
+    private[this] var _mapTaskId: Long,
+    private[this] var _metadata: Option[Serializable] = None)
   extends MapStatus with Externalizable {
 
   // loc could be null when the default constructor is called during deserialization
@@ -203,6 +241,8 @@ private[spark] class HighlyCompressedMapStatus private (
 
   override def mapId: Long = _mapTaskId
 
+  override def metadata: Option[Serializable] = _metadata
+
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)
     emptyBlocks.serialize(out)
@@ -213,6 +253,12 @@ private[spark] class HighlyCompressedMapStatus private (
       out.writeByte(kv._2)
     }
     out.writeLong(_mapTaskId)
+    if (_metadata.isEmpty) {
+      out.writeBoolean(false)
+    } else {
+      out.writeBoolean(true)
+      out.writeObject(_metadata.get)
+    }
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -230,6 +276,10 @@ private[spark] class HighlyCompressedMapStatus private (
     }
     hugeBlockSizes = hugeBlockSizesImpl
     _mapTaskId = in.readLong()
+    val hasMetadata = in.readBoolean()
+    if (hasMetadata) {
+      _metadata = Some(in.readObject().asInstanceOf[Serializable])
+    }
   }
 }
 
@@ -237,7 +287,8 @@ private[spark] object HighlyCompressedMapStatus {
   def apply(
       loc: BlockManagerId,
       uncompressedSizes: Array[Long],
-      mapTaskId: Long): HighlyCompressedMapStatus = {
+      mapTaskId: Long,
+      metadata: Option[Serializable] = None): HighlyCompressedMapStatus = {
     // We must keep track of which blocks are empty so that we don't report a zero-sized
     // block as being non-empty (or vice-versa) when using the average block size.
     var i = 0
@@ -278,6 +329,6 @@ private[spark] object HighlyCompressedMapStatus {
     emptyBlocks.trim()
     emptyBlocks.runOptimize()
     new HighlyCompressedMapStatus(loc, numNonEmptyBlocks, emptyBlocks, avgSize,
-      hugeBlockSizes, mapTaskId)
+      hugeBlockSizes, mapTaskId, metadata)
   }
 }

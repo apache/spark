@@ -27,9 +27,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
-
 import org.apache.commons.io.output.{ByteArrayOutputStream => ApacheByteArrayOutputStream}
-
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -366,6 +364,15 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       endMapIndex: Int,
       startPartition: Int,
       endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])]
+
+  /**
+   * Get all map output statuses for the given shuffle id. This could be used by custom shuffle
+   * manager to get map output information. For example, remote shuffle service shuffle manager
+   * could use this method to get the information and figure out where the shuffle data is located.
+   * @param shuffleId
+   * @return An array of all map status objects.
+   */
+  def getAllMapOutputStatuses(shuffleId: Int): Array[MapStatus]
 
   /**
    * Deletes map output status information for the specified shuffle stage.
@@ -774,6 +781,18 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
+  def getAllMapOutputStatuses(shuffleId: Int): Array[MapStatus] = {
+    logDebug(s"Fetching all output statuses for shuffle $shuffleId")
+    shuffleStatuses.get(shuffleId) match {
+      case Some(shuffleStatus) =>
+        shuffleStatus.withMapStatuses { statuses =>
+          MapOutputTracker.checkMapStatuses(statuses, shuffleId)
+          statuses.clone
+        }
+      case None => Array.empty
+    }
+  }
+
   override def stop(): Unit = {
     mapOutputRequests.offer(PoisonPill)
     threadpool.shutdown()
@@ -825,6 +844,13 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         mapStatuses.clear()
         throw e
     }
+  }
+
+  override def getAllMapOutputStatuses(shuffleId: Int): Array[MapStatus] = {
+    logDebug(s"Fetching all output statuses for shuffle $shuffleId")
+    val statuses = getStatuses(shuffleId, conf)
+    MapOutputTracker.checkMapStatuses(statuses, shuffleId)
+    statuses
   }
 
   /**
@@ -1010,5 +1036,16 @@ private[spark] object MapOutputTracker extends Logging {
     }
 
     splitsByAddress.mapValues(_.toSeq).iterator
+  }
+
+  def checkMapStatuses(statuses: Array[MapStatus], shuffleId: Int) = {
+    assert (statuses != null)
+    for (status <- statuses) {
+      if (status == null) {
+        val errorMessage = s"Missing an output location for shuffle $shuffleId"
+        logError(errorMessage)
+        throw new MetadataFetchFailedException(shuffleId, 0, errorMessage)
+      }
+    }
   }
 }

@@ -63,16 +63,46 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     assert(tracker.containsShuffle(10))
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     val size10000 = MapStatus.decompressSize(MapStatus.compressSize(10000L))
-    tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
-        Array(1000L, 10000L), 5))
-    tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
-        Array(10000L, 1000L), 6))
+    val mapStatus1 = MapStatus(BlockManagerId("a", "hostA", 1000), Array(1000L, 10000L), 5)
+    val mapStatus2 = MapStatus(BlockManagerId("b", "hostB", 1000), Array(10000L, 1000L), 6)
+    tracker.registerMapOutput(10, 0, mapStatus1)
+    tracker.registerMapOutput(10, 1, mapStatus2)
     val statuses = tracker.getMapSizesByExecutorId(10, 0)
     assert(statuses.toSet ===
       Seq((BlockManagerId("a", "hostA", 1000),
         ArrayBuffer((ShuffleBlockId(10, 5, 0), size1000, 0))),
           (BlockManagerId("b", "hostB", 1000),
             ArrayBuffer((ShuffleBlockId(10, 6, 0), size10000, 1)))).toSet)
+    val allStatuses = tracker.getAllMapOutputStatuses(10)
+    assert(allStatuses.toSet === Set(mapStatus1, mapStatus2))
+    assert(0 == tracker.getNumCachedSerializedBroadcast)
+    tracker.stop()
+    rpcEnv.shutdown()
+  }
+
+  test("master register shuffle with map status metadata") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+    tracker.registerShuffle(10, 2)
+    assert(tracker.containsShuffle(10))
+    val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
+    val size10000 = MapStatus.decompressSize(MapStatus.compressSize(10000L))
+    val mapStatus1 = MapStatus(BlockManagerId("a", "hostA", 1000),
+      Array(1000L, 10000L), 5, Some("metadata1"))
+    val mapStatus2 = MapStatus(BlockManagerId("b", "hostB", 1000),
+      Array(10000L, 1000L), 6, Some(1001))
+    tracker.registerMapOutput(10, 0, mapStatus1)
+    tracker.registerMapOutput(10, 1, mapStatus2)
+    val statuses = tracker.getMapSizesByExecutorId(10, 0)
+    assert(statuses.toSet ===
+      Seq((BlockManagerId("a", "hostA", 1000),
+        ArrayBuffer((ShuffleBlockId(10, 5, 0), size1000, 0))),
+        (BlockManagerId("b", "hostB", 1000),
+          ArrayBuffer((ShuffleBlockId(10, 6, 0), size10000, 1)))).toSet)
+    val allStatuses = tracker.getAllMapOutputStatuses(10)
+    assert(allStatuses.toSet === Set(mapStatus1, mapStatus2))
     assert(0 == tracker.getNumCachedSerializedBroadcast)
     tracker.stop()
     rpcEnv.shutdown()
@@ -92,10 +122,12 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       Array(compressedSize10000, compressedSize1000), 6))
     assert(tracker.containsShuffle(10))
     assert(tracker.getMapSizesByExecutorId(10, 0).nonEmpty)
+    assert(tracker.getAllMapOutputStatuses(10).nonEmpty)
     assert(0 == tracker.getNumCachedSerializedBroadcast)
     tracker.unregisterShuffle(10)
     assert(!tracker.containsShuffle(10))
     assert(tracker.getMapSizesByExecutorId(10, 0).isEmpty)
+    assert(tracker.getAllMapOutputStatuses(11).isEmpty)
 
     tracker.stop()
     rpcEnv.shutdown()
@@ -123,6 +155,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     // this should cause it to fail, and the scheduler will ignore the failure due to the
     // stage already being aborted.
     intercept[FetchFailedException] { tracker.getMapSizesByExecutorId(10, 1) }
+    intercept[FetchFailedException] { tracker.getAllMapOutputStatuses(10) }
 
     tracker.stop()
     rpcEnv.shutdown()
@@ -147,13 +180,18 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     intercept[FetchFailedException] { mapWorkerTracker.getMapSizesByExecutorId(10, 0) }
 
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
-    masterTracker.registerMapOutput(10, 0, MapStatus(
-      BlockManagerId("a", "hostA", 1000), Array(1000L), 5))
+    val mapStatus = MapStatus(BlockManagerId("a", "hostA", 1000), Array(1000L), 5)
+    masterTracker.registerMapOutput(10, 0, mapStatus)
     mapWorkerTracker.updateEpoch(masterTracker.getEpoch)
     assert(mapWorkerTracker.getMapSizesByExecutorId(10, 0).toSeq ===
       Seq((BlockManagerId("a", "hostA", 1000),
         ArrayBuffer((ShuffleBlockId(10, 5, 0), size1000, 0)))))
-    assert(0 == masterTracker.getNumCachedSerializedBroadcast)
+    val allMapOutputStatuses = mapWorkerTracker.getAllMapOutputStatuses(10)
+    assert(allMapOutputStatuses.length === 1)
+    assert(allMapOutputStatuses(0).location === mapStatus.location)
+    assert(allMapOutputStatuses(0).getSizeForBlock(0) === mapStatus.getSizeForBlock(0))
+    assert(allMapOutputStatuses(0).mapId === mapStatus.mapId)
+    assert(allMapOutputStatuses(0).metadata === mapStatus.metadata)
 
     val masterTrackerEpochBeforeLossOfMapOutput = masterTracker.getEpoch
     masterTracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000))
@@ -164,6 +202,36 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     // failure should be cached
     intercept[FetchFailedException] { mapWorkerTracker.getMapSizesByExecutorId(10, 0) }
     assert(0 == masterTracker.getNumCachedSerializedBroadcast)
+
+    masterTracker.stop()
+    mapWorkerTracker.stop()
+    rpcEnv.shutdown()
+    mapWorkerRpcEnv.shutdown()
+  }
+
+  test("remote get all map output statuses with metadata") {
+    val hostname = "localhost"
+    val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
+
+    val masterTracker = newTrackerMaster()
+    masterTracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, conf))
+
+    val mapWorkerRpcEnv = createRpcEnv("spark-worker", hostname, 0, new SecurityManager(conf))
+    val mapWorkerTracker = new MapOutputTrackerWorker(conf)
+    mapWorkerTracker.trackerEndpoint =
+      mapWorkerRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+
+    masterTracker.registerShuffle(10, 1)
+    val mapStatus = MapStatus(BlockManagerId("a", "hostA", 1000), Array(1000L), 5,
+      Some("metadata1"))
+    masterTracker.registerMapOutput(10, 0, mapStatus)
+    val allMapOutputStatuses = mapWorkerTracker.getAllMapOutputStatuses(10)
+    assert(allMapOutputStatuses.length === 1)
+    assert(allMapOutputStatuses(0).location === mapStatus.location)
+    assert(allMapOutputStatuses(0).getSizeForBlock(0) === mapStatus.getSizeForBlock(0))
+    assert(allMapOutputStatuses(0).mapId === mapStatus.mapId)
+    assert(allMapOutputStatuses(0).metadata === mapStatus.metadata)
 
     masterTracker.stop()
     mapWorkerTracker.stop()
@@ -312,10 +380,12 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val size0 = MapStatus.decompressSize(MapStatus.compressSize(0L))
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     val size10000 = MapStatus.decompressSize(MapStatus.compressSize(10000L))
-    tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
-      Array(size0, size1000, size0, size10000), 5))
-    tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
-      Array(size10000, size0, size1000, size0), 6))
+    val mapStatus1 = MapStatus(BlockManagerId("a", "hostA", 1000),
+      Array(size0, size1000, size0, size10000), 5)
+    val mapStatus2 = MapStatus(BlockManagerId("b", "hostB", 1000),
+      Array(size10000, size0, size1000, size0), 6)
+    tracker.registerMapOutput(10, 0, mapStatus1)
+    tracker.registerMapOutput(10, 1, mapStatus2)
     assert(tracker.containsShuffle(10))
     assert(tracker.getMapSizesByExecutorId(10, 0, 2, 0, 4).toSeq ===
         Seq(
@@ -327,6 +397,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
                 (ShuffleBlockId(10, 6, 2), size1000, 1)))
         )
     )
+    assert(tracker.getAllMapOutputStatuses(10).toSet === Set(mapStatus1, mapStatus2))
 
     tracker.unregisterShuffle(10)
     tracker.stop()
