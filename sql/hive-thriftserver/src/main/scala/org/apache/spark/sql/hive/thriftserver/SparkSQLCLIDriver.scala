@@ -571,8 +571,10 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         if (insideSingleQuote || insideDoubleQuote || insideComment) {
           // do not split
         } else {
-          // split, do not include ; itself
-          ret.add(line.substring(beginIndex, index))
+          if (contentBegin) {
+            // split, do not include ; itself
+            ret.add(line.substring(beginIndex, index))
+          }
           beginIndex = index + 1
           contentBegin = false
         }
