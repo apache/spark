@@ -210,24 +210,20 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case ExecutorSigPWRReceived =>
+      var driverNotified = false
       try {
-        var failToTellDriver = driver.isEmpty
-        try {
-          if (driver.nonEmpty) {
-            // Tell driver that we are starting decommissioning so it stops trying to schedule us
-            driver.get.askSync[Boolean](ExecutorDecommissioning(executorId))
-          } else {
-            logError("No driver to message decommissioning.")
-          }
-        } catch {
-          case e: Exception =>
-            logError("Fail to tell driver that we are starting decommissioning", e)
-            failToTellDriver = true
+        driver.foreach { driverRef =>
+          // Tell driver that we are starting decommissioning so it stops trying to schedule us
+          driverNotified = driverRef.askSync[Boolean](ExecutorDecommissioning(executorId))
+          if (driverNotified) decommissionSelf()
         }
-        if (!failToTellDriver) decommissionSelf() else decommissioned = false
       } catch {
         case e: Exception =>
-          logError("Fail to decommission self (but driver has been notified).", e)
+          if (driverNotified) {
+            logError("Fail to decommission self (but driver has been notified).", e)
+          } else {
+            logError("Fail to tell driver that we are starting decommissioning", e)
+          }
           decommissioned = false
       }
       context.reply(decommissioned)
