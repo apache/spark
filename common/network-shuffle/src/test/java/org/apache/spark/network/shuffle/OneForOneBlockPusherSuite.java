@@ -28,6 +28,7 @@ import io.netty.buffer.Unpooled;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static org.mockito.AdditionalMatchers.*;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -67,8 +68,8 @@ public class OneForOneBlockPusherSuite {
       blocks,
       blockIds,
       Arrays.asList(new PushBlockStream("app-id", "b0", 0),
-          new PushBlockStream("app-id", "b1", 1),
-          new PushBlockStream("app-id", "b2", 2)));
+        new PushBlockStream("app-id", "b1", 1),
+        new PushBlockStream("app-id", "b2", 2)));
 
     for (int i = 0; i < 3; i ++) {
       verify(listener, times(1)).onBlockFetchSuccess(eq("b" + i), any());
@@ -84,11 +85,11 @@ public class OneForOneBlockPusherSuite {
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
     BlockFetchingListener listener = pushBlocks(
-        blocks,
-        blockIds,
-        Arrays.asList(new PushBlockStream("app-id", "b0", 0),
-            new PushBlockStream("app-id", "b1", 1),
-            new PushBlockStream("app-id", "b2", 2)));
+      blocks,
+      blockIds,
+      Arrays.asList(new PushBlockStream("app-id", "b0", 0),
+        new PushBlockStream("app-id", "b1", 1),
+        new PushBlockStream("app-id", "b2", 2)));
 
     verify(listener, times(1)).onBlockFetchSuccess(eq("b0"), any());
     verify(listener, times(1)).onBlockFetchFailure(eq("b1"), any());
@@ -104,13 +105,14 @@ public class OneForOneBlockPusherSuite {
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
     BlockFetchingListener listener = pushBlocks(
-        blocks,
-        blockIds,
-        Arrays.asList(new PushBlockStream("app-id", "b0", 0),
-            new PushBlockStream("app-id", "b1", 1),
-            new PushBlockStream("app-id", "b2", 2)));
+      blocks,
+      blockIds,
+      Arrays.asList(new PushBlockStream("app-id", "b0", 0),
+        new PushBlockStream("app-id", "b1", 1),
+        new PushBlockStream("app-id", "b2", 2)));
 
     verify(listener, times(1)).onBlockFetchSuccess(eq("b0"), any());
+    verify(listener, times(0)).onBlockFetchSuccess(not(eq("b0")), any());
     verify(listener, times(0)).onBlockFetchFailure(eq("b0"), any());
     verify(listener, times(1)).onBlockFetchFailure(eq("b1"), any());
     verify(listener, times(2)).onBlockFetchFailure(eq("b2"), any());
@@ -128,7 +130,7 @@ public class OneForOneBlockPusherSuite {
     TransportClient client = mock(TransportClient.class);
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
     OneForOneBlockPusher pusher =
-        new OneForOneBlockPusher(client, "app-id", blockIds, listener, blocks);
+      new OneForOneBlockPusher(client, "app-id", blockIds, listener, blocks);
 
     Iterator<Map.Entry<String, ManagedBuffer>> blockIterator = blocks.entrySet().iterator();
     Iterator<BlockTransferMessage> msgIterator = expectMessages.iterator();
@@ -141,10 +143,11 @@ public class OneForOneBlockPusherSuite {
       if (block != null && block.nioByteBuffer().capacity() > 0) {
         callback.onSuccess(header);
       } else if (block != null) {
-        callback.onFailure(new RuntimeException("Failed " + entry.getKey()));
+        callback.onFailure(new RuntimeException("Failed " + entry.getKey()
+          + ErrorHandler.BlockPushErrorHandler.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX));
       } else {
         callback.onFailure(new RuntimeException("Quick fail " + entry.getKey()
-            + ErrorHandler.BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX));
+          + ErrorHandler.BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX));
       }
       assertEquals(msgIterator.next(), message);
       return null;

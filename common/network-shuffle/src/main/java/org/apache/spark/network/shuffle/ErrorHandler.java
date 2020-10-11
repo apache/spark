@@ -19,6 +19,8 @@ package org.apache.spark.network.shuffle;
 
 import java.net.ConnectException;
 
+import com.google.common.base.Throwables;
+
 /**
  * Plugs into {@link RetryingBlockFetcher} to further control when an exception should be retried
  * and logged.
@@ -51,7 +53,7 @@ public interface ErrorHandler {
      * will not retry pushing the block nor log the exception on the client side.
      */
     public static final String TOO_LATE_MESSAGE_SUFFIX =
-        "received after merged shuffle is finalized";
+      "received after merged shuffle is finalized";
 
     /**
      * String constant used for generating exception messages indicating the server couldn't
@@ -61,8 +63,7 @@ public interface ErrorHandler {
      * this reason, we will not log the exception on the client side.
      */
     public static final String COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX =
-        "Couldn't find an opportunity to write block";
-
+      "Couldn't find an opportunity to write block";
 
     @Override
     public boolean shouldRetryError(Throwable t) {
@@ -71,22 +72,14 @@ public interface ErrorHandler {
         return false;
       }
       // If the block is too late, there is no need to retry it
-      return (t.getMessage() == null ||
-          !t.getMessage().contains(TOO_LATE_MESSAGE_SUFFIX)) &&
-          (t.getCause() == null || t.getCause().getMessage() == null ||
-          !t.getCause().getMessage().contains(TOO_LATE_MESSAGE_SUFFIX));
+      return !Throwables.getStackTraceAsString(t).contains(TOO_LATE_MESSAGE_SUFFIX);
     }
 
     @Override
     public boolean shouldLogError(Throwable t) {
-      return (t.getMessage() == null ||
-          (!t.getMessage().contains(COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX) &&
-          !t.getMessage().contains(TOO_LATE_MESSAGE_SUFFIX))) &&
-          (t.getCause() == null || t.getCause().getMessage() == null ||
-          (!t.getCause().getMessage()
-              .contains(COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX) &&
-          !t.getCause().getMessage()
-              .contains(TOO_LATE_MESSAGE_SUFFIX)));
+      String errorStackTrace = Throwables.getStackTraceAsString(t);
+      return !errorStackTrace.contains(COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX) &&
+        !errorStackTrace.contains(TOO_LATE_MESSAGE_SUFFIX);
     }
   }
 }

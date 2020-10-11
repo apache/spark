@@ -135,7 +135,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     for (int i = 0; i < blockIds.length; i++) {
       buffersWithId.put(blockIds[i], buffers[i]);
     }
-    logger.debug("Push shuffle blocks to {}:{} with {} blocks", host, port, blockIds.length);
+    logger.debug("Push {} shuffle blocks to {}:{}", blockIds.length, host, port);
     try {
       RetryingBlockFetcher.BlockFetchStarter blockPushStarter =
           (blockIds1, listener1) -> {

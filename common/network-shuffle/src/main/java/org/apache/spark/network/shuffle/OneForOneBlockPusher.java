@@ -113,14 +113,11 @@ public class OneForOneBlockPusher {
   public void start() {
     logger.debug("Start pushing {} blocks", blockIds.length);
     for (int i = 0; i < blockIds.length; i++) {
-      if (!buffers.containsKey(blockIds[i])) {
-        logger.warn("Ignore block push request for block id {} since no buffer "
-            + "is found for this block.", blockIds[i]);
-      } else {
-        ByteBuffer header = new PushBlockStream(appId, blockIds[i], i).toByteBuffer();
-        client.uploadStream(new NioManagedBuffer(header), buffers.get(blockIds[i]),
-            new BlockPushCallback(i, blockIds[i]));
-      }
+      assert buffers.containsKey(blockIds[i]) : "Could not find the block buffer for block "
+        + blockIds[i];
+      ByteBuffer header = new PushBlockStream(appId, blockIds[i], i).toByteBuffer();
+      client.uploadStream(new NioManagedBuffer(header), buffers.get(blockIds[i]),
+        new BlockPushCallback(i, blockIds[i]));
     }
   }
 }

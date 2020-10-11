@@ -70,7 +70,7 @@ public class MergeStatuses extends BlockTransferMessage {
   public int hashCode() {
     int objectHashCode = Objects.hashCode(shuffleId);
     return (objectHashCode * 41 + Arrays.hashCode(reduceIds) * 41
-        + Arrays.hashCode(bitmaps) * 41 + Arrays.hashCode(sizes));
+      + Arrays.hashCode(bitmaps) * 41 + Arrays.hashCode(sizes));
   }
 
   @Override
@@ -86,9 +86,9 @@ public class MergeStatuses extends BlockTransferMessage {
     if (other != null && other instanceof MergeStatuses) {
       MergeStatuses o = (MergeStatuses) other;
       return Objects.equal(shuffleId, o.shuffleId)
-          && Arrays.equals(bitmaps, o.bitmaps)
-          && Arrays.equals(reduceIds, o.reduceIds)
-          && Arrays.equals(sizes, o.sizes);
+        && Arrays.equals(bitmaps, o.bitmaps)
+        && Arrays.equals(reduceIds, o.reduceIds)
+        && Arrays.equals(sizes, o.sizes);
     }
     return false;
   }
@@ -96,9 +96,9 @@ public class MergeStatuses extends BlockTransferMessage {
   @Override
   public int encodedLength() {
     return 4 // int
-        + Encoders.BitmapArrays.encodedLength(bitmaps)
-        + Encoders.IntArrays.encodedLength(reduceIds)
-        + Encoders.LongArrays.encodedLength(sizes);
+      + Encoders.BitmapArrays.encodedLength(bitmaps)
+      + Encoders.IntArrays.encodedLength(reduceIds)
+      + Encoders.LongArrays.encodedLength(sizes);
   }
 
   @Override

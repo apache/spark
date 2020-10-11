@@ -138,8 +138,9 @@ public abstract class BlockStoreClient implements Closeable {
   }
 
   /**
-   * Push a sequence of shuffle blocks to a remote node asynchronously to be merged into
-   * a larger shuffle block.
+   * Push a sequence of shuffle blocks in a best-effort manner to a remote node asynchronously.
+   * These shuffle blocks, along with blocks pushed by other clients, will be merged into
+   * per-shuffle partition merged shuffle files on the destination node.
    *
    * @param host the host of the remote node.
    * @param port the port of the remote node.

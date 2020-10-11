@@ -51,9 +51,9 @@ public class FinalizeShuffleMerge extends BlockTransferMessage {
   @Override
   public String toString() {
     return Objects.toStringHelper(this)
-        .add("appId", appId)
-        .add("shuffleId", shuffleId)
-        .toString();
+      .add("appId", appId)
+      .add("shuffleId", shuffleId)
+      .toString();
   }
 
   @Override
@@ -61,7 +61,7 @@ public class FinalizeShuffleMerge extends BlockTransferMessage {
     if (other != null && other instanceof FinalizeShuffleMerge) {
       FinalizeShuffleMerge o = (FinalizeShuffleMerge) other;
       return Objects.equal(appId, o.appId)
-          && shuffleId == o.shuffleId;
+        && shuffleId == o.shuffleId;
     }
     return false;
   }

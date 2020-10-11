@@ -238,7 +238,7 @@ public class ExternalBlockHandlerSuite {
     FinalizeShuffleMerge req = new FinalizeShuffleMerge("app0", 0);
     RoaringBitmap bitmap = RoaringBitmap.bitmapOf(0, 1, 2);
     MergeStatuses statuses = new MergeStatuses(0, new RoaringBitmap[]{bitmap},
-        new int[]{3}, new long[]{30});
+      new int[]{3}, new long[]{30});
     when(mergedShuffleManager.finalizeShuffleMerge(req)).thenReturn(statuses);
 
     ByteBuffer reqBuf = req.toByteBuffer();
@@ -249,7 +249,7 @@ public class ExternalBlockHandlerSuite {
     verify(callback, never()).onFailure(any());
 
     MergeStatuses mergeStatuses =
-        (MergeStatuses) BlockTransferMessage.Decoder.fromByteBuffer(response.getValue());
+      (MergeStatuses) BlockTransferMessage.Decoder.fromByteBuffer(response.getValue());
     assertEquals(mergeStatuses, statuses);
 
     Timer finalizeShuffleMergeLatencyMillis = (Timer) ((ExternalBlockHandler) handler)

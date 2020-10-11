@@ -76,7 +76,7 @@ public class ExternalBlockHandler extends RpcHandler {
       File registeredExecutorFile,
       MergedShuffleFileManager mergeManager) throws IOException {
     this(new OneForOneStreamManager(),
-        new ExternalShuffleBlockResolver(conf, registeredExecutorFile), mergeManager);
+      new ExternalShuffleBlockResolver(conf, registeredExecutorFile), mergeManager);
   }
 
   @VisibleForTesting
@@ -203,7 +203,7 @@ public class ExternalBlockHandler extends RpcHandler {
         callback.onSuccess(statuses.toByteBuffer());
       } catch(IOException e) {
         throw new RuntimeException(String.format("Error while finalizing shuffle merge "
-            + "for application %s shuffle %d", msg.appId, msg.shuffleId));
+          + "for application %s shuffle %d", msg.appId, msg.shuffleId));
       } finally {
         responseDelayContext.stop();
       }

@@ -56,10 +56,10 @@ public class PushBlockStream extends BlockTransferMessage {
   @Override
   public String toString() {
     return Objects.toStringHelper(this)
-        .add("appId", appId)
-        .add("blockId", blockId)
-        .add("index", index)
-        .toString();
+      .add("appId", appId)
+      .add("blockId", blockId)
+      .add("index", index)
+      .toString();
   }
 
   @Override
@@ -67,8 +67,8 @@ public class PushBlockStream extends BlockTransferMessage {
     if (other != null && other instanceof PushBlockStream) {
       PushBlockStream o = (PushBlockStream) other;
       return Objects.equal(appId, o.appId)
-          && Objects.equal(blockId, o.blockId)
-          && index == o.index;
+        && Objects.equal(blockId, o.blockId)
+        && index == o.index;
     }
     return false;
   }
@@ -76,7 +76,7 @@ public class PushBlockStream extends BlockTransferMessage {
   @Override
   public int encodedLength() {
     return Encoders.Strings.encodedLength(appId)
-        + Encoders.Strings.encodedLength(blockId) + 4;
+      + Encoders.Strings.encodedLength(blockId) + 4;
   }
 
   @Override

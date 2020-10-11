@@ -229,12 +229,12 @@ public class RetryingBlockFetcher {
           } else {
             if (errorHandler.shouldLogError(exception)) {
               logger.error(
-                  String.format("Failed to fetch block %s, and will not retry (%s retries)",
-                      blockId, retryCount), exception);
+                String.format("Failed to fetch block %s, and will not retry (%s retries)",
+                  blockId, retryCount), exception);
             } else {
               logger.debug(
-                  String.format("Failed to fetch block %s, and will not retry (%s retries)",
-                      blockId, retryCount), exception);
+                String.format("Failed to fetch block %s, and will not retry (%s retries)",
+                  blockId, retryCount), exception);
             }
             outstandingBlocksIds.remove(blockId);
             shouldForwardFailure = true;
