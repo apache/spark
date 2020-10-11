@@ -315,37 +315,58 @@ SELECT COUNT(*), c2 FROM test GROUP BY c2;
 +---------+---------+
 ```
 
-### Type conversion
+### Type Conversion
 
-In general, an expression can contain different data types, type conversion is the transformation of some data types into others in order to solve the expressions. 
+In general, an expression can contain different data types and type conversion is the transformation of some data types into others in order to resolve type mismatches. 
 Spark supports both implicit conversions by type coercion and explicit conversions by explicit casting and store assignment casting.
 
-#### Type coercion in operations between different types 
+#### Type Coercion in Operations between Different Types 
 
-The following matrix shows the resulting type to which they are implicitly converted to resolve an expression involving different data types 
+Type Coercion refers to the automatic or implicit conversion of values from one type to another when you need to to resolve type mismatches.
+The following matrix shows the resulting type to which they are implicitly converted to resolve an expression involving different data types.
 
-Numeric expresions:
+**Numeric expressions**:
 
-|               |ByteType   |ShortType  |IntegerType |LongType  |FloatType |DoubleType |StringType |
-|---------------|-----------|-----------|------------|----------|----------|-----------|-----------|
-|**ByteType**   |--         |ShortType  |IntegerType |LongType  |FloatType |DoubleType |DoubleType |
-|**ShortType**  |ShortType  |--         |IntegerType |LongType  |FloatType |DoubleType |DoubleType |
-|**IntegerType**|IntegerType|IntegerType|--          |LongType  |FloatType |DoubleType |DoubleType |
-|**LongType**   |LongType   |LongType   |LongType    |--        |FloatType |DoubleType |DoubleType |
-|**FloatType**  |FloatType  |FloatType  |FloatType   |FloatType |--        |DoubleType |DoubleType |
-|**DoubleType** |DoubleType |DoubleType |DoubleType  |DoubleType|DoubleType|--         |DoubleType |
-|**StringType** |DoubleType |DoubleType |DoubleType  |DoubleType|DoubleType|DoubleType |--         |
+|               |ByteType   |ShortType  |IntegerType |LongType   |FloatType             |DoubleType            |StringType |DecimalType                  |
+|---------------|-----------|-----------|------------|-----------|----------------------|----------------------|-----------|-----------------------------|
+|**ByteType**   |--         |ShortType  |IntegerType |LongType   |FloatType             |DoubleType            |DoubleType |DecimalType(3,0)<sup>1</sup> |
+|**ShortType**  |ShortType  |--         |IntegerType |LongType   |FloatType             |DoubleType            |DoubleType |DecimalType(5,0)<sup>1</sup> |
+|**IntegerType**|IntegerType|IntegerType|--          |LongType   |FloatType             |DoubleType            |DoubleType |DecimalType(10,0)<sup>1</sup>|
+|**LongType**   |LongType   |LongType   |LongType    |--         |FloatType             |DoubleType            |DoubleType |DecimalType(20,0)<sup>1</sup>|
+|**FloatType**  |FloatType  |FloatType  |FloatType   |FloatType  |--                    |DoubleType            |DoubleType |DoubleType                   |
+|**DoubleType** |DoubleType |DoubleType |DoubleType  |DoubleType |DoubleType            |--                    |DoubleType |DoubleType                   |
+|**StringType** |DoubleType |DoubleType |DoubleType  |DoubleType |DoubleType            |DoubleType            |--         |DoubleType                   |
+|**DecimalType**|DecimalType|DecimalType|DecimalType |DecimalType|DoubleType<sup>2</sup>|DoubleType<sup>2</sup>|DoubleType |--                           |
 
-The case of DecimalType, is treated differently, for example, there is no common type for double and decimal because double's range is larger than decimal, and yet decimal is more precise than double, but in an expresion, we would cast the decimal into double.
+**Note 1**: DecimalType(precision,scale)   
+**Note 2**: In these cases DecimalType can lose precision, there is no common type for decimal and double because double's range is larger than decimal, and yet decimal is more precise than double so when we cast Decimaltype into DobleType it could lose precision.
 
-Time expresions:
+**Time expressions**:
 
 |                  |DateType     |TimestampType |
 |------------------|-------------|--------------|
 |**DateType**      |--           |TimestampType |
 |**TimestampType** |TimestampType|--            |
 
-#### Type coercion examples
+
+**Possible implicit conversions**:
+
+|                  |ByteType  |ShortType |IntegerType |LongType |FloatType |DoubleType |DecimalType|StringType |BinaryType |BooleanType |TimestampType |DateType|
+|------------------|----------|----------|------------|---------|----------|-----------|-----------|-----------|-----------|------------|--------------|--------|
+|**ByteType**      |--        |X         |X           |X        |X         |X          |X          |X          |           |            |              |        |
+|**ShortType**     |X         |--        |X           |X        |X         |X          |X          |X          |           |            |              |        |
+|**IntegerType**   |X         |X         |--          |X        |X         |X          |X          |X          |           |            |              |        |
+|**LongType**      |X         |X         |X           |--       |X         |X          |X          |X          |           |            |              |        |
+|**FloatType**     |X         |X         |X           |X        |--        |X          |X          |X          |           |            |              |        |
+|**DoubleType**    |X         |X         |X           |X        |X         |--         |X          |X          |           |            |              |        |
+|**DecimalType**   |X         |X         |X           |X        |X         |X          |--         |X          |           |            |              |        |
+|**StringType**    |X         |X         |X           |X        |X         |X          |X          |--         |X          |X           |X             |X       |
+|**BinaryType**    |          |          |            |         |          |           |           |X          |--         |            |              |        |
+|**BooleanType**   |          |          |            |         |          |           |           |X          |           |--          |              |        |
+|**TimestampType** |          |          |            |         |          |           |           |X          |           |            |--            |X       |
+|**DateType**      |          |          |            |         |          |           |           |X          |           |            |X             |--      |
+
+#### Type Coercion Examples
 
 ```sql
 DESCRIBE TABLE numericTable;
@@ -378,31 +399,33 @@ SELECT MONTHS_BETWEEN(dateColumn,timestampColumn) FROM dateTable;
 
 ```
 
-#### Explicit casting and store assignment casting
+#### Explicit Casting and Store Assignment Casting
 
 When you are using explicit casting by CAST or doing INSERT INTO operations that need to cast types to different store types, the following matrix shows if the conversion is allowed
 
-|             |ByteType  |ShortType |IntegerType |LongType |FloatType |DoubleType |StringType |BinaryType |BooleanType |TimestampType |DateType|
-|-------------|----------|----------|------------|---------|----------|-----------|-----------|-----------|------------|--------------|--------|
-|**ByteType** |--        |X         |X           |X        |X         |X          |X          |X          |X           |X             |        |
-|**ShortType**|*         |--        |X           |X        |X         |X          |X          |X          |X           |X             |        |
-|**IntegerType**|*       |*         |--          |X        |X         |X          |X          |X          |X           |X             |        |
-|**LongType** |*         |*         |*           |--       |X         |X          |X          |X          |X           |X             |        |
-|**FloatType** |*        |*         |*           |*        |--        |X          |X          |           |X           |X             |        |
-|**DoubleType** |*       |*         |*           |*        |*         |--         |X          |           |X           |X             |        |
-|**StringType** |*       |*         |*           |*        |*         |*          |--         |X          |X           |X             |X       |
-|**BinaryType** |        |          |            |         |          |           |           |--         |            |              |        |
-|**BooleanType** |X      |X         |X           |X        |X         |X          |X          |           |--          |              |        |
-|**TimestampType** |*    |*         |*           |X        |X         |X          |X          |           |            |--            |X       |
-|**DateType** |*         |*         |X           |X        |X         |X          |X          |           |            |X             |--      |
+|             |ByteType  |ShortType |IntegerType |LongType |FloatType |DoubleType |DecimalType|StringType |BinaryType |BooleanType |TimestampType |DateType|
+|-------------|----------|----------|------------|---------|----------|-----------|-----------|-----------|-----------|------------|--------------|--------|
+|**ByteType** |--        |X         |X           |X        |X         |X          |X          |X          |X          |X           |X             |        |
+|**ShortType**|*         |--        |X           |X        |X         |X          |X          |X          |X          |X           |X             |        |
+|**IntegerType**|*       |*         |--          |X        |X         |X          |X          |X          |X          |X           |X             |        |
+|**LongType** |*         |*         |*           |--       |X         |X          |X          |X          |X          |X           |X             |        |
+|**FloatType** |*        |*         |*           |*        |--        |X          |X          |X          |           |X           |X             |        |
+|**DoubleType** |*       |*         |*           |*        |*         |--         |X          |X          |           |X           |X             |        |
+|**DecimalType**|*       |*         |*           |*        |$         |$          |--         |X          |           |X           |X             |        |
+|**StringType** |*       |*         |*           |*        |*         |*          |X          |--         |X          |X           |X             |X       |
+|**BinaryType** |        |          |            |         |          |           |           |           |--         |            |              |        |
+|**BooleanType** |X      |X         |X           |X        |X         |X          |X          |X          |           |--          |X             |        |
+|**TimestampType** |*    |*         |*           |X        |X         |X          |X          |X          |           |X           |--            |X       |
+|**DateType** |*         |*         |X           |X        |X         |X          |X          |X          |           |X           |X             |--      |
 
 X: Conversion allowed (cast ByteType in ShortType)  
 *: An overflow can occur (cast ShortType in ByteType)
+$: Lost precision can occur
 
-If an overflow occurs and ANSI compliance is activated (spark.sql.ansi.enabled is set to true for casting or spark.sql.storeAssignmentPolicy=ANSI for store assignment casting) an exception will be thrown. 
+If an overflow occurs and ANSI compliance is activated (`spark.sql.ansi.enabled` is set to true for casting or `spark.sql.storeAssignmentPolicy=ANSI` for store assignment casting) an exception will be thrown. 
 Otherwise, a truncate value will be used. See more on [Ansi Compliance](sql-ref-ansi-compliance.html#type-conversion).
 
-#### Type Casting examples
+#### Type Casting Examples
 
 ```sql
 DESCRIBE castTable;
@@ -425,7 +448,7 @@ DESCRIBE SELECT CAST(IntegerColumn AS LONG), CAST(longColumn AS DOUBLE), CAST(Fl
 
 ```
 
-#### Store assignment casting examples
+#### Store Assignment Casting Examples
 
 ```sql
 DESCRIBE storeTable;
