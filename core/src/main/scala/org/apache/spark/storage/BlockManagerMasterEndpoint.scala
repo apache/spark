@@ -163,8 +163,13 @@ class BlockManagerMasterEndpoint(
       context.reply(true)
 
     case DecommissionBlockManagers(executorIds) =>
+      // Mark corresponding BlockManagers as being decommissioning by adding them to
+      // decommissioningBlockManagerSet, so they won't be used to replicate or migrate blocks.
+      // Note that BlockManagerStorageEndpoint will be notified about decommissioning when the
+      // executor is notified(see BlockManager.decommissionSelf), so we don't need to send the
+      // notification here.
       val bms = executorIds.flatMap(blockManagerIdByExecutor.get)
-      logInfo(s"Mark BlockManagers (${bms.mkString(", ")}) as decommissioned.")
+      logInfo(s"Mark BlockManagers (${bms.mkString(", ")}) as being decommissioning.")
       decommissioningBlockManagerSet ++= bms
       context.reply(true)
 
