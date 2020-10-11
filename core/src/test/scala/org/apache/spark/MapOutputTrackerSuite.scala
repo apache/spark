@@ -86,21 +86,12 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
     tracker.registerShuffle(10, 2)
-    assert(tracker.containsShuffle(10))
-    val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
-    val size10000 = MapStatus.decompressSize(MapStatus.compressSize(10000L))
     val mapStatus1 = MapStatus(BlockManagerId("a", "hostA", 1000),
       Array(1000L, 10000L), 5, Some("metadata1"))
     val mapStatus2 = MapStatus(BlockManagerId("b", "hostB", 1000),
       Array(10000L, 1000L), 6, Some(1001))
     tracker.registerMapOutput(10, 0, mapStatus1)
     tracker.registerMapOutput(10, 1, mapStatus2)
-    val statuses = tracker.getMapSizesByExecutorId(10, 0)
-    assert(statuses.toSet ===
-      Seq((BlockManagerId("a", "hostA", 1000),
-        ArrayBuffer((ShuffleBlockId(10, 5, 0), size1000, 0))),
-        (BlockManagerId("b", "hostB", 1000),
-          ArrayBuffer((ShuffleBlockId(10, 6, 0), size10000, 1)))).toSet)
     val allStatuses = tracker.getAllMapOutputStatuses(10)
     assert(allStatuses.toSet === Set(mapStatus1, mapStatus2))
     assert(0 == tracker.getNumCachedSerializedBroadcast)
