@@ -123,8 +123,9 @@ class AppClientSuite
       // Send a decommission self to all the workers
       // Note: normally the worker would send this on their own.
       workers.foreach { worker =>
-       worker.decommissionSelf()
-       master.self.send(WorkerDecommissioning(worker.workerId, worker.self))
+        worker.decommissionSelf()
+        // send the notice to Master to tell the decommission of Workers
+        master.self.send(WorkerDecommissioning(worker.workerId, worker.self))
       }
 
       // Decommissioning is async.
