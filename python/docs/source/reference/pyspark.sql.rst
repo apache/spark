@@ -292,6 +292,7 @@ Functions
     asc_nulls_last
     ascii
     asin
+    assert_true
     atan
     atan2
     avg
@@ -420,6 +421,7 @@ Functions
     pow
     quarter
     radians
+    raise_error
     rand
     randn
     rank

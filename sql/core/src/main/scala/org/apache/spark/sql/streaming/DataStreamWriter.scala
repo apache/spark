@@ -27,7 +27,7 @@ import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{SupportsWrite, TableProvider}
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 /**
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
@@ -45,6 +46,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 @Evolving
 final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
+  import DataStreamWriter._
 
   private val df = ds.toDF()
 
@@ -294,63 +296,79 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   @throws[TimeoutException]
   def start(): StreamingQuery = startInternal(None)
 
+  /**
+   * Starts the execution of the streaming query, which will continually output results to the given
+   * table as new data arrives. The returned [[StreamingQuery]] object can be used to interact with
+   * the stream.
+   *
+   * @since 3.1.0
+   */
+  @throws[TimeoutException]
+  def saveAsTable(tableName: String): StreamingQuery = {
+    this.source = SOURCE_NAME_TABLE
+    this.tableName = tableName
+    startInternal(None)
+  }
+
   private def startInternal(path: Option[String]): StreamingQuery = {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "write files of Hive data source directly.")
     }
 
-    if (source == "memory") {
-      assertNotPartitioned("memory")
+    if (source == SOURCE_NAME_TABLE) {
+      assertNotPartitioned(SOURCE_NAME_TABLE)
+
+      import df.sparkSession.sessionState.analyzer.CatalogAndIdentifier
+
+      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+      val originalMultipartIdentifier = df.sparkSession.sessionState.sqlParser
+        .parseMultipartIdentifier(tableName)
+      val CatalogAndIdentifier(catalog, identifier) = originalMultipartIdentifier
+
+      // Currently we don't create a logical streaming writer node in logical plan, so cannot rely
+      // on analyzer to resolve it. Directly lookup only for temp view to provide clearer message.
+      // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
+      if (df.sparkSession.sessionState.catalog.isTempView(originalMultipartIdentifier)) {
+        throw new AnalysisException(s"Temporary view $tableName doesn't support streaming write")
+      }
+
+      val tableInstance = catalog.asTableCatalog.loadTable(identifier)
+
+      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+      val sink = tableInstance match {
+        case t: SupportsWrite if t.supports(STREAMING_WRITE) => t
+        case t => throw new AnalysisException(s"Table $tableName doesn't support streaming " +
+          s"write - $t")
+      }
+
+      startQuery(sink, extraOptions)
+    } else if (source == SOURCE_NAME_MEMORY) {
+      assertNotPartitioned(SOURCE_NAME_MEMORY)
       if (extraOptions.get("queryName").isEmpty) {
         throw new AnalysisException("queryName must be specified for memory sink")
       }
       val sink = new MemorySink()
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink, df.schema.toAttributes))
-      val chkpointLoc = extraOptions.get("checkpointLocation")
       val recoverFromChkpoint = outputMode == OutputMode.Complete()
-      val query = df.sparkSession.sessionState.streamingQueryManager.startQuery(
-        extraOptions.get("queryName"),
-        chkpointLoc,
-        df,
-        extraOptions.toMap,
-        sink,
-        outputMode,
-        useTempCheckpointLocation = true,
-        recoverFromCheckpointLocation = recoverFromChkpoint,
-        trigger = trigger)
+      val query = startQuery(sink, extraOptions, recoverFromCheckpoint = recoverFromChkpoint)
       resultDf.createOrReplaceTempView(query.name)
       query
-    } else if (source == "foreach") {
-      assertNotPartitioned("foreach")
+    } else if (source == SOURCE_NAME_FOREACH) {
+      assertNotPartitioned(SOURCE_NAME_FOREACH)
       val sink = ForeachWriterTable[T](foreachWriter, ds.exprEnc)
-      df.sparkSession.sessionState.streamingQueryManager.startQuery(
-        extraOptions.get("queryName"),
-        extraOptions.get("checkpointLocation"),
-        df,
-        extraOptions.toMap,
-        sink,
-        outputMode,
-        useTempCheckpointLocation = true,
-        trigger = trigger)
-    } else if (source == "foreachBatch") {
-      assertNotPartitioned("foreachBatch")
+      startQuery(sink, extraOptions)
+    } else if (source == SOURCE_NAME_FOREACH_BATCH) {
+      assertNotPartitioned(SOURCE_NAME_FOREACH_BATCH)
       if (trigger.isInstanceOf[ContinuousTrigger]) {
-        throw new AnalysisException("'foreachBatch' is not supported with continuous trigger")
+        throw new AnalysisException(s"'$source' is not supported with continuous trigger")
       }
       val sink = new ForeachBatchSink[T](foreachBatchWriter, ds.exprEnc)
-      df.sparkSession.sessionState.streamingQueryManager.startQuery(
-        extraOptions.get("queryName"),
-        extraOptions.get("checkpointLocation"),
-        df,
-        extraOptions.toMap,
-        sink,
-        outputMode,
-        useTempCheckpointLocation = true,
-        trigger = trigger)
+      startQuery(sink, extraOptions)
     } else {
       val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
-      val disabledSources = df.sparkSession.sqlContext.conf.disabledV2StreamingWriters.split(",")
+      val disabledSources =
+        Utils.stringToSeq(df.sparkSession.sqlContext.conf.disabledV2StreamingWriters)
       val useV1Source = disabledSources.contains(cls.getCanonicalName) ||
         // file source v2 does not support streaming yet.
         classOf[FileDataSourceV2].isAssignableFrom(cls)
@@ -380,17 +398,26 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         createV1Sink(optionsWithPath)
       }
 
-      df.sparkSession.sessionState.streamingQueryManager.startQuery(
-        extraOptions.get("queryName"),
-        extraOptions.get("checkpointLocation"),
-        df,
-        optionsWithPath.originalMap,
-        sink,
-        outputMode,
-        useTempCheckpointLocation = source == "console" || source == "noop",
-        recoverFromCheckpointLocation = true,
-        trigger = trigger)
+      startQuery(sink, optionsWithPath)
     }
+  }
+
+  private def startQuery(
+      sink: Table,
+      newOptions: CaseInsensitiveMap[String],
+      recoverFromCheckpoint: Boolean = true): StreamingQuery = {
+    val useTempCheckpointLocation = SOURCES_ALLOW_ONE_TIME_QUERY.contains(source)
+
+    df.sparkSession.sessionState.streamingQueryManager.startQuery(
+      newOptions.get("queryName"),
+      newOptions.get("checkpointLocation"),
+      df,
+      newOptions.originalMap,
+      sink,
+      outputMode,
+      useTempCheckpointLocation = useTempCheckpointLocation,
+      recoverFromCheckpointLocation = recoverFromCheckpoint,
+      trigger = trigger)
   }
 
   private def createV1Sink(optionsWithPath: CaseInsensitiveMap[String]): Sink = {
@@ -409,7 +436,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * @since 2.0.0
    */
   def foreach(writer: ForeachWriter[T]): DataStreamWriter[T] = {
-    this.source = "foreach"
+    this.source = SOURCE_NAME_FOREACH
     this.foreachWriter = if (writer != null) {
       ds.sparkSession.sparkContext.clean(writer)
     } else {
@@ -433,7 +460,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    */
   @Evolving
   def foreachBatch(function: (Dataset[T], Long) => Unit): DataStreamWriter[T] = {
-    this.source = "foreachBatch"
+    this.source = SOURCE_NAME_FOREACH_BATCH
     if (function == null) throw new IllegalArgumentException("foreachBatch function cannot be null")
     this.foreachBatchWriter = function
     this
@@ -485,6 +512,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private var source: String = df.sparkSession.sessionState.conf.defaultDataSourceName
 
+  private var tableName: String = null
+
   private var outputMode: OutputMode = OutputMode.Append
 
   private var trigger: Trigger = Trigger.ProcessingTime(0L)
@@ -496,4 +525,17 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   private var foreachBatchWriter: (Dataset[T], Long) => Unit = null
 
   private var partitioningColumns: Option[Seq[String]] = None
+}
+
+object DataStreamWriter {
+  val SOURCE_NAME_MEMORY = "memory"
+  val SOURCE_NAME_FOREACH = "foreach"
+  val SOURCE_NAME_FOREACH_BATCH = "foreachBatch"
+  val SOURCE_NAME_CONSOLE = "console"
+  val SOURCE_NAME_TABLE = "table"
+  val SOURCE_NAME_NOOP = "noop"
+
+  // these writer sources are also used for one-time query, hence allow temp checkpoint location
+  val SOURCES_ALLOW_ONE_TIME_QUERY = Seq(SOURCE_NAME_MEMORY, SOURCE_NAME_FOREACH,
+    SOURCE_NAME_FOREACH_BATCH, SOURCE_NAME_CONSOLE, SOURCE_NAME_NOOP)
 }

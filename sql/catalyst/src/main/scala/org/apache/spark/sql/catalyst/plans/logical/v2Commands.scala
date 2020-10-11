@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
-import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
+import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -312,7 +312,18 @@ case class DescribeRelation(
     partitionSpec: TablePartitionSpec,
     isExtended: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = Seq(relation)
-  override def output: Seq[Attribute] = DescribeTableSchema.describeTableAttributes()
+  override def output: Seq[Attribute] = DescribeCommandSchema.describeTableAttributes()
+}
+
+/**
+ * The logical plan of the DESCRIBE relation_name col_name command that works for v2 tables.
+ */
+case class DescribeColumn(
+    relation: LogicalPlan,
+    colNameParts: Seq[String],
+    isExtended: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(relation)
+  override def output: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
 }
 
 /**

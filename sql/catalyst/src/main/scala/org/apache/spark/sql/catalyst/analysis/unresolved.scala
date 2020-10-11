@@ -268,7 +268,10 @@ case class UnresolvedFunction(
   override lazy val resolved = false
 
   override def prettyName: String = name.unquotedString
-  override def toString: String = s"'$name(${children.mkString(", ")})"
+  override def toString: String = {
+    val distinct = if (isDistinct) "distinct " else ""
+    s"'$name($distinct${children.mkString(", ")})"
+  }
 }
 
 object UnresolvedFunction {

@@ -16,6 +16,8 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.time.Instant
+
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, Pod, PodBuilder}
 
 import org.apache.spark.deploy.k8s.Constants._
@@ -29,6 +31,7 @@ object ExecutorLifecycleTestUtils {
     new PodBuilder(podWithAttachedContainerForId(executorId))
       .editOrNewStatus()
         .withPhase("failed")
+        .withStartTime(Instant.now.toString)
         .addNewContainerStatus()
           .withName("spark-executor")
           .withImage("k8s-spark")
@@ -59,6 +62,7 @@ object ExecutorLifecycleTestUtils {
     new PodBuilder(podWithAttachedContainerForId(executorId))
       .editOrNewStatus()
         .withPhase("pending")
+        .withStartTime(Instant.now.toString)
         .endStatus()
       .build()
   }
@@ -67,6 +71,7 @@ object ExecutorLifecycleTestUtils {
     new PodBuilder(podWithAttachedContainerForId(executorId))
       .editOrNewStatus()
         .withPhase("running")
+        .withStartTime(Instant.now.toString)
         .endStatus()
       .build()
   }

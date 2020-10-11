@@ -153,13 +153,16 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 s = s.astype(s.dtypes.categories.dtype)
             try:
                 array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
-            except pa.ArrowException as e:
-                error_msg = "Exception thrown when converting pandas.Series (%s) to Arrow " + \
-                            "Array (%s). It can be caused by overflows or other unsafe " + \
-                            "conversions warned by Arrow. Arrow safe type check can be " + \
-                            "disabled by using SQL config " + \
-                            "`spark.sql.execution.pandas.convertToArrowArraySafely`."
-                raise RuntimeError(error_msg % (s.dtype, t), e)
+            except ValueError as e:
+                if self._safecheck:
+                    error_msg = "Exception thrown when converting pandas.Series (%s) to " + \
+                                "Arrow Array (%s). It can be caused by overflows or other " + \
+                                "unsafe conversions warned by Arrow. Arrow safe type check " + \
+                                "can be disabled by using SQL config " + \
+                                "`spark.sql.execution.pandas.convertToArrowArraySafely`."
+                    raise ValueError(error_msg % (s.dtype, t)) from e
+                else:
+                    raise e
             return array
 
         arrs = []
