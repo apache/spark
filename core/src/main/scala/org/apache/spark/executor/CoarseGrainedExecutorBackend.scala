@@ -349,6 +349,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       logInfo("Will exit when finished decommissioning")
     } catch {
       case e: Exception =>
+        decommissioned = false
         logError("Unexpected error while decommissioning self", e)
     }
   }
