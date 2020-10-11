@@ -85,14 +85,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     if (env.conf.get(DECOMMISSION_ENABLED)) {
       logInfo("Registering PWR handler to trigger decommissioning.")
       SignalUtils.register("PWR", "Failed to register SIGPWR handler - " +
-      "disabling executor decommission feature.") {
-        if (self.askSync(ExecutorSigPWRReceived)) {
-          true
-        } else {
-          // we failed to decommission ourselves, let other handlers to handle the PWR signal
-          false
-        }
-      }
+        "disabling executor decommission feature.") (self.askSync[Boolean](ExecutorSigPWRReceived))
     }
 
     logInfo("Connecting to driver: " + driverUrl)
