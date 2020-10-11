@@ -419,7 +419,7 @@ When you are using explicit casting by CAST or doing INSERT INTO operations that
 |**DateType** |*         |*         |X           |X        |X         |X          |X          |X          |           |X           |X             |--      |
 
 X: Conversion allowed (cast ByteType in ShortType)  
-*: An overflow can occur (cast ShortType in ByteType)
+*: An overflow can occur (cast ShortType in ByteType)   
 $: Lost precision can occur
 
 If an overflow occurs and ANSI compliance is activated (`spark.sql.ansi.enabled` is set to true for casting or `spark.sql.storeAssignmentPolicy=ANSI` for store assignment casting) an exception will be thrown. 
