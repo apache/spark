@@ -127,7 +127,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       } else {
         operator match {
           case WindowExec(_, partitionSpec, orderSpec, _)
-            if (!partitionSpec.isEmpty) =>
+            if (!partitionSpec.isEmpty && !orderSpec.isEmpty) =>
             WindowSortExec(
               partitionSpec,
               orderSpec,

@@ -16,7 +16,7 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_bra
                               InputAdapter
                                 Window [_w0,i_category,i_brand,s_store_name,s_company_name,d_year]
                                   WholeStageCodegen (6)
-                                    WindowSort [i_category,i_brand,s_store_name,s_company_name,d_year]
+                                    Sort [i_category,i_brand,s_store_name,s_company_name,d_year]
                                       InputAdapter
                                         Exchange [i_category,i_brand,s_store_name,s_company_name,d_year] #2
                                           WholeStageCodegen (5)

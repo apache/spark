@@ -5,7 +5,7 @@ TakeOrderedAndProject [i_manager_id,avg_monthly_sales,sum_sales]
         InputAdapter
           Window [_w0,i_manager_id]
             WholeStageCodegen (6)
-              WindowSort [i_manager_id]
+              Sort [i_manager_id]
                 InputAdapter
                   Exchange [i_manager_id] #1
                     WholeStageCodegen (5)

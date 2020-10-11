@@ -54,7 +54,7 @@ public final class UnsafeExternalRowWindowSorter extends AbstractUnsafeExternalR
   private final UnsafeExternalRowSorter.PrefixComputer prefixComputerInWindow;
   private final boolean canUseRadixSortInWindow;
   private final long pageSizeBytes;
-  private static final int windowSorterMapMaxSize = 3;
+  private static final int windowSorterMapMaxSize = 1;
   private static final int totalNumSorters = windowSorterMapMaxSize + 1;
   private final HashMap<UnsafeRow,AbstractUnsafeExternalRowSorter> windowSorterMap;
   private final UnsafeExternalRowSorter mainSorter;

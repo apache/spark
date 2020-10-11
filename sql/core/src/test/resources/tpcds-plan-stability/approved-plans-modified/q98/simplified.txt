@@ -8,7 +8,7 @@ WholeStageCodegen (7)
               InputAdapter
                 Window [_w1,i_class]
                   WholeStageCodegen (5)
-                    WindowSort [i_class]
+                    Sort [i_class]
                       InputAdapter
                         Exchange [i_class] #2
                           WholeStageCodegen (4)
