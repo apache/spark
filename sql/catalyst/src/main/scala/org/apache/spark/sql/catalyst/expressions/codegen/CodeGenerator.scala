@@ -90,7 +90,7 @@ case class SubExprEliminationState(isNull: ExprValue, value: ExprValue)
  * @param codes Strings representing the codes that evaluate common subexpressions.
  * @param states Foreach expression that is participating in subexpression elimination,
  *               the state to use.
- * @param exprCodesNeedEvaluate Some expression codes that need to be evaluate before
+ * @param exprCodesNeedEvaluate Some expression codes that need to be evaluated before
  *                              calling common subexpressions.
  */
 case class SubExprCodes(
@@ -1060,6 +1060,10 @@ class CodegenContext extends Logging {
       }
     }
 
+    // For some operators, they do not require all its child's outputs to be evaluated in advance.
+    // Instead it only early evaluates part of outputs, for example, `ProjectExec` only early
+    // evaluate the outputs used more than twice. So we need to extract these variables used by
+    // subexpressions and evaluate them before subexpressions.
     val (inputVarsForAllFuncs, exprCodesNeedEvaluate) = commonExprs.map { expr =>
       val (inputVars, exprCodes) = getLocalInputVariableValues(this, expr.head)
       (inputVars.toSeq, exprCodes.toSeq)
@@ -1740,15 +1744,20 @@ object CodeGenerator extends Logging {
   }
 
   /**
-   * Extracts all the input variables from references and subexpression elimination states
-   * for a given `expr`. This result will be used to split the generated code of
-   * expressions into multiple functions.
+   * This methods returns two values in a Tuple.
+   *
+   * First value: Extracts all the input variables from references and subexpression
+   * elimination states for a given `expr`. This result will be used to split the
+   * generated code of expressions into multiple functions.
+   *
+   * Second value: Returns the set of `ExprCodes`s which are necessary codes before
+   * evaluating subexpressions.
    */
   def getLocalInputVariableValues(
       ctx: CodegenContext,
       expr: Expression,
-      subExprs: Map[Expression, SubExprEliminationState] = Map.empty):
-        (Set[VariableValue], Set[ExprCode]) = {
+      subExprs: Map[Expression, SubExprEliminationState] = Map.empty)
+      : (Set[VariableValue], Set[ExprCode]) = {
     val argSet = mutable.Set[VariableValue]()
     val exprCodesNeedEvaluate = mutable.Set[ExprCode]()
 
