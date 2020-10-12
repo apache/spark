@@ -178,8 +178,8 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
 }
 
 abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with NullIntolerant {
-  def value: Expression
-  def list: Seq[Expression]
+  def value: Expression = children.head
+  def list: Seq[Expression] = children.tail
   def isNot: Boolean
 
   override def inputTypes: Seq[AbstractDataType] = {
@@ -292,8 +292,8 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "str _FUNC_ patterns [, isNot]  - Returns true if `str` matches all the pattern string " +
-    ", null if any arguments are null, false otherwise.",
+  usage = "_FUNC_(str, pattern1, pattern2, ...) - Returns true if `str` matches all the pattern string, " +
+    "null if any arguments are null, false otherwise.",
   arguments = """
     Arguments:
       * str - a string expression
@@ -314,25 +314,25 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
   """,
   examples = """
     Examples:
-      > SELECT 'foo' _FUNC_('%foo%', '%oo');
+      > SELECT _FUNC_('foo', '%foo%', '%oo');
        true
-      > SELECT 'foo' _FUNC_('%foo%', '%bar%');
+      > SELECT _FUNC_('foo', '%foo%', '%bar%');
        false
-      > SELECT 'foo' _FUNC_('%foo%', null);
-       null
+      > SELECT _FUNC_('foo', '%foo%', null);
+       NULL
   """,
   note = """
     x LIKE ALL ('A%','%B','%C%') is equivalent to x LIKE 'A%' AND x LIKE '%B' AND x LIKE '%C%'.
   """,
   since = "3.1.0")
 // scalastyle:on line.size.limit
-case class LikeAll(value: Expression, list: Seq[Expression]) extends LikeAllBase {
+case class LikeAll(override val children: Seq[Expression]) extends LikeAllBase {
   override def isNot: Boolean = false
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "str _FUNC_ patterns [, isNot]  - Returns true if `str` not matches all the pattern string" +
+  usage = "_FUNC_(str, pattern1, pattern2, ...) - Returns true if `str` not matches all the pattern string" +
     ", null if any arguments are null, false otherwise.",
   arguments = """
     Arguments:
@@ -354,19 +354,19 @@ case class LikeAll(value: Expression, list: Seq[Expression]) extends LikeAllBase
   """,
   examples = """
     Examples:
-      > SELECT 'foo' _FUNC_('tee', '%yoo%');
+      > SELECT _FUNC_('foo', 'tee', '%yoo%');
        true
-      > SELECT 'foo' _FUNC_('%oo%', '%yoo%');
+      > SELECT _FUNC_('foo', '%oo%', '%yoo%');
        false
-      > SELECT 'foo' _FUNC_('%yoo%', null);
-       null
+      > SELECT _FUNC_('foo', '%yoo%', null);
+       NULL
   """,
   note = """
     x NOT LIKE ALL ('A%','%B','%C%') is equivalent to x NOT LIKE 'A%' AND x NOT LIKE '%B' AND x NOT LIKE '%C%'.
   """,
   since = "3.1.0")
 // scalastyle:on line.size.limit
-case class NotLikeAll(value: Expression, list: Seq[Expression]) extends LikeAllBase {
+case class NotLikeAll(override val children: Seq[Expression]) extends LikeAllBase {
   override def isNot: Boolean = true
 }
 
