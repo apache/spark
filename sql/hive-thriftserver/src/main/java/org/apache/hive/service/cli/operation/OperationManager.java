@@ -202,6 +202,7 @@ public class OperationManager extends AbstractService {
     Operation operation = getOperation(opHandle);
     OperationState opState = operation.getStatus().getState();
     if (opState == OperationState.CANCELED ||
+        opState == OperationState.TIMEDOUT ||
         opState == OperationState.CLOSED ||
         opState == OperationState.FINISHED ||
         opState == OperationState.ERROR ||

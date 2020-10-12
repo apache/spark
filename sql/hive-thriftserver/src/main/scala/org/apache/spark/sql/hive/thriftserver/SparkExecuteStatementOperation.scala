@@ -341,7 +341,7 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  private def timeoutCancel(): Unit = {
+  def timeoutCancel(): Unit = {
     synchronized {
       if (!getStatus.getState.isTerminal) {
         logInfo(s"Query with $statementId timed out after $queryTimeout seconds")
