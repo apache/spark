@@ -756,12 +756,12 @@ object Assembly {
         .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
     assemblyJarName in assembly := {
-      lazy val hdpVersion = hadoopVersion.value
+      lazy val versionValue = hadoopVersion.value
       if (moduleName.value.contains("streaming-kafka-0-10-assembly")
         || moduleName.value.contains("streaming-kinesis-asl-assembly")) {
         s"${moduleName.value}-${version.value}.jar"
       } else {
-        s"${moduleName.value}-${version.value}-hadoop${hdpVersion}.jar"
+        s"${moduleName.value}-${version.value}-hadoop${versionValue}.jar"
       }
     },
     assemblyJarName in (Test, assembly) := s"${moduleName.value}-test-${version.value}.jar",
