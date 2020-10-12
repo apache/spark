@@ -83,8 +83,7 @@ private[storage] class BlockManagerDecommissioner(
             case Some((shuffleBlockInfo, retryCount)) =>
               if (retryCount < maxReplicationFailuresForDecommission) {
                 logInfo(s"Trying to migrate shuffle ${shuffleBlockInfo} to ${peer}")
-                val blocks =
-                  bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo)
+                val blocks = bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo)
                 logDebug(s"Got migration sub-blocks ${blocks}")
                 blocks.foreach { case (blockId, buffer) =>
                   logDebug(s"Migrating sub-block ${blockId}")
