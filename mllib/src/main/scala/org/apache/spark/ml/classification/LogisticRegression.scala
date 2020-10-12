@@ -1104,6 +1104,7 @@ class LogisticRegressionModel private[spark] (
   private var _rawThreshold = Double.NaN
 
   updateBinaryThreshold()
+  log.warn(s"_threshold=${_threshold}, _rawThreshold=${_rawThreshold}")
 
   private def updateBinaryThreshold(): Unit = {
     if (!isMultinomial) {
@@ -1205,6 +1206,7 @@ class LogisticRegressionModel private[spark] (
     super.predict(features)
   } else {
     // Note: We should use _threshold instead of $(threshold) since getThreshold is overridden.
+    log.warn(s"_threshold=${_threshold}, _rawThreshold=${_rawThreshold}")
     if (score(features) > _threshold) 1 else 0
   }
 
