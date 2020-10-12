@@ -445,7 +445,7 @@ public class ExternalBlockHandler extends RpcHandler {
 
     @Override
     public void registerApplication(String appId, String user) {
-      throw new UnsupportedOperationException("Cannot handle shuffle block merge");
+      // No-op. Do nothing.
     }
 
     @Override
@@ -466,7 +466,7 @@ public class ExternalBlockHandler extends RpcHandler {
 
     @Override
     public MergedBlockMeta getMergedBlockMeta(String appId, int shuffleId, int reduceId) {
-      return null;
+      throw new UnsupportedOperationException("Cannot handle shuffle block merge");
     }
 
     @Override
