@@ -26,6 +26,7 @@ from pyspark.ml.base import _PredictorParams
 from pyspark.ml.param.shared import (
     HasAggregationDepth,
     HasBlockSize,
+    HasBlockSizeInMB,
     HasElasticNetParam,
     HasFitIntercept,
     HasMaxIter,
