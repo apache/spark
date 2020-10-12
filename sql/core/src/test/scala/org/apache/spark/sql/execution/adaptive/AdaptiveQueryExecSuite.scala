@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import java.io.{File, FilenameFilter}
+import java.io.File
 import java.net.URI
 
 import org.apache.log4j.Level
