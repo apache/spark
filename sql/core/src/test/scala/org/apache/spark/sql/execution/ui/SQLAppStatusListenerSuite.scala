@@ -754,6 +754,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       SparkPlanGraph(newPlan)
         .allNodes.flatMap(_.metrics.map(_.accumulatorId))
 
+    // Assume that AQE update sparkPlanInfo with newPlan
+    // ExecutionMetrics will be appended using newPlan's SQLMetrics
     listener.onOtherEvent(SparkListenerSQLAdaptiveExecutionUpdate(
       executionId,
       "test",
