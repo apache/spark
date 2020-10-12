@@ -343,8 +343,8 @@ trait OffsetWindowSpec extends Expression {
   val inputOffset: Expression
 
   /**
-    * Default result value for the function when the `offset`th row does not exist.
-    */
+   * Default result value for the function when the `offset`th row does not exist.
+   */
   val default: Expression
 
   /**
