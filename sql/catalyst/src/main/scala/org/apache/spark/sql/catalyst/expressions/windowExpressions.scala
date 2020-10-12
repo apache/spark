@@ -602,7 +602,6 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
 }
 
 // scalastyle:off line.size.limit line.contains.tab
-
 @ExpressionDescription(
   usage = """
     _FUNC_(input[, offset]) - Returns the value of `input` at the row that is the `offset`th row
