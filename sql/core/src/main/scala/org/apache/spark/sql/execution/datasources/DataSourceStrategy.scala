@@ -474,7 +474,7 @@ object DataSourceStrategy extends PredicateHelper {
    * is case insensitive. We should change attribute names to match the ones in the schema,
    * so we do not need to worry about case sensitivity anymore.
    */
-  def normalizeExprs(
+  protected[sql] def normalizeExprs(
       exprs: Seq[Expression],
       attributes: Seq[AttributeReference]): Seq[Expression] = {
     exprs.map { e =>
