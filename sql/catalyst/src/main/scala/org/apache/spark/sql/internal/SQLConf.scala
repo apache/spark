@@ -221,7 +221,7 @@ object SQLConf {
     .doc("Configures the log level for logging the change from the original plan to the new " +
       "plan after a rule or batch is applied. The value can be 'trace', 'debug', 'info', " +
       "'warn', or 'error'. The default log level is 'trace'.")
-    .version("3.0.0")
+    .version("3.1.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValue(logLevel => Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(logLevel),
@@ -233,7 +233,7 @@ object SQLConf {
     .internal()
     .doc("Configures a list of rules for logging plan changes, in which the rules are " +
       "specified by their rule names and separated by comma.")
-    .version("3.0.0")
+    .version("3.1.0")
     .stringConf
     .createOptional
 
@@ -241,7 +241,7 @@ object SQLConf {
     .internal()
     .doc("Configures a list of batches for logging plan changes, in which the batches " +
       "are specified by their batch names and separated by comma.")
-    .version("3.0.0")
+    .version("3.1.0")
     .stringConf
     .createOptional
 
