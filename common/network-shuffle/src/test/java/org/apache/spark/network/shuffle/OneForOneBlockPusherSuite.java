@@ -144,7 +144,7 @@ public class OneForOneBlockPusherSuite {
         callback.onSuccess(header);
       } else if (block != null) {
         callback.onFailure(new RuntimeException("Failed " + entry.getKey()
-          + ErrorHandler.BlockPushErrorHandler.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX));
+          + ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX));
       } else {
         callback.onFailure(new RuntimeException("Quick fail " + entry.getKey()
           + ErrorHandler.BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX));

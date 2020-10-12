@@ -62,7 +62,7 @@ public interface ErrorHandler {
      * side. When we get a block push failure because of the block couldn't be written due to
      * this reason, we will not log the exception on the client side.
      */
-    public static final String COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX =
+    public static final String BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX =
       "Couldn't find an opportunity to write block";
 
     @Override
@@ -78,7 +78,7 @@ public interface ErrorHandler {
     @Override
     public boolean shouldLogError(Throwable t) {
       String errorStackTrace = Throwables.getStackTraceAsString(t);
-      return !errorStackTrace.contains(COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX) &&
+      return !errorStackTrace.contains(BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX) &&
         !errorStackTrace.contains(TOO_LATE_MESSAGE_SUFFIX);
     }
   }

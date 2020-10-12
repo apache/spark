@@ -23,8 +23,7 @@ import io.netty.buffer.ByteBuf;
 import org.apache.spark.network.protocol.Encoders;
 
 /**
- * Request from the DAGScheduler to notify external shuffle service to finalize merge
- * for a given shuffle.
+ * Request to finalize merge for a given shuffle.
  * Returns {@link MergeStatuses}
  */
 public class FinalizeShuffleMerge extends BlockTransferMessage {

@@ -35,7 +35,7 @@ public class ErrorHandlerSuite {
       ErrorHandler.BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX))));
     assertFalse(handler.shouldRetryError(new RuntimeException(new ConnectException())));
     assertTrue(handler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockPushErrorHandler.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX))));
+      ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))));
     assertTrue(handler.shouldRetryError(new Throwable()));
   }
 
@@ -45,7 +45,7 @@ public class ErrorHandlerSuite {
     assertFalse(handler.shouldLogError(new RuntimeException(new IllegalArgumentException(
       ErrorHandler.BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX))));
     assertFalse(handler.shouldLogError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockPushErrorHandler.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX))));
+      ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))));
     assertTrue(handler.shouldLogError(new Throwable()));
   }
 }
