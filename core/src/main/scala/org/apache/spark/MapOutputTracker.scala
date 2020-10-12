@@ -125,14 +125,19 @@ private class ShuffleStatus(numPartitions: Int) extends Logging {
    * Update the map output location (e.g. during migration).
    */
   def updateMapOutput(mapId: Long, bmAddress: BlockManagerId): Unit = withWriteLock {
-    val mapStatusOpt = mapStatuses.find(_.mapId == mapId)
-    mapStatusOpt match {
-      case Some(mapStatus) =>
-        logInfo(s"Updating map output for ${mapId} to ${bmAddress}")
-        mapStatus.updateLocation(bmAddress)
-        invalidateSerializedMapOutputStatusCache()
-      case None =>
-        logError(s"Asked to update map output ${mapId} for untracked map status.")
+    try {
+      val mapStatusOpt = mapStatuses.find(_.mapId == mapId)
+      mapStatusOpt match {
+        case Some(mapStatus) =>
+          logInfo(s"Updating map output for ${mapId} to ${bmAddress}")
+          mapStatus.updateLocation(bmAddress)
+          invalidateSerializedMapOutputStatusCache()
+        case None =>
+          logWarning(s"Asked to update map output ${mapId} for untracked map status.")
+      }
+    } catch {
+      case e: java.lang.NullPointerException =>
+        logWarning(s"Unable to update map output for ${mapId}, status removed in-flight")
     }
   }
 

@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, HoursTransform, IdentityTransform, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
+import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.sources.{And, EqualTo, Filter, IsNotNull}
 import org.apache.spark.sql.types.{DataType, DateType, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -145,6 +146,7 @@ class InMemoryTable(
   override def capabilities: util.Set[TableCapability] = Set(
     TableCapability.BATCH_READ,
     TableCapability.BATCH_WRITE,
+    TableCapability.STREAMING_WRITE,
     TableCapability.OVERWRITE_BY_FILTER,
     TableCapability.OVERWRITE_DYNAMIC,
     TableCapability.TRUNCATE).asJava
@@ -169,26 +171,35 @@ class InMemoryTable(
 
     new WriteBuilder with SupportsTruncate with SupportsOverwrite with SupportsDynamicOverwrite {
       private var writer: BatchWrite = Append
+      private var streamingWriter: StreamingWrite = StreamingAppend
 
       override def truncate(): WriteBuilder = {
         assert(writer == Append)
         writer = TruncateAndAppend
+        streamingWriter = StreamingTruncateAndAppend
         this
       }
 
       override def overwrite(filters: Array[Filter]): WriteBuilder = {
         assert(writer == Append)
         writer = new Overwrite(filters)
+        streamingWriter = new StreamingNotSupportedOperation(s"overwrite ($filters)")
         this
       }
 
       override def overwriteDynamicPartitions(): WriteBuilder = {
         assert(writer == Append)
         writer = DynamicOverwrite
+        streamingWriter = new StreamingNotSupportedOperation("overwriteDynamicPartitions")
         this
       }
 
       override def buildForBatch(): BatchWrite = writer
+
+      override def buildForStreaming(): StreamingWrite = streamingWriter match {
+        case exc: StreamingNotSupportedOperation => exc.throwsException()
+        case s => s
+      }
     }
   }
 
@@ -228,6 +239,45 @@ class InMemoryTable(
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       dataMap.clear
       withData(messages.map(_.asInstanceOf[BufferedRows]))
+    }
+  }
+
+  private abstract class TestStreamingWrite extends StreamingWrite {
+    def createStreamingWriterFactory(info: PhysicalWriteInfo): StreamingDataWriterFactory = {
+      BufferedRowsWriterFactory
+    }
+
+    def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+  }
+
+  private class StreamingNotSupportedOperation(operation: String) extends TestStreamingWrite {
+    override def createStreamingWriterFactory(info: PhysicalWriteInfo): StreamingDataWriterFactory =
+      throwsException()
+
+    override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit =
+      throwsException()
+
+    override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit =
+      throwsException()
+
+    def throwsException[T](): T = throw new IllegalStateException("The operation " +
+      s"${operation} isn't supported for streaming query.")
+  }
+
+  private object StreamingAppend extends TestStreamingWrite {
+    override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+      dataMap.synchronized {
+        withData(messages.map(_.asInstanceOf[BufferedRows]))
+      }
+    }
+  }
+
+  private object StreamingTruncateAndAppend extends TestStreamingWrite {
+    override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+      dataMap.synchronized {
+        dataMap.clear
+        withData(messages.map(_.asInstanceOf[BufferedRows]))
+      }
     }
   }
 
@@ -310,8 +360,15 @@ private class BufferedRowsReader(partition: BufferedRows) extends PartitionReade
   override def close(): Unit = {}
 }
 
-private object BufferedRowsWriterFactory extends DataWriterFactory {
+private object BufferedRowsWriterFactory extends DataWriterFactory with StreamingDataWriterFactory {
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
+    new BufferWriter
+  }
+
+  override def createWriter(
+      partitionId: Int,
+      taskId: Long,
+      epochId: Long): DataWriter[InternalRow] = {
     new BufferWriter
   }
 }

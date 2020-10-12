@@ -70,7 +70,9 @@ class JDBCTableCatalog extends TableCatalog with Logging {
     checkNamespace(ident.namespace())
     val writeOptions = new JdbcOptionsInWrite(
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
-    withConnection(JdbcUtils.tableExists(_, writeOptions))
+    classifyException(s"Failed table existence check: $ident") {
+      withConnection(JdbcUtils.tableExists(_, writeOptions))
+    }
   }
 
   override def dropTable(ident: Identifier): Boolean = {
@@ -88,7 +90,9 @@ class JDBCTableCatalog extends TableCatalog with Logging {
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
     checkNamespace(oldIdent.namespace())
     withConnection { conn =>
-      JdbcUtils.renameTable(conn, getTableName(oldIdent), getTableName(newIdent), options)
+      classifyException(s"Failed table renaming from $oldIdent to $newIdent") {
+        JdbcUtils.renameTable(conn, getTableName(oldIdent), getTableName(newIdent), options)
+      }
     }
   }
 
@@ -123,7 +127,9 @@ class JDBCTableCatalog extends TableCatalog with Logging {
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
     val caseSensitive = SQLConf.get.caseSensitiveAnalysis
     withConnection { conn =>
-      JdbcUtils.createTable(conn, getTableName(ident), schema, caseSensitive, writeOptions)
+      classifyException(s"Failed table creation: $ident") {
+        JdbcUtils.createTable(conn, getTableName(ident), schema, caseSensitive, writeOptions)
+      }
     }
 
     JDBCTable(ident, schema, writeOptions)
@@ -132,7 +138,9 @@ class JDBCTableCatalog extends TableCatalog with Logging {
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     checkNamespace(ident.namespace())
     withConnection { conn =>
-      JdbcUtils.alterTable(conn, getTableName(ident), changes, options)
+      classifyException(s"Failed table altering: $ident") {
+        JdbcUtils.alterTable(conn, getTableName(ident), changes, options)
+      }
       loadTable(ident)
     }
   }
@@ -155,5 +163,13 @@ class JDBCTableCatalog extends TableCatalog with Logging {
 
   private def getTableName(ident: Identifier): String = {
     (ident.namespace() :+ ident.name()).map(dialect.quoteIdentifier).mkString(".")
+  }
+
+  private def classifyException[T](message: String)(f: => T): T = {
+    try {
+      f
+    } catch {
+      case e: Throwable => throw dialect.classifyException(message, e)
+    }
   }
 }
