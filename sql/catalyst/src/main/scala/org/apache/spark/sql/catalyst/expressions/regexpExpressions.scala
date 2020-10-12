@@ -189,8 +189,6 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
 
   override def dataType: DataType = BooleanType
 
-  override def children: Seq[Expression] = value +: list
-
   override def foldable: Boolean = value.foldable && list.forall(_.foldable)
 
   override def nullable: Boolean = true
@@ -326,7 +324,7 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
   """,
   since = "3.1.0")
 // scalastyle:on line.size.limit
-case class LikeAll(override val children: Seq[Expression]) extends LikeAllBase {
+case class LikeAll(children: Seq[Expression]) extends LikeAllBase {
   override def isNot: Boolean = false
 }
 
@@ -366,7 +364,7 @@ case class LikeAll(override val children: Seq[Expression]) extends LikeAllBase {
   """,
   since = "3.1.0")
 // scalastyle:on line.size.limit
-case class NotLikeAll(override val children: Seq[Expression]) extends LikeAllBase {
+case class NotLikeAll(children: Seq[Expression]) extends LikeAllBase {
   override def isNot: Boolean = true
 }
 
