@@ -239,7 +239,7 @@ trait InsertIntoSQLOnlyTests
     withTempView(tmpView) {
       insert.createOrReplaceTempView(tmpView)
       val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
-      sql(s"INSERT $overwrite TABLE $tableName $columnList $partitionList SELECT * FROM $tmpView")
+      sql(s"INSERT $overwrite TABLE $tableName $partitionList $columnList SELECT * FROM $tmpView")
     }
   }
 

@@ -3032,7 +3032,6 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case i @ InsertIntoStatement(table, _, _, _, _, _)
           if table.resolved && i.columns.exists(!_.resolved) =>
-        val tableOutputs = table.output.map(x => x.name -> x).toMap
         val resolved = i.columns.map {
           case u: UnresolvedAttribute => withPosition(u) {
             table.resolve(u.nameParts, resolver).map(_.toAttribute)
