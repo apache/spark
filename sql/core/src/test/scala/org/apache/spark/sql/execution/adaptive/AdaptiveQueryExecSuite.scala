@@ -29,8 +29,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
-import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
+import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
+import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
@@ -39,7 +40,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, QueryExecutionListener}
 import org.apache.spark.util.Utils
 
 class AdaptiveQueryExecSuite
@@ -1273,32 +1274,42 @@ class AdaptiveQueryExecSuite
         j <- 1L to 3L
       ) yield (i, j)
 
-      val df = data.toDF("i", "j")
-        .repartition($"j")
+      val df = data.toDF("i", "j").repartition($"j")
+      var noLocalReader: Boolean = false
+      val listener = new QueryExecutionListener {
+        override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+          qe.executedPlan match {
+            case plan@(_: DataWritingCommandExec | _: V2TableWriteExec) =>
+              assert(plan.asInstanceOf[UnaryExecNode].child.isInstanceOf[AdaptiveSparkPlanExec])
+              noLocalReader = collect(plan) {
+                case exec: CustomShuffleReaderExec if exec.isLocalReader => exec
+              }.isEmpty
+            case _ => // ignore other events
+          }
+        }
+        override def onFailure(funcName: String, qe: QueryExecution,
+          exception: Exception): Unit = {}
+      }
+      spark.listenerManager.register(listener)
 
       withTable("t") {
-        df.write
-          .partitionBy("j")
-          .saveAsTable("t")
-        assert(spark.read.table("t").inputFiles.length == 3)
+        df.write.partitionBy("j").saveAsTable("t")
+        sparkContext.listenerBus.waitUntilEmpty()
+        assert(noLocalReader)
+        noLocalReader = false
       }
 
       // Test DataSource v2
       withTempPath { f =>
         val path = f.getCanonicalPath
         val format = classOf[V2Source].getName
-        df.write
-          .format(format)
-          .partitionBy("j")
-          .mode("overwrite")
-          .save(path)
-
-        assert(f.listFiles(new FilenameFilter {
-          override def accept(dir: File, name: String): Boolean = {
-            !name.startsWith("_") && !name.startsWith(".")
-          }
-        }).length == 3)
+        df.write.format(format).partitionBy("j").mode("overwrite").save(path)
+        sparkContext.listenerBus.waitUntilEmpty()
+        assert(noLocalReader)
+        noLocalReader = false
       }
+
+      spark.listenerManager.unregister(listener)
     }
   }
 }
