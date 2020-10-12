@@ -254,7 +254,8 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
       // Creates Spark datasource table using generated Spark DDL.
       sql(sparkDDL)
       val sparkTable = spark.sharedState.externalCatalog.getTable(db, table.table)
-      checkHiveCatalogTables(hiveTable, sparkTable)
+      checkHiveCatalogTables(hiveTable.copy(metaBucketSpec = None),
+        sparkTable.copy(metaBucketSpec = None))
     } finally {
       sql(s"DROP TABLE IF EXISTS ${table.table}")
     }
