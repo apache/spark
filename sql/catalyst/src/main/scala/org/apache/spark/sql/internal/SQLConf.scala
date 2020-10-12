@@ -2346,8 +2346,8 @@ object SQLConf {
     buildConf("spark.sql.legacy.centralMomentAgg")
       .internal()
       .doc("When set to true, central moment aggregation will return Double.NaN " +
-        "if divide by zero occurred during calculation. " +
-        "Otherwise, it will return null")
+        "if divide by zero occurred during calculation. Otherwise, it will return null. " +
+        "Before version 3.1.0, it returns NaN in divideByZero case by default.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
