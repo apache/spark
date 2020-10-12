@@ -59,7 +59,7 @@ import org.apache.spark.sql.types._
  *  - `cast(fromExp, toType) <= value` ==> `fromExp < cast(value, fromType)`
  *  - `cast(fromExp, toType) < value` ==> `fromExp < cast(value, fromType)`
  *
- *  Similarly for the case when casting `value` to `fromType` causes rounding down.
+ * Similarly for the case when casting `value` to `fromType` causes rounding down.
  *
  * If the `value` is not within range `(min, max)`, the rule breaks the scenario into different
  * cases and try to replace each with simpler constructs.
@@ -261,7 +261,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       Cast.canUpCast(fromExp.dataType, toType)
   }
 
-  private def getRange(dt: DataType): Option[(Any, Any)] = dt match {
+  private[optimizer] def getRange(dt: DataType): Option[(Any, Any)] = dt match {
     case ByteType => Some((Byte.MinValue, Byte.MaxValue))
     case ShortType => Some((Short.MinValue, Short.MaxValue))
     case IntegerType => Some((Int.MinValue, Int.MaxValue))

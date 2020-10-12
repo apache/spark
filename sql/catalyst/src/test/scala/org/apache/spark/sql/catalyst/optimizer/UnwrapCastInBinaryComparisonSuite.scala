@@ -208,6 +208,31 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     assertEquivalent(Cast(f, ByteType) > 100.toByte, Cast(f, ByteType) > 100.toByte)
   }
 
+  test("test getRange()") {
+    assert(Some((Byte.MinValue, Byte.MaxValue)) === getRange(ByteType))
+    assert(Some((Short.MinValue, Short.MaxValue)) === getRange(ShortType))
+    assert(Some((Int.MinValue, Int.MaxValue)) === getRange(IntegerType))
+    assert(Some((Long.MinValue, Long.MaxValue)) === getRange(LongType))
+
+    val floatRange = getRange(FloatType)
+    assert(floatRange.isDefined)
+    val (floatMin, floatMax) = floatRange.get
+    assert(floatMin.isInstanceOf[Float])
+    assert(floatMin.asInstanceOf[Float].isNegInfinity)
+    assert(floatMax.isInstanceOf[Float])
+    assert(floatMax.asInstanceOf[Float].isNaN)
+
+    val doubleRange = getRange(DoubleType)
+    assert(doubleRange.isDefined)
+    val (doubleMin, doubleMax) = doubleRange.get
+    assert(doubleMin.isInstanceOf[Double])
+    assert(doubleMin.asInstanceOf[Double].isNegInfinity)
+    assert(doubleMax.isInstanceOf[Double])
+    assert(doubleMax.asInstanceOf[Double].isNaN)
+
+    assert(getRange(DecimalType(5, 2)).isEmpty)
+  }
+
   private def castInt(e: Expression): Expression = Cast(e, IntegerType)
   private def castDouble(e: Expression): Expression = Cast(e, DoubleType)
   private def castDecimal2(e: Expression): Expression = Cast(e, DecimalType(10, 4))
