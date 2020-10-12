@@ -885,8 +885,8 @@ class DDLParserSuite extends AnalysisTest {
   test("insert table: append with partition and a column list") {
     parseCompare(
       """
-        |INSERT INTO testcat.ns1.ns2.tbl (a, b)
-        |PARTITION (p1 = 3, p2)
+        |INSERT INTO testcat.ns1.ns2.tbl
+        |PARTITION (p1 = 3, p2) (a, b)
         |SELECT * FROM source
       """.stripMargin,
       InsertIntoStatement(
@@ -945,8 +945,8 @@ class DDLParserSuite extends AnalysisTest {
   test("insert table: overwrite with partition and column list") {
     parseCompare(
       """
-        |INSERT OVERWRITE TABLE testcat.ns1.ns2.tbl (a, b)
-        |PARTITION (p1 = 3, p2)
+        |INSERT OVERWRITE TABLE testcat.ns1.ns2.tbl
+        |PARTITION (p1 = 3, p2) (a, b)
         |SELECT * FROM source
       """.stripMargin,
       InsertIntoStatement(
