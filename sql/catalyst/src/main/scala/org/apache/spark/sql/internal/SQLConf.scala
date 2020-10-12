@@ -2775,6 +2775,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val DISABLED_JDBC_CONN_PROVIDER_LIST =
+    buildConf("spark.sql.sources.disabledJdbcConnProviderList")
+    .internal()
+    .doc("Configures a list of JDBC connection providers, which are disabled. " +
+      "The list contains the name of the JDBC connection providers separated by comma.")
+    .version("3.1.0")
+    .stringConf
+    .createWithDefault("")
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3398,6 +3407,8 @@ class SQLConf extends Serializable with Logging {
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
   def truncateTrashEnabled: Boolean = getConf(SQLConf.TRUNCATE_TRASH_ENABLED)
+
+  def disabledJdbcConnectionProviders: String = getConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 
   /** ********************** SQLConf functionality methods ************ */
 
