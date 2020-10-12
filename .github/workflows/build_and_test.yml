@@ -42,9 +42,11 @@ jobs:
             mllib-local, mllib,
             yarn, mesos, kubernetes, hadoop-cloud, spark-ganglia-lgpl
           - >-
-            pyspark-sql, pyspark-mllib, pyspark-resource
+            pyspark-sql
           - >-
-            pyspark-core, pyspark-streaming, pyspark-ml
+            pyspark-core, pyspark-streaming, pyspark-resource
+          - >-
+            pyspark-mllib, pyspark-ml
           - >-
             sparkr
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
@@ -79,6 +81,7 @@ jobs:
             excluded-tags: org.apache.spark.tags.ExtendedSQLTest
             comment: "- other tests"
     env:
+      NOLINT_ON_COMPILE: 1
       MODULES_TO_TEST: ${{ matrix.modules }}
       EXCLUDED_TAGS: ${{ matrix.excluded-tags }}
       INCLUDED_TAGS: ${{ matrix.included-tags }}
@@ -186,7 +189,7 @@ jobs:
         # Hive tests become flaky when running in parallel as it's too intensive.
         if [[ "$MODULES_TO_TEST" == "hive" ]]; then export SERIAL_SBT_TESTS=1; fi
         mkdir -p ~/.m2
-        ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
+        ./dev/run-tests --parallelism 3 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
         rm -rf ~/.m2/repository/org/apache/spark
     - name: Upload test results to report
       if: always()
