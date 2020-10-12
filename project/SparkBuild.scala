@@ -108,7 +108,7 @@ object SparkBuild extends PomBuild {
   override val userPropertiesMap = System.getProperties.asScala.toMap
 
   lazy val MavenCompile = config("m2r") extend(Compile)
-  lazy val publishLocalBoth = TaskKey[Unit]("localPublish", "publish local for m2 and ivy", KeyRanks.ATask)
+  lazy val SbtCompile = config("sbt") extend(Compile)
 
   lazy val sparkGenjavadocSettings: Seq[sbt.Def.Setting[_]] = GenJavadocPlugin.projectSettings ++ Seq(
     scalacOptions ++= Seq(
@@ -213,7 +213,7 @@ object SparkBuild extends PomBuild {
       "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/maven2/",
       DefaultMavenRepository,
       Resolver.mavenLocal,
-      Resolver.file("local", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
+      Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
     ),
     externalResolvers := resolvers.value,
     otherResolvers := SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))).value,
@@ -221,9 +221,15 @@ object SparkBuild extends PomBuild {
         .withResolverName("dotM2")
         .withArtifacts(packagedArtifacts.value.toVector)
         .withLogging(ivyLoggingLevel.value),
+    publishLocalConfiguration in SbtCompile := PublishConfiguration()
+        .withResolverName("ivyLocal")
+        .withArtifacts(packagedArtifacts.value.toVector)
+        .withLogging(ivyLoggingLevel.value),
     publishMavenStyle in MavenCompile := true,
+    publishMavenStyle in SbtCompile := false,
     publishLocal in MavenCompile := publishTask(publishLocalConfiguration in MavenCompile).value,
-    publishLocalBoth := Seq(publishLocal in MavenCompile, publishLocal).dependOn.value,
+    publishLocal in SbtCompile := publishTask(publishLocalConfiguration in SbtCompile).value,
+    publishLocal := Seq(publishLocal in MavenCompile, publishLocal in SbtCompile).dependOn.value,
 
     javacOptions in (Compile, doc) ++= {
       val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
