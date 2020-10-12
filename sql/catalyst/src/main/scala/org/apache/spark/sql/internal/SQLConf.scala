@@ -893,6 +893,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val THRIFTSERVER_QUERY_TIMEOUT =
+    buildConf("spark.sql.thriftServer.queryTimeout")
+      .doc("Specifies a global timeout value for Thrift Server. A query will be cancelled " +
+        "automatically after the specified time. If a timeout value is set for each statement " +
+        "(e.g., via `java.sql.Statement.setQueryTimeout`), the value takes precedence. " +
+        "If the value is zero or negative, no timeout happens.")
+      .version("3.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(0L)
+
   val THRIFTSERVER_UI_STATEMENT_LIMIT =
     buildConf("spark.sql.thriftserver.ui.retainedStatements")
       .doc("The number of SQL statements kept in the JDBC/ODBC web UI history.")

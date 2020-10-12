@@ -51,6 +51,12 @@ private[hive] class SparkExecuteStatementOperation(
   with SparkOperation
   with Logging {
 
+  private val queryTimeoutValue = if (queryTimeout <= 0) {
+    sqlContext.getConf(SQLConf.THRIFTSERVER_QUERY_TIMEOUT.key).toLong
+  } else {
+    queryTimeout
+  }
+
   private var result: DataFrame = _
 
   // We cache the returned rows to get iterators again in case the user wants to use FETCH_FIRST.
@@ -201,7 +207,7 @@ private[hive] class SparkExecuteStatementOperation(
       parentSession.getUsername)
     setHasResultSet(true) // avoid no resultset for async run
 
-    if (queryTimeout > 0) {
+    if (queryTimeoutValue > 0) {
       Executors.newSingleThreadScheduledExecutor.schedule(new Runnable {
           override def run(): Unit = timeoutCancel()
         }, queryTimeout, TimeUnit.SECONDS)
