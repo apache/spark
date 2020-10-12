@@ -493,9 +493,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // decommission notification to executors. So, it's less likely to lead to the race
     // condition where `getPeer` request from the decommissioned executor comes first
     // before the BlockManagers are marked as decommissioned.
-    if (conf.get(STORAGE_DECOMMISSION_ENABLED)) {
-      scheduler.sc.env.blockManager.master.decommissionBlockManagers(executorsToDecommission)
-    }
+    // Note that marking BlockManager as decommissioned doesn't need depend on
+    // `spark.storage.decommission.enabled`. Because it's meaningless to save more blocks
+    // for the BlockManager since the executor will be shutdown soon.
+    scheduler.sc.env.blockManager.master.decommissionBlockManagers(executorsToDecommission)
 
     if (!triggeredByExecutor) {
       executorsToDecommission.foreach { executorId =>
