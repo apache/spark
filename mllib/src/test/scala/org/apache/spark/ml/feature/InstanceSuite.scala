@@ -74,4 +74,36 @@ class InstanceSuite extends SparkFunSuite{
     }
   }
 
+  test("InstanceBlock: blokify with max memory usage") {
+    val instance1 = Instance(19.0, 2.0, Vectors.dense(1.0, 7.0))
+    val instance2 = Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse)
+    val instances = Seq(instance1, instance2)
+
+    val blocks = InstanceBlock
+      .blokifyWithMaxMemoryUsage(Iterator.apply(instance1, instance2), 128).toArray
+    require(blocks.length == 1)
+    val block = blocks.head
+    assert(block.size === 2)
+    assert(block.numFeatures === 2)
+    block.instanceIterator.zipWithIndex.foreach {
+      case (instance, i) =>
+        assert(instance.label === instances(i).label)
+        assert(instance.weight === instances(i).weight)
+        assert(instance.features.toArray === instances(i).features.toArray)
+    }
+    Seq(0, 1).foreach { i =>
+      val nzIter = block.getNonZeroIter(i)
+      val vec = Vectors.sparse(2, nzIter.toSeq)
+      assert(vec.toArray === instances(i).features.toArray)
+    }
+
+    val bigInstance = Instance(-1.0, 2.0, Vectors.dense(Array.fill(10000)(1.0)))
+    val inputIter1 = Iterator.apply(bigInstance)
+    val inputIter2 = Iterator.apply(instance1, instance2, bigInstance)
+    Seq(inputIter1, inputIter2).foreach { inputIter =>
+      intercept[IllegalArgumentException] {
+        InstanceBlock.blokifyWithMaxMemoryUsage(inputIter, 1024).toArray
+      }
+    }
+  }
 }
