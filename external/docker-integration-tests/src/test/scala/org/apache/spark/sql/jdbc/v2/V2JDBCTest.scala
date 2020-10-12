@@ -18,26 +18,25 @@
 package org.apache.spark.sql.jdbc.v2
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
 trait V2JDBCTest extends SharedSparkSession {
   val catalogName: String
   // dialect specific update column type test
-  def updateColumnType: Unit
+  def testUpdateColumnType(tbl: String): Unit
 
   test("SPARK-33034: ALTER TABLE ... add new columns") {
     withTable(s"$catalogName.alt_table") {
       sql(s"CREATE TABLE $catalogName.alt_table (ID STRING) USING _")
-      sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C1 STRING, C2 STRING)")
       var t = spark.table(s"$catalogName.alt_table")
-      var expectedSchema = new StructType()
-        .add("ID", StringType)
-        .add("C1", StringType)
-        .add("C2", StringType)
+      var expectedSchema = new StructType().add("ID", StringType)
+      assert(t.schema === expectedSchema)
+      sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C1 STRING, C2 STRING)")
+      t = spark.table(s"$catalogName.alt_table")
+      expectedSchema = expectedSchema.add("C1", StringType).add("C2", StringType)
       assert(t.schema === expectedSchema)
       sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C3 STRING)")
       t = spark.table(s"$catalogName.alt_table")
@@ -58,17 +57,12 @@ trait V2JDBCTest extends SharedSparkSession {
 
   test("SPARK-33034: ALTER TABLE ... update column type") {
     withTable(s"$catalogName.alt_table") {
-      updateColumnType
+      testUpdateColumnType(s"$catalogName.alt_table")
       // Update not existing column
       val msg2 = intercept[AnalysisException] {
         sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN bad_column TYPE DOUBLE")
       }.getMessage
       assert(msg2.contains("Cannot update missing field bad_column"))
-      // Update column to wrong type
-      val msg3 = intercept[ParseException] {
-        sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN id TYPE bad_type")
-      }.getMessage
-      assert(msg3.contains("DataType bad_type is not supported"))
     }
     // Update column type in not existing table
     val msg = intercept[AnalysisException] {
@@ -80,9 +74,14 @@ trait V2JDBCTest extends SharedSparkSession {
   test("SPARK-33034: ALTER TABLE ... update column nullability") {
     withTable(s"$catalogName.alt_table") {
       sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL) USING _")
+      var t = spark.table(s"$catalogName.alt_table")
+      // nullable is true in the expecteSchema because Spark always sets nullable to true
+      // regardless of the JDBC metadata https://github.com/apache/spark/pull/18445
+      var expectedSchema = new StructType().add("ID", StringType, nullable = true)
+      assert(t.schema === expectedSchema)
       sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN ID DROP NOT NULL")
-      val t = spark.table(s"$catalogName.alt_table")
-      val expectedSchema = new StructType().add("ID", StringType, nullable = true)
+      t = spark.table(s"$catalogName.alt_table")
+      expectedSchema = new StructType().add("ID", StringType, nullable = true)
       assert(t.schema === expectedSchema)
       // Update nullability of not existing column
       val msg = intercept[AnalysisException] {

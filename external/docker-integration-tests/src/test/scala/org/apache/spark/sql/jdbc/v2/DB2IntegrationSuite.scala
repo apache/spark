@@ -23,7 +23,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
-import org.apache.spark.sql.types.{DoubleType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -58,15 +58,18 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
 
   override def dataPreparation(conn: Connection): Unit = {}
 
-  override def updateColumnType: Unit = {
-    sql(s"CREATE TABLE $catalogName.alt_table (ID INTEGER) USING _")
-    sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN id TYPE DOUBLE")
-    val t = spark.table(s"$catalogName.alt_table")
-    val expectedSchema = new StructType().add("ID", DoubleType)
+  override def testUpdateColumnType(tbl: String): Unit = {
+    sql(s"CREATE TABLE $tbl (ID INTEGER) USING _")
+    var t = spark.table(tbl)
+    var expectedSchema = new StructType().add("ID", IntegerType)
+    assert(t.schema === expectedSchema)
+    sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE DOUBLE")
+    t = spark.table(tbl)
+    expectedSchema = new StructType().add("ID", DoubleType)
     assert(t.schema === expectedSchema)
     // Update column type from DOUBLE to STRING
     val msg1 = intercept[AnalysisException] {
-      sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN id TYPE VARCHAR(10)")
+      sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE VARCHAR(10)")
     }.getMessage
     assert(msg1.contains("Cannot update alt_table field ID: double cannot be cast to varchar"))
   }
