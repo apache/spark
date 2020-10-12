@@ -39,8 +39,8 @@ abstract class Covariance(x: Expression, y: Expression, nullOnDivideByZero: Bool
   protected val yAvg = AttributeReference("yAvg", DoubleType, nullable = false)()
   protected val ck = AttributeReference("ck", DoubleType, nullable = false)()
 
-  protected lazy val divideByZeroEvalResult: Expression = {
-    if (nullOnDivideByZero) Double.NaN else Literal.create(null, DoubleType)
+  protected def divideByZeroEvalResult: Expression = {
+    if (nullOnDivideByZero) Literal.create(null, DoubleType) else Double.NaN
   }
 
   override val aggBufferAttributes: Seq[AttributeReference] = Seq(n, xAvg, yAvg, ck)
@@ -96,11 +96,11 @@ abstract class Covariance(x: Expression, y: Expression, nullOnDivideByZero: Bool
 case class CovPopulation(
     left: Expression,
     right: Expression,
-    nullOnDivideByZero: Boolean = SQLConf.get.legacyStatisticalAggregate)
+    nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
   extends Covariance(left, right, nullOnDivideByZero) {
 
   def this(left: Expression, right: Expression) =
-    this(left, right, SQLConf.get.legacyStatisticalAggregate)
+    this(left, right, !SQLConf.get.legacyStatisticalAggregate)
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType), ck / n)
@@ -121,11 +121,11 @@ case class CovPopulation(
 case class CovSample(
     left: Expression,
     right: Expression,
-    nullOnDivideByZero: Boolean = SQLConf.get.legacyStatisticalAggregate)
+    nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
   extends Covariance(left, right, nullOnDivideByZero) {
 
   def this(left: Expression, right: Expression) =
-    this(left, right, SQLConf.get.legacyStatisticalAggregate)
+    this(left, right, !SQLConf.get.legacyStatisticalAggregate)
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),

@@ -44,8 +44,8 @@ abstract class PearsonCorrelation(x: Expression, y: Expression, nullOnDivideByZe
   protected val xMk = AttributeReference("xMk", DoubleType, nullable = false)()
   protected val yMk = AttributeReference("yMk", DoubleType, nullable = false)()
 
-  protected lazy val divideByZeroEvalResult: Expression = {
-    if (nullOnDivideByZero) Double.NaN else Literal.create(null, DoubleType)
+  protected def divideByZeroEvalResult: Expression = {
+    if (nullOnDivideByZero) Literal.create(null, DoubleType) else Double.NaN
   }
 
   override val aggBufferAttributes: Seq[AttributeReference] = Seq(n, xAvg, yAvg, ck, xMk, yMk)
@@ -110,11 +110,11 @@ abstract class PearsonCorrelation(x: Expression, y: Expression, nullOnDivideByZe
 case class Corr(
     x: Expression,
     y: Expression,
-    nullOnDivideByZero: Boolean = SQLConf.get.legacyStatisticalAggregate)
+    nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
   extends PearsonCorrelation(x, y, nullOnDivideByZero) {
 
   def this(x: Expression, y: Expression) =
-    this(x, y, SQLConf.get.legacyStatisticalAggregate)
+    this(x, y, !SQLConf.get.legacyStatisticalAggregate)
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),

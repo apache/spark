@@ -450,20 +450,20 @@ object TypeCoercion {
       case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
       case Average(e @ StringType()) => Average(Cast(e, DoubleType))
-      case StddevPop(e @ StringType(), nullOnDivideByZero) =>
-        StddevPop(Cast(e, DoubleType), nullOnDivideByZero)
-      case StddevSamp(e @ StringType(), nullOnDivideByZero) =>
-        StddevSamp(Cast(e, DoubleType), nullOnDivideByZero)
+      case s @ StddevPop(e @ StringType(), _) =>
+        s.withNewChildren(Seq(Cast(e, DoubleType)))
+      case s @ StddevSamp(e @ StringType(), _) =>
+        s.withNewChildren(Seq(Cast(e, DoubleType)))
       case UnaryMinus(e @ StringType()) => UnaryMinus(Cast(e, DoubleType))
       case UnaryPositive(e @ StringType()) => UnaryPositive(Cast(e, DoubleType))
-      case VariancePop(e @ StringType(), nullOnDivideByZero) =>
-        VariancePop(Cast(e, DoubleType), nullOnDivideByZero)
-      case VarianceSamp(e @ StringType(), nullOnDivideByZero) =>
-        VarianceSamp(Cast(e, DoubleType), nullOnDivideByZero)
-      case Skewness(e @ StringType(), nullOnDivideByZero) =>
-        Skewness(Cast(e, DoubleType), nullOnDivideByZero)
-      case Kurtosis(e @ StringType(), nullOnDivideByZero) =>
-        Kurtosis(Cast(e, DoubleType), nullOnDivideByZero)
+      case v @ VariancePop(e @ StringType(), _) =>
+        v.withNewChildren(Seq(Cast(e, DoubleType)))
+      case v @ VarianceSamp(e @ StringType(), _) =>
+        v.withNewChildren(Seq(Cast(e, DoubleType)))
+      case s @ Skewness(e @ StringType(), _) =>
+        s.withNewChildren(Seq(Cast(e, DoubleType)))
+      case k @ Kurtosis(e @ StringType(), _) =>
+        k.withNewChildren(Seq(Cast(e, DoubleType)))
     }
   }
 
