@@ -48,4 +48,14 @@ class MSSQLConnectionProviderSuite extends ConnectionProviderSuiteBase {
     testSecureConnectionProvider(provider, driver, defaultOptions)
     testSecureConnectionProvider(provider, driver, customOptions)
   }
+
+  test("SPARK-32229: appEntry should handle DriverWrapper instances") {
+    val provider = new MSSQLConnectionProvider()
+    registerDriver(provider.driverClass)
+
+    val wrappedDriver: Driver = getWrappedDriver(provider.driverClass)
+
+    assert(provider.appEntry(wrappedDriver, options("jdbc:sqlserver://localhost/mssql")) ===
+      "SQLJDBCDriver")
+  }
 }

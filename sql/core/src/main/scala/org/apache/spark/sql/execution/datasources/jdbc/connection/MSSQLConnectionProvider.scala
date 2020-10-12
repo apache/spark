@@ -23,7 +23,7 @@ import java.util.Properties
 
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 
 private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
   override val driverClass = "com.microsoft.sqlserver.jdbc.SQLServerDriver"
@@ -35,10 +35,12 @@ private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
     val configName = "jaasConfigurationName"
     val appEntryDefault = "SQLJDBCDriver"
 
+    val wrappedDriver = DriverRegistry.getWrappedDriver(driver)
     val parseURL = try {
       // The default parser method signature is the following:
       // private Properties parseAndMergeProperties(String Url, Properties suppliedProperties)
-      val m = driver.getClass.getDeclaredMethod(parserMethod, classOf[String], classOf[Properties])
+      val m = wrappedDriver.getClass.getDeclaredMethod(parserMethod, classOf[String],
+        classOf[Properties])
       m.setAccessible(true)
       Some(m)
     } catch {
@@ -48,7 +50,7 @@ private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
     parseURL match {
       case Some(m) =>
         logDebug("Property parser method found, using it")
-        m.invoke(driver, options.url, null).asInstanceOf[Properties]
+        m.invoke(wrappedDriver, options.url, null).asInstanceOf[Properties]
           .getProperty(configName, appEntryDefault)
 
       case None =>

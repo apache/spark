@@ -58,5 +58,12 @@ object DriverRegistry extends Logging {
       }
     }
   }
+
+  def getWrappedDriver(driver: Driver): Driver = {
+    driver match {
+      case dw: DriverWrapper => dw.wrapped
+      case d => d
+    }
+  }
 }
 
