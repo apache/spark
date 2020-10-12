@@ -1410,10 +1410,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           case Some(SqlBaseParser.ALL) =>
             if (ctx.expression.isEmpty) {
               throw new ParseException("Expected something between '(' and ')'.", ctx)
+            } else if (ctx.expression.size <= 14378) {
+              getLikeQuantifierExprs(ctx.expression).reduceLeft(And)
+            } else {
+              ctx.NOT match {
+                case null => LikeAll(e +: ctx.expression.asScala.map(expression))
+                case _ => NotLikeAll(e +: ctx.expression.asScala.map(expression))
             }
-            ctx.NOT match {
-              case null => LikeAll(e +: ctx.expression.asScala.map(expression))
-              case _ => NotLikeAll(e +: ctx.expression.asScala.map(expression))
           }
           case _ =>
             val escapeChar = Option(ctx.escapeChar).map(string).map { str =>
