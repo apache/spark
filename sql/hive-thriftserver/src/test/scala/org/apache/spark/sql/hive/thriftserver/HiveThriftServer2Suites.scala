@@ -46,6 +46,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.HiveTestJars
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -285,7 +286,6 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("test multiple session") {
-    import org.apache.spark.sql.internal.SQLConf
     var defaultV1: String = null
     var defaultV2: String = null
     var data: ArrayBuffer[Int] = null
@@ -881,11 +881,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     }
   }
 
-  test("SPARK-26533: Support query auto timeout cancel on thriftserver") {
+  test("SPARK-26533: Support query auto timeout cancel on thriftserver - setQueryTimeout") {
     withJdbcStatement() { statement =>
       statement.setQueryTimeout(1)
       val e = intercept[SQLException] {
-        statement.execute("select java_method('java.lang.Thread', 'sleep', 3000L)")
+        statement.execute("select java_method('java.lang.Thread', 'sleep', 10000L)")
       }.getMessage
       assert(e.contains("Query timed out after"))
 
@@ -900,6 +900,22 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         "select 'test', java_method('java.lang.Thread', 'sleep', 3000L)")
       rs2.next()
       assert(rs2.getString(1) == "test")
+    }
+  }
+
+  test("SPARK-26533: Support query auto timeout cancel on thriftserver - SQLConf") {
+    withJdbcStatement() { statement =>
+      statement.execute(s"SET ${SQLConf.THRIFTSERVER_QUERY_TIMEOUT.key}=1")
+      val e = intercept[SQLException] {
+        statement.execute("select java_method('java.lang.Thread', 'sleep', 10000L)")
+      }.getMessage
+      assert(e.contains("Query timed out after"))
+
+      statement.execute(s"SET ${SQLConf.THRIFTSERVER_QUERY_TIMEOUT.key}=0")
+      val rs = statement.executeQuery(
+        "select 'test', java_method('java.lang.Thread', 'sleep', 3000L)")
+      rs.next()
+      assert(rs.getString(1) == "test")
     }
   }
 }
