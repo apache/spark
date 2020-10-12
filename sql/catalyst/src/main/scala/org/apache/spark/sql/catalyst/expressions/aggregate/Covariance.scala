@@ -26,7 +26,7 @@ import org.apache.spark.sql.types._
  * Compute the covariance between two expressions.
  * When applied on empty data (i.e., count is zero), it returns NULL.
  */
-abstract class Covariance(x: Expression, y: Expression)
+abstract class Covariance(x: Expression, y: Expression, nullOnDivideByZero: Boolean)
   extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(x, y)
@@ -39,8 +39,9 @@ abstract class Covariance(x: Expression, y: Expression)
   protected val yAvg = AttributeReference("yAvg", DoubleType, nullable = false)()
   protected val ck = AttributeReference("ck", DoubleType, nullable = false)()
 
-  protected val divideByZeroEvalResult: Expression =
-    if (SQLConf.get.legacyStatisticalAggregate) Double.NaN else Literal.create(null, DoubleType)
+  protected lazy val divideByZeroEvalResult: Expression = {
+    if (nullOnDivideByZero) Double.NaN else Literal.create(null, DoubleType)
+  }
 
   override val aggBufferAttributes: Seq[AttributeReference] = Seq(n, xAvg, yAvg, ck)
 
@@ -92,7 +93,15 @@ abstract class Covariance(x: Expression, y: Expression)
   """,
   group = "agg_funcs",
   since = "2.0.0")
-case class CovPopulation(left: Expression, right: Expression) extends Covariance(left, right) {
+case class CovPopulation(
+    left: Expression,
+    right: Expression,
+    nullOnDivideByZero: Boolean = SQLConf.get.legacyStatisticalAggregate)
+  extends Covariance(left, right, nullOnDivideByZero) {
+
+  def this(left: Expression, right: Expression) =
+    this(left, right, SQLConf.get.legacyStatisticalAggregate)
+
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType), ck / n)
   }
@@ -109,7 +118,15 @@ case class CovPopulation(left: Expression, right: Expression) extends Covariance
   """,
   group = "agg_funcs",
   since = "2.0.0")
-case class CovSample(left: Expression, right: Expression) extends Covariance(left, right) {
+case class CovSample(
+    left: Expression,
+    right: Expression,
+    nullOnDivideByZero: Boolean = SQLConf.get.legacyStatisticalAggregate)
+  extends Covariance(left, right, nullOnDivideByZero) {
+
+  def this(left: Expression, right: Expression) =
+    this(left, right, SQLConf.get.legacyStatisticalAggregate)
+
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
       If(n === 1.0, divideByZeroEvalResult, ck / (n - 1.0)))

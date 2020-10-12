@@ -450,14 +450,20 @@ object TypeCoercion {
       case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
       case Average(e @ StringType()) => Average(Cast(e, DoubleType))
-      case StddevPop(e @ StringType()) => StddevPop(Cast(e, DoubleType))
-      case StddevSamp(e @ StringType()) => StddevSamp(Cast(e, DoubleType))
+      case StddevPop(e @ StringType(), nullOnDivideByZero) =>
+        StddevPop(Cast(e, DoubleType), nullOnDivideByZero)
+      case StddevSamp(e @ StringType(), nullOnDivideByZero) =>
+        StddevSamp(Cast(e, DoubleType), nullOnDivideByZero)
       case UnaryMinus(e @ StringType()) => UnaryMinus(Cast(e, DoubleType))
       case UnaryPositive(e @ StringType()) => UnaryPositive(Cast(e, DoubleType))
-      case VariancePop(e @ StringType()) => VariancePop(Cast(e, DoubleType))
-      case VarianceSamp(e @ StringType()) => VarianceSamp(Cast(e, DoubleType))
-      case Skewness(e @ StringType()) => Skewness(Cast(e, DoubleType))
-      case Kurtosis(e @ StringType()) => Kurtosis(Cast(e, DoubleType))
+      case VariancePop(e @ StringType(), nullOnDivideByZero) =>
+        VariancePop(Cast(e, DoubleType), nullOnDivideByZero)
+      case VarianceSamp(e @ StringType(), nullOnDivideByZero) =>
+        VarianceSamp(Cast(e, DoubleType), nullOnDivideByZero)
+      case Skewness(e @ StringType(), nullOnDivideByZero) =>
+        Skewness(Cast(e, DoubleType), nullOnDivideByZero)
+      case Kurtosis(e @ StringType(), nullOnDivideByZero) =>
+        Kurtosis(Cast(e, DoubleType), nullOnDivideByZero)
     }
   }
 

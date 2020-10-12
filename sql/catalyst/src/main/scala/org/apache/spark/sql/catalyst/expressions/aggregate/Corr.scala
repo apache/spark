@@ -29,7 +29,7 @@ import org.apache.spark.sql.types._
  * Definition of Pearson correlation can be found at
  * http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
  */
-abstract class PearsonCorrelation(x: Expression, y: Expression)
+abstract class PearsonCorrelation(x: Expression, y: Expression, nullOnDivideByZero: Boolean)
   extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(x, y)
@@ -44,8 +44,9 @@ abstract class PearsonCorrelation(x: Expression, y: Expression)
   protected val xMk = AttributeReference("xMk", DoubleType, nullable = false)()
   protected val yMk = AttributeReference("yMk", DoubleType, nullable = false)()
 
-  protected val divideByZeroEvalResult: Expression =
-    if (SQLConf.get.legacyStatisticalAggregate) Double.NaN else Literal.create(null, DoubleType)
+  protected lazy val divideByZeroEvalResult: Expression = {
+    if (nullOnDivideByZero) Double.NaN else Literal.create(null, DoubleType)
+  }
 
   override val aggBufferAttributes: Seq[AttributeReference] = Seq(n, xAvg, yAvg, ck, xMk, yMk)
 
@@ -106,8 +107,14 @@ abstract class PearsonCorrelation(x: Expression, y: Expression)
   group = "agg_funcs",
   since = "1.6.0")
 // scalastyle:on line.size.limit
-case class Corr(x: Expression, y: Expression)
-  extends PearsonCorrelation(x, y) {
+case class Corr(
+    x: Expression,
+    y: Expression,
+    nullOnDivideByZero: Boolean = SQLConf.get.legacyStatisticalAggregate)
+  extends PearsonCorrelation(x, y, nullOnDivideByZero) {
+
+  def this(x: Expression, y: Expression) =
+    this(x, y, SQLConf.get.legacyStatisticalAggregate)
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),

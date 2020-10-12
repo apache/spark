@@ -44,7 +44,7 @@ import org.apache.spark.sql.types._
  *
  * @param child to compute central moments of.
  */
-abstract class CentralMomentAgg(child: Expression)
+abstract class CentralMomentAgg(child: Expression, nullOnDivideByZero: Boolean)
   extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   /**
@@ -63,8 +63,9 @@ abstract class CentralMomentAgg(child: Expression)
   protected val m3 = AttributeReference("m3", DoubleType, nullable = false)()
   protected val m4 = AttributeReference("m4", DoubleType, nullable = false)()
 
-  protected val divideByZeroEvalResult: Expression =
-    if (SQLConf.get.legacyStatisticalAggregate) Double.NaN else Literal.create(null, DoubleType)
+  protected lazy val divideByZeroEvalResult: Expression = {
+    if (nullOnDivideByZero) Double.NaN else Literal.create(null, DoubleType)
+  }
 
   private def trimHigherOrder[T](expressions: Seq[T]) = expressions.take(momentOrder + 1)
 
@@ -149,7 +150,12 @@ abstract class CentralMomentAgg(child: Expression)
   group = "agg_funcs",
   since = "1.6.0")
 // scalastyle:on line.size.limit
-case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
+case class StddevPop(
+    child: Expression,
+    nullOnDivideByZero: Boolean = SQLConf.get.legacyStatisticalAggregate)
+  extends CentralMomentAgg(child, nullOnDivideByZero) {
+
+  def this(child: Expression) = this(child, SQLConf.get.legacyStatisticalAggregate)
 
   override protected def momentOrder = 2
 
@@ -172,7 +178,12 @@ case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
   group = "agg_funcs",
   since = "1.6.0")
 // scalastyle:on line.size.limit
-case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
+case class StddevSamp(
+    child: Expression,
+    nullOnDivideByZero: Boolean = SQLConf.get.legacyStatisticalAggregate)
+  extends CentralMomentAgg(child, nullOnDivideByZero) {
+
+  def this(child: Expression) = this(child, SQLConf.get.legacyStatisticalAggregate)
 
   override protected def momentOrder = 2
 
@@ -195,7 +206,12 @@ case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
   """,
   group = "agg_funcs",
   since = "1.6.0")
-case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
+case class VariancePop(
+    child: Expression,
+    nullOnDivideByZero: Boolean = SQLConf.get.legacyStatisticalAggregate)
+  extends CentralMomentAgg(child, nullOnDivideByZero) {
+
+  def this(child: Expression) = this(child, SQLConf.get.legacyStatisticalAggregate)
 
   override protected def momentOrder = 2
 
@@ -216,7 +232,12 @@ case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
   """,
   group = "agg_funcs",
   since = "1.6.0")
-case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
+case class VarianceSamp(
+    child: Expression,
+    nullOnDivideByZero: Boolean = SQLConf.get.legacyStatisticalAggregate)
+  extends CentralMomentAgg(child, nullOnDivideByZero) {
+
+  def this(child: Expression) = this(child, SQLConf.get.legacyStatisticalAggregate)
 
   override protected def momentOrder = 2
 
@@ -239,7 +260,12 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
   """,
   group = "agg_funcs",
   since = "1.6.0")
-case class Skewness(child: Expression) extends CentralMomentAgg(child) {
+case class Skewness(
+    child: Expression,
+    nullOnDivideByZero: Boolean = SQLConf.get.legacyStatisticalAggregate)
+  extends CentralMomentAgg(child, nullOnDivideByZero) {
+
+  def this(child: Expression) = this(child, SQLConf.get.legacyStatisticalAggregate)
 
   override def prettyName: String = "skewness"
 
@@ -262,7 +288,12 @@ case class Skewness(child: Expression) extends CentralMomentAgg(child) {
   """,
   group = "agg_funcs",
   since = "1.6.0")
-case class Kurtosis(child: Expression) extends CentralMomentAgg(child) {
+case class Kurtosis(
+    child: Expression,
+    nullOnDivideByZero: Boolean = SQLConf.get.legacyStatisticalAggregate)
+  extends CentralMomentAgg(child, nullOnDivideByZero) {
+
+  def this(child: Expression) = this(child, SQLConf.get.legacyStatisticalAggregate)
 
   override protected def momentOrder = 4
 
