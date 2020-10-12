@@ -63,6 +63,9 @@ abstract class CentralMomentAgg(child: Expression)
   protected val m3 = AttributeReference("m3", DoubleType, nullable = false)()
   protected val m4 = AttributeReference("m4", DoubleType, nullable = false)()
 
+  protected val divideByZeroEvalResult: Expression =
+    if (SQLConf.get.legacyStatisticalAggregate) Double.NaN else Literal.create(null, DoubleType)
+
   private def trimHigherOrder[T](expressions: Seq[T]) = expressions.take(momentOrder + 1)
 
   override val aggBufferAttributes = trimHigherOrder(Seq(n, avg, m2, m3, m4))
@@ -175,9 +178,7 @@ case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === 1.0,
-        if (SQLConf.get.legacyCentralMomentAgg) Double.NaN else Literal.create(null, DoubleType),
-        sqrt(m2 / (n - 1.0))))
+      If(n === 1.0, divideByZeroEvalResult, sqrt(m2 / (n - 1.0))))
   }
 
   override def prettyName: String =
@@ -221,9 +222,7 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === 1.0,
-        if (SQLConf.get.legacyCentralMomentAgg) Double.NaN else Literal.create(null, DoubleType),
-        m2 / (n - 1.0)))
+      If(n === 1.0, divideByZeroEvalResult, m2 / (n - 1.0)))
   }
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("var_samp")
@@ -248,9 +247,7 @@ case class Skewness(child: Expression) extends CentralMomentAgg(child) {
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(m2 === 0.0,
-        if (SQLConf.get.legacyCentralMomentAgg) Double.NaN else Literal.create(null, DoubleType),
-        sqrt(n) * m3 / sqrt(m2 * m2 * m2)))
+      If(m2 === 0.0, divideByZeroEvalResult, sqrt(n) * m3 / sqrt(m2 * m2 * m2)))
   }
 }
 
@@ -271,9 +268,7 @@ case class Kurtosis(child: Expression) extends CentralMomentAgg(child) {
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(m2 === 0.0,
-        if (SQLConf.get.legacyCentralMomentAgg) Double.NaN else Literal.create(null, DoubleType),
-        n * m4 / (m2 * m2) - 3.0))
+      If(m2 === 0.0, divideByZeroEvalResult, n * m4 / (m2 * m2) - 3.0))
   }
 
   override def prettyName: String = "kurtosis"

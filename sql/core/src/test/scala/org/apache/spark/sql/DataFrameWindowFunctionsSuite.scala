@@ -94,56 +94,111 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   }
 
   test("corr, covar_pop, stddev_pop functions in specific window") {
-    val df = Seq(
-      ("a", "p1", 10.0, 20.0),
-      ("b", "p1", 20.0, 10.0),
-      ("c", "p2", 20.0, 20.0),
-      ("d", "p2", 20.0, 20.0),
-      ("e", "p3", 0.0, 0.0),
-      ("f", "p3", 6.0, 12.0),
-      ("g", "p3", 6.0, 12.0),
-      ("h", "p3", 8.0, 16.0),
-      ("i", "p4", 5.0, 5.0)).toDF("key", "partitionId", "value1", "value2")
-    checkAnswer(
-      df.select(
-        $"key",
-        corr("value1", "value2").over(Window.partitionBy("partitionId")
-          .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        covar_pop("value1", "value2")
-          .over(Window.partitionBy("partitionId")
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
+      val df = Seq(
+        ("a", "p1", 10.0, 20.0),
+        ("b", "p1", 20.0, 10.0),
+        ("c", "p2", 20.0, 20.0),
+        ("d", "p2", 20.0, 20.0),
+        ("e", "p3", 0.0, 0.0),
+        ("f", "p3", 6.0, 12.0),
+        ("g", "p3", 6.0, 12.0),
+        ("h", "p3", 8.0, 16.0),
+        ("i", "p4", 5.0, 5.0)).toDF("key", "partitionId", "value1", "value2")
+      checkAnswer(
+        df.select(
+          $"key",
+          corr("value1", "value2").over(Window.partitionBy("partitionId")
             .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        var_pop("value1")
-          .over(Window.partitionBy("partitionId")
-            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        stddev_pop("value1")
-          .over(Window.partitionBy("partitionId")
-            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        var_pop("value2")
-          .over(Window.partitionBy("partitionId")
-            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        stddev_pop("value2")
-          .over(Window.partitionBy("partitionId")
-            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing))),
+          covar_pop("value1", "value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          var_pop("value1")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev_pop("value1")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          var_pop("value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev_pop("value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing))),
 
-      // As stddev_pop(expr) = sqrt(var_pop(expr))
-      // the "stddev_pop" column can be calculated from the "var_pop" column.
-      //
-      // As corr(expr1, expr2) = covar_pop(expr1, expr2) / (stddev_pop(expr1) * stddev_pop(expr2))
-      // the "corr" column can be calculated from the "covar_pop" and the two "stddev_pop" columns.
-      Seq(
-        Row("a", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
-        Row("b", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
-        Row("c", null, 0.0, 0.0, 0.0, 0.0, 0.0),
-        Row("d", null, 0.0, 0.0, 0.0, 0.0, 0.0),
-        Row("e", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
-        Row("f", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
-        Row("g", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
-        Row("h", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
-        Row("i", Double.NaN, 0.0, 0.0, 0.0, 0.0, 0.0)))
+        // As stddev_pop(expr) = sqrt(var_pop(expr))
+        // the "stddev_pop" column can be calculated from the "var_pop" column.
+        //
+        // As corr(expr1, expr2) = covar_pop(expr1, expr2) / (stddev_pop(expr1) * stddev_pop(expr2))
+        // the "corr" column can be calculated from the "covar_pop" and the two "stddev_pop" columns
+        Seq(
+          Row("a", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
+          Row("b", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
+          Row("c", null, 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("d", null, 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("e", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("f", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("g", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("h", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("i", Double.NaN, 0.0, 0.0, 0.0, 0.0, 0.0)))
+    }
+  }
+
+  test("SPARK-13860: " +
+    "corr, covar_pop, stddev_pop functions in specific window " +
+    "LEGACY_STATISTICAL_AGGREGATE off") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "false") {
+      val df = Seq(
+        ("a", "p1", 10.0, 20.0),
+        ("b", "p1", 20.0, 10.0),
+        ("c", "p2", 20.0, 20.0),
+        ("d", "p2", 20.0, 20.0),
+        ("e", "p3", 0.0, 0.0),
+        ("f", "p3", 6.0, 12.0),
+        ("g", "p3", 6.0, 12.0),
+        ("h", "p3", 8.0, 16.0),
+        ("i", "p4", 5.0, 5.0)).toDF("key", "partitionId", "value1", "value2")
+      checkAnswer(
+        df.select(
+          $"key",
+          corr("value1", "value2").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          covar_pop("value1", "value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          var_pop("value1")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev_pop("value1")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          var_pop("value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev_pop("value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing))),
+
+        // As stddev_pop(expr) = sqrt(var_pop(expr))
+        // the "stddev_pop" column can be calculated from the "var_pop" column.
+        //
+        // As corr(expr1, expr2) = covar_pop(expr1, expr2) / (stddev_pop(expr1) * stddev_pop(expr2))
+        // the "corr" column can be calculated from the "covar_pop" and the two "stddev_pop" columns
+        Seq(
+          Row("a", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
+          Row("b", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
+          Row("c", null, 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("d", null, 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("e", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("f", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("g", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("h", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("i", null, 0.0, 0.0, 0.0, 0.0, 0.0)))
+    }
   }
 
   test("covar_samp, var_samp (variance), stddev_samp (stddev) functions in specific window") {
-    withSQLConf(SQLConf.LEGACY_CENTRAL_MOMENT_AGG.key -> "true") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
       val df = Seq(
         ("a", "p1", 10.0, 20.0),
         ("b", "p1", 20.0, 10.0),
@@ -183,8 +238,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
 
   test("SPARK-13860: " +
     "covar_samp, var_samp (variance), stddev_samp (stddev) functions in specific window " +
-    "LEGACY_CENTRAL_MOMENT_AGG off") {
-    withSQLConf(SQLConf.LEGACY_CENTRAL_MOMENT_AGG.key -> "false") {
+    "LEGACY_STATISTICAL_AGGREGATE off") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "false") {
       val df = Seq(
         ("a", "p1", 10.0, 20.0),
         ("b", "p1", 20.0, 10.0),
@@ -218,7 +273,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
           Row("f", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
           Row("g", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
           Row("h", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
-          Row("i", Double.NaN, null, null, null, null)))
+          Row("i", null, null, null, null, null)))
     }
   }
 

@@ -2342,11 +2342,11 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_CENTRAL_MOMENT_AGG =
-    buildConf("spark.sql.legacy.centralMomentAgg")
+  val LEGACY_STATISTICAL_AGGREGATE =
+    buildConf("spark.sql.legacy.statisticalAggregate")
       .internal()
-      .doc("When set to true, central moment aggregation will return Double.NaN " +
-        "if divide by zero occurred during calculation. Otherwise, it will return null. " +
+      .doc("When set to true, statistical aggregate function returns Double.NaN " +
+        "if divide by zero occurred during expression evaluation, otherwise, it returns null. " +
         "Before version 3.1.0, it returns NaN in divideByZero case by default.")
       .version("3.1.0")
       .booleanConf
@@ -3374,7 +3374,7 @@ class SQLConf extends Serializable with Logging {
   def allowNegativeScaleOfDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED)
 
-  def legacyCentralMomentAgg: Boolean = getConf(SQLConf.LEGACY_CENTRAL_MOMENT_AGG)
+  def legacyStatisticalAggregate: Boolean = getConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE)
 
   def truncateTableIgnorePermissionAcl: Boolean =
     getConf(SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL)

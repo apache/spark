@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -42,6 +43,9 @@ abstract class PearsonCorrelation(x: Expression, y: Expression)
   protected val ck = AttributeReference("ck", DoubleType, nullable = false)()
   protected val xMk = AttributeReference("xMk", DoubleType, nullable = false)()
   protected val yMk = AttributeReference("yMk", DoubleType, nullable = false)()
+
+  protected val divideByZeroEvalResult: Expression =
+    if (SQLConf.get.legacyStatisticalAggregate) Double.NaN else Literal.create(null, DoubleType)
 
   override val aggBufferAttributes: Seq[AttributeReference] = Seq(n, xAvg, yAvg, ck, xMk, yMk)
 
@@ -107,7 +111,7 @@ case class Corr(x: Expression, y: Expression)
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === 1.0, Double.NaN, ck / sqrt(xMk * yMk)))
+      If(n === 1.0, divideByZeroEvalResult, ck / sqrt(xMk * yMk)))
   }
 
   override def prettyName: String = "corr"

@@ -456,7 +456,7 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("zero moments") {
-    withSQLConf(SQLConf.LEGACY_CENTRAL_MOMENT_AGG.key -> "true") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
       val input = Seq((1, 2)).toDF("a", "b")
       checkAnswer(
         input.agg(stddev($"a"), stddev_samp($"a"), stddev_pop($"a"), variance($"a"),
@@ -479,8 +479,8 @@ class DataFrameAggregateSuite extends QueryTest
     }
   }
 
-  test("SPARK-13860: zero moments LEGACY_CENTRAL_MOMENT_AGG off") {
-    withSQLConf(SQLConf.LEGACY_CENTRAL_MOMENT_AGG.key -> "false") {
+  test("SPARK-13860: zero moments LEGACY_STATISTICAL_AGGREGATE off") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "false") {
       val input = Seq((1, 2)).toDF("a", "b")
       checkAnswer(
         input.agg(stddev($"a"), stddev_samp($"a"), stddev_pop($"a"), variance($"a"),
