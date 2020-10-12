@@ -85,7 +85,7 @@ struct<stddev_pop(CAST(CAST(udf(ansi_cast(b as string)) AS FLOAT) AS DOUBLE)):do
 -- !query
 SELECT udf(stddev_samp(b)) FROM aggtest
 -- !query schema
-struct<CAST(udf(ansi_cast(stddev_samp(ansi_cast(b as double), false) as string)) AS DOUBLE):double>
+struct<CAST(udf(ansi_cast(stddev_samp(ansi_cast(b as double), true) as string)) AS DOUBLE):double>
 -- !query output
 151.38936080399804
 
@@ -101,7 +101,7 @@ struct<var_pop(CAST(CAST(udf(ansi_cast(b as string)) AS FLOAT) AS DOUBLE)):doubl
 -- !query
 SELECT udf(var_samp(b)) FROM aggtest
 -- !query schema
-struct<CAST(udf(ansi_cast(var_samp(ansi_cast(b as double), false) as string)) AS DOUBLE):double>
+struct<CAST(udf(ansi_cast(var_samp(ansi_cast(b as double), true) as string)) AS DOUBLE):double>
 -- !query output
 22918.738564643096
 
@@ -109,7 +109,7 @@ struct<CAST(udf(ansi_cast(var_samp(ansi_cast(b as double), false) as string)) AS
 -- !query
 SELECT udf(stddev_pop(CAST(b AS Decimal(38,0)))) FROM aggtest
 -- !query schema
-struct<CAST(udf(ansi_cast(stddev_pop(ansi_cast(ansi_cast(b as decimal(38,0)) as double), false) as string)) AS DOUBLE):double>
+struct<CAST(udf(ansi_cast(stddev_pop(ansi_cast(ansi_cast(b as decimal(38,0)) as double), true) as string)) AS DOUBLE):double>
 -- !query output
 131.18117242958306
 
@@ -125,7 +125,7 @@ struct<stddev_samp(CAST(CAST(CAST(udf(ansi_cast(b as string)) AS FLOAT) AS DECIM
 -- !query
 SELECT udf(var_pop(CAST(b AS Decimal(38,0)))) FROM aggtest
 -- !query schema
-struct<CAST(udf(ansi_cast(var_pop(ansi_cast(ansi_cast(b as decimal(38,0)) as double), false) as string)) AS DOUBLE):double>
+struct<CAST(udf(ansi_cast(var_pop(ansi_cast(ansi_cast(b as decimal(38,0)) as double), true) as string)) AS DOUBLE):double>
 -- !query output
 17208.5
 
@@ -141,7 +141,7 @@ struct<var_samp(CAST(CAST(udf(ansi_cast(ansi_cast(b as decimal(38,0)) as string)
 -- !query
 SELECT udf(var_pop(1.0)), var_samp(udf(2.0))
 -- !query schema
-struct<CAST(udf(ansi_cast(var_pop(ansi_cast(1.0 as double), false) as string)) AS DOUBLE):double,var_samp(CAST(CAST(udf(ansi_cast(2.0 as string)) AS DECIMAL(2,1)) AS DOUBLE)):double>
+struct<CAST(udf(ansi_cast(var_pop(ansi_cast(1.0 as double), true) as string)) AS DOUBLE):double,var_samp(CAST(CAST(udf(ansi_cast(2.0 as string)) AS DECIMAL(2,1)) AS DOUBLE)):double>
 -- !query output
 0.0	NULL
 
@@ -265,7 +265,7 @@ NaN	NaN
 SELECT avg(udf(CAST(x AS DOUBLE))), udf(var_pop(CAST(x AS DOUBLE)))
 FROM (VALUES (100000003), (100000004), (100000006), (100000007)) v(x)
 -- !query schema
-struct<avg(CAST(udf(ansi_cast(ansi_cast(x as double) as string)) AS DOUBLE)):double,CAST(udf(ansi_cast(var_pop(ansi_cast(x as double), false) as string)) AS DOUBLE):double>
+struct<avg(CAST(udf(ansi_cast(ansi_cast(x as double) as string)) AS DOUBLE)):double,CAST(udf(ansi_cast(var_pop(ansi_cast(x as double), true) as string)) AS DOUBLE):double>
 -- !query output
 1.00000005E8	2.5
 
@@ -274,7 +274,7 @@ struct<avg(CAST(udf(ansi_cast(ansi_cast(x as double) as string)) AS DOUBLE)):dou
 SELECT avg(udf(CAST(x AS DOUBLE))), udf(var_pop(CAST(x AS DOUBLE)))
 FROM (VALUES (7000000000005), (7000000000007)) v(x)
 -- !query schema
-struct<avg(CAST(udf(ansi_cast(ansi_cast(x as double) as string)) AS DOUBLE)):double,CAST(udf(ansi_cast(var_pop(ansi_cast(x as double), false) as string)) AS DOUBLE):double>
+struct<avg(CAST(udf(ansi_cast(ansi_cast(x as double) as string)) AS DOUBLE)):double,CAST(udf(ansi_cast(var_pop(ansi_cast(x as double), true) as string)) AS DOUBLE):double>
 -- !query output
 7.000000000006E12	1.0
 
@@ -282,7 +282,7 @@ struct<avg(CAST(udf(ansi_cast(ansi_cast(x as double) as string)) AS DOUBLE)):dou
 -- !query
 SELECT udf(covar_pop(b, udf(a))), covar_samp(udf(b), a) FROM aggtest
 -- !query schema
-struct<CAST(udf(ansi_cast(covar_pop(ansi_cast(b as double), ansi_cast(ansi_cast(udf(ansi_cast(a as string)) as int) as double), false) as string)) AS DOUBLE):double,covar_samp(CAST(CAST(udf(ansi_cast(b as string)) AS FLOAT) AS DOUBLE), CAST(a AS DOUBLE)):double>
+struct<CAST(udf(ansi_cast(covar_pop(ansi_cast(b as double), ansi_cast(ansi_cast(udf(ansi_cast(a as string)) as int) as double), true) as string)) AS DOUBLE):double,covar_samp(CAST(CAST(udf(ansi_cast(b as string)) AS FLOAT) AS DOUBLE), CAST(a AS DOUBLE)):double>
 -- !query output
 653.6289553875104	871.5052738500139
 
