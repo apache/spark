@@ -137,9 +137,6 @@
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.1</parquet.version>
     <orc.version>1.5.12</orc.version>
-    <orc.classifier></orc.classifier>
-    <hive.parquet.group>com.twitter</hive.parquet.group>
-    <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.4.28.v20200408</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
     <chill.version>0.9.5</chill.version>
@@ -236,7 +233,6 @@
     -->
     <hadoop.deps.scope>compile</hadoop.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
-    <hive.parquet.scope>provided</hive.parquet.scope>
     <hive.storage.version>2.7.2</hive.storage.version>
     <hive.storage.scope>compile</hive.storage.scope>
     <hive.common.scope>compile</hive.common.scope>
@@ -692,7 +688,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.4.5-4</version>
+        <version>1.4.5-6</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -2169,7 +2165,6 @@
         <groupId>org.apache.orc</groupId>
         <artifactId>orc-core</artifactId>
         <version>${orc.version}</version>
-        <classifier>${orc.classifier}</classifier>
         <scope>${orc.deps.scope}</scope>
         <exclusions>
           <exclusion>
@@ -2194,7 +2189,6 @@
         <groupId>org.apache.orc</groupId>
         <artifactId>orc-mapreduce</artifactId>
         <version>${orc.version}</version>
-        <classifier>${orc.classifier}</classifier>
         <scope>${orc.deps.scope}</scope>
         <exclusions>
           <exclusion>
@@ -2242,12 +2236,6 @@
         <artifactId>parquet-avro</artifactId>
         <version>${parquet.version}</version>
         <scope>${parquet.test.deps.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>${hive.parquet.group}</groupId>
-        <artifactId>parquet-hadoop-bundle</artifactId>
-        <version>${hive.parquet.version}</version>
-        <scope>${hive.parquet.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.codehaus.janino</groupId>

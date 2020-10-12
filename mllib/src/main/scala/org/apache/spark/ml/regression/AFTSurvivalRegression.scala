@@ -421,9 +421,17 @@ class AFTSurvivalRegressionModel private[ml] (
     }
 
     if (hasQuantilesCol) {
-      val predictQuantilesUDF = udf { features: Vector => predictQuantiles(features)}
+      val baseQuantiles = $(quantileProbabilities)
+        .map(q => math.exp(math.log(-math.log1p(-q)) * scale))
+      val lambdaCol = if ($(predictionCol).nonEmpty) {
+        predictionColumns.head
+      } else {
+        udf { features: Vector => predict(features) }.apply(col($(featuresCol)))
+      }
+      val predictQuantilesUDF =
+        udf { lambda: Double => Vectors.dense(baseQuantiles.map(q => q * lambda)) }
       predictionColNames :+= $(quantilesCol)
-      predictionColumns :+= predictQuantilesUDF(col($(featuresCol)))
+      predictionColumns :+= predictQuantilesUDF(lambdaCol)
         .as($(quantilesCol), outputSchema($(quantilesCol)).metadata)
     }
 

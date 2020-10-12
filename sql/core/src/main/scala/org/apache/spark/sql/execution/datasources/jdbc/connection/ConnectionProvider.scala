@@ -24,6 +24,7 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.security.SecurityConfigurationLock
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcConnectionProvider
 import org.apache.spark.util.Utils
 
@@ -39,15 +40,18 @@ private[jdbc] object ConnectionProvider extends Logging {
     while (iterator.hasNext) {
       try {
         val provider = iterator.next
-        logDebug(s"Loaded built in provider: $provider")
+        logDebug(s"Loaded built-in provider: $provider")
         providers += provider
       } catch {
         case t: Throwable =>
-          logError(s"Failed to load built in provider.", t)
+          logError("Failed to load built-in provider.")
+          logInfo("Loading of the provider failed with the exception:", t)
       }
     }
-    // Seems duplicate but it's needed for Scala 2.13
-    providers.toSeq
+
+    val disabledProviders = Utils.stringToSeq(SQLConf.get.disabledJdbcConnectionProviders)
+    // toSeq seems duplicate but it's needed for Scala 2.13
+    providers.filterNot(p => disabledProviders.contains(p.name)).toSeq
   }
 
   def create(driver: Driver, options: Map[String, String]): Connection = {

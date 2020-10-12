@@ -1809,7 +1809,7 @@ test_that("column functions", {
   expect_equal(actual, expected)
 
   # Test withField
-  lines <- c("{\"Person\": {\"name\":\"Bob\", \"age\":24}}")
+  lines <- c("{\"Person\": {\"name\":\"Bob\", \"age\":24, \"height\": 170}}")
   jsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   writeLines(lines, jsonPath)
   df <- read.df(jsonPath, "json")
@@ -1820,6 +1820,23 @@ test_that("column functions", {
       )
   )
   expect_equal(result, data.frame(dummy = 42))
+
+  # Test dropFields
+  expect_setequal(
+    colnames(select(
+      withColumn(df, "Person", dropFields(df$Person, "age")),
+      column("Person.*")
+    )),
+    c("name", "height")
+  )
+
+  expect_equal(
+    colnames(select(
+      withColumn(df, "Person", dropFields(df$Person, "height", "name")),
+      column("Person.*")
+    )),
+    "age"
+  )
 })
 
 test_that("column binary mathfunctions", {
@@ -3926,6 +3943,24 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   expect_error(refreshByPath("/"), NA)
 
   dropTempView("cars")
+})
+
+test_that("assert_true, raise_error", {
+  df <- read.json(jsonPath)
+  filtered <- filter(df, "age < 20")
+
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20)))$age, c(NULL))
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20, "error message")))$age,
+               c(NULL))
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20, filtered$name)))$age,
+               c(NULL))
+  expect_error(collect(select(df, assert_true(df$age < 20))), "is not true!")
+  expect_error(collect(select(df, assert_true(df$age < 20, "error message"))),
+               "error message")
+  expect_error(collect(select(df, assert_true(df$age < 20, df$name))), "Michael")
+
+  expect_error(collect(select(filtered, raise_error("error message"))), "error message")
+  expect_error(collect(select(filtered, raise_error(filtered$name))), "Justin")
 })
 
 compare_list <- function(list1, list2) {
