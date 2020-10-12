@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal, SortDirection}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.util._
@@ -205,6 +205,45 @@ case class BucketSpec(
   }
 }
 
+case class HiveMetaBucketSpec(
+    numBuckets: Int,
+    bucketColumnNames: Seq[String],
+    sortColumnNames: Seq[(String, Int)]) {
+  def conf: SQLConf = SQLConf.get
+
+  if (numBuckets <= 0) {
+    throw new AnalysisException(
+      s"Number of buckets should be greater than 0.")
+  }
+
+  private def directionSQL(order: Int): String = order match {
+    case 1 => "ASC"
+    case 0 => "DESC"
+  }
+
+  override def toString: String = {
+    val bucketString = s"bucket columns: [${bucketColumnNames.mkString(", ")}]"
+    val sortString = if (sortColumnNames.nonEmpty) {
+      s", sort columns: [${sortColumnNames.map {
+        case (col, direction) => s"($col, ${directionSQL(direction)})"
+      }.mkString(", ")}]"
+    } else {
+      ""
+    }
+    s"$numBuckets buckets, $bucketString$sortString"
+  }
+
+  def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
+    mutable.LinkedHashMap[String, String](
+      "Num Buckets" -> numBuckets.toString,
+      "Bucket Columns" -> bucketColumnNames.map(quoteIdentifier).mkString("[", ", ", "]"),
+      "Sort Columns" -> sortColumnNames.map {
+        case (col, direction) => s"($col, ${directionSQL(direction)})"
+      }.map(quoteIdentifier).mkString("[", ", ", "]")
+    )
+  }
+}
+
 /**
  * A table defined in the catalog.
  *
@@ -237,6 +276,7 @@ case class CatalogTable(
     provider: Option[String] = None,
     partitionColumnNames: Seq[String] = Seq.empty,
     bucketSpec: Option[BucketSpec] = None,
+    metaBucketSpec: Option[HiveMetaBucketSpec] = None,
     owner: String = "",
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,

@@ -449,6 +449,16 @@ private[hive] class HiveClientImpl(
       None
     }
 
+    val metaBucketSpec = if (h.getNumBuckets > 0) {
+      val sortColumnOrders = h.getSortCols.asScala
+        .map { col =>
+          (col.getCol, col.getOrder)
+        }
+      Some(HiveMetaBucketSpec(h.getNumBuckets, h.getBucketCols.asScala, sortColumnOrders))
+    } else {
+      None
+    }
+
     // Skew spec and storage handler can't be mapped to CatalogTable (yet)
     val unsupportedFeatures = ArrayBuffer.empty[String]
 
@@ -502,6 +512,7 @@ private[hive] class HiveClientImpl(
       // in table properties. This means, if we have bucket spec in both hive metastore and
       // table properties, we will trust the one in table properties.
       bucketSpec = bucketSpec,
+      metaBucketSpec = metaBucketSpec,
       owner = Option(h.getOwner).getOrElse(""),
       createTime = h.getTTable.getCreateTime.toLong * 1000,
       lastAccessTime = h.getLastAccessTime.toLong * 1000,
@@ -1074,8 +1085,20 @@ private[hive] object HiveClientImpl extends Logging {
       hiveTable.setViewExpandedText(t)
     }
 
-    table.bucketSpec match {
-      case Some(bucketSpec) if !HiveExternalCatalog.isDatasourceTable(table) =>
+    (table.bucketSpec, table.metaBucketSpec) match {
+      case (Some(_), Some(bucketSpec)) if !HiveExternalCatalog.isDatasourceTable(table) =>
+        hiveTable.setNumBuckets(bucketSpec.numBuckets)
+        hiveTable.setBucketCols(bucketSpec.bucketColumnNames.toList.asJava)
+
+        if (bucketSpec.sortColumnNames.nonEmpty) {
+          hiveTable.setSortCols(
+            bucketSpec.sortColumnNames
+              .map { case (col, direction) => new Order(col, direction) }
+              .toList
+              .asJava
+          )
+        }
+      case (Some(bucketSpec), None) if !HiveExternalCatalog.isDatasourceTable(table) =>
         hiveTable.setNumBuckets(bucketSpec.numBuckets)
         hiveTable.setBucketCols(bucketSpec.bucketColumnNames.toList.asJava)
 

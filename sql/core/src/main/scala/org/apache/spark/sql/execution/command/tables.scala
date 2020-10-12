@@ -125,6 +125,7 @@ case class CreateTableLikeCommand(
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
         bucketSpec = sourceTableDesc.bucketSpec,
+        metaBucketSpec = sourceTableDesc.metaBucketSpec,
         properties = properties,
         tracksPartitionsInCatalog = sourceTableDesc.tracksPartitionsInCatalog)
 
