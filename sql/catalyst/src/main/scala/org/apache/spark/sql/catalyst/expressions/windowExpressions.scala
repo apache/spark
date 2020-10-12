@@ -336,11 +336,6 @@ trait OffsetWindowSpec extends Expression {
   val input: Expression
 
   /**
-   * Default result value for the function when the `offset`th row does not exist.
-   */
-  val default: Expression
-
-  /**
    * (Foldable) expression that contains the number of rows between the starting row (current row
    * if isRelative=true, or the first row of the window frame otherwise) and the row where the
    * input expression is evaluated.
@@ -348,9 +343,14 @@ trait OffsetWindowSpec extends Expression {
   val inputOffset: Expression
 
   /**
+    * Default result value for the function when the `offset`th row does not exist.
+    */
+  val default: Expression
+
+  /**
    * A new expression based on inputOffset, considering the direction of the `offset`.
    */
-  val offsetExpr: Expression = inputOffset
+  val offsetExpr: Expression
 
   /**
    * An optional specification that indicates the offset window function should skip null values in
@@ -453,6 +453,8 @@ case class Lead(input: Expression, inputOffset: Expression, default: Expression)
   def this(input: Expression) = this(input, Literal(1))
 
   def this() = this(Literal(null))
+
+  override val offsetExpr: Expression = inputOffset
 
   override val ignoreNulls = false
 }
@@ -635,6 +637,8 @@ case class NthValue(input: Expression, inputOffset: Expression, ignoreNulls: Boo
   def this(child: Expression, offset: Expression) = this(child, offset, false)
 
   override lazy val default = Literal.create(null, input.dataType)
+
+  override val offsetExpr: Expression = inputOffset
 
   override val isRelative = false
 
