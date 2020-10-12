@@ -1,58 +1,54 @@
 == Physical Plan ==
-* HashAggregate (54)
-+- Exchange (53)
-   +- * HashAggregate (52)
-      +- * HashAggregate (51)
-         +- * HashAggregate (50)
-            +- * HashAggregate (49)
-               +- * HashAggregate (48)
-                  +- * HashAggregate (47)
-                     +- Exchange (46)
-                        +- * HashAggregate (45)
-                           +- * BroadcastHashJoin LeftAnti BuildRight (44)
-                              :- * BroadcastHashJoin LeftAnti BuildRight (30)
-                              :  :- * Project (16)
-                              :  :  +- * BroadcastHashJoin Inner BuildRight (15)
-                              :  :     :- * Project (10)
-                              :  :     :  +- * BroadcastHashJoin Inner BuildRight (9)
-                              :  :     :     :- * Filter (3)
-                              :  :     :     :  +- * ColumnarToRow (2)
-                              :  :     :     :     +- Scan parquet default.store_sales (1)
-                              :  :     :     +- BroadcastExchange (8)
-                              :  :     :        +- * Project (7)
-                              :  :     :           +- * Filter (6)
-                              :  :     :              +- * ColumnarToRow (5)
-                              :  :     :                 +- Scan parquet default.date_dim (4)
-                              :  :     +- BroadcastExchange (14)
-                              :  :        +- * Filter (13)
-                              :  :           +- * ColumnarToRow (12)
-                              :  :              +- Scan parquet default.customer (11)
-                              :  +- BroadcastExchange (29)
-                              :     +- * HashAggregate (28)
-                              :        +- Exchange (27)
-                              :           +- * HashAggregate (26)
-                              :              +- * Project (25)
-                              :                 +- * BroadcastHashJoin Inner BuildRight (24)
-                              :                    :- * Project (22)
-                              :                    :  +- * BroadcastHashJoin Inner BuildRight (21)
-                              :                    :     :- * Filter (19)
-                              :                    :     :  +- * ColumnarToRow (18)
-                              :                    :     :     +- Scan parquet default.catalog_sales (17)
-                              :                    :     +- ReusedExchange (20)
-                              :                    +- ReusedExchange (23)
-                              +- BroadcastExchange (43)
-                                 +- * HashAggregate (42)
-                                    +- Exchange (41)
-                                       +- * HashAggregate (40)
-                                          +- * Project (39)
-                                             +- * BroadcastHashJoin Inner BuildRight (38)
-                                                :- * Project (36)
-                                                :  +- * BroadcastHashJoin Inner BuildRight (35)
-                                                :     :- * Filter (33)
-                                                :     :  +- * ColumnarToRow (32)
-                                                :     :     +- Scan parquet default.web_sales (31)
-                                                :     +- ReusedExchange (34)
-                                                +- ReusedExchange (37)
+* HashAggregate (50)
++- Exchange (49)
+   +- * HashAggregate (48)
+      +- * HashAggregate (47)
+         +- Exchange (46)
+            +- * HashAggregate (45)
+               +- * BroadcastHashJoin LeftAnti BuildRight (44)
+                  :- * BroadcastHashJoin LeftAnti BuildRight (30)
+                  :  :- * Project (16)
+                  :  :  +- * BroadcastHashJoin Inner BuildRight (15)
+                  :  :     :- * Project (10)
+                  :  :     :  +- * BroadcastHashJoin Inner BuildRight (9)
+                  :  :     :     :- * Filter (3)
+                  :  :     :     :  +- * ColumnarToRow (2)
+                  :  :     :     :     +- Scan parquet default.store_sales (1)
+                  :  :     :     +- BroadcastExchange (8)
+                  :  :     :        +- * Project (7)
+                  :  :     :           +- * Filter (6)
+                  :  :     :              +- * ColumnarToRow (5)
+                  :  :     :                 +- Scan parquet default.date_dim (4)
+                  :  :     +- BroadcastExchange (14)
+                  :  :        +- * Filter (13)
+                  :  :           +- * ColumnarToRow (12)
+                  :  :              +- Scan parquet default.customer (11)
+                  :  +- BroadcastExchange (29)
+                  :     +- * HashAggregate (28)
+                  :        +- Exchange (27)
+                  :           +- * HashAggregate (26)
+                  :              +- * Project (25)
+                  :                 +- * BroadcastHashJoin Inner BuildRight (24)
+                  :                    :- * Project (22)
+                  :                    :  +- * BroadcastHashJoin Inner BuildRight (21)
+                  :                    :     :- * Filter (19)
+                  :                    :     :  +- * ColumnarToRow (18)
+                  :                    :     :     +- Scan parquet default.catalog_sales (17)
+                  :                    :     +- ReusedExchange (20)
+                  :                    +- ReusedExchange (23)
+                  +- BroadcastExchange (43)
+                     +- * HashAggregate (42)
+                        +- Exchange (41)
+                           +- * HashAggregate (40)
+                              +- * Project (39)
+                                 +- * BroadcastHashJoin Inner BuildRight (38)
+                                    :- * Project (36)
+                                    :  +- * BroadcastHashJoin Inner BuildRight (35)
+                                    :     :- * Filter (33)
+                                    :     :  +- * ColumnarToRow (32)
+                                    :     :     +- Scan parquet default.web_sales (31)
+                                    :     +- ReusedExchange (34)
+                                    +- ReusedExchange (37)
 
 
 (1) Scan parquet default.store_sales
@@ -273,48 +269,20 @@ Input [3]: [c_last_name#9, c_first_name#8, d_date#4]
 Keys [3]: [c_last_name#9, c_first_name#8, d_date#4]
 Functions: []
 Aggregate Attributes: []
-Results [3]: [c_last_name#9, c_first_name#8, d_date#4]
-
-(48) HashAggregate [codegen id : 12]
-Input [3]: [c_last_name#9, c_first_name#8, d_date#4]
-Keys [3]: [c_last_name#9, c_first_name#8, d_date#4]
-Functions: []
-Aggregate Attributes: []
-Results [3]: [c_last_name#9, c_first_name#8, d_date#4]
-
-(49) HashAggregate [codegen id : 12]
-Input [3]: [c_last_name#9, c_first_name#8, d_date#4]
-Keys [3]: [c_last_name#9, c_first_name#8, d_date#4]
-Functions: []
-Aggregate Attributes: []
-Results [3]: [c_last_name#9, c_first_name#8, d_date#4]
-
-(50) HashAggregate [codegen id : 12]
-Input [3]: [c_last_name#9, c_first_name#8, d_date#4]
-Keys [3]: [c_last_name#9, c_first_name#8, d_date#4]
-Functions: []
-Aggregate Attributes: []
-Results [3]: [c_last_name#9, c_first_name#8, d_date#4]
-
-(51) HashAggregate [codegen id : 12]
-Input [3]: [c_last_name#9, c_first_name#8, d_date#4]
-Keys [3]: [c_last_name#9, c_first_name#8, d_date#4]
-Functions: []
-Aggregate Attributes: []
 Results: []
 
-(52) HashAggregate [codegen id : 12]
+(48) HashAggregate [codegen id : 12]
 Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#30]
 Results [1]: [count#31]
 
-(53) Exchange
+(49) Exchange
 Input [1]: [count#31]
 Arguments: SinglePartition, true, [id=#32]
 
-(54) HashAggregate [codegen id : 13]
+(50) HashAggregate [codegen id : 13]
 Input [1]: [count#31]
 Keys: []
 Functions [1]: [count(1)]

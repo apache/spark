@@ -108,6 +108,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RewriteCorrelatedScalarSubquery,
         EliminateSerialization,
         RemoveRedundantAliases,
+        RemoveRedundantAggregates,
         UnwrapCastInBinaryComparison,
         RemoveNoopOperators,
         CombineUpdateFields,
@@ -475,6 +476,24 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = removeRedundantAliases(plan, AttributeSet.empty)
+}
+
+/**
+ * Remove redundant aggregates from a query plan. A redundant aggregate is an aggregate whose
+ * only goal is to keep distinct values, while its parent aggregate would ignore duplicate values.
+ */
+object RemoveRedundantAggregates extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case upper @ Aggregate(_, _, lower: Aggregate) if isRedundant(upper, lower) =>
+      upper.copy(child = lower.child)
+  }
+
+  private def isRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
+    val referencesOnlyGrouping = upper.references.subsetOf(AttributeSet(lower.groupingExpressions))
+    val hasAggregateExpressions = upper.aggregateExpressions
+      .exists(_.find(_.isInstanceOf[AggregateExpression]).nonEmpty)
+    referencesOnlyGrouping && !hasAggregateExpressions
+  }
 }
 
 /**
