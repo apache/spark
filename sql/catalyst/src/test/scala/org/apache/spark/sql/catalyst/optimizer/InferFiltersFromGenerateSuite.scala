@@ -52,12 +52,8 @@ class InferFiltersFromGenerateSuite extends PlanTest {
         .where(IsNotNull('a) && Size('a) > 0)
         .generate(generator)
         .analyze
-      val correctAnswer = testRelation
-        .where(IsNotNull('a) && Size('a) > 0)
-        .generate(generator)
-        .analyze
       val optimized = Optimize.execute(originalQuery)
-      comparePlans(optimized, correctAnswer)
+      comparePlans(optimized, originalQuery)
     }
 
     test("Don't infer filters from outer " + generator) {
