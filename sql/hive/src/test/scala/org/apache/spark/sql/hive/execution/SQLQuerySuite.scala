@@ -30,7 +30,7 @@ import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveMetaBucketSpec, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.execution.TestUncaughtExceptionHandler
@@ -2582,6 +2582,39 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           checkAnswer(sql("select * from t"), Row(1, "caseSensitive"))
         }
       }
+    }
+  }
+
+  test("SPARK-32281: Spark shouldn't wipes out SORTED spec in metastore") {
+    withTable("t1") {
+      sql(
+        s"""
+           |CREATE TABLE t1 (
+           |  emp_id INT COMMENT 'employee id', emp_name STRING,
+           |  emp_dob STRING COMMENT 'employee date of birth', emp_sex STRING COMMENT 'M/F'
+           |)
+           |COMMENT 'employee table'
+           |PARTITIONED BY (
+           |  emp_country STRING COMMENT '2-char code', emp_state STRING COMMENT '2-char code'
+           |)
+           |CLUSTERED BY (emp_sex) SORTED BY (emp_id ASC) INTO 10 BUCKETS
+           |STORED AS ORC
+         """.stripMargin
+      )
+      val table = TableIdentifier("t1", Some("default"))
+      val db = table.database.get
+      val buckectSpec = HiveMetaBucketSpec(10, Seq("emp_sex"), Seq(("emp_id", 1), ("emp_dob", 0)))
+      // change SORT BY with spark not supported `DESC`
+      val hiveTable = spark.sharedState.externalCatalog.getTable(db, table.table)
+      spark.sharedState.externalCatalog.alterTable(
+        hiveTable.copy(metaBucketSpec = Some(buckectSpec)))
+
+      val hiveTable1 = spark.sharedState.externalCatalog.getTable(db, table.table)
+      assert(hiveTable1.metaBucketSpec.contains(buckectSpec))
+
+      sql("ALTER TABLE t1 SET TBLPROPERTIES ('foo'='bar')")
+      val hiveTable2 = spark.sharedState.externalCatalog.getTable(db, table.table)
+      assert(hiveTable2.metaBucketSpec.contains(buckectSpec))
     }
   }
 }
