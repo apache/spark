@@ -348,9 +348,6 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression, pos: Expression)
   extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  def this(subject: Expression, regexp: Expression, rep: Expression) =
-    this(subject, regexp, rep, Literal(1))
-
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!pos.foldable) {
       return TypeCheckFailure(s"Position expression must be foldable, but got $pos")
@@ -386,17 +383,19 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       lastReplacement = lastReplacementInUTF8.toString
     }
     val source = s.toString()
-    val m = pattern.matcher(source)
-    result.delete(0, result.length())
     val position = i.asInstanceOf[Int] - 1
-    m.region(position, source.length)
-
-    while (m.find) {
-      m.appendReplacement(result, lastReplacement)
+    if (position < source.length) {
+      val m = pattern.matcher(source)
+      m.region(position, source.length)
+      result.delete(0, result.length())
+      while (m.find) {
+        m.appendReplacement(result, lastReplacement)
+      }
+      m.appendTail(result)
+      UTF8String.fromString(result.toString)
+    } else {
+      s
     }
-    m.appendTail(result)
-
-    UTF8String.fromString(result.toString)
   }
 
   override def dataType: DataType = StringType
@@ -412,6 +411,8 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     val classNameStringBuffer = classOf[java.lang.StringBuffer].getCanonicalName
 
     val matcher = ctx.freshName("matcher")
+    val source = ctx.freshName("source")
+    val position = ctx.freshName("position")
 
     val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
     val termPattern = ctx.addMutableState(classNamePattern, "pattern")
@@ -436,21 +437,31 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
         $termLastReplacementInUTF8 = $rep.clone();
         $termLastReplacement = $termLastReplacementInUTF8.toString();
       }
-      $classNameStringBuffer $termResult = new $classNameStringBuffer();
-      String source = $subject.toString();
-      java.util.regex.Matcher $matcher = $termPattern.matcher(source);
-      $matcher.region($pos - 1, source.length());
+      String $source = $subject.toString();
+      int $position = $pos - 1;
+      if ($position < $source.length()) {
+        $classNameStringBuffer $termResult = new $classNameStringBuffer();
+        java.util.regex.Matcher $matcher = $termPattern.matcher($source);
+        $matcher.region($position, $source.length());
 
-      while ($matcher.find()) {
-        $matcher.appendReplacement($termResult, $termLastReplacement);
+        while ($matcher.find()) {
+          $matcher.appendReplacement($termResult, $termLastReplacement);
+        }
+        $matcher.appendTail($termResult);
+        ${ev.value} = UTF8String.fromString($termResult.toString());
+        $termResult = null;
+      } else {
+        ${ev.value} = $subject;
       }
-      $matcher.appendTail($termResult);
-      ${ev.value} = UTF8String.fromString($termResult.toString());
-      $termResult = null;
       $setEvNotNull
     """
     })
   }
+}
+
+object RegExpReplace {
+  def apply(subject: Expression, regexp: Expression, rep: Expression): RegExpReplace =
+    new RegExpReplace(subject, regexp, rep, Literal(1))
 }
 
 object RegExpExtractBase {

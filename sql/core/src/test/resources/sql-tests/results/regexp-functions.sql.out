@@ -302,3 +302,27 @@ SELECT regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', 8)
 struct<regexp_replace(healthy, wealthy, and wise, \w+thy, something, 8):string>
 -- !query output
 healthy, something, and wise
+
+
+-- !query
+SELECT regexp_replace('healthy, wealthy, and wise', '\\w', 'something', 26)
+-- !query schema
+struct<regexp_replace(healthy, wealthy, and wise, \w, something, 26):string>
+-- !query output
+healthy, wealthy, and wissomething
+
+
+-- !query
+SELECT regexp_replace('healthy, wealthy, and wise', '\\w', 'something', 27)
+-- !query schema
+struct<regexp_replace(healthy, wealthy, and wise, \w, something, 27):string>
+-- !query output
+healthy, wealthy, and wise
+
+
+-- !query
+SELECT regexp_replace('healthy, wealthy, and wise', '\\w', 'something', 30)
+-- !query schema
+struct<regexp_replace(healthy, wealthy, and wise, \w, something, 30):string>
+-- !query output
+healthy, wealthy, and wise
