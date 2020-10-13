@@ -101,8 +101,10 @@ private[spark] object HiveUtils extends Logging {
     .createWithDefault("builtin")
 
   val HIVE_METASTORE_JARS_PATH = buildStaticConf("spark.sql.hive.metastore.jars.path")
-    .doc(s"Comma separated path of Hive jars, support both local and remote paths." +
-      s"When ${HIVE_METASTORE_JARS} is set as `path`, we will use Hive jars configured by this")
+    .doc(s"Comma separated path of Hive jars, support both local and remote paths," +
+      s"we support path wildcards such as `hdfs://path/to/jars/*`, but not support" +
+      s"nested path wildcards such as `hdfs://path/to/jars/*/*`. When ${HIVE_METASTORE_JARS}" +
+      s"is set to `path`, we will use Hive jars configured by this")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
