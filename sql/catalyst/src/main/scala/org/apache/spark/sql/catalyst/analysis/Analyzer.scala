@@ -2974,9 +2974,10 @@ class Analyzer(
    */
   object ResolveWindowFrame extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
-      case WindowExpression(owf: OffsetWindowFunction,
-        WindowSpecDefinition(_, _, _: SpecifiedWindowFrame)) =>
-        failAnalysis(s"Cannot specify window frame for ${owf.prettyName} function")
+      case WindowExpression(wf: OffsetWindowFunction,
+        WindowSpecDefinition(_, _, f: SpecifiedWindowFrame))
+        if wf.frame != UnspecifiedFrame && wf.frame != f =>
+        failAnalysis(s"Cannot specify window frame for ${wf.prettyName} function")
       case WindowExpression(wf: WindowFunction, WindowSpecDefinition(_, _, f: SpecifiedWindowFrame))
           if wf.frame != UnspecifiedFrame && wf.frame != f =>
         failAnalysis(s"Window Frame $f must match the required frame ${wf.frame}")
