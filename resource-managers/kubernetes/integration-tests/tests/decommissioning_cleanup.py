@@ -41,9 +41,13 @@ if __name__ == "__main__":
     accRdd = initialRdd.map(addToAcc)
     # Trigger a shuffle so there are shuffle blocks to migrate
     rdd = accRdd.map(lambda x: (x, x)).groupByKey()
+    # Make enough shuffle files to increase the chance of the race condition.
+    for i in range(1, 100):
+        shuffleRdd = sc.parallelize(range(1, 1000), 5).groupByKey()
+        shuffleRDD.collect()
     rdd.collect()
     print("1st accumulator value is: " + str(acc.value))
-    print("Waiting to give nodes time to finish migration, decom exec 1.")
+    print("Waiting to have nodes marked as available.")
     print("...")
     time.sleep(30)
     rdd.count()

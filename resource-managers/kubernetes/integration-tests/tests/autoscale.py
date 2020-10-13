@@ -23,12 +23,12 @@ from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
     """
-        Usage: decommissioning
+        Usage: autoscale
     """
-    print("Starting decom test")
+    print("Starting autoscale test")
     spark = SparkSession \
         .builder \
-        .appName("DecomTest") \
+        .appName("AutoScale") \
         .getOrCreate()
     sc = spark._sc
     acc = sc.accumulator(0)
@@ -43,9 +43,8 @@ if __name__ == "__main__":
     rdd = accRdd.map(lambda x: (x, x)).groupByKey()
     rdd.collect()
     print("1st accumulator value is: " + str(acc.value))
-    print("Waiting to give nodes time to finish migration, decom exec 1.")
-    print("...")
-    time.sleep(30)
+    print("Waiting for dynamic alloc")
+    time.sleep(120)
     rdd.count()
     rdd.collect()
     print("Final accumulator value is: " + str(acc.value))
