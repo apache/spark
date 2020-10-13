@@ -25,7 +25,6 @@ import org.roaringbitmap.RoaringBitmap;
 
 import org.apache.spark.network.protocol.Encoders;
 
-
 /**
  * Result returned by an ExternalShuffleService to the DAGScheduler. This represents the result
  * of all the remote shuffle block merge operations performed by an ExternalShuffleService
