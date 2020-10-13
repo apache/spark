@@ -350,7 +350,8 @@ abstract class OffsetWindowFunction
    * (Foldable) expression that contains the number of rows between the current row and the row
    * where the input expression is evaluated. If `offset` is a positive integer, it means that
    * the direction of the `offset` is from front to back. If it is a negative integer, the direction
-   * of the `offset` is from back to front.
+   * of the `offset` is from back to front. If it is zero, it means that the offset is ignored and
+   * use current row.
    */
   val offset: Expression
 
