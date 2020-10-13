@@ -187,6 +187,7 @@ private[spark] object InstanceBlock {
       }
 
       override def next(): InstanceBlock = {
+        if (block.isEmpty) blockify()
         val ret = block.get
         blockify()
         ret
