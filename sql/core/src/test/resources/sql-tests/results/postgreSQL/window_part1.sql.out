@@ -202,7 +202,7 @@ struct<ntile(3) OVER (ORDER BY ten ASC NULLS FIRST, four ASC NULLS FIRST ROWS BE
 -- !query
 SELECT lag(ten) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10
 -- !query schema
-struct<lag(ten, 1, NULL) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING):int,ten:int,four:int>
+struct<lag(ten, -1, NULL) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING):int,ten:int,four:int>
 -- !query output
 0	0	0
 0	4	0
