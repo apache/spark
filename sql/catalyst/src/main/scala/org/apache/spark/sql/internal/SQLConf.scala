@@ -895,7 +895,7 @@ object SQLConf {
 
   val THRIFTSERVER_QUERY_TIMEOUT =
     buildConf("spark.sql.thriftServer.queryTimeout")
-      .doc("Specifies a global timeout value for Thrift Server. A query will be cancelled " +
+      .doc("Specifies timeout in seconds for Thrift Server. A query will be cancelled " +
         "automatically after the specified time. If a timeout value is set for each statement " +
         "(e.g., via `java.sql.Statement.setQueryTimeout`), the value takes precedence. " +
         "If the value is zero or negative, no timeout happens.")
