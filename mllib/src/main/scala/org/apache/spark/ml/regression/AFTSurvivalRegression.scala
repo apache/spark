@@ -383,22 +383,25 @@ class AFTSurvivalRegressionModel private[ml] (
 
   /** @group setParam */
   @Since("1.6.0")
-  def setQuantileProbabilities(value: Array[Double]): this.type = set(quantileProbabilities, value)
+  def setQuantileProbabilities(value: Array[Double]): this.type = {
+    set(quantileProbabilities, value)
+    _quantiles(0) = $(quantileProbabilities).map(q => math.exp(math.log(-math.log1p(-q)) * scale))
+    this
+  }
 
   /** @group setParam */
   @Since("1.6.0")
   def setQuantilesCol(value: String): this.type = set(quantilesCol, value)
 
+  private lazy val _quantiles = {
+    Array($(quantileProbabilities).map(q => math.exp(math.log(-math.log1p(-q)) * scale)))
+  }
+
   @Since("2.0.0")
   def predictQuantiles(features: Vector): Vector = {
     // scale parameter for the Weibull distribution of lifetime
-    val lambda = math.exp(BLAS.dot(coefficients, features) + intercept)
-    // shape parameter for the Weibull distribution of lifetime
-    val k = 1 / scale
-    val quantiles = $(quantileProbabilities).map {
-      q => lambda * math.exp(math.log(-math.log1p(-q)) / k)
-    }
-    Vectors.dense(quantiles)
+    val lambda = predict(features)
+    Vectors.dense(_quantiles(0).map(_ * lambda))
   }
 
   @Since("2.0.0")
@@ -421,15 +424,13 @@ class AFTSurvivalRegressionModel private[ml] (
     }
 
     if (hasQuantilesCol) {
-      val baseQuantiles = $(quantileProbabilities)
-        .map(q => math.exp(math.log(-math.log1p(-q)) * scale))
       val lambdaCol = if ($(predictionCol).nonEmpty) {
         predictionColumns.head
       } else {
         udf { features: Vector => predict(features) }.apply(col($(featuresCol)))
       }
       val predictQuantilesUDF =
-        udf { lambda: Double => Vectors.dense(baseQuantiles.map(q => q * lambda)) }
+        udf { lambda: Double => Vectors.dense(_quantiles(0).map(_ * lambda)) }
       predictionColNames :+= $(quantilesCol)
       predictionColumns :+= predictQuantilesUDF(lambdaCol)
         .as($(quantilesCol), outputSchema($(quantilesCol)).metadata)
