@@ -1040,7 +1040,7 @@ private[spark] object MapOutputTracker extends Logging {
     splitsByAddress.mapValues(_.toSeq).iterator
   }
 
-  def checkMapStatuses(statuses: Array[MapStatus], shuffleId: Int) = {
+  def checkMapStatuses(statuses: Array[MapStatus], shuffleId: Int): Unit = {
     assert (statuses != null)
     for (status <- statuses) {
       if (status == null) {
