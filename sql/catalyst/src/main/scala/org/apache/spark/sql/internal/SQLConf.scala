@@ -221,7 +221,7 @@ object SQLConf {
     .doc("Configures the log level for logging the change from the original plan to the new " +
       "plan after a rule or batch is applied. The value can be 'trace', 'debug', 'info', " +
       "'warn', or 'error'. The default log level is 'trace'.")
-    .version("3.0.0")
+    .version("3.1.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValue(logLevel => Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(logLevel),
@@ -233,7 +233,7 @@ object SQLConf {
     .internal()
     .doc("Configures a list of rules for logging plan changes, in which the rules are " +
       "specified by their rule names and separated by comma.")
-    .version("3.0.0")
+    .version("3.1.0")
     .stringConf
     .createOptional
 
@@ -241,7 +241,7 @@ object SQLConf {
     .internal()
     .doc("Configures a list of batches for logging plan changes, in which the batches " +
       "are specified by their batch names and separated by comma.")
-    .version("3.0.0")
+    .version("3.1.0")
     .stringConf
     .createOptional
 
@@ -950,6 +950,17 @@ object SQLConf {
     .intConf
     .checkValue(_ > 0, "the value of spark.sql.sources.bucketing.maxBuckets must be greater than 0")
     .createWithDefault(100000)
+
+  val AUTO_BUCKETED_SCAN_ENABLED =
+    buildConf("spark.sql.sources.bucketing.autoBucketedScan.enabled")
+      .doc("When true, decide whether to do bucketed scan on input tables based on query plan " +
+        "automatically. Do not use bucketed scan if 1. query does not have operators to utilize " +
+        "bucketing (e.g. join, group-by, etc), or 2. there's an exchange operator between these " +
+        s"operators and table scan. Note when '${BUCKETING_ENABLED.key}' is set to " +
+        "false, this configuration does not take any effect.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
@@ -2764,6 +2775,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val DISABLED_JDBC_CONN_PROVIDER_LIST =
+    buildConf("spark.sql.sources.disabledJdbcConnProviderList")
+    .internal()
+    .doc("Configures a list of JDBC connection providers, which are disabled. " +
+      "The list contains the name of the JDBC connection providers separated by comma.")
+    .version("3.1.0")
+    .stringConf
+    .createWithDefault("")
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3164,6 +3184,8 @@ class SQLConf extends Serializable with Logging {
 
   def bucketingMaxBuckets: Int = getConf(SQLConf.BUCKETING_MAX_BUCKETS)
 
+  def autoBucketedScanEnabled: Boolean = getConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
+
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
@@ -3385,6 +3407,8 @@ class SQLConf extends Serializable with Logging {
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
   def truncateTrashEnabled: Boolean = getConf(SQLConf.TRUNCATE_TRASH_ENABLED)
+
+  def disabledJdbcConnectionProviders: String = getConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -732,6 +732,9 @@ setGeneric("%<=>%", function(x, value) { standardGeneric("%<=>%") })
 #' @rdname withField
 setGeneric("withField", function(x, fieldName, col) { standardGeneric("withField") })
 
+#' @rdname dropFields
+setGeneric("dropFields", function(x, ...) { standardGeneric("dropFields") })
+
 ###################### WindowSpec Methods ##########################
 
 #' @rdname partitionBy
@@ -846,6 +849,10 @@ setGeneric("arrays_zip_with", function(x, y, f) { standardGeneric("arrays_zip_wi
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("ascii", function(x) { standardGeneric("ascii") })
+
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("assert_true", function(x, errMsg = NULL) { standardGeneric("assert_true") })
 
 #' @param x Column to compute on or a GroupedData object.
 #' @param ... additional argument(s) when \code{x} is a GroupedData object.
@@ -1164,6 +1171,10 @@ setGeneric("months_between", function(y, x, ...) { standardGeneric("months_betwe
 #' @rdname count
 setGeneric("n", function(x) { standardGeneric("n") })
 
+#' @rdname column_window_functions
+#' @name NULL
+setGeneric("nth_value", function(x, offset, ...) { standardGeneric("nth_value") })
+
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("nanvl", function(y, x) { standardGeneric("nanvl") })
@@ -1215,6 +1226,10 @@ setGeneric("posexplode_outer", function(x) { standardGeneric("posexplode_outer")
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("quarter", function(x) { standardGeneric("quarter") })
+
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("raise_error", function(x) { standardGeneric("raise_error") })
 
 #' @rdname column_nonaggregate_functions
 #' @name NULL
@@ -1444,6 +1459,10 @@ setGeneric("var_pop", function(x) { standardGeneric("var_pop") })
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
+
+#' @rdname column_ml_functions
+#' @name NULL
+setGeneric("vector_to_array", function(x, ...) { standardGeneric("vector_to_array") })
 
 #' @rdname column_datetime_functions
 #' @name NULL
