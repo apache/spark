@@ -17,6 +17,7 @@
 
 package org.apache.spark.storage
 
+import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -85,19 +86,32 @@ private[storage] class BlockManagerDecommissioner(
                 logInfo(s"Trying to migrate shuffle ${shuffleBlockInfo} to ${peer}")
                 val blocks = bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo)
                 logDebug(s"Got migration sub-blocks ${blocks}")
-                blocks.foreach { case (blockId, buffer) =>
-                  logDebug(s"Migrating sub-block ${blockId}")
-                  bm.blockTransferService.uploadBlockSync(
-                    peer.host,
-                    peer.port,
-                    peer.executorId,
-                    blockId,
-                    buffer,
-                    StorageLevel.DISK_ONLY,
-                    null)// class tag, we don't need for shuffle
-                  logDebug(s"Migrated sub block ${blockId}")
+
+                // Migrate the components of the blocks.
+                try {
+                  blocks.foreach { case (blockId, buffer) =>
+                    logDebug(s"Migrating sub-block ${blockId}")
+                    bm.blockTransferService.uploadBlockSync(
+                      peer.host,
+                      peer.port,
+                      peer.executorId,
+                      blockId,
+                      buffer,
+                      StorageLevel.DISK_ONLY,
+                      null)// class tag, we don't need for shuffle
+                    logDebug(s"Migrated sub block ${blockId}")
+                  }
+                  logDebug(s"Migrated ${shuffleBlockInfo} to ${peer}")
+                } catch {
+                  case e: IOException =>
+                    // If a block got deleted before netty opened the file handle, then trying to
+                    // load the blocks now will fail.
+                    if (bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo).isEmpty) {
+                      logDebug("Skipping block ${blockId}, block deleted.")
+                    } else {
+                      throw e
+                    }
                 }
-                logDebug(s"Migrated ${shuffleBlockInfo} to ${peer}")
               } else {
                 logError(s"Skipping block ${shuffleBlockInfo} because it has failed ${retryCount}")
               }
@@ -120,7 +134,7 @@ private[storage] class BlockManagerDecommissioner(
   }
 
   // Shuffles which are either in queue for migrations or migrated
-  private val migratingShuffles = mutable.HashSet[ShuffleBlockInfo]()
+  protected[storage] val migratingShuffles = mutable.HashSet[ShuffleBlockInfo]()
 
   // Shuffles which have migrated. This used to know when we are "done", being done can change
   // if a new shuffle file is created by a running task.
@@ -224,7 +238,7 @@ private[storage] class BlockManagerDecommissioner(
     // Update the queue of shuffles to be migrated
     logInfo("Offloading shuffle blocks")
     val localShuffles = bm.migratableResolver.getStoredShuffles().toSet
-    val newShufflesToMigrate = localShuffles.diff(migratingShuffles).toSeq
+    val newShufflesToMigrate = (localShuffles.diff(migratingShuffles)).toSeq
     shufflesToMigrate.addAll(newShufflesToMigrate.map(x => (x, 0)).asJava)
     migratingShuffles ++= newShufflesToMigrate
 

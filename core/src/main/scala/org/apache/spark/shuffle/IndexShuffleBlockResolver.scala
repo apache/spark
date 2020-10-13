@@ -240,6 +240,10 @@ private[spark] class IndexShuffleBlockResolver(
       val dataBlockId = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
       val dataBlockData = new FileSegmentManagedBuffer(
         transportConf, dataFile, 0, dataFile.length())
+
+      // Make sure the files exist
+      assert(indexFile.exists() && dataFile.exists())
+
       List((indexBlockId, indexBlockData), (dataBlockId, dataBlockData))
     } catch {
       case e: Exception => // If we can't load the blocks ignore them.

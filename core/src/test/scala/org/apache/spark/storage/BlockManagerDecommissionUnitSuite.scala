@@ -63,9 +63,14 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
    * a constant Long.MaxValue timestamp.
    */
   private def validateDecommissionTimestamps(conf: SparkConf, bm: BlockManager,
-      migratableShuffleBlockResolver: MigratableResolver, fail: Boolean = false) = {
+      fail: Boolean = false) = {
     // Verify the decommissioning manager timestamps and status
     val bmDecomManager = new BlockManagerDecommissioner(conf, bm)
+    validateDecommissionTimestampsOnManager(bmDecomManager, fail)
+  }
+
+  private def validateDecommissionTimestampsOnManager(bmDecomManager: BlockManagerDecommissioner,
+      fail: Boolean = false) = {
     var previousTime: Option[Long] = None
     try {
       bmDecomManager.start()
@@ -110,7 +115,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
       .thenReturn(Seq(BlockManagerId("exec2", "host2", 12345)))
 
     // Verify the decom manager handles this correctly
-    validateDecommissionTimestamps(sparkConf, bm, migratableShuffleBlockResolver)
+    validateDecommissionTimestamps(sparkConf, bm)
   }
 
   test("block decom manager with no migrations configured") {
@@ -128,8 +133,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
       .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED, false)
       .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 10L)
     // Verify the decom manager handles this correctly
-    validateDecommissionTimestamps(badConf, bm, migratableShuffleBlockResolver,
-      fail = true)
+    validateDecommissionTimestamps(badConf, bm, fail = true)
   }
 
   test("block decom manager with no peers") {
@@ -144,8 +148,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
       .thenReturn(Seq())
 
     // Verify the decom manager handles this correctly
-    validateDecommissionTimestamps(sparkConf, bm, migratableShuffleBlockResolver,
-      fail = true)
+    validateDecommissionTimestamps(sparkConf, bm, fail = true)
   }
 
 
@@ -161,7 +164,23 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
       .thenReturn(Seq(BlockManagerId("exec2", "host2", 12345)))
 
     // Verify the decom manager handles this correctly
-    validateDecommissionTimestamps(sparkConf, bm, migratableShuffleBlockResolver)
+    validateDecommissionTimestamps(sparkConf, bm)
+  }
+
+  test("block decom manager does not re-add removed shuffle files") {
+    // Set up the mocks so we return one shuffle block
+    val bm = mock(classOf[BlockManager])
+    val migratableShuffleBlockResolver = mock(classOf[MigratableResolver])
+    registerShuffleBlocks(migratableShuffleBlockResolver, Set())
+    when(bm.migratableResolver).thenReturn(migratableShuffleBlockResolver)
+    when(bm.getMigratableRDDBlocks())
+      .thenReturn(Seq())
+    when(bm.getPeers(mc.any()))
+      .thenReturn(Seq(BlockManagerId("exec2", "host2", 12345)))
+    val bmDecomManager = new BlockManagerDecommissioner(sparkConf, bm)
+    bmDecomManager.migratingShuffles += ShuffleBlockInfo(10, 10)
+
+    validateDecommissionTimestampsOnManager(bmDecomManager)
   }
 
   test("test shuffle and cached rdd migration without any error") {
