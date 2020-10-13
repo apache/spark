@@ -80,7 +80,7 @@ class InstanceSuite extends SparkFunSuite{
     val instances = Seq(instance1, instance2)
 
     val blocks = InstanceBlock
-      .blokifyWithMaxMemoryUsage(Iterator.apply(instance1, instance2), 128).toArray
+      .blokifyWithMaxMemUsage(Iterator.apply(instance1, instance2), 128).toArray
     require(blocks.length == 1)
     val block = blocks.head
     assert(block.size === 2)
@@ -102,7 +102,7 @@ class InstanceSuite extends SparkFunSuite{
     val inputIter2 = Iterator.apply(instance1, instance2, bigInstance)
     Seq(inputIter1, inputIter2).foreach { inputIter =>
       intercept[IllegalArgumentException] {
-        InstanceBlock.blokifyWithMaxMemoryUsage(inputIter, 1024).toArray
+        InstanceBlock.blokifyWithMaxMemUsage(inputIter, 1024).toArray
       }
     }
   }

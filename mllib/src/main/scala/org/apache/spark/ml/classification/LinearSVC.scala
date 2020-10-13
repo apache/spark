@@ -288,8 +288,8 @@ class LinearSVC @Since("2.2.0") (
       iter.map { case Instance(label, weight, vec) => Instance(label, weight, func(vec)) }
     }
 
-    val maxMemoryUsage = (actualBlockSizeInMB * 1024L * 1024L).ceil.toLong
-    val blocks = InstanceBlock.blokifyWithMaxMemoryUsage(standardized, maxMemoryUsage)
+    val maxMemUsage = (actualBlockSizeInMB * 1024L * 1024L).ceil.toLong
+    val blocks = InstanceBlock.blokifyWithMaxMemUsage(standardized, maxMemUsage)
       .persist(StorageLevel.MEMORY_AND_DISK)
       .setName(s"training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
