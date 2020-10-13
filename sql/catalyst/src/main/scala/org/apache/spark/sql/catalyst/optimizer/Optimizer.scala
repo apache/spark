@@ -216,6 +216,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) :+
+    // `CollapseProject` cannot collapse all projects in once. So we need `fixedPoint` here.
     Batch("RewriteSubquery", fixedPoint,
       RewritePredicateSubquery,
       ColumnPruning,

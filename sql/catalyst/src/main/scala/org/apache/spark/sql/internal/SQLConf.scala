@@ -1928,8 +1928,8 @@ object SQLConf {
 
   val MAX_COMMON_EXPRS_IN_COLLAPSE_PROJECT =
     buildConf("spark.sql.optimizer.maxCommonExprsInCollapseProject")
-      .doc("An integer number indicates the maximum allowed number of a common expression " +
-        "can be collapsed into upper Project from lower Project by optimizer rule " +
+      .doc("An integer number indicates the maximum allowed number of common input expression " +
+        "from lower Project when being collapsed into upper Project by optimizer rule " +
         "`CollapseProject`. Normally `CollapseProject` will collapse adjacent Project " +
         "and merge expressions. But in some edge cases, expensive expressions might be " +
         "duplicated many times in merged Project by this optimization. This config sets " +
@@ -1937,6 +1937,7 @@ object SQLConf {
         "if merging two Project, Spark SQL will skip the merging.")
       .version("3.1.0")
       .intConf
+      .checkValue(m => m > 0, "maxCommonExprsInCollapseProject must be larger than zero.")
       .createWithDefault(20)
 
   val DECIMAL_OPERATIONS_ALLOW_PREC_LOSS =
