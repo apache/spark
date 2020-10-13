@@ -299,6 +299,7 @@ org.apache.kerby:kerby-xdr
 org.apache.kerby:token-provider
 org.apache.orc:orc-core
 org.apache.orc:orc-mapreduce
+org.checkerframework:checker-qual
 org.mortbay.jetty:jetty
 org.mortbay.jetty:jetty-util
 com.jolbox:bonecp
@@ -321,10 +322,14 @@ com.github.mifmif:generex
 com.github.stephenc.jcip:jcip-annotations
 com.google.code.findbugs:jsr305
 com.google.code.gson:gson
+com.google.errorprone:error_prone_annotations
 com.google.flatbuffers:flatbuffers-java
+com.google.guava:failureaccess
 com.google.guava:guava
+com.google.guava:listenablefuture
 com.google.inject:guice
 com.google.inject.extensions:guice-servlet
+com.google.j2objc:j2objc-annotations
 com.nimbusds:nimbus-jose-jwt
 com.twitter:parquet-hadoop-bundle
 commons-cli:commons-cli
