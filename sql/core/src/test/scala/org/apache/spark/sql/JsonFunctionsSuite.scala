@@ -715,18 +715,15 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-33134: return partial results only for root JSON objects") {
     val st = new StructType()
-      .add("playerId", LongType)
-      .add("cards", ArrayType(
-        new StructType()
-          .add("id", LongType)
-          .add("rank", StringType)))
-    val df1 = Seq("""{"cards": [11], "playerId": 583651}""").toDF("events")
-    checkAnswer(df1.select(from_json($"events", st)), Row(Row(583651, null)))
-    val df2 = Seq("""{"data": {"cards": [11], "playerId": 583651}}""").toDF("events")
-    checkAnswer(df2.select(from_json($"events", new StructType().add("data", st))), Row(Row(null)))
-    val df3 = Seq("""[{"cards": [11], "playerId": 583651}]""").toDF("events")
-    checkAnswer(df3.select(from_json($"events", ArrayType(st))), Row(null))
-    val df4 = Seq("""{"cards": [11]}""").toDF("events")
-    checkAnswer(df4.select(from_json($"events", MapType(StringType, st))), Row(null))
+      .add("c1", LongType)
+      .add("c2", ArrayType(new StructType().add("c3", LongType).add("c4", StringType)))
+    val df1 = Seq("""{"c2": [19], "c1": 123456}""").toDF("c0")
+    checkAnswer(df1.select(from_json($"c0", st)), Row(Row(123456, null)))
+    val df2 = Seq("""{"data": {"c2": [19], "c1": 123456}}""").toDF("c0")
+    checkAnswer(df2.select(from_json($"c0", new StructType().add("data", st))), Row(Row(null)))
+    val df3 = Seq("""[{"c2": [19], "c1": 583651}]""").toDF("c0")
+    checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(null))
+    val df4 = Seq("""{"c2": [19]}""").toDF("c0")
+    checkAnswer(df4.select(from_json($"c0", MapType(StringType, st))), Row(null))
   }
 }
