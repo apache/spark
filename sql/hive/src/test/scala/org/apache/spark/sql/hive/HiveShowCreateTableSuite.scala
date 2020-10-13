@@ -253,9 +253,9 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
     try {
       // Creates Spark datasource table using generated Spark DDL.
       sql(sparkDDL)
+      println(sparkDDL)
       val sparkTable = spark.sharedState.externalCatalog.getTable(db, table.table)
-      checkHiveCatalogTables(hiveTable.copy(metaBucketSpec = None),
-        sparkTable.copy(metaBucketSpec = None))
+      checkHiveCatalogTables(hiveTable, sparkTable)
     } finally {
       sql(s"DROP TABLE IF EXISTS ${table.table}")
     }
@@ -281,6 +281,7 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
         createTime = 0L,
         lastAccessTime = 0L,
         properties = table.properties.filterKeys(!nondeterministicProps.contains(_)).toMap,
+        metaBucketSpec = None,
         stats = None,
         ignoredProperties = Map.empty,
         storage = table.storage.copy(properties = Map.empty),
