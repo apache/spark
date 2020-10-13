@@ -77,7 +77,7 @@ object ExecutorPodsSnapshot extends Logging {
         case "failed" =>
           PodFailed(pod)
         case "succeeded" =>
-            PodSucceeded(pod)
+          PodSucceeded(pod)
         case "terminating" =>
           PodTerminating(pod)
         case _ =>
