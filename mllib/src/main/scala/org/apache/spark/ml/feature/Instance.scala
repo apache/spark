@@ -138,39 +138,59 @@ private[spark] object InstanceBlock {
       iterator: Iterator[Instance],
       maxMemUsage: Long): Iterator[InstanceBlock] = {
     require(maxMemUsage > 0)
-    val buff = mutable.ArrayBuilder.make[Instance]
-    var numCols = -1L
-    var count = 0L
-    var buffNnz = 0L
-    var allUnitWeight = true
 
-    iterator.flatMap { instance =>
-      if (numCols < 0L) numCols = instance.features.size
-      require(numCols == instance.features.size)
-      val nnz = instance.features.numNonzeros
-      var block = Option.empty[InstanceBlock]
-      // Check if enough memory remains to add this instance to the block.
-      if (getBlockMemUsage(numCols, count + 1L, buffNnz + nnz,
-        allUnitWeight && (instance.weight == 1)) > maxMemUsage) {
-        // Check if this instance is too large
-        require(count > 0, s"instance $instance exceeds memory limit $maxMemUsage, " +
-          s"please increase block size")
+    new Iterator[InstanceBlock] {
+      private var numCols = -1L
+      private val buff = mutable.ArrayBuilder.make[Instance]
+      private var buffCnt = 0L
+      private var buffNnz = 0L
+      private var buffUnitWeight = true
+      private var block = Option.empty[InstanceBlock]
 
+      private def flush(): Unit = {
         block = Some(InstanceBlock.fromInstances(buff.result()))
         buff.clear()
-        count = 0L
+        buffCnt = 0L
         buffNnz = 0L
-        allUnitWeight = true
+        buffUnitWeight = true
       }
-      buff += instance
-      count += 1L
-      buffNnz += nnz
-      allUnitWeight &&= (instance.weight == 1)
-      block.iterator
-    } ++ {
-      if (count > 0) {
-        Iterator.single(InstanceBlock.fromInstances(buff.result()))
-      } else Iterator.empty
+
+      private def blockify(): Unit = {
+        block = None
+
+        while (block.isEmpty && iterator.hasNext) {
+          val instance = iterator.next()
+          if (numCols < 0L) numCols = instance.features.size
+          require(numCols == instance.features.size)
+          val nnz = instance.features.numNonzeros
+
+          // Check if enough memory remains to add this instance to the block.
+          if (getBlockMemUsage(numCols, buffCnt + 1L, buffNnz + nnz,
+            buffUnitWeight && (instance.weight == 1)) > maxMemUsage) {
+            // Check if this instance is too large
+            require(buffCnt > 0, s"instance $instance exceeds memory limit $maxMemUsage, " +
+              s"please increase block size")
+            flush()
+          }
+
+          buff += instance
+          buffCnt += 1L
+          buffNnz += nnz
+          buffUnitWeight &&= (instance.weight == 1)
+        }
+
+        if (block.isEmpty && buffCnt > 0) flush()
+      }
+
+      override def hasNext: Boolean = {
+        block.nonEmpty || { blockify(); block.nonEmpty }
+      }
+
+      override def next(): InstanceBlock = {
+        val ret = block.get
+        blockify()
+        ret
+      }
     }
   }
 
