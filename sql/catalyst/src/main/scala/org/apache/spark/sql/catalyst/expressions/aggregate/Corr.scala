@@ -48,6 +48,9 @@ abstract class PearsonCorrelation(x: Expression, y: Expression, nullOnDivideByZe
     if (nullOnDivideByZero) Literal.create(null, DoubleType) else Double.NaN
   }
 
+  override def stringArgs: Iterator[Any] =
+    super.stringArgs.filter(_.isInstanceOf[Expression])
+
   override val aggBufferAttributes: Seq[AttributeReference] = Seq(n, xAvg, yAvg, ck, xMk, yMk)
 
   override val initialValues: Seq[Expression] = Array.fill(6)(Literal(0.0))
@@ -122,7 +125,4 @@ case class Corr(
   }
 
   override def prettyName: String = "corr"
-
-  override def stringArgs: Iterator[Any] =
-    super.stringArgs.filter(_.isInstanceOf[Expression])
 }

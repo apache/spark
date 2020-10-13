@@ -43,6 +43,9 @@ abstract class Covariance(x: Expression, y: Expression, nullOnDivideByZero: Bool
     if (nullOnDivideByZero) Literal.create(null, DoubleType) else Double.NaN
   }
 
+  override def stringArgs: Iterator[Any] =
+    super.stringArgs.filter(_.isInstanceOf[Expression])
+
   override val aggBufferAttributes: Seq[AttributeReference] = Seq(n, xAvg, yAvg, ck)
 
   override val initialValues: Seq[Expression] = Array.fill(4)(Literal(0.0))
@@ -106,9 +109,6 @@ case class CovPopulation(
     If(n === 0.0, Literal.create(null, DoubleType), ck / n)
   }
   override def prettyName: String = "covar_pop"
-
-  override def stringArgs: Iterator[Any] =
-    super.stringArgs.filter(_.isInstanceOf[Expression])
 }
 
 
@@ -135,7 +135,4 @@ case class CovSample(
       If(n === 1.0, divideByZeroEvalResult, ck / (n - 1.0)))
   }
   override def prettyName: String = "covar_samp"
-
-  override def stringArgs: Iterator[Any] =
-    super.stringArgs.filter(_.isInstanceOf[Expression])
 }
