@@ -472,6 +472,7 @@ devel = [
     'pywinrm',
     'qds-sdk>=1.9.6',
     'requests_mock',
+    'semver',
     'setuptools',
     'testfixtures',
     'wheel',
@@ -756,7 +757,9 @@ def do_setup():
         long_description_content_type='text/markdown',
         license='Apache License 2.0',
         version=version,
-        packages=find_packages(include=['airflow', 'airflow.*']),
+        packages=find_packages(
+            include=['airflow*'],
+            exclude=['airflow.providers', 'airflow.providers.*']),
         package_data={
             'airflow': ['py.typed'],
             '': ['airflow/alembic.ini', "airflow/git_version", "*.ipynb",
