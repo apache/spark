@@ -574,13 +574,11 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(1.minute)("SELECT MAKE_DATE(-44, 3, 15);" -> "-0044-03-15")
   }
 
-  test("SPARK-33100: Ignore the content inside bracketed comment and ignore the comment without" +
-    " content.") {
-    runCliWithin(1.minute)("/* SELECT 1;*/ SELECT 1;" -> "1" )
-    runCliWithin(1.minute)(";;/* SELECT 1;*/ SELECT 1;" -> "1" )
-    runCliWithin(1.minute)("/* SELECT 1;*/;; SELECT 1;" -> "1" )
-    runCliWithin(1.minute)("SELECT '1'; -- SELECT '1';" -> "")
-    runCliWithin(1.minute)("SELECT '1'; /* SELECT '1';*/" -> "")
-    runCliWithin(1.minute)("/* SELECT 1;*/;; SELECT 1; /* SELECT '1';*/" -> "" )
+  test("SPARK-33100: Ignore a semicolon inside a bracketed comment in spark-sql") {
+    runCliWithin(1.minute)("/* SELECT 'test';*/ SELECT 1;" -> "test" )
+    runCliWithin(1.minute)(";;/* SELECT 'test';*/ SELECT 'test';" -> "test" )
+    runCliWithin(1.minute)("/* SELECT 'test';*/;; SELECT 'test';" -> "test" )
+    runCliWithin(1.minute)("SELECT 'test'; -- SELECT 'test';" -> "")
+    runCliWithin(1.minute)("SELECT 'test'; /* SELECT 'test';*/" -> "")
   }
 }

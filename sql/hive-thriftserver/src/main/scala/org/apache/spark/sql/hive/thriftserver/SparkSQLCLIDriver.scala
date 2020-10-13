@@ -519,21 +519,21 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // Note: [SPARK-31595] if there is a `'` in a double quoted string, or a `"` in a single quoted
   // string, the origin implementation from Hive will not drop the trailing semicolon as expected,
   // hence we refined this function a little bit.
-  // Note: [SPARK-33100] Ignore the content inside bracketed comment and ignore the comment without
-  // content.
+  // Note: [SPARK-33100] Ignore a semicolon inside a bracketed comment in spark-sql.
   private def splitSemiColon(line: String): JList[String] = {
     var insideSingleQuote = false
     var insideDoubleQuote = false
-    var insideDashComment = false
+    var insideSimpleComment = false
     var insideBracketedComment = false
     var bracketedCommentRightBound = -1
     var escape = false
     var beginIndex = 0
-    var contentBegin = false
+    var includingStatement = false
     val ret = new JArrayList[String]
 
-    def insideComment: Boolean = insideDashComment || insideBracketedComment
-    def isContent(char: Char): Boolean = !insideComment && !s"$char".trim.isEmpty
+    def insideComment: Boolean = insideSimpleComment || insideBracketedComment
+    def statementBegin(index: Int): Boolean = includingStatement || (!insideComment &&
+      index > beginIndex && !s"${line.charAt(index)}".trim.isEmpty)
 
     for (index <- 0 until line.length) {
       if (insideBracketedComment && index == bracketedCommentRightBound + 1) {
@@ -564,24 +564,24 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           // Sample query: select "quoted value --"
           //                                    ^^ avoids starting a comment if it's inside quotes.
         } else if (hasNext && line.charAt(index + 1) == '-') {
-          // ignore quotes and ; in dash-comment
-          insideDashComment = true
+          // ignore quotes and ; in simple comment
+          insideSimpleComment = true
         }
       } else if (line.charAt(index) == ';') {
         if (insideSingleQuote || insideDoubleQuote || insideComment) {
           // do not split
         } else {
-          if (contentBegin) {
+          if (includingStatement) {
             // split, do not include ; itself
             ret.add(line.substring(beginIndex, index))
           }
           beginIndex = index + 1
-          contentBegin = false
+          includingStatement = false
         }
       } else if (line.charAt(index) == '\n') {
-        // with a new line the inline dash-comment should end.
+        // with a new line the inline simple comment should end.
         if (!escape) {
-          insideDashComment = false
+          insideSimpleComment = false
         }
       } else if (line.charAt(index) == '/' && !insideComment) {
         val hasNext = index + 1 < line.length
@@ -604,11 +604,9 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         escape = true
       }
 
-      if (!contentBegin && index > beginIndex && isContent(line.charAt(index))) {
-        contentBegin = true
-      }
+      includingStatement = statementBegin(index)
     }
-    if (contentBegin) {
+    if (includingStatement) {
       ret.add(line.substring(beginIndex))
     }
     ret
