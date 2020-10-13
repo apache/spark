@@ -744,6 +744,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
           .add("rank", StringType)))
     val pokerhand_events = pokerhand_raw
       .select(explode(from_json($"events", ArrayType(event))).as("event"))
-    assert(pokerhand_events.count() === 0)
+    checkAnswer(pokerhand_events, Seq.empty)
   }
 }
