@@ -712,4 +712,17 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
          | """.stripMargin)
     checkAnswer(toDF("yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), toDF("yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]"))
   }
+
+  test("SPARK-XXXXX: ") {
+    val pokerhand_raw = Seq("""[{"cards": [11], "playerId": 583651}]""").toDF("events")
+    val event = new StructType()
+      .add("playerId", LongType)
+      .add("cards", ArrayType(
+        new StructType()
+          .add("id", LongType)
+          .add("rank", StringType)))
+    val pokerhand_events = pokerhand_raw
+      .select(explode(from_json($"events", ArrayType(event))).as("event"))
+    assert(pokerhand_events.count() === 0)
+  }
 }
