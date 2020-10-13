@@ -106,6 +106,9 @@ case class CovPopulation(
     If(n === 0.0, Literal.create(null, DoubleType), ck / n)
   }
   override def prettyName: String = "covar_pop"
+
+  override def stringArgs: Iterator[Any] =
+    super.stringArgs.filter(_.isInstanceOf[Expression])
 }
 
 
@@ -132,4 +135,7 @@ case class CovSample(
       If(n === 1.0, divideByZeroEvalResult, ck / (n - 1.0)))
   }
   override def prettyName: String = "covar_samp"
+
+  override def stringArgs: Iterator[Any] =
+    super.stringArgs.filter(_.isInstanceOf[Expression])
 }

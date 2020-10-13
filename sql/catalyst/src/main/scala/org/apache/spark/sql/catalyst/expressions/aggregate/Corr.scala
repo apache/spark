@@ -122,4 +122,7 @@ case class Corr(
   }
 
   override def prettyName: String = "corr"
+
+  override def stringArgs: Iterator[Any] =
+    super.stringArgs.filter(_.isInstanceOf[Expression])
 }

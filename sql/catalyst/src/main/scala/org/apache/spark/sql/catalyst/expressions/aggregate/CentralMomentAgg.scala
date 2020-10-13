@@ -164,6 +164,9 @@ case class StddevPop(
   }
 
   override def prettyName: String = "stddev_pop"
+
+  override def stringArgs: Iterator[Any] =
+    super.stringArgs.filter(_.isInstanceOf[Expression])
 }
 
 // Compute the sample standard deviation of a column
@@ -194,6 +197,9 @@ case class StddevSamp(
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("stddev_samp")
+
+  override def stringArgs: Iterator[Any] =
+    super.stringArgs.filter(_.isInstanceOf[Expression])
 }
 
 // Compute the population variance of a column
@@ -220,6 +226,9 @@ case class VariancePop(
   }
 
   override def prettyName: String = "var_pop"
+
+  override def stringArgs: Iterator[Any] =
+    super.stringArgs.filter(_.isInstanceOf[Expression])
 }
 
 // Compute the sample variance of a column
@@ -247,6 +256,9 @@ case class VarianceSamp(
   }
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("var_samp")
+
+  override def stringArgs: Iterator[Any] =
+    super.stringArgs.filter(_.isInstanceOf[Expression])
 }
 
 @ExpressionDescription(
@@ -275,6 +287,9 @@ case class Skewness(
     If(n === 0.0, Literal.create(null, DoubleType),
       If(m2 === 0.0, divideByZeroEvalResult, sqrt(n) * m3 / sqrt(m2 * m2 * m2)))
   }
+
+  override def stringArgs: Iterator[Any] =
+    super.stringArgs.filter(_.isInstanceOf[Expression])
 }
 
 @ExpressionDescription(
@@ -303,4 +318,7 @@ case class Kurtosis(
   }
 
   override def prettyName: String = "kurtosis"
+
+  override def stringArgs: Iterator[Any] =
+    super.stringArgs.filter(_.isInstanceOf[Expression])
 }
