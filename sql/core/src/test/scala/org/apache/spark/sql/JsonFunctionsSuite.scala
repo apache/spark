@@ -721,7 +721,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df1.select(from_json($"c0", st)), Row(Row(123456, null)))
     val df2 = Seq("""{"data": {"c2": [19], "c1": 123456}}""").toDF("c0")
     checkAnswer(df2.select(from_json($"c0", new StructType().add("data", st))), Row(Row(null)))
-    val df3 = Seq("""[{"c2": [19], "c1": 583651}]""").toDF("c0")
+    val df3 = Seq("""[{"c2": [19], "c1": 123456}]""").toDF("c0")
     checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(null))
     val df4 = Seq("""{"c2": [19]}""").toDF("c0")
     checkAnswer(df4.select(from_json($"c0", MapType(StringType, st))), Row(null))
