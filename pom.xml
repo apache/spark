@@ -3149,15 +3149,15 @@
         <dependencies>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-client-runtime</artifactId>
+            <artifactId>hadoop-client-api</artifactId>
             <version>${hadoop.version}</version>
             <scope>${hadoop.deps.scope}</scope>
           </dependency>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-client-api</artifactId>
+            <artifactId>hadoop-client-runtime</artifactId>
             <version>${hadoop.version}</version>
-            <scope>${hadoop.deps.scope}</scope>
+            <scope>runtime</scope>
           </dependency>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
