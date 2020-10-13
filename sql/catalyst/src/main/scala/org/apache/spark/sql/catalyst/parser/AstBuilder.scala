@@ -1410,11 +1410,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           case Some(SqlBaseParser.ALL) =>
             if (ctx.expression.isEmpty) {
               throw new ParseException("Expected something between '(' and ')'.", ctx)
-            } else if (ctx.expression.size < 14379) {
+            } else if (ctx.expression.size < 500) {
+              // An empirical value that will not cause StackOverflowError is used here
               getLikeQuantifierExprs(ctx.expression).reduceLeft(And)
             } else {
-              // If there are many pattern expressions(more than 14378 elements), will throw
-              // StackOverflowError. So we use LikeAll or NotLikeAll instead.
+              // If there are many pattern expressions, will throw StackOverflowError.
+              // So we use LikeAll or NotLikeAll instead.
               ctx.NOT match {
                 case null => LikeAll(e +: ctx.expression.asScala.map(expression))
                 case _ => NotLikeAll(e +: ctx.expression.asScala.map(expression))
