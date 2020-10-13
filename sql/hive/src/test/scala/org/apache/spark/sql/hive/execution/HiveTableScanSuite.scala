@@ -266,6 +266,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
 
         sql("set mapreduce.input.fileinputformat.input.dir.recursive=true")
         assert(sql("select * from t").collect().head.getLong(0) == 1)
+        dir.delete()
       }
 
     }

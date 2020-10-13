@@ -287,7 +287,11 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
               val msg = intercept[IOException] {
                 sql("SELECT * FROM tbl1").show()
               }.getMessage
-              assert(msg.contains("Not a file:"))
+              assert(msg.contains(
+                s"Path: ${path}/l1" +
+                  " is a directory, it is not allowed for `serde` reader" +
+                  " when `mapreduce.input.fileinputformat.input.dir.recursive` is false."
+              ))
             }
 
             val l1DirStatement =
@@ -305,7 +309,11 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
               val msg = intercept[IOException] {
                 sql("SELECT * FROM tbl2").show()
               }.getMessage
-              assert(msg.contains("Not a file:"))
+              assert(msg.contains(
+                s"Path: ${path}/l1/l2" +
+                  " is a directory, it is not allowed for `serde` reader" +
+                  " when `mapreduce.input.fileinputformat.input.dir.recursive` is false."
+              ))
             }
 
             val l2DirStatement =
@@ -323,7 +331,10 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
               val msg = intercept[IOException] {
                 sql("SELECT * FROM tbl3").show()
               }.getMessage
-              assert(msg.contains("Not a file:"))
+              assert(msg.contains(
+                s"Path: ${path}/l1/l2/l3" +
+                  " is a directory, it is not allowed for `serde` reader" +
+                  " when `mapreduce.input.fileinputformat.input.dir.recursive` is false."))
             }
 
             val wildcardTopDirStatement =
@@ -341,7 +352,11 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
               val msg = intercept[IOException] {
                 sql("SELECT * FROM tbl4").show()
               }.getMessage
-              assert(msg.contains("Not a file:"))
+              assert(msg.contains(
+                s"Path: ${path}/l1/l2" +
+                  " is a directory, it is not allowed for `serde` reader" +
+                  " when `mapreduce.input.fileinputformat.input.dir.recursive` is false."
+              ))
             }
 
             val wildcardL1DirStatement =
@@ -359,7 +374,9 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
               val msg = intercept[IOException] {
                 sql("SELECT * FROM tbl5").show()
               }.getMessage
-              assert(msg.contains("Not a file:"))
+              assert(msg.contains(s"Path: ${path}/l1/l2/l3" +
+                " is a directory, it is not allowed for `serde` reader" +
+                " when `mapreduce.input.fileinputformat.input.dir.recursive` is false."))
             }
 
             val wildcardL2DirStatement =
