@@ -1934,7 +1934,10 @@ object SQLConf {
         "and merge expressions. But in some edge cases, expensive expressions might be " +
         "duplicated many times in merged Project by this optimization. This config sets " +
         "a maximum number. Once an expression is duplicated more than this number " +
-        "if merging two Project, Spark SQL will skip the merging.")
+        "if merging two Project, Spark SQL will skip the merging. Note that normally " +
+        "in whole-stage codegen Project operator will de-duplicate expressions internally, " +
+        "but in edge cases Spark cannot do whole-stage codegen and fallback to interpreted " +
+        "mode. In such cases, users can use this config to avoid duplicate expressions")
       .version("3.1.0")
       .intConf
       .checkValue(m => m > 0, "maxCommonExprsInCollapseProject must be larger than zero.")
