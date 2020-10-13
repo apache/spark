@@ -253,7 +253,6 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
     try {
       // Creates Spark datasource table using generated Spark DDL.
       sql(sparkDDL)
-      println(sparkDDL)
       val sparkTable = spark.sharedState.externalCatalog.getTable(db, table.table)
       checkHiveCatalogTables(hiveTable, sparkTable)
     } finally {
