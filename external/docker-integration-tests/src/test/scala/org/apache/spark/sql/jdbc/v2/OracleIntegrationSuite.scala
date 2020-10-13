@@ -38,7 +38,7 @@ import org.apache.spark.tags.DockerTest
  *    Pull oracle $ORACLE_DOCKER_IMAGE_NAME image - docker pull $ORACLE_DOCKER_IMAGE_NAME
  * 3. Start docker - sudo service docker start
  * 4. Run spark test - ./build/sbt -Pdocker-integration-tests
- *    "test-only org.apache.spark.sql.jdbc.v2.OracleIntegrationSuite"
+ *    "testOnly org.apache.spark.sql.jdbc.v2.OracleIntegrationSuite"
  *
  * An actual sequence of commands to run the test is as follows
  *
@@ -49,7 +49,7 @@ import org.apache.spark.tags.DockerTest
  *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:18.4.0-xe
  *  $ cd $SPARK_HOME
  *  $ ./build/sbt -Pdocker-integration-tests
- *    "test-only org.apache.spark.sql.jdbc.v2.OracleIntegrationSuite"
+ *    "testOnly org.apache.spark.sql.jdbc.v2.OracleIntegrationSuite"
  *
  * It has been validated with 18.4.0 Express Edition.
  */
