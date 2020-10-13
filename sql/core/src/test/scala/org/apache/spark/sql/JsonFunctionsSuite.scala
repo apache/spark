@@ -713,14 +713,20 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(toDF("yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), toDF("yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]"))
   }
 
-  test("SPARK-33134: ignore nested JSON fields not matched to the specified schema") {
-    val df = Seq("""[{"cards": [11], "playerId": 583651}]""").toDF("events")
-    val event = new StructType()
+  test("SPARK-33134: return partial results only for root JSON objects") {
+    val st = new StructType()
       .add("playerId", LongType)
       .add("cards", ArrayType(
         new StructType()
           .add("id", LongType)
           .add("rank", StringType)))
-    checkAnswer(df.select(from_json($"events", ArrayType(event))), Row(null))
+    val df1 = Seq("""{"cards": [11], "playerId": 583651}""").toDF("events")
+    checkAnswer(df1.select(from_json($"events", st)), Row(Row(583651, null)))
+    val df2 = Seq("""{"data": {"cards": [11], "playerId": 583651}}""").toDF("events")
+    checkAnswer(df2.select(from_json($"events", new StructType().add("data", st))), Row(Row(null)))
+    val df3 = Seq("""[{"cards": [11], "playerId": 583651}]""").toDF("events")
+    checkAnswer(df3.select(from_json($"events", ArrayType(st))), Row(null))
+    val df4 = Seq("""{"cards": [11]}""").toDF("events")
+    checkAnswer(df4.select(from_json($"events", MapType(StringType, st))), Row(null))
   }
 }
