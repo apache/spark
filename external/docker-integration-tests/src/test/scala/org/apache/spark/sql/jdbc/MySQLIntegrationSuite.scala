@@ -28,7 +28,7 @@ import org.apache.spark.tags.DockerTest
  * To run this test suite for a specific version (e.g., mysql:5.7.31):
  * {{{
  *   MYSQL_DOCKER_IMAGE_NAME=mysql:5.7.31
- *     ./build/sbt -Pdocker-integration-tests "test-only *MySQLIntegrationSuite"
+ *     ./build/sbt -Pdocker-integration-tests "testOnly *MySQLIntegrationSuite"
  * }}}
  */
 @DockerTest
