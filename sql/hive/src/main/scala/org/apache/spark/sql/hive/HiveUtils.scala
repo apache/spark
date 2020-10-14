@@ -42,6 +42,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
@@ -82,7 +83,7 @@ private[spark] object HiveUtils extends Logging {
   val HIVE_METASTORE_JARS = buildStaticConf("spark.sql.hive.metastore.jars")
     .doc(s"""
       | Location of the jars that should be used to instantiate the HiveMetastoreClient.
-      | This property can be one of three options: "
+      | This property can be one of four options: "
       | 1. "builtin"
       |   Use Hive ${builtinHiveVersion}, which is bundled with the Spark assembly when
       |   <code>-Phive</code> is enabled. When this option is chosen,
@@ -102,9 +103,16 @@ private[spark] object HiveUtils extends Logging {
 
   val HIVE_METASTORE_JARS_PATH = buildStaticConf("spark.sql.hive.metastore.jars.path")
     .doc(s"Comma separated path of Hive jars, support both local and remote paths," +
-      s"we support path wildcards such as `hdfs://path/to/jars/*`, but not support" +
-      s"nested path wildcards such as `hdfs://path/to/jars/*/*`. When ${HIVE_METASTORE_JARS}" +
-      s"is set to `path`, we will use Hive jars configured by this")
+      s"Such as:" +
+      s" 1. /path/to/jar/xxx.jar" +
+      s" 2. file:///path/to/jar/xxx.jar" +
+      s" 3. local:///path/to/jar/xxx.jar" +
+      s" 4. hdfs://path/to/jar/xxx.jar" +
+      s" 5. [http/https/ftp]://path/to/jar/xxx.jar" +
+      s"For local path and URI path, we only support path wildcard for the last layer," +
+      s"but for remote HDFS path, we support nested path wildcard." +
+      s"When ${HIVE_METASTORE_JARS.key} is set to `path`, we will use Hive jars configured by this")
+    .version("3.1.0")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
@@ -359,6 +367,20 @@ private[spark] object HiveUtils extends Logging {
     val hiveMetastoreBarrierPrefixes = HiveUtils.hiveMetastoreBarrierPrefixes(sqlConf)
     val metaVersion = IsolatedClientLoader.hiveVersion(hiveMetastoreVersion)
 
+    def addLocalHiveJars(file: File): Seq[URL] = {
+      if (file.getName == "*") {
+        val files = file.getParentFile.listFiles()
+        if (files == null) {
+          logWarning(s"Hive jar path '${file.getPath}' does not exist.")
+          Nil
+        } else {
+          files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).map(_.toURL).toSeq
+        }
+      } else {
+        file.toURL :: Nil
+      }
+    }
+
     val isolatedLoader = if (hiveMetastoreJars == "builtin") {
       if (builtinHiveVersion != hiveMetastoreVersion) {
         throw new IllegalArgumentException(
@@ -420,55 +442,6 @@ private[spark] object HiveUtils extends Logging {
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else if (hiveMetastoreJars == "path") {
-
-      def addLocalHiveJars(file: File): Seq[URL] = {
-        if (file.getName == "*") {
-          val files = file.getParentFile.listFiles()
-          if (files == null) {
-            logWarning(s"Hive jar path '${file.getPath}' does not exist.")
-            Nil
-          } else {
-            files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).map(_.toURL).toSeq
-          }
-        } else {
-          file.toURL :: Nil
-        }
-      }
-
-      def checkRemoteHiveJars(path: String): Seq[URL] = {
-        try {
-          val hadoopPath = new Path(path)
-          val fs = hadoopPath.getFileSystem(hadoopConf)
-          if (hadoopPath.getName == "*") {
-            val parent = hadoopPath.getParent
-            if (!fs.exists(parent)) {
-              logWarning(s"Hive Jar ${path} does not exist.")
-              Nil
-            } else if (!fs.getFileStatus(parent).isDirectory) {
-              logWarning(s"Hive Jar ${parent} is not a directory.")
-              Nil
-            } else {
-              fs.listStatus(parent).map(_.getPath.toUri.toURL)
-            }
-          } else {
-            if (!fs.exists(hadoopPath)) {
-              logWarning(s"Hive Jar ${path} does not exist.")
-              Nil
-            } else if (fs.getFileStatus(hadoopPath).isDirectory) {
-              logWarning(s"Hive Jar ${path} not allow directory without `*`")
-              Nil
-            } else {
-              // Since tar/tar.gz file we can't know it's final path yet, not support it
-              hadoopPath.toUri.toURL :: Nil
-            }
-          }
-        } catch {
-          case NonFatal(e) =>
-            logError(s"Failed to find $path to Hive Jars", e)
-            Nil
-        }
-      }
-
       // Convert to files and expand any directories.
       val jars =
         HiveUtils.hiveMetastoreJarsPath(sqlConf)
@@ -478,19 +451,17 @@ private[spark] object HiveUtils extends Logging {
             case path =>
               val uri = new Path(path).toUri
               uri.getScheme match {
-                case "file" | "local" =>
+                // For path `/path/to/jar/xx.jar` schema is `null`
+                case "file" | "local" | null =>
                   addLocalHiveJars(new File(uri.getPath))
-                case "http" | "https" | "ftp" =>
-                  try {
-                    // validate and fetch URI file
-                    uri.toURL :: Nil
-                  } catch {
-                    case _: Throwable =>
-                      logWarning(s"Hive Jars URI (${uri.toString}) is not a valid URL.")
-                      Nil
-                  }
                 case _ =>
-                  checkRemoteHiveJars(path)
+                  DataSource.checkAndGlobPathIfNecessary(
+                    pathStrings = Seq(path),
+                    hadoopConf = hadoopConf,
+                    checkEmptyGlobPath = true,
+                    checkFilesExist = false,
+                    enableGlobbing = true
+                  ).map(_.toUri.toURL)
               }
           }
 
@@ -511,18 +482,9 @@ private[spark] object HiveUtils extends Logging {
       val jars =
         hiveMetastoreJars
           .split(File.pathSeparator)
-          .flatMap {
-          case path if new File(path).getName == "*" =>
-            val files = new File(path).getParentFile.listFiles()
-            if (files == null) {
-              logWarning(s"Hive jar path '$path' does not exist.")
-              Nil
-            } else {
-              files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).toSeq
-            }
-          case path =>
-            new File(path) :: Nil
-        }
+          .flatMap { path =>
+            addLocalHiveJars(new File(path))
+          }
           .map(_.toURI.toURL)
 
       logInfo(
