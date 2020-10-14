@@ -104,7 +104,7 @@ case class AdaptiveSparkPlanExec(
     OptimizeLocalShuffleReader(conf)
   )
 
-  @transient private val finalStageOptimizerRules: Seq[Rule[SparkPlan]] =
+  private def finalStageOptimizerRules: Seq[Rule[SparkPlan]] =
     context.qe.sparkPlan match {
       case _: DataWritingCommandExec | _: V2TableWriteExec =>
         // SPARK-32932: Local shuffle reader could break partitioning that works best
