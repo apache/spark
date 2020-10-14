@@ -43,12 +43,16 @@ public interface MetadataColumn {
    *
    * @return a documentation String
    */
-  String comment();
+  default String comment() {
+    return null;
+  }
 
   /**
    * The {@link Transform} used to produce this metadata column from data rows, or null.
    *
    * @return a {@link Transform} used to produce the column's values, or null if there isn't one
    */
-  Transform transform();
+  default Transform transform() {
+    return null;
+  }
 }
