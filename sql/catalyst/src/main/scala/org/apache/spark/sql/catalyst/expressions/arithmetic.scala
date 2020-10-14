@@ -33,7 +33,8 @@ import org.apache.spark.unsafe.types.CalendarInterval
       > SELECT _FUNC_(1);
        -1
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "math_funcs")
 case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
   private val checkOverflow = SQLConf.get.ansiEnabled
@@ -102,7 +103,8 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
       > SELECT _FUNC_(1);
        1
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "math_funcs")
 case class UnaryPositive(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
   override def prettyName: String = "positive"
@@ -129,7 +131,8 @@ case class UnaryPositive(child: Expression)
       > SELECT _FUNC_(-1);
        1
   """,
-  since = "1.2.0")
+  since = "1.2.0",
+  group = "math_funcs")
 case class Abs(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
@@ -232,7 +235,8 @@ object BinaryArithmetic {
       > SELECT 1 _FUNC_ 2;
        3
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "math_funcs")
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
@@ -265,7 +269,8 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
       > SELECT 2 _FUNC_ 1;
        1
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "math_funcs")
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
@@ -298,7 +303,8 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
       > SELECT 2 _FUNC_ 3;
        6
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "math_funcs")
 case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = NumericType
@@ -394,7 +400,8 @@ trait DivModLike extends BinaryArithmetic {
       > SELECT 2L _FUNC_ 2L;
        1.0
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "math_funcs")
 // scalastyle:on line.size.limit
 case class Divide(left: Expression, right: Expression) extends DivModLike {
 
@@ -418,7 +425,8 @@ case class Divide(left: Expression, right: Expression) extends DivModLike {
       > SELECT 3 _FUNC_ 2;
        1
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "math_funcs")
 // scalastyle:on line.size.limit
 case class IntegralDivide(
     left: Expression,
@@ -468,7 +476,8 @@ object IntegralDivide {
       > SELECT MOD(2, 1.8);
        0.2
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "math_funcs")
 case class Remainder(left: Expression, right: Expression) extends DivModLike {
 
   override def inputType: AbstractDataType = NumericType
@@ -516,7 +525,8 @@ case class Remainder(left: Expression, right: Expression) extends DivModLike {
       > SELECT _FUNC_(-10, 3);
        2
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "math_funcs")
 case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def toString: String = s"pmod($left, $right)"
@@ -673,7 +683,8 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
       > SELECT _FUNC_(10, 9, 2, 4, 3);
        2
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "comparison_funcs")
 case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)
@@ -747,7 +758,8 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
       > SELECT _FUNC_(10, 9, 2, 4, 3);
        10
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "comparison_funcs")
 case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)

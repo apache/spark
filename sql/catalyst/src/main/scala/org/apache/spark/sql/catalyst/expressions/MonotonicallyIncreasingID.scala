@@ -46,7 +46,8 @@ import org.apache.spark.sql.types.{DataType, LongType}
       > SELECT _FUNC_();
        0
   """,
-  since = "1.4.0")
+  since = "1.4.0",
+  group = "misc_funcs")
 case class MonotonicallyIncreasingID() extends LeafExpression with Stateful {
 
   /**

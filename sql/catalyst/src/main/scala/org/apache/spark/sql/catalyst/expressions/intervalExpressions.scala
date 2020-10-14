@@ -152,7 +152,8 @@ case class DivideInterval(
       > SELECT _FUNC_(0, 1, 0, 1, 0, 0, 100.000001);
        1 months 1 days 1 minutes 40.000001 seconds
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class MakeInterval(
     years: Expression,

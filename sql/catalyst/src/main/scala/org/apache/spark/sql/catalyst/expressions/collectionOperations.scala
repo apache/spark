@@ -90,7 +90,8 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
       > SELECT _FUNC_(NULL);
        -1
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "array_funcs")
 case class Size(child: Expression, legacySizeOfNull: Boolean)
   extends UnaryExpression with ExpectsInputTypes {
 
@@ -1918,7 +1919,8 @@ case class ArrayPosition(left: Expression, right: Expression)
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), 2);
        b
   """,
-  since = "2.4.0")
+  since = "2.4.0",
+  group = "map_funcs")
 case class ElementAt(left: Expression, right: Expression)
   extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant {
 
