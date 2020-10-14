@@ -261,7 +261,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
           sql("SELECT * FROM t").collect()
         }
         assert(e.getMessage.contains(s"Path: ${dir.getAbsoluteFile} is a directory, " +
-          s"it is not allowed for `serde` reader when" +
+          s"it is not allowed for InputFormat reader when" +
           s" `mapreduce.input.fileinputformat.input.dir.recursive` is false."))
 
         sql("set mapreduce.input.fileinputformat.input.dir.recursive=true")
