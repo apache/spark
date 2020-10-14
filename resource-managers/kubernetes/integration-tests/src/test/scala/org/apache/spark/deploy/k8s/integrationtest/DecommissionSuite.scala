@@ -55,7 +55,6 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       decommissioningTest = true)
   }
 
-
   test("Test basic decommissioning with shuffle cleanup", k8sTestTag) {
     sparkAppConf
       .set(config.DECOMMISSION_ENABLED.key, "true")
@@ -65,7 +64,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key, "true")
       .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key, "true")
       .set(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED.key, "true")
-      .set(config.DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT.key, "500")
+      .set(config.DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT.key, "400")
       // Ensure we have somewhere to migrate our data too
       .set("spark.executor.instances", "3")
       // The default of 30 seconds is fine, but for testing we just want to get this done fast.
