@@ -67,6 +67,8 @@ public interface ExecutorPlugin {
    * Exceptions thrown from this method do not propagate - they're caught,
    * logged, and suppressed. Therefore exceptions when executing this method won't
    * make the job fail.
+   *
+   * @since 3.1.0
    */
   default void onTaskStart() {}
 
@@ -78,6 +80,8 @@ public interface ExecutorPlugin {
    * task failed.
    * <p>
    * Same warnings of {@link #onTaskStart() onTaskStart} apply here.
+   *
+   * @since 3.1.0
    */
   default void onTaskSucceeded() {}
 
@@ -87,6 +91,8 @@ public interface ExecutorPlugin {
    * Same warnings of {@link #onTaskStart() onTaskStart} apply here.
    *
    * @param failureReason the exception thrown from the failed task.
+   *
+   * @since 3.1.0
    */
   default void onTaskFailed(Throwable failureReason) {}
 }
