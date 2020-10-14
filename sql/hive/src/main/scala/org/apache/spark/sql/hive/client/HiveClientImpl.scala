@@ -453,8 +453,8 @@ private[hive] class HiveClientImpl(
       val sortColumnOrders = h.getSortCols.asScala
         .map { col =>
           (col.getCol, col.getOrder)
-        }
-      Some(HiveMetaBucketSpec(h.getNumBuckets, h.getBucketCols.asScala, sortColumnOrders))
+        }.toSeq
+      Some(HiveMetaBucketSpec(h.getNumBuckets, h.getBucketCols.asScala.toSeq, sortColumnOrders))
     } else {
       None
     }
