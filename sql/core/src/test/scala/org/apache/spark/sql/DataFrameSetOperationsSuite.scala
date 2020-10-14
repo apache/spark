@@ -507,107 +507,98 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-29358: Make unionByName optionally fill missing columns with nulls") {
-    Seq("true", "false").foreach { config =>
-      withSQLConf(SQLConf.UNION_BYNAME_STRUCT_SUPPORT_ENABLED.key -> config) {
-        var df1 = Seq(1, 2, 3).toDF("a")
-        var df2 = Seq(3, 1, 2).toDF("b")
-        val df3 = Seq(2, 3, 1).toDF("c")
-        val unionDf = df1.unionByName(df2.unionByName(df3, true), true)
-        checkAnswer(unionDf,
-          Row(1, null, null) :: Row(2, null, null) :: Row(3, null, null) :: // df1
-            Row(null, 3, null) :: Row(null, 1, null) :: Row(null, 2, null) :: // df2
-            Row(null, null, 2) :: Row(null, null, 3) :: Row(null, null, 1) :: Nil // df3
-        )
+    var df1 = Seq(1, 2, 3).toDF("a")
+    var df2 = Seq(3, 1, 2).toDF("b")
+    val df3 = Seq(2, 3, 1).toDF("c")
+    val unionDf = df1.unionByName(df2.unionByName(df3, true), true)
+    checkAnswer(unionDf,
+      Row(1, null, null) :: Row(2, null, null) :: Row(3, null, null) :: // df1
+        Row(null, 3, null) :: Row(null, 1, null) :: Row(null, 2, null) :: // df2
+        Row(null, null, 2) :: Row(null, null, 3) :: Row(null, null, 1) :: Nil // df3
+    )
 
-        df1 = Seq((1, 2)).toDF("a", "c")
-        df2 = Seq((3, 4, 5)).toDF("a", "b", "c")
-        checkAnswer(df1.unionByName(df2, true),
-          Row(1, 2, null) :: Row(3, 5, 4) :: Nil)
-        checkAnswer(df2.unionByName(df1, true),
-          Row(3, 4, 5) :: Row(1, null, 2) :: Nil)
+    df1 = Seq((1, 2)).toDF("a", "c")
+    df2 = Seq((3, 4, 5)).toDF("a", "b", "c")
+    checkAnswer(df1.unionByName(df2, true),
+      Row(1, 2, null) :: Row(3, 5, 4) :: Nil)
+    checkAnswer(df2.unionByName(df1, true),
+      Row(3, 4, 5) :: Row(1, null, 2) :: Nil)
 
-        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-          df2 = Seq((3, 4, 5)).toDF("a", "B", "C")
-          val union1 = df1.unionByName(df2, true)
-          val union2 = df2.unionByName(df1, true)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      df2 = Seq((3, 4, 5)).toDF("a", "B", "C")
+      val union1 = df1.unionByName(df2, true)
+      val union2 = df2.unionByName(df1, true)
 
-          checkAnswer(union1, Row(1, 2, null, null) :: Row(3, null, 4, 5) :: Nil)
-          checkAnswer(union2, Row(3, 4, 5, null) :: Row(1, null, null, 2) :: Nil)
+      checkAnswer(union1, Row(1, 2, null, null) :: Row(3, null, 4, 5) :: Nil)
+      checkAnswer(union2, Row(3, 4, 5, null) :: Row(1, null, null, 2) :: Nil)
 
-          assert(union1.schema.fieldNames === Array("a", "c", "B", "C"))
-          assert(union2.schema.fieldNames === Array("a", "B", "C", "c"))
-        }
-      }
+      assert(union1.schema.fieldNames === Array("a", "c", "B", "C"))
+      assert(union2.schema.fieldNames === Array("a", "B", "C", "c"))
     }
   }
 
   test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - simple") {
-    withSQLConf(SQLConf.UNION_BYNAME_STRUCT_SUPPORT_ENABLED.key -> "true") {
-      val df1 = Seq(((1, 2, 3), 0), ((2, 3, 4), 1), ((3, 4, 5), 2)).toDF("a", "idx")
-      val df2 = Seq(((3, 4), 0), ((1, 2), 1), ((2, 3), 2)).toDF("a", "idx")
-      val df3 = Seq(((100, 101, 102, 103), 0), ((110, 111, 112, 113), 1), ((120, 121, 122, 123), 2))
-        .toDF("a", "idx")
+    val df1 = Seq(((1, 2, 3), 0), ((2, 3, 4), 1), ((3, 4, 5), 2)).toDF("a", "idx")
+    val df2 = Seq(((3, 4), 0), ((1, 2), 1), ((2, 3), 2)).toDF("a", "idx")
+    val df3 = Seq(((100, 101, 102, 103), 0), ((110, 111, 112, 113), 1), ((120, 121, 122, 123), 2))
+      .toDF("a", "idx")
 
-      var unionDf = df1.unionByName(df2, true)
+    var unionDf = df1.unionByName(df2, true)
 
-      checkAnswer(unionDf,
-        Row(Row(1, 2, 3), 0) :: Row(Row(2, 3, 4), 1) :: Row(Row(3, 4, 5), 2) ::
-          Row(Row(3, 4, null), 0) :: Row(Row(1, 2, null), 1) :: Row(Row(2, 3, null), 2) :: Nil
-      )
+    checkAnswer(unionDf,
+      Row(Row(1, 2, 3), 0) :: Row(Row(2, 3, 4), 1) :: Row(Row(3, 4, 5), 2) ::
+        Row(Row(3, 4, null), 0) :: Row(Row(1, 2, null), 1) :: Row(Row(2, 3, null), 2) :: Nil
+    )
 
-      assert(unionDf.schema.toDDL == "`a` STRUCT<`_1`: INT, `_2`: INT, `_3`: INT>,`idx` INT")
+    assert(unionDf.schema.toDDL == "`a` STRUCT<`_1`: INT, `_2`: INT, `_3`: INT>,`idx` INT")
 
-      unionDf = df1.unionByName(df2, true).unionByName(df3, true)
+    unionDf = df1.unionByName(df2, true).unionByName(df3, true)
 
-      checkAnswer(unionDf,
-        Row(Row(1, 2, 3, null), 0) ::
-          Row(Row(2, 3, 4, null), 1) ::
-          Row(Row(3, 4, 5, null), 2) :: // df1
-          Row(Row(3, 4, null, null), 0) ::
-          Row(Row(1, 2, null, null), 1) ::
-          Row(Row(2, 3, null, null), 2) :: // df2
-          Row(Row(100, 101, 102, 103), 0) ::
-          Row(Row(110, 111, 112, 113), 1) ::
-          Row(Row(120, 121, 122, 123), 2) :: Nil // df3
-      )
-      assert(unionDf.schema.toDDL ==
-        "`a` STRUCT<`_1`: INT, `_2`: INT, `_3`: INT, `_4`: INT>,`idx` INT")
-    }
+    checkAnswer(unionDf,
+      Row(Row(1, 2, 3, null), 0) ::
+        Row(Row(2, 3, 4, null), 1) ::
+        Row(Row(3, 4, 5, null), 2) :: // df1
+        Row(Row(3, 4, null, null), 0) ::
+        Row(Row(1, 2, null, null), 1) ::
+        Row(Row(2, 3, null, null), 2) :: // df2
+        Row(Row(100, 101, 102, 103), 0) ::
+        Row(Row(110, 111, 112, 113), 1) ::
+        Row(Row(120, 121, 122, 123), 2) :: Nil // df3
+    )
+    assert(unionDf.schema.toDDL ==
+      "`a` STRUCT<`_1`: INT, `_2`: INT, `_3`: INT, `_4`: INT>,`idx` INT")
   }
 
   test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - nested") {
-    withSQLConf(SQLConf.UNION_BYNAME_STRUCT_SUPPORT_ENABLED.key -> "true") {
-      val df1 = Seq((0, UnionClass1a(0, 1L, UnionClass2(1, "2")))).toDF("id", "a")
-      val df2 = Seq((1, UnionClass1b(1, 2L, UnionClass3(2, 3L)))).toDF("id", "a")
+    val df1 = Seq((0, UnionClass1a(0, 1L, UnionClass2(1, "2")))).toDF("id", "a")
+    val df2 = Seq((1, UnionClass1b(1, 2L, UnionClass3(2, 3L)))).toDF("id", "a")
 
-      val expectedSchema = "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
-        "`nested`: STRUCT<`a`: INT, `b`: BIGINT, `c`: STRING>>"
+    val expectedSchema = "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
+      "`nested`: STRUCT<`a`: INT, `b`: BIGINT, `c`: STRING>>"
 
-      var unionDf = df1.unionByName(df2, true)
-      checkAnswer(unionDf,
-        Row(0, Row(0, 1, Row(1, null, "2"))) ::
-          Row(1, Row(1, 2, Row(2, 3L, null))) :: Nil)
-      assert(unionDf.schema.toDDL == expectedSchema)
+    var unionDf = df1.unionByName(df2, true)
+    checkAnswer(unionDf,
+      Row(0, Row(0, 1, Row(1, null, "2"))) ::
+        Row(1, Row(1, 2, Row(2, 3L, null))) :: Nil)
+    assert(unionDf.schema.toDDL == expectedSchema)
 
-      unionDf = df2.unionByName(df1, true)
-      checkAnswer(unionDf,
-        Row(1, Row(1, 2, Row(2, 3L, null))) ::
-          Row(0, Row(0, 1, Row(1, null, "2"))) :: Nil)
-      assert(unionDf.schema.toDDL == expectedSchema)
+    unionDf = df2.unionByName(df1, true)
+    checkAnswer(unionDf,
+      Row(1, Row(1, 2, Row(2, 3L, null))) ::
+        Row(0, Row(0, 1, Row(1, null, "2"))) :: Nil)
+    assert(unionDf.schema.toDDL == expectedSchema)
 
-      val df3 = Seq((2, UnionClass1b(2, 3L, null))).toDF("id", "a")
-      unionDf = df1.unionByName(df3, true)
-      checkAnswer(unionDf,
-        Row(0, Row(0, 1, Row(1, null, "2"))) ::
-          Row(2, Row(2, 3, null)) :: Nil)
-      assert(unionDf.schema.toDDL == expectedSchema)
-    }
+    val df3 = Seq((2, UnionClass1b(2, 3L, null))).toDF("id", "a")
+    unionDf = df1.unionByName(df3, true)
+    checkAnswer(unionDf,
+      Row(0, Row(0, 1, Row(1, null, "2"))) ::
+        Row(2, Row(2, 3, null)) :: Nil)
+    assert(unionDf.schema.toDDL == expectedSchema)
   }
 
   test("SPARK-32376: Make unionByName null-filling behavior work with struct columns" +
       " - case-sensitive cases") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true",
-        SQLConf.UNION_BYNAME_STRUCT_SUPPORT_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       val df1 = Seq((0, UnionClass1a(0, 1L, UnionClass2(1, "2")))).toDF("id", "a")
       val df2 = Seq((1, UnionClass1c(1, 2L, UnionClass4(2, 3L)))).toDF("id", "a")
 
@@ -639,42 +630,26 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - edge case") {
-    withSQLConf(SQLConf.UNION_BYNAME_STRUCT_SUPPORT_ENABLED.key -> "true") {
-      val nestedStructType1 = StructType(Seq(
-        StructField("b", StringType)))
-      val nestedStructValues1 = Row("b")
+    val nestedStructType1 = StructType(Seq(
+      StructField("b", StringType)))
+    val nestedStructValues1 = Row("b")
 
-      val nestedStructType2 = StructType(Seq(
-        StructField("b", StringType),
-        StructField("a", StringType)))
-      val nestedStructValues2 = Row("b", "a")
+    val nestedStructType2 = StructType(Seq(
+      StructField("b", StringType),
+      StructField("a", StringType)))
+    val nestedStructValues2 = Row("b", "a")
 
-      val df1: DataFrame = spark.createDataFrame(
-        sparkContext.parallelize(Row(nestedStructValues1) :: Nil),
-        StructType(Seq(StructField("topLevelCol", nestedStructType1))))
+    val df1: DataFrame = spark.createDataFrame(
+      sparkContext.parallelize(Row(nestedStructValues1) :: Nil),
+      StructType(Seq(StructField("topLevelCol", nestedStructType1))))
 
-      val df2: DataFrame = spark.createDataFrame(
-        sparkContext.parallelize(Row(nestedStructValues2) :: Nil),
-        StructType(Seq(StructField("topLevelCol", nestedStructType2))))
+    val df2: DataFrame = spark.createDataFrame(
+      sparkContext.parallelize(Row(nestedStructValues2) :: Nil),
+      StructType(Seq(StructField("topLevelCol", nestedStructType2))))
 
-      val union = df1.unionByName(df2, allowMissingColumns = true)
-      checkAnswer(union, Row(Row(null, "b")) :: Row(Row("a", "b")) :: Nil)
-      assert(union.schema.toDDL == "`topLevelCol` STRUCT<`a`: STRING, `b`: STRING>")
-    }
-  }
-
-  test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - disable") {
-    withSQLConf(SQLConf.UNION_BYNAME_STRUCT_SUPPORT_ENABLED.key -> "false") {
-      val df1 = Seq(((1, 2, 3), 0), ((2, 3, 4), 1), ((3, 4, 5), 2)).toDF("a", "idx")
-      val df2 = Seq(((3, 4), 0), ((1, 2), 1), ((2, 3), 2)).toDF("a", "idx")
-
-      val err = intercept[AnalysisException] {
-        df1.unionByName(df2, true).collect()
-      }
-      assert(err.getMessage.contains("Union can only be performed on tables with the compatible " +
-        "column types. struct<_1:int,_2:int> <> struct<_1:int,_2:int,_3:int> at the first column " +
-        "of the second table"))
-    }
+    val union = df1.unionByName(df2, allowMissingColumns = true)
+    checkAnswer(union, Row(Row(null, "b")) :: Row(Row("a", "b")) :: Nil)
+    assert(union.schema.toDDL == "`topLevelCol` STRUCT<`a`: STRING, `b`: STRING>")
   }
 
   test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - deep expr") {
@@ -704,36 +679,35 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
       df
     }
-    withSQLConf(SQLConf.UNION_BYNAME_STRUCT_SUPPORT_ENABLED.key -> "true") {
-      val df1 = nestedDf(depth = 10, numColsAtEachDepth = 1)
-      val df2 = nestedDf(depth = 10, numColsAtEachDepth = 20)
-      val union = df1.unionByName(df2, allowMissingColumns = true)
-      // scalastyle:off
-      val row1 = Row(Row(Row(Row(Row(Row(Row(Row(Row(Row(
-        Row(0, 1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
-        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
-        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
-        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
-        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
-        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
-        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
-        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
-        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
-        1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null))
-      val row2 = Row(Row(Row(Row(Row(Row(Row(Row(Row(Row(
-        Row(0, 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
-        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
-        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
-        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
-        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
-        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
-        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
-        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
-        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
-        1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9))
-      // scalastyle:on
-      checkAnswer(union, row1 :: row2 :: Nil)
-    }
+
+    val df1 = nestedDf(depth = 10, numColsAtEachDepth = 1)
+    val df2 = nestedDf(depth = 10, numColsAtEachDepth = 20)
+    val union = df1.unionByName(df2, allowMissingColumns = true)
+    // scalastyle:off
+    val row1 = Row(Row(Row(Row(Row(Row(Row(Row(Row(Row(
+      Row(0, 1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+      1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+      1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+      1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+      1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+      1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+      1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+      1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+      1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+      1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null))
+    val row2 = Row(Row(Row(Row(Row(Row(Row(Row(Row(Row(
+      Row(0, 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+      1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+      1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+      1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+      1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+      1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+      1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+      1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+      1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9),
+      1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9))
+    // scalastyle:on
+    checkAnswer(union, row1 :: row2 :: Nil)
   }
 }
 

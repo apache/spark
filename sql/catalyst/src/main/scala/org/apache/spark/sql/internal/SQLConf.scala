@@ -2740,19 +2740,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val UNION_BYNAME_STRUCT_SUPPORT_ENABLED =
-    buildConf("spark.sql.unionByName.structSupport.enabled")
-      .doc("When true, the `allowMissingColumns` feature of `Dataset.unionByName` supports " +
-        "nested column in struct types. Missing nested columns of struct columns with same " +
-        "name will also be filled with null values. This currently does not support nested " +
-        "columns in array and map types. Note that if there is any missing nested columns " +
-        "to be filled, in order to make consistent schema between two sides of union, the " +
-        "nested fields of structs will be sorted after merging schema."
-      )
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(true)
-
   val LEGACY_PATH_OPTION_BEHAVIOR =
     buildConf("spark.sql.legacy.pathOptionBehavior.enabled")
       .internal()
@@ -3101,9 +3088,6 @@ class SQLConf extends Serializable with Logging {
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
   }
-
-  def unionByNameStructSupportEnabled: Boolean =
-    getConf(SQLConf.UNION_BYNAME_STRUCT_SUPPORT_ENABLED)
 
   def broadcastHashJoinOutputPartitioningExpandLimit: Int =
     getConf(BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)

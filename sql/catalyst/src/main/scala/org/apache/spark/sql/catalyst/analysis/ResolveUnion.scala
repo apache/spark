@@ -34,7 +34,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 object ResolveUnion extends Rule[LogicalPlan] {
   /**
-   * This method sorts recursively columns in a struct expression based on column names.
+   * This method sorts columns recursively in a struct expression based on column names.
    */
   private def sortStructFields(expr: Expression): Expression = {
     val existingExprs = expr.dataType.asInstanceOf[StructType].fieldNames.zipWithIndex.map {
@@ -106,17 +106,17 @@ object ResolveUnion extends Rule[LogicalPlan] {
     assert(col.dataType.isInstanceOf[StructType], "Only support StructType.")
 
     val resolver = SQLConf.get.resolver
-    val missingFields =
+    val missingFieldsOpt =
       StructType.findMissingFields(col.dataType.asInstanceOf[StructType], target, resolver)
 
     // We need to sort columns in result, because we might add another column in other side.
     // E.g., we want to union two structs "a int, b long" and "a int, c string".
     // If we don't sort, we will have "a int, b long, c string" and
     // "a int, c string, b long", which are not compatible.
-    if (missingFields.isEmpty) {
+    if (missingFieldsOpt.isEmpty) {
       sortStructFields(col)
     } else {
-      missingFields.map { s =>
+      missingFieldsOpt.map { s =>
         val struct = addFieldsInto(col, s.fields)
         // Combines `WithFields`s to reduce expression tree.
         val reducedStruct = simplifyWithFields(struct)
@@ -174,8 +174,6 @@ object ResolveUnion extends Rule[LogicalPlan] {
 
     val aliased = mutable.ArrayBuffer.empty[Attribute]
 
-    val supportStruct = SQLConf.get.unionByNameStructSupportEnabled
-
     val rightProjectList = leftOutputAttrs.map { lattr =>
       val found = rightOutputAttrs.find { rattr => resolver(lattr.name, rattr.name) }
       if (found.isDefined) {
@@ -183,7 +181,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
         val foundDt = foundAttr.dataType
         (foundDt, lattr.dataType) match {
           case (source: StructType, target: StructType)
-              if supportStruct && allowMissingCol && !source.sameType(target) =>
+              if allowMissingCol && !source.sameType(target) =>
             // Having an output with same name, but different struct type.
             // We need to add missing fields. Note that if there are deeply nested structs such as
             // nested struct of array in struct, we don't support to add missing deeply nested field
