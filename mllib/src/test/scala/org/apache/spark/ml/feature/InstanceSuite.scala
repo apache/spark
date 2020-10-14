@@ -97,13 +97,13 @@ class InstanceSuite extends SparkFunSuite{
       assert(vec.toArray === instances(i).features.toArray)
     }
 
+    // instances larger than maxMemUsage
     val bigInstance = Instance(-1.0, 2.0, Vectors.dense(Array.fill(10000)(1.0)))
-    val inputIter1 = Iterator.apply(bigInstance)
-    val inputIter2 = Iterator.apply(instance1, instance2, bigInstance)
-    Seq(inputIter1, inputIter2).foreach { inputIter =>
-      intercept[IllegalArgumentException] {
-        InstanceBlock.blokifyWithMaxMemUsage(inputIter, 1024).toArray
-      }
+    InstanceBlock.blokifyWithMaxMemUsage(Iterator.fill(10)(bigInstance), 64).size
+
+    // different numFeatures
+    intercept[IllegalArgumentException] {
+      InstanceBlock.blokifyWithMaxMemUsage(Iterator.apply(instance1, bigInstance), 64).size
     }
   }
 }
