@@ -142,55 +142,32 @@ private[spark] object InstanceBlock {
     new Iterator[InstanceBlock] {
       private var numCols = -1L
       private val buff = mutable.ArrayBuilder.make[Instance]
-      private var buffCnt = 0L
-      private var buffNnz = 0L
-      private var buffUnitWeight = true
-      private var block = Option.empty[InstanceBlock]
 
-      private def flush(): Unit = {
-        block = Some(InstanceBlock.fromInstances(buff.result()))
+      override def hasNext: Boolean = iterator.hasNext
+
+      override def next(): InstanceBlock = {
         buff.clear()
-        buffCnt = 0L
-        buffNnz = 0L
-        buffUnitWeight = true
-      }
+        var buffCnt = 0L
+        var buffNnz = 0L
+        var buffUnitWeight = true
+        var blockMemUsage = 0L
 
-      private def blockify(): Unit = {
-        block = None
-
-        while (block.isEmpty && iterator.hasNext) {
+        while (iterator.hasNext && blockMemUsage < maxMemUsage) {
           val instance = iterator.next()
           if (numCols < 0L) numCols = instance.features.size
           require(numCols == instance.features.size)
           val nnz = instance.features.numNonzeros
 
-          // Check if enough memory remains to add this instance to the block.
-          if (getBlockMemUsage(numCols, buffCnt + 1L, buffNnz + nnz,
-            buffUnitWeight && (instance.weight == 1)) > maxMemUsage) {
-            // Check if this instance is too large
-            require(buffCnt > 0, s"instance $instance exceeds memory limit $maxMemUsage, " +
-              s"please increase block size")
-            flush()
-          }
-
           buff += instance
           buffCnt += 1L
           buffNnz += nnz
           buffUnitWeight &&= (instance.weight == 1)
+          blockMemUsage = getBlockMemUsage(numCols, buffCnt, buffNnz, buffUnitWeight)
         }
 
-        if (block.isEmpty && buffCnt > 0) flush()
-      }
-
-      override def hasNext: Boolean = {
-        block.nonEmpty || { blockify(); block.nonEmpty }
-      }
-
-      override def next(): InstanceBlock = {
-        if (block.isEmpty) blockify()
-        val ret = block.get
-        blockify()
-        ret
+        // the block mem usage may slightly exceed threshold, not a big issue.
+        // and this ensure even if one row exceed block limit, each block has one row
+        InstanceBlock.fromInstances(buff.result())
       }
     }
   }
