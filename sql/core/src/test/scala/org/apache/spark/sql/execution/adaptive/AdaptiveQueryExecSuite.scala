@@ -26,11 +26,9 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.connector.SimpleWritableDataSource
-import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
+import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, SortMergeJoinExec}
@@ -40,7 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
-import org.apache.spark.sql.util.{CaseInsensitiveStringMap, QueryExecutionListener}
+import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.Utils
 
 class AdaptiveQueryExecSuite
@@ -1302,8 +1300,8 @@ class AdaptiveQueryExecSuite
       // Test DataSource v2
       withTempPath { f =>
         val path = f.getCanonicalPath
-        val format = classOf[V2Source].getName
-        df.write.format(format).partitionBy("j").mode("overwrite").save(path)
+        val format = classOf[NoopDataSource].getName
+        df.write.format(format).mode("overwrite").save(path)
         sparkContext.listenerBus.waitUntilEmpty()
         assert(noLocalReader)
         noLocalReader = false
@@ -1311,20 +1309,5 @@ class AdaptiveQueryExecSuite
 
       spark.listenerManager.unregister(listener)
     }
-  }
-}
-
-class V2Source extends SimpleWritableDataSource {
-
-  class TestingTable(options: CaseInsensitiveStringMap)
-    extends MyTable(options) {
-
-    override def partitioning(): Array[Transform] = {
-      Array(IdentityTransform(FieldReference("j")))
-    }
-  }
-
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    new TestingTable(options)
   }
 }
