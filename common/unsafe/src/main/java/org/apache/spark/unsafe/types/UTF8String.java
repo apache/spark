@@ -29,8 +29,10 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.google.common.primitives.Ints;
 
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.UTF8StringBuilder;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 
@@ -57,12 +59,43 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public Object getBaseObject() { return base; }
   public long getBaseOffset() { return offset; }
 
-  private static int[] bytesOfCodePointInUTF8 = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-    4, 4, 4, 4, 4, 4, 4, 4,
-    5, 5, 5, 5,
-    6, 6};
+  /**
+   * A char in UTF-8 encoding can take 1-4 bytes depending on the first byte which
+   * indicates the size of the char. See Unicode standard in page 126, Table 3-6:
+   * http://www.unicode.org/versions/Unicode10.0.0/UnicodeStandard-10.0.pdf
+   *
+   * Binary    Hex          Comments
+   * 0xxxxxxx  0x00..0x7F   Only byte of a 1-byte character encoding
+   * 10xxxxxx  0x80..0xBF   Continuation bytes (1-3 continuation bytes)
+   * 110xxxxx  0xC0..0xDF   First byte of a 2-byte character encoding
+   * 1110xxxx  0xE0..0xEF   First byte of a 3-byte character encoding
+   * 11110xxx  0xF0..0xF7   First byte of a 4-byte character encoding
+   *
+   * As a consequence of the well-formedness conditions specified in
+   * Table 3-7 (page 126), the following byte values are disallowed in UTF-8:
+   *   C0–C1, F5–FF.
+   */
+  private static byte[] bytesOfCodePointInUTF8 = {
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x00..0x0F
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x10..0x1F
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x20..0x2F
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x30..0x3F
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x40..0x4F
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x50..0x5F
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x60..0x6F
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x70..0x7F
+    // Continuation bytes cannot appear as the first byte
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x80..0x8F
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x90..0x9F
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0xA0..0xAF
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0xB0..0xBF
+    0, 0, // 0xC0..0xC1 - disallowed in UTF-8
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // 0xC2..0xCF
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // 0xD0..0xDF
+    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, // 0xE0..0xEF
+    4, 4, 4, 4, 4, // 0xF0..0xF4
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 // 0xF5..0xFF - disallowed in UTF-8
+  };
 
   private static final boolean IS_LITTLE_ENDIAN =
       ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
@@ -187,8 +220,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @param b The first byte of a code point
    */
   private static int numBytesForFirstByte(final byte b) {
-    final int offset = (b & 0xFF) - 192;
-    return (offset >= 0) ? bytesOfCodePointInUTF8[offset] : 1;
+    final int offset = b & 0xFF;
+    byte numBytes = bytesOfCodePointInUTF8[offset];
+    return (numBytes == 0) ? 1: numBytes; // Skip the first byte disallowed in UTF-8
   }
 
   /**
@@ -307,8 +341,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // to the -ith element before the end of the sequence. If a start index i is 0, it
     // refers to the first element.
     int len = numChars();
+    // `len + pos` does not overflow as `len >= 0`.
     int start = (pos > 0) ? pos -1 : ((pos < 0) ? len + pos : 0);
-    int end = (length == Integer.MAX_VALUE) ? len : start + length;
+
+    int end;
+    if ((long) start + length > Integer.MAX_VALUE) {
+      end = Integer.MAX_VALUE;
+    } else if ((long) start + length < Integer.MIN_VALUE) {
+      end = Integer.MIN_VALUE;
+    } else {
+      end = start + length;
+    }
     return substring(start, end);
   }
 
@@ -336,7 +379,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return Platform.getByte(base, offset + i);
   }
 
-  private boolean matchAt(final UTF8String s, int pos) {
+  public boolean matchAt(final UTF8String s, int pos) {
     if (s.numBytes + pos > numBytes || pos < 0) {
       return false;
     }
@@ -496,26 +539,63 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return UTF8String.fromBytes(newBytes);
   }
 
+  /**
+   * Trims space characters (ASCII 32) from both ends of this string.
+   *
+   * @return this string with no spaces at the start or end
+   */
   public UTF8String trim() {
     int s = 0;
     // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) == 0x20) s++;
+    while (s < this.numBytes && getByte(s) == ' ') s++;
     if (s == this.numBytes) {
-      // empty string
+      // Everything trimmed
       return EMPTY_UTF8;
     }
     // skip all of the space (0x20) in the right side
     int e = this.numBytes - 1;
-    while (e > s && getByte(e) == 0x20) e--;
+    while (e > s && getByte(e) == ' ') e--;
+    if (s == 0 && e == numBytes - 1) {
+      // Nothing trimmed
+      return this;
+    }
     return copyUTF8String(s, e);
   }
 
   /**
-   * Based on the given trim string, trim this string starting from both ends
-   * This method searches for each character in the source string, removes the character if it is
-   * found in the trim string, stops at the first not found. It calls the trimLeft first, then
-   * trimRight. It returns a new string in which both ends trim characters have been removed.
+   * Trims whitespaces ({@literal <=} ASCII 32) from both ends of this string.
+   *
+   * Note that, this method is the same as java's {@link String#trim}, and different from
+   * {@link UTF8String#trim()} which remove only spaces(= ASCII 32) from both ends.
+   *
+   * @return A UTF8String whose value is this UTF8String, with any leading and trailing white
+   * space removed, or this UTF8String if it has no leading or trailing whitespace.
+   *
+   */
+  public UTF8String trimAll() {
+    int s = 0;
+    // skip all of the whitespaces (<=0x20) in the left side
+    while (s < this.numBytes && Character.isWhitespace(getByte(s))) s++;
+    if (s == this.numBytes) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    // skip all of the whitespaces (<=0x20) in the right side
+    int e = this.numBytes - 1;
+    while (e > s && Character.isWhitespace(getByte(e))) e--;
+    if (s == 0 && e == numBytes - 1) {
+      // Nothing trimmed
+      return this;
+    }
+    return copyUTF8String(s, e);
+  }
+
+  /**
+   * Trims instances of the given trim string from both ends of this string.
+   *
    * @param trimString the trim character string
+   * @return this string with no occurrences of the trim string at the start or end, or `null`
+   *  if `trimString` is `null`
    */
   public UTF8String trim(UTF8String trimString) {
     if (trimString != null) {
@@ -525,24 +605,32 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
   }
 
+  /**
+   * Trims space characters (ASCII 32) from the start of this string.
+   *
+   * @return this string with no spaces at the start
+   */
   public UTF8String trimLeft() {
     int s = 0;
     // skip all of the space (0x20) in the left side
     while (s < this.numBytes && getByte(s) == 0x20) s++;
-    if (s == this.numBytes) {
-      // empty string
-      return EMPTY_UTF8;
-    } else {
-      return copyUTF8String(s, this.numBytes - 1);
+    if (s == 0) {
+      // Nothing trimmed
+      return this;
     }
+    if (s == this.numBytes) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    return copyUTF8String(s, this.numBytes - 1);
   }
 
   /**
-   * Based on the given trim string, trim this string starting from left end
-   * This method searches each character in the source string starting from the left end, removes
-   * the character if it is in the trim string, stops at the first character which is not in the
-   * trim string, returns the new string.
+   * Trims instances of the given trim string from the start of this string.
+   *
    * @param trimString the trim character string
+   * @return this string with no occurrences of the trim string at the start, or `null`
+   *  if `trimString` is `null`
    */
   public UTF8String trimLeft(UTF8String trimString) {
     if (trimString == null) return null;
@@ -564,34 +652,43 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
       srchIdx += searchCharBytes;
     }
-
-    if (trimIdx >= numBytes) {
-      // empty string
-      return EMPTY_UTF8;
-    } else {
-      return copyUTF8String(trimIdx, numBytes - 1);
+    if (srchIdx == 0) {
+      // Nothing trimmed
+      return this;
     }
+    if (trimIdx >= numBytes) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    return copyUTF8String(trimIdx, numBytes - 1);
   }
 
+  /**
+   * Trims space characters (ASCII 32) from the end of this string.
+   *
+   * @return this string with no spaces at the end
+   */
   public UTF8String trimRight() {
     int e = numBytes - 1;
     // skip all of the space (0x20) in the right side
     while (e >= 0 && getByte(e) == 0x20) e--;
-
-    if (e < 0) {
-      // empty string
-      return EMPTY_UTF8;
-    } else {
-      return copyUTF8String(0, e);
+    if (e == numBytes - 1) {
+      // Nothing trimmed
+      return this;
     }
+    if (e < 0) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    return copyUTF8String(0, e);
   }
 
   /**
-   * Based on the given trim string, trim this string starting from right end
-   * This method searches each character in the source string starting from the right end,
-   * removes the character if it is in the trim string, stops at the first character which is not
-   * in the trim string, returns the new string.
+   * Trims instances of the given trim string from the end of this string.
+   *
    * @param trimString the trim character string
+   * @return this string with no occurrences of the trim string at the end, or `null`
+   *  if `trimString` is `null`
    */
   public UTF8String trimRight(UTF8String trimString) {
     if (trimString == null) return null;
@@ -625,12 +722,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       numChars --;
     }
 
-    if (trimEnd < 0) {
-      // empty string
-      return EMPTY_UTF8;
-    } else {
-      return copyUTF8String(0, trimEnd);
+    if (trimEnd == numBytes - 1) {
+      // Nothing trimmed
+      return this;
     }
+    if (trimEnd < 0) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    return copyUTF8String(0, trimEnd);
   }
 
   public UTF8String reverse() {
@@ -850,17 +950,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public static UTF8String concat(UTF8String... inputs) {
     // Compute the total length of the result.
-    int totalLength = 0;
+    long totalLength = 0;
     for (int i = 0; i < inputs.length; i++) {
       if (inputs[i] != null) {
-        totalLength += inputs[i].numBytes;
+        totalLength += (long)inputs[i].numBytes;
       } else {
         return null;
       }
     }
 
     // Allocate a new byte array, and copy the inputs one by one into it.
-    final byte[] result = new byte[totalLength];
+    final byte[] result = new byte[Ints.checkedCast(totalLength)];
     int offset = 0;
     for (int i = 0; i < inputs.length; i++) {
       int len = inputs[i].numBytes;
@@ -925,6 +1025,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String[] split(UTF8String pattern, int limit) {
+    // Java String's split method supports "ignore empty string" behavior when the limit is 0
+    // whereas other languages do not. To avoid this java specific behavior, we fall back to
+    // -1 when the limit is 0.
+    if (limit == 0) {
+      limit = -1;
+    }
     String[] splits = toString().split(pattern.toString(), limit);
     UTF8String[] res = new UTF8String[splits.length];
     for (int i = 0; i < res.length; i++) {
@@ -934,12 +1040,29 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String replace(UTF8String search, UTF8String replace) {
-    if (EMPTY_UTF8.equals(search)) {
+    // This implementation is loosely based on commons-lang3's StringUtils.replace().
+    if (numBytes == 0 || search.numBytes == 0) {
       return this;
     }
-    String replaced = toString().replace(
-      search.toString(), replace.toString());
-    return fromString(replaced);
+    // Find the first occurrence of the search string.
+    int start = 0;
+    int end = this.find(search, start);
+    if (end == -1) {
+      // Search string was not found, so string is unchanged.
+      return this;
+    }
+    // At least one match was found. Estimate space needed for result.
+    // The 16x multiplier here is chosen to match commons-lang3's implementation.
+    int increase = Math.max(0, replace.numBytes - search.numBytes) * 16;
+    final UTF8StringBuilder buf = new UTF8StringBuilder(numBytes + increase);
+    while (end != -1) {
+      buf.appendBytes(this.base, this.offset + start, end - start);
+      buf.append(replace);
+      start = end + search.numBytes;
+      end = this.find(search, start);
+    }
+    buf.appendBytes(this.base, this.offset + start, numBytes - start);
+    return buf.build();
   }
 
   // TODO: Need to use `Code Point` here instead of Char in case the character longer than 2 bytes
@@ -977,7 +1100,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Parses this UTF8String to long.
+   * Parses this UTF8String(trimmed if needed) to long.
    *
    * Note that, in this method we accumulate the result in negative format, and convert it to
    * positive format at the end, if this string is not started with '-'. This is because min value
@@ -991,18 +1114,24 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return true if the parsing was successful else false
    */
   public boolean toLong(LongWrapper toLongResult) {
-    if (numBytes == 0) {
-      return false;
-    }
+    return toLong(toLongResult, true);
+  }
 
-    byte b = getByte(0);
-    final boolean negative = b == '-';
+  private boolean toLong(LongWrapper toLongResult, boolean allowDecimal) {
     int offset = 0;
+    while (offset < this.numBytes && Character.isWhitespace(getByte(offset))) offset++;
+    if (offset == this.numBytes) return false;
+
+    int end = this.numBytes - 1;
+    while (end > offset && Character.isWhitespace(getByte(end))) end--;
+
+    byte b = getByte(offset);
+    final boolean negative = b == '-';
     if (negative || b == '+') {
-      offset++;
-      if (numBytes == 1) {
+      if (end - offset == 0) {
         return false;
       }
+      offset++;
     }
 
     final byte separator = '.';
@@ -1010,10 +1139,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     final long stopValue = Long.MIN_VALUE / radix;
     long result = 0;
 
-    while (offset < numBytes) {
+    while (offset <= end) {
       b = getByte(offset);
       offset++;
-      if (b == separator) {
+      if (b == separator && allowDecimal) {
         // We allow decimals and will return a truncated integral in that case.
         // Therefore we won't throw an exception here (checking the fractional
         // part happens below.)
@@ -1045,7 +1174,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // This is the case when we've encountered a decimal separator. The fractional
     // part will not change the number, but we will verify that the fractional part
     // is well formed.
-    while (offset < numBytes) {
+    while (offset <= end) {
       byte currentByte = getByte(offset);
       if (currentByte < '0' || currentByte > '9') {
         return false;
@@ -1065,7 +1194,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Parses this UTF8String to int.
+   * Parses this UTF8String(trimmed if needed) to int.
    *
    * Note that, in this method we accumulate the result in negative format, and convert it to
    * positive format at the end, if this string is not started with '-'. This is because min value
@@ -1082,18 +1211,24 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return true if the parsing was successful else false
    */
   public boolean toInt(IntWrapper intWrapper) {
-    if (numBytes == 0) {
-      return false;
-    }
+    return toInt(intWrapper, true);
+  }
 
-    byte b = getByte(0);
-    final boolean negative = b == '-';
+  private boolean toInt(IntWrapper intWrapper, boolean allowDecimal) {
     int offset = 0;
+    while (offset < this.numBytes && Character.isWhitespace(getByte(offset))) offset++;
+    if (offset == this.numBytes) return false;
+
+    int end = this.numBytes - 1;
+    while (end > offset && Character.isWhitespace(getByte(end))) end--;
+
+    byte b = getByte(offset);
+    final boolean negative = b == '-';
     if (negative || b == '+') {
-      offset++;
-      if (numBytes == 1) {
+      if (end - offset == 0) {
         return false;
       }
+      offset++;
     }
 
     final byte separator = '.';
@@ -1101,10 +1236,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     final int stopValue = Integer.MIN_VALUE / radix;
     int result = 0;
 
-    while (offset < numBytes) {
+    while (offset <= end) {
       b = getByte(offset);
       offset++;
-      if (b == separator) {
+      if (b == separator && allowDecimal) {
         // We allow decimals and will return a truncated integral in that case.
         // Therefore we won't throw an exception here (checking the fractional
         // part happens below.)
@@ -1136,7 +1271,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // This is the case when we've encountered a decimal separator. The fractional
     // part will not change the number, but we will verify that the fractional part
     // is well formed.
-    while (offset < numBytes) {
+    while (offset <= end) {
       byte currentByte = getByte(offset);
       if (currentByte < '0' || currentByte > '9') {
         return false;
@@ -1158,9 +1293,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (toInt(intWrapper)) {
       int intValue = intWrapper.value;
       short result = (short) intValue;
-      if (result == intValue) {
-        return true;
-      }
+      return result == intValue;
     }
     return false;
   }
@@ -1169,11 +1302,55 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (toInt(intWrapper)) {
       int intValue = intWrapper.value;
       byte result = (byte) intValue;
-      if (result == intValue) {
-        return true;
-      }
+      return result == intValue;
     }
     return false;
+  }
+
+  /**
+   * Parses UTF8String(trimmed if needed) to long. This method is used when ANSI is enabled.
+   *
+   * @return If string contains valid numeric value then it returns the long value otherwise a
+   * NumberFormatException  is thrown.
+   */
+  public long toLongExact() {
+    LongWrapper result = new LongWrapper();
+    if (toLong(result, false)) {
+      return result.value;
+    }
+    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+  }
+
+  /**
+   * Parses UTF8String(trimmed if needed) to int. This method is used when ANSI is enabled.
+   *
+   * @return If string contains valid numeric value then it returns the int value otherwise a
+   * NumberFormatException  is thrown.
+   */
+  public int toIntExact() {
+    IntWrapper result = new IntWrapper();
+    if (toInt(result, false)) {
+      return result.value;
+    }
+    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+  }
+
+  public short toShortExact() {
+    int value = this.toIntExact();
+    short result = (short) value;
+    if (result == value) {
+      return result;
+    }
+    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+  }
+
+  public byte toByteExact() {
+    int value = this.toIntExact();
+    byte result = (byte) value;
+    if (result == value) {
+      return result;
+    }
+    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
   }
 
   @Override

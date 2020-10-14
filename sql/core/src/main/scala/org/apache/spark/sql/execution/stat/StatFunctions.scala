@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GenericInternalRow, GetArrayItem, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.catalyst.util.QuantileSummaries
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, QuantileSummaries}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -45,7 +45,7 @@ object StatFunctions extends Logging {
    *
    * This method implements a variation of the Greenwald-Khanna algorithm (with some speed
    * optimizations).
-   * The algorithm was first present in <a href="http://dx.doi.org/10.1145/375663.375670">
+   * The algorithm was first present in <a href="https://doi.org/10.1145/375663.375670">
    * Space-efficient Online Computation of Quantile Summaries</a> by Greenwald and Khanna.
    *
    * @param df the dataframe
@@ -70,7 +70,7 @@ object StatFunctions extends Logging {
     require(relativeError >= 0,
       s"Relative Error must be non-negative but got $relativeError")
     val columns: Seq[Column] = cols.map { colName =>
-      val field = df.schema(colName)
+      val field = df.resolve(colName)
       require(field.dataType.isInstanceOf[NumericType],
         s"Quantile calculation for column $colName with data type ${field.dataType}" +
         " is not supported.")
@@ -154,10 +154,9 @@ object StatFunctions extends Logging {
               functionName: String): CovarianceCounter = {
     require(cols.length == 2, s"Currently $functionName calculation is supported " +
       "between two columns.")
-    cols.map(name => (name, df.schema.fields.find(_.name == name))).foreach { case (name, data) =>
-      require(data.nonEmpty, s"Couldn't find column with name $name")
-      require(data.get.dataType.isInstanceOf[NumericType], s"Currently $functionName calculation " +
-        s"for columns with dataType ${data.get.dataType} not supported.")
+    cols.map(name => (name, df.resolve(name))).foreach { case (name, data) =>
+      require(data.dataType.isInstanceOf[NumericType], s"Currently $functionName calculation " +
+        s"for columns with dataType ${data.dataType.catalogString} not supported.")
     }
     val columns = cols.map(n => Column(Cast(Column(n).expr, DoubleType)))
     df.select(columns: _*).queryExecution.toRdd.treeAggregate(new CovarianceCounter)(
@@ -203,7 +202,7 @@ object StatFunctions extends Logging {
         // row.get(0) is column 1
         // row.get(1) is column 2
         // row.get(2) is the frequency
-        val columnIndex = distinctCol2.get(cleanElement(row.get(1))).get
+        val columnIndex = distinctCol2(cleanElement(row.get(1)))
         countsRow.setLong(columnIndex + 1, row.getLong(2))
       }
       // the value of col1 is the first value, the rest are the counts
@@ -248,7 +247,9 @@ object StatFunctions extends Logging {
         percentileIndex += 1
         (child: Expression) =>
           GetArrayItem(
-            new ApproximatePercentile(child, Literal.create(percentiles)).toAggregateExpression(),
+            new ApproximatePercentile(child,
+              Literal(new GenericArrayData(percentiles), ArrayType(DoubleType, false)))
+              .toAggregateExpression(),
             Literal(index))
       } else {
         stats.toLowerCase(Locale.ROOT) match {

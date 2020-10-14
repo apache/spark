@@ -1,26 +1,47 @@
+---
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+---
+
 ## Building SparkR on Windows
 
 To build SparkR on Windows, the following steps are required
 
-1. Install R (>= 3.1) and [Rtools](http://cran.r-project.org/bin/windows/Rtools/). Make sure to
+1. Make sure `bash` is available and in `PATH` if you already have a built-in `bash` on Windows. If you do not have, install [Cygwin](https://www.cygwin.com/).
+
+2. Install R (>= 3.5) and [Rtools](https://cloud.r-project.org/bin/windows/Rtools/). Make sure to
 include Rtools and R in `PATH`.
 
-2. Install
-[JDK8](http://www.oracle.com/technetwork/java/javase/downloads/jdk8-downloads-2133151.html) and set
-`JAVA_HOME` in the system environment variables.
+3. Install JDK that SparkR supports (see `R/pkg/DESCRIPTION`), and set `JAVA_HOME` in the system environment variables.
 
-3. Download and install [Maven](http://maven.apache.org/download.html). Also include the `bin`
+4. Download and install [Maven](https://maven.apache.org/download.html). Also include the `bin`
 directory in Maven in `PATH`.
 
-4. Set `MAVEN_OPTS` as described in [Building Spark](http://spark.apache.org/docs/latest/building-spark.html).
+5. Set `MAVEN_OPTS` as described in [Building Spark](https://spark.apache.org/docs/latest/building-spark.html).
 
-5. Open a command shell (`cmd`) in the Spark directory and build Spark with [Maven](http://spark.apache.org/docs/latest/building-spark.html#building-with-buildmvn) and include the `-Psparkr` profile to build the R package. For example to use the default Hadoop versions you can run
+6. Open a command shell (`cmd`) in the Spark directory and build Spark with [Maven](https://spark.apache.org/docs/latest/building-spark.html#buildmvn) and include the `-Psparkr` profile to build the R package. For example to use the default Hadoop versions you can run
 
     ```bash
     mvn.cmd -DskipTests -Psparkr package
     ```
 
-    `.\build\mvn` is a shell script so `mvn.cmd` should be used directly on Windows.
+    Note that `.\build\mvn` is a shell script so `mvn.cmd` on the system should be used directly on Windows.
+    Make sure your Maven version is matched to `maven.version` in `./pom.xml`.
+
+Note that it is a workaround for SparkR developers on Windows. Apache Spark does not officially support to _build_ on Windows yet whereas it supports to _run_ on Windows.
 
 ##  Unit tests
 
@@ -34,7 +55,7 @@ To run the SparkR unit tests on Windows, the following steps are required —ass
 
 4. Set the environment variable `HADOOP_HOME` to the full path to the newly created `hadoop` directory.
 
-5. Run unit tests for SparkR by running the command below. You need to install the needed packages following the instructions under [Running R Tests](http://spark.apache.org/docs/latest/building-spark.html#running-r-tests) first:
+5. Run unit tests for SparkR by running the command below. You need to install the needed packages following the instructions under [Running R Tests](https://spark.apache.org/docs/latest/building-spark.html#running-r-tests) first:
 
     ```
     .\bin\spark-submit2.cmd --conf spark.hadoop.fs.defaultFS="file:///" R\pkg\tests\run-all.R

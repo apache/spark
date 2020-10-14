@@ -19,12 +19,12 @@ package org.apache.spark.sql.api.java;
 
 import java.io.Serializable;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Stable;
 
 /**
  * A Spark SQL UDF that has 0 arguments.
  */
-@InterfaceStability.Stable
+@Stable
 public interface UDF0<R> extends Serializable {
     R call() throws Exception;
 }

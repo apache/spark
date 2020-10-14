@@ -17,18 +17,19 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.SparkFunSuite
+import java.time.ZoneId
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class ResolvedDataSourceSuite extends SparkFunSuite with SharedSQLContext {
+class ResolvedDataSourceSuite extends SharedSparkSession {
   private def getProvidingClass(name: String): Class[_] =
     DataSource(
       sparkSession = spark,
       className = name,
-      options = Map(DateTimeUtils.TIMEZONE_OPTION -> DateTimeUtils.defaultTimeZone().getID)
+      options = Map(DateTimeUtils.TIMEZONE_OPTION -> ZoneId.systemDefault().getId)
     ).providingClass
 
   test("jdbc") {
@@ -76,20 +77,28 @@ class ResolvedDataSourceSuite extends SparkFunSuite with SharedSQLContext {
         classOf[org.apache.spark.sql.execution.datasources.csv.CSVFileFormat])
   }
 
+  test("avro: show deploy guide for loading the external avro module") {
+    Seq("avro", "org.apache.spark.sql.avro").foreach { provider =>
+      val message = intercept[AnalysisException] {
+        getProvidingClass(provider)
+      }.getMessage
+      assert(message.contains(s"Failed to find data source: $provider"))
+      assert(message.contains("Please deploy the application as per the deployment section of"))
+    }
+  }
+
+  test("kafka: show deploy guide for loading the external kafka module") {
+    val message = intercept[AnalysisException] {
+      getProvidingClass("kafka")
+    }.getMessage
+    assert(message.contains("Failed to find data source: kafka"))
+    assert(message.contains("Please deploy the application as per the deployment section of"))
+  }
+
   test("error message for unknown data sources") {
-    val error1 = intercept[AnalysisException] {
-      getProvidingClass("avro")
-    }
-    assert(error1.getMessage.contains("Failed to find data source: avro."))
-
-    val error2 = intercept[AnalysisException] {
-      getProvidingClass("com.databricks.spark.avro")
-    }
-    assert(error2.getMessage.contains("Failed to find data source: com.databricks.spark.avro."))
-
-    val error3 = intercept[ClassNotFoundException] {
+    val error = intercept[ClassNotFoundException] {
       getProvidingClass("asfdwefasdfasdf")
     }
-    assert(error3.getMessage.contains("Failed to find data source: asfdwefasdfasdf."))
+    assert(error.getMessage.contains("Failed to find data source: asfdwefasdfasdf."))
   }
 }

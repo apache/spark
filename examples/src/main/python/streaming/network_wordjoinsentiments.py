@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-"""
+r"""
  Shows the most positive words in UTF8 encoded, '\n' delimited text directly received the network
  every 5 seconds. The streaming data is joined with a static RDD of the AFINN word list
  (http://neuro.imm.dtu.dk/wiki/AFINN)
@@ -29,8 +29,6 @@
     `$ bin/spark-submit examples/src/main/python/streaming/network_wordjoinsentiments.py \
     localhost 9999`
 """
-
-from __future__ import print_function
 
 import sys
 
@@ -47,7 +45,7 @@ def print_happiest_words(rdd):
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: network_wordjoinsentiments.py <hostname> <port>", file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
 
     sc = SparkContext(appName="PythonStreamingNetworkWordJoinSentiments")
     ssc = StreamingContext(sc, 5)

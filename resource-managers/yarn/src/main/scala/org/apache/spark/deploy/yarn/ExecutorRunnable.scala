@@ -19,11 +19,12 @@ package org.apache.spark.deploy.yarn
 
 import java.io.File
 import java.nio.ByteBuffer
-import java.util.Collections
+import java.util.{Collections, Locale}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer}
 
+import org.apache.hadoop.HadoopIllegalArgumentException
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.UserGroupInformation
@@ -33,12 +34,13 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.NMClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
-import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
+import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.Utils
 
 private[yarn] class ExecutorRunnable(
@@ -52,7 +54,8 @@ private[yarn] class ExecutorRunnable(
     executorCores: Int,
     appId: String,
     securityMgr: SecurityManager,
-    localResources: Map[String, LocalResource]) extends Logging {
+    localResources: Map[String, LocalResource],
+    resourceProfileId: Int) extends Logging {
 
   var rpc: YarnRPC = YarnRPC.create(conf)
   var nmClient: NMClient = _
@@ -71,11 +74,11 @@ private[yarn] class ExecutorRunnable(
 
     s"""
     |===============================================================================
-    |YARN executor launch context:
+    |Default YARN executor launch context:
     |  env:
     |${Utils.redact(sparkConf, env.toSeq).map { case (k, v) => s"    $k -> $v\n" }.mkString}
     |  command:
-    |    ${commands.mkString(" \\ \n      ")}
+    |    ${Utils.redactCommandLineArgs(sparkConf, commands).mkString(" \\ \n      ")}
     |
     |  resources:
     |${localResources.map { case (k, v) => s"    $k -> $v\n" }.mkString}
@@ -131,20 +134,20 @@ private[yarn] class ExecutorRunnable(
     // Extra options for the JVM
     val javaOpts = ListBuffer[String]()
 
-    // Set the environment variable through a command prefix
-    // to append to the existing value of the variable
-    var prefixEnv: Option[String] = None
-
     // Set the JVM memory
     val executorMemoryString = executorMemory + "m"
     javaOpts += "-Xmx" + executorMemoryString
 
     // Set extra Java options for the executor, if defined
     sparkConf.get(EXECUTOR_JAVA_OPTIONS).foreach { opts =>
-      javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
+      val subsOpt = Utils.substituteAppNExecIds(opts, appId, executorId)
+      javaOpts ++= Utils.splitCommandString(subsOpt).map(YarnSparkHadoopUtil.escapeForShell)
     }
-    sparkConf.get(EXECUTOR_LIBRARY_PATH).foreach { p =>
-      prefixEnv = Some(Client.getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(p))))
+
+    // Set the library path through a command prefix to append to the existing value of the
+    // env variable.
+    val prefixEnv = sparkConf.get(EXECUTOR_LIBRARY_PATH).map { libPath =>
+      Client.createLibraryPathPrefix(libPath, sparkConf)
     }
 
     javaOpts += "-Djava.io.tmpdir=" +
@@ -201,12 +204,13 @@ private[yarn] class ExecutorRunnable(
     val commands = prefixEnv ++
       Seq(Environment.JAVA_HOME.$$() + "/bin/java", "-server") ++
       javaOpts ++
-      Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",
+      Seq("org.apache.spark.executor.YarnCoarseGrainedExecutorBackend",
         "--driver-url", masterAddress,
         "--executor-id", executorId,
         "--hostname", hostname,
         "--cores", executorCores.toString,
-        "--app-id", appId) ++
+        "--app-id", appId,
+        "--resourceProfileId", resourceProfileId.toString) ++
       userClassPath ++
       Seq(
         s"1>${ApplicationConstants.LOG_DIR_EXPANSION_VAR}/stdout",
@@ -220,33 +224,20 @@ private[yarn] class ExecutorRunnable(
     val env = new HashMap[String, String]()
     Client.populateClasspath(null, conf, sparkConf, env, sparkConf.get(EXECUTOR_CLASS_PATH))
 
+    System.getenv().asScala.filterKeys(_.startsWith("SPARK"))
+      .foreach { case (k, v) => env(k) = v }
+
     sparkConf.getExecutorEnv.foreach { case (key, value) =>
-      // This assumes each executor environment variable set here is a path
-      // This is kept for backward compatibility and consistency with hadoop
-      YarnSparkHadoopUtil.addPathToEnvironment(env, key, value)
-    }
-
-    // lookup appropriate http scheme for container log urls
-    val yarnHttpPolicy = conf.get(
-      YarnConfiguration.YARN_HTTP_POLICY_KEY,
-      YarnConfiguration.YARN_HTTP_POLICY_DEFAULT
-    )
-    val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
-
-    // Add log urls
-    container.foreach { c =>
-      sys.env.get("SPARK_USER").foreach { user =>
-        val containerId = ConverterUtils.toString(c.getId)
-        val address = c.getNodeHttpAddress
-        val baseUrl = s"$httpScheme$address/node/containerlogs/$containerId/$user"
-
-        env("SPARK_LOG_URL_STDERR") = s"$baseUrl/stderr?start=-4096"
-        env("SPARK_LOG_URL_STDOUT") = s"$baseUrl/stdout?start=-4096"
+      if (key == Environment.CLASSPATH.name()) {
+        // If the key of env variable is CLASSPATH, we assume it is a path and append it.
+        // This is kept for backward compatibility and consistency with hadoop
+        YarnSparkHadoopUtil.addPathToEnvironment(env, key, value)
+      } else {
+        // For other env variables, simply overwrite the value.
+        env(key) = value
       }
     }
 
-    System.getenv().asScala.filterKeys(_.startsWith("SPARK"))
-      .foreach { case (k, v) => env(k) = v }
     env
   }
 }

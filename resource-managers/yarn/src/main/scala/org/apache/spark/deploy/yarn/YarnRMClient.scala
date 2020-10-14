@@ -19,6 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
@@ -43,23 +44,20 @@ private[spark] class YarnRMClient extends Logging {
   /**
    * Registers the application master with the RM.
    *
+   * @param driverHost Host name where driver is running.
+   * @param driverPort Port where driver is listening.
    * @param conf The Yarn configuration.
    * @param sparkConf The Spark configuration.
    * @param uiAddress Address of the SparkUI.
    * @param uiHistoryAddress Address of the application on the History Server.
-   * @param securityMgr The security manager.
-   * @param localResources Map with information about files distributed via YARN's cache.
    */
   def register(
-      driverUrl: String,
-      driverRef: RpcEndpointRef,
+      driverHost: String,
+      driverPort: Int,
       conf: YarnConfiguration,
       sparkConf: SparkConf,
       uiAddress: Option[String],
-      uiHistoryAddress: String,
-      securityMgr: SecurityManager,
-      localResources: Map[String, LocalResource]
-    ): YarnAllocator = {
+      uiHistoryAddress: String): Unit = {
     amClient = AMRMClient.createAMRMClient()
     amClient.init(conf)
     amClient.start()
@@ -71,11 +69,22 @@ private[spark] class YarnRMClient extends Logging {
 
     logInfo("Registering the ApplicationMaster")
     synchronized {
-      amClient.registerApplicationMaster(Utils.localHostName(), 0, trackingUrl)
+      amClient.registerApplicationMaster(driverHost, driverPort, trackingUrl)
       registered = true
     }
-    new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, getAttemptId(), securityMgr,
-      localResources, new SparkRackResolver())
+  }
+
+  def createAllocator(
+      conf: YarnConfiguration,
+      sparkConf: SparkConf,
+      appAttemptId: ApplicationAttemptId,
+      driverUrl: String,
+      driverRef: RpcEndpointRef,
+      securityMgr: SecurityManager,
+      localResources: Map[String, LocalResource]): YarnAllocator = {
+    require(registered, "Must register AM before creating allocator.")
+    new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, appAttemptId, securityMgr,
+      localResources, SparkRackResolver.get(conf))
   }
 
   /**
@@ -88,11 +97,9 @@ private[spark] class YarnRMClient extends Logging {
     if (registered) {
       amClient.unregisterApplicationMaster(status, diagnostics, uiHistoryAddress)
     }
-  }
-
-  /** Returns the attempt ID. */
-  def getAttemptId(): ApplicationAttemptId = {
-    YarnSparkHadoopUtil.get.getContainerId.getApplicationAttemptId()
+    if (amClient != null) {
+      amClient.stop()
+    }
   }
 
   /** Returns the configuration for the AmIpFilter to add to the Spark UI. */
@@ -101,9 +108,18 @@ private[spark] class YarnRMClient extends Logging {
     // so not all stable releases have it.
     val prefix = WebAppUtils.getHttpSchemePrefix(conf)
     val proxies = WebAppUtils.getProxyHostsAndPortsForAmFilter(conf)
-    val hosts = proxies.asScala.map(_.split(":").head)
+    val hosts = proxies.asScala.map(proxy => Utils.parseHostPort(proxy)._1)
     val uriBases = proxies.asScala.map { proxy => prefix + proxy + proxyBase }
-    Map("PROXY_HOSTS" -> hosts.mkString(","), "PROXY_URI_BASES" -> uriBases.mkString(","))
+    val params =
+      Map("PROXY_HOSTS" -> hosts.mkString(","), "PROXY_URI_BASES" -> uriBases.mkString(","))
+
+    // Handles RM HA urls
+    val rmIds = conf.getStringCollection(YarnConfiguration.RM_HA_IDS).asScala
+    if (rmIds != null && rmIds.nonEmpty) {
+      params + ("RM_HA_URLS" -> rmIds.map(getUrlByRmId(conf, _)).mkString(","))
+    } else {
+      params
+    }
   }
 
   /** Returns the maximum number of attempts to register the AM. */
@@ -117,4 +133,21 @@ private[spark] class YarnRMClient extends Logging {
     }
   }
 
+  private def getUrlByRmId(conf: Configuration, rmId: String): String = {
+    val addressPropertyPrefix = if (YarnConfiguration.useHttps(conf)) {
+      YarnConfiguration.RM_WEBAPP_HTTPS_ADDRESS
+    } else {
+      YarnConfiguration.RM_WEBAPP_ADDRESS
+    }
+
+    val addressWithRmId = if (rmId == null || rmId.isEmpty) {
+      addressPropertyPrefix
+    } else if (rmId.startsWith(".")) {
+      throw new IllegalStateException(s"rmId $rmId should not already have '.' prepended.")
+    } else {
+      s"$addressPropertyPrefix.$rmId"
+    }
+
+    conf.get(addressWithRmId)
+  }
 }

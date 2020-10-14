@@ -18,7 +18,12 @@
 context("basic tests for CRAN")
 
 test_that("create DataFrame from list or data.frame", {
-  sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
+  tryCatch(checkJavaVersion(),
+            error = function(e) { skip("error on Java check") },
+            warning = function(e) { skip("warning on Java check") })
+
+  sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE,
+                 sparkConfig = sparkRTestConfig)
 
   i <- 4
   df <- createDataFrame(data.frame(dummy = 1:i))
@@ -49,7 +54,12 @@ test_that("create DataFrame from list or data.frame", {
 })
 
 test_that("spark.glm and predict", {
-  sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
+  tryCatch(checkJavaVersion(),
+            error = function(e) { skip("error on Java check") },
+            warning = function(e) { skip("warning on Java check") })
+
+  sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE,
+                 sparkConfig = sparkRTestConfig)
 
   training <- suppressWarnings(createDataFrame(iris))
   # gaussian family

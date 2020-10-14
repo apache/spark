@@ -15,18 +15,15 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
-# $example on$
-from pyspark.ml.classification import LogisticRegression
-# $example off$
-from pyspark.sql import SparkSession
-
 """
 An example demonstrating Logistic Regression Summary.
 Run with:
   bin/spark-submit examples/src/main/python/ml/logistic_regression_summary_example.py
 """
+# $example on$
+from pyspark.ml.classification import LogisticRegression
+# $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
     spark = SparkSession \

@@ -20,8 +20,10 @@ package org.apache.spark.ml.param
 import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.{Estimator, Transformer}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.MyParams
+import org.apache.spark.sql.Dataset
 
 class ParamsSuite extends SparkFunSuite {
 
@@ -121,10 +123,10 @@ class ParamsSuite extends SparkFunSuite {
     { // DoubleArrayParam
       val param = new DoubleArrayParam(dummy, "name", "doc")
       val values: Seq[Array[Double]] = Seq(
-         Array(),
-         Array(1.0),
-         Array(Double.NaN, Double.NegativeInfinity, Double.MinValue, -1.0, 0.0,
-           Double.MinPositiveValue, 1.0, Double.MaxValue, Double.PositiveInfinity))
+        Array(),
+        Array(1.0),
+        Array(Double.NaN, Double.NegativeInfinity, Double.MinValue, -1.0, 0.0,
+          Double.MinPositiveValue, 1.0, Double.MaxValue, Double.PositiveInfinity))
       for (value <- values) {
         val json = param.jsonEncode(value)
         val decoded = param.jsonDecode(json)
@@ -134,6 +136,36 @@ class ParamsSuite extends SparkFunSuite {
             assert(actual.isNaN)
           } else {
             assert(actual === expected)
+          }
+        }
+      }
+    }
+
+    { // DoubleArrayArrayParam
+      val param = new DoubleArrayArrayParam(dummy, "name", "doc")
+      val values: Seq[Array[Array[Double]]] = Seq(
+        Array(Array()),
+        Array(Array(1.0)),
+        Array(Array(1.0), Array(2.0)),
+        Array(
+          Array(Double.NaN, Double.NegativeInfinity, Double.MinValue, -1.0, 0.0,
+            Double.MinPositiveValue, 1.0, Double.MaxValue, Double.PositiveInfinity),
+          Array(Double.MaxValue, Double.PositiveInfinity, Double.MinPositiveValue, 1.0,
+            Double.NaN, Double.NegativeInfinity, Double.MinValue, -1.0, 0.0)
+        ))
+
+      for (value <- values) {
+        val json = param.jsonEncode(value)
+        val decoded = param.jsonDecode(json)
+        assert(decoded.length === value.length)
+        decoded.zip(value).foreach { case (actualArray, expectedArray) =>
+          assert(actualArray.length === expectedArray.length)
+          actualArray.zip(expectedArray).foreach { case (actual, expected) =>
+            if (expected.isNaN) {
+              assert(actual.isNaN)
+            } else {
+              assert(actual === expected)
+            }
           }
         }
       }
@@ -399,5 +431,25 @@ object ParamsSuite extends SparkFunSuite {
     val copyReturnType = copyMethod.getReturnType
     require(copyReturnType === obj.getClass,
       s"${clazz.getName}.copy should return ${clazz.getName} instead of ${copyReturnType.getName}.")
+  }
+
+  /**
+   * Checks that the class throws an exception in case multiple exclusive params are set.
+   * The params to be checked are passed as arguments with their value.
+   */
+  def testExclusiveParams(
+      model: Params,
+      dataset: Dataset[_],
+      paramsAndValues: (String, Any)*): Unit = {
+    val m = model.copy(ParamMap.empty)
+    paramsAndValues.foreach { case (paramName, paramValue) =>
+      m.set(m.getParam(paramName), paramValue)
+    }
+    intercept[IllegalArgumentException] {
+      m match {
+        case t: Transformer => t.transform(dataset)
+        case e: Estimator[_] => e.fit(dataset)
+      }
+    }
   }
 }

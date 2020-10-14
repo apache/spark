@@ -23,8 +23,9 @@ import java.util.List;
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Schema;
-import org.apache.hive.service.cli.thrift.TColumnDesc;
-import org.apache.hive.service.cli.thrift.TTableSchema;
+import org.apache.hadoop.hive.serde2.thrift.Type;
+import org.apache.hive.service.rpc.thrift.TColumnDesc;
+import org.apache.hive.service.rpc.thrift.TTableSchema;
 
 /**
  * TableSchema.
@@ -49,7 +50,8 @@ public class TableSchema {
   public TableSchema(List<FieldSchema> fieldSchemas) {
     int pos = 1;
     for (FieldSchema field : fieldSchemas) {
-      columns.add(new ColumnDescriptor(field, pos++));
+      columns.add(new ColumnDescriptor(field.getName(), field.getComment(),
+          new TypeDescriptor(field.getType()), pos++));
     }
   }
 
@@ -82,10 +84,10 @@ public class TableSchema {
     return tTableSchema;
   }
 
-  public Type[] toTypes() {
-    Type[] types = new Type[columns.size()];
+  public TypeDescriptor[] toTypeDescriptors() {
+    TypeDescriptor[] types = new TypeDescriptor[columns.size()];
     for (int i = 0; i < types.length; i++) {
-      types[i] = columns.get(i).getType();
+      types[i] = columns.get(i).getTypeDescriptor();
     }
     return types;
   }

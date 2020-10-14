@@ -89,7 +89,10 @@ test_that("cleanClosure on R functions", {
     lapply(x, g) + 1  # Test for capturing function call "g"'s closure as a argument of lapply.
     l$field[1, 1] <- 3  # Test for access operators `$`.
     res <- defUse + l$field[1, ]  # Test for def-use chain of "defUse", and "" symbol.
-    f(res)  # Test for recursive calls.
+    # Enable once SPARK-30629 is fixed
+    # nolint start
+    # f(res)  # Test for recursive calls.
+    # nolint end
   }
   newF <- cleanClosure(f)
   env <- environment(newF)
@@ -101,14 +104,26 @@ test_that("cleanClosure on R functions", {
   # nolint end
   expect_true("g" %in% ls(env))
   expect_true("l" %in% ls(env))
-  expect_true("f" %in% ls(env))
+  # Enable once SPARK-30629 is fixed
+  # nolint start
+  # expect_true("f" %in% ls(env))
+  # nolint end
   expect_equal(get("l", envir = env, inherits = FALSE), l)
-  # "y" should be in the environemnt of g.
+  # "y" should be in the environment of g.
   newG <- get("g", envir = env, inherits = FALSE)
   env <- environment(newG)
   expect_equal(length(ls(env)), 1)
   actual <- get("y", envir = env, inherits = FALSE)
   expect_equal(actual, y)
+
+  # Test for combination for nested and sequenctial functions in a closure
+  f1 <- function(x) x + 1
+  f2 <- function(x) f1(x) + 2
+  userFunc <- function(x) { f1(x); f2(x) }
+  cUserFuncEnv <- environment(cleanClosure(userFunc))
+  expect_equal(length(cUserFuncEnv), 2)
+  innerCUserFuncEnv <- environment(cUserFuncEnv$f2)
+  expect_equal(length(innerCUserFuncEnv), 1)
 
   # Test for function (and variable) definitions.
   f <- function(x) {
@@ -156,14 +171,6 @@ test_that("varargsToJProperties", {
 
   jprops <- varargsToJProperties()
   expect_equal(callJMethod(jprops, "size"), 0L)
-})
-
-test_that("convertToJSaveMode", {
-  s <- convertToJSaveMode("error")
-  expect_true(class(s) == "jobj")
-  expect_match(capture.output(print.jobj(s)), "Java ref type org.apache.spark.sql.SaveMode id ")
-  expect_error(convertToJSaveMode("foo"),
-    'mode should be one of "append", "overwrite", "error", "ignore"') #nolint
 })
 
 test_that("captureJVMException", {
@@ -234,6 +241,31 @@ test_that("basenameSansExtFromUrl", {
   expect_equal(basenameSansExtFromUrl(x), "spark-2.1.1-SNAPSHOT-bin-hadoop2.7")
   z <- "http://people.apache.org/~pwendell/spark-releases/spark-2.1.0--hive.tar.gz"
   expect_equal(basenameSansExtFromUrl(z), "spark-2.1.0--hive")
+})
+
+test_that("getOne", {
+  dummy <- getOne(".dummyValue", envir = new.env(), ifnotfound = FALSE)
+  expect_equal(dummy, FALSE)
+})
+
+test_that("traverseParentDirs", {
+  if (is_windows()) {
+    # original path is included as-is, otherwise dirname() replaces \\ with / on windows
+    dirs <- traverseParentDirs("c:\\Users\\user\\AppData\\Local\\Apache\\Spark\\Cache\\spark2.2", 3)
+    expect <- c("c:\\Users\\user\\AppData\\Local\\Apache\\Spark\\Cache\\spark2.2",
+                "c:/Users/user/AppData/Local/Apache/Spark/Cache",
+                "c:/Users/user/AppData/Local/Apache/Spark",
+                "c:/Users/user/AppData/Local/Apache")
+    expect_equal(dirs, expect)
+  } else {
+    dirs <- traverseParentDirs("/Users/user/Library/Caches/spark/spark2.2", 1)
+    expect <- c("/Users/user/Library/Caches/spark/spark2.2", "/Users/user/Library/Caches/spark")
+    expect_equal(dirs, expect)
+
+    dirs <- traverseParentDirs("/home/u/.cache/spark/spark2.2", 1)
+    expect <- c("/home/u/.cache/spark/spark2.2", "/home/u/.cache/spark")
+    expect_equal(dirs, expect)
+  }
 })
 
 sparkR.session.stop()

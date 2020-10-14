@@ -38,9 +38,14 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
     spark.streams.stateStoreCoordinator // initialize the lazy coordinator
   }
 
+  SymmetricHashJoinStateManager.supportedVersions.foreach { version =>
+    test(s"StreamingJoinStateManager V${version} - all operations") {
+      testAllOperations(version)
+    }
+  }
 
-  test("SymmetricHashJoinStateManager - all operations") {
-    withJoinStateManager(inputValueAttribs, joinKeyExprs) { manager =>
+  private def testAllOperations(stateFormatVersion: Int): Unit = {
+    withJoinStateManager(inputValueAttribs, joinKeyExprs, stateFormatVersion) { manager =>
       implicit val mgr = manager
 
       assert(get(20) === Seq.empty)     // initially empty
@@ -123,7 +128,8 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
   def toValueInt(inputValueRow: UnsafeRow): Int = inputValueRow.getInt(0)
 
   def append(key: Int, value: Int)(implicit manager: SymmetricHashJoinStateManager): Unit = {
-    manager.append(toJoinKeyRow(key), toInputValue(value))
+    // we only put matched = false for simplicity - StreamingJoinSuite will test the functionality
+    manager.append(toJoinKeyRow(key), toInputValue(value), matched = false)
   }
 
   def get(key: Int)(implicit manager: SymmetricHashJoinStateManager): Seq[Int] = {
@@ -137,14 +143,16 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
         BoundReference(
           1, inputValueAttribWithWatermark.dataType, inputValueAttribWithWatermark.nullable),
         Literal(threshold))
-    manager.removeByKeyCondition(GeneratePredicate.generate(expr).eval _)
+    val iter = manager.removeByKeyCondition(GeneratePredicate.generate(expr).eval _)
+    while (iter.hasNext) iter.next()
   }
 
   /** Remove values where `time <= threshold` */
   def removeByValue(watermark: Long)(implicit manager: SymmetricHashJoinStateManager): Unit = {
     val expr = LessThanOrEqual(inputValueAttribWithWatermark, Literal(watermark))
-    manager.removeByValueCondition(
+    val iter = manager.removeByValueCondition(
       GeneratePredicate.generate(expr, inputValueAttribs).eval _)
+    while (iter.hasNext) iter.next()
   }
 
   def numRows(implicit manager: SymmetricHashJoinStateManager): Long = {
@@ -154,13 +162,15 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
 
   def withJoinStateManager(
     inputValueAttribs: Seq[Attribute],
-    joinKeyExprs: Seq[Expression])(f: SymmetricHashJoinStateManager => Unit): Unit = {
+    joinKeyExprs: Seq[Expression],
+    stateFormatVersion: Int)(f: SymmetricHashJoinStateManager => Unit): Unit = {
 
     withTempDir { file =>
       val storeConf = new StateStoreConf()
-      val stateInfo = StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0)
+      val stateInfo = StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0, 5)
       val manager = new SymmetricHashJoinStateManager(
-        LeftSide, inputValueAttribs, joinKeyExprs, Some(stateInfo), storeConf, new Configuration)
+        LeftSide, inputValueAttribs, joinKeyExprs, Some(stateInfo), storeConf, new Configuration,
+        partitionId = 0, stateFormatVersion)
       try {
         f(manager)
       } finally {

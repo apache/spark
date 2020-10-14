@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import java.util
+
 import scala.collection.mutable.StringBuilder
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
@@ -32,11 +34,18 @@ object ParserUtils {
   /** Get the command which created the token. */
   def command(ctx: ParserRuleContext): String = {
     val stream = ctx.getStart.getInputStream
-    stream.getText(Interval.of(0, stream.size()))
+    stream.getText(Interval.of(0, stream.size() - 1))
   }
 
   def operationNotAllowed(message: String, ctx: ParserRuleContext): Nothing = {
     throw new ParseException(s"Operation not allowed: $message", ctx)
+  }
+
+  def checkDuplicateClauses[T](
+      nodes: util.List[T], clauseName: String, ctx: ParserRuleContext): Unit = {
+    if (nodes.size() > 1) {
+      throw new ParseException(s"Found duplicate clauses: $clauseName", ctx)
+    }
   }
 
   /** Check if duplicate keys exist in a set of key-value pairs. */
@@ -58,7 +67,7 @@ object ParserUtils {
   /** Get all the text which comes after the given token. */
   def remainder(token: Token): String = {
     val stream = token.getInputStream
-    val interval = Interval.of(token.getStopIndex + 1, stream.size())
+    val interval = Interval.of(token.getStopIndex + 1, stream.size() - 1)
     stream.getText(interval)
   }
 
@@ -72,6 +81,11 @@ object ParserUtils {
   def stringWithoutUnescape(node: TerminalNode): String = {
     // STRING parser rule forces that the input always has quotes at the starting and ending.
     node.getText.slice(1, node.getText.size - 1)
+  }
+
+  /** Collect the entries if any. */
+  def entry(key: String, value: Token): Seq[(String, String)] = {
+    Option(value).toSeq.map(x => key -> string(x))
   }
 
   /** Get the origin (line and position) of the token. */
@@ -107,7 +121,7 @@ object ParserUtils {
     var enclosure: Character = null
     val sb = new StringBuilder(b.length())
 
-    def appendEscapedChar(n: Char) {
+    def appendEscapedChar(n: Char): Unit = {
       n match {
         case '0' => sb.append('\u0000')
         case '\'' => sb.append('\'')

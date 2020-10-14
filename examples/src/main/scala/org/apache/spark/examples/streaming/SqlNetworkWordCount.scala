@@ -38,7 +38,7 @@ import org.apache.spark.streaming.{Seconds, StreamingContext, Time}
  */
 
 object SqlNetworkWordCount {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 2) {
       System.err.println("Usage: NetworkWordCount <hostname> <port>")
       System.exit(1)

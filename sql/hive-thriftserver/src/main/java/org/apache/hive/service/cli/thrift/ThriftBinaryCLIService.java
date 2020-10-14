@@ -25,9 +25,11 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.hadoop.hive.common.auth.HiveAuthUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.shims.ShimLoader;
+import org.apache.hive.service.ServiceException;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.CLIService;
 import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup;
@@ -45,7 +47,7 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
   }
 
   @Override
-  public void run() {
+  protected void initializeServer() {
     try {
       // Server thread pool
       String threadPoolName = "HiveServer2-Handler-Pool";
@@ -63,7 +65,7 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
         sslVersionBlacklist.add(sslVersion);
       }
       if (!hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_USE_SSL)) {
-        serverSocket = HiveAuthFactory.getServerSocket(hiveHost, portNum);
+        serverSocket = HiveAuthUtils.getServerSocket(hiveHost, portNum);
       } else {
         String keyStorePath = hiveConf.getVar(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PATH).trim();
         if (keyStorePath.isEmpty()) {
@@ -72,9 +74,13 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
         }
         String keyStorePassword = ShimLoader.getHadoopShims().getPassword(hiveConf,
             HiveConf.ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PASSWORD.varname);
-        serverSocket = HiveAuthFactory.getServerSSLSocket(hiveHost, portNum, keyStorePath,
+        serverSocket = HiveAuthUtils.getServerSSLSocket(hiveHost, portNum, keyStorePath,
             keyStorePassword, sslVersionBlacklist);
       }
+
+      // In case HIVE_SERVER2_THRIFT_PORT or hive.server2.thrift.port is configured with 0 which
+      // represents any free port, we should set it to the actual one
+      portNum = serverSocket.getServerSocket().getLocalPort();
 
       // Server args
       int maxMessageSize = hiveConf.getIntVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_MAX_MESSAGE_SIZE);
@@ -96,9 +102,17 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
       String msg = "Starting " + ThriftBinaryCLIService.class.getSimpleName() + " on port "
           + portNum + " with " + minWorkerThreads + "..." + maxWorkerThreads + " worker threads";
       LOG.info(msg);
+    } catch (Exception t) {
+      throw new ServiceException("Error initializing " + getName(), t);
+    }
+  }
+
+  @Override
+  public void run() {
+    try {
       server.serve();
     } catch (Throwable t) {
-      LOG.fatal(
+      LOG.error(
           "Error starting HiveServer2: could not start "
               + ThriftBinaryCLIService.class.getSimpleName(), t);
       System.exit(-1);

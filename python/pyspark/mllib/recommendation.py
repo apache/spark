@@ -16,6 +16,7 @@
 #
 
 import array
+import sys
 from collections import namedtuple
 
 from pyspark import SparkContext, since
@@ -99,16 +100,16 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> users_for_products[0]
     (1, (Rating(user=2, product=1, rating=...),))
 
-    >>> model = ALS.train(ratings, 1, nonnegative=True, seed=10)
+    >>> model = ALS.train(ratings, 1, nonnegative=True, seed=123456789)
     >>> model.predict(2, 2)
     3.73...
 
     >>> df = sqlContext.createDataFrame([Rating(1, 1, 1.0), Rating(1, 2, 2.0), Rating(2, 1, 2.0)])
-    >>> model = ALS.train(df, 1, nonnegative=True, seed=10)
+    >>> model = ALS.train(df, 1, nonnegative=True, seed=123456789)
     >>> model.predict(2, 2)
     3.73...
 
-    >>> model = ALS.trainImplicit(ratings, 1, nonnegative=True, seed=10)
+    >>> model = ALS.trainImplicit(ratings, 1, nonnegative=True, seed=123456789)
     >>> model.predict(2, 2)
     0.4...
 
@@ -326,7 +327,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

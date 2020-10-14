@@ -17,9 +17,11 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.ml.feature.{LabeledPoint => NewLabeledPoint}
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.serializer.KryoSerializer
 
 class LabeledPointSuite extends SparkFunSuite {
 
@@ -51,6 +53,21 @@ class LabeledPointSuite extends SparkFunSuite {
 
     points.zip(newPoints).foreach { case (p1, p2) =>
       assert(p1 === LabeledPoint.fromML(p2))
+    }
+  }
+
+  test("Kryo class register") {
+    val conf = new SparkConf(false)
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
+
+    val ser = new KryoSerializer(conf).newInstance()
+
+    val labeled1 = LabeledPoint(1.0, Vectors.dense(Array(1.0, 2.0)))
+    val labeled2 = LabeledPoint(1.0, Vectors.sparse(10, Array(5, 7), Array(1.0, 2.0)))
+
+    Seq(labeled1, labeled2).foreach { l =>
+      val l2 = ser.deserialize[LabeledPoint](ser.serialize(l))
+      assert(l === l2)
     }
   }
 }

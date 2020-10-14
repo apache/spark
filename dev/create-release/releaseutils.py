@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -23,7 +23,7 @@ import sys
 from subprocess import Popen, PIPE
 
 try:
-    from jira.client import JIRA
+    from jira.client import JIRA  # noqa: F401
     # Old versions have JIRAError in exceptions package, new (0.5+) in utils.
     try:
         from jira.exceptions import JIRAError
@@ -31,11 +31,11 @@ try:
         from jira.utils import JIRAError
 except ImportError:
     print("This tool requires the jira-python library")
-    print("Install using 'sudo pip install jira'")
+    print("Install using 'sudo pip3 install jira'")
     sys.exit(-1)
 
 try:
-    from github import Github
+    from github import Github  # noqa: F401
     from github import GithubException
 except ImportError:
     print("This tool requires the PyGithub library")
@@ -49,13 +49,14 @@ except ImportError:
     print("Install using 'sudo pip install unidecode'")
     sys.exit(-1)
 
+
 # Contributors list file name
 contributors_file_name = "contributors.txt"
 
 
 # Prompt the user to answer yes or no until they do so
 def yesOrNoPrompt(msg):
-    response = raw_input("%s [y/n]: " % msg)
+    response = input("%s [y/n]: " % msg)
     while response != "y" and response != "n":
         return yesOrNoPrompt(msg)
     return response == "y"
@@ -149,7 +150,8 @@ def get_commits(tag):
             if not is_valid_author(author):
                 author = github_username
         # Guard against special characters
-        author = unidecode.unidecode(unicode(author, "UTF-8")).strip()
+        author = str(author)
+        author = unidecode.unidecode(author).strip()
         commit = Commit(_hash, author, title, pr_number)
         commits.append(commit)
     return commits
@@ -185,6 +187,8 @@ known_components = {
     "graphx": "GraphX",
     "input/output": CORE_COMPONENT,
     "java api": "Java API",
+    "k8s": "Kubernetes",
+    "kubernetes": "Kubernetes",
     "mesos": "Mesos",
     "ml": "MLlib",
     "mllib": "MLlib",
@@ -226,8 +230,8 @@ def translate_component(component, commit_hash, warnings):
 # Parse components in the commit message
 # The returned components are already filtered and translated
 def find_components(commit, commit_hash):
-    components = re.findall("\[\w*\]", commit.lower())
-    components = [translate_component(c, commit_hash)
+    components = re.findall(r"\[\w*\]", commit.lower())
+    components = [translate_component(c, commit_hash, [])
                   for c in components if c in known_components]
     return components
 

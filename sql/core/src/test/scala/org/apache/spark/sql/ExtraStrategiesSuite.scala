@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 case class FastOperator(output: Seq[Attribute]) extends SparkPlan {
 
@@ -46,7 +46,7 @@ object TestStrategy extends Strategy {
   }
 }
 
-class ExtraStrategiesSuite extends QueryTest with SharedSQLContext {
+class ExtraStrategiesSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("insert an extraStrategy") {

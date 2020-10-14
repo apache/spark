@@ -26,20 +26,31 @@ package org.apache.spark.sql.catalyst.expressions
  *
  * The following rules are applied:
  *  - Names and nullability hints for [[org.apache.spark.sql.types.DataType]]s are stripped.
+ *  - Names for [[GetStructField]] are stripped.
+ *  - TimeZoneId for [[Cast]] and [[AnsiCast]] are stripped if `needsTimeZone` is false.
  *  - Commutative and associative operations ([[Add]] and [[Multiply]]) have their children ordered
  *    by `hashCode`.
  *  - [[EqualTo]] and [[EqualNullSafe]] are reordered by `hashCode`.
  *  - Other comparisons ([[GreaterThan]], [[LessThan]]) are reversed by `hashCode`.
+ *  - Elements in [[In]] are reordered by `hashCode`.
  */
-object Canonicalize extends {
+object Canonicalize {
   def execute(e: Expression): Expression = {
-    expressionReorder(ignoreNamesTypes(e))
+    expressionReorder(ignoreTimeZone(ignoreNamesTypes(e)))
   }
 
-  /** Remove names and nullability from types. */
+  /** Remove names and nullability from types, and names from `GetStructField`. */
   private[expressions] def ignoreNamesTypes(e: Expression): Expression = e match {
     case a: AttributeReference =>
       AttributeReference("none", a.dataType.asNullable)(exprId = a.exprId)
+    case GetStructField(child, ordinal, Some(_)) => GetStructField(child, ordinal, None)
+    case _ => e
+  }
+
+  /** Remove TimeZoneId for Cast if needsTimeZone return false. */
+  private[expressions] def ignoreTimeZone(e: Expression): Expression = e match {
+    case c: CastBase if c.timeZoneId.nonEmpty && !c.needsTimeZone =>
+      c.withTimeZone(null)
     case _ => e
   }
 
@@ -69,6 +80,13 @@ object Canonicalize extends {
       orderCommutative(a, { case And(l, r) if l.deterministic && r.deterministic => Seq(l, r)})
         .reduce(And)
 
+    case o: BitwiseOr =>
+      orderCommutative(o, { case BitwiseOr(l, r) => Seq(l, r) }).reduce(BitwiseOr)
+    case a: BitwiseAnd =>
+      orderCommutative(a, { case BitwiseAnd(l, r) => Seq(l, r) }).reduce(BitwiseAnd)
+    case x: BitwiseXor =>
+      orderCommutative(x, { case BitwiseXor(l, r) => Seq(l, r) }).reduce(BitwiseXor)
+
     case EqualTo(l, r) if l.hashCode() > r.hashCode() => EqualTo(r, l)
     case EqualNullSafe(l, r) if l.hashCode() > r.hashCode() => EqualNullSafe(r, l)
 
@@ -84,6 +102,9 @@ object Canonicalize extends {
     case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
     case Not(GreaterThanOrEqual(l, r)) => LessThan(l, r)
     case Not(LessThanOrEqual(l, r)) => GreaterThan(l, r)
+
+    // order the list in the In operator
+    case In(value, list) if list.length > 1 => In(value, list.sortBy(_.hashCode()))
 
     case _ => e
   }

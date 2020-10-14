@@ -85,9 +85,9 @@ public class TaskMemoryManager {
   /**
    * Similar to an operating system's page table, this array maps page numbers into base object
    * pointers, allowing us to translate between the hashtable's internal 64-bit address
-   * representation and the baseObject+offset representation which we use to support both in- and
+   * representation and the baseObject+offset representation which we use to support both on- and
    * off-heap addresses. When using an off-heap allocator, every entry in this map will be `null`.
-   * When using an in-heap allocator, the entries in this map will point to pages' base objects.
+   * When using an on-heap allocator, the entries in this map will point to pages' base objects.
    * Entries are added to this map as new data pages are allocated.
    */
   private final MemoryBlock[] pageTable = new MemoryBlock[PAGE_TABLE_SIZE];
@@ -102,7 +102,7 @@ public class TaskMemoryManager {
   private final long taskAttemptId;
 
   /**
-   * Tracks whether we're in-heap or off-heap. For off-heap, we short-circuit most of these methods
+   * Tracks whether we're on-heap or off-heap. For off-heap, we short-circuit most of these methods
    * without doing any masking or lookups. Since this branching should be well-predicted by the JIT,
    * this extra layer of indirection / abstraction hopefully shouldn't be too expensive.
    */
@@ -172,10 +172,7 @@ public class TaskMemoryManager {
             currentEntry = sortedConsumers.lastEntry();
           }
           List<MemoryConsumer> cList = currentEntry.getValue();
-          MemoryConsumer c = cList.remove(cList.size() - 1);
-          if (cList.isEmpty()) {
-            sortedConsumers.remove(currentEntry.getKey());
-          }
+          MemoryConsumer c = cList.get(cList.size() - 1);
           try {
             long released = c.spill(required - got, consumer);
             if (released > 0) {
@@ -185,6 +182,11 @@ public class TaskMemoryManager {
               if (got >= required) {
                 break;
               }
+            } else {
+              cList.remove(cList.size() - 1);
+              if (cList.isEmpty()) {
+                sortedConsumers.remove(currentEntry.getKey());
+              }
             }
           } catch (ClosedByInterruptException e) {
             // This called by user to kill a task (e.g: speculative task).
@@ -192,8 +194,10 @@ public class TaskMemoryManager {
             throw new RuntimeException(e.getMessage());
           } catch (IOException e) {
             logger.error("error while calling spill() on " + c, e);
-            throw new OutOfMemoryError("error while calling spill() on " + c + " : "
+            // checkstyle.off: RegexpSinglelineJava
+            throw new SparkOutOfMemoryError("error while calling spill() on " + c + " : "
               + e.getMessage());
+            // checkstyle.on: RegexpSinglelineJava
           }
         }
       }
@@ -213,8 +217,10 @@ public class TaskMemoryManager {
           throw new RuntimeException(e.getMessage());
         } catch (IOException e) {
           logger.error("error while calling spill() on " + consumer, e);
-          throw new OutOfMemoryError("error while calling spill() on " + consumer + " : "
+          // checkstyle.off: RegexpSinglelineJava
+          throw new SparkOutOfMemoryError("error while calling spill() on " + consumer + " : "
             + e.getMessage());
+          // checkstyle.on: RegexpSinglelineJava
         }
       }
 
@@ -270,13 +276,14 @@ public class TaskMemoryManager {
    *
    * Returns `null` if there was not enough memory to allocate the page. May return a page that
    * contains fewer bytes than requested, so callers should verify the size of returned pages.
+   *
+   * @throws TooLargePageException
    */
   public MemoryBlock allocatePage(long size, MemoryConsumer consumer) {
     assert(consumer != null);
     assert(consumer.getMode() == tungstenMemoryMode);
     if (size > MAXIMUM_PAGE_SIZE_BYTES) {
-      throw new IllegalArgumentException(
-        "Cannot allocate a page with more than " + MAXIMUM_PAGE_SIZE_BYTES + " bytes");
+      throw new TooLargePageException(size);
     }
 
     long acquired = acquireExecutionMemory(size, consumer);
@@ -320,8 +327,12 @@ public class TaskMemoryManager {
    * Free a block of memory allocated via {@link TaskMemoryManager#allocatePage}.
    */
   public void freePage(MemoryBlock page, MemoryConsumer consumer) {
-    assert (page.pageNumber != -1) :
+    assert (page.pageNumber != MemoryBlock.NO_PAGE_NUMBER) :
       "Called freePage() on memory that wasn't allocated with allocatePage()";
+    assert (page.pageNumber != MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER) :
+      "Called freePage() on a memory block that has already been freed";
+    assert (page.pageNumber != MemoryBlock.FREED_IN_TMM_PAGE_NUMBER) :
+            "Called freePage() on a memory block that has already been freed";
     assert(allocatedPages.get(page.pageNumber));
     pageTable[page.pageNumber] = null;
     synchronized (this) {
@@ -331,6 +342,10 @@ public class TaskMemoryManager {
       logger.trace("Freed page number {} ({} bytes)", page.pageNumber, page.size());
     }
     long pageSize = page.size();
+    // Clear the page number before passing the block to the MemoryAllocator's free().
+    // Doing this allows the MemoryAllocator to detect when a TaskMemoryManager-managed
+    // page has been inappropriately directly freed without calling TMM.freePage().
+    page.pageNumber = MemoryBlock.FREED_IN_TMM_PAGE_NUMBER;
     memoryManager.tungstenMemoryAllocator().free(page);
     releaseExecutionMemory(pageSize, consumer);
   }
@@ -357,7 +372,7 @@ public class TaskMemoryManager {
 
   @VisibleForTesting
   public static long encodePageNumberAndOffset(int pageNumber, long offsetInPage) {
-    assert (pageNumber != -1) : "encodePageNumberAndOffset called with invalid page";
+    assert (pageNumber >= 0) : "encodePageNumberAndOffset called with invalid page";
     return (((long) pageNumber) << OFFSET_BITS) | (offsetInPage & MASK_LONG_LOWER_51_BITS);
   }
 
@@ -423,6 +438,7 @@ public class TaskMemoryManager {
       for (MemoryBlock page : pageTable) {
         if (page != null) {
           logger.debug("unreleased page: " + page + " in task " + taskAttemptId);
+          page.pageNumber = MemoryBlock.FREED_IN_TMM_PAGE_NUMBER;
           memoryManager.tungstenMemoryAllocator().free(page);
         }
       }

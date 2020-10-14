@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.StringType
 
 
 class CombineConcatsSuite extends PlanTest {
@@ -37,8 +36,10 @@ class CombineConcatsSuite extends PlanTest {
     comparePlans(actual, correctAnswer)
   }
 
+  def str(s: String): Literal = Literal(s)
+  def binary(s: String): Literal = Literal(s.getBytes)
+
   test("combine nested Concat exprs") {
-    def str(s: String): Literal = Literal(s, StringType)
     assertEquivalent(
       Concat(
         Concat(str("a") :: str("b") :: Nil) ::
@@ -71,5 +72,14 @@ class CombineConcatsSuite extends PlanTest {
           Nil) ::
         Nil),
       Concat(str("a") :: str("b") :: str("c") :: str("d") :: Nil))
+  }
+
+  test("combine string and binary exprs") {
+    assertEquivalent(
+      Concat(
+        Concat(str("a") :: str("b") :: Nil) ::
+        Concat(binary("c") :: binary("d") :: Nil) ::
+        Nil),
+      Concat(str("a") :: str("b") :: binary("c") :: binary("d") :: Nil))
   }
 }

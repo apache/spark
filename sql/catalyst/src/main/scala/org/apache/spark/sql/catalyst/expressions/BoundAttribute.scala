@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, JavaCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 
 /**
@@ -33,47 +34,33 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   override def toString: String = s"input[$ordinal, ${dataType.simpleString}, $nullable]"
 
+  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType, nullable)
+
   // Use special getter for primitive types (for UnsafeRow)
   override def eval(input: InternalRow): Any = {
-    if (input.isNullAt(ordinal)) {
-      null
-    } else {
-      dataType match {
-        case BooleanType => input.getBoolean(ordinal)
-        case ByteType => input.getByte(ordinal)
-        case ShortType => input.getShort(ordinal)
-        case IntegerType | DateType => input.getInt(ordinal)
-        case LongType | TimestampType => input.getLong(ordinal)
-        case FloatType => input.getFloat(ordinal)
-        case DoubleType => input.getDouble(ordinal)
-        case StringType => input.getUTF8String(ordinal)
-        case BinaryType => input.getBinary(ordinal)
-        case CalendarIntervalType => input.getInterval(ordinal)
-        case t: DecimalType => input.getDecimal(ordinal, t.precision, t.scale)
-        case t: StructType => input.getStruct(ordinal, t.size)
-        case _: ArrayType => input.getArray(ordinal)
-        case _: MapType => input.getMap(ordinal)
-        case _ => input.get(ordinal, dataType)
-      }
-    }
+    accessor(input, ordinal)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaType = ctx.javaType(dataType)
-    val value = ctx.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
     if (ctx.currentVars != null && ctx.currentVars(ordinal) != null) {
       val oev = ctx.currentVars(ordinal)
       ev.isNull = oev.isNull
       ev.value = oev.value
-      val code = oev.code
-      oev.code = ""
-      ev.copy(code = code)
-    } else if (nullable) {
-      ev.copy(code = s"""
-        boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
-        $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);""")
+      ev.copy(code = oev.code)
     } else {
-      ev.copy(code = s"""$javaType ${ev.value} = $value;""", isNull = "false")
+      assert(ctx.INPUT_ROW != null, "INPUT_ROW and currentVars cannot both be null.")
+      val javaType = JavaCode.javaType(dataType)
+      val value = CodeGenerator.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
+      if (nullable) {
+        ev.copy(code =
+          code"""
+             |boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
+             |$javaType ${ev.value} = ${ev.isNull} ?
+             |  ${CodeGenerator.defaultValue(dataType)} : ($value);
+           """.stripMargin)
+      } else {
+        ev.copy(code = code"$javaType ${ev.value} = $value;", isNull = FalseLiteral)
+      }
     }
   }
 }
@@ -98,5 +85,14 @@ object BindReferences extends Logging {
         }
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
+  }
+
+  /**
+   * A helper function to bind given expressions to an input schema.
+   */
+  def bindReferences[A <: Expression](
+      expressions: Seq[A],
+      input: AttributeSeq): Seq[A] = {
+    expressions.map(BindReferences.bindReference(_, input))
   }
 }

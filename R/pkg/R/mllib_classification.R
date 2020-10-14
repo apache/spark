@@ -21,30 +21,32 @@
 #' S4 class that represents an LinearSVCModel
 #'
 #' @param jobj a Java object reference to the backing Scala LinearSVCModel
-#' @export
 #' @note LinearSVCModel since 2.2.0
 setClass("LinearSVCModel", representation(jobj = "jobj"))
 
 #' S4 class that represents an LogisticRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala LogisticRegressionModel
-#' @export
 #' @note LogisticRegressionModel since 2.1.0
 setClass("LogisticRegressionModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a MultilayerPerceptronClassificationModel
 #'
 #' @param jobj a Java object reference to the backing Scala MultilayerPerceptronClassifierWrapper
-#' @export
 #' @note MultilayerPerceptronClassificationModel since 2.1.0
 setClass("MultilayerPerceptronClassificationModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a NaiveBayesModel
 #'
 #' @param jobj a Java object reference to the backing Scala NaiveBayesWrapper
-#' @export
 #' @note NaiveBayesModel since 2.0.0
 setClass("NaiveBayesModel", representation(jobj = "jobj"))
+
+#' S4 class that represents a FMClassificationModel
+#'
+#' @param jobj a Java object reference to the backing Scala FMClassifierWrapper
+#' @note FMClassificationModel since 3.1.0
+setClass("FMClassificationModel", representation(jobj = "jobj"))
 
 #' Linear SVM Model
 #'
@@ -54,7 +56,7 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #'
 #' @param data SparkDataFrame for training.
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
-#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#'                operators are supported, including '~', '.', ':', '+', '-', '*', and '^'.
 #' @param regParam The regularization parameter. Only supports L2 regularization currently.
 #' @param maxIter Maximum iteration number.
 #' @param tol Convergence tolerance of iterations.
@@ -82,7 +84,6 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #' @rdname spark.svmLinear
 #' @aliases spark.svmLinear,SparkDataFrame,formula-method
 #' @name spark.svmLinear
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -131,7 +132,6 @@ setMethod("spark.svmLinear", signature(data = "SparkDataFrame", formula = "formu
 #' @return \code{predict} returns the predicted values based on a LinearSVCModel.
 #' @rdname spark.svmLinear
 #' @aliases predict,LinearSVCModel,SparkDataFrame-method
-#' @export
 #' @note predict(LinearSVCModel) since 2.2.0
 setMethod("predict", signature(object = "LinearSVCModel"),
           function(object, newData) {
@@ -146,7 +146,6 @@ setMethod("predict", signature(object = "LinearSVCModel"),
 #'         \code{numClasses} (number of classes), \code{numFeatures} (number of features).
 #' @rdname spark.svmLinear
 #' @aliases summary,LinearSVCModel-method
-#' @export
 #' @note summary(LinearSVCModel) since 2.2.0
 setMethod("summary", signature(object = "LinearSVCModel"),
           function(object) {
@@ -169,7 +168,6 @@ setMethod("summary", signature(object = "LinearSVCModel"),
 #'
 #' @rdname spark.svmLinear
 #' @aliases write.ml,LinearSVCModel,character-method
-#' @export
 #' @note write.ml(LogisticRegression, character) since 2.2.0
 setMethod("write.ml", signature(object = "LinearSVCModel", path = "character"),
 function(object, path, overwrite = FALSE) {
@@ -257,7 +255,6 @@ function(object, path, overwrite = FALSE) {
 #' @rdname spark.logit
 #' @aliases spark.logit,SparkDataFrame,formula-method
 #' @name spark.logit
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -279,11 +276,24 @@ function(object, path, overwrite = FALSE) {
 #' savedModel <- read.ml(path)
 #' summary(savedModel)
 #'
-#' # multinomial logistic regression
+#' # binary logistic regression against two classes with
+#' # upperBoundsOnCoefficients and upperBoundsOnIntercepts
+#' ubc <- matrix(c(1.0, 0.0, 1.0, 0.0), nrow = 1, ncol = 4)
+#' model <- spark.logit(training, Species ~ .,
+#'                       upperBoundsOnCoefficients = ubc,
+#'                       upperBoundsOnIntercepts = 1.0)
 #'
+#' # multinomial logistic regression
 #' model <- spark.logit(training, Class ~ ., regParam = 0.5)
 #' summary <- summary(model)
 #'
+#' # multinomial logistic regression with
+#' # lowerBoundsOnCoefficients and lowerBoundsOnIntercepts
+#' lbc <- matrix(c(0.0, -1.0, 0.0, -1.0, 0.0, -1.0, 0.0, -1.0), nrow = 2, ncol = 4)
+#' lbi <- as.array(c(0.0, 0.0))
+#' model <- spark.logit(training, Species ~ ., family = "multinomial",
+#'                      lowerBoundsOnCoefficients = lbc,
+#'                      lowerBoundsOnIntercepts = lbi)
 #' }
 #' @note spark.logit since 2.1.0
 setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"),
@@ -327,8 +337,8 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
 
               if (!is.null(lowerBoundsOnCoefficients) && (row != nrow(upperBoundsOnCoefficients)
                 || col != ncol(upperBoundsOnCoefficients))) {
-                stop(paste0("dimension of upperBoundsOnCoefficients ",
-                           "is not the same as lowerBoundsOnCoefficients", sep = ""))
+                stop("dimension of upperBoundsOnCoefficients ",
+                     "is not the same as lowerBoundsOnCoefficients")
               }
 
               if (is.null(lowerBoundsOnCoefficients)) {
@@ -361,7 +371,6 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
 #'         The list includes \code{coefficients} (coefficients matrix of the fitted model).
 #' @rdname spark.logit
 #' @aliases summary,LogisticRegressionModel-method
-#' @export
 #' @note summary(LogisticRegressionModel) since 2.1.0
 setMethod("summary", signature(object = "LogisticRegressionModel"),
           function(object) {
@@ -389,7 +398,6 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
 #' @return \code{predict} returns the predicted values based on an LogisticRegressionModel.
 #' @rdname spark.logit
 #' @aliases predict,LogisticRegressionModel,SparkDataFrame-method
-#' @export
 #' @note predict(LogisticRegressionModel) since 2.1.0
 setMethod("predict", signature(object = "LogisticRegressionModel"),
           function(object, newData) {
@@ -404,7 +412,6 @@ setMethod("predict", signature(object = "LogisticRegressionModel"),
 #'
 #' @rdname spark.logit
 #' @aliases write.ml,LogisticRegressionModel,character-method
-#' @export
 #' @note write.ml(LogisticRegression, character) since 2.1.0
 setMethod("write.ml", signature(object = "LogisticRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
@@ -445,7 +452,6 @@ setMethod("write.ml", signature(object = "LogisticRegressionModel", path = "char
 #' @aliases spark.mlp,SparkDataFrame,formula-method
 #' @name spark.mlp
 #' @seealso \link{read.ml}
-#' @export
 #' @examples
 #' \dontrun{
 #' df <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
@@ -504,7 +510,6 @@ setMethod("spark.mlp", signature(data = "SparkDataFrame", formula = "formula"),
 #'         For \code{weights}, it is a numeric vector with length equal to the expected
 #'         given the architecture (i.e., for 8-10-2 network, 112 connection weights).
 #' @rdname spark.mlp
-#' @export
 #' @aliases summary,MultilayerPerceptronClassificationModel-method
 #' @note summary(MultilayerPerceptronClassificationModel) since 2.1.0
 setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel"),
@@ -525,7 +530,6 @@ setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel
 #' "prediction".
 #' @rdname spark.mlp
 #' @aliases predict,MultilayerPerceptronClassificationModel-method
-#' @export
 #' @note predict(MultilayerPerceptronClassificationModel) since 2.1.0
 setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel"),
           function(object, newData) {
@@ -540,7 +544,6 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 #'
 #' @rdname spark.mlp
 #' @aliases write.ml,MultilayerPerceptronClassificationModel,character-method
-#' @export
 #' @seealso \link{write.ml}
 #' @note write.ml(MultilayerPerceptronClassificationModel, character) since 2.1.0
 setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationModel",
@@ -572,7 +575,6 @@ setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationMode
 #' @aliases spark.naiveBayes,SparkDataFrame,formula-method
 #' @name spark.naiveBayes
 #' @seealso e1071: \url{https://cran.r-project.org/package=e1071}
-#' @export
 #' @examples
 #' \dontrun{
 #' data <- as.data.frame(UCBAdmissions)
@@ -611,7 +613,6 @@ setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "form
 #'         The list includes \code{apriori} (the label distribution) and
 #'         \code{tables} (conditional probabilities given the target label).
 #' @rdname spark.naiveBayes
-#' @export
 #' @note summary(NaiveBayesModel) since 2.0.0
 setMethod("summary", signature(object = "NaiveBayesModel"),
           function(object) {
@@ -635,7 +636,6 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
 #' "prediction".
 #' @rdname spark.naiveBayes
-#' @export
 #' @note predict(NaiveBayesModel) since 2.0.0
 setMethod("predict", signature(object = "NaiveBayesModel"),
           function(object, newData) {
@@ -649,10 +649,160 @@ setMethod("predict", signature(object = "NaiveBayesModel"),
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.naiveBayes
-#' @export
 #' @seealso \link{write.ml}
 #' @note write.ml(NaiveBayesModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
+
+#' Factorization Machines Classification Model
+#'
+#' \code{spark.fmClassifier} fits a factorization classification model against a SparkDataFrame.
+#' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
+#' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
+#' Only categorical data is supported.
+#'
+#' @param data a \code{SparkDataFrame} of observations and labels for model fitting.
+#' @param formula a symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#' @param factorSize dimensionality of the factors.
+#' @param fitLinear whether to fit linear term.  # TODO Can we express this with formula?
+#' @param regParam the regularization parameter.
+#' @param miniBatchFraction the mini-batch fraction parameter.
+#' @param initStd the standard deviation of initial coefficients.
+#' @param maxIter maximum iteration number.
+#' @param stepSize stepSize parameter.
+#' @param tol convergence tolerance of iterations.
+#' @param solver solver parameter, supported options: "gd" (minibatch gradient descent) or "adamW".
+#' @param thresholds in binary classification, in range [0, 1]. If the estimated probability of
+#'                   class label 1 is > threshold, then predict 1, else 0. A high threshold
+#'                   encourages the model to predict 0 more often; a low threshold encourages the
+#'                   model to predict 1 more often. Note: Setting this with threshold p is
+#'                   equivalent to setting thresholds c(1-p, p).
+#' @param seed seed parameter for weights initialization.
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and
+#'                      label column of string type.
+#'                      Supported options: "skip" (filter out rows with invalid data),
+#'                                         "error" (throw an error), "keep" (put invalid data in
+#'                                         a special additional bucket, at index numLabels). Default
+#'                                         is "error".
+#' @param ... additional arguments passed to the method.
+#' @return \code{spark.fmClassifier} returns a fitted Factorization Machines Classification Model.
+#' @rdname spark.fmClassifier
+#' @aliases spark.fmClassifier,SparkDataFrame,formula-method
+#' @name spark.fmClassifier
+#' @seealso \link{read.ml}
+#' @examples
+#' \dontrun{
+#' df <- read.df("data/mllib/sample_binary_classification_data.txt", source = "libsvm")
+#'
+#' # fit Factorization Machines Classification Model
+#' model <- spark.fmClassifier(
+#'            df, label ~ features,
+#'            regParam = 0.01, maxIter = 10, fitLinear = TRUE
+#'          )
+#'
+#' # get the summary of the model
+#' summary(model)
+#'
+#' # make predictions
+#' predictions <- predict(model, df)
+#'
+#' # save and load the model
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
+#' }
+#' @note spark.fmClassifier since 3.1.0
+setMethod("spark.fmClassifier", signature(data = "SparkDataFrame", formula = "formula"),
+          function(data, formula, factorSize = 8, fitLinear = TRUE, regParam = 0.0,
+                   miniBatchFraction = 1.0, initStd = 0.01, maxIter = 100, stepSize=1.0,
+                   tol = 1e-6, solver = c("adamW", "gd"), thresholds = NULL, seed = NULL,
+                   handleInvalid = c("error", "keep", "skip")) {
+
+            formula <- paste(deparse(formula), collapse = "")
+
+            if (!is.null(seed)) {
+              seed <- as.character(as.integer(seed))
+            }
+
+            if (!is.null(thresholds)) {
+              thresholds <- as.list(thresholds)
+            }
+
+            solver <- match.arg(solver)
+            handleInvalid <- match.arg(handleInvalid)
+
+            jobj <- callJStatic("org.apache.spark.ml.r.FMClassifierWrapper",
+                                "fit",
+                                data@sdf,
+                                formula,
+                                as.integer(factorSize),
+                                as.logical(fitLinear),
+                                as.numeric(regParam),
+                                as.numeric(miniBatchFraction),
+                                as.numeric(initStd),
+                                as.integer(maxIter),
+                                as.numeric(stepSize),
+                                as.numeric(tol),
+                                solver,
+                                seed,
+                                thresholds,
+                                handleInvalid)
+            new("FMClassificationModel", jobj = jobj)
+          })
+
+#  Returns the summary of a FM Classification model produced by \code{spark.fmClassifier}
+
+#' @param object a FM Classification model fitted by \code{spark.fmClassifier}.
+#' @return \code{summary} returns summary information of the fitted model, which is a list.
+#' @rdname spark.fmClassifier
+#' @note summary(FMClassificationModel) since 3.1.0
+setMethod("summary", signature(object = "FMClassificationModel"),
+          function(object) {
+            jobj <- object@jobj
+            features <- callJMethod(jobj, "rFeatures")
+            coefficients <- callJMethod(jobj, "rCoefficients")
+            coefficients <- as.matrix(unlist(coefficients))
+            colnames(coefficients) <- c("Estimate")
+            rownames(coefficients) <- unlist(features)
+            numClasses <- callJMethod(jobj, "numClasses")
+            numFeatures <- callJMethod(jobj, "numFeatures")
+            raw_factors <- unlist(callJMethod(jobj, "rFactors"))
+            factor_size <- callJMethod(jobj, "factorSize")
+
+            list(
+              coefficients = coefficients,
+              factors = matrix(raw_factors, ncol = factor_size),
+              numClasses = numClasses, numFeatures = numFeatures,
+              factorSize = factor_size
+            )
+          })
+
+#  Predicted values based on an FMClassificationModel model
+
+#' @param newData a SparkDataFrame for testing.
+#' @return \code{predict} returns the predicted values based on a FM Classification model.
+#' @rdname spark.fmClassifier
+#' @aliases predict,FMClassificationModel,SparkDataFrame-method
+#' @note predict(FMClassificationModel) since 3.1.0
+setMethod("predict", signature(object = "FMClassificationModel"),
+          function(object, newData) {
+            predict_internal(object, newData)
+          })
+
+#  Save fitted FMClassificationModel to the input path
+
+#' @param path The directory where the model is saved.
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname spark.fmClassifier
+#' @aliases write.ml,FMClassificationModel,character-method
+#' @note write.ml(FMClassificationModel, character) since 3.1.0
+setMethod("write.ml", signature(object = "FMClassificationModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             write_internal(object, path, overwrite)
           })

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.execution.SQLViewSuite
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{NullType, StructType}
 
 /**
  * A test suite for Hive view related functionality.
@@ -67,20 +67,22 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
       classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper].getCanonicalName
     withUserDefinedFunction(tempFunctionName -> true) {
       sql(s"CREATE TEMPORARY FUNCTION $tempFunctionName AS '$functionClass'")
-      withView("view1", "tempView1") {
-        withTable("tab1") {
-          (1 to 10).map(i => s"$i").toDF("id").write.saveAsTable("tab1")
+      withView("view1") {
+        withTempView("tempView1") {
+          withTable("tab1") {
+            (1 to 10).map(i => s"$i").toDF("id").write.saveAsTable("tab1")
 
-          // temporary view
-          sql(s"CREATE TEMPORARY VIEW tempView1 AS SELECT $tempFunctionName(id) from tab1")
-          checkAnswer(sql("select count(*) FROM tempView1"), Row(10))
+            // temporary view
+            sql(s"CREATE TEMPORARY VIEW tempView1 AS SELECT $tempFunctionName(id) from tab1")
+            checkAnswer(sql("select count(*) FROM tempView1"), Row(10))
 
-          // permanent view
-          val e = intercept[AnalysisException] {
-            sql(s"CREATE VIEW view1 AS SELECT $tempFunctionName(id) from tab1")
-          }.getMessage
-          assert(e.contains("Not allowed to create a permanent view `view1` by referencing " +
-            s"a temporary function `$tempFunctionName`"))
+            // permanent view
+            val e = intercept[AnalysisException] {
+              sql(s"CREATE VIEW view1 AS SELECT $tempFunctionName(id) from tab1")
+            }.getMessage
+            assert(e.contains("Not allowed to create a permanent view `default`.`view1` by " +
+              s"referencing a temporary function `$tempFunctionName`"))
+          }
         }
       }
     }
@@ -133,6 +135,26 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
         // Check the output schema.
         assert(df.schema.sameType(view.schema))
       }
+    }
+  }
+
+  test("SPARK-20680: Add HiveVoidType to compatible with Hive void type") {
+    withView("v1") {
+      sql("create view v1 as select null as c")
+      val df = sql("select * from v1")
+      assert(df.schema.fields.head.dataType == NullType)
+      checkAnswer(
+        df,
+        Row(null)
+      )
+
+      sql("alter view v1 as select null as c1, 1 as c2")
+      val df2 = sql("select * from v1")
+      assert(df2.schema.fields.head.dataType == NullType)
+      checkAnswer(
+        df2,
+        Row(null, 1)
+      )
     }
   }
 }

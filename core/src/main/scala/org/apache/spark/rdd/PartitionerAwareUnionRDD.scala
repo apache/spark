@@ -101,7 +101,7 @@ class PartitionerAwareUnionRDD[T: ClassTag](
     }
   }
 
-  override def clearDependencies() {
+  override def clearDependencies(): Unit = {
     super.clearDependencies()
     rdds = null
   }

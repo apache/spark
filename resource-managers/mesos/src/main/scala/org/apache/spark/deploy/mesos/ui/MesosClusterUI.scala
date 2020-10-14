@@ -37,10 +37,10 @@ private[spark] class MesosClusterUI(
 
   def activeWebUiUrl: String = "http://" + dispatcherPublicAddress + ":" + boundPort
 
-  override def initialize() {
+  override def initialize(): Unit = {
     attachPage(new MesosClusterPage(this))
     attachPage(new DriverPage(this))
-    attachHandler(createStaticHandler(MesosClusterUI.STATIC_RESOURCE_DIR, "/static"))
+    addStaticHandler(MesosClusterUI.STATIC_RESOURCE_DIR)
   }
 }
 

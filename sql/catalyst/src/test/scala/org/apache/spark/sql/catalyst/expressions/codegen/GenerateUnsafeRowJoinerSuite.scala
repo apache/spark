@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import java.time.{LocalDateTime, ZoneOffset}
+
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Test suite for [[GenerateUnsafeRowJoiner]].
@@ -43,6 +47,32 @@ class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
     testConcat(64, 0, fixed)
     testConcat(0, 64, fixed)
     testConcat(64, 64, fixed)
+  }
+
+  test("rows with all empty strings") {
+    val schema = StructType(Seq(
+      StructField("f1", StringType), StructField("f2", StringType)))
+    val row: UnsafeRow = UnsafeProjection.create(schema).apply(
+      InternalRow(UTF8String.EMPTY_UTF8, UTF8String.EMPTY_UTF8))
+     testConcat(schema, row, schema, row)
+  }
+
+  test("rows with all empty int arrays") {
+    val schema = StructType(Seq(
+      StructField("f1", ArrayType(IntegerType)), StructField("f2", ArrayType(IntegerType))))
+    val toRow = ExpressionEncoder[Array[Int]]().resolveAndBind().createSerializer()
+    val emptyIntArray = toRow(Array.emptyIntArray).getArray(0)
+    val row: UnsafeRow = UnsafeProjection.create(schema).apply(
+      InternalRow(emptyIntArray, emptyIntArray))
+    testConcat(schema, row, schema, row)
+  }
+
+  test("alternating empty and non-empty strings") {
+    val schema = StructType(Seq(
+      StructField("f1", StringType), StructField("f2", StringType)))
+    val row: UnsafeRow = UnsafeProjection.create(schema).apply(
+      InternalRow(UTF8String.EMPTY_UTF8, UTF8String.fromString("foo")))
+    testConcat(schema, row, schema, row)
   }
 
   test("randomized fix width types") {
@@ -66,13 +96,36 @@ class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-22508: GenerateUnsafeRowJoiner.create should not generate codes beyond 64KB") {
+    val N = 3000
+    testConcatOnce(N, N, variable)
+  }
+
+  test("SPARK-30993: UserDefinedType matched to fixed length SQL type shouldn't be corrupted") {
+    val schema1 = new StructType(Array(
+      StructField("date", new WrappedDateTimeUDT),
+      StructField("s", StringType),
+      StructField("i", IntegerType)))
+    val proj1 = UnsafeProjection.create(schema1.fields.map(_.dataType))
+    val intRow1 = new GenericInternalRow(Array[Any](
+      LocalDateTime.now().toEpochSecond(ZoneOffset.UTC),
+      UTF8String.fromString("hello"), 1))
+
+    val schema2 = new StructType(Array(StructField("i", IntegerType)))
+    val proj2 = UnsafeProjection.create(schema2.fields.map(_.dataType))
+    val intRow2 = new GenericInternalRow(Array[Any](2))
+
+    testConcat(schema1, proj1.apply(intRow1), schema2, proj2.apply(intRow2))
+  }
+
   private def testConcat(numFields1: Int, numFields2: Int, candidateTypes: Seq[DataType]): Unit = {
     for (i <- 0 until 10) {
       testConcatOnce(numFields1, numFields2, candidateTypes)
     }
   }
 
-  private def testConcatOnce(numFields1: Int, numFields2: Int, candidateTypes: Seq[DataType]) {
+  private def testConcatOnce(numFields1: Int, numFields2: Int,
+      candidateTypes: Seq[DataType]): Unit = {
     info(s"schema size $numFields1, $numFields2")
     val random = new Random()
     val schema1 = RandomDataGenerator.randomSchema(random, numFields1, candidateTypes)
@@ -89,27 +142,104 @@ class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
     val extRow2 = RandomDataGenerator.forType(schema2, nullable = false).get.apply()
     val row1 = converter1.apply(internalConverter1.apply(extRow1).asInstanceOf[InternalRow])
     val row2 = converter2.apply(internalConverter2.apply(extRow2).asInstanceOf[InternalRow])
+    testConcat(schema1, row1, schema2, row2)
+  }
+
+  private def testConcat(
+      schema1: StructType,
+      row1: UnsafeRow,
+      schema2: StructType,
+      row2: UnsafeRow): Unit = {
 
     // Run the joiner.
     val mergedSchema = StructType(schema1 ++ schema2)
     val concater = GenerateUnsafeRowJoiner.create(schema1, schema2)
-    val output = concater.join(row1, row2)
+    val output: UnsafeRow = concater.join(row1, row2)
+
+    // We'll also compare to an UnsafeRow produced with JoinedRow + UnsafeProjection. This ensures
+    // that unused space in the row (e.g. leftover bits in the null-tracking bitmap) is written
+    // correctly.
+    val expectedOutput: UnsafeRow = {
+      val joinedRowProjection = UnsafeProjection.create(mergedSchema)
+      val joined = new JoinedRow()
+      joinedRowProjection.apply(joined.apply(row1, row2))
+    }
 
     // Test everything equals ...
     for (i <- mergedSchema.indices) {
+      val dataType = mergedSchema(i).dataType
       if (i < schema1.size) {
         assert(output.isNullAt(i) === row1.isNullAt(i))
         if (!output.isNullAt(i)) {
-          assert(output.get(i, mergedSchema(i).dataType) === row1.get(i, mergedSchema(i).dataType))
+          assert(output.get(i, dataType) === row1.get(i, dataType))
+          assert(output.get(i, dataType) === expectedOutput.get(i, dataType))
         }
       } else {
         assert(output.isNullAt(i) === row2.isNullAt(i - schema1.size))
         if (!output.isNullAt(i)) {
-          assert(output.get(i, mergedSchema(i).dataType) ===
-            row2.get(i - schema1.size, mergedSchema(i).dataType))
+          assert(output.get(i, dataType) === row2.get(i - schema1.size, dataType))
+          assert(output.get(i, dataType) === expectedOutput.get(i, dataType))
         }
       }
     }
+
+
+    assert(
+      expectedOutput.getSizeInBytes == output.getSizeInBytes,
+      "output isn't same size in bytes as slow path")
+
+    // Compare the UnsafeRows byte-by-byte so that we can print more useful debug information in
+    // case this assertion fails:
+    val actualBytes = output.getBaseObject.asInstanceOf[Array[Byte]]
+      .take(output.getSizeInBytes)
+    val expectedBytes = expectedOutput.getBaseObject.asInstanceOf[Array[Byte]]
+      .take(expectedOutput.getSizeInBytes)
+
+    val bitsetWidth = UnsafeRow.calculateBitSetWidthInBytes(expectedOutput.numFields())
+    val actualBitset = actualBytes.take(bitsetWidth)
+    val expectedBitset = expectedBytes.take(bitsetWidth)
+    assert(actualBitset === expectedBitset, "bitsets were not equal")
+
+    val fixedLengthSize = expectedOutput.numFields() * 8
+    val actualFixedLength = actualBytes.slice(bitsetWidth, bitsetWidth + fixedLengthSize)
+    val expectedFixedLength = expectedBytes.slice(bitsetWidth, bitsetWidth + fixedLengthSize)
+    if (actualFixedLength !== expectedFixedLength) {
+      actualFixedLength.grouped(8)
+        .zip(expectedFixedLength.grouped(8))
+        .zip(mergedSchema.fields.toIterator)
+        .foreach {
+          case ((actual, expected), field) =>
+            assert(actual === expected, s"Fixed length sections are not equal for field $field")
+      }
+      fail("Fixed length sections were not equal")
+    }
+
+    val variableLengthStart = bitsetWidth + fixedLengthSize
+    val actualVariableLength = actualBytes.drop(variableLengthStart)
+    val expectedVariableLength = expectedBytes.drop(variableLengthStart)
+    assert(actualVariableLength === expectedVariableLength, "fixed length sections were not equal")
+
+    assert(output.hashCode() == expectedOutput.hashCode(), "hash codes were not equal")
   }
 
+}
+
+private[sql] case class WrappedDateTime(dt: LocalDateTime)
+
+private[sql] class WrappedDateTimeUDT extends UserDefinedType[WrappedDateTime] {
+  override def sqlType: DataType = LongType
+
+  override def serialize(obj: WrappedDateTime): Long = {
+    obj.dt.toEpochSecond(ZoneOffset.UTC)
+  }
+
+  def deserialize(datum: Any): WrappedDateTime = datum match {
+    case value: Long =>
+      val v = LocalDateTime.ofEpochSecond(value, 0, ZoneOffset.UTC)
+      WrappedDateTime(v)
+  }
+
+  override def userClass: Class[WrappedDateTime] = classOf[WrappedDateTime]
+
+  private[spark] override def asNullable: WrappedDateTimeUDT = this
 }

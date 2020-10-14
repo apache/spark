@@ -40,7 +40,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("single cluster") {
-    val data = sc.parallelize(Array(
+    val data = sc.parallelize(Seq(
       Vectors.dense(6.0, 9.0),
       Vectors.dense(5.0, 10.0),
       Vectors.dense(4.0, 11.0)
@@ -105,7 +105,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("single cluster with sparse data") {
-    val data = sc.parallelize(Array(
+    val data = sc.parallelize(Seq(
       Vectors.sparse(3, Array(0, 2), Array(4.0, 2.0)),
       Vectors.sparse(3, Array(0, 2), Array(2.0, 4.0)),
       Vectors.sparse(3, Array(1), Array(6.0))

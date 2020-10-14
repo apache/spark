@@ -20,6 +20,7 @@ package org.apache.spark.deploy.master
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Deploy.RECOVERY_DIRECTORY
 import org.apache.spark.serializer.Serializer
 
 /**
@@ -52,11 +53,11 @@ abstract class StandaloneRecoveryModeFactory(conf: SparkConf, serializer: Serial
 private[master] class FileSystemRecoveryModeFactory(conf: SparkConf, serializer: Serializer)
   extends StandaloneRecoveryModeFactory(conf, serializer) with Logging {
 
-  val RECOVERY_DIR = conf.get("spark.deploy.recoveryDirectory", "")
+  val recoveryDir = conf.get(RECOVERY_DIRECTORY)
 
   def createPersistenceEngine(): PersistenceEngine = {
-    logInfo("Persisting recovery state to directory: " + RECOVERY_DIR)
-    new FileSystemPersistenceEngine(RECOVERY_DIR, serializer)
+    logInfo("Persisting recovery state to directory: " + recoveryDir)
+    new FileSystemPersistenceEngine(recoveryDir, serializer)
   }
 
   def createLeaderElectionAgent(master: LeaderElectable): LeaderElectionAgent = {

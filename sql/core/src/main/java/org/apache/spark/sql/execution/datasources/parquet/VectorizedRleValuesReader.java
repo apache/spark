@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+
 import org.apache.parquet.Preconditions;
+import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.column.values.bitpacking.BytePacker;
@@ -42,16 +46,14 @@ public final class VectorizedRleValuesReader extends ValuesReader
   // Current decoding mode. The encoded data contains groups of either run length encoded data
   // (RLE) or bit packed data. Each group contains a header that indicates which group it is and
   // the number of values in the group.
-  // More details here: https://github.com/Parquet/parquet-format/blob/master/Encodings.md
+  // More details here: https://github.com/apache/parquet-format/blob/master/Encodings.md
   private enum MODE {
     RLE,
     PACKED
   }
 
   // Encoded data.
-  private byte[] in;
-  private int end;
-  private int offset;
+  private ByteBufferInputStream in;
 
   // bit/byte width of decoded data and utility to batch unpack them.
   private int bitWidth;
@@ -70,45 +72,40 @@ public final class VectorizedRleValuesReader extends ValuesReader
   // If true, the bit width is fixed. This decoder is used in different places and this also
   // controls if we need to read the bitwidth from the beginning of the data stream.
   private final boolean fixedWidth;
+  private final boolean readLength;
 
   public VectorizedRleValuesReader() {
-    fixedWidth = false;
+    this.fixedWidth = false;
+    this.readLength = false;
   }
 
   public VectorizedRleValuesReader(int bitWidth) {
-    fixedWidth = true;
+    this.fixedWidth = true;
+    this.readLength = bitWidth != 0;
+    init(bitWidth);
+  }
+
+  public VectorizedRleValuesReader(int bitWidth, boolean readLength) {
+    this.fixedWidth = true;
+    this.readLength = readLength;
     init(bitWidth);
   }
 
   @Override
-  public void initFromPage(int valueCount, byte[] page, int start) {
-    this.offset = start;
-    this.in = page;
+  public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
+    this.in = in;
     if (fixedWidth) {
-      if (bitWidth != 0) {
+      // initialize for repetition and definition levels
+      if (readLength) {
         int length = readIntLittleEndian();
-        this.end = this.offset + length;
+        this.in = in.sliceStream(length);
       }
     } else {
-      this.end = page.length;
-      if (this.end != this.offset) init(page[this.offset++] & 255);
+      // initialize for values
+      if (in.available() > 0) {
+        init(in.read());
+      }
     }
-    if (bitWidth == 0) {
-      // 0 bit width, treat this as an RLE run of valueCount number of 0's.
-      this.mode = MODE.RLE;
-      this.currentCount = valueCount;
-      this.currentValue = 0;
-    } else {
-      this.currentCount = 0;
-    }
-  }
-
-  // Initialize the reader from a buffer. This is used for the V2 page encoding where the
-  // definition are in its own buffer.
-  public void initFromBuffer(int valueCount, byte[] data) {
-    this.offset = 0;
-    this.in = data;
-    this.end = data.length;
     if (bitWidth == 0) {
       // 0 bit width, treat this as an RLE run of valueCount number of 0's.
       this.mode = MODE.RLE;
@@ -127,11 +124,6 @@ public final class VectorizedRleValuesReader extends ValuesReader
     this.bitWidth = bitWidth;
     this.bytesWidth = BytesUtils.paddedByteCountFromBits(bitWidth);
     this.packer = Packer.LITTLE_ENDIAN.newBytePacker(bitWidth);
-  }
-
-  @Override
-  public int getNextOffset() {
-    return this.end;
   }
 
   @Override
@@ -182,7 +174,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector c,
       int rowId,
       int level,
-      VectorizedValuesReader data) {
+      VectorizedValuesReader data) throws IOException {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -211,13 +203,51 @@ public final class VectorizedRleValuesReader extends ValuesReader
     }
   }
 
+  // A fork of `readIntegers`, which rebases the date int value (days) before filling
+  // the Spark column vector.
+  public void readIntegersWithRebase(
+      int total,
+      WritableColumnVector c,
+      int rowId,
+      int level,
+      VectorizedValuesReader data,
+      final boolean failIfRebase) throws IOException {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            data.readIntegersWithRebase(n, c, rowId, failIfRebase);
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              int julianDays = data.readInteger();
+              c.putInt(rowId + i, VectorizedColumnReader.rebaseDays(julianDays, failIfRebase));
+            } else {
+              c.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
   // TODO: can this code duplication be removed without a perf penalty?
   public void readBooleans(
       int total,
       WritableColumnVector c,
       int rowId,
       int level,
-      VectorizedValuesReader data) {
+      VectorizedValuesReader data) throws IOException {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -251,7 +281,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector c,
       int rowId,
       int level,
-      VectorizedValuesReader data) {
+      VectorizedValuesReader data) throws IOException {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -285,7 +315,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector c,
       int rowId,
       int level,
-      VectorizedValuesReader data) {
+      VectorizedValuesReader data) throws IOException {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -321,7 +351,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector c,
       int rowId,
       int level,
-      VectorizedValuesReader data) {
+      VectorizedValuesReader data) throws IOException {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -350,12 +380,50 @@ public final class VectorizedRleValuesReader extends ValuesReader
     }
   }
 
+  // A fork of `readLongs`, which rebases the timestamp long value (microseconds) before filling
+  // the Spark column vector.
+  public void readLongsWithRebase(
+      int total,
+      WritableColumnVector c,
+      int rowId,
+      int level,
+      VectorizedValuesReader data,
+      final boolean failIfRebase) throws IOException {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            data.readLongsWithRebase(n, c, rowId, failIfRebase);
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              long julianMicros = data.readLong();
+              c.putLong(rowId + i, VectorizedColumnReader.rebaseMicros(julianMicros, failIfRebase));
+            } else {
+              c.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
   public void readFloats(
       int total,
       WritableColumnVector c,
       int rowId,
       int level,
-      VectorizedValuesReader data) {
+      VectorizedValuesReader data) throws IOException {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -389,7 +457,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector c,
       int rowId,
       int level,
-      VectorizedValuesReader data) {
+      VectorizedValuesReader data) throws IOException {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -423,7 +491,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector c,
       int rowId,
       int level,
-      VectorizedValuesReader data) {
+      VectorizedValuesReader data) throws IOException {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -462,7 +530,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector nulls,
       int rowId,
       int level,
-      VectorizedValuesReader data) {
+      VectorizedValuesReader data) throws IOException {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -517,6 +585,12 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   @Override
+  public void readIntegersWithRebase(
+      int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
   public byte readByte() {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
@@ -528,6 +602,12 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   @Override
   public void readLongs(int total, WritableColumnVector c, int rowId) {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
+  public void readLongsWithRebase(
+      int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 
@@ -559,12 +639,12 @@ public final class VectorizedRleValuesReader extends ValuesReader
   /**
    * Reads the next varint encoded int.
    */
-  private int readUnsignedVarInt() {
+  private int readUnsignedVarInt() throws IOException {
     int value = 0;
     int shift = 0;
     int b;
     do {
-      b = in[offset++] & 255;
+      b = in.read();
       value |= (b & 0x7F) << shift;
       shift += 7;
     } while ((b & 0x80) != 0);
@@ -574,35 +654,32 @@ public final class VectorizedRleValuesReader extends ValuesReader
   /**
    * Reads the next 4 byte little endian int.
    */
-  private int readIntLittleEndian() {
-    int ch4 = in[offset] & 255;
-    int ch3 = in[offset + 1] & 255;
-    int ch2 = in[offset + 2] & 255;
-    int ch1 = in[offset + 3] & 255;
-    offset += 4;
+  private int readIntLittleEndian() throws IOException {
+    int ch4 = in.read();
+    int ch3 = in.read();
+    int ch2 = in.read();
+    int ch1 = in.read();
     return ((ch1 << 24) + (ch2 << 16) + (ch3 << 8) + (ch4 << 0));
   }
 
   /**
    * Reads the next byteWidth little endian int.
    */
-  private int readIntLittleEndianPaddedOnBitWidth() {
+  private int readIntLittleEndianPaddedOnBitWidth() throws IOException {
     switch (bytesWidth) {
       case 0:
         return 0;
       case 1:
-        return in[offset++] & 255;
+        return in.read();
       case 2: {
-        int ch2 = in[offset] & 255;
-        int ch1 = in[offset + 1] & 255;
-        offset += 2;
+        int ch2 = in.read();
+        int ch1 = in.read();
         return (ch1 << 8) + ch2;
       }
       case 3: {
-        int ch3 = in[offset] & 255;
-        int ch2 = in[offset + 1] & 255;
-        int ch1 = in[offset + 2] & 255;
-        offset += 3;
+        int ch3 = in.read();
+        int ch2 = in.read();
+        int ch1 = in.read();
         return (ch1 << 16) + (ch2 << 8) + (ch3 << 0);
       }
       case 4: {
@@ -619,32 +696,36 @@ public final class VectorizedRleValuesReader extends ValuesReader
   /**
    * Reads the next group.
    */
-  private void readNextGroup()  {
-    int header = readUnsignedVarInt();
-    this.mode = (header & 1) == 0 ? MODE.RLE : MODE.PACKED;
-    switch (mode) {
-      case RLE:
-        this.currentCount = header >>> 1;
-        this.currentValue = readIntLittleEndianPaddedOnBitWidth();
-        return;
-      case PACKED:
-        int numGroups = header >>> 1;
-        this.currentCount = numGroups * 8;
-        int bytesToRead = ceil8(this.currentCount * this.bitWidth);
+  private void readNextGroup() {
+    try {
+      int header = readUnsignedVarInt();
+      this.mode = (header & 1) == 0 ? MODE.RLE : MODE.PACKED;
+      switch (mode) {
+        case RLE:
+          this.currentCount = header >>> 1;
+          this.currentValue = readIntLittleEndianPaddedOnBitWidth();
+          return;
+        case PACKED:
+          int numGroups = header >>> 1;
+          this.currentCount = numGroups * 8;
 
-        if (this.currentBuffer.length < this.currentCount) {
-          this.currentBuffer = new int[this.currentCount];
-        }
-        currentBufferIdx = 0;
-        int valueIndex = 0;
-        for (int byteIndex = offset; valueIndex < this.currentCount; byteIndex += this.bitWidth) {
-          this.packer.unpack8Values(in, byteIndex, this.currentBuffer, valueIndex);
-          valueIndex += 8;
-        }
-        offset += bytesToRead;
-        return;
-      default:
-        throw new ParquetDecodingException("not a valid mode " + this.mode);
+          if (this.currentBuffer.length < this.currentCount) {
+            this.currentBuffer = new int[this.currentCount];
+          }
+          currentBufferIdx = 0;
+          int valueIndex = 0;
+          while (valueIndex < this.currentCount) {
+            // values are bit packed 8 at a time, so reading bitWidth will always work
+            ByteBuffer buffer = in.slice(bitWidth);
+            this.packer.unpack8Values(buffer, buffer.position(), this.currentBuffer, valueIndex);
+            valueIndex += 8;
+          }
+          return;
+        default:
+          throw new ParquetDecodingException("not a valid mode " + this.mode);
+      }
+    } catch (IOException e) {
+      throw new ParquetDecodingException("Failed to read from input stream", e);
     }
   }
 }

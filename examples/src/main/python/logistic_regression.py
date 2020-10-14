@@ -22,8 +22,6 @@ to act on batches of input data using efficient matrix operations.
 In practice, one may prefer to use the LogisticRegression algorithm in
 ML, as shown in examples/src/main/python/ml/logistic_regression_with_elastic_net.py.
 """
-from __future__ import print_function
-
 import sys
 
 import numpy as np
@@ -48,7 +46,7 @@ if __name__ == "__main__":
 
     if len(sys.argv) != 3:
         print("Usage: logistic_regression <file> <iterations>", file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
 
     print("""WARN: This is a naive implementation of Logistic Regression and is
       given as an example!

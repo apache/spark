@@ -22,9 +22,9 @@ import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.FileRegion;
-import io.netty.util.AbstractReferenceCounted;
+import org.apache.spark.network.util.AbstractFileRegion;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -49,7 +49,36 @@ public class MessageWithHeaderSuite {
 
   @Test
   public void testByteBufBody() throws Exception {
+    testByteBufBody(Unpooled.copyLong(42));
+  }
+
+  @Test
+  public void testCompositeByteBufBodySingleBuffer() throws Exception {
     ByteBuf header = Unpooled.copyLong(42);
+    CompositeByteBuf compositeByteBuf = Unpooled.compositeBuffer();
+    compositeByteBuf.addComponent(true, header);
+    assertEquals(1, compositeByteBuf.nioBufferCount());
+    testByteBufBody(compositeByteBuf);
+  }
+
+  @Test
+  public void testCompositeByteBufBodyMultipleBuffers() throws Exception {
+    ByteBuf header = Unpooled.copyLong(42);
+    CompositeByteBuf compositeByteBuf = Unpooled.compositeBuffer();
+    compositeByteBuf.addComponent(true, header.retainedSlice(0, 4));
+    compositeByteBuf.addComponent(true, header.slice(4, 4));
+    assertEquals(2, compositeByteBuf.nioBufferCount());
+    testByteBufBody(compositeByteBuf);
+  }
+
+  /**
+   * Test writing a {@link MessageWithHeader} using the given {@link ByteBuf} as header.
+   *
+   * @param header the header to use.
+   * @throws Exception thrown on error.
+   */
+  private void testByteBufBody(ByteBuf header) throws Exception {
+    long expectedHeaderValue = header.getLong(header.readerIndex());
     ByteBuf bodyPassedToNettyManagedBuffer = Unpooled.copyLong(84);
     assertEquals(1, header.refCnt());
     assertEquals(1, bodyPassedToNettyManagedBuffer.refCnt());
@@ -62,7 +91,7 @@ public class MessageWithHeaderSuite {
     MessageWithHeader msg = new MessageWithHeader(managedBuf, header, body, managedBuf.size());
     ByteBuf result = doWrite(msg, 1);
     assertEquals(msg.count(), result.readableBytes());
-    assertEquals(42, result.readLong());
+    assertEquals(expectedHeaderValue, result.readLong());
     assertEquals(84, result.readLong());
 
     assertTrue(msg.release());
@@ -108,7 +137,7 @@ public class MessageWithHeaderSuite {
     return Unpooled.wrappedBuffer(channel.getData());
   }
 
-  private static class TestFileRegion extends AbstractReferenceCounted implements FileRegion {
+  private static class TestFileRegion extends AbstractFileRegion {
 
     private final int writeCount;
     private final int writesPerCall;
@@ -130,7 +159,7 @@ public class MessageWithHeaderSuite {
     }
 
     @Override
-    public long transfered() {
+    public long transferred() {
       return 8 * written;
     }
 

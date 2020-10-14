@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Driver, DriverManager, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
+import java.sql.{Connection, Driver, DriverManager, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, SQLFeatureNotSupportedException}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -34,6 +34,8 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -48,6 +50,7 @@ object JdbcUtils extends Logging {
    * Returns a factory for creating connections to the given JDBC URL.
    *
    * @param options - JDBC options that contains url, table and other information.
+   * @throws IllegalArgumentException if the driver could not open a JDBC connection.
    */
   def createConnectionFactory(options: JDBCOptions): () => Connection = {
     val driverClass: String = options.driverClass
@@ -60,14 +63,18 @@ object JdbcUtils extends Logging {
         throw new IllegalStateException(
           s"Did not find registered driver with class $driverClass")
       }
-      driver.connect(options.url, options.asConnectionProperties)
+      val connection = ConnectionProvider.create(driver, options.parameters)
+      require(connection != null,
+        s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
+
+      connection
     }
   }
 
   /**
    * Returns true if the table already exists in the JDBC database.
    */
-  def tableExists(conn: Connection, options: JDBCOptions): Boolean = {
+  def tableExists(conn: Connection, options: JdbcOptionsInWrite): Boolean = {
     val dialect = JdbcDialects.get(options.url)
 
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
@@ -76,6 +83,7 @@ object JdbcUtils extends Logging {
     Try {
       val statement = conn.prepareStatement(dialect.getTableExistsQuery(options.table))
       try {
+        statement.setQueryTimeout(options.queryTimeout)
         statement.executeQuery()
       } finally {
         statement.close()
@@ -86,22 +94,24 @@ object JdbcUtils extends Logging {
   /**
    * Drops a table from the JDBC database.
    */
-  def dropTable(conn: Connection, table: String): Unit = {
-    val statement = conn.createStatement
-    try {
-      statement.executeUpdate(s"DROP TABLE $table")
-    } finally {
-      statement.close()
-    }
+  def dropTable(conn: Connection, table: String, options: JDBCOptions): Unit = {
+    executeStatement(conn, options, s"DROP TABLE $table")
   }
 
   /**
-   * Truncates a table from the JDBC database.
+   * Truncates a table from the JDBC database without side effects.
    */
-  def truncateTable(conn: Connection, table: String): Unit = {
+  def truncateTable(conn: Connection, options: JdbcOptionsInWrite): Unit = {
+    val dialect = JdbcDialects.get(options.url)
     val statement = conn.createStatement
     try {
-      statement.executeUpdate(s"TRUNCATE TABLE $table")
+      statement.setQueryTimeout(options.queryTimeout)
+      val truncateQuery = if (options.isCascadeTruncate.isDefined) {
+        dialect.getTruncateQuery(options.table, options.isCascadeTruncate)
+      } else {
+        dialect.getTruncateQuery(options.table)
+      }
+      statement.executeUpdate(truncateQuery)
     } finally {
       statement.close()
     }
@@ -169,9 +179,9 @@ object JdbcUtils extends Logging {
     }
   }
 
-  private def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
+  def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
     dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
-      throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.simpleString}"))
+      throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.catalogString}"))
   }
 
   /**
@@ -226,11 +236,10 @@ object JdbcUtils extends Logging {
       case java.sql.Types.STRUCT        => StringType
       case java.sql.Types.TIME          => TimestampType
       case java.sql.Types.TIME_WITH_TIMEZONE
-                                        => TimestampType
+                                        => null
       case java.sql.Types.TIMESTAMP     => TimestampType
       case java.sql.Types.TIMESTAMP_WITH_TIMEZONE
-                                        => TimestampType
-      case -101                         => TimestampType // Value for Timestamp with Time Zone in Oracle
+                                        => null
       case java.sql.Types.TINYINT       => IntegerType
       case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR       => StringType
@@ -252,8 +261,9 @@ object JdbcUtils extends Logging {
     val dialect = JdbcDialects.get(options.url)
 
     try {
-      val statement = conn.prepareStatement(dialect.getSchemaQuery(options.table))
+      val statement = conn.prepareStatement(dialect.getSchemaQuery(options.tableOrQuery))
       try {
+        statement.setQueryTimeout(options.queryTimeout)
         Some(getSchema(statement.executeQuery(), dialect))
       } catch {
         case _: SQLException => None
@@ -317,9 +327,9 @@ object JdbcUtils extends Logging {
   def resultSetToRows(resultSet: ResultSet, schema: StructType): Iterator[Row] = {
     val inputMetrics =
       Option(TaskContext.get()).map(_.taskMetrics().inputMetrics).getOrElse(new InputMetrics)
-    val encoder = RowEncoder(schema).resolveAndBind()
+    val fromRow = RowEncoder(schema).resolveAndBind().createDeserializer()
     val internalRows = resultSetToSparkInternalRows(resultSet, schema, inputMetrics)
-    internalRows.map(encoder.fromRow)
+    internalRows.map(fromRow)
   }
 
   private[spark] def resultSetToSparkInternalRows(
@@ -429,6 +439,10 @@ object JdbcUtils extends Logging {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setShort(pos, rs.getShort(pos + 1))
 
+    case ByteType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.setByte(pos, rs.getByte(pos + 1))
+
     case StringType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
@@ -457,8 +471,9 @@ object JdbcUtils extends Logging {
 
         case StringType =>
           (array: Object) =>
-            array.asInstanceOf[Array[java.lang.String]]
-              .map(UTF8String.fromString)
+            // some underling types are not String such as uuid, inet, cidr, etc.
+            array.asInstanceOf[Array[java.lang.Object]]
+              .map(obj => if (obj == null) null else UTF8String.fromString(obj.toString))
 
         case DateType =>
           (array: Object) =>
@@ -475,7 +490,7 @@ object JdbcUtils extends Logging {
 
         case LongType if metadata.contains("binarylong") =>
           throw new IllegalArgumentException(s"Unsupported array element " +
-            s"type ${dt.simpleString} based on binary")
+            s"type ${dt.catalogString} based on binary")
 
         case ArrayType(_, _) =>
           throw new IllegalArgumentException("Nested arrays unsupported")
@@ -489,7 +504,7 @@ object JdbcUtils extends Logging {
           array => new GenericArrayData(elementConversion.apply(array.getArray)))
         row.update(pos, array)
 
-    case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.simpleString}")
+    case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.catalogString}")
   }
 
   private def nullSafeConvert[T](input: T, f: T => Any): Any = {
@@ -586,6 +601,13 @@ object JdbcUtils extends Logging {
    * implementation changes elsewhere might easily render such a closure
    * non-Serializable.  Instead, we explicitly close over all variables that
    * are used.
+   *
+   * Note that this method records task output metrics. It assumes the method is
+   * running in a task. For now, we only records the number of rows being written
+   * because there's no good way to measure the total bytes being written. Only
+   * effective outputs are taken into account: for example, metric will not be updated
+   * if it supports transaction and transaction is rolled back, but metric will be
+   * updated even with error if it doesn't support transaction, as there're dirty outputs.
    */
   def savePartition(
       getConnection: () => Connection,
@@ -595,7 +617,10 @@ object JdbcUtils extends Logging {
       insertStmt: String,
       batchSize: Int,
       dialect: JdbcDialect,
-      isolationLevel: Int): Iterator[Byte] = {
+      isolationLevel: Int,
+      options: JDBCOptions): Unit = {
+    val outMetrics = TaskContext.get().taskMetrics().outputMetrics
+
     val conn = getConnection()
     var committed = false
 
@@ -623,7 +648,7 @@ object JdbcUtils extends Logging {
       }
     }
     val supportsTransactions = finalIsolationLevel != Connection.TRANSACTION_NONE
-
+    var totalRowCount = 0L
     try {
       if (supportsTransactions) {
         conn.setAutoCommit(false) // Everything in the same db transaction.
@@ -636,6 +661,9 @@ object JdbcUtils extends Logging {
 
       try {
         var rowCount = 0
+
+        stmt.setQueryTimeout(options.queryTimeout)
+
         while (iterator.hasNext) {
           val row = iterator.next()
           var i = 0
@@ -649,6 +677,7 @@ object JdbcUtils extends Logging {
           }
           stmt.addBatch()
           rowCount += 1
+          totalRowCount += 1
           if (rowCount % batchSize == 0) {
             stmt.executeBatch()
             rowCount = 0
@@ -664,7 +693,6 @@ object JdbcUtils extends Logging {
         conn.commit()
       }
       committed = true
-      Iterator.empty
     } catch {
       case e: SQLException =>
         val cause = e.getNextException
@@ -692,9 +720,13 @@ object JdbcUtils extends Logging {
         // tell the user about another problem.
         if (supportsTransactions) {
           conn.rollback()
+        } else {
+          outMetrics.setRecordsWritten(totalRowCount)
         }
         conn.close()
       } else {
+        outMetrics.setRecordsWritten(totalRowCount)
+
         // The stage must succeed.  We cannot propagate any exception close() might throw.
         try {
           conn.close()
@@ -709,15 +741,16 @@ object JdbcUtils extends Logging {
    * Compute the schema string for this RDD.
    */
   def schemaString(
-      df: DataFrame,
+      schema: StructType,
+      caseSensitive: Boolean,
       url: String,
       createTableColumnTypes: Option[String] = None): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
     val userSpecifiedColTypesMap = createTableColumnTypes
-      .map(parseUserSpecifiedCreateTableColumnTypes(df, _))
+      .map(parseUserSpecifiedCreateTableColumnTypes(schema, caseSensitive, _))
       .getOrElse(Map.empty[String, String])
-    df.schema.fields.foreach { field =>
+    schema.fields.foreach { field =>
       val name = dialect.quoteIdentifier(field.name)
       val typ = userSpecifiedColTypesMap
         .getOrElse(field.name, getJdbcType(field.dataType, dialect).databaseTypeDefinition)
@@ -733,7 +766,8 @@ object JdbcUtils extends Logging {
    * use in-place of the default data type.
    */
   private def parseUserSpecifiedCreateTableColumnTypes(
-      df: DataFrame,
+      schema: StructType,
+      caseSensitive: Boolean,
       createTableColumnTypes: String): Map[String, String] = {
     def typeName(f: StructField): String = {
       // char/varchar gets translated to string type. Real data type specified by the user
@@ -746,7 +780,11 @@ object JdbcUtils extends Logging {
     }
 
     val userSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
-    val nameEquality = df.sparkSession.sessionState.conf.resolver
+    val nameEquality = if (caseSensitive) {
+      org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
+    } else {
+      org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
+    }
 
     // checks duplicate columns in the user specified column types.
     SchemaUtils.checkColumnNameDuplication(
@@ -754,16 +792,15 @@ object JdbcUtils extends Logging {
 
     // checks if user specified column names exist in the DataFrame schema
     userSchema.fieldNames.foreach { col =>
-      df.schema.find(f => nameEquality(f.name, col)).getOrElse {
+      schema.find(f => nameEquality(f.name, col)).getOrElse {
         throw new AnalysisException(
           s"createTableColumnTypes option column $col not found in schema " +
-            df.schema.catalogString)
+            schema.catalogString)
       }
     }
 
     val userSchemaMap = userSchema.fields.map(f => f.name -> typeName(f)).toMap
-    val isCaseSensitive = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
-    if (isCaseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
+    if (caseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
   }
 
   /**
@@ -777,8 +814,10 @@ object JdbcUtils extends Logging {
     if (null != customSchema && customSchema.nonEmpty) {
       val userSchema = CatalystSqlParser.parseTableSchema(customSchema)
 
-      SchemaUtils.checkColumnNameDuplication(
-        userSchema.map(_.name), "in the customSchema option value", nameEquality)
+      SchemaUtils.checkSchemaColumnNameDuplication(
+        userSchema,
+        "in the customSchema option value",
+        nameEquality)
 
       // This is resolved by names, use the custom filed dataType to replace the default dataType.
       val newSchema = tableSchema.map { col =>
@@ -800,7 +839,7 @@ object JdbcUtils extends Logging {
       df: DataFrame,
       tableSchema: Option[StructType],
       isCaseSensitive: Boolean,
-      options: JDBCOptions): Unit = {
+      options: JdbcOptionsInWrite): Unit = {
     val url = options.url
     val table = options.table
     val dialect = JdbcDialects.get(url)
@@ -817,9 +856,10 @@ object JdbcUtils extends Logging {
       case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
       case _ => df
     }
-    repartitionedDF.rdd.foreachPartition(iterator => savePartition(
-      getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel)
-    )
+    repartitionedDF.rdd.foreachPartition { iterator => savePartition(
+      getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel,
+      options)
+    }
   }
 
   /**
@@ -827,19 +867,74 @@ object JdbcUtils extends Logging {
    */
   def createTable(
       conn: Connection,
-      df: DataFrame,
-      options: JDBCOptions): Unit = {
+      tableName: String,
+      schema: StructType,
+      caseSensitive: Boolean,
+      options: JdbcOptionsInWrite): Unit = {
     val strSchema = schemaString(
-      df, options.url, options.createTableColumnTypes)
-    val table = options.table
+      schema, caseSensitive, options.url, options.createTableColumnTypes)
     val createTableOptions = options.createTableOptions
     // Create the table if the table does not exist.
     // To allow certain options to append when create a new table, which can be
     // table_options or partition_options.
     // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
-    val sql = s"CREATE TABLE $table ($strSchema) $createTableOptions"
+    val sql = s"CREATE TABLE $tableName ($strSchema) $createTableOptions"
+    executeStatement(conn, options, sql)
+  }
+
+  /**
+   * Rename a table from the JDBC database.
+   */
+  def renameTable(
+      conn: Connection,
+      oldTable: String,
+      newTable: String,
+      options: JDBCOptions): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    executeStatement(conn, options, dialect.renameTable(oldTable, newTable))
+  }
+
+  /**
+   * Update a table from the JDBC database.
+   */
+  def alterTable(
+      conn: Connection,
+      tableName: String,
+      changes: Seq[TableChange],
+      options: JDBCOptions): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    if (changes.length == 1) {
+      executeStatement(conn, options, dialect.alterTable(tableName, changes)(0))
+    } else {
+      val metadata = conn.getMetaData
+      if (!metadata.supportsTransactions) {
+        throw new SQLFeatureNotSupportedException("The target JDBC server does not support " +
+          "transaction and can only support ALTER TABLE with a single action.")
+      } else {
+        conn.setAutoCommit(false)
+        val statement = conn.createStatement
+        try {
+          statement.setQueryTimeout(options.queryTimeout)
+          for (sql <- dialect.alterTable(tableName, changes)) {
+            statement.executeUpdate(sql)
+          }
+          conn.commit()
+        } catch {
+          case e: Exception =>
+            if (conn != null) conn.rollback()
+            throw e
+        } finally {
+          statement.close()
+          conn.setAutoCommit(true)
+        }
+      }
+    }
+  }
+
+  private def executeStatement(conn: Connection, options: JDBCOptions, sql: String): Unit = {
     val statement = conn.createStatement
     try {
+      statement.setQueryTimeout(options.queryTimeout)
       statement.executeUpdate(sql)
     } finally {
       statement.close()

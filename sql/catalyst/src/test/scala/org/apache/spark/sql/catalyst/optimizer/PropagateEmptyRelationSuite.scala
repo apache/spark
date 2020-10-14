@@ -21,10 +21,11 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StructType}
 
 class PropagateEmptyRelationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -34,9 +35,10 @@ class PropagateEmptyRelationSuite extends PlanTest {
         ReplaceDistinctWithAggregate,
         ReplaceExceptWithAntiJoin,
         ReplaceIntersectWithSemiJoin,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         PruneFilters,
-        PropagateEmptyRelation) :: Nil
+        PropagateEmptyRelation,
+        CollapseProject) :: Nil
   }
 
   object OptimizeWithoutPropagateEmptyRelation extends RuleExecutor[LogicalPlan] {
@@ -46,12 +48,16 @@ class PropagateEmptyRelationSuite extends PlanTest {
         ReplaceDistinctWithAggregate,
         ReplaceExceptWithAntiJoin,
         ReplaceIntersectWithSemiJoin,
-        PushDownPredicate,
-        PruneFilters) :: Nil
+        PushPredicateThroughNonJoin,
+        PruneFilters,
+        CollapseProject) :: Nil
   }
 
   val testRelation1 = LocalRelation.fromExternalRows(Seq('a.int), data = Seq(Row(1)))
   val testRelation2 = LocalRelation.fromExternalRows(Seq('b.int), data = Seq(Row(1)))
+  val metadata = new MetadataBuilder().putLong("test", 1).build()
+  val testRelation3 =
+    LocalRelation.fromExternalRows(Seq('c.int.notNull.withMetadata(metadata)), data = Seq(Row(1)))
 
   test("propagate empty relation through Union") {
     val query = testRelation1
@@ -62,6 +68,39 @@ class PropagateEmptyRelationSuite extends PlanTest {
     val correctAnswer = LocalRelation('a.int)
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-32241: remove empty relation children from Union") {
+    val query = testRelation1.union(testRelation2.where(false))
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = testRelation1
+    comparePlans(optimized, correctAnswer)
+
+    val query2 = testRelation1.where(false).union(testRelation2)
+    val optimized2 = Optimize.execute(query2.analyze)
+    val correctAnswer2 = testRelation2.select('b.as('a)).analyze
+    comparePlans(optimized2, correctAnswer2)
+
+    val query3 = testRelation1.union(testRelation2.where(false)).union(testRelation3)
+    val optimized3 = Optimize.execute(query3.analyze)
+    val correctAnswer3 = testRelation1.union(testRelation3)
+    comparePlans(optimized3, correctAnswer3)
+
+    val query4 = testRelation1.where(false).union(testRelation2).union(testRelation3)
+    val optimized4 = Optimize.execute(query4.analyze)
+    val correctAnswer4 = testRelation2.union(testRelation3).select('b.as('a)).analyze
+    comparePlans(optimized4, correctAnswer4)
+
+    // Nullability can change from nullable to non-nullable
+    val query5 = testRelation1.where(false).union(testRelation3)
+    val optimized5 = Optimize.execute(query5.analyze)
+    assert(query5.output.head.nullable, "Original output should be nullable")
+    assert(!optimized5.output.head.nullable, "New output should be non-nullable")
+
+    // Keep metadata
+    val query6 = testRelation3.where(false).union(testRelation1)
+    val optimized6 = Optimize.execute(query6.analyze)
+    assert(optimized6.output.head.metadata == metadata, "New output should keep metadata")
   }
 
   test("propagate empty relation through Join") {
@@ -78,17 +117,21 @@ class PropagateEmptyRelationSuite extends PlanTest {
 
       (true, false, Inner, Some(LocalRelation('a.int, 'b.int))),
       (true, false, Cross, Some(LocalRelation('a.int, 'b.int))),
-      (true, false, LeftOuter, None),
+      (true, false, LeftOuter,
+        Some(Project(Seq('a, Literal(null).cast(IntegerType).as('b)), testRelation1).analyze)),
       (true, false, RightOuter, Some(LocalRelation('a.int, 'b.int))),
-      (true, false, FullOuter, None),
-      (true, false, LeftAnti, None),
-      (true, false, LeftSemi, None),
+      (true, false, FullOuter,
+        Some(Project(Seq('a, Literal(null).cast(IntegerType).as('b)), testRelation1).analyze)),
+      (true, false, LeftAnti, Some(testRelation1)),
+      (true, false, LeftSemi, Some(LocalRelation('a.int))),
 
       (false, true, Inner, Some(LocalRelation('a.int, 'b.int))),
       (false, true, Cross, Some(LocalRelation('a.int, 'b.int))),
       (false, true, LeftOuter, Some(LocalRelation('a.int, 'b.int))),
-      (false, true, RightOuter, None),
-      (false, true, FullOuter, None),
+      (false, true, RightOuter,
+        Some(Project(Seq(Literal(null).cast(IntegerType).as('a), 'b), testRelation2).analyze)),
+      (false, true, FullOuter,
+        Some(Project(Seq(Literal(null).cast(IntegerType).as('a), 'b), testRelation2).analyze)),
       (false, true, LeftAnti, Some(LocalRelation('a.int))),
       (false, true, LeftSemi, Some(LocalRelation('a.int))),
 
@@ -140,7 +183,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
       .where(false)
       .select('a)
       .where('a > 1)
-      .where('a != 200)
+      .where('a =!= 200)
       .orderBy('a.asc)
 
     val optimized = Optimize.execute(query.analyze)
@@ -206,5 +249,18 @@ class PropagateEmptyRelationSuite extends PlanTest {
     val correctAnswer = LocalRelation('a.int).groupBy()().analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("propagate empty relation keeps the plan resolved") {
+    val query = testRelation1.join(
+      LocalRelation('a.int, 'b.int), UsingJoin(FullOuter, "a" :: Nil), None)
+    val optimized = Optimize.execute(query.analyze)
+    assert(optimized.resolved)
+  }
+
+  test("should not optimize away limit if streaming") {
+    val query = LocalRelation(Nil, Nil, isStreaming = true).limit(1).analyze
+    val optimized = Optimize.execute(query)
+    comparePlans(optimized, query)
   }
 }

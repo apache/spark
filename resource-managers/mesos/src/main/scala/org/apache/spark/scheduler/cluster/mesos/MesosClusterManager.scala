@@ -17,7 +17,8 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.SparkContext
+import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 
@@ -42,7 +43,7 @@ private[spark] class MesosClusterManager extends ExternalClusterManager {
       "I/O encryption is currently not supported in Mesos.")
 
     val mesosUrl = MESOS_REGEX.findFirstMatchIn(masterURL).get.group(1)
-    val coarse = sc.conf.getBoolean("spark.mesos.coarse", defaultValue = true)
+    val coarse = sc.conf.get(COARSE_MODE)
     if (coarse) {
       new MesosCoarseGrainedSchedulerBackend(
         scheduler.asInstanceOf[TaskSchedulerImpl],

@@ -15,18 +15,15 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
-# $example on$
-from pyspark.ml.clustering import GaussianMixture
-# $example off$
-from pyspark.sql import SparkSession
-
 """
 A simple example demonstrating Gaussian Mixture Model (GMM).
 Run with:
   bin/spark-submit examples/src/main/python/ml/gaussian_mixture_example.py
 """
+# $example on$
+from pyspark.ml.clustering import GaussianMixture
+# $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
     spark = SparkSession\

@@ -22,9 +22,7 @@ import com.typesafe.tools.mima.core._
 import com.typesafe.tools.mima.core.MissingClassProblem
 import com.typesafe.tools.mima.core.MissingTypesProblem
 import com.typesafe.tools.mima.core.ProblemFilters._
-import com.typesafe.tools.mima.plugin.MimaKeys.{mimaBinaryIssueFilters, mimaPreviousArtifacts}
-import com.typesafe.tools.mima.plugin.MimaPlugin.mimaDefaultSettings
-
+import com.typesafe.tools.mima.plugin.MimaKeys.{mimaBinaryIssueFilters, mimaPreviousArtifacts, mimaFailOnNoPrevious}
 
 object MimaBuild {
 
@@ -44,7 +42,7 @@ object MimaBuild {
 
   // Exclude a single class
   def excludeClass(className: String) = Seq(
-      excludePackage(className),
+      ProblemFilters.exclude[Problem](className + ".*"),
       ProblemFilters.exclude[MissingClassProblem](className),
       ProblemFilters.exclude[MissingTypesProblem](className)
     )
@@ -56,7 +54,7 @@ object MimaBuild {
 
   // Exclude a Spark package, that is in the package org.apache.spark
   def excludeSparkPackage(packageName: String) = {
-    excludePackage("org.apache.spark." + packageName)
+    ProblemFilters.exclude[Problem]("org.apache.spark." + packageName + ".*")
   }
 
   def ignoredABIProblems(base: File, currentSparkVersion: String) = {
@@ -86,14 +84,17 @@ object MimaBuild {
     ignoredMembers.flatMap(excludeMember) ++ MimaExcludes.excludes(currentSparkVersion)
   }
 
-  def mimaSettings(sparkHome: File, projectRef: ProjectRef) = {
+  def mimaSettings(sparkHome: File, projectRef: ProjectRef): Seq[Setting[_]] = {
     val organization = "org.apache.spark"
-    val previousSparkVersion = "2.0.0"
+    val previousSparkVersion = "3.0.0"
     val project = projectRef.project
-    val fullId = "spark-" + project + "_2.11"
-    mimaDefaultSettings ++
-    Seq(mimaPreviousArtifacts := Set(organization % fullId % previousSparkVersion),
-      mimaBinaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value))
+    val fullId = "spark-" + project + "_2.12"
+
+    Seq(
+      mimaFailOnNoPrevious := true,
+      mimaPreviousArtifacts := Set(organization % fullId % previousSparkVersion),
+      mimaBinaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value)
+    )
   }
 
 }

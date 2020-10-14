@@ -18,11 +18,8 @@
 package org.apache.spark.repl
 
 import java.io._
-import java.net.URLClassLoader
 
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.Utils
@@ -42,19 +39,9 @@ class SingletonReplSuite extends SparkFunSuite {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    val cl = getClass.getClassLoader
-    var paths = new ArrayBuffer[String]
-    if (cl.isInstanceOf[URLClassLoader]) {
-      val urlLoader = cl.asInstanceOf[URLClassLoader]
-      for (url <- urlLoader.getURLs) {
-        if (url.getProtocol == "file") {
-          paths += url.getFile
-        }
-      }
-    }
-    val classpath = paths.map(new File(_).getAbsolutePath).mkString(File.pathSeparator)
-
+    val classpath = System.getProperty("java.class.path")
     System.setProperty(CONF_EXECUTOR_CLASSPATH, classpath)
+
     Main.conf.set("spark.master", "local-cluster[2,1,1024]")
     val interp = new SparkILoop(
       new BufferedReader(new InputStreamReader(new PipedInputStream(in))),
@@ -65,9 +52,7 @@ class SingletonReplSuite extends SparkFunSuite {
     Main.sparkSession = null
 
     // Starts a new thread to run the REPL interpreter, so that we won't block.
-    thread = new Thread(new Runnable {
-      override def run(): Unit = Main.doMain(Array("-classpath", classpath), interp)
-    })
+    thread = new Thread(() => Main.doMain(Array("-classpath", classpath), interp))
     thread.setDaemon(true)
     thread.start()
 
@@ -110,13 +95,13 @@ class SingletonReplSuite extends SparkFunSuite {
     out.getBuffer.substring(currentOffset)
   }
 
-  def assertContains(message: String, output: String) {
+  def assertContains(message: String, output: String): Unit = {
     val isContain = output.contains(message)
     assert(isContain,
       "Interpreter output did not contain '" + message + "':\n" + output)
   }
 
-  def assertDoesNotContain(message: String, output: String) {
+  def assertDoesNotContain(message: String, output: String): Unit = {
     val isContain = output.contains(message)
     assert(!isContain,
       "Interpreter output contained '" + message + "':\n" + output)
@@ -350,7 +335,7 @@ class SingletonReplSuite extends SparkFunSuite {
       """
         |val timeout = 60000 // 60 seconds
         |val start = System.currentTimeMillis
-        |while(sc.getExecutorStorageStatus.size != 3 &&
+        |while(sc.statusTracker.getExecutorInfos.size != 3 &&
         |    (System.currentTimeMillis - start) < timeout) {
         |  Thread.sleep(10)
         |}
@@ -361,11 +346,11 @@ class SingletonReplSuite extends SparkFunSuite {
         |case class Foo(i: Int)
         |val ret = sc.parallelize((1 to 100).map(Foo), 10).persist(MEMORY_AND_DISK_2)
         |ret.count()
-        |val res = sc.getExecutorStorageStatus.map(s => s.rddBlocksById(ret.id).size).sum
+        |val res = sc.getRDDStorageInfo.filter(_.id == ret.id).map(_.numCachedPartitions).sum
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
-    assertContains("res: Int = 20", output)
+    assertContains("res: Int = 10", output)
   }
 
   test("should clone and clean line object in ClosureCleaner") {
@@ -402,6 +387,22 @@ class SingletonReplSuite extends SparkFunSuite {
         |spark.implicits.newProductSeqEncoder[Click]
       """.stripMargin)
 
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+  }
+
+  test("create encoder in executors") {
+    val output = runInterpreter(
+      """
+        |case class Foo(s: String)
+        |
+        |import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+        |
+        |val r =
+        |  sc.parallelize(1 to 1).map { i => ExpressionEncoder[Foo](); Foo("bar") }.collect.head
+      """.stripMargin)
+
+    assertContains("r: Foo = Foo(bar)", output)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
   }

@@ -23,9 +23,9 @@
 # found at dev/run-tests-jenkins.
 #
 # Arg1: The Github Pull Request Actual Commit
-#+ known as `ghprbActualCommit` in `run-tests-jenkins`
+# known as `ghprbActualCommit` in `run-tests-jenkins`
 # Arg2: The SHA1 hash
-#+ known as `sha1` in `run-tests-jenkins`
+# known as `sha1` in `run-tests-jenkins`
 #
 
 ghprbActualCommit="$1"

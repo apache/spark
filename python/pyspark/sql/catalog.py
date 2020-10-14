@@ -15,14 +15,13 @@
 # limitations under the License.
 #
 
+import sys
 import warnings
 from collections import namedtuple
 
 from pyspark import since
-from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.functions import UserDefinedFunction
-from pyspark.sql.types import IntegerType, StringType, StructType
+from pyspark.sql.types import StructType
 
 
 Database = namedtuple("Database", "name description locationUri")
@@ -43,19 +42,16 @@ class Catalog(object):
         self._jsparkSession = sparkSession._jsparkSession
         self._jcatalog = sparkSession._jsparkSession.catalog()
 
-    @ignore_unicode_prefix
     @since(2.0)
     def currentDatabase(self):
         """Returns the current default database in this session."""
         return self._jcatalog.currentDatabase()
 
-    @ignore_unicode_prefix
     @since(2.0)
     def setCurrentDatabase(self, dbName):
         """Sets the current default database in this session."""
         return self._jcatalog.setCurrentDatabase(dbName)
 
-    @ignore_unicode_prefix
     @since(2.0)
     def listDatabases(self):
         """Returns a list of databases available across all sessions."""
@@ -69,7 +65,6 @@ class Catalog(object):
                 locationUri=jdb.locationUri()))
         return databases
 
-    @ignore_unicode_prefix
     @since(2.0)
     def listTables(self, dbName=None):
         """Returns a list of tables/views in the specified database.
@@ -91,7 +86,6 @@ class Catalog(object):
                 isTemporary=jtable.isTemporary()))
         return tables
 
-    @ignore_unicode_prefix
     @since(2.0)
     def listFunctions(self, dbName=None):
         """Returns a list of functions registered in the specified database.
@@ -112,7 +106,6 @@ class Catalog(object):
                 isTemporary=jfunction.isTemporary()))
         return functions
 
-    @ignore_unicode_prefix
     @since(2.0)
     def listColumns(self, tableName, dbName=None):
         """Returns a list of columns for the given table/view in the specified database.
@@ -158,7 +151,8 @@ class Catalog(object):
         return self.createTable(tableName, path, source, schema, **options)
 
     @since(2.2)
-    def createTable(self, tableName, path=None, source=None, schema=None, **options):
+    def createTable(
+            self, tableName, path=None, source=None, schema=None, description=None, **options):
         """Creates a table based on the dataset in a data source.
 
         It returns the DataFrame associated with the table.
@@ -171,20 +165,25 @@ class Catalog(object):
         Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
         created table.
 
+        .. versionchanged:: 3.1
+           Added the ``description`` parameter.
+
         :return: :class:`DataFrame`
         """
         if path is not None:
             options["path"] = path
         if source is None:
-            source = self._sparkSession.conf.get(
-                "spark.sql.sources.default", "org.apache.spark.sql.parquet")
+            source = self._sparkSession._wrapped._conf.defaultDataSourceName()
+        if description is None:
+            description = ""
         if schema is None:
-            df = self._jcatalog.createTable(tableName, source, options)
+            df = self._jcatalog.createTable(tableName, source, description, options)
         else:
             if not isinstance(schema, StructType):
                 raise TypeError("schema should be StructType")
             scala_datatype = self._jsparkSession.parseDataType(schema.json())
-            df = self._jcatalog.createTable(tableName, source, scala_datatype, options)
+            df = self._jcatalog.createTable(
+                tableName, source, scala_datatype, description, options)
         return DataFrame(df, self._sparkSession._wrapped)
 
     @since(2.0)
@@ -224,41 +223,17 @@ class Catalog(object):
         """
         self._jcatalog.dropGlobalTempView(viewName)
 
-    @ignore_unicode_prefix
     @since(2.0)
-    def registerFunction(self, name, f, returnType=StringType()):
-        """Registers a python function (including lambda function) as a UDF
-        so it can be used in SQL statements.
+    def registerFunction(self, name, f, returnType=None):
+        """An alias for :func:`spark.udf.register`.
+        See :meth:`pyspark.sql.UDFRegistration.register`.
 
-        In addition to a name and the function itself, the return type can be optionally specified.
-        When the return type is not given it default to a string and conversion will automatically
-        be done.  For any other return type, the produced object must match the specified type.
-
-        :param name: name of the UDF
-        :param f: python function
-        :param returnType: a :class:`pyspark.sql.types.DataType` object
-        :return: a wrapped :class:`UserDefinedFunction`
-
-        >>> strlen = spark.catalog.registerFunction("stringLengthString", len)
-        >>> spark.sql("SELECT stringLengthString('test')").collect()
-        [Row(stringLengthString(test)=u'4')]
-
-        >>> spark.sql("SELECT 'foo' AS text").select(strlen("text")).collect()
-        [Row(stringLengthString(text)=u'3')]
-
-        >>> from pyspark.sql.types import IntegerType
-        >>> _ = spark.catalog.registerFunction("stringLengthInt", len, IntegerType())
-        >>> spark.sql("SELECT stringLengthInt('test')").collect()
-        [Row(stringLengthInt(test)=4)]
-
-        >>> from pyspark.sql.types import IntegerType
-        >>> _ = spark.udf.register("stringLengthInt", len, IntegerType())
-        >>> spark.sql("SELECT stringLengthInt('test')").collect()
-        [Row(stringLengthInt(test)=4)]
+        .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.register` instead.
         """
-        udf = UserDefinedFunction(f, returnType, name)
-        self._jsparkSession.udf().registerPython(name, udf._judf)
-        return udf._wrapped()
+        warnings.warn(
+            "Deprecated in 2.3.0. Use spark.udf.register instead.",
+            DeprecationWarning)
+        return self._sparkSession.udf.register(name, f, returnType)
 
     @since(2.0)
     def isCached(self, tableName):
@@ -330,7 +305,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

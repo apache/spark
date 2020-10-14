@@ -23,7 +23,7 @@
 # found at dev/run-tests-jenkins.
 #
 # Arg1: The Github Pull Request Actual Commit
-#+ known as `ghprbActualCommit` in `run-tests-jenkins`
+# known as `ghprbActualCommit` in `run-tests-jenkins`
 
 ghprbActualCommit="$1"
 
@@ -31,7 +31,7 @@ ghprbActualCommit="$1"
 # master commit and the tip of the pull request branch.
 
 # By diffing$ghprbActualCommit^...$ghprbActualCommit and filtering to examine the diffs of only
-# non-test files, we can gets us changes introduced in the PR and not anything else added to master
+# non-test files, we can get changes introduced in the PR and not anything else added to master
 # since the PR was branched.
 
 # Handle differences between GNU and BSD sed

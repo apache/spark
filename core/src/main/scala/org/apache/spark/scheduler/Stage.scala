@@ -21,7 +21,7 @@ import scala.collection.mutable.HashSet
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.util.CallSite
 
 /**
@@ -59,7 +59,8 @@ private[scheduler] abstract class Stage(
     val numTasks: Int,
     val parents: List[Stage],
     val firstJobId: Int,
-    val callSite: CallSite)
+    val callSite: CallSite,
+    val resourceProfileId: Int)
   extends Logging {
 
   val numPartitions = rdd.partitions.length
@@ -79,18 +80,19 @@ private[scheduler] abstract class Stage(
    * StageInfo to tell SparkListeners when a job starts (which happens before any stage attempts
    * have been created).
    */
-  private var _latestInfo: StageInfo = StageInfo.fromStage(this, nextAttemptId)
+  private var _latestInfo: StageInfo =
+    StageInfo.fromStage(this, nextAttemptId, resourceProfileId = resourceProfileId)
 
   /**
-   * Set of stage attempt IDs that have failed with a FetchFailure. We keep track of these
-   * failures in order to avoid endless retries if a stage keeps failing with a FetchFailure.
+   * Set of stage attempt IDs that have failed. We keep track of these failures in order to avoid
+   * endless retries if a stage keeps failing.
    * We keep track of each attempt ID that has failed to avoid recording duplicate failures if
    * multiple tasks from the same stage attempt fail (SPARK-5945).
    */
-  val fetchFailedAttemptIds = new HashSet[Int]
+  val failedAttemptIds = new HashSet[Int]
 
   private[scheduler] def clearFailures() : Unit = {
-    fetchFailedAttemptIds.clear()
+    failedAttemptIds.clear()
   }
 
   /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
@@ -100,7 +102,8 @@ private[scheduler] abstract class Stage(
     val metrics = new TaskMetrics
     metrics.register(rdd.sparkContext)
     _latestInfo = StageInfo.fromStage(
-      this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences)
+      this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences,
+      resourceProfileId = resourceProfileId)
     nextAttemptId += 1
   }
 
@@ -116,4 +119,8 @@ private[scheduler] abstract class Stage(
 
   /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
   def findMissingPartitions(): Seq[Int]
+
+  def isIndeterminate: Boolean = {
+    rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
+  }
 }

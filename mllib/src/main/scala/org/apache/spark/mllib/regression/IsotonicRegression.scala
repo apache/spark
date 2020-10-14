@@ -160,8 +160,6 @@ class IsotonicRegressionModel @Since("1.3.0") (
   override def save(sc: SparkContext, path: String): Unit = {
     IsotonicRegressionModel.SaveLoadV1_0.save(sc, path, boundaries, predictions, isotonic)
   }
-
-  override protected def formatVersion: String = "1.0"
 }
 
 @Since("1.4.0")

@@ -112,9 +112,7 @@ object SortPrefixUtils {
       val field = schema.head
       getPrefixComparator(SortOrder(BoundReference(0, field.dataType, field.nullable), Ascending))
     } else {
-      new PrefixComparator {
-        override def compare(prefix1: Long, prefix2: Long): Int = 0
-      }
+      (_: Long, _: Long) => 0
     }
   }
 
@@ -164,12 +162,7 @@ object SortPrefixUtils {
         }
       }
     } else {
-      new UnsafeExternalRowSorter.PrefixComputer {
-        override def computePrefix(row: InternalRow):
-            UnsafeExternalRowSorter.PrefixComputer.Prefix = {
-          emptyPrefix
-        }
-      }
+      _: InternalRow => emptyPrefix
     }
   }
 }

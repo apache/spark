@@ -57,10 +57,16 @@ private[spark] trait SparkListenerBus
         listener.onApplicationEnd(applicationEnd)
       case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
         listener.onExecutorMetricsUpdate(metricsUpdate)
+      case stageExecutorMetrics: SparkListenerStageExecutorMetrics =>
+        listener.onStageExecutorMetrics(stageExecutorMetrics)
       case executorAdded: SparkListenerExecutorAdded =>
         listener.onExecutorAdded(executorAdded)
       case executorRemoved: SparkListenerExecutorRemoved =>
         listener.onExecutorRemoved(executorRemoved)
+      case executorBlacklistedForStage: SparkListenerExecutorBlacklistedForStage =>
+        listener.onExecutorBlacklistedForStage(executorBlacklistedForStage)
+      case nodeBlacklistedForStage: SparkListenerNodeBlacklistedForStage =>
+        listener.onNodeBlacklistedForStage(nodeBlacklistedForStage)
       case executorBlacklisted: SparkListenerExecutorBlacklisted =>
         listener.onExecutorBlacklisted(executorBlacklisted)
       case executorUnblacklisted: SparkListenerExecutorUnblacklisted =>
@@ -73,6 +79,12 @@ private[spark] trait SparkListenerBus
         listener.onBlockUpdated(blockUpdated)
       case speculativeTaskSubmitted: SparkListenerSpeculativeTaskSubmitted =>
         listener.onSpeculativeTaskSubmitted(speculativeTaskSubmitted)
+      case unschedulableTaskSetAdded: SparkListenerUnschedulableTaskSetAdded =>
+        listener.onUnschedulableTaskSetAdded(unschedulableTaskSetAdded)
+      case unschedulableTaskSetRemoved: SparkListenerUnschedulableTaskSetRemoved =>
+        listener.onUnschedulableTaskSetRemoved(unschedulableTaskSetRemoved)
+      case resourceProfileAdded: SparkListenerResourceProfileAdded =>
+        listener.onResourceProfileAdded(resourceProfileAdded)
       case _ => listener.onOtherEvent(event)
     }
   }

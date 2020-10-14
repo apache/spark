@@ -17,14 +17,22 @@
 
 import py4j
 
+from pyspark import SparkContext
+
 
 class CapturedException(Exception):
-    def __init__(self, desc, stackTrace):
+    def __init__(self, desc, stackTrace, cause=None):
         self.desc = desc
         self.stackTrace = stackTrace
+        self.cause = convert_exception(cause) if cause is not None else None
 
     def __str__(self):
-        return repr(self.desc)
+        sql_conf = SparkContext._jvm.org.apache.spark.sql.internal.SQLConf.get()
+        debug_enabled = sql_conf.pysparkJVMStacktraceEnabled()
+        desc = self.desc
+        if debug_enabled:
+            desc = desc + "\n\nJVM stacktrace:\n%s" % self.stackTrace
+        return str(desc)
 
 
 class AnalysisException(CapturedException):
@@ -57,27 +65,58 @@ class QueryExecutionException(CapturedException):
     """
 
 
+class PythonException(CapturedException):
+    """
+    Exceptions thrown from Python workers.
+    """
+
+
+class UnknownException(CapturedException):
+    """
+    None of the above exceptions.
+    """
+
+
+def convert_exception(e):
+    s = e.toString()
+    c = e.getCause()
+    stacktrace = SparkContext._jvm.org.apache.spark.util.Utils.exceptionString(e)
+
+    if s.startswith('org.apache.spark.sql.AnalysisException: '):
+        return AnalysisException(s.split(': ', 1)[1], stacktrace, c)
+    if s.startswith('org.apache.spark.sql.catalyst.analysis'):
+        return AnalysisException(s.split(': ', 1)[1], stacktrace, c)
+    if s.startswith('org.apache.spark.sql.catalyst.parser.ParseException: '):
+        return ParseException(s.split(': ', 1)[1], stacktrace, c)
+    if s.startswith('org.apache.spark.sql.streaming.StreamingQueryException: '):
+        return StreamingQueryException(s.split(': ', 1)[1], stacktrace, c)
+    if s.startswith('org.apache.spark.sql.execution.QueryExecutionException: '):
+        return QueryExecutionException(s.split(': ', 1)[1], stacktrace, c)
+    if s.startswith('java.lang.IllegalArgumentException: '):
+        return IllegalArgumentException(s.split(': ', 1)[1], stacktrace, c)
+    if c is not None and (
+            c.toString().startswith('org.apache.spark.api.python.PythonException: ')
+            # To make sure this only catches Python UDFs.
+            and any(map(lambda v: "org.apache.spark.sql.execution.python" in v.toString(),
+                        c.getStackTrace()))):
+        msg = ("\n  An exception was thrown from the Python worker. "
+               "Please see the stack trace below.\n%s" % c.getMessage())
+        return PythonException(msg, stacktrace)
+    return UnknownException(s, stacktrace, c)
+
+
 def capture_sql_exception(f):
     def deco(*a, **kw):
         try:
             return f(*a, **kw)
         except py4j.protocol.Py4JJavaError as e:
-            s = e.java_exception.toString()
-            stackTrace = '\n\t at '.join(map(lambda x: x.toString(),
-                                             e.java_exception.getStackTrace()))
-            if s.startswith('org.apache.spark.sql.AnalysisException: '):
-                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.catalyst.analysis'):
-                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.catalyst.parser.ParseException: '):
-                raise ParseException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.streaming.StreamingQueryException: '):
-                raise StreamingQueryException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.execution.QueryExecutionException: '):
-                raise QueryExecutionException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('java.lang.IllegalArgumentException: '):
-                raise IllegalArgumentException(s.split(': ', 1)[1], stackTrace)
-            raise
+            converted = convert_exception(e.java_exception)
+            if not isinstance(converted, UnknownException):
+                # Hide where the exception came from that shows a non-Pythonic
+                # JVM exception message.
+                raise converted from None
+            else:
+                raise
     return deco
 
 
@@ -110,3 +149,58 @@ def toJArray(gateway, jtype, arr):
     for i in range(0, len(arr)):
         jarr[i] = arr[i]
     return jarr
+
+
+def require_test_compiled():
+    """ Raise Exception if test classes are not compiled
+    """
+    import os
+    import glob
+    try:
+        spark_home = os.environ['SPARK_HOME']
+    except KeyError:
+        raise RuntimeError('SPARK_HOME is not defined in environment')
+
+    test_class_path = os.path.join(
+        spark_home, 'sql', 'core', 'target', '*', 'test-classes')
+    paths = glob.glob(test_class_path)
+
+    if len(paths) == 0:
+        raise RuntimeError(
+            "%s doesn't exist. Spark sql test classes are not compiled." % test_class_path)
+
+
+class ForeachBatchFunction(object):
+    """
+    This is the Python implementation of Java interface 'ForeachBatchFunction'. This wraps
+    the user-defined 'foreachBatch' function such that it can be called from the JVM when
+    the query is active.
+    """
+
+    def __init__(self, sql_ctx, func):
+        self.sql_ctx = sql_ctx
+        self.func = func
+
+    def call(self, jdf, batch_id):
+        from pyspark.sql.dataframe import DataFrame
+        try:
+            self.func(DataFrame(jdf, self.sql_ctx), batch_id)
+        except Exception as e:
+            self.error = e
+            raise e
+
+    class Java:
+        implements = ['org.apache.spark.sql.execution.streaming.sources.PythonForeachBatchFunction']
+
+
+def to_str(value):
+    """
+    A wrapper over str(), but converts bool values to lower case strings.
+    If None is given, just returns None, instead of converting it to string "None".
+    """
+    if isinstance(value, bool):
+        return str(value).lower()
+    elif value is None:
+        return value
+    else:
+        return str(value)

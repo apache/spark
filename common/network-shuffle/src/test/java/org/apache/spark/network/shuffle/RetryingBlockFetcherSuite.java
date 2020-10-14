@@ -46,9 +46,9 @@ import static org.apache.spark.network.shuffle.RetryingBlockFetcher.BlockFetchSt
  */
 public class RetryingBlockFetcherSuite {
 
-  ManagedBuffer block0 = new NioManagedBuffer(ByteBuffer.wrap(new byte[13]));
-  ManagedBuffer block1 = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
-  ManagedBuffer block2 = new NioManagedBuffer(ByteBuffer.wrap(new byte[19]));
+  private final ManagedBuffer block0 = new NioManagedBuffer(ByteBuffer.wrap(new byte[13]));
+  private final ManagedBuffer block1 = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
+  private final ManagedBuffer block2 = new NioManagedBuffer(ByteBuffer.wrap(new byte[19]));
 
   @Test
   public void testNoFailures() throws IOException, InterruptedException {
@@ -291,7 +291,7 @@ public class RetryingBlockFetcherSuite {
     }
 
     assertNotNull(stub);
-    stub.when(fetchStarter).createAndStart(any(), anyObject());
+    stub.when(fetchStarter).createAndStart(any(), any());
     String[] blockIdArray = blockIds.toArray(new String[blockIds.size()]);
     new RetryingBlockFetcher(conf, fetchStarter, blockIdArray, listener).start();
   }

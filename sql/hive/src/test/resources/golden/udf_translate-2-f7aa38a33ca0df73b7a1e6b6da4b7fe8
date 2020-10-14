@@ -6,8 +6,8 @@ translate('abcdef', 'adc', '19') returns '1b9ef' replacing 'a' with '1', 'd' wit
 
 translate('a b c d', ' ', '') return 'abcd' removing all spaces from the input string
 
-If the same character is present multiple times in the input string, the first occurence of the character is the one that's considered for matching. However, it is not recommended to have the same character more than once in the from string since it's not required and adds to confusion.
+If the same character is present multiple times in the input string, the first occurrence of the character is the one that's considered for matching. However, it is not recommended to have the same character more than once in the from string since it's not required and adds to confusion.
 
 For example,
 
-translate('abcdef', 'ada', '192') returns '1bc9ef' replaces 'a' with '1' and 'd' with '9' ignoring the second occurence of 'a' in the from string mapping it to '2'
+translate('abcdef', 'ada', '192') returns '1bc9ef' replaces 'a' with '1' and 'd' with '9' ignoring the second occurrence of 'a' in the from string mapping it to '2'

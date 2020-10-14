@@ -55,13 +55,14 @@ package object state {
         valueSchema: StructType,
         indexOrdinal: Option[Int],
         sessionState: SessionState,
-        storeCoordinator: Option[StateStoreCoordinatorRef])(
+        storeCoordinator: Option[StateStoreCoordinatorRef],
+        extraOptions: Map[String, String] = Map.empty)(
         storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U]): StateStoreRDD[T, U] = {
 
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
       val wrappedF = (store: StateStore, iter: Iterator[T]) => {
         // Abort the state store in case of error
-        TaskContext.get().addTaskCompletionListener(_ => {
+        TaskContext.get().addTaskCompletionListener[Unit](_ => {
           if (!store.hasCommitted) store.abort()
         })
         cleanedF(store, iter)
@@ -78,7 +79,8 @@ package object state {
         valueSchema,
         indexOrdinal,
         sessionState,
-        storeCoordinator)
+        storeCoordinator,
+        extraOptions)
     }
   }
 }

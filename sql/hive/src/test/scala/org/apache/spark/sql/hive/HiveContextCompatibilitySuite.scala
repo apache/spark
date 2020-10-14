@@ -24,6 +24,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
 class HiveContextCompatibilitySuite extends SparkFunSuite with BeforeAndAfterEach {
 
+  override protected val enableAutoThreadAudit = false
   private var sc: SparkContext = null
   private var hc: HiveContext = null
 

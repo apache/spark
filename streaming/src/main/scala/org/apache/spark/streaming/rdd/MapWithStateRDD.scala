@@ -75,7 +75,7 @@ private[streaming] object MapWithStateRDDRecord {
       }
     }
 
-    MapWithStateRDDRecord(newStateMap, mappedData)
+    MapWithStateRDDRecord(newStateMap, mappedData.toSeq)
   }
 }
 
@@ -162,7 +162,7 @@ private[streaming] class MapWithStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, 
       mappingFunction,
       batchTime,
       timeoutThresholdTime,
-      removeTimedoutData = doFullScan // remove timedout data only when full scan is enabled
+      removeTimedoutData = doFullScan // remove timed-out data only when full scan is enabled
     )
     Iterator(newRecord)
   }

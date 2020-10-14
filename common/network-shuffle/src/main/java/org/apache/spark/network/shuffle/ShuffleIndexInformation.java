@@ -37,14 +37,8 @@ public class ShuffleIndexInformation {
     size = (int)indexFile.length();
     ByteBuffer buffer = ByteBuffer.allocate(size);
     offsets = buffer.asLongBuffer();
-    DataInputStream dis = null;
-    try {
-      dis = new DataInputStream(Files.newInputStream(indexFile.toPath()));
+    try (DataInputStream dis = new DataInputStream(Files.newInputStream(indexFile.toPath()))) {
       dis.readFully(buffer.array());
-    } finally {
-      if (dis != null) {
-        dis.close();
-      }
     }
   }
 
@@ -60,8 +54,15 @@ public class ShuffleIndexInformation {
    * Get index offset for a particular reducer.
    */
   public ShuffleIndexRecord getIndex(int reduceId) {
-    long offset = offsets.get(reduceId);
-    long nextOffset = offsets.get(reduceId + 1);
+    return getIndex(reduceId, reduceId + 1);
+  }
+
+  /**
+   * Get index offset for the reducer range of [startReduceId, endReduceId).
+   */
+  public ShuffleIndexRecord getIndex(int startReduceId, int endReduceId) {
+    long offset = offsets.get(startReduceId);
+    long nextOffset = offsets.get(endReduceId);
     return new ShuffleIndexRecord(offset, nextOffset - offset);
   }
 }

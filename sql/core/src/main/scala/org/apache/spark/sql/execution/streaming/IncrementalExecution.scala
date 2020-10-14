@@ -22,13 +22,16 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.expressions.CurrentBatchTimestamp
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.{LeafExecNode, LocalLimitExec, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.util.Utils
 
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
@@ -39,6 +42,7 @@ class IncrementalExecution(
     logicalPlan: LogicalPlan,
     val outputMode: OutputMode,
     val checkpointLocation: String,
+    val queryId: UUID,
     val runId: UUID,
     val currentBatchId: Long,
     val offsetSeqMetadata: OffsetSeqMetadata)
@@ -46,7 +50,7 @@ class IncrementalExecution(
 
   // Modified planner with stateful operations.
   override val planner: SparkPlanner = new SparkPlanner(
-      sparkSession.sparkContext,
+      sparkSession,
       sparkSession.sessionState.conf,
       sparkSession.sessionState.experimentalMethods) {
     override def strategies: Seq[Strategy] =
@@ -58,19 +62,27 @@ class IncrementalExecution(
       StatefulAggregationStrategy ::
       FlatMapGroupsWithStateStrategy ::
       StreamingRelationStrategy ::
-      StreamingDeduplicationStrategy :: Nil
+      StreamingDeduplicationStrategy ::
+      StreamingGlobalLimitStrategy(outputMode) :: Nil
   }
+
+  private[sql] val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
+    .map(SQLConf.SHUFFLE_PARTITIONS.valueConverter)
+    .getOrElse(sparkSession.sessionState.conf.numShufflePartitions)
 
   /**
    * See [SPARK-18339]
    * Walk the optimized logical plan and replace CurrentBatchTimestamp
    * with the desired literal
    */
-  override lazy val optimizedPlan: LogicalPlan = {
-    sparkSession.sessionState.optimizer.execute(withCachedData) transformAllExpressions {
+  override
+  lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
+    sparkSession.sessionState.optimizer.executeAndTrack(withCachedData,
+      tracker) transformAllExpressions {
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
         logInfo(s"Current batch timestamp = $timestamp")
         ts.toLiteral
+      case e: ExpressionWithRandomSeed => e.withNewSeed(Utils.random.nextLong())
     }
   }
 
@@ -83,26 +95,58 @@ class IncrementalExecution(
   /** Get the state info of the next stateful operator */
   private def nextStatefulOperationStateInfo(): StatefulOperatorStateInfo = {
     StatefulOperatorStateInfo(
-      checkpointLocation, runId, statefulOperatorId.getAndIncrement(), currentBatchId)
+      checkpointLocation,
+      runId,
+      statefulOperatorId.getAndIncrement(),
+      currentBatchId,
+      numStateStores)
   }
 
   /** Locates save/restore pairs surrounding aggregation. */
   val state = new Rule[SparkPlan] {
 
+    /**
+     * Ensures that this plan DOES NOT have any stateful operation in it whose pipelined execution
+     * depends on this plan. In other words, this function returns true if this plan does
+     * have a narrow dependency on a stateful subplan.
+     */
+    private def hasNoStatefulOp(plan: SparkPlan): Boolean = {
+      var statefulOpFound = false
+
+      def findStatefulOp(planToCheck: SparkPlan): Unit = {
+        planToCheck match {
+          case s: StatefulOperator =>
+            statefulOpFound = true
+
+          case e: ShuffleExchangeLike =>
+            // Don't search recursively any further as any child stateful operator as we
+            // are only looking for stateful subplans that this plan has narrow dependencies on.
+
+          case p: SparkPlan =>
+            p.children.foreach(findStatefulOp)
+        }
+      }
+
+      findStatefulOp(plan)
+      !statefulOpFound
+    }
+
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
-      case StateStoreSaveExec(keys, None, None, None,
+      case StateStoreSaveExec(keys, None, None, None, stateFormatVersion,
              UnaryExecNode(agg,
-               StateStoreRestoreExec(_, None, child))) =>
+               StateStoreRestoreExec(_, None, _, child))) =>
         val aggStateInfo = nextStatefulOperationStateInfo
         StateStoreSaveExec(
           keys,
           Some(aggStateInfo),
           Some(outputMode),
           Some(offsetSeqMetadata.batchWatermarkMs),
+          stateFormatVersion,
           agg.withNewChildren(
             StateStoreRestoreExec(
               keys,
               Some(aggStateInfo),
+              stateFormatVersion,
               child) :: Nil))
 
       case StreamingDeduplicateExec(keys, child, None, None) =>
@@ -124,40 +168,34 @@ class IncrementalExecution(
           eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs),
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
-              j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition,
-              Some(offsetSeqMetadata.batchWatermarkMs))
-        )
+              j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
+              Some(offsetSeqMetadata.batchWatermarkMs)))
+
+      case l: StreamingGlobalLimitExec =>
+        l.copy(
+          stateInfo = Some(nextStatefulOperationStateInfo),
+          outputMode = Some(outputMode))
+
+      case StreamingLocalLimitExec(limit, child) if hasNoStatefulOp(child) =>
+        // Optimize limit execution by replacing StreamingLocalLimitExec (consumes the iterator
+        // completely) to LocalLimitExec (does not consume the iterator) when the child plan has
+        // no stateful operator (i.e., consuming the iterator is not needed).
+        LocalLimitExec(limit, child)
     }
   }
 
-  override def preparations: Seq[Rule[SparkPlan]] =
-    Seq(state, EnsureStatefulOpPartitioning) ++ super.preparations
+  override def preparations: Seq[Rule[SparkPlan]] = state +: super.preparations
 
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }
-}
 
-object EnsureStatefulOpPartitioning extends Rule[SparkPlan] {
-  // Needs to be transformUp to avoid extra shuffles
-  override def apply(plan: SparkPlan): SparkPlan = plan transformUp {
-    case so: StatefulOperator =>
-      val numPartitions = plan.sqlContext.sessionState.conf.numShufflePartitions
-      val distributions = so.requiredChildDistribution
-      val children = so.children.zip(distributions).map { case (child, reqDistribution) =>
-        val expectedPartitioning = reqDistribution match {
-          case AllTuples => SinglePartition
-          case ClusteredDistribution(keys) => HashPartitioning(keys, numPartitions)
-          case _ => throw new AnalysisException("Unexpected distribution expected for " +
-            s"Stateful Operator: $so. Expect AllTuples or ClusteredDistribution but got " +
-            s"$reqDistribution.")
-        }
-        if (child.outputPartitioning.guarantees(expectedPartitioning) &&
-            child.execute().getNumPartitions == expectedPartitioning.numPartitions) {
-          child
-        } else {
-          ShuffleExchangeExec(expectedPartitioning, child)
-        }
-      }
-      so.withNewChildren(children)
+  /**
+   * Should the MicroBatchExecution run another batch based on this execution and the current
+   * updated metadata.
+   */
+  def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+    executedPlan.collect {
+      case p: StateStoreWriter => p.shouldRunAnotherBatch(newMetadata)
+    }.exists(_ == true)
   }
 }

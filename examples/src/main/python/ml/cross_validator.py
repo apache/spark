@@ -15,8 +15,13 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
+"""
+A simple example demonstrating model selection using CrossValidator.
+This example also demonstrates how Pipelines are Estimators.
+Run with:
 
+  bin/spark-submit examples/src/main/python/ml/cross_validator.py
+"""
 # $example on$
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import LogisticRegression
@@ -25,14 +30,6 @@ from pyspark.ml.feature import HashingTF, Tokenizer
 from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
 # $example off$
 from pyspark.sql import SparkSession
-
-"""
-A simple example demonstrating model selection using CrossValidator.
-This example also demonstrates how Pipelines are Estimators.
-Run with:
-
-  bin/spark-submit examples/src/main/python/ml/cross_validator.py
-"""
 
 if __name__ == "__main__":
     spark = SparkSession\

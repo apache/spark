@@ -18,8 +18,6 @@
 """
 Streaming Linear Regression Example.
 """
-from __future__ import print_function
-
 # $example on$
 import sys
 # $example off$
@@ -36,7 +34,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: streaming_linear_regression_example.py <trainingDir> <testDir>",
               file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
 
     sc = SparkContext(appName="PythonLogisticRegressionWithLBFGSExample")
     ssc = StreamingContext(sc, 1)

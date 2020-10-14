@@ -21,14 +21,15 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
 import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
@@ -68,6 +69,27 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
 
   /** @group getParam */
   def getMinDF: Double = $(minDF)
+
+  /**
+   * Specifies the maximum number of different documents a term could appear in to be included
+   * in the vocabulary. A term that appears more than the threshold will be ignored. If this is an
+   * integer greater than or equal to 1, this specifies the maximum number of documents the term
+   * could appear in; if this is a double in [0,1), then this specifies the maximum fraction of
+   * documents the term could appear in.
+   *
+   * Default: (2^63^) - 1
+   * @group param
+   */
+  val maxDF: DoubleParam = new DoubleParam(this, "maxDF", "Specifies the maximum number of" +
+    " different documents a term could appear in to be included in the vocabulary." +
+    " A term that appears more than the threshold will be ignored. If this is an integer >= 1," +
+    " this specifies the maximum number of documents the term could appear in;" +
+    " if this is a double in [0,1), then this specifies the maximum fraction of" +
+    " documents the term could appear in.",
+    ParamValidators.gtEq(0.0))
+
+  /** @group getParam */
+  def getMaxDF: Double = $(maxDF)
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
@@ -113,7 +135,11 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
   /** @group getParam */
   def getBinary: Boolean = $(binary)
 
-  setDefault(vocabSize -> (1 << 18), minDF -> 1.0, minTF -> 1.0, binary -> false)
+  setDefault(vocabSize -> (1 << 18),
+    minDF -> 1.0,
+    maxDF -> Long.MaxValue,
+    minTF -> 1.0,
+    binary -> false)
 }
 
 /**
@@ -143,6 +169,10 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   def setMinDF(value: Double): this.type = set(minDF, value)
 
   /** @group setParam */
+  @Since("2.4.0")
+  def setMaxDF(value: Double): this.type = set(maxDF, value)
+
+  /** @group setParam */
   @Since("1.5.0")
   def setMinTF(value: Double): this.type = set(minTF, value)
 
@@ -153,33 +183,68 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): CountVectorizerModel = {
     transformSchema(dataset.schema, logging = true)
+    if (($(minDF) >= 1.0 && $(maxDF) >= 1.0) || ($(minDF) < 1.0 && $(maxDF) < 1.0)) {
+      require($(maxDF) >= $(minDF), "maxDF must be >= minDF.")
+    }
+
     val vocSize = $(vocabSize)
-    val input = dataset.select($(inputCol)).rdd.map(_.getAs[Seq[String]](0))
+    val input = dataset.select($(inputCol)).rdd.map(_.getSeq[String](0))
+    val countingRequired = $(minDF) < 1.0 || $(maxDF) < 1.0
+    val maybeInputSize = if (countingRequired) {
+      if (dataset.storageLevel == StorageLevel.NONE) {
+        input.persist(StorageLevel.MEMORY_AND_DISK)
+      }
+      Some(input.count)
+    } else {
+      None
+    }
     val minDf = if ($(minDF) >= 1.0) {
       $(minDF)
     } else {
-      $(minDF) * input.cache().count()
+      $(minDF) * maybeInputSize.get
     }
-    val wordCounts: RDD[(String, Long)] = input.flatMap { case (tokens) =>
+    val maxDf = if ($(maxDF) >= 1.0) {
+      $(maxDF)
+    } else {
+      $(maxDF) * maybeInputSize.get
+    }
+    require(maxDf >= minDf, "maxDF must be >= minDF.")
+    val allWordCounts = input.flatMap { tokens =>
       val wc = new OpenHashMap[String, Long]
       tokens.foreach { w =>
         wc.changeValue(w, 1L, _ + 1L)
       }
       wc.map { case (word, count) => (word, (count, 1)) }
-    }.reduceByKey { case ((wc1, df1), (wc2, df2)) =>
-      (wc1 + wc2, df1 + df2)
-    }.filter { case (word, (wc, df)) =>
-      df >= minDf
-    }.map { case (word, (count, dfCount)) =>
-      (word, count)
-    }.cache()
+    }.reduceByKey { (wcdf1, wcdf2) =>
+      (wcdf1._1 + wcdf2._1, wcdf1._2 + wcdf2._2)
+    }
+
+    val filteringRequired = isSet(minDF) || isSet(maxDF)
+    val maybeFilteredWordCounts = if (filteringRequired) {
+      allWordCounts.filter { case (_, (_, df)) => df >= minDf && df <= maxDf }
+    } else {
+      allWordCounts
+    }
+
+    val wordCounts = maybeFilteredWordCounts
+      .map { case (word, (count, _)) => (word, count) }
+      .persist(StorageLevel.MEMORY_AND_DISK)
+
     val fullVocabSize = wordCounts.count()
 
     val vocab = wordCounts
       .top(math.min(fullVocabSize, vocSize).toInt)(Ordering.by(_._2))
       .map(_._1)
 
-    require(vocab.length > 0, "The vocabulary size should be > 0. Lower minDF as necessary.")
+    if (input.getStorageLevel != StorageLevel.NONE) {
+      input.unpersist()
+    }
+    wordCounts.unpersist()
+
+    if (vocab.isEmpty) {
+      this.logWarning("The vocabulary size is empty. " +
+        "If this was unexpected, you may wish to lower minDF (or) increase maxDF.")
+    }
     copyValues(new CountVectorizerModel(uid, vocab).setParent(this))
   }
 
@@ -238,14 +303,14 @@ class CountVectorizerModel(
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     if (broadcastDict.isEmpty) {
       val dict = vocabulary.zipWithIndex.toMap
       broadcastDict = Some(dataset.sparkSession.sparkContext.broadcast(dict))
     }
     val dictBr = broadcastDict.get
     val minTf = $(minTF)
-    val vectorizer = udf { (document: Seq[String]) =>
+    val vectorizer = udf { document: Seq[String] =>
       val termCounts = new OpenHashMap[Int, Double]
       var tokenCount = 0L
       document.foreach { term =>
@@ -264,12 +329,19 @@ class CountVectorizerModel(
 
       Vectors.sparse(dictBr.value.size, effectiveCounts)
     }
-    dataset.withColumn($(outputCol), vectorizer(col($(inputCol))))
+    dataset.withColumn($(outputCol), vectorizer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      val attrs: Array[Attribute] = vocabulary.map(_ => new NumericAttribute)
+      val field = new AttributeGroup($(outputCol), attrs).toStructField()
+      outputSchema = SchemaUtils.updateField(outputSchema, field)
+    }
+    outputSchema
   }
 
   @Since("1.5.0")
@@ -280,6 +352,11 @@ class CountVectorizerModel(
 
   @Since("1.6.0")
   override def write: MLWriter = new CountVectorizerModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"CountVectorizerModel: uid=$uid, vocabularySize=${vocabulary.length}"
+  }
 }
 
 @Since("1.6.0")
@@ -310,7 +387,7 @@ object CountVectorizerModel extends MLReadable[CountVectorizerModel] {
         .head()
       val vocabulary = data.getAs[Seq[String]](0).toArray
       val model = new CountVectorizerModel(metadata.uid, vocabulary)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

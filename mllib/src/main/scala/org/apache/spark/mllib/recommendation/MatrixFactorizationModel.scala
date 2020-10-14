@@ -78,8 +78,13 @@ class MatrixFactorizationModel @Since("0.8.0") (
   /** Predict the rating of one user for one product. */
   @Since("0.8.0")
   def predict(user: Int, product: Int): Double = {
-    val userVector = userFeatures.lookup(user).head
-    val productVector = productFeatures.lookup(product).head
+    val userFeatureSeq = userFeatures.lookup(user)
+    require(userFeatureSeq.nonEmpty, s"userId: $user not found in the model")
+    val productFeatureSeq = productFeatures.lookup(product)
+    require(productFeatureSeq.nonEmpty, s"productId: $product not found in the model")
+
+    val userVector = userFeatureSeq.head
+    val productVector = productFeatureSeq.head
     blas.ddot(rank, userVector, 1, productVector, 1)
   }
 
@@ -164,9 +169,12 @@ class MatrixFactorizationModel @Since("0.8.0") (
    *  recommended the product is.
    */
   @Since("1.1.0")
-  def recommendProducts(user: Int, num: Int): Array[Rating] =
-    MatrixFactorizationModel.recommend(userFeatures.lookup(user).head, productFeatures, num)
+  def recommendProducts(user: Int, num: Int): Array[Rating] = {
+    val userFeatureSeq = userFeatures.lookup(user)
+    require(userFeatureSeq.nonEmpty, s"userId: $user not found in the model")
+    MatrixFactorizationModel.recommend(userFeatureSeq.head, productFeatures, num)
       .map(t => Rating(user, t._1, t._2))
+  }
 
   /**
    * Recommends users to a product. That is, this returns users who are most likely to be
@@ -181,11 +189,12 @@ class MatrixFactorizationModel @Since("0.8.0") (
    *  recommended the user is.
    */
   @Since("1.1.0")
-  def recommendUsers(product: Int, num: Int): Array[Rating] =
-    MatrixFactorizationModel.recommend(productFeatures.lookup(product).head, userFeatures, num)
+  def recommendUsers(product: Int, num: Int): Array[Rating] = {
+    val productFeatureSeq = productFeatures.lookup(product)
+    require(productFeatureSeq.nonEmpty, s"productId: $product not found in the model")
+    MatrixFactorizationModel.recommend(productFeatureSeq.head, userFeatures, num)
       .map(t => Rating(t._1, product, t._2))
-
-  protected override val formatVersion: String = "1.0"
+  }
 
   /**
    * Save this model to the given path.
@@ -377,12 +386,12 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       assert(formatVersion == thisFormatVersion)
       val rank = (metadata \ "rank").extract[Int]
       val userFeatures = spark.read.parquet(userPath(path)).rdd.map {
-        case Row(id: Int, features: Seq[_]) =>
-          (id, features.asInstanceOf[Seq[Double]].toArray)
+        case Row(id: Int, features: scala.collection.Seq[_]) =>
+          (id, features.asInstanceOf[scala.collection.Seq[Double]].toArray)
       }
       val productFeatures = spark.read.parquet(productPath(path)).rdd.map {
-        case Row(id: Int, features: Seq[_]) =>
-          (id, features.asInstanceOf[Seq[Double]].toArray)
+        case Row(id: Int, features: scala.collection.Seq[_]) =>
+          (id, features.asInstanceOf[scala.collection.Seq[Double]].toArray)
       }
       new MatrixFactorizationModel(rank, userFeatures, productFeatures)
     }

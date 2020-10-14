@@ -132,10 +132,10 @@ class FoldablePropagationSuite extends PlanTest {
 
   test("Propagate in inner join") {
     val ta = testRelation.select('a, Literal(1).as('tag))
-      .union(testRelation.select('a, Literal(2).as('tag)))
+      .union(testRelation.select('a.as('a), Literal(2).as('tag)))
       .subquery('ta)
     val tb = testRelation.select('a, Literal(1).as('tag))
-      .union(testRelation.select('a, Literal(2).as('tag)))
+      .union(testRelation.select('a.as('a), Literal(2).as('tag)))
       .subquery('tb)
     val query = ta.join(tb, Inner,
       Some("ta.a".attr === "tb.a".attr && "ta.tag".attr === "tb.tag".attr))
@@ -147,8 +147,8 @@ class FoldablePropagationSuite extends PlanTest {
   test("Propagate in expand") {
     val c1 = Literal(1).as('a)
     val c2 = Literal(2).as('b)
-    val a1 = c1.toAttribute.withNullability(true)
-    val a2 = c2.toAttribute.withNullability(true)
+    val a1 = c1.toAttribute.newInstance().withNullability(true)
+    val a2 = c2.toAttribute.newInstance().withNullability(true)
     val expand = Expand(
       Seq(Seq(Literal(null), 'b), Seq('a, Literal(null))),
       Seq(a1, a2),
@@ -156,9 +156,52 @@ class FoldablePropagationSuite extends PlanTest {
     val query = expand.where(a1.isNotNull).select(a1, a2).analyze
     val optimized = Optimize.execute(query)
     val correctExpand = expand.copy(projections = Seq(
-      Seq(Literal(null), c2),
-      Seq(c1, Literal(null))))
+      Seq(Literal(null), Literal(2)),
+      Seq(Literal(1), Literal(null))))
     val correctAnswer = correctExpand.where(a1.isNotNull).select(a1, a2).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Propagate above outer join") {
+    val left = LocalRelation('a.int).select('a, Literal(1).as('b))
+    val right = LocalRelation('c.int).select('c, Literal(1).as('d))
+
+    val join = left.join(
+      right,
+      joinType = LeftOuter,
+      condition = Some('a === 'c && 'b === 'd))
+    val query = join.select(('b + 3).as('res)).analyze
+    val optimized = Optimize.execute(query)
+
+    val correctAnswer = left.join(
+      right,
+      joinType = LeftOuter,
+      condition = Some('a === 'c && Literal(1) === Literal(1)))
+      .select((Literal(1) + 3).as('res)).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-32635: Replace references with foldables coming only from the node's children") {
+    val leftExpression = 'a.int
+    val left = LocalRelation(leftExpression).select('a)
+    val rightExpression = Alias(Literal(2), "a")(leftExpression.exprId)
+    val right = LocalRelation('b.int).select('b, rightExpression).select('b)
+    val join = left.join(right, joinType = LeftOuter, condition = Some('b === 'a))
+
+    val query = join.analyze
+    val optimized = Optimize.execute(query)
+    comparePlans(optimized, query)
+  }
+
+  test("SPARK-32951: Foldable propagation from Aggregate") {
+    val query = testRelation
+      .groupBy('a)('a, sum('b).as('b), Literal(1).as('c))
+      .select('a, 'b, 'c)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = testRelation
+      .groupBy('a)('a, sum('b).as('b), Literal(1).as('c))
+      .select('a, 'b, Literal(1).as('c)).analyze
     comparePlans(optimized, correctAnswer)
   }
 }

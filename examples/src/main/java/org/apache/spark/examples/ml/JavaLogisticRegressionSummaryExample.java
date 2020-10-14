@@ -18,10 +18,9 @@
 package org.apache.spark.examples.ml;
 
 // $example on$
-import org.apache.spark.ml.classification.BinaryLogisticRegressionSummary;
+import org.apache.spark.ml.classification.BinaryLogisticRegressionTrainingSummary;
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.LogisticRegressionModel;
-import org.apache.spark.ml.classification.LogisticRegressionTrainingSummary;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
@@ -50,7 +49,7 @@ public class JavaLogisticRegressionSummaryExample {
     // $example on$
     // Extract the summary from the returned LogisticRegressionModel instance trained in the earlier
     // example
-    LogisticRegressionTrainingSummary trainingSummary = lrModel.summary();
+    BinaryLogisticRegressionTrainingSummary trainingSummary = lrModel.binarySummary();
 
     // Obtain the loss per iteration.
     double[] objectiveHistory = trainingSummary.objectiveHistory();
@@ -58,21 +57,15 @@ public class JavaLogisticRegressionSummaryExample {
       System.out.println(lossPerIteration);
     }
 
-    // Obtain the metrics useful to judge performance on test data.
-    // We cast the summary to a BinaryLogisticRegressionSummary since the problem is a binary
-    // classification problem.
-    BinaryLogisticRegressionSummary binarySummary =
-      (BinaryLogisticRegressionSummary) trainingSummary;
-
     // Obtain the receiver-operating characteristic as a dataframe and areaUnderROC.
-    Dataset<Row> roc = binarySummary.roc();
+    Dataset<Row> roc = trainingSummary.roc();
     roc.show();
     roc.select("FPR").show();
-    System.out.println(binarySummary.areaUnderROC());
+    System.out.println(trainingSummary.areaUnderROC());
 
     // Get the threshold corresponding to the maximum F-Measure and rerun LogisticRegression with
     // this selected threshold.
-    Dataset<Row> fMeasure = binarySummary.fMeasureByThreshold();
+    Dataset<Row> fMeasure = trainingSummary.fMeasureByThreshold();
     double maxFMeasure = fMeasure.select(functions.max("F-Measure")).head().getDouble(0);
     double bestThreshold = fMeasure.where(fMeasure.col("F-Measure").equalTo(maxFMeasure))
       .select("threshold").head().getDouble(0);

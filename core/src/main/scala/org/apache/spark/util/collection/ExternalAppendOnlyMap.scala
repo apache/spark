@@ -18,8 +18,6 @@
 package org.apache.spark.util.collection
 
 import java.io._
-import java.nio.channels.{Channels, FileChannel}
-import java.nio.file.StandardOpenOption
 import java.util.Comparator
 
 import scala.collection.BufferedIterator
@@ -31,7 +29,7 @@ import com.google.common.io.ByteStreams
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer.{DeserializationStream, Serializer, SerializerManager}
 import org.apache.spark.storage.{BlockId, BlockManager}
 import org.apache.spark.util.CompletionIterator
@@ -82,7 +80,10 @@ class ExternalAppendOnlyMap[K, V, C](
     this(createCombiner, mergeValue, mergeCombiners, serializer, blockManager, TaskContext.get())
   }
 
-  @volatile private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
+  /**
+   * Exposed for testing
+   */
+  @volatile private[collection] var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
   private val sparkConf = SparkEnv.get.conf
   private val diskBlockManager = blockManager.diskBlockManager
@@ -96,15 +97,14 @@ class ExternalAppendOnlyMap[K, V, C](
    * NOTE: Setting this too low can cause excessive copying when serializing, since some serializers
    * grow internal data structures by growing + copying every time the number of objects doubles.
    */
-  private val serializerBatchSize = sparkConf.getLong("spark.shuffle.spill.batchSize", 10000)
+  private val serializerBatchSize = sparkConf.get(config.SHUFFLE_SPILL_BATCH_SIZE)
 
   // Number of bytes spilled in total
   private var _diskBytesSpilled = 0L
   def diskBytesSpilled: Long = _diskBytesSpilled
 
   // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
-  private val fileBufferSize =
-    sparkConf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
+  private val fileBufferSize = sparkConf.get(config.SHUFFLE_FILE_BUFFER_SIZE).toInt * 1024
 
   // Write metrics
   private val writeMetrics: ShuffleWriteMetrics = new ShuffleWriteMetrics()
@@ -269,7 +269,7 @@ class ExternalAppendOnlyMap[K, V, C](
    */
   def destructiveIterator(inMemoryIterator: Iterator[(K, C)]): Iterator[(K, C)] = {
     readingIterator = new SpillableIterator(inMemoryIterator)
-    readingIterator
+    readingIterator.toCompletionIterator
   }
 
   /**
@@ -282,8 +282,7 @@ class ExternalAppendOnlyMap[K, V, C](
         "ExternalAppendOnlyMap.iterator is destructive and should only be called once.")
     }
     if (spilledMaps.isEmpty) {
-      CompletionIterator[(K, C), Iterator[(K, C)]](
-        destructiveIterator(currentMap.iterator), freeCurrentMap())
+      destructiveIterator(currentMap.iterator)
     } else {
       new ExternalIterator()
     }
@@ -307,8 +306,8 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // Input streams are derived both from the in-memory map and spilled maps on disk
     // The in-memory map is sorted in place, while the spilled maps are already in sorted order
-    private val sortedMap = CompletionIterator[(K, C), Iterator[(K, C)]](destructiveIterator(
-      currentMap.destructiveSortedIterator(keyComparator)), freeCurrentMap())
+    private val sortedMap = destructiveIterator(
+      currentMap.destructiveSortedIterator(keyComparator))
     private val inputStreams = (Seq(sortedMap) ++ spilledMaps).map(it => it.buffered)
 
     inputStreams.foreach { it =>
@@ -368,7 +367,7 @@ class ExternalAppendOnlyMap[K, V, C](
     private def removeFromBuffer[T](buffer: ArrayBuffer[T], index: Int): T = {
       val elem = buffer(index)
       buffer(index) = buffer(buffer.size - 1)  // This also works if index == buffer.size - 1
-      buffer.reduceToSize(buffer.size - 1)
+      buffer.trimEnd(1)
       elem
     }
 
@@ -461,11 +460,11 @@ class ExternalAppendOnlyMap[K, V, C](
     )
 
     private var batchIndex = 0  // Which batch we're in
-    private var fileChannel: FileChannel = null
+    private var fileStream: FileInputStream = null
 
     // An intermediate stream that reads from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
-    private var deserializeStream = nextBatchStream()
+    private var deserializeStream: DeserializationStream = null
     private var nextItem: (K, C) = null
     private var objectsRead = 0
 
@@ -478,14 +477,14 @@ class ExternalAppendOnlyMap[K, V, C](
       if (batchIndex < batchOffsets.length - 1) {
         if (deserializeStream != null) {
           deserializeStream.close()
-          fileChannel.close()
+          fileStream.close()
           deserializeStream = null
-          fileChannel = null
+          fileStream = null
         }
 
         val start = batchOffsets(batchIndex)
-        fileChannel = FileChannel.open(file.toPath, StandardOpenOption.READ)
-        fileChannel.position(start)
+        fileStream = new FileInputStream(file)
+        fileStream.getChannel.position(start)
         batchIndex += 1
 
         val end = batchOffsets(batchIndex)
@@ -493,8 +492,7 @@ class ExternalAppendOnlyMap[K, V, C](
         assert(end >= start, "start = " + start + ", end = " + end +
           ", batchOffsets = " + batchOffsets.mkString("[", ", ", "]"))
 
-        val bufferedStream = new BufferedInputStream(
-          ByteStreams.limit(Channels.newInputStream(fileChannel), end - start))
+        val bufferedStream = new BufferedInputStream(ByteStreams.limit(fileStream, end - start))
         val wrappedStream = serializerManager.wrapStream(blockId, bufferedStream)
         ser.deserializeStream(wrappedStream)
       } else {
@@ -531,7 +529,11 @@ class ExternalAppendOnlyMap[K, V, C](
     override def hasNext: Boolean = {
       if (nextItem == null) {
         if (deserializeStream == null) {
-          return false
+          // In case of deserializeStream has not been initialized
+          deserializeStream = nextBatchStream()
+          if (deserializeStream == null) {
+            return false
+          }
         }
         nextItem = readNextItem()
       }
@@ -539,24 +541,23 @@ class ExternalAppendOnlyMap[K, V, C](
     }
 
     override def next(): (K, C) = {
-      val item = if (nextItem == null) readNextItem() else nextItem
-      if (item == null) {
+      if (!hasNext) {
         throw new NoSuchElementException
       }
+      val item = nextItem
       nextItem = null
       item
     }
 
-    private def cleanup() {
+    private def cleanup(): Unit = {
       batchIndex = batchOffsets.length  // Prevent reading any other batch
-      val ds = deserializeStream
-      if (ds != null) {
-        ds.close()
+      if (deserializeStream != null) {
+        deserializeStream.close()
         deserializeStream = null
       }
-      if (fileChannel != null) {
-        fileChannel.close()
-        fileChannel = null
+      if (fileStream != null) {
+        fileStream.close()
+        fileStream = null
       }
       if (file.exists()) {
         if (!file.delete()) {
@@ -565,15 +566,13 @@ class ExternalAppendOnlyMap[K, V, C](
       }
     }
 
-    context.addTaskCompletionListener(context => cleanup())
+    context.addTaskCompletionListener[Unit](context => cleanup())
   }
 
-  private[this] class SpillableIterator(var upstream: Iterator[(K, C)])
+  private class SpillableIterator(var upstream: Iterator[(K, C)])
     extends Iterator[(K, C)] {
 
     private val SPILL_LOCK = new Object()
-
-    private var nextUpstream: Iterator[(K, C)] = null
 
     private var cur: (K, C) = readNext()
 
@@ -585,17 +584,24 @@ class ExternalAppendOnlyMap[K, V, C](
       } else {
         logInfo(s"Task ${context.taskAttemptId} force spilling in-memory map to disk and " +
           s"it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
-        nextUpstream = spillMemoryIteratorToDisk(upstream)
+        val nextUpstream = spillMemoryIteratorToDisk(upstream)
+        assert(!upstream.hasNext)
         hasSpilled = true
+        upstream = nextUpstream
         true
       }
     }
 
+    private def destroy(): Unit = {
+      freeCurrentMap()
+      upstream = Iterator.empty
+    }
+
+    def toCompletionIterator: CompletionIterator[(K, C), SpillableIterator] = {
+      CompletionIterator[(K, C), SpillableIterator](this, this.destroy)
+    }
+
     def readNext(): (K, C) = SPILL_LOCK.synchronized {
-      if (nextUpstream != null) {
-        upstream = nextUpstream
-        nextUpstream = null
-      }
       if (upstream.hasNext) {
         upstream.next()
       } else {

@@ -141,6 +141,13 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
       Seq("2008-04-08", "11"),
       Seq("2008-04-09", "11")))
 
+  createPruningTest("Partition pruning - with filter containing non-deterministic condition",
+    "SELECT value, hr FROM srcpart1 WHERE ds = '2008-04-08' AND hr < 12 AND rand() < 1",
+    Seq("value", "hr"),
+    Seq("value", "hr"),
+    Seq(
+      Seq("2008-04-08", "11")))
+
   def createPruningTest(
       testCaseName: String,
       sql: String,
@@ -154,7 +161,7 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
         case p @ HiveTableScanExec(columns, relation, _) =>
           val columnNames = columns.map(_.name)
           val partValues = if (relation.isPartitioned) {
-            p.prunePartitions(p.rawPartitions).map(_.getValues)
+            p.prunedPartitions.map(_.getValues)
           } else {
             Seq.empty
           }

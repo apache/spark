@@ -15,8 +15,11 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
+"""
+A simple example demonstrating basic Spark SQL features.
+Run with:
+  ./bin/spark-submit examples/src/main/python/sql/basic.py
+"""
 # $example on:init_session$
 from pyspark.sql import SparkSession
 # $example off:init_session$
@@ -27,14 +30,8 @@ from pyspark.sql import Row
 
 # $example on:programmatic_schema$
 # Import data types
-from pyspark.sql.types import *
+from pyspark.sql.types import StringType, StructType, StructField
 # $example off:programmatic_schema$
-
-"""
-A simple example demonstrating basic Spark SQL features.
-Run with:
-  ./bin/spark-submit examples/src/main/python/sql/basic.py
-"""
 
 
 def basic_df_example(spark):

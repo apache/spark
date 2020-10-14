@@ -18,12 +18,9 @@
 package org.apache.spark.sql.execution
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
+import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.ExecutionContext
-
-import org.codehaus.commons.compiler.CompileException
-import org.codehaus.janino.JaninoRuntimeException
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 import org.apache.spark.{broadcast, SparkEnv}
 import org.apache.spark.internal.Logging
@@ -32,12 +29,26 @@ import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate, _}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.DataType
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.vectorized.ColumnarBatch
+
+object SparkPlan {
+  /** The original [[LogicalPlan]] from which this [[SparkPlan]] is converted. */
+  val LOGICAL_PLAN_TAG = TreeNodeTag[LogicalPlan]("logical_plan")
+
+  /** The [[LogicalPlan]] inherited from its ancestor. */
+  val LOGICAL_PLAN_INHERITED_TAG = TreeNodeTag[LogicalPlan]("logical_plan_inherited")
+
+  private val nextPlanId = new AtomicInteger(0)
+
+  /** Register a new SparkPlan, returning its SparkPlan ID */
+  private[execution] def newPlanId(): Int = nextPlanId.getAndIncrement()
+}
 
 /**
  * The base class for physical operators.
@@ -47,30 +58,62 @@ import org.apache.spark.util.ThreadUtils
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
 
   /**
-   * A handle to the SQL Context that was used to create this plan.   Since many operators need
+   * A handle to the SQL Context that was used to create this plan. Since many operators need
    * access to the sqlContext for RDD operations or configuration this field is automatically
    * populated by the query planning infrastructure.
    */
-  @transient
-  final val sqlContext = SparkSession.getActiveSession.map(_.sqlContext).orNull
+  @transient final val sqlContext = SparkSession.getActiveSession.map(_.sqlContext).orNull
 
   protected def sparkContext = sqlContext.sparkContext
 
-  // sqlContext will be null when SparkPlan nodes are created without the active sessions.
-  // So far, this only happens in the test cases.
-  val subexpressionEliminationEnabled: Boolean = if (sqlContext != null) {
-    sqlContext.conf.subexpressionEliminationEnabled
-  } else {
-    false
-  }
+  val id: Int = SparkPlan.newPlanId()
 
-  // whether we should fallback when hitting compilation errors caused by codegen
-  private val codeGenFallBack = (sqlContext == null) || sqlContext.conf.codegenFallback
+  /**
+   * Return true if this stage of the plan supports columnar execution.
+   */
+  def supportsColumnar: Boolean = false
+
+  /**
+   * The exact java types of the columns that are output in columnar processing mode. This
+   * is a performance optimization for code generation and is optional.
+   */
+  def vectorTypes: Option[Seq[String]] = None
 
   /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
-    SparkSession.setActiveSession(sqlContext.sparkSession)
+    if (sqlContext != null) {
+      SparkSession.setActiveSession(sqlContext.sparkSession)
+    }
     super.makeCopy(newArgs)
+  }
+
+  /**
+   * @return The logical plan this plan is linked to.
+   */
+  def logicalLink: Option[LogicalPlan] =
+    getTagValue(SparkPlan.LOGICAL_PLAN_TAG)
+      .orElse(getTagValue(SparkPlan.LOGICAL_PLAN_INHERITED_TAG))
+
+  /**
+   * Set logical plan link recursively if unset.
+   */
+  def setLogicalLink(logicalPlan: LogicalPlan): Unit = {
+    setLogicalLink(logicalPlan, false)
+  }
+
+  private def setLogicalLink(logicalPlan: LogicalPlan, inherited: Boolean = false): Unit = {
+    // Stop at a descendant which is the root of a sub-tree transformed from another logical node.
+    if (inherited && getTagValue(SparkPlan.LOGICAL_PLAN_TAG).isDefined) {
+      return
+    }
+
+    val tag = if (inherited) {
+      SparkPlan.LOGICAL_PLAN_INHERITED_TAG
+    } else {
+      SparkPlan.LOGICAL_PLAN_TAG
+    }
+    setTagValue(tag, logicalPlan)
+    children.foreach(_.setLogicalLink(logicalPlan, true))
   }
 
   /**
@@ -83,6 +126,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   def resetMetrics(): Unit = {
     metrics.valuesIterator.foreach(_.reset())
+    children.foreach(_.resetMetrics())
   }
 
   /**
@@ -94,7 +138,21 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /** Specifies how data is partitioned across different nodes in the cluster. */
   def outputPartitioning: Partitioning = UnknownPartitioning(0) // TODO: WRONG WIDTH!
 
-  /** Specifies any partition requirements on the input data for this operator. */
+  /**
+   * Specifies the data distribution requirements of all the children for this operator. By default
+   * it's [[UnspecifiedDistribution]] for each child, which means each child can have any
+   * distribution.
+   *
+   * If an operator overwrites this method, and specifies distribution requirements(excluding
+   * [[UnspecifiedDistribution]] and [[BroadcastDistribution]]) for more than one child, Spark
+   * guarantees that the outputs of these children will have same number of partitions, so that the
+   * operator can safely zip partitions of these children's result RDDs. Some operators can leverage
+   * this guarantee to satisfy some interesting requirement, e.g., non-broadcast joins can specify
+   * HashClusteredDistribution(a,b) for its left child, and specify HashClusteredDistribution(c,d)
+   * for its right child, then it's guaranteed that left and right child are co-partitioned by
+   * a,b/c,d, which means tuples of same value are in the partitions of same index, e.g.,
+   * (a=1,b=2) and (c=1,d=2) are both in the second partition of left and right child.
+   */
   def requiredChildDistribution: Seq[Distribution] =
     Seq.fill(children.size)(UnspecifiedDistribution)
 
@@ -111,6 +169,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Concrete implementations of SparkPlan should override `doExecute`.
    */
   final def execute(): RDD[InternalRow] = executeQuery {
+    if (isCanonicalizedPlan) {
+      throw new IllegalStateException("A canonicalized plan is not supposed to be executed.")
+    }
     doExecute()
   }
 
@@ -121,7 +182,24 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Concrete implementations of SparkPlan should override `doExecuteBroadcast`.
    */
   final def executeBroadcast[T](): broadcast.Broadcast[T] = executeQuery {
+    if (isCanonicalizedPlan) {
+      throw new IllegalStateException("A canonicalized plan is not supposed to be executed.")
+    }
     doExecuteBroadcast()
+  }
+
+  /**
+   * Returns the result of this query as an RDD[ColumnarBatch] by delegating to `doColumnarExecute`
+   * after preparations.
+   *
+   * Concrete implementations of SparkPlan should override `doColumnarExecute` if `supportsColumnar`
+   * returns true.
+   */
+  final def executeColumnar(): RDD[ColumnarBatch] = executeQuery {
+    if (isCanonicalizedPlan) {
+      throw new IllegalStateException("A canonicalized plan is not supposed to be executed.")
+    }
+    doExecuteColumnar()
   }
 
   /**
@@ -216,6 +294,16 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
+   * Produces the result of the query as an `RDD[ColumnarBatch]` if [[supportsColumnar]] returns
+   * true. By convention the executor that creates a ColumnarBatch is responsible for closing it
+   * when it is no longer needed. This allows input formats to be able to reuse batches if needed.
+   */
+  protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    throw new IllegalStateException(s"Internal Error ${this.getClass} has column support" +
+      s" mismatch:\n${this}")
+  }
+
+  /**
    * Packing the UnsafeRows into byte array for faster serialization.
    * The byte arrays are in the following format:
    * [size] [bytes of UnsafeRow] [size] [bytes of UnsafeRow] ... [-1]
@@ -223,23 +311,43 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * UnsafeRow is highly compressible (at least 8 bytes for any column), the byte array is also
    * compressed.
    */
-  private def getByteArrayRdd(n: Int = -1): RDD[Array[Byte]] = {
+  private def getByteArrayRdd(
+      n: Int = -1, takeFromEnd: Boolean = false): RDD[(Long, Array[Byte])] = {
     execute().mapPartitionsInternal { iter =>
       var count = 0
       val buffer = new Array[Byte](4 << 10)  // 4K
       val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
       val bos = new ByteArrayOutputStream()
       val out = new DataOutputStream(codec.compressedOutputStream(bos))
-      while (iter.hasNext && (n < 0 || count < n)) {
-        val row = iter.next().asInstanceOf[UnsafeRow]
-        out.writeInt(row.getSizeInBytes)
-        row.writeToStream(out, buffer)
-        count += 1
+
+      if (takeFromEnd && n > 0) {
+        // To collect n from the last, we should anyway read everything with keeping the n.
+        // Otherwise, we don't know where is the last from the iterator.
+        var last: Seq[UnsafeRow] = Seq.empty[UnsafeRow]
+        val slidingIter = iter.map(_.copy()).sliding(n)
+        while (slidingIter.hasNext) { last = slidingIter.next().asInstanceOf[Seq[UnsafeRow]] }
+        var i = 0
+        count = last.length
+        while (i < count) {
+          val row = last(i)
+          out.writeInt(row.getSizeInBytes)
+          row.writeToStream(out, buffer)
+          i += 1
+        }
+      } else {
+        // `iter.hasNext` may produce one row and buffer it, we should only call it when the
+        // limit is not hit.
+        while ((n < 0 || count < n) && iter.hasNext) {
+          val row = iter.next().asInstanceOf[UnsafeRow]
+          out.writeInt(row.getSizeInBytes)
+          row.writeToStream(out, buffer)
+          count += 1
+        }
       }
       out.writeInt(-1)
       out.flush()
       out.close()
-      Iterator(bos.toByteArray)
+      Iterator((count, bos.toByteArray))
     }
   }
 
@@ -274,10 +382,17 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     val byteArrayRdd = getByteArrayRdd()
 
     val results = ArrayBuffer[InternalRow]()
-    byteArrayRdd.collect().foreach { bytes =>
-      decodeUnsafeRows(bytes).foreach(results.+=)
+    byteArrayRdd.collect().foreach { countAndBytes =>
+      decodeUnsafeRows(countAndBytes._2).foreach(results.+=)
     }
     results.toArray
+  }
+
+  private[spark] def executeCollectIterator(): (Long, Iterator[InternalRow]) = {
+    val countsAndBytes = getByteArrayRdd().collect()
+    val total = countsAndBytes.map(_._1).sum
+    val rows = countsAndBytes.iterator.flatMap(countAndBytes => decodeUnsafeRows(countAndBytes._2))
+    (total, rows)
   }
 
   /**
@@ -286,7 +401,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * @note Triggers multiple jobs (one for each partition).
    */
   def executeToIterator(): Iterator[InternalRow] = {
-    getByteArrayRdd().toLocalIterator.flatMap(decodeUnsafeRows)
+    getByteArrayRdd().map(_._2).toLocalIterator.flatMap(decodeUnsafeRows)
   }
 
   /**
@@ -302,17 +417,26 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    *
    * This is modeled after `RDD.take` but never runs any job locally on the driver.
    */
-  def executeTake(n: Int): Array[InternalRow] = {
+  def executeTake(n: Int): Array[InternalRow] = executeTake(n, takeFromEnd = false)
+
+  /**
+   * Runs this query returning the last `n` rows as an array.
+   *
+   * This is modeled after `RDD.take` but never runs any job locally on the driver.
+   */
+  def executeTail(n: Int): Array[InternalRow] = executeTake(n, takeFromEnd = true)
+
+  private def executeTake(n: Int, takeFromEnd: Boolean): Array[InternalRow] = {
     if (n == 0) {
       return new Array[InternalRow](0)
     }
 
-    val childRDD = getByteArrayRdd(n)
+    val childRDD = getByteArrayRdd(n, takeFromEnd)
 
-    val buf = new ArrayBuffer[InternalRow]
+    val buf = if (takeFromEnd) new ListBuffer[InternalRow] else new ArrayBuffer[InternalRow]
     val totalParts = childRDD.partitions.length
     var partsScanned = 0
-    while (buf.size < n && partsScanned < totalParts) {
+    while (buf.length < n && partsScanned < totalParts) {
       // The number of partitions to try in this iteration. It is ok for this number to be
       // greater than totalParts because we actually cap it at totalParts in runJob.
       var numPartsToTry = 1L
@@ -324,83 +448,87 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         if (buf.isEmpty) {
           numPartsToTry = partsScanned * limitScaleUpFactor
         } else {
-          // the left side of max is >=1 whenever partsScanned >= 2
-          numPartsToTry = Math.max((1.5 * n * partsScanned / buf.size).toInt - partsScanned, 1)
+          val left = n - buf.length
+          // As left > 0, numPartsToTry is always >= 1
+          numPartsToTry = Math.ceil(1.5 * left * partsScanned / buf.length).toInt
           numPartsToTry = Math.min(numPartsToTry, partsScanned * limitScaleUpFactor)
         }
       }
 
-      val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
+      val parts = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
+      val partsToScan = if (takeFromEnd) {
+        // Reverse partitions to scan. So, if parts was [1, 2, 3] in 200 partitions (0 to 199),
+        // it becomes [198, 197, 196].
+        parts.map(p => (totalParts - 1) - p)
+      } else {
+        parts
+      }
       val sc = sqlContext.sparkContext
-      val res = sc.runJob(childRDD,
-        (it: Iterator[Array[Byte]]) => if (it.hasNext) it.next() else Array.empty[Byte], p)
+      val res = sc.runJob(childRDD, (it: Iterator[(Long, Array[Byte])]) =>
+        if (it.hasNext) it.next() else (0L, Array.emptyByteArray), partsToScan)
 
-      buf ++= res.flatMap(decodeUnsafeRows)
+      var i = 0
 
-      partsScanned += p.size
+      if (takeFromEnd) {
+        while (buf.length < n && i < res.length) {
+          val rows = decodeUnsafeRows(res(i)._2)
+          if (n - buf.length >= res(i)._1) {
+            buf.prepend(rows.toArray[InternalRow]: _*)
+          } else {
+            val dropUntil = res(i)._1 - (n - buf.length)
+            // Same as Iterator.drop but this only takes a long.
+            var j: Long = 0L
+            while (j < dropUntil) { rows.next(); j += 1L}
+            buf.prepend(rows.toArray[InternalRow]: _*)
+          }
+          i += 1
+        }
+      } else {
+        while (buf.length < n && i < res.length) {
+          val rows = decodeUnsafeRows(res(i)._2)
+          if (n - buf.length >= res(i)._1) {
+            buf ++= rows.toArray[InternalRow]
+          } else {
+            buf ++= rows.take(n - buf.length).toArray[InternalRow]
+          }
+          i += 1
+        }
+      }
+      partsScanned += partsToScan.size
     }
-
-    if (buf.size > n) {
-      buf.take(n).toArray
-    } else {
-      buf.toArray
-    }
-  }
-
-  protected def newMutableProjection(
-      expressions: Seq[Expression],
-      inputSchema: Seq[Attribute],
-      useSubexprElimination: Boolean = false): MutableProjection = {
-    log.debug(s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
-    GenerateMutableProjection.generate(expressions, inputSchema, useSubexprElimination)
-  }
-
-  private def genInterpretedPredicate(
-      expression: Expression, inputSchema: Seq[Attribute]): InterpretedPredicate = {
-    val str = expression.toString
-    val logMessage = if (str.length > 256) {
-      str.substring(0, 256 - 3) + "..."
-    } else {
-      str
-    }
-    logWarning(s"Codegen disabled for this expression:\n $logMessage")
-    InterpretedPredicate.create(expression, inputSchema)
-  }
-
-  protected def newPredicate(
-      expression: Expression, inputSchema: Seq[Attribute]): GenPredicate = {
-    try {
-      GeneratePredicate.generate(expression, inputSchema)
-    } catch {
-      case _ @ (_: JaninoRuntimeException | _: CompileException) if codeGenFallBack =>
-        genInterpretedPredicate(expression, inputSchema)
-    }
-  }
-
-  protected def newOrdering(
-      order: Seq[SortOrder], inputSchema: Seq[Attribute]): Ordering[InternalRow] = {
-    GenerateOrdering.generate(order, inputSchema)
+    buf.toArray
   }
 
   /**
-   * Creates a row ordering for the given schema, in natural ascending order.
+   * Cleans up the resources used by the physical operator (if any). In general, all the resources
+   * should be cleaned up when the task finishes but operators like SortMergeJoinExec and LimitExec
+   * may want eager cleanup to free up tight resources (e.g., memory).
    */
-  protected def newNaturalAscendingOrdering(dataTypes: Seq[DataType]): Ordering[InternalRow] = {
-    val order: Seq[SortOrder] = dataTypes.zipWithIndex.map {
-      case (dt, index) => SortOrder(BoundReference(index, dt, nullable = true), Ascending)
-    }
-    newOrdering(order, Seq.empty)
+  protected[sql] def cleanupResources(): Unit = {
+    children.foreach(_.cleanupResources())
   }
-}
-
-object SparkPlan {
-  private[execution] val subqueryExecutionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
 }
 
 trait LeafExecNode extends SparkPlan {
   override final def children: Seq[SparkPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
+  override def verboseStringWithOperatorId(): String = {
+    val argumentString = argString(SQLConf.get.maxToStringFields)
+    val outputStr = s"${ExplainUtils.generateFieldString("Output", output)}"
+
+    if (argumentString.nonEmpty) {
+      s"""
+         |$formattedNodeName
+         |$outputStr
+         |Arguments: $argumentString
+         |""".stripMargin
+    } else {
+      s"""
+         |$formattedNodeName
+         |$outputStr
+         |""".stripMargin
+    }
+  }
 }
 
 object UnaryExecNode {
@@ -414,6 +542,23 @@ trait UnaryExecNode extends SparkPlan {
   def child: SparkPlan
 
   override final def children: Seq[SparkPlan] = child :: Nil
+  override def verboseStringWithOperatorId(): String = {
+    val argumentString = argString(SQLConf.get.maxToStringFields)
+    val inputStr = s"${ExplainUtils.generateFieldString("Input", child.output)}"
+
+    if (argumentString.nonEmpty) {
+      s"""
+         |$formattedNodeName
+         |$inputStr
+         |Arguments: $argumentString
+         |""".stripMargin
+    } else {
+      s"""
+         |$formattedNodeName
+         |$inputStr
+         |""".stripMargin
+    }
+  }
 }
 
 trait BinaryExecNode extends SparkPlan {
@@ -421,4 +566,24 @@ trait BinaryExecNode extends SparkPlan {
   def right: SparkPlan
 
   override final def children: Seq[SparkPlan] = Seq(left, right)
+  override def verboseStringWithOperatorId(): String = {
+    val argumentString = argString(SQLConf.get.maxToStringFields)
+    val leftOutputStr = s"${ExplainUtils.generateFieldString("Left output", left.output)}"
+    val rightOutputStr = s"${ExplainUtils.generateFieldString("Right output", right.output)}"
+
+    if (argumentString.nonEmpty) {
+      s"""
+         |$formattedNodeName
+         |$leftOutputStr
+         |$rightOutputStr
+         |Arguments: $argumentString
+         |""".stripMargin
+    } else {
+      s"""
+         |$formattedNodeName
+         |$leftOutputStr
+         |$rightOutputStr
+         |""".stripMargin
+    }
+  }
 }

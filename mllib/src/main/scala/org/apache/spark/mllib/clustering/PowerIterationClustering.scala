@@ -48,8 +48,6 @@ class PowerIterationClusteringModel @Since("1.3.0") (
   override def save(sc: SparkContext, path: String): Unit = {
     PowerIterationClusteringModel.SaveLoadV1_0.save(sc, this, path)
   }
-
-  override protected def formatVersion: String = "1.0"
 }
 
 @Since("1.4.0")
@@ -103,9 +101,9 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
 
 /**
  * Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
- * <a href="http://www.icml2010.org/papers/387.pdf">Lin and Cohen</a>. From the abstract: PIC finds
- * a very low-dimensional embedding of a dataset using truncated power iteration on a normalized
- * pair-wise similarity matrix of the data.
+ * <a href="http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf">Lin and Cohen</a>.
+ * From the abstract: PIC finds a very low-dimensional embedding of a dataset using
+ * truncated power iteration on a normalized pair-wise similarity matrix of the data.
  *
  * @param k Number of clusters.
  * @param maxIterations Maximum number of iterations of the PIC algorithm.
@@ -185,6 +183,8 @@ class PowerIterationClustering private[clustering] (
       case "random" => randomInit(w)
       case "degree" => initDegreeVector(w)
     }
+    // Materialized the graph w0 in randomInit/initDegreeVector, hence we can unpersist w.
+    w.unpersist()
     pic(w0)
   }
 
@@ -207,6 +207,8 @@ class PowerIterationClustering private[clustering] (
       case "random" => randomInit(w)
       case "degree" => initDegreeVector(w)
     }
+    // Materialized the graph w0 in randomInit/initDegreeVector, hence we can unpersist w.
+    w.unpersist()
     pic(w0)
   }
 
@@ -228,11 +230,10 @@ class PowerIterationClustering private[clustering] (
    */
   private def pic(w: Graph[Double, Double]): PowerIterationClusteringModel = {
     val v = powerIter(w, maxIterations)
-    val assignments = kMeans(v, k).mapPartitions({ iter =>
-      iter.map { case (id, cluster) =>
-        Assignment(id, cluster)
-      }
-    }, preservesPartitioning = true)
+    val assignments = kMeans(v, k).map {
+      case (id, cluster) => Assignment(id, cluster)
+    }
+
     new PowerIterationClusteringModel(k, assignments)
   }
 }
@@ -298,12 +299,15 @@ object PowerIterationClustering extends Logging {
       },
       mergeMsg = _ + _,
       TripletFields.EdgeOnly)
-    Graph(vD, gA.edges)
-      .mapTriplets(
-        e => e.attr / math.max(e.srcAttr, MLUtils.EPSILON),
-        new TripletFields(/* useSrc */ true,
-                          /* useDst */ false,
-                          /* useEdge */ true))
+    val graph = Graph(vD, gA.edges).mapTriplets(
+      e => e.attr / math.max(e.srcAttr, MLUtils.EPSILON),
+      new TripletFields(/* useSrc */ true,
+        /* useDst */ false,
+        /* useEdge */ true))
+    materialize(graph)
+    gA.unpersist()
+
+    graph
   }
 
   /**
@@ -324,7 +328,10 @@ object PowerIterationClustering extends Logging {
       }, preservesPartitioning = true).cache()
     val sum = r.values.map(math.abs).sum()
     val v0 = r.mapValues(x => x / sum)
-    Graph(VertexRDD(v0), g.edges)
+    val graph = Graph(VertexRDD(v0), g.edges)
+    materialize(graph)
+    r.unpersist()
+    graph
   }
 
   /**
@@ -339,7 +346,9 @@ object PowerIterationClustering extends Logging {
   def initDegreeVector(g: Graph[Double, Double]): Graph[Double, Double] = {
     val sum = g.vertices.values.sum()
     val v0 = g.vertices.mapValues(_ / sum)
-    Graph(VertexRDD(v0), g.edges)
+    val graph = Graph(VertexRDD(v0), g.edges)
+    materialize(graph)
+    graph
   }
 
   /**
@@ -378,10 +387,38 @@ object PowerIterationClustering extends Logging {
       logInfo(s"$msgPrefix: delta = $delta.")
       diffDelta = math.abs(delta - prevDelta)
       logInfo(s"$msgPrefix: diff(delta) = $diffDelta.")
+
+      if (math.abs(diffDelta) < tol) {
+        /**
+         * Power Iteration fails to converge if absolute value of top 2 eigen values are equal,
+         * but with opposite sign. The resultant vector flip-flops between two vectors.
+         * We should give an exception, if we detect the failure of the convergence of the
+         * power iteration
+         */
+
+        // Rayleigh quotient = x^tAx / x^tx
+        val xTAx = curG.joinVertices(v) {
+          case (_, x, y) => x * y
+        }.vertices.values.sum()
+        val xTx = curG.vertices.mapValues(x => x * x).values.sum()
+        val rayleigh = xTAx / xTx
+
+        if (math.abs(norm - math.abs(rayleigh)) > tol) {
+          logWarning(s"Power Iteration fail to converge. delta = ${delta}," +
+            s" difference delta = ${diffDelta} and norm = ${norm}")
+        }
+      }
+      curG.vertices.unpersist()
+      curG.edges.unpersist()
       // update v
       curG = Graph(VertexRDD(v1), g.edges)
+      materialize(curG)
+      v.unpersist()
       prevDelta = delta
     }
+
+    curG.edges.unpersist()
+
     curG.vertices
   }
 
@@ -393,11 +430,21 @@ object PowerIterationClustering extends Logging {
    */
   private[clustering]
   def kMeans(v: VertexRDD[Double], k: Int): VertexRDD[Int] = {
-    val points = v.mapValues(x => Vectors.dense(x)).cache()
+    val points = v.mapValues(Vectors.dense(_)).cache()
     val model = new KMeans()
       .setK(k)
       .setSeed(0L)
       .run(points.values)
-    points.mapValues(p => model.predict(p)).cache()
+
+    val predict = points.mapValues(model.predict(_))
+    points.unpersist()
+    predict
+  }
+
+  /**
+   * Forces materialization of a Graph by iterating its RDDs.
+   */
+  private def materialize(g: Graph[_, _]): Unit = {
+    g.edges.foreachPartition(_ => {})
   }
 }

@@ -17,9 +17,9 @@
 
 """
 MLlib utilities for linear algebra. For dense vectors, MLlib
-uses the NumPy C{array} type, so you can simply pass NumPy arrays
-around. For sparse vectors, users can construct a L{SparseVector}
-object from MLlib or pass SciPy C{scipy.sparse} column vectors if
+uses the NumPy `array` type, so you can simply pass NumPy arrays
+around. For sparse vectors, users can construct a :class:`SparseVector`
+object from MLlib or pass SciPy `scipy.sparse` column vectors if
 SciPy is available in their environment.
 """
 
@@ -27,31 +27,14 @@ import sys
 import array
 import struct
 
-if sys.version >= '3':
-    basestring = str
-    xrange = range
-    import copyreg as copy_reg
-    long = int
-else:
-    from itertools import izip as zip
-    import copy_reg
-
 import numpy as np
 
-from pyspark import since
 from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
     IntegerType, ByteType, BooleanType
 
 
 __all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors',
            'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices']
-
-
-if sys.version_info[:2] == (2, 7):
-    # speed up pickling array in Python 2.7
-    def fast_pickle_array(ar):
-        return array.array, (ar.typecode, ar.tostring())
-    copy_reg.pickle(array.array, fast_pickle_array)
 
 
 # Check whether we have SciPy. MLlib works without it too, but if we have it, some methods,
@@ -68,7 +51,7 @@ except:
 def _convert_to_vector(l):
     if isinstance(l, Vector):
         return l
-    elif type(l) in (array.array, np.array, np.ndarray, list, tuple, xrange):
+    elif type(l) in (array.array, np.array, np.ndarray, list, tuple, range):
         return DenseVector(l)
     elif _have_scipy and scipy.sparse.issparse(l):
         assert l.shape[1] == 1, "Expected column vector"
@@ -102,7 +85,7 @@ def _vector_size(v):
     """
     if isinstance(v, Vector):
         return len(v)
-    elif type(v) in (array.array, list, tuple, xrange):
+    elif type(v) in (array.array, list, tuple, range):
         return len(v)
     elif type(v) == np.ndarray:
         if v.ndim == 1 or (v.ndim == 2 and v.shape[1] == 1):
@@ -270,6 +253,8 @@ class DenseVector(Vector):
     DenseVector([3.0, 2.0])
     >>> u % 2
     DenseVector([1.0, 0.0])
+    >>> -v
+    DenseVector([-1.0, -2.0])
     """
     def __init__(self, ar):
         if isinstance(ar, bytes):
@@ -384,14 +369,14 @@ class DenseVector(Vector):
 
     def toArray(self):
         """
-        Returns an numpy.ndarray
+        Returns the underlying numpy.ndarray
         """
         return self.array
 
     @property
     def values(self):
         """
-        Returns a list of values
+        Returns the underlying numpy.ndarray
         """
         return self.array
 
@@ -413,7 +398,7 @@ class DenseVector(Vector):
         elif isinstance(other, SparseVector):
             if len(self) != other.size:
                 return False
-            return Vectors._equals(list(xrange(len(self))), self.array, other.indices, other.values)
+            return Vectors._equals(list(range(len(self))), self.array, other.indices, other.values)
         return False
 
     def __ne__(self, other):
@@ -436,6 +421,9 @@ class DenseVector(Vector):
     def __getattr__(self, item):
         return getattr(self.array, item)
 
+    def __neg__(self):
+        return DenseVector(-self.array)
+
     def _delegate(op):
         def func(self, other):
             if isinstance(other, DenseVector):
@@ -443,7 +431,6 @@ class DenseVector(Vector):
             return DenseVector(getattr(self.array, op)(other))
         return func
 
-    __neg__ = _delegate("__neg__")
     __add__ = _delegate("__add__")
     __sub__ = _delegate("__sub__")
     __mul__ = _delegate("__mul__")
@@ -516,7 +503,7 @@ class SparseVector(Vector):
                 self.indices = np.array(args[0], dtype=np.int32)
                 self.values = np.array(args[1], dtype=np.float64)
             assert len(self.indices) == len(self.values), "index and value arrays not same length"
-            for i in xrange(len(self.indices) - 1):
+            for i in range(len(self.indices) - 1):
                 if self.indices[i] >= self.indices[i + 1]:
                     raise TypeError(
                         "Indices %s and %s are not strictly increasing"
@@ -677,7 +664,7 @@ class SparseVector(Vector):
 
     def toArray(self):
         """
-        Returns a copy of this SparseVector as a 1-dimensional NumPy array.
+        Returns a copy of this SparseVector as a 1-dimensional numpy.ndarray.
         """
         arr = np.zeros((self.size,), dtype=np.float64)
         arr[self.indices] = self.values
@@ -695,7 +682,7 @@ class SparseVector(Vector):
         inds = self.indices
         vals = self.values
         entries = ", ".join(["{0}: {1}".format(inds[i], _format_float(vals[i]))
-                             for i in xrange(len(inds))])
+                             for i in range(len(inds))])
         return "SparseVector({0}, {{{1}}})".format(self.size, entries)
 
     def __eq__(self, other):
@@ -705,7 +692,7 @@ class SparseVector(Vector):
         elif isinstance(other, DenseVector):
             if self.size != len(other):
                 return False
-            return Vectors._equals(self.indices, self.values, list(xrange(len(other))), other.array)
+            return Vectors._equals(self.indices, self.values, list(range(len(other))), other.array)
         return False
 
     def __getitem__(self, index):
@@ -754,7 +741,7 @@ class Vectors(object):
     .. note:: Dense vectors are simply represented as NumPy array objects,
         so there is no need to covert them for use in MLlib. For sparse vectors,
         the factory methods in this class create an MLlib-compatible type, or users
-        can pass in SciPy's C{scipy.sparse} column vectors.
+        can pass in SciPy's `scipy.sparse` column vectors.
     """
 
     @staticmethod
@@ -787,7 +774,7 @@ class Vectors(object):
         >>> Vectors.dense(1.0, 2.0)
         DenseVector([1.0, 2.0])
         """
-        if len(elements) == 1 and not isinstance(elements[0], (float, int, long)):
+        if len(elements) == 1 and not isinstance(elements[0], (float, int)):
             # it's list, numpy.array or other iterable object.
             elements = elements[0]
         return DenseVector(elements)
@@ -858,7 +845,7 @@ class Matrix(object):
 
     def toArray(self):
         """
-        Returns its elements in a NumPy ndarray.
+        Returns its elements in a numpy.ndarray.
         """
         raise NotImplementedError
 
@@ -933,7 +920,7 @@ class DenseMatrix(Matrix):
 
     def toArray(self):
         """
-        Return an numpy.ndarray
+        Return a numpy.ndarray
 
         >>> m = DenseMatrix(2, 2, range(4))
         >>> m.toArray()
@@ -976,14 +963,14 @@ class DenseMatrix(Matrix):
             return self.values[i + j * self.numRows]
 
     def __eq__(self, other):
-        if (not isinstance(other, DenseMatrix) or
-                self.numRows != other.numRows or
-                self.numCols != other.numCols):
+        if (self.numRows != other.numRows or self.numCols != other.numCols):
             return False
+        if isinstance(other, SparseMatrix):
+            return np.all(self.toArray() == other.toArray())
 
         self_values = np.ravel(self.toArray(), order='F')
         other_values = np.ravel(other.toArray(), order='F')
-        return all(self_values == other_values)
+        return np.all(self_values == other_values)
 
 
 class SparseMatrix(Matrix):
@@ -1117,10 +1104,10 @@ class SparseMatrix(Matrix):
 
     def toArray(self):
         """
-        Return an numpy.ndarray
+        Return a numpy.ndarray
         """
         A = np.zeros((self.numRows, self.numCols), dtype=np.float64, order='F')
-        for k in xrange(self.colPtrs.size - 1):
+        for k in range(self.colPtrs.size - 1):
             startptr = self.colPtrs[k]
             endptr = self.colPtrs[k + 1]
             if self.isTransposed:
@@ -1156,9 +1143,14 @@ class Matrices(object):
 
 def _test():
     import doctest
+    try:
+        # Numpy 1.14+ changed it's string format.
+        np.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

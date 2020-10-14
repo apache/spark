@@ -53,13 +53,13 @@ private[streaming] class FileBasedWriteAheadLogWriter(path: String, hadoopConf: 
     stream.close()
   }
 
-  private def flush() {
+  private def flush(): Unit = {
     stream.hflush()
     // Useful for local file system where hflush/sync does not work (HADOOP-7844)
     stream.getWrappedStream.flush()
   }
 
-  private def assertOpen() {
+  private def assertOpen(): Unit = {
     HdfsUtils.checkState(!closed, "Stream is closed. Create a new Writer to write to file.")
   }
 }

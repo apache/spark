@@ -19,8 +19,7 @@ package org.apache.spark.examples.sql.hive
 // $example on:spark_hive$
 import java.io.File
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 // $example off:spark_hive$
 
 object SparkHiveExample {
@@ -29,7 +28,7 @@ object SparkHiveExample {
   case class Record(key: Int, value: String)
   // $example off:spark_hive$
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     // When working with Hive, one must instantiate `SparkSession` with Hive support, including
     // connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined
     // functions. Users who do not have an existing Hive deployment can still enable Hive support.
@@ -102,8 +101,54 @@ object SparkHiveExample {
     // |  4| val_4|  4| val_4|
     // |  5| val_5|  5| val_5|
     // ...
-    // $example off:spark_hive$
+
+    // Create a Hive managed Parquet table, with HQL syntax instead of the Spark SQL native syntax
+    // `USING hive`
+    sql("CREATE TABLE hive_records(key int, value string) STORED AS PARQUET")
+    // Save DataFrame to the Hive managed table
+    val df = spark.table("src")
+    df.write.mode(SaveMode.Overwrite).saveAsTable("hive_records")
+    // After insertion, the Hive managed table has data now
+    sql("SELECT * FROM hive_records").show()
+    // +---+-------+
+    // |key|  value|
+    // +---+-------+
+    // |238|val_238|
+    // | 86| val_86|
+    // |311|val_311|
+    // ...
+
+    // Prepare a Parquet data directory
+    val dataDir = "/tmp/parquet_data"
+    spark.range(10).write.parquet(dataDir)
+    // Create a Hive external Parquet table
+    sql(s"CREATE EXTERNAL TABLE hive_bigints(id bigint) STORED AS PARQUET LOCATION '$dataDir'")
+    // The Hive external table should already have data
+    sql("SELECT * FROM hive_bigints").show()
+    // +---+
+    // | id|
+    // +---+
+    // |  0|
+    // |  1|
+    // |  2|
+    // ... Order may vary, as spark processes the partitions in parallel.
+
+    // Turn on flag for Hive Dynamic Partitioning
+    spark.sqlContext.setConf("hive.exec.dynamic.partition", "true")
+    spark.sqlContext.setConf("hive.exec.dynamic.partition.mode", "nonstrict")
+    // Create a Hive partitioned table using DataFrame API
+    df.write.partitionBy("key").format("hive").saveAsTable("hive_part_tbl")
+    // Partitioned column `key` will be moved to the end of the schema.
+    sql("SELECT * FROM hive_part_tbl").show()
+    // +-------+---+
+    // |  value|key|
+    // +-------+---+
+    // |val_238|238|
+    // | val_86| 86|
+    // |val_311|311|
+    // ...
 
     spark.stop()
+    // $example off:spark_hive$
   }
 }

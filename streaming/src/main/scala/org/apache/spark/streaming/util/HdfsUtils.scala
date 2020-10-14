@@ -21,6 +21,8 @@ import java.io.{FileNotFoundException, IOException}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
+import org.apache.spark.deploy.SparkHadoopUtil
+
 private[streaming] object HdfsUtils {
 
   def getOutputStream(path: String, conf: Configuration): FSDataOutputStream = {
@@ -29,13 +31,16 @@ private[streaming] object HdfsUtils {
     // If the file exists and we have append support, append instead of creating a new file
     val stream: FSDataOutputStream = {
       if (dfs.isFile(dfsPath)) {
-        if (conf.getBoolean("hdfs.append.support", false) || dfs.isInstanceOf[RawLocalFileSystem]) {
+        if (conf.getBoolean("dfs.support.append", true) ||
+            conf.getBoolean("hdfs.append.support", false) ||
+            dfs.isInstanceOf[RawLocalFileSystem]) {
           dfs.append(dfsPath)
         } else {
           throw new IllegalStateException("File exists and there is no append support!")
         }
       } else {
-        dfs.create(dfsPath)
+        // we dont' want to use hdfs erasure coding, as that lacks support for append and hflush
+        SparkHadoopUtil.createFile(dfs, dfsPath, false)
       }
     }
     stream
@@ -53,11 +58,11 @@ private[streaming] object HdfsUtils {
         // If we are really unlucky, the file may be deleted as we're opening the stream.
         // This can happen as clean up is performed by daemon threads that may be left over from
         // previous runs.
-        if (!dfs.isFile(dfsPath)) null else throw e
+        if (!dfs.getFileStatus(dfsPath).isFile) null else throw e
     }
   }
 
-  def checkState(state: Boolean, errorMsg: => String) {
+  def checkState(state: Boolean, errorMsg: => String): Unit = {
     if (!state) {
       throw new IllegalStateException(errorMsg)
     }
@@ -87,6 +92,10 @@ private[streaming] object HdfsUtils {
   def checkFileExists(path: String, conf: Configuration): Boolean = {
     val hdpPath = new Path(path)
     val fs = getFileSystemForPath(hdpPath, conf)
-    fs.isFile(hdpPath)
+    try {
+      fs.getFileStatus(hdpPath).isFile
+    } catch {
+      case _: FileNotFoundException => false
+    }
   }
 }

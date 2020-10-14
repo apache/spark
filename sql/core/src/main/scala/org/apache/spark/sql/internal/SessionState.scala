@@ -22,14 +22,15 @@ import java.io.File
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListener}
@@ -49,7 +50,8 @@ import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListen
  *                        unresolved attributes and relations.
  * @param optimizerBuilder a function to create the logical query plan optimizer.
  * @param planner Planner that converts optimized logical plans to physical plans.
- * @param streamingQueryManager Interface to start and stop streaming queries.
+ * @param streamingQueryManagerBuilder A function to create a streaming query manager to
+ *                                     start and stop streaming queries.
  * @param listenerManager Interface to register custom [[QueryExecutionListener]]s.
  * @param resourceLoaderBuilder a function to create a session shared resource loader to load JARs,
  *                              files, etc.
@@ -67,11 +69,13 @@ private[sql] class SessionState(
     analyzerBuilder: () => Analyzer,
     optimizerBuilder: () => Optimizer,
     val planner: SparkPlanner,
-    val streamingQueryManager: StreamingQueryManager,
+    val streamingQueryManagerBuilder: () => StreamingQueryManager,
     val listenerManager: ExecutionListenerManager,
     resourceLoaderBuilder: () => SessionResourceLoader,
     createQueryExecution: LogicalPlan => QueryExecution,
-    createClone: (SparkSession, SessionState) => SessionState) {
+    createClone: (SparkSession, SessionState) => SessionState,
+    val columnarRules: Seq[ColumnarRule],
+    val queryStagePrepRules: Seq[Rule[SparkPlan]]) {
 
   // The following fields are lazy to avoid creating the Hive client when creating SessionState.
   lazy val catalog: SessionCatalog = catalogBuilder()
@@ -81,6 +85,12 @@ private[sql] class SessionState(
   lazy val optimizer: Optimizer = optimizerBuilder()
 
   lazy val resourceLoader: SessionResourceLoader = resourceLoaderBuilder()
+
+  // The streamingQueryManager is lazy to avoid creating a StreamingQueryManager for each session
+  // when connecting to ThriftServer.
+  lazy val streamingQueryManager: StreamingQueryManager = streamingQueryManagerBuilder()
+
+  def catalogManager: CatalogManager = analyzer.catalogManager
 
   def newHadoopConf(): Configuration = SessionState.newHadoopConf(
     sharedState.sparkContext.hadoopConfiguration,
@@ -123,19 +133,19 @@ private[sql] object SessionState {
 /**
  * Concrete implementation of a [[BaseSessionStateBuilder]].
  */
-@Experimental
-@InterfaceStability.Unstable
+@Unstable
 class SessionStateBuilder(
     session: SparkSession,
-    parentState: Option[SessionState] = None)
-  extends BaseSessionStateBuilder(session, parentState) {
-  override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _)
+    parentState: Option[SessionState],
+    options: Map[String, String])
+  extends BaseSessionStateBuilder(session, parentState, options) {
+  override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _, Map.empty)
 }
 
 /**
  * Session shared [[FunctionResourceLoader]].
  */
-@InterfaceStability.Unstable
+@Unstable
 class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoader {
   override def loadResource(resource: FunctionResource): Unit = {
     resource.resourceType match {

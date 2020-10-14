@@ -36,7 +36,7 @@ import org.apache.spark.util.Utils
  *   (2) the Spark version of the client / server
  *   (3) an optional message
  */
-@JsonInclude(Include.NON_NULL)
+@JsonInclude(Include.NON_ABSENT)
 @JsonAutoDetect(getterVisibility = Visibility.ANY, setterVisibility = Visibility.ANY)
 @JsonPropertyOrder(alphabetic = true)
 private[rest] abstract class SubmitRestProtocolMessage {

@@ -26,37 +26,22 @@ import os
 import platform
 import warnings
 
-import py4j
-
-from pyspark import SparkConf
 from pyspark.context import SparkContext
-from pyspark.sql import SparkSession, SQLContext
+from pyspark.sql import SparkSession
 
 if os.environ.get("SPARK_EXECUTOR_URI"):
     SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
 
-SparkContext._ensure_initialized()
+SparkContext._ensure_initialized()  # type: ignore
 
 try:
-    # Try to access HiveConf, it will raise exception if Hive is not added
-    conf = SparkConf()
-    if conf.get('spark.sql.catalogImplementation', 'hive').lower() == 'hive':
-        SparkContext._jvm.org.apache.hadoop.hive.conf.HiveConf()
-        spark = SparkSession.builder\
-            .enableHiveSupport()\
-            .getOrCreate()
-    else:
-        spark = SparkSession.builder.getOrCreate()
-except py4j.protocol.Py4JError:
-    if conf.get('spark.sql.catalogImplementation', '').lower() == 'hive':
-        warnings.warn("Fall back to non-hive support because failing to access HiveConf, "
-                      "please make sure you build spark with hive")
-    spark = SparkSession.builder.getOrCreate()
-except TypeError:
-    if conf.get('spark.sql.catalogImplementation', '').lower() == 'hive':
-        warnings.warn("Fall back to non-hive support because failing to access HiveConf, "
-                      "please make sure you build spark with hive")
-    spark = SparkSession.builder.getOrCreate()
+    spark = SparkSession._create_shell_session()  # type: ignore
+except Exception:
+    import sys
+    import traceback
+    warnings.warn("Failed to initialize Spark session.")
+    traceback.print_exc(file=sys.stderr)
+    sys.exit(1)
 
 sc = spark.sparkContext
 sql = spark.sql
@@ -66,7 +51,7 @@ atexit.register(lambda: sc.stop())
 sqlContext = spark._wrapped
 sqlCtx = sqlContext
 
-print("""Welcome to
+print(r"""Welcome to
       ____              __
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
