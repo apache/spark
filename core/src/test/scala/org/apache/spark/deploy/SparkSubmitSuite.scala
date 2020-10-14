@@ -329,8 +329,8 @@ class SparkSubmitSuite
     conf.get("spark.executor.instances") should be ("6")
     conf.get("spark.yarn.dist.files") should include regex (".*file1.txt,.*file2.txt")
     conf.get("spark.yarn.dist.archives") should include regex (".*archive1.txt,.*archive2.txt")
-    conf.get("spark.yarn.dist.jars") should include
-      regex (".*one.jar,.*two.jar,.*three.jar,.*thejar.jar")
+    conf.get("spark.yarn.dist.jars") should
+      include regex (".*one.jar,.*two.jar,.*three.jar,.*thejar.jar")
     conf.get(UI_ENABLED) should be (false)
     sys.props("SPARK_SUBMIT") should be ("true")
   }

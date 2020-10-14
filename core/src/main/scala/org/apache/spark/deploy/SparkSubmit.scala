@@ -547,6 +547,10 @@ private[spark] class SparkSubmit extends Logging {
       args.files = mergeFileLists(args.files, args.primaryResource)
     }
 
+    if (clusterManager == YARN && deployMode == CLIENT && isUserJar(args.primaryResource)) {
+      args.jars = mergeFileLists(args.jars, args.primaryResource)
+    }
+
     // Special flag to avoid deprecation warnings at the client
     sys.props("SPARK_SUBMIT") = "true"
 

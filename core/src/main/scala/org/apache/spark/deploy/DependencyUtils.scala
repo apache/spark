@@ -169,12 +169,14 @@ private[deploy] object DependencyUtils extends Logging {
   }
 
   /**
-   * Merge a sequence of comma-separated file lists, some of which may be null to indicate
-   * no files, into a single comma-separated string.
+   * Merge and de-duplicate a sequence of comma-separated file lists,
+   * some of which may be null to indicate no files,
+   * into a single comma-separated string.
    */
   def mergeFileLists(lists: String*): String = {
     val merged = lists.filterNot(StringUtils.isBlank)
       .flatMap(Utils.stringToSeq)
+      .to[scala.collection.mutable.LinkedHashSet]
     if (merged.nonEmpty) merged.mkString(",") else null
   }
 
