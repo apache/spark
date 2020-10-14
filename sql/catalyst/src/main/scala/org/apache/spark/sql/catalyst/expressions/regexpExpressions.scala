@@ -232,8 +232,6 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
     val hasNull = ctx.freshName("hasNull")
     val matched = ctx.freshName("matched")
     val valueArg = ctx.freshName("valueArg")
-    // All the blocks are meant to be inside a do { ... } while (false); loop.
-    // The evaluation of variables can be stopped when we find a matching value.
     val listCode = listGen.map(x =>
       s"""
          |${x.code}
