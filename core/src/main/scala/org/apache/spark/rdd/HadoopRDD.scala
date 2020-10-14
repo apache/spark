@@ -234,9 +234,8 @@ class HadoopRDD[K, V](
         Array.empty[Partition]
       case e: IOException if e.getMessage.startsWith("Not a file:") =>
         val path = e.getMessage.split(":").map(_.trim).apply(2)
-        throw new IOException(s"Path: ${path} is a directory, it is not" +
-          s" allowed for InputFormat reader when" +
-          s" `mapreduce.input.fileinputformat.input.dir.recursive` is false.")
+        throw new IOException(s"Path: ${path} is a directory, which is not supported by the " +
+          s"record reader when `mapreduce.input.fileinputformat.input.dir.recursive` is false.")
     }
   }
 
