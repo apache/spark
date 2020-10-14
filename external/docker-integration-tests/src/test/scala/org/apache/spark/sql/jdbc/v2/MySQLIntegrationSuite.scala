@@ -41,7 +41,8 @@ import org.apache.spark.tags.DockerTest
  *
  */
 @DockerTest
-class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSession {
+class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
+  override val catalogName: String = "mysql"
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:5.7.31")
     override val env = Map(
@@ -49,6 +50,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkS
     )
     override val usesIpc = false
     override val jdbcPort: Int = 3306
+
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass"
   }
@@ -58,74 +60,32 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkS
     .set("spark.sql.catalog.mysql.url", db.getJdbcUrl(dockerIp, externalPort))
 
   override val connectionTimeout = timeout(7.minutes)
+
   override def dataPreparation(conn: Connection): Unit = {}
 
-  test("ALTER TABLE - add new columns") {
-    withTable("mysql.alt_table") {
-      sql("CREATE TABLE mysql.alt_table (ID STRING) USING _")
-      sql("ALTER TABLE mysql.alt_table ADD COLUMNS (C1 STRING, C2 STRING)")
-      var t = spark.table("mysql.alt_table")
-      var expectedSchema = new StructType()
-        .add("ID", StringType)
-        .add("C1", StringType)
-        .add("C2", StringType)
-      assert(t.schema === expectedSchema)
-      sql("ALTER TABLE mysql.alt_table ADD COLUMNS (C3 STRING)")
-      t = spark.table("mysql.alt_table")
-      expectedSchema = expectedSchema.add("C3", StringType)
-      assert(t.schema === expectedSchema)
-      // Add already existing column
-      val msg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE mysql.alt_table ADD COLUMNS (C3 DOUBLE)")
-      }.getMessage
-      assert(msg.contains("Cannot add column, because C3 already exists"))
-    }
-    // Add a column to not existing table
-    val msg = intercept[AnalysisException] {
-      sql(s"ALTER TABLE mysql.not_existing_table ADD COLUMNS (C4 STRING)")
+  override def testUpdateColumnType(tbl: String): Unit = {
+    sql(s"CREATE TABLE $tbl (ID INTEGER) USING _")
+    var t = spark.table(tbl)
+    var expectedSchema = new StructType().add("ID", IntegerType)
+    assert(t.schema === expectedSchema)
+    sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
+    t = spark.table(tbl)
+    expectedSchema = new StructType().add("ID", StringType)
+    assert(t.schema === expectedSchema)
+    // Update column type from STRING to INTEGER
+    val msg1 = intercept[AnalysisException] {
+      sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
     }.getMessage
-    assert(msg.contains("Table not found"))
+    assert(msg1.contains("Cannot update alt_table field ID: string cannot be cast to int"))
   }
 
-  test("ALTER TABLE - update column type") {
-    withTable("mysql.alt_table") {
-      sql("CREATE TABLE mysql.alt_table (ID INTEGER) USING _")
-      sql("ALTER TABLE mysql.alt_table ALTER COLUMN id TYPE STRING")
-      val t = spark.table("mysql.alt_table")
-      val expectedSchema = new StructType().add("ID", StringType)
-      assert(t.schema === expectedSchema)
-      // Update column type from STRING to INTEGER
-      val msg1 = intercept[AnalysisException] {
-        sql("ALTER TABLE mysql.alt_table ALTER COLUMN id TYPE INTEGER")
-      }.getMessage
-      assert(msg1.contains("Cannot update alt_table field ID: string cannot be cast to int"))
-      // Update not existing column
-      val msg2 = intercept[AnalysisException] {
-        sql("ALTER TABLE mysql.alt_table ALTER COLUMN bad_column TYPE DOUBLE")
-      }.getMessage
-      assert(msg2.contains("Cannot update missing field bad_column"))
-      // Update column to wrong type
-      val msg3 = intercept[ParseException] {
-        sql("ALTER TABLE mysql.alt_table ALTER COLUMN id TYPE bad_type")
-      }.getMessage
-      assert(msg3.contains("DataType bad_type is not supported"))
-    }
-    // Update column type in not existing table
+  override def testUpdateColumnNullability(tbl: String): Unit = {
+    sql("CREATE TABLE mysql.alt_table (ID STRING NOT NULL) USING _")
+    // Update nullability is unsupported for mysql db.
     val msg = intercept[AnalysisException] {
-      sql(s"ALTER TABLE mysql.not_existing_table ALTER COLUMN id TYPE DOUBLE")
-    }.getMessage
-    assert(msg.contains("Table not found"))
-  }
+      sql("ALTER TABLE mysql.alt_table ALTER COLUMN ID DROP NOT NULL")
+    }.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
 
-  test("ALTER TABLE - update column nullability") {
-    withTable("mysql.alt_table") {
-      sql("CREATE TABLE mysql.alt_table (ID STRING NOT NULL) USING _")
-      // Update nullability is unsupported for mysql db.
-      val msg = intercept[AnalysisException] {
-        sql("ALTER TABLE mysql.alt_table ALTER COLUMN ID DROP NOT NULL")
-      }.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
-
-      assert(msg.contains("UpdateColumnNullability is not supported"))
-    }
+    assert(msg.contains("UpdateColumnNullability is not supported"))
   }
 }

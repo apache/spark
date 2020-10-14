@@ -51,7 +51,7 @@ private case object MySQLDialect extends JdbcDialect {
 
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
   override def getUpdateColumnTypeQuery(tableName: String, columnName: String,
-    newDataType: String): String = {
+      newDataType: String): String = {
     s"ALTER TABLE $tableName MODIFY COLUMN $columnName $newDataType"
   }
 
@@ -63,7 +63,7 @@ private case object MySQLDialect extends JdbcDialect {
   // e.g. ALTER TABLE t1 MODIFY b INT NOT NULL;
   // We don't have column data type here, so throw Exception for now
   override def getUpdateColumnNullabilityQuery(tableName: String, columnName: String,
-    isNullable: Boolean): String = {
+      isNullable: Boolean): String = {
     throw new SQLFeatureNotSupportedException(s"UpdateColumnNullability is not supported")
   }
 }
