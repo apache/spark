@@ -31,6 +31,8 @@ license: |
     {% if static_file.name == 'generated-window-funcs-table.html' %}
 ### Window Functions
 {% include_relative generated-window-funcs-table.html %}
+#### Examples
+{% include_relative generated-window-funcs-examples.html %}
         {% break %}
     {% endif %}
 {% endfor %}

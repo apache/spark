@@ -121,6 +121,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
           assert(info.getExamples.startsWith("\n    Examples:\n"))
           assert(info.getExamples.endsWith("\n  "))
           assert(info.getSince.matches("[0-9]+\\.[0-9]+\\.[0-9]+"))
+          assert(info.getGroup.nonEmpty)
 
           if (info.getArguments.nonEmpty) {
             assert(info.getArguments.startsWith("\n    Arguments:\n"))

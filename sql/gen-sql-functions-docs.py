@@ -29,8 +29,11 @@ from pyspark.java_gateway import launch_gateway
 ExpressionInfo = namedtuple("ExpressionInfo", "name usage examples group")
 
 groups = {
-    "agg_funcs", "array_funcs", "datetime_funcs",
-    "json_funcs", "map_funcs", "window_funcs",
+    "agg_funcs", "array_funcs", "binary_funcs", "bitwise_funcs",
+    "comparison_funcs", "conditional_funcs", "conversion_funcs", "csv_funcs",
+    "datetime_funcs", "generator_funcs", "grouping_funcs", "json_funcs", "logical_funcs",
+    "map_funcs", "math_funcs", "misc_funcs", "regex_funcs", "string_funcs", "struct_funcs",
+    "window_funcs", "xml_funcs"
 }
 
 
@@ -108,7 +111,7 @@ def _make_pretty_usage(infos):
         # Expected formats are as follows;
         #  - `_FUNC_(...) - description`, or
         #  - `_FUNC_ - description`
-        usages = iter(re.split(r"(%s.*) - " % info.name, info.usage.strip())[1:])
+        usages = iter(re.split(r"(%s.*) - " % re.escape(info.name), info.usage.strip())[1:])
         for (sig, description) in zip(usages, usages):
             result.append("    <tr>")
             result.append("      <td>%s</td>" % sig)
@@ -145,12 +148,16 @@ def _make_pretty_examples(jspark, infos):
 
     pretty_output = ""
     for info in infos:
+        if info.name == 'raise_error':
+            # TODO: how to handle this
+            continue
+
         if info.examples.startswith("\n    Examples:"):
             output = []
             output.append("-- %s" % info.name)
             query_examples = filter(lambda x: x.startswith("      > "), info.examples.split("\n"))
             for query_example in query_examples:
-                query = query_example.lstrip("      > ")
+                query = query_example.lstrip("      > ").rstrip(';')
                 print("    %s" % query)
                 query_output = jspark.sql(query).showString(20, 20, False)
                 output.append(query)
