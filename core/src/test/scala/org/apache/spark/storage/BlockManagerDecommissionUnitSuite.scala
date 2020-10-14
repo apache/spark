@@ -70,7 +70,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
   }
 
   private def validateDecommissionTimestampsOnManager(bmDecomManager: BlockManagerDecommissioner,
-      fail: Boolean = false) = {
+      fail: Boolean = false, numShuffles: Option[Int] = None) = {
     var previousTime: Option[Long] = None
     try {
       bmDecomManager.start()
@@ -89,6 +89,9 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
         } else {
           // If we expect migration to fail we should get the max value quickly.
           assert(currentTime === Long.MaxValue)
+        }
+        numShuffles.foreach { s =>
+          assert(bmDecomManager.numMigratedShuffles.get() === s)
         }
       }
       if (!fail) {
@@ -183,6 +186,62 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     validateDecommissionTimestampsOnManager(bmDecomManager)
   }
 
+  test("block decom manager handles IO failures") {
+    // Set up the mocks so we return one shuffle block
+    val bm = mock(classOf[BlockManager])
+    val migratableShuffleBlockResolver = mock(classOf[MigratableResolver])
+    registerShuffleBlocks(migratableShuffleBlockResolver, Set((1, 1L, 1)))
+    when(bm.migratableResolver).thenReturn(migratableShuffleBlockResolver)
+    when(bm.getMigratableRDDBlocks())
+      .thenReturn(Seq())
+    when(bm.getPeers(mc.any()))
+      .thenReturn(Seq(BlockManagerId("exec2", "host2", 12345)))
+
+    val blockTransferService = mock(classOf[BlockTransferService])
+    // Simulate an ambiguous IO error (e.g. block could be gone, connection failed, etc.)
+    when(blockTransferService.uploadBlockSync(
+      mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull())).thenThrow(
+      new java.io.IOException("boop")
+    )
+
+    when(bm.blockTransferService).thenReturn(blockTransferService)
+
+    // Verify the decom manager handles this correctly
+    val bmDecomManager = new BlockManagerDecommissioner(sparkConf, bm)
+    validateDecommissionTimestampsOnManager(bmDecomManager, fail = false)
+  }
+
+  test("block decom manager short circuits removed blocks") {
+    // Set up the mocks so we return one shuffle block
+    val bm = mock(classOf[BlockManager])
+    val migratableShuffleBlockResolver = mock(classOf[MigratableResolver])
+    // First call get blocks, then empty list simulating a delete.
+    when(migratableShuffleBlockResolver.getMigrationBlocks(mc.any()))
+      .thenReturn(List(
+        (ShuffleIndexBlockId(1, 1, 1), mock(classOf[ManagedBuffer])),
+        (ShuffleDataBlockId(1, 1, 1), mock(classOf[ManagedBuffer]))))
+      .thenReturn(List())
+
+    when(bm.migratableResolver).thenReturn(migratableShuffleBlockResolver)
+    when(bm.getMigratableRDDBlocks())
+      .thenReturn(Seq())
+    when(bm.getPeers(mc.any()))
+      .thenReturn(Seq(BlockManagerId("exec2", "host2", 12345)))
+
+    val blockTransferService = mock(classOf[BlockTransferService])
+    // Simulate an ambiguous IO error (e.g. block could be gone, connection failed, etc.)
+    when(blockTransferService.uploadBlockSync(
+      mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull())).thenThrow(
+      new java.io.IOException("boop")
+    )
+
+    when(bm.blockTransferService).thenReturn(blockTransferService)
+
+    // Verify the decom manager handles this correctly
+    val bmDecomManager = new BlockManagerDecommissioner(sparkConf, bm)
+    validateDecommissionTimestampsOnManager(bmDecomManager, fail = false)
+  }
+
   test("test shuffle and cached rdd migration without any error") {
     val blockTransferService = mock(classOf[BlockTransferService])
     val bm = mock(classOf[BlockManager])
@@ -211,7 +270,8 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
 
       // We don't check that all blocks are migrated because out mock is always returning an RDD.
       eventually(timeout(100.second), interval(10.milliseconds)) {
-        assert(bmDecomManager.shufflesToMigrate.isEmpty == true)
+        assert(bmDecomManager.shufflesToMigrate.isEmpty === true)
+        assert(bmDecomManager.numMigratedShuffles.get() === 1)
         verify(bm, least(1)).replicateBlock(
           mc.eq(storedBlockId1), mc.any(), mc.any(), mc.eq(Some(3)))
         verify(blockTransferService, times(2))

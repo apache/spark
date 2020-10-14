@@ -83,7 +83,7 @@ private[storage] class BlockManagerDecommissioner(
               Thread.sleep(SLEEP_TIME_SECS * 1000L)
             case Some((shuffleBlockInfo, retryCount)) =>
               if (retryCount < maxReplicationFailuresForDecommission) {
-                logInfo(s"Trying to migrate shuffle ${shuffleBlockInfo} to ${peer}")
+                logDebug(s"Trying to migrate shuffle ${shuffleBlockInfo} to ${peer}")
                 val blocks = bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo)
                 logDebug(s"Got migration sub-blocks ${blocks}")
 
@@ -107,7 +107,7 @@ private[storage] class BlockManagerDecommissioner(
                     // If a block got deleted before netty opened the file handle, then trying to
                     // load the blocks now will fail.
                     if (bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo).isEmpty) {
-                      logDebug("Skipping block ${blockId}, block deleted.")
+                      logWarn(s"Skipping block ${shuffleBlockInfo}, block deleted.")
                     } else {
                       throw e
                     }
@@ -138,7 +138,7 @@ private[storage] class BlockManagerDecommissioner(
 
   // Shuffles which have migrated. This used to know when we are "done", being done can change
   // if a new shuffle file is created by a running task.
-  private val numMigratedShuffles = new AtomicInteger(0)
+  private[storage] val numMigratedShuffles = new AtomicInteger(0)
 
   // Shuffles which are queued for migration & number of retries so far.
   // Visible in storage for testing.
