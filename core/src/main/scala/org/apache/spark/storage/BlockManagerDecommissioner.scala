@@ -107,7 +107,7 @@ private[storage] class BlockManagerDecommissioner(
                     // If a block got deleted before netty opened the file handle, then trying to
                     // load the blocks now will fail.
                     if (bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo).isEmpty) {
-                      logWarn(s"Skipping block ${shuffleBlockInfo}, block deleted.")
+                      logWarning(s"Skipping block ${shuffleBlockInfo}, block deleted.")
                     } else {
                       throw e
                     }
