@@ -109,7 +109,7 @@ case class AdaptiveSparkPlanExec(
       case _: DataWritingCommandExec | _: V2TableWriteExec =>
         // SPARK-32932: Local shuffle reader could break partitioning that works best
         // for the following writing command
-       queryStageOptimizerRules.filterNot(_.isInstanceOf[OptimizeLocalShuffleReader])
+        queryStageOptimizerRules.filterNot(_.isInstanceOf[OptimizeLocalShuffleReader])
       case _ =>
         queryStageOptimizerRules
     }

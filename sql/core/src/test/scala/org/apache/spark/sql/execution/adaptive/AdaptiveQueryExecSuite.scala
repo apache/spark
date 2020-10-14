@@ -1298,14 +1298,11 @@ class AdaptiveQueryExecSuite
       }
 
       // Test DataSource v2
-      withTempPath { f =>
-        val path = f.getCanonicalPath
-        val format = classOf[NoopDataSource].getName
-        df.write.format(format).mode("overwrite").save(path)
-        sparkContext.listenerBus.waitUntilEmpty()
-        assert(noLocalReader)
-        noLocalReader = false
-      }
+      val format = classOf[NoopDataSource].getName
+      df.write.format(format).mode("overwrite").save()
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(noLocalReader)
+      noLocalReader = false
 
       spark.listenerManager.unregister(listener)
     }
