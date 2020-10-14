@@ -175,8 +175,7 @@ private[deploy] object DependencyUtils extends Logging {
    */
   def mergeFileLists(lists: String*): String = {
     val merged = lists.filterNot(StringUtils.isBlank)
-      .flatMap(Utils.stringToSeq)
-      .to[scala.collection.mutable.LinkedHashSet]
+      .flatMap(Utils.stringToSeq).distinct
     if (merged.nonEmpty) merged.mkString(",") else null
   }
 
