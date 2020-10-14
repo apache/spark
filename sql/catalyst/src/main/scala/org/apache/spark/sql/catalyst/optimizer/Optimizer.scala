@@ -484,15 +484,16 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
  */
 object RemoveRedundantAggregates extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case upper @ Aggregate(_, _, lower: Aggregate) if isRedundant(upper, lower) =>
+    case upper @ Aggregate(_, _, lower: Aggregate) if lowerIsRedundant(upper, lower) =>
       upper.copy(child = lower.child)
   }
 
-  private def isRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
-    val referencesOnlyGrouping = upper.references.subsetOf(AttributeSet(lower.groupingExpressions))
-    val hasAggregateExpressions = upper.aggregateExpressions
+  private def lowerIsRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
+    val upperReferencesOnlyGrouping = upper.references
+      .subsetOf(AttributeSet(lower.groupingExpressions))
+    val upperHasAggregateExpressions = upper.aggregateExpressions
       .exists(_.find(_.isInstanceOf[AggregateExpression]).nonEmpty)
-    referencesOnlyGrouping && !hasAggregateExpressions
+    upperReferencesOnlyGrouping && !upperHasAggregateExpressions
   }
 }
 
