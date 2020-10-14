@@ -1499,6 +1499,9 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       val appStatusPath = RollingEventLogFilesWriter.getAppStatusFilePath(new Path(writer.logPath),
         "app", None, true)
       fs.delete(appStatusPath, false)
+      provider.checkForLogs()
+      provider.cleanLogs()
+      assert(provider.getListing.length === 0)
 
       // Create a new application
       val writer2 = new RollingEventLogFilesWriter("app2", None, dir.toURI, conf, hadoopConf)
@@ -1507,10 +1510,10 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
         SparkListenerApplicationStart("app2", Some("app2"), 0, "user", None),
         SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
 
-      // The invalid folder doesn't get removed from the active provider
+      // Both folders exist but only one application found
       provider.checkForLogs()
       provider.cleanLogs()
-      assert(provider.getListing.length === 2)
+      assert(provider.getListing.length === 1)
       assert(dir.listFiles().size === 2)
 
       // Make sure a new provider sees the valid application
