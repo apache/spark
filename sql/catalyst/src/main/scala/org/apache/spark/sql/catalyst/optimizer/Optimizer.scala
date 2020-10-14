@@ -491,9 +491,9 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] {
   private def lowerIsRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
     val upperReferencesOnlyGrouping = upper.references
       .subsetOf(AttributeSet(lower.groupingExpressions))
-    val upperHasAggregateExpressions = upper.aggregateExpressions
-      .exists(_.find(_.isInstanceOf[AggregateExpression]).nonEmpty)
-    upperReferencesOnlyGrouping && !upperHasAggregateExpressions
+    val upperHasNoAggregateExpressions = upper.aggregateExpressions
+      .forall(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
+    upperReferencesOnlyGrouping && upperHasNoAggregateExpressions
   }
 }
 
