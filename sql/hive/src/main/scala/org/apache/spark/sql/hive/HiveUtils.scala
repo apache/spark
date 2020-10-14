@@ -25,7 +25,6 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
-import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
@@ -201,7 +200,7 @@ private[spark] object HiveUtils extends Logging {
    * The location of the jars that should be used to instantiate the HiveMetastoreClient.  This
    * property can be one of three options:
    *  - a classpath in the standard format for both hive and hadoop.
-   *  - path - attempt to discover the jars with paths configured bt `HIVE_METASTORE_JARS_PATH`
+   *  - path - attempt to discover the jars with paths configured by `HIVE_METASTORE_JARS_PATH`.
    *  - builtin - attempt to discover the jars that were used to load Spark SQL and use those. This
    *              option is only valid when using the execution version of Hive.
    *  - maven - download the correct version of hive on demand from maven.
