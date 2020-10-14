@@ -55,6 +55,40 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       decommissioningTest = true)
   }
 
+
+  test("Test basic decommissioning with shuffle cleanup", k8sTestTag) {
+    sparkAppConf
+      .set(config.DECOMMISSION_ENABLED.key, "true")
+      .set("spark.kubernetes.pyspark.pythonVersion", "3")
+      .set("spark.kubernetes.container.image", pyImage)
+      .set(config.STORAGE_DECOMMISSION_ENABLED.key, "true")
+      .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key, "true")
+      .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key, "true")
+      .set(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED.key, "true")
+      .set(config.DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT.key, "500")
+      // Ensure we have somewhere to migrate our data too
+      .set("spark.executor.instances", "3")
+      // The default of 30 seconds is fine, but for testing we just want to get this done fast.
+      .set("spark.storage.decommission.replicationReattemptInterval", "1")
+
+    runSparkApplicationAndVerifyCompletion(
+      appResource = PYSPARK_DECOMISSIONING_CLEANUP,
+      mainClass = "",
+      expectedLogOnCompletion = Seq(
+        "Finished waiting, stopping Spark",
+        "Received decommission executor message",
+        "Acknowledged decommissioning block manager",
+        ": Executor decommission."),
+      appArgs = Array.empty[String],
+      driverPodChecker = doBasicDriverPyPodCheck,
+      executorPodChecker = doBasicExecutorPyPodCheck,
+      appLocator = appLocator,
+      isJVM = false,
+      pyFiles = None,
+      executorPatience = None,
+      decommissioningTest = true)
+  }
+
   test("Test decommissioning with dynamic allocation & shuffle cleanups", k8sTestTag) {
     sparkAppConf
       .set(config.DECOMMISSION_ENABLED.key, "true")
@@ -64,10 +98,12 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key, "true")
       .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key, "true")
       .set(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED.key, "true")
-      .set(config.DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT.key, "5000")
-      .set(config.DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT.key, "1")
+      .set(config.DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT.key, "500")
+      .set(config.DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT.key, "30")
+      .set(config.DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, "10")
       .set(config.DYN_ALLOCATION_MIN_EXECUTORS.key, "2")
       .set(config.DYN_ALLOCATION_INITIAL_EXECUTORS.key, "3")
+      .set(config.DYN_ALLOCATION_ENABLED.key, "true")
       // Ensure we have somewhere to migrate our data too
       .set("spark.executor.instances", "3")
       // The default of 30 seconds is fine, but for testing we just want to get this done fast.
@@ -76,7 +112,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     var execLogs: String = ""
 
     runSparkApplicationAndVerifyCompletion(
-      appResource = PYSPARK_DECOMISSIONING,
+      appResource = PYSPARK_SCALE,
       mainClass = "",
       expectedLogOnCompletion = Seq(
         "Finished waiting, stopping Spark",
@@ -97,4 +133,6 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
 private[spark] object DecommissionSuite {
   val TEST_LOCAL_PYSPARK: String = "local:///opt/spark/tests/"
   val PYSPARK_DECOMISSIONING: String = TEST_LOCAL_PYSPARK + "decommissioning.py"
+  val PYSPARK_DECOMISSIONING_CLEANUP: String = TEST_LOCAL_PYSPARK + "decommissioning_cleanup.py"
+  val PYSPARK_SCALE: String = TEST_LOCAL_PYSPARK + "autoscale.py"
 }
