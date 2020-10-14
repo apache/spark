@@ -906,16 +906,31 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   test("SPARK-26533: Support query auto timeout cancel on thriftserver - SQLConf") {
     withJdbcStatement() { statement =>
       statement.execute(s"SET ${SQLConf.THRIFTSERVER_QUERY_TIMEOUT.key}=1")
-      val e = intercept[SQLException] {
+      val e1 = intercept[SQLException] {
         statement.execute("select java_method('java.lang.Thread', 'sleep', 10000L)")
       }.getMessage
-      assert(e.contains("Query timed out after"))
+      assert(e1.contains("Query timed out after"))
 
       statement.execute(s"SET ${SQLConf.THRIFTSERVER_QUERY_TIMEOUT.key}=0")
       val rs = statement.executeQuery(
         "select 'test', java_method('java.lang.Thread', 'sleep', 3000L)")
       rs.next()
       assert(rs.getString(1) == "test")
+
+      // Uses a smaller timeout value of a config value and an a user-specified one
+      statement.execute(s"SET ${SQLConf.THRIFTSERVER_QUERY_TIMEOUT.key}=1")
+      statement.setQueryTimeout(30)
+      val e2 = intercept[SQLException] {
+        statement.execute("select java_method('java.lang.Thread', 'sleep', 10000L)")
+      }.getMessage
+      assert(e2.contains("Query timed out after"))
+
+      statement.execute(s"SET ${SQLConf.THRIFTSERVER_QUERY_TIMEOUT.key}=30")
+      statement.setQueryTimeout(1)
+      val e3 = intercept[SQLException] {
+        statement.execute("select java_method('java.lang.Thread', 'sleep', 10000L)")
+      }.getMessage
+      assert(e3.contains("Query timed out after"))
     }
   }
 }

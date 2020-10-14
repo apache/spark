@@ -51,10 +51,16 @@ private[hive] class SparkExecuteStatementOperation(
   with SparkOperation
   with Logging {
 
-  private val queryTimeoutValue = if (queryTimeout <= 0) {
-    sqlContext.conf.getConf(SQLConf.THRIFTSERVER_QUERY_TIMEOUT)
-  } else {
-    queryTimeout
+  // If a timeout value `queryTimeout` is specified by users and it is smaller than
+  // a global timeout value, we use the user-specified value.
+  // This code follows the Hive timeout behaviour (See #29933 for details).
+  private val timeout = {
+    val globalTimeout = sqlContext.conf.getConf(SQLConf.THRIFTSERVER_QUERY_TIMEOUT)
+    if (globalTimeout > 0 && (queryTimeout <= 0 || globalTimeout < queryTimeout)) {
+      globalTimeout
+    } else {
+      queryTimeout
+    }
   }
 
   private var result: DataFrame = _
@@ -207,10 +213,21 @@ private[hive] class SparkExecuteStatementOperation(
       parentSession.getUsername)
     setHasResultSet(true) // avoid no resultset for async run
 
-    if (queryTimeoutValue > 0) {
-      Executors.newSingleThreadScheduledExecutor.schedule(new Runnable {
-          override def run(): Unit = timeoutCancel()
-        }, queryTimeoutValue, TimeUnit.SECONDS)
+    if (timeout > 0) {
+      val timeoutExecutor = Executors.newSingleThreadScheduledExecutor()
+      timeoutExecutor.schedule(new Runnable {
+        override def run(): Unit = {
+          try {
+            timeoutCancel()
+          } catch {
+            case NonFatal(e) =>
+              setOperationException(new HiveSQLException(e))
+              logError(s"Error cancelling the query after timeout: $timeout seconds")
+          } finally {
+            timeoutExecutor.shutdown()
+          }
+        }
+      }, timeout, TimeUnit.SECONDS)
     }
 
     if (!runInBackground) {
@@ -344,7 +361,7 @@ private[hive] class SparkExecuteStatementOperation(
   def timeoutCancel(): Unit = {
     synchronized {
       if (!getStatus.getState.isTerminal) {
-        logInfo(s"Query with $statementId timed out after $queryTimeoutValue seconds")
+        logInfo(s"Query with $statementId timed out after $timeout seconds")
         setState(OperationState.TIMEDOUT)
         cleanup()
         HiveThriftServer2.eventManager.onStatementTimeout(statementId)
