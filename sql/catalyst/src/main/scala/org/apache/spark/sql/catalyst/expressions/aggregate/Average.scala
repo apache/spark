@@ -77,6 +77,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   )
 
   // If all input are nulls, count will be 0 and we will get null after the division.
+  // We can't directly use `Divide` as it throws an exception under ansi mode.
   override lazy val evaluateExpression = {
     val eval = child.dataType match {
       case _: DecimalType =>

@@ -151,7 +151,7 @@ case class Abs(child: Expression)
 
 abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
-  protected val checkOverflow = SQLConf.get.ansiEnabled
+  protected val failOnError = SQLConf.get.ansiEnabled
 
   override def dataType: DataType = left.dataType
 
@@ -181,7 +181,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
     case ByteType | ShortType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         val tmpResult = ctx.freshName("tmpResult")
-        val overflowCheck = if (checkOverflow) {
+        val overflowCheck = if (failOnError) {
           val javaType = CodeGenerator.boxedType(dataType)
           s"""
              |if ($tmpResult < $javaType.MIN_VALUE || $tmpResult > $javaType.MAX_VALUE) {
@@ -199,7 +199,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
       })
     case IntegerType | LongType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-        val operation = if (checkOverflow && exactMathMethod.isDefined) {
+        val operation = if (failOnError && exactMathMethod.isDefined) {
           val mathClass = classOf[Math].getName
           s"$mathClass.${exactMathMethod.get}($eval1, $eval2)"
         } else {
@@ -241,12 +241,12 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def decimalMethod: String = "$plus"
 
-  override def calendarIntervalMethod: String = if (checkOverflow) "addExact" else "add"
+  override def calendarIntervalMethod: String = if (failOnError) "addExact" else "add"
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
-    case CalendarIntervalType if checkOverflow =>
+    case CalendarIntervalType if failOnError =>
       IntervalUtils.addExact(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
     case CalendarIntervalType =>
@@ -274,12 +274,12 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
 
   override def decimalMethod: String = "$minus"
 
-  override def calendarIntervalMethod: String = if (checkOverflow) "subtractExact" else "subtract"
+  override def calendarIntervalMethod: String = if (failOnError) "subtractExact" else "subtract"
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
-    case CalendarIntervalType if checkOverflow =>
+    case CalendarIntervalType if failOnError =>
       IntervalUtils.subtractExact(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
     case CalendarIntervalType =>
@@ -306,7 +306,7 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
   override def symbol: String = "*"
   override def decimalMethod: String = "$times"
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 
@@ -326,7 +326,7 @@ trait DivModLike extends BinaryArithmetic {
   }
 
   private def divByZero: Any = {
-    if (checkOverflow) {
+    if (failOnError) {
       throw new ArithmeticException("divide by zero")
     } else {
       null
@@ -355,7 +355,7 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       s"${eval2.value} == 0"
     }
-    val divByZero = if (checkOverflow) {
+    val divByZero = if (failOnError) {
       "throw new ArithmeticException(\"divide by zero\");"
     } else {
       s"${ev.isNull} = true;"
@@ -550,7 +550,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
   }
 
   private def divByZero: Any = {
-    if (checkOverflow) {
+    if (failOnError) {
       throw new ArithmeticException("divide by zero")
     } else {
       null
@@ -581,7 +581,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
     } else {
       s"${eval2.value} == 0"
     }
-    val divByZero = if (checkOverflow) {
+    val divByZero = if (failOnError) {
       "throw new ArithmeticException(\"divide by zero\");"
     } else {
       s"${ev.isNull} = true;"
