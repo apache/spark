@@ -487,8 +487,8 @@ public class RemoteBlockPushResolverSuite {
   }
 
   private void removeApplication(String TEST_APP) {
-    // PushResolver cleans up the local dirs in a different thread which can conflict with the test data of other
-    // tests, since all the tests are using the same Application Id.
+    // PushResolver cleans up the local dirs in a different thread which can conflict with the test
+    // data of other tests, since they are using the same Application Id.
     pushResolver.applicationRemoved(TEST_APP,  false);
   }
 
@@ -504,7 +504,8 @@ public class RemoteBlockPushResolverSuite {
     }
     for (int i = 0; i < meta.getNumChunks(); i++) {
       FileSegmentManagedBuffer mb =
-          (FileSegmentManagedBuffer) pushResolver.getMergedBlockData(TEST_APP, shuffleId, reduceId, i);
+          (FileSegmentManagedBuffer) pushResolver.getMergedBlockData(TEST_APP, shuffleId, reduceId,
+              i);
       assertEquals(expectedSizes[i], mb.getLength());
     }
   }
