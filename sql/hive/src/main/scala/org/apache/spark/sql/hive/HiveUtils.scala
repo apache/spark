@@ -28,7 +28,6 @@ import scala.language.implicitConversions
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -101,15 +100,16 @@ private[spark] object HiveUtils extends Logging {
     .createWithDefault("builtin")
 
   val HIVE_METASTORE_JARS_PATH = buildStaticConf("spark.sql.hive.metastore.jars.path")
-    .doc(s"Comma separated path of Hive jars, support both local and remote paths," +
-      s"Such as:" +
-      s" 1. /path/to/jar/xxx.jar" +
-      s" 2. file:///path/to/jar/xxx.jar" +
-      s" 3. local:///path/to/jar/xxx.jar" +
-      s" 4. hdfs://path/to/jar/xxx.jar" +
-      s" 5. [http/https/ftp]://path/to/jar/xxx.jar" +
-      s"For local path and URI path, we only support path wildcard for the last layer," +
-      s"but for remote HDFS path, we support nested path wildcard." +
+    .doc(s"Comma separated fully qualified URL of Hive jars, support both local and remote paths," +
+      s"Such as: " +
+      s" 1. file://path/to/jar/xxx.jar" +
+      s" 2. hdfs://nameservice/path/to/jar/xxx.jar" +
+      s" 3. /path/to/jar (path without schema will be treated as HDFS path)" +
+      s" 3. [http/https/ftp]://path/to/jar/xxx.jar" +
+      s"For URI, we can't support path wildcard, but for other URL support nested path wildcard," +
+      s"Such as: " +
+      s" 1. file://path/to/jar/*, file://path/to/jar/*/*" +
+      s" 2. hdfs://nameservice/path/to/jar/*, hdfs://nameservice/path/to/jar/*/*" +
       s"When ${HIVE_METASTORE_JARS.key} is set to `path`, we will use Hive jars configured by this")
     .version("3.1.0")
     .stringConf
@@ -445,23 +445,16 @@ private[spark] object HiveUtils extends Logging {
       val jars =
         HiveUtils.hiveMetastoreJarsPath(sqlConf)
           .flatMap {
-            case path if Utils.isWindows =>
+            case path if path.contains("\\") && Utils.isWindows =>
               addLocalHiveJars(new File(path))
             case path =>
-              val uri = new Path(path).toUri
-              uri.getScheme match {
-                // For path `/path/to/jar/xx.jar` schema is `null`
-                case "file" | "local" | null =>
-                  addLocalHiveJars(new File(uri.getPath))
-                case _ =>
-                  DataSource.checkAndGlobPathIfNecessary(
-                    pathStrings = Seq(path),
-                    hadoopConf = hadoopConf,
-                    checkEmptyGlobPath = true,
-                    checkFilesExist = false,
-                    enableGlobbing = true
-                  ).map(_.toUri.toURL)
-              }
+              DataSource.checkAndGlobPathIfNecessary(
+                pathStrings = Seq(path),
+                hadoopConf = hadoopConf,
+                checkEmptyGlobPath = true,
+                checkFilesExist = false,
+                enableGlobbing = true
+              ).map(_.toUri.toURL)
           }
 
       logInfo(
