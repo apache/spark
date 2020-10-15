@@ -583,6 +583,5 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(1.minute)("/*$meta chars{^\\;}*/ SELECT 'test';" -> "test")
     runCliWithin(1.minute)("/*\nmulti-line\n*/ SELECT 'test';" -> "test")
     runCliWithin(1.minute)("/*/* multi-level bracketed*/*/ SELECT 'test';" -> "test")
-
   }
 }
