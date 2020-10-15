@@ -859,20 +859,25 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  private def getMetaData(dir: java.io.File): Map[String, String] = {
+    val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
+
+    val conf = new Configuration()
+    val hadoopInputFile = HadoopInputFile.fromPath(new Path(file), conf)
+    val parquetReadOptions = HadoopReadOptions.builder(conf).build()
+    val m = ParquetFileReader.open(hadoopInputFile, parquetReadOptions)
+    val metadata = try {
+      m.getFileMetaData.getKeyValueMetaData
+    } finally {
+      m.close()
+    }
+    metadata.asScala.toMap
+  }
+
   test("Write Spark version into Parquet metadata") {
     withTempPath { dir =>
-      val path = dir.getAbsolutePath
-      spark.range(1).repartition(1).write.parquet(path)
-      val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
-
-      val conf = new Configuration()
-      val hadoopInputFile = HadoopInputFile.fromPath(new Path(file), conf)
-      val parquetReadOptions = HadoopReadOptions.builder(conf).build()
-      val m = ParquetFileReader.open(hadoopInputFile, parquetReadOptions)
-      val metaData = m.getFileMetaData.getKeyValueMetaData
-      m.close()
-
-      assert(metaData.get(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION_SHORT)
+      spark.range(1).repartition(1).write.parquet(dir.getAbsolutePath)
+      assert(getMetaData(dir)(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION_SHORT)
     }
   }
 
@@ -1107,6 +1112,30 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           }
         }
       }
+    }
+  }
+
+  test("SPARK-33160: write the metadata key 'org.apache.spark.int96NoRebase'") {
+    def saveInt96(dir: java.io.File): Unit = {
+      Seq(Timestamp.valueOf("1000-01-01 01:02:03")).toDF()
+        .repartition(1)
+        .write
+        .parquet(dir.getAbsolutePath)
+    }
+    withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+      withTempPath { dir =>
+        saveInt96(dir)
+        assert(getMetaData(dir).get(SPARK_INT96_NO_REBASE).isEmpty)
+      }
+    }
+    withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
+      withTempPath { dir =>
+        saveInt96(dir)
+        assert(getMetaData(dir)(SPARK_INT96_NO_REBASE) === "")
+      }
+    }
+    withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+      withTempPath { dir => intercept[SparkException] { saveInt96(dir) } }
     }
   }
 }
