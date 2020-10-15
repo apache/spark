@@ -199,22 +199,26 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
     if (evaluatedValue == null) {
       null
     } else {
+      var hasNull = false
+      var match = true
       list.foreach { e =>
         val str = e.eval(input)
         if (str == null) {
-          return null
+          hasNull = true
         }
         val regex =
           Pattern.compile(StringUtils.escapeLikeRegex(str.asInstanceOf[UTF8String].toString, '\\'))
-        if(regex == null) {
-          return null
-        } else if (isNot && matches(regex, evaluatedValue.asInstanceOf[UTF8String].toString)) {
-          return false
+        if (isNot && matches(regex, evaluatedValue.asInstanceOf[UTF8String].toString)) {
+          match = false
         } else if (!isNot && !matches(regex, evaluatedValue.asInstanceOf[UTF8String].toString)) {
-          return false
+          match = false
         }
       }
-      return true
+      if (hasNull) {
+        return null
+      } else {
+        return match
+      }
     }
   }
 
