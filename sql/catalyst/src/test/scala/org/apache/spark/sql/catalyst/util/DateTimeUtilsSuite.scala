@@ -70,7 +70,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("us and julian day") {
-    val (d, ns) = toJulianDay(0)
+    val (d, ns) = toJulianDay(RebaseDateTime.rebaseGregorianToJulianMicros(0))
     assert(d === JULIAN_DAY_OF_EPOCH)
     assert(ns === 0)
     assert(fromJulianDay(d, ns) == 0L)
@@ -78,7 +78,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     Seq(Timestamp.valueOf("2015-06-11 10:10:10.100"),
       Timestamp.valueOf("2015-06-11 20:10:10.100"),
       Timestamp.valueOf("1900-06-11 20:10:10.100")).foreach { t =>
-      val (d, ns) = toJulianDay(fromJavaTimestamp(t))
+      val (d, ns) = toJulianDay(RebaseDateTime.rebaseGregorianToJulianMicros(fromJavaTimestamp(t)))
       assert(ns > 0)
       val t1 = toJavaTimestamp(fromJulianDay(d, ns))
       assert(t.equals(t1))
