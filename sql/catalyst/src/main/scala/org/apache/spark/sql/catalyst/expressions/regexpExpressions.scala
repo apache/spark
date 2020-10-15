@@ -348,6 +348,9 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression, pos: Expression)
   extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
+  def this(subject: Expression, regexp: Expression, rep: Expression) =
+    this(subject, regexp, rep, Literal(1))
+
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!pos.foldable) {
       return TypeCheckFailure(s"Position expression must be foldable, but got $pos")
@@ -461,7 +464,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
 object RegExpReplace {
   def apply(subject: Expression, regexp: Expression, rep: Expression): RegExpReplace =
-    new RegExpReplace(subject, regexp, rep, Literal(1))
+    new RegExpReplace(subject, regexp, rep)
 }
 
 object RegExpExtractBase {
