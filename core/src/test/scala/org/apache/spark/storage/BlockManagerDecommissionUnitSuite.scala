@@ -216,6 +216,9 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     val bm = mock(classOf[BlockManager])
     val migratableShuffleBlockResolver = mock(classOf[MigratableResolver])
     // First call get blocks, then empty list simulating a delete.
+    when(migratableShuffleBlockResolver.getStoredShuffles())
+      .thenReturn(Seq(ShuffleBlockInfo(1, 1)))
+      .thenReturn(Seq())
     when(migratableShuffleBlockResolver.getMigrationBlocks(mc.any()))
       .thenReturn(List(
         (ShuffleIndexBlockId(1, 1, 1), mock(classOf[ManagedBuffer])),
