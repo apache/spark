@@ -52,8 +52,7 @@ object InsertTableWithDynamicPartitionsBenchmark extends DataSourceWriteBenchmar
   def writeOnePartitionColumnTable(
       numberRows: Int, partitionNumberSeeds: Seq[Int], benchmark: Benchmark): Unit = {
     partitionNumberSeeds.foreach { partitionNumber =>
-      benchmark.addCase(s"insert table with $numberRows rows, " +
-        s"one partition column, $partitionNumber partitions") { _ =>
+      benchmark.addCase(s"one partition column, $partitionNumber partitions") { _ =>
         spark.sql("insert overwrite table " +
           "tableOnePartitionColumn partition(part) " +
           s"select id, " +
@@ -66,8 +65,7 @@ object InsertTableWithDynamicPartitionsBenchmark extends DataSourceWriteBenchmar
   def writeTwoPartitionColumnTable(
       numberRows: Int, partitionNumberSeeds: Seq[Int], benchmark: Benchmark): Unit = {
     partitionNumberSeeds.foreach { partitionNumber =>
-      benchmark.addCase(s"insert table with $numberRows rows, " +
-        s"two partition columns, $partitionNumber partitions") { _ =>
+      benchmark.addCase(s"two partition columns, $partitionNumber partitions") { _ =>
         spark.sql("insert overwrite table " +
           "tableTwoPartitionColumn partition(part1, part2) " +
           s"select id, " +
@@ -81,8 +79,7 @@ object InsertTableWithDynamicPartitionsBenchmark extends DataSourceWriteBenchmar
   def writeThreePartitionColumnTable(
       numberRows: Int, partitionNumberSeeds: Seq[Int], benchmark: Benchmark): Unit = {
     partitionNumberSeeds.foreach { partitionNumber =>
-      benchmark.addCase(s"insert table with $numberRows rows, " +
-        s"three partition columns, $partitionNumber partitions") { _ =>
+      benchmark.addCase(s"three partition columns, $partitionNumber partitions") { _ =>
         spark.sql("insert overwrite table " +
           "tableThreePartitionColumn partition(part1, part2, part3) " +
           s"select id, " +
