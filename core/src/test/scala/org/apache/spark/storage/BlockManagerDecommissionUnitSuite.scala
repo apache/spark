@@ -239,7 +239,8 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
 
     // Verify the decom manager handles this correctly
     val bmDecomManager = new BlockManagerDecommissioner(sparkConf, bm)
-    validateDecommissionTimestampsOnManager(bmDecomManager, fail = false, numShuffles=Some(1))
+    validateDecommissionTimestampsOnManager(bmDecomManager, fail = false,
+      numShuffles = Some(1))
   }
 
   test("test shuffle and cached rdd migration without any error") {
