@@ -291,8 +291,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
 
       val newSession = session.newSession()
       if (!allowModifyActiveSession) {
-        intercept[IllegalStateException](SparkSession.setActiveSession(newSession))
-        intercept[IllegalStateException](SparkSession.clearActiveSession())
+        intercept[UnsupportedOperationException](SparkSession.setActiveSession(newSession))
+        intercept[UnsupportedOperationException](SparkSession.clearActiveSession())
       } else {
         SparkSession.setActiveSession(newSession)
         SparkSession.clearActiveSession()

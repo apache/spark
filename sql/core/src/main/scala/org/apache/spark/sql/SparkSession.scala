@@ -984,11 +984,12 @@ object SparkSession extends Logging {
    *
    * @since 2.0.0
    */
+  @deprecated("This method is deprecated and will be removed in future versions.", "3.1.0")
   def setActiveSession(session: SparkSession): Unit = {
     if (SQLConf.get.legacyAllowModifyActiveSession) {
       setActiveSessionInternal(session)
     } else {
-      throw new IllegalStateException("Not allowed to modify active Spark session.")
+      throw new UnsupportedOperationException("Not allowed to modify active Spark session.")
     }
   }
 
@@ -1002,11 +1003,12 @@ object SparkSession extends Logging {
    *
    * @since 2.0.0
    */
+  @deprecated("This method is deprecated and will be removed in future versions.", "3.1.0")
   def clearActiveSession(): Unit = {
     if (SQLConf.get.legacyAllowModifyActiveSession) {
       clearActiveSessionInternal()
     } else {
-      throw new IllegalStateException("Not allowed to modify active Spark session.")
+      throw new UnsupportedOperationException("Not allowed to modify active Spark session.")
     }
   }
 
