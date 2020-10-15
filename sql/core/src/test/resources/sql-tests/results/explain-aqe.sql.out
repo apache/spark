@@ -43,6 +43,39 @@ spark.sql.codegen.wholeStage	true
 
 
 -- !query
+EXPLAIN EXTENDED
+  SELECT sum(distinct val)
+  FROM explain_temp1
+-- !query schema
+struct<plan:string>
+-- !query output
+== Parsed Logical Plan ==
+'Project [unresolvedalias('sum(distinct 'val), None)]
++- 'UnresolvedRelation [explain_temp1], [], false
+
+== Analyzed Logical Plan ==
+sum(DISTINCT val): bigint
+Aggregate [sum(distinct cast(val#x as bigint)) AS sum(DISTINCT val)#xL]
++- SubqueryAlias spark_catalog.default.explain_temp1
+   +- Relation[key#x,val#x] parquet
+
+== Optimized Logical Plan ==
+Aggregate [sum(distinct cast(val#x as bigint)) AS sum(DISTINCT val)#xL]
++- Project [val#x]
+   +- Relation[key#x,val#x] parquet
+
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=false
++- HashAggregate(keys=[], functions=[sum(distinct cast(val#x as bigint)#xL)], output=[sum(DISTINCT val)#xL])
+   +- Exchange SinglePartition, true, [id=#x]
+      +- HashAggregate(keys=[], functions=[partial_sum(distinct cast(val#x as bigint)#xL)], output=[sum#xL])
+         +- HashAggregate(keys=[cast(val#x as bigint)#xL], functions=[], output=[cast(val#x as bigint)#xL])
+            +- Exchange hashpartitioning(cast(val#x as bigint)#xL, 4), true, [id=#x]
+               +- HashAggregate(keys=[cast(val#x as bigint) AS cast(val#x as bigint)#xL], functions=[], output=[cast(val#x as bigint)#xL])
+                  +- FileScan parquet default.explain_temp1[val#x] Batched: true, DataFilters: [], Format: Parquet, Location [not included in comparison]/{warehouse_dir}/explain_temp1], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<val:int>
+
+
+-- !query
 EXPLAIN FORMATTED
   SELECT key, max(val) 
   FROM   explain_temp1 
@@ -54,16 +87,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (8)
-+- == Current Plan ==
-   Sort (7)
-   +- Exchange (6)
-      +- HashAggregate (5)
-         +- Exchange (4)
-            +- HashAggregate (3)
-               +- Filter (2)
-                  +- Scan parquet default.explain_temp1 (1)
-+- == Initial Plan ==
-   Sort (7)
++- Sort (7)
    +- Exchange (6)
       +- HashAggregate (5)
          +- Exchange (4)
@@ -126,16 +150,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (8)
-+- == Current Plan ==
-   Project (7)
-   +- Filter (6)
-      +- HashAggregate (5)
-         +- Exchange (4)
-            +- HashAggregate (3)
-               +- Filter (2)
-                  +- Scan parquet default.explain_temp1 (1)
-+- == Initial Plan ==
-   Project (7)
++- Project (7)
    +- Filter (6)
       +- HashAggregate (5)
          +- Exchange (4)
@@ -196,17 +211,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (9)
-+- == Current Plan ==
-   HashAggregate (8)
-   +- Exchange (7)
-      +- HashAggregate (6)
-         +- Union (5)
-            :- Filter (2)
-            :  +- Scan parquet default.explain_temp1 (1)
-            +- Filter (4)
-               +- Scan parquet default.explain_temp1 (3)
-+- == Initial Plan ==
-   HashAggregate (8)
++- HashAggregate (8)
    +- Exchange (7)
       +- HashAggregate (6)
          +- Union (5)
@@ -274,15 +279,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (7)
-+- == Current Plan ==
-   BroadcastHashJoin Inner BuildRight (6)
-   :- Filter (2)
-   :  +- Scan parquet default.explain_temp1 (1)
-   +- BroadcastExchange (5)
-      +- Filter (4)
-         +- Scan parquet default.explain_temp2 (3)
-+- == Initial Plan ==
-   BroadcastHashJoin Inner BuildRight (6)
++- BroadcastHashJoin Inner BuildRight (6)
    :- Filter (2)
    :  +- Scan parquet default.explain_temp1 (1)
    +- BroadcastExchange (5)
@@ -337,14 +334,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (6)
-+- == Current Plan ==
-   BroadcastHashJoin LeftOuter BuildRight (5)
-   :- Scan parquet default.explain_temp1 (1)
-   +- BroadcastExchange (4)
-      +- Filter (3)
-         +- Scan parquet default.explain_temp2 (2)
-+- == Initial Plan ==
-   BroadcastHashJoin LeftOuter BuildRight (5)
++- BroadcastHashJoin LeftOuter BuildRight (5)
    :- Scan parquet default.explain_temp1 (1)
    +- BroadcastExchange (4)
       +- Filter (3)
@@ -398,11 +388,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (3)
-+- == Current Plan ==
-   Filter (2)
-   +- Scan parquet default.explain_temp1 (1)
-+- == Initial Plan ==
-   Filter (2)
++- Filter (2)
    +- Scan parquet default.explain_temp1 (1)
 
 
@@ -438,11 +424,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (3)
-+- == Current Plan ==
-   Filter (2)
-   +- Scan parquet default.explain_temp1 (1)
-+- == Initial Plan ==
-   Filter (2)
++- Filter (2)
    +- Scan parquet default.explain_temp1 (1)
 
 
@@ -470,11 +452,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (3)
-+- == Current Plan ==
-   Project (2)
-   +- Scan parquet default.explain_temp1 (1)
-+- == Initial Plan ==
-   Project (2)
++- Project (2)
    +- Scan parquet default.explain_temp1 (1)
 
 
@@ -506,15 +484,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (7)
-+- == Current Plan ==
-   BroadcastHashJoin Inner BuildRight (6)
-   :- Filter (2)
-   :  +- Scan parquet default.explain_temp1 (1)
-   +- BroadcastExchange (5)
-      +- Filter (4)
-         +- Scan parquet default.explain_temp1 (3)
-+- == Initial Plan ==
-   BroadcastHashJoin Inner BuildRight (6)
++- BroadcastHashJoin Inner BuildRight (6)
    :- Filter (2)
    :  +- Scan parquet default.explain_temp1 (1)
    +- BroadcastExchange (5)
@@ -572,21 +542,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (13)
-+- == Current Plan ==
-   BroadcastHashJoin Inner BuildRight (12)
-   :- HashAggregate (5)
-   :  +- Exchange (4)
-   :     +- HashAggregate (3)
-   :        +- Filter (2)
-   :           +- Scan parquet default.explain_temp1 (1)
-   +- BroadcastExchange (11)
-      +- HashAggregate (10)
-         +- Exchange (9)
-            +- HashAggregate (8)
-               +- Filter (7)
-                  +- Scan parquet default.explain_temp1 (6)
-+- == Initial Plan ==
-   BroadcastHashJoin Inner BuildRight (12)
++- BroadcastHashJoin Inner BuildRight (12)
    :- HashAggregate (5)
    :  +- Exchange (4)
    :     +- HashAggregate (3)
@@ -693,7 +649,7 @@ Output: []
 Arguments: `default`.`explain_view`, SELECT key, val FROM explain_temp1, false, false, PersistedView
 
 (3) UnresolvedRelation
-Arguments: [explain_temp1], []
+Arguments: [explain_temp1], [], false
 
 (4) Project
 Arguments: ['key, 'val]
@@ -710,13 +666,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (5)
-+- == Current Plan ==
-   HashAggregate (4)
-   +- Exchange (3)
-      +- HashAggregate (2)
-         +- Scan parquet default.explain_temp1 (1)
-+- == Initial Plan ==
-   HashAggregate (4)
++- HashAggregate (4)
    +- Exchange (3)
       +- HashAggregate (2)
          +- Scan parquet default.explain_temp1 (1)
@@ -761,13 +711,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (5)
-+- == Current Plan ==
-   ObjectHashAggregate (4)
-   +- Exchange (3)
-      +- ObjectHashAggregate (2)
-         +- Scan parquet default.explain_temp4 (1)
-+- == Initial Plan ==
-   ObjectHashAggregate (4)
++- ObjectHashAggregate (4)
    +- Exchange (3)
       +- ObjectHashAggregate (2)
          +- Scan parquet default.explain_temp4 (1)
@@ -812,15 +756,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 AdaptiveSparkPlan (7)
-+- == Current Plan ==
-   SortAggregate (6)
-   +- Sort (5)
-      +- Exchange (4)
-         +- SortAggregate (3)
-            +- Sort (2)
-               +- Scan parquet default.explain_temp4 (1)
-+- == Initial Plan ==
-   SortAggregate (6)
++- SortAggregate (6)
    +- Sort (5)
       +- Exchange (4)
          +- SortAggregate (3)

@@ -20,8 +20,8 @@ import warnings
 
 from pyspark import since, keyword_only
 from pyspark.ml.param.shared import HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol, \
-    HasAggregationDepth, HasWeightCol, HasTol, HasProbabilityCol, HasBlockSize, \
-    HasDistanceMeasure, HasCheckpointInterval, Param, Params, TypeConverters
+    HasAggregationDepth, HasWeightCol, HasTol, HasProbabilityCol, HasDistanceMeasure, \
+    HasCheckpointInterval, Param, Params, TypeConverters
 from pyspark.ml.util import JavaMLWritable, JavaMLReadable, GeneralJavaMLWritable, \
     HasTrainingSummary, SparkContext
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaWrapper
@@ -101,8 +101,7 @@ class ClusteringSummary(JavaWrapper):
 
 @inherit_doc
 class _GaussianMixtureParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
-                             HasProbabilityCol, HasTol, HasAggregationDepth, HasWeightCol,
-                             HasBlockSize):
+                             HasProbabilityCol, HasTol, HasAggregationDepth, HasWeightCol):
     """
     Params for :py:class:`GaussianMixture` and :py:class:`GaussianMixtureModel`.
 
@@ -114,7 +113,7 @@ class _GaussianMixtureParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionC
 
     def __init__(self, *args):
         super(_GaussianMixtureParams, self).__init__(*args)
-        self._setDefault(k=2, tol=0.01, maxIter=100, aggregationDepth=2, blockSize=1)
+        self._setDefault(k=2, tol=0.01, maxIter=100, aggregationDepth=2)
 
     @since("2.0.0")
     def getK(self):
@@ -251,8 +250,6 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> gm.getMaxIter()
     30
     >>> model = gm.fit(df)
-    >>> model.getBlockSize()
-    1
     >>> model.getAggregationDepth()
     2
     >>> model.getFeaturesCol()
@@ -337,13 +334,13 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     """
 
     @keyword_only
-    def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
+    def __init__(self, *, featuresCol="features", predictionCol="prediction", k=2,
                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None,
-                 aggregationDepth=2, weightCol=None, blockSize=1):
+                 aggregationDepth=2, weightCol=None):
         """
-        __init__(self, featuresCol="features", predictionCol="prediction", k=2, \
+        __init__(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None, \
-                 aggregationDepth=2, weightCol=None, blockSize=1)
+                 aggregationDepth=2, weightCol=None)
         """
         super(GaussianMixture, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.GaussianMixture",
@@ -356,13 +353,13 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, featuresCol="features", predictionCol="prediction", k=2,
+    def setParams(self, *, featuresCol="features", predictionCol="prediction", k=2,
                   probabilityCol="probability", tol=0.01, maxIter=100, seed=None,
-                  aggregationDepth=2, weightCol=None, blockSize=1):
+                  aggregationDepth=2, weightCol=None):
         """
-        setParams(self, featuresCol="features", predictionCol="prediction", k=2, \
+        setParams(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                   probabilityCol="probability", tol=0.01, maxIter=100, seed=None, \
-                  aggregationDepth=2, weightCol=None, blockSize=1)
+                  aggregationDepth=2, weightCol=None)
 
         Sets params for GaussianMixture.
         """
@@ -431,13 +428,6 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
         Sets the value of :py:attr:`aggregationDepth`.
         """
         return self._set(aggregationDepth=value)
-
-    @since("3.1.0")
-    def setBlockSize(self, value):
-        """
-        Sets the value of :py:attr:`blockSize`.
-        """
-        return self._set(blockSize=value)
 
 
 class GaussianMixtureSummary(ClusteringSummary):
@@ -649,11 +639,11 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
     """
 
     @keyword_only
-    def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
+    def __init__(self, *, featuresCol="features", predictionCol="prediction", k=2,
                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None,
                  distanceMeasure="euclidean", weightCol=None):
         """
-        __init__(self, featuresCol="features", predictionCol="prediction", k=2, \
+        __init__(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
                  distanceMeasure="euclidean", weightCol=None)
         """
@@ -667,11 +657,11 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
 
     @keyword_only
     @since("1.5.0")
-    def setParams(self, featuresCol="features", predictionCol="prediction", k=2,
+    def setParams(self, *, featuresCol="features", predictionCol="prediction", k=2,
                   initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None,
                   distanceMeasure="euclidean", weightCol=None):
         """
-        setParams(self, featuresCol="features", predictionCol="prediction", k=2, \
+        setParams(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                   initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
                   distanceMeasure="euclidean", weightCol=None)
 
@@ -928,11 +918,11 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
     """
 
     @keyword_only
-    def __init__(self, featuresCol="features", predictionCol="prediction", maxIter=20,
+    def __init__(self, *, featuresCol="features", predictionCol="prediction", maxIter=20,
                  seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean",
                  weightCol=None):
         """
-        __init__(self, featuresCol="features", predictionCol="prediction", maxIter=20, \
+        __init__(self, \\*, featuresCol="features", predictionCol="prediction", maxIter=20, \
                  seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean", \
                  weightCol=None)
         """
@@ -944,11 +934,11 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, featuresCol="features", predictionCol="prediction", maxIter=20,
+    def setParams(self, *, featuresCol="features", predictionCol="prediction", maxIter=20,
                   seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean",
                   weightCol=None):
         """
-        setParams(self, featuresCol="features", predictionCol="prediction", maxIter=20, \
+        setParams(self, \\*, featuresCol="features", predictionCol="prediction", maxIter=20, \
                   seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean", \
                   weightCol=None)
         Sets params for BisectingKMeans.
@@ -1405,13 +1395,13 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
     """
 
     @keyword_only
-    def __init__(self, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,
+    def __init__(self, *, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,
                  k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,
                  subsamplingRate=0.05, optimizeDocConcentration=True,
                  docConcentration=None, topicConcentration=None,
                  topicDistributionCol="topicDistribution", keepLastCheckpoint=True):
         """
-        __init__(self, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,\
+        __init__(self, \\*, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,\
                   k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,\
                   subsamplingRate=0.05, optimizeDocConcentration=True,\
                   docConcentration=None, topicConcentration=None,\
@@ -1430,13 +1420,13 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,
+    def setParams(self, *, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,
                   k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,
                   subsamplingRate=0.05, optimizeDocConcentration=True,
                   docConcentration=None, topicConcentration=None,
                   topicDistributionCol="topicDistribution", keepLastCheckpoint=True):
         """
-        setParams(self, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,\
+        setParams(self, \\*, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,\
                   k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,\
                   subsamplingRate=0.05, optimizeDocConcentration=True,\
                   docConcentration=None, topicConcentration=None,\
@@ -1695,10 +1685,10 @@ class PowerIterationClustering(_PowerIterationClusteringParams, JavaParams, Java
     """
 
     @keyword_only
-    def __init__(self, k=2, maxIter=20, initMode="random", srcCol="src", dstCol="dst",
+    def __init__(self, *, k=2, maxIter=20, initMode="random", srcCol="src", dstCol="dst",
                  weightCol=None):
         """
-        __init__(self, k=2, maxIter=20, initMode="random", srcCol="src", dstCol="dst",\
+        __init__(self, \\*, k=2, maxIter=20, initMode="random", srcCol="src", dstCol="dst",\
                  weightCol=None)
         """
         super(PowerIterationClustering, self).__init__()
@@ -1709,10 +1699,10 @@ class PowerIterationClustering(_PowerIterationClusteringParams, JavaParams, Java
 
     @keyword_only
     @since("2.4.0")
-    def setParams(self, k=2, maxIter=20, initMode="random", srcCol="src", dstCol="dst",
+    def setParams(self, *, k=2, maxIter=20, initMode="random", srcCol="src", dstCol="dst",
                   weightCol=None):
         """
-        setParams(self, k=2, maxIter=20, initMode="random", srcCol="src", dstCol="dst",\
+        setParams(self, \\*, k=2, maxIter=20, initMode="random", srcCol="src", dstCol="dst",\
                   weightCol=None)
         Sets params for PowerIterationClustering.
         """

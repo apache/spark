@@ -380,16 +380,22 @@ class BlockManagerMasterEndpoint(
    * @return Seq of ReplicateBlock
    */
   private def getReplicateInfoForRDDBlocks(blockManagerId: BlockManagerId): Seq[ReplicateBlock] = {
-    val info = blockManagerInfo(blockManagerId)
+    try {
+      val info = blockManagerInfo(blockManagerId)
 
-    val rddBlocks = info.blocks.keySet().asScala.filter(_.isRDD)
-    rddBlocks.map { blockId =>
-      val currentBlockLocations = blockLocations.get(blockId)
-      val maxReplicas = currentBlockLocations.size + 1
-      val remainingLocations = currentBlockLocations.toSeq.filter(bm => bm != blockManagerId)
-      val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
-      replicateMsg
-    }.toSeq
+      val rddBlocks = info.blocks.keySet().asScala.filter(_.isRDD)
+      rddBlocks.map { blockId =>
+        val currentBlockLocations = blockLocations.get(blockId)
+        val maxReplicas = currentBlockLocations.size + 1
+        val remainingLocations = currentBlockLocations.toSeq.filter(bm => bm != blockManagerId)
+        val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
+        replicateMsg
+      }.toSeq
+    } catch {
+      // If the block manager has already exited, nothing to replicate.
+      case e: java.util.NoSuchElementException =>
+        Seq.empty[ReplicateBlock]
+    }
   }
 
   // Remove a block from the workers that have it. This can only be used to remove

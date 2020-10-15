@@ -113,17 +113,10 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
 
 private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
 
-  private val logInfo = (msg: String) => if (HiveUtils.isHive23) {
-    getAncestorField[Logger](this, 3, "LOG").info(msg)
-  } else {
-    getAncestorField[Log](this, 3, "LOG").info(msg)
-  }
+  private val logInfo = (msg: String) => getAncestorField[Logger](this, 3, "LOG").info(msg)
 
-  private val logError = (msg: String, e: Throwable) => if (HiveUtils.isHive23) {
+  private val logError = (msg: String, e: Throwable) =>
     getAncestorField[Logger](this, 3, "LOG").error(msg, e)
-  } else {
-    getAncestorField[Log](this, 3, "LOG").error(msg, e)
-  }
 
   def initCompositeService(hiveConf: HiveConf): Unit = {
     // Emulating `CompositeService.init(hiveConf)`

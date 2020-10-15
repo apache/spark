@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.Path
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
@@ -26,11 +28,13 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 
@@ -189,5 +193,35 @@ object DataSourceUtils {
       micros
     case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseGregorianToJulianMicros
     case LegacyBehaviorPolicy.CORRECTED => identity[Long]
+  }
+
+  def generateDatasourceOptions(
+      extraOptions: CaseInsensitiveStringMap, table: CatalogTable): Map[String, String] = {
+    val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+    val options = table.storage.properties ++ pathOption
+    if (!SQLConf.get.getConf(SQLConf.LEGACY_EXTRA_OPTIONS_BEHAVIOR)) {
+      // Check the same key with different values
+      table.storage.properties.foreach { case (k, v) =>
+        if (extraOptions.containsKey(k) && extraOptions.get(k) != v) {
+          throw new AnalysisException(
+            s"Fail to resolve data source for the table ${table.identifier} since the table " +
+              s"serde property has the duplicated key $k with extra options specified for this " +
+              "scan operation. To fix this, you can rollback to the legacy behavior of ignoring " +
+              "the extra options by setting the config " +
+              s"${SQLConf.LEGACY_EXTRA_OPTIONS_BEHAVIOR.key} to `false`, or address the " +
+              s"conflicts of the same config.")
+        }
+      }
+      // To keep the original key from table properties, here we filter all case insensitive
+      // duplicate keys out from extra options.
+      val lowerCasedDuplicatedKeys =
+        table.storage.properties.keySet.map(_.toLowerCase(Locale.ROOT))
+          .intersect(extraOptions.keySet.asScala)
+      extraOptions.asCaseSensitiveMap().asScala.filterNot {
+        case (k, _) => lowerCasedDuplicatedKeys.contains(k.toLowerCase(Locale.ROOT))
+      }.toMap ++ options
+    } else {
+      options
+    }
   }
 }
