@@ -35,7 +35,7 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
       isJVM = false)
   }
 
-  test("Run PySpark with Python3 to test a pyfiles example", k8sTestTag) {
+  test("Run PySpark to test a pyfiles example", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.container.image", pyImage)
     runSparkApplicationAndVerifyCompletion(
