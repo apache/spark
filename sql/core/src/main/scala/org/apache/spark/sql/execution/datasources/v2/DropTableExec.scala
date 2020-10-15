@@ -29,7 +29,7 @@ case class DropTableExec(catalog: TableCatalog, ident: Identifier, ifExists: Boo
   extends V2CommandExec {
 
   override def run(): Seq[InternalRow] = {
-    if (catalog.tableExists(ident)) {
+    if (catalog != null && catalog.tableExists(ident)) {
       catalog.dropTable(ident)
     } else if (!ifExists) {
       throw new NoSuchTableException(ident)

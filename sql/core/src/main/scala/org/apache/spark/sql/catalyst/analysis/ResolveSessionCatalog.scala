@@ -268,7 +268,7 @@ class ResolveSessionCatalog(
         if isSessionCatalog(r.catalog) =>
       DescribeColumnCommand(r.identifier.asTableIdentifier, colNameParts, isExtended)
 
-    case DescribeColumn(ResolvedView(ident), colNameParts, isExtended) =>
+    case DescribeColumn(ResolvedView(ident, _), colNameParts, isExtended) =>
       DescribeColumnCommand(ident.asTableIdentifier, colNameParts, isExtended)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
