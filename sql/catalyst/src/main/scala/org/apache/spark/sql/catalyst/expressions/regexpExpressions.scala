@@ -180,7 +180,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
 abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with NullIntolerant {
   def value: Expression = children.head
   def list: Seq[Expression] = children.tail
-  def isNot: Boolean
+  protected def isNot: Boolean
 
   override def inputTypes: Seq[AbstractDataType] = {
     StringType +: Seq.fill(children.size - 1)(StringType)
@@ -192,7 +192,7 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
 
   override def nullable: Boolean = true
 
-  def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
+  private def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
   override def eval(input: InternalRow): Any = {
     val evaluatedValue = value.eval(input)
@@ -200,24 +200,24 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
       null
     } else {
       var hasNull = false
-      var match = true
-      list.foreach { e =>
+      var matched = true
+      list.foreach { e if !hasNull && matched =>
         val str = e.eval(input)
         if (str == null) {
           hasNull = true
         } else {
           val regex =
             Pattern.compile(StringUtils.escapeLikeRegex(str.asInstanceOf[UTF8String].toString, '\\'))
-          if ((isNot && matches(regex, evaluatedValue.asInstanceOf[UTF8String].toString)) ||
-            !(isNot || matches(regex, evaluatedValue.asInstanceOf[UTF8String].toString)) {
-            match = false
+          val matches = matches(regex, evaluatedValue.asInstanceOf[UTF8String].toString)
+          if ((isNot && matches) || !(isNot || matches)) {
+            matched = false
           }
         }
       }
       if (hasNull) {
         null
       } else {
-        match
+        matched
       }
     }
   }
