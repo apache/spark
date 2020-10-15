@@ -177,7 +177,7 @@ jobs:
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:24
+      image: dongjoon/apache-spark-github-action-image:20201015
     strategy:
       fail-fast: false
       matrix:
