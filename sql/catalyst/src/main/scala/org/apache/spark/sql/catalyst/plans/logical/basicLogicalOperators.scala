@@ -378,7 +378,7 @@ case class AppendData(
           case (inAttr, outAttr) =>
             // names and types must match, nullability must be compatible
             inAttr.name == outAttr.name &&
-                DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
+                DataType.equalsIgnoreCompatibleNullability(inAttr.dataType, outAttr.dataType) &&
                 (outAttr.nullable || !inAttr.nullable)
         }
   }
