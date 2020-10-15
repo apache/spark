@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.expressions.{EqualTo, Expression, IsNotNull}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BinaryOperator, EqualTo, Expression, IsNotNull, Literal}
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -48,46 +48,46 @@ abstract class PrunePartitionSuiteBase extends QueryTest with SQLTestUtils with 
 
         assertPrunedPartitions(
           "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)", 2,
-          Set("`p`='1'", "`p`='2'"))
+          "((`p` = '1') || (`p` = '2'))")
         assertPrunedPartitions(
           "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (i = 1 OR p = '2')", 4,
-          Set())
+          "")
         assertPrunedPartitions(
           "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '3' AND i = 3 )", 2,
-          Set("`p`='1'", "`p`='3'"))
+          "((`p` = '1') || (`p` = '3'))")
         assertPrunedPartitions(
           "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '2' OR p = '3')", 3,
-          Set("`p`='1'", "`p`='2'", "`p`='3'"))
+          "((`p` = '1') || ((`p` = '2') || (`p` = '3')))")
         assertPrunedPartitions(
           "SELECT * FROM t", 4,
-          Set())
+          "")
         assertPrunedPartitions(
           "SELECT * FROM t WHERE p = '1' AND i = 2", 1,
-          Set("`p`='1'"))
+          "(`p` = '1')")
         assertPrunedPartitions(
           """
             |SELECT i, COUNT(1) FROM (
             |SELECT * FROM t WHERE  p = '1' OR (p = '2' AND i = 1)
             |) tmp GROUP BY i
-          """.stripMargin, 2, Set("`p`='1'", "`p`='2'"))
+          """.stripMargin, 2, "((`p` = '1') || (`p` = '2'))")
       }
     }
   }
 
-  private def collectEqualExp(
-      expression: Expression,
-      currentSet: Set[String]): Set[String] = expression match {
-    case e: EqualTo =>
-      currentSet + (e.left.sql + e.symbol + e.right.sql)
-        .replaceAll("spark_catalog.default.t.", "")
-    case _ =>
-      expression.children.foldLeft(currentSet)((s, exp) => collectEqualExp(exp, s))
+  private def getCleanStringRepresentation(exp: Expression): String = exp match {
+    case attr: AttributeReference =>
+      attr.sql
+    case l: Literal =>
+      l.sql
+    case e: BinaryOperator =>
+      (s"(${getCleanStringRepresentation(e.left)} ${e.symbol} " +
+        s"${getCleanStringRepresentation(e.right)})").replaceAll("spark_catalog.default.t.", "")
   }
 
   protected def assertPrunedPartitions(
       query: String,
       expectedPartitionCount: Long,
-      expectedPushedDownFilters: Set[String]): Unit = {
+      expectedPushedDownFilters: String): Unit = {
     val qe = sql(query).queryExecution
     val plan = qe.sparkPlan
     assert(getScanExecPartitionSize(plan) == expectedPartitionCount)
@@ -97,8 +97,15 @@ abstract class PrunePartitionSuiteBase extends QueryTest with SQLTestUtils with 
       case scan: HiveTableScanExec => scan.partitionPruningPred
     }.map(exps => exps.filterNot(e => e.isInstanceOf[IsNotNull]))
     val pushedFilters = pushedDownPartitionFilters.map(filters => {
-      filters.foldLeft(Set[String]())((set, filter) => collectEqualExp(filter, set))
+      filters.foldLeft("")((currentStr, exp) => {
+        if (currentStr == "") {
+          s"${getCleanStringRepresentation(exp)}"
+        } else {
+          s"$currentStr AND ${getCleanStringRepresentation(exp)}"
+        }
+      })
     })
+
     assert(pushedFilters == Some(expectedPushedDownFilters))
   }
 
