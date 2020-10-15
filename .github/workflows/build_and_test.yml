@@ -12,7 +12,8 @@ jobs:
   # Build: build Spark and run the tests for specified modules.
   build:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }})"
-    runs-on: ubuntu-latest
+    # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
@@ -179,7 +180,7 @@ jobs:
   # Static analysis, and documentation build
   lint:
     name: Linters, licenses, dependencies and documentation generation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
