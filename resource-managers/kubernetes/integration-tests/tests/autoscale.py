@@ -44,7 +44,7 @@ if __name__ == "__main__":
     rdd.collect()
     print("1st accumulator value is: " + str(acc.value))
     print("Waiting for dynamic alloc")
-    time.sleep(180)
+    time.sleep(90)
     rdd.count()
     rdd.collect()
     print("Final accumulator value is: " + str(acc.value))
