@@ -524,24 +524,18 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     var insideSingleQuote = false
     var insideDoubleQuote = false
     var insideSimpleComment = false
-    var insideBracketedComment = false
-    var bracketedCommentRightBound = -1
+    var bracketedCommentLevel = 0
     var escape = false
     var beginIndex = 0
     var includingStatement = false
     val ret = new JArrayList[String]
 
+    def insideBracketedComment: Boolean = bracketedCommentLevel > 0
     def insideComment: Boolean = insideSimpleComment || insideBracketedComment
     def statementBegin(index: Int): Boolean = includingStatement || (!insideComment &&
       index > beginIndex && !s"${line.charAt(index)}".trim.isEmpty)
 
     for (index <- 0 until line.length) {
-      if (insideBracketedComment && index == bracketedCommentRightBound + 1) {
-        // end bracketed comment
-        insideBracketedComment = false
-        bracketedCommentRightBound = -1
-      }
-
       if (line.charAt(index) == '\'' && !insideComment) {
         // take a look to see if it is escaped
         // See the comment above about SPARK-31595
@@ -583,18 +577,18 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         if (!escape) {
           insideSimpleComment = false
         }
-      } else if (line.charAt(index) == '/' && !insideComment) {
+      } else if (line.charAt(index) == '/' && !insideSimpleComment) {
         val hasNext = index + 1 < line.length
         if (insideSingleQuote || insideDoubleQuote) {
           // Ignores '/' in any case of quotes
         } else if (hasNext && line.charAt(index + 1) == '*') {
           // ignore quotes and ; in bracketed comment
-          insideBracketedComment = true
+          bracketedCommentLevel += 1
         }
       } else if (line.charAt(index) == '/' && insideBracketedComment) {
         if (line.charAt(index - 1) == '*') {
           // record the right bound of bracketed comment
-          bracketedCommentRightBound = index
+          bracketedCommentLevel -= 1
         }
       }
       // set the escape
