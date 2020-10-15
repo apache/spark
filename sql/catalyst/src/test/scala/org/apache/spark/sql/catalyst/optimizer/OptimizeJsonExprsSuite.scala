@@ -266,4 +266,16 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
       checkEvaluation(e1, e2.eval(row), row)
     })
   }
+
+  test("SPARK-33078: disable json optimization") {
+    withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "false") {
+      val options = Map.empty[String, String]
+
+      val query = testRelation
+        .select(JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct"))
+      val optimized = Optimizer.execute(query.analyze)
+
+      comparePlans(optimized, query.analyze)
+    }
+  }
 }
