@@ -92,7 +92,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     SQLConf.get.getConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE))
 
   private val int96RebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInWrite(
-    datetimeRebaseMode, "Parquet INT96")
+    int96RebaseMode, "Parquet INT96")
 
   override def init(configuration: Configuration): WriteContext = {
     val schemaString = configuration.get(ParquetWriteSupport.SPARK_ROW_SCHEMA)
