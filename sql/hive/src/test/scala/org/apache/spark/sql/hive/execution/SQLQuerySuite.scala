@@ -2584,6 +2584,69 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  test("SPARK-32838: Check DataSource insert command path with actual path") {
+    withSQLConf(
+      HiveUtils.CONVERT_METASTORE_ORC.key -> "true",
+      HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE.key -> "true") {
+      withTempPath { path =>
+        withTable("t1", "t2") {
+          sql(
+            s"""
+               |CREATE TABLE t1 (id STRING)
+               |PARTITIONED BY (dt STRING)
+               |STORED AS ORC
+               |LOCATION '${path.getAbsolutePath}'
+            """.stripMargin)
+          sql("INSERT OVERWRITE TABLE t1 PARTITION(dt='2020-09-09') SELECT 10")
+          sql("INSERT OVERWRITE TABLE t1 PARTITION(dt='2020-09-10') SELECT 1")
+
+          // overwrite partition with different path
+          sql(
+            """
+              |INSERT OVERWRITE TABLE t1 PARTITION(dt='2020-09-10')
+              |select id from t1 where dt='2020-09-09'
+            """.stripMargin)
+          checkAnswer(sql("SELECT * FROM t1 WHERE dt='2020-09-10'"),
+            Row("10", "2020-09-10") :: Nil)
+
+          // overwrite partition with same path
+          val e1 = intercept[AnalysisException] {
+            sql(
+              """
+                |INSERT OVERWRITE TABLE t1 PARTITION(dt='2020-09-10')
+                |SELECT id FROM t1 WHERE dt='2020-09-10';
+              """.stripMargin)
+          }
+          assert(e1.getMessage.contains("Cannot overwrite a path that is also being read from."))
+
+          sql("INSERT OVERWRITE TABLE t1 PARTITION(dt='2020-09-10') SELECT 1")
+          // non partition table with different path
+          sql(
+            s"""
+               |CREATE TABLE t2 (id STRING)
+               |STORED AS ORC
+               |LOCATION '${path.getAbsolutePath}/dt=2020-09-08'
+            """.stripMargin)
+          sql("INSERT OVERWRITE TABLE t2 SELECT id FROM t1 WHERE dt='2020-09-10'")
+          checkAnswer(sql("SELECT * FROM t2"), Row("1") :: Nil)
+
+          // non partition table with same path
+          sql(
+            s"""
+               |CREATE TABLE t3 (id string)
+               |STORED AS ORC
+               |LOCATION '${path.getAbsolutePath}/dt=2020-09-10'
+            """.stripMargin)
+          sql("INSERT OVERWRITE TABLE t1 PARTITION(dt='2020-09-10') SELECT 1")
+          val e2 = intercept[AnalysisException] {
+            sql("INSERT OVERWRITE TABLE t3 SELECT id FROM t1 WHERE dt='2020-09-10'")
+          }
+          assert(e2.getMessage.contains("Cannot overwrite a path that is also being read from."))
+        }
+      }
+    }
+  }
 }
 
 @SlowHiveTest

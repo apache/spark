@@ -224,13 +224,6 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
         table,
         Some(t.location),
         actualQuery.output.map(_.name))
-
-      // For dynamic partition overwrite, we do not delete partition directories ahead.
-      // We write to staging directories and move to final partition directories after writing
-      // job is done. So it is ok to have outputPath try to overwrite inputpath.
-      if (overwrite && !insertCommand.dynamicPartitionOverwrite) {
-        DDLUtils.verifyNotReadPath(actualQuery, outputPath)
-      }
       insertCommand
   }
 }

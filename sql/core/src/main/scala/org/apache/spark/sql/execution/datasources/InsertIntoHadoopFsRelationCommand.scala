@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.IOException
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -135,6 +135,35 @@ case class InsertIntoHadoopFsRelationCommand(
           !exists
         case (s, exists) =>
           throw new IllegalStateException(s"unsupported save mode $s ($exists)")
+      }
+    }
+
+    // For dynamic partition overwrite, we do not delete partition directories ahead.
+    // We write to staging directories and move to final partition directories after writing
+    // job is done. So it is ok to have outputPath try to overwrite inputpath.
+    if (mode == SaveMode.Overwrite && !dynamicPartitionOverwrite) {
+      val inputPaths = child.collect {
+        case scan: FileSourceScanExec =>
+          scan.dynamicallySelectedPartitions.flatMap(_.files.map {
+            case fileStatus if !fileStatus.isDirectory => fileStatus.getPath.getParent
+            case fileStatus => fileStatus.getPath
+          })
+      }.flatten
+      val staticPathFragment =
+        PartitioningUtils.getPathFragment(staticPartitions, partitionColumns)
+      val finalOutputPath = if (staticPartitions.nonEmpty
+        && partitionColumns.length == staticPartitions.size) {
+        if (customPartitionLocations.contains(staticPartitions)) {
+          customPartitionLocations.getOrElse(staticPartitions, staticPathFragment)
+        } else {
+          new Path(outputPath, staticPathFragment)
+        }
+      } else {
+        outputPath
+      }
+      if (inputPaths.contains(finalOutputPath)) {
+        throw new AnalysisException(
+          s"Cannot overwrite a path that is also being read from.")
       }
     }
 
