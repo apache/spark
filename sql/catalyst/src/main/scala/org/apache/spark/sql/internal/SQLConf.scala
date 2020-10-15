@@ -2675,6 +2675,15 @@ object SQLConf {
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
+  val LEGACY_ALLOW_MODIFY_ACTIVE_SESSION =
+    buildConf("spark.sql.legacy.allowModifyActiveSession")
+      .internal()
+      .doc("When set to true, user is allowed to use setActiveSession or clearActiveSession " +
+        "to modify the current active SparkSession, otherwise an exception will be thrown.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val SCRIPT_TRANSFORMATION_EXIT_TIMEOUT =
     buildConf("spark.sql.scriptTransformation.exitTimeoutInSeconds")
       .internal()
@@ -3402,6 +3411,8 @@ class SQLConf extends Serializable with Logging {
   def avroFilterPushDown: Boolean = getConf(AVRO_FILTER_PUSHDOWN_ENABLED)
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
+
+  def legacyAllowModifyActiveSession: Boolean = getConf(SQLConf.LEGACY_ALLOW_MODIFY_ACTIVE_SESSION)
 
   def legacyAllowCastNumericToTimestamp: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)

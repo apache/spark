@@ -1031,6 +1031,7 @@ object SQLContext {
    */
   @deprecated("Use SparkSession.setActiveSession instead", "2.0.0")
   def setActive(sqlContext: SQLContext): Unit = {
+    // For code-review, this is the only place that call SparkSession.setActiveSession
     SparkSession.setActiveSession(sqlContext.sparkSession)
   }
 
@@ -1042,6 +1043,7 @@ object SQLContext {
    */
   @deprecated("Use SparkSession.clearActiveSession instead", "2.0.0")
   def clearActive(): Unit = {
+    // For code-review, this is the only place that call SparkSession.clearActiveSession
     SparkSession.clearActiveSession()
   }
 

@@ -1189,7 +1189,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
         numPartitionsGenerated: Int,
         reusesConsumers: Boolean): Unit = {
 
-      SparkSession.setActiveSession(spark)
+      SparkSession.setActiveSessionInternal(spark)
       withTempDir { dir =>
         val provider = new KafkaSourceProvider()
         val options = Map(
