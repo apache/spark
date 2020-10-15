@@ -22,7 +22,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.internal.config.EXECUTOR_ALLOW_SPARK_CONTEXT
 import org.apache.spark.internal.config.UI.UI_ENABLED
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf._
 
 /**
@@ -282,11 +282,11 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("SPARK-33139: Test spark.sql.legacy.allowModifyActiveSession") {
+  test("SPARK-33139: Test SparkSession.setActiveSession/clearActiveSession") {
     Seq(true, false).foreach { allowModifyActiveSession =>
       val session = SparkSession.builder()
         .master("local")
-        .config(SQLConf.LEGACY_ALLOW_MODIFY_ACTIVE_SESSION.key, allowModifyActiveSession.toString)
+        .config(StaticSQLConf.LEGACY_ALLOW_MODIFY_ACTIVE_SESSION.key, allowModifyActiveSession)
         .getOrCreate()
 
       val newSession = session.newSession()
