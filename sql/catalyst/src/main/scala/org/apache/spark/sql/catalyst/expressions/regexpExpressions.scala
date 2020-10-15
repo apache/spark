@@ -189,7 +189,7 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
 
   override def dataType: DataType = BooleanType
 
-  override def foldable: Boolean = value.foldable && list.forall(_.foldable)
+  override def foldable: Boolean = children.forall(_.foldable)
 
   override def nullable: Boolean = true
 
@@ -207,7 +207,7 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
         if (str == null) {
           return null
         }
-        val regex = Pattern.compile(escape(str.asInstanceOf[UTF8String].toString))
+        val regex = Pattern.compile(StringUtils.escapeLikeRegex(str.asInstanceOf[UTF8String].toString, '\\'))
         if(regex == null) {
           return null
         } else if (isNot && matches(regex, evaluatedValue.asInstanceOf[UTF8String].toString)) {
@@ -280,88 +280,16 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
             |  $javaDataType $valueArg = ${valueGen.value};
             |  $codes
             |}
-            |final boolean ${ev.isNull} = ($hasNull == true);
-            |final boolean ${ev.value} = ($matched == true);
+            |final boolean ${ev.isNull} = $hasNull;
+            |final boolean ${ev.value} = $matched;
       """.stripMargin)
   }
 }
 
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(str, pattern1, pattern2, ...) - Returns true if `str` matches all the pattern string, " +
-    "null if any arguments are null, false otherwise.",
-  arguments = """
-    Arguments:
-      * str - a string expression
-      * patterns - a list of string expression. Each pattern is a string which is matched literally, with
-          exception to the following special symbols:
-
-          _ matches any one character in the input (similar to . in posix regular expressions)
-
-          % matches zero or more characters in the input (similar to .* in posix regular
-          expressions)
-
-          Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
-          to match "\abc", the pattern should be "\\abc".
-
-          When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it fallbacks
-          to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
-          enabled, the pattern to match "\abc" should be "\abc".
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_('foo', '%foo%', '%oo');
-       true
-      > SELECT _FUNC_('foo', '%foo%', '%bar%');
-       false
-      > SELECT _FUNC_('foo', '%foo%', null);
-       NULL
-  """,
-  note = """
-    x LIKE ALL ('A%','%B','%C%') is equivalent to x LIKE 'A%' AND x LIKE '%B' AND x LIKE '%C%'.
-  """,
-  since = "3.1.0")
-// scalastyle:on line.size.limit
 case class LikeAll(children: Seq[Expression]) extends LikeAllBase {
   override def isNot: Boolean = false
 }
 
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(str, pattern1, pattern2, ...) - Returns true if `str` not matches all the pattern string" +
-    ", null if any arguments are null, false otherwise.",
-  arguments = """
-    Arguments:
-      * str - a string expression
-      * patterns - a list of string expression. Each pattern is a string which is matched literally, with
-          exception to the following special symbols:
-
-          _ matches any one character in the input (similar to . in posix regular expressions)
-
-          % matches zero or more characters in the input (similar to .* in posix regular
-          expressions)
-
-          Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
-          to match "\abc", the pattern should be "\\abc".
-
-          When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it fallbacks
-          to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
-          enabled, the pattern to match "\abc" should be "\abc".
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_('foo', 'tee', '%yoo%');
-       true
-      > SELECT _FUNC_('foo', '%oo%', '%yoo%');
-       false
-      > SELECT _FUNC_('foo', '%yoo%', null);
-       NULL
-  """,
-  note = """
-    x NOT LIKE ALL ('A%','%B','%C%') is equivalent to x NOT LIKE 'A%' AND x NOT LIKE '%B' AND x NOT LIKE '%C%'.
-  """,
-  since = "3.1.0")
-// scalastyle:on line.size.limit
 case class NotLikeAll(children: Seq[Expression]) extends LikeAllBase {
   override def isNot: Boolean = true
 }
