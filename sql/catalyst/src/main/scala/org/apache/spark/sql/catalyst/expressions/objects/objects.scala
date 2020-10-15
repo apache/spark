@@ -22,7 +22,7 @@ import java.lang.reflect.{Method, Modifier}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{Builder, IndexedSeq, WrappedArray}
 import scala.reflect.ClassTag
-import scala.util.Try
+import scala.util.{Properties, Try}
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
@@ -916,19 +916,44 @@ case class MapObjects private(
     val (initCollection, addElement, getResult): (String, String => String, String) =
       customCollectionCls match {
         case Some(cls) if classOf[WrappedArray[_]].isAssignableFrom(cls) =>
-          // Scala WrappedArray
-          val getBuilder = s"${cls.getName}$$.MODULE$$.newBuilder()"
-          val builder = ctx.freshName("collectionBuilder")
-          (
-            s"""
-               ${classOf[Builder[_, _]].getName} $builder = $getBuilder;
-               $builder.sizeHint($dataLength);
-             """,
-            (genValue: String) => s"$builder.$$plus$$eq($genValue);",
-            s"(${cls.getName}) ${classOf[WrappedArray[_]].getName}$$." +
-              s"MODULE$$.make(((${classOf[IndexedSeq[_]].getName})$builder" +
-              s".result()).toArray(scala.reflect.ClassTag$$.MODULE$$.Object()));"
-          )
+          def doCodeGenForScala212 = {
+            // WrappedArray in Scala 2.12
+            val getBuilder = s"${cls.getName}$$.MODULE$$.newBuilder()"
+            val builder = ctx.freshName("collectionBuilder")
+            (
+              s"""
+                 ${classOf[Builder[_, _]].getName} $builder = $getBuilder;
+                 $builder.sizeHint($dataLength);
+               """,
+              (genValue: String) => s"$builder.$$plus$$eq($genValue);",
+              s"(${cls.getName}) ${classOf[WrappedArray[_]].getName}$$." +
+                s"MODULE$$.make(((${classOf[IndexedSeq[_]].getName})$builder" +
+                s".result()).toArray(scala.reflect.ClassTag$$.MODULE$$.Object()));"
+            )
+          }
+
+          def doCodeGenForScala213 = {
+            // In Scala 2.13, WrappedArray is mutable.ArraySeq and newBuilder method need
+            // a ClassTag type construction parameter
+            val getBuilder = s"${cls.getName}$$.MODULE$$.newBuilder(" +
+              s"scala.reflect.ClassTag$$.MODULE$$.Object())"
+            val builder = ctx.freshName("collectionBuilder")
+            (
+              s"""
+                 ${classOf[Builder[_, _]].getName} $builder = $getBuilder;
+                 $builder.sizeHint($dataLength);
+               """,
+              (genValue: String) => s"$builder.$$plus$$eq($genValue);",
+              s"(${cls.getName})$builder.result();"
+            )
+          }
+
+          val scalaVersion = Properties.versionNumberString
+          if (scalaVersion.startsWith("2.12")) {
+            doCodeGenForScala212
+          } else {
+            doCodeGenForScala213
+          }
         case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) ||
           classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
           // Scala sequence or set

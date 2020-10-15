@@ -67,9 +67,9 @@ if __name__ == "__main__":
     print("Test set accuracy = %g" % accuracy)
 
     fmModel = model.stages[2]
-    print("Factors: " + str(fmModel.factors))
-    print("Linear: " + str(fmModel.linear))
-    print("Intercept: " + str(fmModel.intercept))
+    print("Factors: " + str(fmModel.factors))  # type: ignore
+    print("Linear: " + str(fmModel.linear))  # type: ignore
+    print("Intercept: " + str(fmModel.intercept))  # type: ignore
     # $example off$
 
     spark.stop()

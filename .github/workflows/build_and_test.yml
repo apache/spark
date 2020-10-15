@@ -17,7 +17,8 @@ jobs:
   # Build: build Spark and run the tests for specified modules.
   build:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }}, ${{ matrix.hive }})"
-    runs-on: ubuntu-latest
+    # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
@@ -154,12 +155,11 @@ jobs:
     - name: Install Python packages (Python 3.6 and PyPy3)
       if: contains(matrix.modules, 'pyspark')
       # PyArrow is not supported in PyPy yet, see ARROW-2651.
-      # TODO(SPARK-32247): scipy installation with PyPy fails for an unknown reason.
       run: |
         python3.6 -m pip install numpy pyarrow pandas scipy xmlrunner
         python3.6 -m pip list
         # PyPy does not have xmlrunner
-        pypy3 -m pip install numpy pandas
+        pypy3 -m pip install numpy pandas scipy
         pypy3 -m pip list
     - name: Install Python packages (Python 3.8)
       if: contains(matrix.modules, 'pyspark') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
@@ -168,12 +168,10 @@ jobs:
         python3.8 -m pip list
     # SparkR
     - name: Install R 4.0
+      uses: r-lib/actions/setup-r@v1
       if: contains(matrix.modules, 'sparkr')
-      run: |
-        sudo sh -c "echo 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran40/' >> /etc/apt/sources.list"
-        curl -sL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xE298A3A825C0D65DFD57CBB651716619E084DAB9" | sudo apt-key add
-        sudo apt-get update
-        sudo apt-get install -y r-base r-base-dev libcurl4-openssl-dev
+      with:
+        r-version: 4.0
     - name: Install R packages
       if: contains(matrix.modules, 'sparkr')
       run: |
@@ -206,7 +204,7 @@ jobs:
   # Static analysis, and documentation build
   lint:
     name: Linters, licenses, dependencies and documentation generation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -232,11 +230,9 @@ jobs:
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
         pip3 install flake8 'sphinx<3.1.0' numpy pydata_sphinx_theme ipython nbsphinx
     - name: Install R 4.0
-      run: |
-        sudo sh -c "echo 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran40/' >> /etc/apt/sources.list"
-        curl -sL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xE298A3A825C0D65DFD57CBB651716619E084DAB9" | sudo apt-key add
-        sudo apt-get update
-        sudo apt-get install -y r-base r-base-dev libcurl4-openssl-dev
+      uses: r-lib/actions/setup-r@v1
+      with:
+        r-version: 4.0
     - name: Install R linter dependencies and SparkR
       run: |
         sudo apt-get install -y libcurl4-openssl-dev
@@ -275,7 +271,7 @@ jobs:
 
   java11:
     name: Java 11 build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -300,26 +296,22 @@ jobs:
 
   scala-213:
     name: Scala 2.13 build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
-    - name: Cache Maven local repository
+    - name: Cache Ivy local repository
       uses: actions/cache@v2
       with:
-        path: ~/.m2/repository
-        key: scala-213-maven-${{ hashFiles('**/pom.xml') }}
+        path: ~/.ivy2/cache
+        key: scala-213-ivy-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          scala-213-maven-
+          scala-213-ivy-
     - name: Install Java 11
       uses: actions/setup-java@v1
       with:
         java-version: 11
-    - name: Build with Maven
+    - name: Build with SBT
       run: |
-        export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
-        export MAVEN_CLI_OPTS="--no-transfer-progress"
-        mkdir -p ~/.m2
         ./dev/change-scala-version.sh 2.13
-        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=11 -Pscala-2.13 install
-        rm -rf ~/.m2/repository/org/apache/spark
+        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Djava.version=11 -Pscala-2.13 compile test:compile

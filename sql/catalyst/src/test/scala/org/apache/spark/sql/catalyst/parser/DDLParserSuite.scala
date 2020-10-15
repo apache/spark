@@ -600,6 +600,13 @@ class DDLParserSuite extends AnalysisTest {
         None))
   }
 
+  test("alter table: update column type invalid type") {
+    val msg = intercept[ParseException] {
+      parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c TYPE bad_type")
+    }.getMessage
+    assert(msg.contains("DataType bad_type is not supported"))
+  }
+
   test("alter table: update column type") {
     comparePlans(
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c TYPE bigint"),
@@ -789,27 +796,27 @@ class DDLParserSuite extends AnalysisTest {
 
   test("describe table column") {
     comparePlans(parsePlan("DESCRIBE t col"),
-      DescribeColumnStatement(
-        Seq("t"), Seq("col"), isExtended = false))
+      DescribeColumn(
+        UnresolvedTableOrView(Seq("t")), Seq("col"), isExtended = false))
     comparePlans(parsePlan("DESCRIBE t `abc.xyz`"),
-      DescribeColumnStatement(
-        Seq("t"), Seq("abc.xyz"), isExtended = false))
+      DescribeColumn(
+        UnresolvedTableOrView(Seq("t")), Seq("abc.xyz"), isExtended = false))
     comparePlans(parsePlan("DESCRIBE t abc.xyz"),
-      DescribeColumnStatement(
-        Seq("t"), Seq("abc", "xyz"), isExtended = false))
+      DescribeColumn(
+        UnresolvedTableOrView(Seq("t")), Seq("abc", "xyz"), isExtended = false))
     comparePlans(parsePlan("DESCRIBE t `a.b`.`x.y`"),
-      DescribeColumnStatement(
-        Seq("t"), Seq("a.b", "x.y"), isExtended = false))
+      DescribeColumn(
+        UnresolvedTableOrView(Seq("t")), Seq("a.b", "x.y"), isExtended = false))
 
     comparePlans(parsePlan("DESCRIBE TABLE t col"),
-      DescribeColumnStatement(
-        Seq("t"), Seq("col"), isExtended = false))
+      DescribeColumn(
+        UnresolvedTableOrView(Seq("t")), Seq("col"), isExtended = false))
     comparePlans(parsePlan("DESCRIBE TABLE EXTENDED t col"),
-      DescribeColumnStatement(
-        Seq("t"), Seq("col"), isExtended = true))
+      DescribeColumn(
+        UnresolvedTableOrView(Seq("t")), Seq("col"), isExtended = true))
     comparePlans(parsePlan("DESCRIBE TABLE FORMATTED t col"),
-      DescribeColumnStatement(
-        Seq("t"), Seq("col"), isExtended = true))
+      DescribeColumn(
+        UnresolvedTableOrView(Seq("t")), Seq("col"), isExtended = true))
 
     val caught = intercept[AnalysisException](
       parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))
@@ -1674,7 +1681,7 @@ class DDLParserSuite extends AnalysisTest {
   test("REFRESH TABLE") {
     comparePlans(
       parsePlan("REFRESH TABLE a.b.c"),
-      RefreshTableStatement(Seq("a", "b", "c")))
+      RefreshTable(UnresolvedTableOrView(Seq("a", "b", "c"))))
   }
 
   test("show columns") {

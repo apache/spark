@@ -37,8 +37,12 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.connector.catalog.SupportsRead
+import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.sources._
@@ -260,19 +264,48 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     })
   }
 
+  private def getStreamingRelation(
+      table: CatalogTable,
+      extraOptions: CaseInsensitiveStringMap): StreamingRelation = {
+    val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
+    val dataSource = DataSource(
+      sparkSession,
+      className = table.provider.get,
+      userSpecifiedSchema = Some(table.schema),
+      options = dsOptions)
+    StreamingRelation(dataSource)
+  }
+
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options), _, _, _, _)
+    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options, false), _, _, _, _)
         if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta, options))
 
-    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _), _, _, _, _) =>
+    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false), _, _, _, _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
-    case UnresolvedCatalogRelation(tableMeta, options) if DDLUtils.isDatasourceTable(tableMeta) =>
+    case UnresolvedCatalogRelation(tableMeta, options, false)
+        if DDLUtils.isDatasourceTable(tableMeta) =>
       readDataSourceTable(tableMeta, options)
 
-    case UnresolvedCatalogRelation(tableMeta, _) =>
+    case UnresolvedCatalogRelation(tableMeta, _, false) =>
       DDLUtils.readHiveTable(tableMeta)
+
+    case UnresolvedCatalogRelation(tableMeta, extraOptions, true) =>
+      getStreamingRelation(tableMeta, extraOptions)
+
+    case s @ StreamingRelationV2(
+        _, _, table, extraOptions, _, _, _, Some(UnresolvedCatalogRelation(tableMeta, _, true))) =>
+      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+      val v1Relation = getStreamingRelation(tableMeta, extraOptions)
+      if (table.isInstanceOf[SupportsRead]
+          && table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ)) {
+        s.copy(v1Relation = Some(v1Relation))
+      } else {
+        // Fallback to V1 relation
+        v1Relation
+      }
   }
 }
 

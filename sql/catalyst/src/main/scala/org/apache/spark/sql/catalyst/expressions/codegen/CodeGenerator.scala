@@ -90,8 +90,13 @@ case class SubExprEliminationState(isNull: ExprValue, value: ExprValue)
  * @param codes Strings representing the codes that evaluate common subexpressions.
  * @param states Foreach expression that is participating in subexpression elimination,
  *               the state to use.
+ * @param exprCodesNeedEvaluate Some expression codes that need to be evaluated before
+ *                              calling common subexpressions.
  */
-case class SubExprCodes(codes: Seq[String], states: Map[Expression, SubExprEliminationState])
+case class SubExprCodes(
+  codes: Seq[String],
+  states: Map[Expression, SubExprEliminationState],
+  exprCodesNeedEvaluate: Seq[ExprCode])
 
 /**
  * The main information about a new added function.
@@ -1044,7 +1049,7 @@ class CodegenContext extends Logging {
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
-    val commonExprVals = commonExprs.map(_.head.genCode(this))
+    lazy val commonExprVals = commonExprs.map(_.head.genCode(this))
 
     lazy val nonSplitExprCode = {
       commonExprs.zip(commonExprVals).map { case (exprs, eval) =>
@@ -1055,10 +1060,17 @@ class CodegenContext extends Logging {
       }
     }
 
-    val codes = if (commonExprVals.map(_.code.length).sum > SQLConf.get.methodSplitThreshold) {
-      val inputVarsForAllFuncs = commonExprs.map { expr =>
-        getLocalInputVariableValues(this, expr.head).toSeq
-      }
+    // For some operators, they do not require all its child's outputs to be evaluated in advance.
+    // Instead it only early evaluates part of outputs, for example, `ProjectExec` only early
+    // evaluate the outputs used more than twice. So we need to extract these variables used by
+    // subexpressions and evaluate them before subexpressions.
+    val (inputVarsForAllFuncs, exprCodesNeedEvaluate) = commonExprs.map { expr =>
+      val (inputVars, exprCodes) = getLocalInputVariableValues(this, expr.head)
+      (inputVars.toSeq, exprCodes.toSeq)
+    }.unzip
+
+    val splitThreshold = SQLConf.get.methodSplitThreshold
+    val codes = if (commonExprVals.map(_.code.length).sum > splitThreshold) {
       if (inputVarsForAllFuncs.map(calculateParamLengthFromExprValues).forall(isValidParamLength)) {
         commonExprs.zipWithIndex.map { case (exprs, i) =>
           val expr = exprs.head
@@ -1109,7 +1121,7 @@ class CodegenContext extends Logging {
     } else {
       nonSplitExprCode
     }
-    SubExprCodes(codes, localSubExprEliminationExprs.toMap)
+    SubExprCodes(codes, localSubExprEliminationExprs.toMap, exprCodesNeedEvaluate.flatten)
   }
 
   /**
@@ -1732,15 +1744,23 @@ object CodeGenerator extends Logging {
   }
 
   /**
-   * Extracts all the input variables from references and subexpression elimination states
-   * for a given `expr`. This result will be used to split the generated code of
-   * expressions into multiple functions.
+   * This methods returns two values in a Tuple.
+   *
+   * First value: Extracts all the input variables from references and subexpression
+   * elimination states for a given `expr`. This result will be used to split the
+   * generated code of expressions into multiple functions.
+   *
+   * Second value: Returns the set of `ExprCodes`s which are necessary codes before
+   * evaluating subexpressions.
    */
   def getLocalInputVariableValues(
       ctx: CodegenContext,
       expr: Expression,
-      subExprs: Map[Expression, SubExprEliminationState] = Map.empty): Set[VariableValue] = {
+      subExprs: Map[Expression, SubExprEliminationState] = Map.empty)
+      : (Set[VariableValue], Set[ExprCode]) = {
     val argSet = mutable.Set[VariableValue]()
+    val exprCodesNeedEvaluate = mutable.Set[ExprCode]()
+
     if (ctx.INPUT_ROW != null) {
       argSet += JavaCode.variable(ctx.INPUT_ROW, classOf[InternalRow])
     }
@@ -1761,16 +1781,21 @@ object CodeGenerator extends Logging {
 
         case ref: BoundReference if ctx.currentVars != null &&
             ctx.currentVars(ref.ordinal) != null =>
-          val ExprCode(_, isNull, value) = ctx.currentVars(ref.ordinal)
-          collectLocalVariable(value)
-          collectLocalVariable(isNull)
+          val exprCode = ctx.currentVars(ref.ordinal)
+          // If the referred variable is not evaluated yet.
+          if (exprCode.code != EmptyBlock) {
+            exprCodesNeedEvaluate += exprCode.copy()
+            exprCode.code = EmptyBlock
+          }
+          collectLocalVariable(exprCode.value)
+          collectLocalVariable(exprCode.isNull)
 
         case e =>
           stack.pushAll(e.children)
       }
     }
 
-    argSet.toSet
+    (argSet.toSet, exprCodesNeedEvaluate.toSet)
   }
 
   /**

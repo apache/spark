@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -127,8 +127,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             propsWithOwner, writeOptions, ifNotExists) :: Nil
       }
 
-    case RefreshTable(catalog, ident) =>
-      RefreshTableExec(catalog, ident) :: Nil
+    case RefreshTable(r: ResolvedTable) =>
+      RefreshTableExec(r.catalog, r.identifier) :: Nil
 
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
@@ -225,8 +225,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       DescribeTableExec(desc.output, r.table, isExtended) :: Nil
 
+    case DescribeColumn(_: ResolvedTable, _, _) =>
+      throw new AnalysisException("Describing columns is not supported for v2 tables.")
+
     case DropTable(r: ResolvedTable, ifExists, _) =>
       DropTableExec(r.catalog, r.identifier, ifExists) :: Nil
+
+    case DropTable(_: UnresolvedTableOrView, ifExists, _) if ifExists =>
+      Nil
 
     case AlterTable(catalog, ident, _, changes) =>
       AlterTableExec(catalog, ident, changes) :: Nil
