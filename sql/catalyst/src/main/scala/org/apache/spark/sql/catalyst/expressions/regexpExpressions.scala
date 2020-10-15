@@ -183,8 +183,7 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
   def isNot: Boolean
 
   override def inputTypes: Seq[AbstractDataType] = {
-    val arrayOrStr = TypeCollection(ArrayType(StringType), StringType)
-    StringType +: Seq.fill(children.size - 1)(arrayOrStr)
+    StringType +: Seq.fill(children.size - 1)(StringType)
   }
 
   override def dataType: DataType = BooleanType
