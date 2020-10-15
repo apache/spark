@@ -37,6 +37,33 @@ object InsertTableWithDynamicPartitionsBenchmark extends DataSourceWriteBenchmar
     SparkSession.builder().master("local[4]").getOrCreate()
   }
 
+  def prepareSourceTableAndGetTotalRowsCount(numberRows: Long,
+      part1Step: Int, part2Step: Int, part3Step: Int): Long = {
+    val dataFrame = spark.range(0, numberRows, 1, 4)
+    val dataFrame1 = spark.range(0, numberRows, part1Step, 4)
+    val dataFrame2 = spark.range(0, numberRows, part2Step, 4)
+    val dataFrame3 = spark.range(0, numberRows, part3Step, 4)
+
+    val data = dataFrame.join(dataFrame1).join(dataFrame2).join(dataFrame3)
+      .toDF("id", "part1", "part2", "part3")
+
+    data.createOrReplaceTempView("tmpTable")
+
+    spark.sql("create table " +
+      "sourceTable(id bigint, part1 bigint, part2 bigint, part3 bigint) " +
+      "using parquet")
+
+    spark.sql("insert overwrite table sourceTable " +
+      s"select id, " +
+      s"part1, " +
+      s"part2, " +
+      s"part3 " +
+      s"from tmpTable")
+
+    spark.catalog.dropTempView("tmpTable")
+    data.count()
+  }
+
   def prepareTable(): Unit = {
     spark.sql("create table " +
       "tableOnePartitionColumn(i bigint, part bigint) " +
@@ -49,60 +76,62 @@ object InsertTableWithDynamicPartitionsBenchmark extends DataSourceWriteBenchmar
       "using parquet partitioned by (part1, part2, part3)")
   }
 
-  def writeOnePartitionColumnTable(
-      numberRows: Int, partitionNumberSeeds: Seq[Int], benchmark: Benchmark): Unit = {
-    partitionNumberSeeds.foreach { partitionNumber =>
-      benchmark.addCase(s"one partition column, $partitionNumber partitions") { _ =>
-        spark.sql("insert overwrite table " +
-          "tableOnePartitionColumn partition(part) " +
-          s"select id, " +
-          s"id % $partitionNumber as part " +
-          s"from range($numberRows)")
-      }
+  def writeOnePartitionColumnTable(partitionNumber: Long, benchmark: Benchmark): Unit = {
+    benchmark.addCase(s"one partition column, $partitionNumber partitions") { _ =>
+      spark.sql("insert overwrite table " +
+        "tableOnePartitionColumn partition(part) " +
+        s"select id, " +
+        s"part1 as part " +
+        s"from sourceTable")
     }
   }
 
-  def writeTwoPartitionColumnTable(
-      numberRows: Int, partitionNumberSeeds: Seq[Int], benchmark: Benchmark): Unit = {
-    partitionNumberSeeds.foreach { partitionNumber =>
-      benchmark.addCase(s"two partition columns, $partitionNumber partitions") { _ =>
-        spark.sql("insert overwrite table " +
-          "tableTwoPartitionColumn partition(part1, part2) " +
-          s"select id, " +
-          s"id % $partitionNumber as part1, " +
-          s"id % $partitionNumber as part2 " +
-          s"from range($numberRows)")
-      }
+  def writeTwoPartitionColumnTable(partitionNumber: Long, benchmark: Benchmark): Unit = {
+    benchmark.addCase(s"two partition columns, $partitionNumber partitions") { _ =>
+      spark.sql("insert overwrite table " +
+        "tableTwoPartitionColumn partition(part1, part2) " +
+        s"select id, " +
+        s"part1, " +
+        s"part2 " +
+        s"from sourceTable")
     }
   }
 
-  def writeThreePartitionColumnTable(
-      numberRows: Int, partitionNumberSeeds: Seq[Int], benchmark: Benchmark): Unit = {
-    partitionNumberSeeds.foreach { partitionNumber =>
-      benchmark.addCase(s"three partition columns, $partitionNumber partitions") { _ =>
-        spark.sql("insert overwrite table " +
-          "tableThreePartitionColumn partition(part1, part2, part3) " +
-          s"select id, " +
-          s"id % $partitionNumber as part1, " +
-          s"id % $partitionNumber as part2, " +
-          s"id % $partitionNumber as part3 " +
-          s"from range($numberRows)")
-      }
+  def writeThreePartitionColumnTable(partitionNumber: Long, benchmark: Benchmark): Unit = {
+    benchmark.addCase(s"three partition columns, $partitionNumber partitions") { _ =>
+      spark.sql("insert overwrite table " +
+        "tableThreePartitionColumn partition(part1, part2, part3) " +
+        s"select id, " +
+        s"part1, " +
+        s"part2, " +
+        s"part3 " +
+        s"from sourceTable")
     }
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    val sourceTable = "sourceTable"
     val tableOnePartitionColumn = "tableOnePartitionColumn"
     val tableTwoPartitionColumn = "tableTwoPartitionColumn"
     val tableThreePartitionColumn = "tableThreePartitionColumn"
-    val numberRows = 10000
-    val partitionNumberSeeds = Seq(10, 50, 100, 200, 500)
-    withTable(tableOnePartitionColumn, tableTwoPartitionColumn, tableThreePartitionColumn) {
+    val numberRows = 100L
+    val part1Step = 1
+    val part2Step = 20
+    val part3Step = 25
+    val part1Number = numberRows / part1Step
+    val part2Number = numberRows / part2Step *  part1Number
+    val part3Number = numberRows / part3Step *  part2Number
+    withTable(sourceTable, tableOnePartitionColumn, tableTwoPartitionColumn,
+      tableThreePartitionColumn) {
+      val totalRows =
+        prepareSourceTableAndGetTotalRowsCount(numberRows, part1Step, part2Step, part3Step)
       prepareTable()
-      val benchmark = new Benchmark(s"dynamic insert table benchmark", numberRows, output = output)
-      writeOnePartitionColumnTable(numberRows, partitionNumberSeeds, benchmark)
-      writeTwoPartitionColumnTable(numberRows, partitionNumberSeeds, benchmark)
-      writeThreePartitionColumnTable(numberRows, partitionNumberSeeds, benchmark)
+      val benchmark =
+        new Benchmark(s"dynamic insert table benchmark, totalRows = $totalRows",
+          totalRows, output = output)
+      writeOnePartitionColumnTable(part1Number, benchmark)
+      writeTwoPartitionColumnTable(part2Number, benchmark)
+      writeThreePartitionColumnTable(part3Number, benchmark)
       benchmark.run()
     }
   }
