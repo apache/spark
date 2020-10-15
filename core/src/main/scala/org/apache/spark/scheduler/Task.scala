@@ -128,9 +128,7 @@ private[spark] abstract class Task[T](
     plugins.foreach(_.onTaskStart())
 
     try {
-      val taskResult = runTask(context)
-      plugins.foreach(_.onTaskSucceeded())
-      taskResult
+      runTask(context)
     } catch {
       case e: Throwable =>
         // Catch all errors; run task failure callbacks, and rethrow the exception.
@@ -141,7 +139,6 @@ private[spark] abstract class Task[T](
             e.addSuppressed(t)
         }
         context.markTaskCompleted(Some(e))
-        plugins.foreach(_.onTaskFailed(e))
         throw e
     } finally {
       try {

@@ -19,6 +19,7 @@ package org.apache.spark.api.plugin;
 
 import java.util.Map;
 
+import org.apache.spark.TaskFailedReason;
 import org.apache.spark.annotation.DeveloperApi;
 
 /**
@@ -94,5 +95,5 @@ public interface ExecutorPlugin {
    *
    * @since 3.1.0
    */
-  default void onTaskFailed(Throwable failureReason) {}
+  default void onTaskFailed(TaskFailedReason failureReason) {}
 }

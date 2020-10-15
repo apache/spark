@@ -20,7 +20,7 @@ package org.apache.spark.internal.plugin
 import scala.collection.JavaConverters._
 import scala.util.{Either, Left, Right}
 
-import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.{SparkContext, SparkEnv, TaskFailedReason}
 import org.apache.spark.api.plugin._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -33,7 +33,7 @@ sealed abstract class PluginContainer {
   def registerMetrics(appId: String): Unit
   def onTaskStart(): Unit
   def onTaskSucceeded(): Unit
-  def onTaskFailed(failureReason: Throwable): Unit
+  def onTaskFailed(failureReason: TaskFailedReason): Unit
 
 }
 
@@ -96,7 +96,7 @@ private class DriverPluginContainer(
     throw new IllegalStateException("Should not be called for the driver container.")
   }
 
-  override def onTaskFailed(throwable: Throwable): Unit = {
+  override def onTaskFailed(failureReason: TaskFailedReason): Unit = {
     throw new IllegalStateException("Should not be called for the driver container.")
   }
 }
@@ -171,7 +171,7 @@ private class ExecutorPluginContainer(
     }
   }
 
-  override def onTaskFailed(failureReason: Throwable): Unit = {
+  override def onTaskFailed(failureReason: TaskFailedReason): Unit = {
     executorPlugins.foreach { case (name, plugin) =>
       try {
         plugin.onTaskFailed(failureReason)

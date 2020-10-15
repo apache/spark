@@ -360,7 +360,7 @@ private class TestExecutorPlugin extends ExecutorPlugin {
     numOnTaskSucceeded += 1
   }
 
-  override def onTaskFailed(failureReason: Throwable): Unit = {
+  override def onTaskFailed(failureReason: TaskFailedReason): Unit = {
     numOnTaskFailed += 1
   }
 }
