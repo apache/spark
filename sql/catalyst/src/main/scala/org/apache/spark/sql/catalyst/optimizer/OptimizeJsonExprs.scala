@@ -35,10 +35,8 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
  *      contains all accessed fields in original CreateNamedStruct.
  */
 object OptimizeJsonExprs extends Rule[LogicalPlan] {
-  private def enabledJsonOptimization = SQLConf.get.jsonExpressionOptimization
-
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case p if enabledJsonOptimization => p.transformExpressions {
+    case p if SQLConf.get.jsonExpressionOptimization => p.transformExpressions {
 
       case c: CreateNamedStruct
           // If we create struct from various fields of the same `JsonToStructs`.
