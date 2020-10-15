@@ -1459,8 +1459,8 @@ object SQLConf {
       .createWithDefault(true)
 
   val JSON_EXPRESSION_OPTIMIZATION =
-    buildConf("spark.sql.optimizer.jsonExpressionOptimization")
-      .doc("Whether to optimize Json expressions in SQL optimizer. It includes pruning " +
+    buildConf("spark.sql.optimizer.enableJsonExpressionOptimization")
+      .doc("Whether to optimize JSON expressions in SQL optimizer. It includes pruning " +
         "unnecessary columns from from_json, simplifing from_json + to_json, to_json + " +
         "named_struct(from_json.col1, from_json.col2, ....).")
       .version("3.1.0")

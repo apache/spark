@@ -29,6 +29,15 @@ import org.apache.spark.sql.types._
 
 class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
+  private var jsonExpressionOptimizeEnabled: Boolean = _
+  protected override def beforeAll(): Unit = {
+    jsonExpressionOptimizeEnabled = SQLConf.get.jsonExpressionOptimization
+  }
+
+  protected override def afterAll(): Unit = {
+    SQLConf.get.setConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION, jsonExpressionOptimizeEnabled)
+  }
+
   object Optimizer extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Json optimization", FixedPoint(10), OptimizeJsonExprs) :: Nil
   }
