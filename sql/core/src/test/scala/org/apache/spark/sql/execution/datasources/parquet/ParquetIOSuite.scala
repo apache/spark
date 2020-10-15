@@ -1114,7 +1114,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  test("SPARK-XXXXX: write the metadata key 'org.apache.spark.legacyDateTime'") {
+  test("SPARK-33163: write the metadata key 'org.apache.spark.legacyDateTime'") {
     def saveTs(dir: java.io.File): Unit = {
       Seq(Timestamp.valueOf("2020-10-15 01:02:03")).toDF()
         .repartition(1)
