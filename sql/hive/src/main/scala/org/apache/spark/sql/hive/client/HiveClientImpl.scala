@@ -103,29 +103,37 @@ private[hive] class HiveClientImpl(
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   private val outputBuffer = new CircularBuffer()
 
-  private val shim = version match {
-    case hive.v12 => new Shim_v0_12()
-    case hive.v13 => new Shim_v0_13()
-    case hive.v14 => new Shim_v0_14()
-    case hive.v1_0 => new Shim_v1_0()
-    case hive.v1_1 => new Shim_v1_1()
-    case hive.v1_2 => new Shim_v1_2()
-    case hive.v2_0 => new Shim_v2_0()
-    case hive.v2_1 => new Shim_v2_1()
-    case hive.v2_2 => new Shim_v2_2()
-    case hive.v2_3 => new Shim_v2_3()
-    case hive.v3_0 => new Shim_v3_0()
-    case hive.v3_1 => new Shim_v3_1()
+  private val shim: ThreadLocal[Shim] = new ThreadLocal[Shim]() {
+    override def initialValue(): Shim = version match {
+      case hive.v12 => new Shim_v0_12()
+      case hive.v13 => new Shim_v0_13()
+      case hive.v14 => new Shim_v0_14()
+      case hive.v1_0 => new Shim_v1_0()
+      case hive.v1_1 => new Shim_v1_1()
+      case hive.v1_2 => new Shim_v1_2()
+      case hive.v2_0 => new Shim_v2_0()
+      case hive.v2_1 => new Shim_v2_1()
+      case hive.v2_2 => new Shim_v2_2()
+      case hive.v2_3 => new Shim_v2_3()
+      case hive.v3_0 => new Shim_v3_0()
+      case hive.v3_1 => new Shim_v3_1()
+    }
   }
 
-  // Create an internal session state for this HiveClientImpl.
-  val state: SessionState = {
+  // Since HiveClientImpl is thread local, one state per HiveClientImpl
+  def state: SessionState = {
     val original = Thread.currentThread().getContextClassLoader
     if (clientLoader.isolationOn) {
       // Switch to the initClassLoader.
       Thread.currentThread().setContextClassLoader(initClassLoader)
       try {
-        newState()
+        val ret = SessionState.get
+        if (ret != null) {
+          // use thread local state if exists
+          ret
+        } else {
+          newState()
+        }
       } finally {
         Thread.currentThread().setContextClassLoader(original)
       }
@@ -207,12 +215,12 @@ private[hive] class HiveClientImpl(
 
   // We use hive's conf for compatibility.
   private val retryLimit = conf.getIntVar(HiveConf.ConfVars.METASTORETHRIFTFAILURERETRIES)
-  private val retryDelayMillis = shim.getMetastoreClientConnectRetryDelayMillis(conf)
+  private val retryDelayMillis = shim.get().getMetastoreClientConnectRetryDelayMillis(conf)
 
   /**
    * Runs `f` with multiple retries in case the hive metastore is temporarily unreachable.
    */
-  private def retryLocked[A](f: => A): A = clientLoader.synchronized {
+  private def retryLocked[A](f: => A): A = {
     // Hive sometimes retries internally, so set a deadline to avoid compounding delays.
     val deadline = System.nanoTime + (retryLimit * retryDelayMillis * 1e6).toLong
     var numTries = 0
@@ -260,7 +268,7 @@ private[hive] class HiveClientImpl(
   }
 
   private def msClient: IMetaStoreClient = {
-    shim.getMSC(client)
+    shim.get().getMSC(client)
   }
 
   /** Return the associated Hive [[SessionState]] of this [[HiveClientImpl]] */
@@ -285,7 +293,7 @@ private[hive] class HiveClientImpl(
     // setCurrentSessionState will use the classLoader associated
     // with the HiveConf in `state` to override the context class loader of the current
     // thread.
-    shim.setCurrentSessionState(state)
+    shim.get().setCurrentSessionState(state)
     val ret = try {
       f
     } catch {
@@ -361,7 +369,7 @@ private[hive] class HiveClientImpl(
       CatalogUtils.URIToString(database.locationUri),
       (props -- Seq(PROP_OWNER)).asJava)
     props.get(PROP_OWNER).orElse(userName).foreach { ownerName =>
-      shim.setDatabaseOwnerName(hiveDb, ownerName)
+      shim.get().setDatabaseOwnerName(hiveDb, ownerName)
     }
     hiveDb
   }
@@ -369,7 +377,7 @@ private[hive] class HiveClientImpl(
   override def getDatabase(dbName: String): CatalogDatabase = withHiveState {
     Option(client.getDatabase(dbName)).map { d =>
       val paras = Option(d.getParameters).map(_.asScala.toMap).getOrElse(Map()) ++
-        Map(PROP_OWNER -> shim.getDatabaseOwnerName(d))
+        Map(PROP_OWNER -> shim.get().getDatabaseOwnerName(d))
 
       CatalogDatabase(
         name = d.getName,
@@ -506,7 +514,7 @@ private[hive] class HiveClientImpl(
       createTime = h.getTTable.getCreateTime.toLong * 1000,
       lastAccessTime = h.getLastAccessTime.toLong * 1000,
       storage = CatalogStorageFormat(
-        locationUri = shim.getDataLocation(h).map(CatalogUtils.stringToURI),
+        locationUri = shim.get().getDataLocation(h).map(CatalogUtils.stringToURI),
         // To avoid ClassNotFound exception, we try our best to not get the format class, but get
         // the class name directly. However, for non-native tables, there is no interface to get
         // the format class name, so we may still throw ClassNotFound in this case.
@@ -547,7 +555,7 @@ private[hive] class HiveClientImpl(
       tableName: String,
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit = withHiveState {
-    shim.dropTable(client, dbName, tableName, true, ignoreIfNotExists, purge)
+    shim.get().dropTable(client, dbName, tableName, true, ignoreIfNotExists, purge)
   }
 
   override def alterTable(
@@ -563,7 +571,7 @@ private[hive] class HiveClientImpl(
       table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
     // Do not use `table.qualifiedName` here because this may be a rename
     val qualifiedTableName = s"$dbName.$tableName"
-    shim.alterTable(client, qualifiedTableName, hiveTable)
+    shim.get().alterTable(client, qualifiedTableName, hiveTable)
   }
 
   override def alterTableDataSchema(
@@ -591,7 +599,7 @@ private[hive] class HiveClientImpl(
     schemaProps.foreach { case (k, v) => oldTable.setProperty(k, v) }
 
     val qualifiedTableName = s"$dbName.$tableName"
-    shim.alterTable(client, qualifiedTableName, oldTable)
+    shim.get().alterTable(client, qualifiedTableName, oldTable)
   }
 
   override def createPartitions(
@@ -599,7 +607,7 @@ private[hive] class HiveClientImpl(
       table: String,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = withHiveState {
-    shim.createPartitions(client, db, table, parts, ignoreIfExists)
+    shim.get().createPartitions(client, db, table, parts, ignoreIfExists)
   }
 
   override def dropPartitions(
@@ -629,7 +637,7 @@ private[hive] class HiveClientImpl(
     var droppedParts = ArrayBuffer.empty[java.util.List[String]]
     matchingParts.foreach { partition =>
       try {
-        shim.dropPartition(client, db, table, partition, !retainData, purge)
+        shim.get().dropPartition(client, db, table, partition, !retainData, purge)
       } catch {
         case e: Exception =>
           val remainingParts = matchingParts.toBuffer --= droppedParts
@@ -678,7 +686,8 @@ private[hive] class HiveClientImpl(
     try {
       setCurrentDatabaseRaw(db)
       val hiveTable = toHiveTable(getTable(db, table), Some(userName))
-      shim.alterPartitions(client, table, newParts.map { toHivePartition(_, hiveTable) }.asJava)
+      shim.get()
+        .alterPartitions(client, table, newParts.map { toHivePartition(_, hiveTable) }.asJava)
     } finally {
       state.setCurrentDatabase(original)
     }
@@ -736,7 +745,8 @@ private[hive] class HiveClientImpl(
       table: CatalogTable,
       predicates: Seq[Expression]): Seq[CatalogTablePartition] = withHiveState {
     val hiveTable = toHiveTable(table, Some(userName))
-    val parts = shim.getPartitionsByFilter(client, hiveTable, predicates).map(fromHivePartition)
+    val parts =
+      shim.get().getPartitionsByFilter(client, hiveTable, predicates).map(fromHivePartition)
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts
   }
@@ -756,7 +766,7 @@ private[hive] class HiveClientImpl(
     val hiveTableType = toHiveTableType(tableType)
     try {
       // Try with Hive API getTablesByType first, it's supported from Hive 2.3+.
-      shim.getTablesByType(client, dbName, pattern, hiveTableType)
+      shim.get().getTablesByType(client, dbName, pattern, hiveTableType)
     } catch {
       case _: UnsupportedOperationException =>
         // Fallback to filter logic if getTablesByType not supported.
@@ -802,7 +812,7 @@ private[hive] class HiveClientImpl(
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
       // The remainder of the command.
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
-      val proc = shim.getCommandProcessor(tokens(0), conf)
+      val proc = shim.get().getCommandProcessor(tokens(0), conf)
       proc match {
         case driver: Driver =>
           val response: CommandProcessorResponse = driver.run(cmd)
@@ -813,7 +823,7 @@ private[hive] class HiveClientImpl(
           }
           driver.setMaxRows(maxRows)
 
-          val results = shim.getDriverResults(driver)
+          val results = shim.get().getDriverResults(driver)
           closeDriver(driver)
           results
 
@@ -855,7 +865,7 @@ private[hive] class HiveClientImpl(
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit = withHiveState {
     val hiveTable = client.getTable(dbName, tableName, true /* throw exception */)
-    shim.loadPartition(
+    shim.get().loadPartition(
       client,
       new Path(loadPath), // TODO: Use URI
       s"$dbName.$tableName",
@@ -871,7 +881,7 @@ private[hive] class HiveClientImpl(
       tableName: String,
       replace: Boolean,
       isSrcLocal: Boolean): Unit = withHiveState {
-    shim.loadTable(
+    shim.get().loadTable(
       client,
       new Path(loadPath),
       tableName,
@@ -887,7 +897,7 @@ private[hive] class HiveClientImpl(
       replace: Boolean,
       numDP: Int): Unit = withHiveState {
     val hiveTable = client.getTable(dbName, tableName, true /* throw exception */)
-    shim.loadDynamicPartitions(
+    shim.get().loadDynamicPartitions(
       client,
       new Path(loadPath),
       s"$dbName.$tableName",
@@ -898,28 +908,28 @@ private[hive] class HiveClientImpl(
   }
 
   override def createFunction(db: String, func: CatalogFunction): Unit = withHiveState {
-    shim.createFunction(client, db, func)
+    shim.get().createFunction(client, db, func)
   }
 
   override def dropFunction(db: String, name: String): Unit = withHiveState {
-    shim.dropFunction(client, db, name)
+    shim.get().dropFunction(client, db, name)
   }
 
   override def renameFunction(db: String, oldName: String, newName: String): Unit = withHiveState {
-    shim.renameFunction(client, db, oldName, newName)
+    shim.get().renameFunction(client, db, oldName, newName)
   }
 
   override def alterFunction(db: String, func: CatalogFunction): Unit = withHiveState {
-    shim.alterFunction(client, db, func)
+    shim.get().alterFunction(client, db, func)
   }
 
   override def getFunctionOption(
       db: String, name: String): Option[CatalogFunction] = withHiveState {
-    shim.getFunctionOption(client, db, name)
+    shim.get().getFunctionOption(client, db, name)
   }
 
   override def listFunctions(db: String, pattern: String): Seq[String] = withHiveState {
-    shim.listFunctions(client, db, pattern)
+    shim.get().listFunctions(client, db, pattern)
   }
 
   def addJar(path: String): Unit = {
@@ -956,7 +966,7 @@ private[hive] class HiveClientImpl(
       logDebug(s"Deleting table $t")
       try {
         client.getIndexes("default", t, 255).asScala.foreach { index =>
-          shim.dropIndex(client, "default", t, index.getIndexName)
+          shim.get().dropIndex(client, "default", t, index.getIndexName)
         }
         if (!table.isIndexTable) {
           client.dropTable("default", t)
