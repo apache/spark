@@ -147,12 +147,11 @@ jobs:
     - name: Install Python packages (Python 2.7 and PyPy3)
       if: contains(matrix.modules, 'pyspark')
       # PyArrow is not supported in PyPy yet, see ARROW-2651.
-      # TODO(SPARK-32247): scipy installation with PyPy fails for an unknown reason.
       run: |
         python2.7 -m pip install numpy 'pyarrow<3.0.0' pandas scipy xmlrunner
         python2.7 -m pip list
         # PyPy does not have xmlrunner
-        pypy3 -m pip install numpy pandas
+        pypy3 -m pip install numpy pandas scipy
         pypy3 -m pip list
     - name: Install Python packages (Python 3.8)
       if: contains(matrix.modules, 'pyspark') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
