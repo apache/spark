@@ -170,9 +170,6 @@ private[hive] class HiveClientImpl(
   private def newState(): SessionState = {
     val hiveConf = newHiveConf(sparkConf, hadoopConf, extraConfig, Some(initClassLoader))
     val state = new SessionState(hiveConf)
-    if (clientLoader.cachedHive != null) {
-      Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
-    }
     // Hive 2.3 will set UDFClassLoader to hiveConf when initializing SessionState
     // since HIVE-11878, and ADDJarCommand will add jars to clientLoader.classLoader.
     // For this reason we cannot load the jars added by ADDJarCommand because of class loader
@@ -220,7 +217,7 @@ private[hive] class HiveClientImpl(
   /**
    * Runs `f` with multiple retries in case the hive metastore is temporarily unreachable.
    */
-  private def retryLocked[A](f: => A): A = {
+  private def retry[A](f: => A): A = {
     // Hive sometimes retries internally, so set a deadline to avoid compounding delays.
     val deadline = System.nanoTime + (retryLimit * retryDelayMillis * 1e6).toLong
     var numTries = 0
@@ -235,7 +232,6 @@ private[hive] class HiveClientImpl(
           logWarning(
             "HiveClient got thrift exception, destroying client and retrying " +
               s"(${retryLimit - numTries} tries remaining)", e)
-          clientLoader.cachedHive = null
           Thread.sleep(retryDelayMillis)
       }
     } while (numTries <= retryLimit && System.nanoTime < deadline)
@@ -258,13 +254,10 @@ private[hive] class HiveClientImpl(
   }
 
   private def client: Hive = {
-    if (clientLoader.cachedHive != null) {
-      clientLoader.cachedHive.asInstanceOf[Hive]
-    } else {
-      val c = Hive.get(conf)
-      clientLoader.cachedHive = c
-      c
-    }
+    // get the Hive and set to thread local
+    val c = Hive.get(conf)
+    Hive.set(c)
+    c
   }
 
   private def msClient: IMetaStoreClient = {
@@ -277,7 +270,7 @@ private[hive] class HiveClientImpl(
   /**
    * Runs `f` with ThreadLocal session state and classloaders configured for this version of hive.
    */
-  def withHiveState[A](f: => A): A = retryLocked {
+  def withHiveState[A](f: => A): A = retry {
     val original = Thread.currentThread().getContextClassLoader
     val originalConfLoader = state.getConf.getClassLoader
     // The classloader in clientLoader could be changed after addJar, always use the latest
