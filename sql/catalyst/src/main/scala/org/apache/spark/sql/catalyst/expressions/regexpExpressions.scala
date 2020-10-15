@@ -192,8 +192,6 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
 
   override def nullable: Boolean = true
 
-  def escape(v: String): String = StringUtils.escapeLikeRegex(v, '\\')
-
   def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
   override def eval(input: InternalRow): Any = {
