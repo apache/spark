@@ -17,7 +17,7 @@ jobs:
   # Build: build Spark and run the tests for specified modules.
   build:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }}, ${{ matrix.hive }})"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
@@ -204,7 +204,7 @@ jobs:
   # Static analysis, and documentation build
   lint:
     name: Linters, licenses, dependencies and documentation generation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -271,7 +271,7 @@ jobs:
 
   java11:
     name: Java 11 build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -296,7 +296,7 @@ jobs:
 
   scala-213:
     name: Scala 2.13 build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
