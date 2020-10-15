@@ -335,7 +335,7 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
       * rep - a string expression to replace matched substrings.
-      * position - a positive integer expression that indicates the position within `str` to begin searching.
+      * position - a positive integer literal that indicates the position within `str` to begin searching.
           The default is 1. If position is greater than the number of characters in `str`, the result is `str`.
   """,
   examples = """
