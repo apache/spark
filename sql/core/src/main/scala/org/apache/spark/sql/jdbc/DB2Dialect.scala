@@ -66,7 +66,8 @@ private object DB2Dialect extends JdbcDialect {
       tableName: String,
       columnName: String,
       newDataType: String): String =
-    s"ALTER TABLE $tableName ALTER COLUMN $columnName SET DATA TYPE $newDataType"
+    s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)}" +
+      s" SET DATA TYPE $newDataType"
 
   // scalastyle:off line.size.limit
   // See https://www.ibm.com/support/knowledgecenter/en/SSEPGG_11.5.0/com.ibm.db2.luw.sql.ref.doc/doc/r0000888.html
@@ -76,6 +77,6 @@ private object DB2Dialect extends JdbcDialect {
       columnName: String,
       isNullable: Boolean): String = {
     val nullable = if (isNullable) "DROP NOT NULL" else "SET NOT NULL"
-    s"ALTER TABLE $tableName ALTER COLUMN $columnName $nullable"
+    s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} $nullable"
   }
 }

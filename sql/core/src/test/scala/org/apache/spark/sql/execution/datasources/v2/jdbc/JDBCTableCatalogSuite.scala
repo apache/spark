@@ -178,15 +178,15 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         .add("C1", IntegerType)
         .add("C2", StringType)
       assert(t.schema === expectedSchema)
-      sql("ALTER TABLE h2.test.alt_table ADD COLUMNS (C3 DOUBLE)")
+      sql("ALTER TABLE h2.test.alt_table ADD COLUMNS (c3 DOUBLE)")
       t = spark.table("h2.test.alt_table")
-      expectedSchema = expectedSchema.add("C3", DoubleType)
+      expectedSchema = expectedSchema.add("c3", DoubleType)
       assert(t.schema === expectedSchema)
       // Add already existing column
       val msg = intercept[AnalysisException] {
-        sql("ALTER TABLE h2.test.alt_table ADD COLUMNS (C3 DOUBLE)")
+        sql("ALTER TABLE h2.test.alt_table ADD COLUMNS (c3 DOUBLE)")
       }.getMessage
-      assert(msg.contains("Cannot add column, because C3 already exists"))
+      assert(msg.contains("Cannot add column, because c3 already exists"))
     }
     // Add a column to not existing table and namespace
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
@@ -199,8 +199,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   test("alter table ... rename column") {
     withTable("h2.test.alt_table") {
-      sql("CREATE TABLE h2.test.alt_table (ID INTEGER, C0 INTEGER) USING _")
-      sql("ALTER TABLE h2.test.alt_table RENAME COLUMN ID TO C")
+      sql("CREATE TABLE h2.test.alt_table (id INTEGER, C0 INTEGER) USING _")
+      sql("ALTER TABLE h2.test.alt_table RENAME COLUMN id TO C")
       val t = spark.table("h2.test.alt_table")
       val expectedSchema = new StructType()
         .add("C", IntegerType)
@@ -223,8 +223,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   test("alter table ... drop column") {
     withTable("h2.test.alt_table") {
-      sql("CREATE TABLE h2.test.alt_table (C1 INTEGER, C2 INTEGER) USING _")
+      sql("CREATE TABLE h2.test.alt_table (C1 INTEGER, C2 INTEGER, c3 INTEGER) USING _")
       sql("ALTER TABLE h2.test.alt_table DROP COLUMN C1")
+      sql("ALTER TABLE h2.test.alt_table DROP COLUMN c3")
       val t = spark.table("h2.test.alt_table")
       val expectedSchema = new StructType().add("C2", IntegerType)
       assert(t.schema === expectedSchema)
@@ -245,10 +246,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   test("alter table ... update column type") {
     withTable("h2.test.alt_table") {
-      sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")
+      sql("CREATE TABLE h2.test.alt_table (ID INTEGER, deptno INTEGER) USING _")
       sql("ALTER TABLE h2.test.alt_table ALTER COLUMN id TYPE DOUBLE")
+      sql("ALTER TABLE h2.test.alt_table ALTER COLUMN deptno TYPE DOUBLE")
       val t = spark.table("h2.test.alt_table")
-      val expectedSchema = new StructType().add("ID", DoubleType)
+      val expectedSchema = new StructType().add("ID", DoubleType).add("deptno", DoubleType)
       assert(t.schema === expectedSchema)
       // Update not existing column
       val msg1 = intercept[AnalysisException] {
@@ -272,10 +274,12 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   test("alter table ... update column nullability") {
     withTable("h2.test.alt_table") {
-      sql("CREATE TABLE h2.test.alt_table (ID INTEGER NOT NULL) USING _")
+      sql("CREATE TABLE h2.test.alt_table (ID INTEGER NOT NULL, deptno INTEGER NOT NULL) USING _")
       sql("ALTER TABLE h2.test.alt_table ALTER COLUMN ID DROP NOT NULL")
+      sql("ALTER TABLE h2.test.alt_table ALTER COLUMN deptno DROP NOT NULL")
       val t = spark.table("h2.test.alt_table")
-      val expectedSchema = new StructType().add("ID", IntegerType, nullable = true)
+      val expectedSchema = new StructType()
+        .add("ID", IntegerType, nullable = true).add("deptno", IntegerType, nullable = true)
       assert(t.schema === expectedSchema)
       // Update nullability of not existing column
       val msg = intercept[AnalysisException] {
