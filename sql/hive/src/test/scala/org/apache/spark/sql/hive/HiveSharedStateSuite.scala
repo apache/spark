@@ -26,6 +26,12 @@ import org.apache.spark.util.Utils
 
 class HiveSharedStateSuite extends SparkFunSuite {
 
+  override def beforeEach(): Unit = {
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+    super.beforeEach()
+  }
+
   test("initial configs should be passed to SharedState but not SparkContext") {
     val conf = new SparkConf().setMaster("local").setAppName("SharedState Test")
     val sc = SparkContext.getOrCreate(conf)
