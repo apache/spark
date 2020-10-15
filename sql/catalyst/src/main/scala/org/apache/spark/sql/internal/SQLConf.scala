@@ -1458,6 +1458,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val JSON_EXPRESSION_OPTIMIZATION =
+    buildConf("spark.sql.optimizer.enableJsonExpressionOptimization")
+      .doc("Whether to optimize JSON expressions in SQL optimizer. It includes pruning " +
+        "unnecessary columns from from_json, simplifing from_json + to_json, to_json + " +
+        "named_struct(from_json.col1, from_json.col2, ....).")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
     .doc("Whether to delete the expired log files in file stream sink.")
@@ -3231,6 +3240,8 @@ class SQLConf extends Serializable with Logging {
   def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
   def jsonGeneratorIgnoreNullFields: Boolean = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
+
+  def jsonExpressionOptimization: Boolean = getConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION)
 
   def parallelFileListingInStatsComputation: Boolean =
     getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)
