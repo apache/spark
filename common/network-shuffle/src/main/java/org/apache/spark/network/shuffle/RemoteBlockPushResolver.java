@@ -358,7 +358,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       private int length = 0;
       // This indicates that this stream got the opportunity to write the blocks to the merged file.
       // Once this is set to true and the stream encounters a failure then it will take necessary
-      // action to overwrite the partial written data. This is reset to false when the stream
+      // action to overwrite any partial written data. This is reset to false when the stream
       // completes without any failures.
       private boolean startBlockWrite = false;
       // Use on-heap instead of direct ByteBuffer since these buffers will be GC'ed very quickly
@@ -592,10 +592,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
       @Override
       public void onFailure(String streamId, Throwable throwable) throws IOException {
-        if (!errorHandler.shouldLogError(throwable)) {
-          logger.debug("Encountered issue when merging shuffle partition block {}", msg, throwable);
-        } else {
+        if (errorHandler.shouldLogError(throwable)) {
           logger.error("Encountered issue when merging shuffle partition block {}", msg, throwable);
+        } else {
+          logger.debug("Encountered issue when merging shuffle partition block {}", msg, throwable);
         }
         // Only update partitionInfo if the failure corresponds to a valid request. If the
         // request is too late, i.e. received after shuffle merge finalize, #onFailure will
@@ -758,10 +758,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     private RoaringBitmap mapTracker;
     // The index file for a particular merged shuffle contains the chunk offsets.
     private final FileChannel indexChannel;
-    /**
-     * The meta file for a particular merged shuffle contains all the map ids that belong to every
-     * chunk. The entry per chunk is a serialized bitmap.
-     */
+    // The meta file for a particular merged shuffle contains all the map ids that belong to every
+    // chunk. The entry per chunk is a serialized bitmap.
     private final FileChannel metaChannel;
     private final DataOutputStream indexWriteStream;
     // The offset for the last chunk tracked in the index file for this shuffle partition
@@ -772,7 +770,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     private RoaringBitmap chunkTracker;
     ByteBuf trackerBuf = null;
 
-    AppShufflePartitionInfo(AppShufflePartitionId partitionId,
+    AppShufflePartitionInfo(
+        AppShufflePartitionId partitionId,
         File targetFile,
         File indexFile,
         File metaFile) throws IOException {
