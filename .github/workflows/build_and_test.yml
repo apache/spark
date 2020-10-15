@@ -301,22 +301,18 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
-    - name: Cache Maven local repository
+    - name: Cache Ivy local repository
       uses: actions/cache@v2
       with:
-        path: ~/.m2/repository
-        key: scala-213-maven-${{ hashFiles('**/pom.xml') }}
+        path: ~/.ivy2/cache
+        key: scala-213-ivy-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          scala-213-maven-
+          scala-213-ivy-
     - name: Install Java 11
       uses: actions/setup-java@v1
       with:
         java-version: 11
-    - name: Build with Maven
+    - name: Build with SBT
       run: |
-        export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
-        export MAVEN_CLI_OPTS="--no-transfer-progress"
-        mkdir -p ~/.m2
         ./dev/change-scala-version.sh 2.13
-        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=11 -Pscala-2.13 install
-        rm -rf ~/.m2/repository/org/apache/spark
+        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Djava.version=11 -Pscala-2.13 compile test:compile
