@@ -213,11 +213,11 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
             match = false
           }
         }
-        if (hasNull) {
-          null
-        } else {
-          match
-        }
+      }
+      if (hasNull) {
+        null
+      } else {
+        match
       }
     }
   }
