@@ -104,8 +104,8 @@ private[spark] object HiveUtils extends Logging {
       s"Such as: " +
       s" 1. file://path/to/jar/xxx.jar" +
       s" 2. hdfs://nameservice/path/to/jar/xxx.jar" +
-      s" 3. /path/to/jar (path without schema will be treated as HDFS path)" +
-      s" 3. [http/https/ftp]://path/to/jar/xxx.jar" +
+      s" 3. /path/to/jar/ (path without schema will follow hadoop conf `fs.defaultFS`'s schema)" +
+      s" 4. [http/https/ftp]://path/to/jar/xxx.jar" +
       s"For URI, we can't support path wildcard, but for other URL support nested path wildcard," +
       s"Such as: " +
       s" 1. file://path/to/jar/*, file://path/to/jar/*/*" +
