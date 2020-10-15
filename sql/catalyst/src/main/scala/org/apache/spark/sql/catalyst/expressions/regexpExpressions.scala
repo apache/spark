@@ -206,7 +206,8 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
         if (str == null) {
           return null
         }
-        val regex = Pattern.compile(StringUtils.escapeLikeRegex(str.asInstanceOf[UTF8String].toString, '\\'))
+        val regex =
+          Pattern.compile(StringUtils.escapeLikeRegex(str.asInstanceOf[UTF8String].toString, '\\'))
         if(regex == null) {
           return null
         } else if (isNot && matches(regex, evaluatedValue.asInstanceOf[UTF8String].toString)) {
