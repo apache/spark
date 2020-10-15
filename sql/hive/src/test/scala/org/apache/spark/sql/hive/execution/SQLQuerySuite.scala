@@ -2590,7 +2590,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       HiveUtils.CONVERT_METASTORE_ORC.key -> "true",
       HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE.key -> "true") {
       withTempPath { path =>
-        withTable("t1", "t2") {
+        withTable("t1", "t2", "t3", "t4") {
           sql(
             s"""
                |CREATE TABLE t1 (id STRING)
@@ -2643,6 +2643,19 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
             sql("INSERT OVERWRITE TABLE t3 SELECT id FROM t1 WHERE dt='2020-09-10'")
           }
           assert(e2.getMessage.contains("Cannot overwrite a path that is also being read from."))
+
+          sql(
+            s"""
+               |CREATE TABLE t4 (id string)
+               |STORED AS ORC
+               |LOCATION '${path.getAbsolutePath}/dt=2020-09-10'
+            """.stripMargin)
+          sql("INSERT OVERWRITE TABLE t1 PARTITION(dt='2020-09-10') SELECT 1")
+          val e3 = intercept[AnalysisException] {
+            sql("INSERT OVERWRITE TABLE t4 SELECT id FROM t3")
+          }
+          assert(e3.getMessage.contains("Cannot overwrite a path that is also being read from."))
+
         }
       }
     }
