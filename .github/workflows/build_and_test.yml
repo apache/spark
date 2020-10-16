@@ -231,7 +231,6 @@ jobs:
           pyspark-ivy-
     - name: Install Python 3.6
       uses: actions/setup-python@v2
-      if: contains(matrix.modules, 'pyspark')
       with:
         python-version: 3.6
         architecture: x64
