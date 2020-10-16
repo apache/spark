@@ -32,7 +32,6 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.util.SerializableConfiguration
 
 
-
 /**
  * Simple metrics collected during an instance of [[FileFormatDataWriter]].
  * These were first introduced in https://github.com/apache/spark/pull/18159 (SPARK-20703).
@@ -156,12 +155,10 @@ class BasicWriteJobStatsTracker(
       totalNumOutput += summary.numRows
     }
 
-    val numPartitions: Long = partitionsSet.size
-
     metrics(BasicWriteJobStatsTracker.NUM_FILES_KEY).add(numFiles)
     metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_BYTES_KEY).add(totalNumBytes)
     metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_ROWS_KEY).add(totalNumOutput)
-    metrics(BasicWriteJobStatsTracker.NUM_PARTS_KEY).add(numPartitions)
+    metrics(BasicWriteJobStatsTracker.NUM_PARTS_KEY).add(partitionsSet.size)
 
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toList)
