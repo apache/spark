@@ -179,13 +179,27 @@ private[spark] object InstanceBlock {
     instances.mapPartitions(iter => blokifyWithMaxMemUsage(iter, maxMemUsage))
   }
 
+
+  /**
+   * Suggested value for BlockSizeInMB, based on performance tests of BLAS operation.
+   *
+   * @param dim size of vector.
+   * @param avgNNZ average nnz of vectors.
+   * @param blasLevel level of BLAS operation.
+   */
   def inferBlockSizeInMB(
       dim: Int,
       avgNNZ: Double,
       blasLevel: Int = 2): Double = {
     if (dim <= avgNNZ * 3) {
+      // When the dataset is relatively dense, Spark will use netlib-java for optimised numerical
+      // processing, which will try to use nativeBLAS implementations (like OpenBLAS, Intel MKL),
+      // and fallback to the Java implementation (f2jBLAS) if necessary.
+      // The suggested value for dense cases is 0.25.
       0.25
     } else {
+      // When the dataset is sparse, Spark will use its own Scala implementation.
+      // The suggested value for sparse cases is 64.0.
       64.0
     }
   }

@@ -98,12 +98,34 @@ class InstanceSuite extends SparkFunSuite{
     }
 
     // instances larger than maxMemUsage
-    val bigInstance = Instance(-1.0, 2.0, Vectors.dense(Array.fill(10000)(1.0)))
-    InstanceBlock.blokifyWithMaxMemUsage(Iterator.fill(10)(bigInstance), 64).size
+    val denseInstance = Instance(-1.0, 2.0, Vectors.dense(Array.fill(1000)(1.0)))
+    InstanceBlock.blokifyWithMaxMemUsage(Iterator.single(denseInstance), 64).size
+    InstanceBlock.blokifyWithMaxMemUsage(Iterator.fill(10)(denseInstance), 64).size
 
     // different numFeatures
     intercept[IllegalArgumentException] {
-      InstanceBlock.blokifyWithMaxMemUsage(Iterator.apply(instance1, bigInstance), 64).size
+      InstanceBlock.blokifyWithMaxMemUsage(Iterator.apply(instance1, denseInstance), 64).size
     }
+
+    // nnz = 10
+    val sparseInstance = Instance(-2.0, 3.0,
+      Vectors.sparse(1000, Array.range(0, 1000, 100), Array.fill(10)(0.1)))
+
+    // normally, memory usage of a block does not exceed maxMemUsage too much
+    val maxMemUsage = 1 << 18
+    val mixedIter = Iterator.fill(100)(denseInstance) ++
+      Iterator.fill(1000)(sparseInstance) ++
+      Iterator.fill(10)(denseInstance) ++
+      Iterator.fill(10)(sparseInstance) ++
+      Iterator.fill(100)(denseInstance) ++
+      Iterator.fill(100)(sparseInstance)
+    InstanceBlock.blokifyWithMaxMemUsage(mixedIter, maxMemUsage)
+      .foreach { block =>
+        val doubleBytes = java.lang.Double.BYTES
+        val arrayHeader = 12L
+        val blockMemUsage = block.matrix.getSizeInBytes +
+          (block.labels.length + block.weights.length) * doubleBytes + arrayHeader * 2
+        require(blockMemUsage < maxMemUsage * 1.05)
+      }
   }
 }
