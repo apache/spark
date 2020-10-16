@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, StructType}
 
 /**
@@ -35,7 +36,7 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
  */
 object OptimizeJsonExprs extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case p => p.transformExpressions {
+    case p if SQLConf.get.jsonExpressionOptimization => p.transformExpressions {
 
       case c: CreateNamedStruct
           // If we create struct from various fields of the same `JsonToStructs`.

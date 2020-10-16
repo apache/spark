@@ -195,7 +195,7 @@ private[hive] class TestHiveSparkSession(
   }
 
   SparkSession.setDefaultSession(this)
-  SparkSession.setActiveSession(this)
+  SparkSession.setActiveSessionInternal(this)
 
   { // set the metastore temporary configuration
     val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(

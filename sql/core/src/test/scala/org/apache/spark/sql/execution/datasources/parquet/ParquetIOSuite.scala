@@ -1114,6 +1114,29 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  test("SPARK-33163: write the metadata key 'org.apache.spark.legacyDateTime'") {
+    def saveTs(dir: java.io.File): Unit = {
+      Seq(Timestamp.valueOf("2020-10-15 01:02:03")).toDF()
+        .repartition(1)
+        .write
+        .parquet(dir.getAbsolutePath)
+    }
+    withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+      withTempPath { dir =>
+        saveTs(dir)
+        assert(getMetaData(dir)(SPARK_LEGACY_DATETIME) === "")
+      }
+    }
+    Seq(CORRECTED, EXCEPTION).foreach { mode =>
+      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> mode.toString) {
+        withTempPath { dir =>
+          saveTs(dir)
+          assert(getMetaData(dir).get(SPARK_LEGACY_DATETIME).isEmpty)
+        }
+      }
+    }
+  }
+
   test("SPARK-33160: write the metadata key 'org.apache.spark.int96NoRebase'") {
     def saveTs(dir: java.io.File): Unit = {
       Seq(Timestamp.valueOf("1000-01-01 01:02:03")).toDF()
