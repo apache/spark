@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{FileSystem => _, _}
-import java.net.{InetAddress, UnknownHostException, URI}
+import java.net.{HttpURLConnection, InetAddress, URI, UnknownHostException, URL => JURL}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.{Locale, Properties, UUID}
@@ -27,9 +27,13 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.control.NonFatal
-
 import com.google.common.base.Objects
 import com.google.common.io.Files
+import javax.ws.rs.client.ClientBuilder
+import javax.ws.rs.core.{GenericType, MediaType}
+import javax.ws.rs.core.Response.Status.Family
+import net.minidev.json.parser.JSONParser
+import net.minidev.json.{JSONArray, JSONObject}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
@@ -46,7 +50,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier
 import org.apache.hadoop.yarn.util.Records
-
+import org.apache.hadoop.yarn.webapp.util.WebAppUtils
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.deploy.{SparkApplication, SparkHadoopUtil}
@@ -59,6 +63,8 @@ import org.apache.spark.internal.config.Python._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.{CallerContext, Utils}
+import org.glassfish.jersey.client.ClientResponse
+
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -1163,13 +1169,50 @@ private[spark] class Client(
       ("final status", report.getFinalApplicationStatus.toString),
       ("tracking URL", report.getTrackingUrl),
       ("user", report.getUser)
-    )
+    ) ++ getDriverLogsLink(report.getApplicationId.toString)
+      .map { case (stdOut, stdErr) => Seq(
+        ("Driver Logs (stdout)", stdOut),
+        ("Driver Logs (stderr)", stdErr)
+      )}.getOrElse(Seq())
 
     // Use more loggable format if value is null or empty
     details.map { case (k, v) =>
       val newValue = Option(v).filter(_.nonEmpty).getOrElse("N/A")
       s"\n\t $k: $newValue"
     }.mkString("")
+  }
+
+  private def getDriverLogsLink(appId: String): Option[(String, String)] = {
+    val baseRmUrl = WebAppUtils.getRMWebAppURLWithScheme(hadoopConf)
+    val response = ClientBuilder.newClient()
+      .target(baseRmUrl)
+      .path("ws").path("v1").path("cluster").path("apps").path(appId).path("appattempts")
+      .request(MediaType.APPLICATION_JSON)
+      .get()
+    response.getStatusInfo.getFamily match {
+      case Family.SUCCESSFUL =>
+        val rawResponse = new JSONParser(JSONParser.MODE_PERMISSIVE)
+          .parse(response.readEntity(classOf[String]))
+
+        import scala.reflect.runtime.universe._
+        def castWithWarn[T: TypeTag]: Any => Option[T] = {
+          case matched: T => Some(matched)
+          case o =>
+            logWarning(s"Malformed status response from RM appattempts; "
+              + s"expected ${typeTag[T].tpe} but was ${o.getClass}")
+            None
+        }
+        Option(rawResponse).flatMap(castWithWarn[JSONObject])
+          .map(_.get("appAttempts")).flatMap(castWithWarn[JSONObject])
+          .map(_.get("appAttempt")).flatMap(castWithWarn[JSONArray])
+          .map(arr => arr.get(arr.size() - 1)).flatMap(castWithWarn[JSONObject])
+          .map(_.getAsString("logsLink"))
+          .map(baseUrl => (s"$baseUrl/stdout?start=-4096", s"$baseUrl/stderr?start=-4096"))
+      case _ =>
+        logInfo(s"Unable to fetch app attempts info from $baseRmUrl, got "
+          + s"status code ${response.getStatus}: ${response.getStatusInfo.getReasonPhrase}")
+        None
+    }
   }
 
   /**
