@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
 import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
-import org.apache.spark.sql.execution.datasources.{DataSource, FilePartition}
+import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
@@ -50,9 +50,15 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
 import org.apache.spark.util.Utils
 
-abstract class AvroSuite extends QueryTest with SharedSparkSession with NestedDataSourceSuiteBase {
+abstract class AvroSuite
+  extends QueryTest
+  with SharedSparkSession
+  with CommonFileDataSourceSuite
+  with NestedDataSourceSuiteBase {
+
   import testImplicits._
 
+  override protected def dataSourceFormat = "avro"
   override val nestedDataSources = Seq("avro")
   val episodesAvro = testFile("episodes.avro")
   val testAvro = testFile("test.avro")
@@ -1804,16 +1810,6 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession with NestedDa
     withTempPath { path =>
       spark.range(1).repartition(1).write.format("avro").save(path.getCanonicalPath)
       checkMetaData(path, SPARK_VERSION_METADATA_KEY, SPARK_VERSION_SHORT)
-    }
-  }
-
-  test("SPARK-33089: should propagate Hadoop config from DS options to underlying file system") {
-    withSQLConf(
-      "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
-      "fs.file.impl.disable.cache" -> "true") {
-      val conf = Map("ds_option" -> "value")
-      val path = "file:" + testAvro.stripPrefix("file:")
-      spark.read.format("avro").options(conf).load(path)
     }
   }
 
