@@ -151,16 +151,16 @@ case class InsertIntoHadoopFsRelationCommand(
       }.flatten
       val staticPathFragment =
         PartitioningUtils.getPathFragment(staticPartitions, partitionColumns)
-      val finalOutputPath = if (staticPartitions.nonEmpty
-        && partitionColumns.length == staticPartitions.size) {
-        if (customPartitionLocations.contains(staticPartitions)) {
-          customPartitionLocations.getOrElse(staticPartitions, staticPathFragment)
+      val finalOutputPath =
+        if (staticPartitions.nonEmpty && partitionColumns.length == staticPartitions.size) {
+          if (customPartitionLocations.contains(staticPartitions)) {
+            new Path(customPartitionLocations.getOrElse(staticPartitions, staticPathFragment))
+          } else {
+            new Path(outputPath, staticPathFragment)
+          }
         } else {
-          new Path(outputPath, staticPathFragment)
+          outputPath
         }
-      } else {
-        outputPath
-      }
       if (inputPaths.contains(finalOutputPath)) {
         throw new AnalysisException(
           s"Cannot overwrite a path that is also being read from.")
