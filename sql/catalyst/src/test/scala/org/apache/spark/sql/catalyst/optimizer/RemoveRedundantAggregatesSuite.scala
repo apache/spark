@@ -70,12 +70,35 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
-  test("Keep non-redundant aggregate") {
+  test("Remove redundant aggregate with aliases") {
     val relation = LocalRelation('a.int, 'b.int)
     val query = relation
-      .groupBy('a)('a, first('b) as 'b)
+      .groupBy('a + 'b)(('a + 'b) as 'c, count('b))
+      .groupBy('c)('c)
+      .analyze
+    val expected = relation
+      .groupBy('a + 'b)(('a + 'b) as 'c)
+      .analyze
+    val optimized = Optimize.execute(query)
+    comparePlans(optimized, expected)
+  }
+
+  test("Keep non-redundant aggregate - upper has agg expression") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val query = relation
+      .groupBy('a, 'b)('a, 'b)
       // The count would change if we remove the first aggregate
       .groupBy('a)('a, count('b))
+      .analyze
+    val optimized = Optimize.execute(query)
+    comparePlans(optimized, query)
+  }
+
+  test("Keep non-redundant aggregate - upper references non-grouping") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val query = relation
+      .groupBy('a)('a, count('b) as 'c)
+      .groupBy('c)('c)
       .analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, query)

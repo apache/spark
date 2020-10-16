@@ -97,7 +97,7 @@ object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePr
   }
 }
 
-trait PredicateHelper extends Logging {
+trait PredicateHelper extends Logging with AliasHelper {
   protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
     condition match {
       case And(cond1, cond2) =>
@@ -147,18 +147,6 @@ trait PredicateHelper extends Logging {
       case Or(cond1, cond2) =>
         splitDisjunctivePredicates(cond1) ++ splitDisjunctivePredicates(cond2)
       case other => other :: Nil
-    }
-  }
-
-  // Substitute any known alias from a map.
-  protected def replaceAlias(
-      condition: Expression,
-      aliases: AttributeMap[Expression]): Expression = {
-    // Use transformUp to prevent infinite recursion when the replacement expression
-    // redefines the same ExprId,
-    condition.transformUp {
-      case a: Attribute =>
-        aliases.getOrElse(a, a)
     }
   }
 
@@ -246,6 +234,41 @@ trait PredicateHelper extends Logging {
       } else {
         None
       }
+  }
+}
+
+/**
+ * Helper methods for collecting and replacing aliases.
+ */
+trait AliasHelper {
+
+  protected def getAliasMap(plan: Project): AttributeMap[Expression] = {
+    // Create a map of Aliases to their values from the child projection.
+    // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
+    AttributeMap(plan.projectList.collect { case a: Alias => (a.toAttribute, a.child) })
+  }
+
+  protected def getAliasMap(plan: Aggregate): AttributeMap[Expression] = {
+    // Find all the aliased expressions in the aggregate list that don't include any actual
+    // AggregateExpression or PythonUDF, and create a map from the alias to the expression
+    val aliasMap = plan.aggregateExpressions.collect {
+      case a: Alias if a.child.find(e => e.isInstanceOf[AggregateExpression] ||
+        PythonUDF.isGroupedAggPandasUDF(e)).isEmpty =>
+        (a.toAttribute, a.child)
+    }
+    AttributeMap(aliasMap)
+  }
+
+  // Substitute any known alias from a map.
+  protected def replaceAlias(
+    condition: Expression,
+    aliases: AttributeMap[Expression]): Expression = {
+    // Use transformUp to prevent infinite recursion when the replacement expression
+    // redefines the same ExprId,
+    condition.transformUp {
+      case a: Attribute =>
+        aliases.getOrElse(a, a)
+    }
   }
 }
 

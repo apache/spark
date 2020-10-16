@@ -482,18 +482,51 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
  * Remove redundant aggregates from a query plan. A redundant aggregate is an aggregate whose
  * only goal is to keep distinct values, while its parent aggregate would ignore duplicate values.
  */
-object RemoveRedundantAggregates extends Rule[LogicalPlan] {
+object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case upper @ Aggregate(_, _, lower: Aggregate) if lowerIsRedundant(upper, lower) =>
-      upper.copy(child = lower.child)
+      val aliasMap = getAliasMap(lower)
+      upper.copy(
+        child = lower.child,
+        groupingExpressions = upper.groupingExpressions.map(replaceAlias(_, aliasMap)),
+        aggregateExpressions = upper.aggregateExpressions.map(
+          replaceAliasButKeepOuter(_, aliasMap))
+      )
   }
 
   private def lowerIsRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
-    val upperReferencesOnlyGrouping = upper.references
-      .subsetOf(AttributeSet(lower.groupingExpressions))
+    val isDeterministic = upper.aggregateExpressions.forall(_.deterministic) &&
+      lower.aggregateExpressions.forall(_.deterministic)
+
+    val upperReferencesOnlyGrouping = upper.references.subsetOf(AttributeSet(
+      lower.aggregateExpressions.filter(!isAggregate(_)).map(_.toAttribute)))
+
     val upperHasNoAggregateExpressions = upper.aggregateExpressions
-      .forall(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
-    upperReferencesOnlyGrouping && upperHasNoAggregateExpressions
+      .forall(_.find(isAggregate).isEmpty)
+
+    isDeterministic && upperReferencesOnlyGrouping && upperHasNoAggregateExpressions
+  }
+
+  private def isAggregate(expr: Expression): Boolean = {
+    expr.find(e => e.isInstanceOf[AggregateExpression] ||
+      PythonUDF.isGroupedAggPandasUDF(e)).isDefined
+  }
+
+  /**
+   * Replace all attributes, that reference an alias, with the aliased expression,
+   * but keep the name of the name of the outmost attribute.
+   */
+  private def replaceAliasButKeepOuter(
+    expr: NamedExpression,
+    aliasMap: AttributeMap[Expression]): NamedExpression = {
+
+    val replaced = expr match {
+      case a: Attribute if aliasMap.contains(a) =>
+        Alias(replaceAlias(a, aliasMap), a.name)(a.exprId, a.qualifier)
+      case _ => replaceAlias(expr, aliasMap)
+    }
+
+    replaced.asInstanceOf[NamedExpression]
   }
 }
 
@@ -1256,23 +1289,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       pushDownPredicate(filter, u.child) { predicate =>
         u.withNewChildren(Seq(Filter(predicate, u.child)))
       }
-  }
-
-  def getAliasMap(plan: Project): AttributeMap[Expression] = {
-    // Create a map of Aliases to their values from the child projection.
-    // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
-    AttributeMap(plan.projectList.collect { case a: Alias => (a.toAttribute, a.child) })
-  }
-
-  def getAliasMap(plan: Aggregate): AttributeMap[Expression] = {
-    // Find all the aliased expressions in the aggregate list that don't include any actual
-    // AggregateExpression or PythonUDF, and create a map from the alias to the expression
-    val aliasMap = plan.aggregateExpressions.collect {
-      case a: Alias if a.child.find(e => e.isInstanceOf[AggregateExpression] ||
-          PythonUDF.isGroupedAggPandasUDF(e)).isEmpty =>
-        (a.toAttribute, a.child)
-    }
-    AttributeMap(aliasMap)
   }
 
   def canPushThrough(p: UnaryNode): Boolean = p match {
