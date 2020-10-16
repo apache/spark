@@ -27,7 +27,7 @@ import org.apache.spark.util.Utils
 class HiveSharedStateSuite extends SparkFunSuite {
 
   override def beforeEach(): Unit = {
-    SparkSession.clearActiveSession()
+    SparkSession.clearActiveSessionInternal()
     SparkSession.clearDefaultSession()
     super.beforeEach()
   }

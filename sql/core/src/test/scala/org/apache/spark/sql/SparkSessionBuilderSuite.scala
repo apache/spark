@@ -320,6 +320,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       .config(custom, "kyao")
       .getOrCreate()
 
+    // When creating the first session like above, we will update the shared spark conf to the
+    // newly specified values
     val sharedWH = spark.sharedState.conf.get(wh)
     val sharedTD = spark.sharedState.conf.get(td)
     val sharedCustom = spark.sharedState.conf.get(custom)
@@ -330,10 +332,13 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(sharedCustom === "kyao",
       "Dynamic sql configs in shared state should be determined by the 1st created spark session")
 
-
-    assert(spark.conf.get(wh) === sharedWH)
-    assert(spark.conf.get(td) === sharedTD)
-    assert(spark.conf.get(custom) === sharedCustom)
+    assert(spark.conf.get(wh) === sharedWH,
+      "The warehouse dir in session conf and shared state conf should be consistent")
+    assert(spark.conf.get(td) === sharedTD,
+      "Static sql configs in session conf and shared state conf should be consistent")
+    assert(spark.conf.get(custom) === sharedCustom,
+      "Dynamic sql configs in session conf and shared state conf should be consistent before" +
+        " setting to new ones")
 
     spark.sql("RESET")
 
