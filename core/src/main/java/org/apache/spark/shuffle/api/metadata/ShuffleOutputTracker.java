@@ -17,8 +17,6 @@
 
 package org.apache.spark.shuffle.api.metadata;
 
-import org.apache.spark.shuffle.api.ShuffleDriverComponents;
-
 /**
  * :: Private ::
  *
