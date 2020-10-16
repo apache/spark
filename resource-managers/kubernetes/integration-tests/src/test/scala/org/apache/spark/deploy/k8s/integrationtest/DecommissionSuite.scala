@@ -97,11 +97,9 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       .set(config.DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT.key, "30")
       .set(config.DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT.key, "30")
       .set(config.DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, "5")
-      .set(config.DYN_ALLOCATION_MIN_EXECUTORS.key, "2")
-      .set(config.DYN_ALLOCATION_INITIAL_EXECUTORS.key, "3")
+      .set(config.DYN_ALLOCATION_MIN_EXECUTORS.key, "1")
+      .set(config.DYN_ALLOCATION_INITIAL_EXECUTORS.key, "2")
       .set(config.DYN_ALLOCATION_ENABLED.key, "true")
-      // Ensure we have somewhere to migrate our data too
-      .set("spark.executor.instances", "3")
       // The default of 30 seconds is fine, but for testing we just want to get this done fast.
       .set("spark.storage.decommission.replicationReattemptInterval", "1")
 
