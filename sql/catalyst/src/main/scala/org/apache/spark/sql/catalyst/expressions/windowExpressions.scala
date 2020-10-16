@@ -475,6 +475,8 @@ case class Lag(input: Expression, inputOffset: Expression, default: Expression)
 
   def this() = this(Literal(null))
 
+  override def children: Seq[Expression] = Seq(input, inputOffset, default)
+
   override val offset: Expression = UnaryMinus(inputOffset) match {
     case e: Expression if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
     case o => o
