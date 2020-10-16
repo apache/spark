@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.datasources
 
 import org.scalatest.funsuite.AnyFunSuite
 
-import org.apache.spark.sql.{FakeFileSystemRequiringDSOption, QueryTest, Row}
+import org.apache.spark.sql.{Encoders, FakeFileSystemRequiringDSOption, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.test.SQLTestData
 
+// The trait contains tests for all file-based data sources.
 trait CommonFileDataSourceSuite {
   self: QueryTest with AnyFunSuite with SQLTestData with SQLHelper =>
 
@@ -36,8 +37,17 @@ trait CommonFileDataSourceSuite {
         withTempPath { dir =>
           val path = dir.getAbsolutePath
           val conf = Map("ds_option" -> "value", "mergeSchema" -> mergeSchema.toString)
-          spark.range(1).write.options(conf).format(dataSourceFormat).save(path)
-          checkAnswer(spark.read.options(conf).format(dataSourceFormat).load(path), Row(0))
+          spark.createDataset(Seq("abc"))(Encoders.STRING)
+            .write
+            .options(conf)
+            .format(dataSourceFormat)
+            .save(path)
+          val readback = spark
+            .read
+            .options(conf)
+            .format(dataSourceFormat)
+            .load(path)
+          checkAnswer(readback, Row("abc"))
         }
       }
     }
