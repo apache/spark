@@ -50,7 +50,7 @@ case class BasicWriteTaskStats(
 class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   extends WriteTaskStatsTracker with Logging {
 
-  private[this] var partitions: mutable.ArraySeq[InternalRow] = mutable.ArraySeq.empty
+  private[this] val partitions: mutable.ArrayBuffer[InternalRow] = mutable.ArrayBuffer.empty
   private[this] var numFiles: Int = 0
   private[this] var submittedFiles: Int = 0
   private[this] var numBytes: Long = 0L
@@ -78,7 +78,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
 
 
   override def newPartition(partitionValues: InternalRow): Unit = {
-    partitions = partitions :+ partitionValues
+    partitions.append(partitionValues)
   }
 
   override def newBucket(bucketId: Int): Unit = {
