@@ -206,6 +206,8 @@
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
 
+    <test.java.home>${java.home}</test.java.home>
+
     <!-- Some UI tests require Chrome and Chrome driver installed so those tests are disabled by default. -->
     <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest</test.default.exclude.tags>
     <test.exclude.tags></test.exclude.tags>
@@ -240,6 +242,15 @@
     <orc.deps.scope>compile</orc.deps.scope>
     <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
+
+    <!--
+      These default to Hadoop 3.x shaded client/minicluster jars, but are switched to hadoop-client
+      when the Hadoop profile is hadoop-2.7, because these are only available in 3.x. Note that,
+      as result we have to include the same hadoop-client dependency multiple times in hadoop-2.7.
+    -->
+    <hadoop-client-api.artifact>hadoop-client-api</hadoop-client-api.artifact>
+    <hadoop-client-runtime.artifact>hadoop-client-runtime</hadoop-client-runtime.artifact>
+    <hadoop-client-minicluster.artifact>hadoop-client-minicluster</hadoop-client-minicluster.artifact>
 
     <!--
       Overridable test home. So that you can call individual pom files directly without
@@ -2424,17 +2435,6 @@
                 </rules>
               </configuration>
             </execution>
-            <execution>
-              <id>enforce-no-duplicate-dependencies</id>
-              <goals>
-                <goal>enforce</goal>
-              </goals>
-              <configuration>
-                <rules>
-                  <banDuplicatePomDependencyVersions/>
-                </rules>
-              </configuration>
-            </execution>
           </executions>
         </plugin>
 	<plugin>
@@ -2568,7 +2568,7 @@
               <SPARK_PREPEND_CLASSES>1</SPARK_PREPEND_CLASSES>
               <SPARK_SCALA_VERSION>${scala.binary.version}</SPARK_SCALA_VERSION>
               <SPARK_TESTING>1</SPARK_TESTING>
-              <JAVA_HOME>${java.home}</JAVA_HOME>
+              <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
               <log4j.configuration>file:src/test/resources/log4j.properties</log4j.configuration>
@@ -2619,7 +2619,7 @@
               <SPARK_PREPEND_CLASSES>1</SPARK_PREPEND_CLASSES>
               <SPARK_SCALA_VERSION>${scala.binary.version}</SPARK_SCALA_VERSION>
               <SPARK_TESTING>1</SPARK_TESTING>
-              <JAVA_HOME>${java.home}</JAVA_HOME>
+              <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
               <log4j.configuration>file:src/test/resources/log4j.properties</log4j.configuration>
@@ -2894,6 +2894,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
+          <createDependencyReducedPom>false</createDependencyReducedPom>
           <artifactSet>
             <includes>
               <include>org.spark-project.spark:unused</include>
@@ -3155,11 +3156,15 @@
         <hadoop.version>2.7.4</hadoop.version>
         <curator.version>2.7.1</curator.version>
         <commons-io.version>2.4</commons-io.version>
+        <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
+        <hadoop-client-runtime.artifact>hadoop-client</hadoop-client-runtime.artifact>
+        <hadoop-client-minicluster.artifact>hadoop-client</hadoop-client-minicluster.artifact>
       </properties>
     </profile>
 
     <profile>
       <id>hadoop-3.2</id>
+      <!-- Default hadoop profile. Uses global properties. -->
     </profile>
 
     <profile>
@@ -3212,50 +3217,13 @@
     </profile>
 
     <profile>
-      <id>Windows</id>
+      <id>test-java-home</id>
       <activation>
-        <os>
-          <family>Windows</family>
-        </os>
+        <property><name>env.JAVA_HOME</name></property>
       </activation>
       <properties>
-        <script.extension>.bat</script.extension>
+        <test.java.home>${env.JAVA_HOME}</test.java.home>
       </properties>
-    </profile>
-    <profile>
-      <id>unix</id>
-      <activation>
-        <os>
-          <family>unix</family>
-        </os>
-      </activation>
-      <properties>
-        <script.extension>.sh</script.extension>
-      </properties>
-    </profile>
-    <profile>
-      <id>sparkr</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>exec-maven-plugin</artifactId>
-            <version>1.6.0</version>
-            <executions>
-              <execution>
-                <id>sparkr-pkg</id>
-                <phase>compile</phase>
-                <goals>
-                  <goal>exec</goal>
-                </goals>
-              </execution>
-            </executions>
-            <configuration>
-              <executable>${project.basedir}${file.separator}R${file.separator}install-dev${script.extension}</executable>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
     </profile>
 
     <profile>
@@ -3267,7 +3235,7 @@
         </pluginManagement>
       </build>
     </profile>
-    
+
     <profile>
       <id>scala-2.13</id>
       <properties>
@@ -3349,6 +3317,9 @@
     </profile>
     <profile>
       <id>parquet-provided</id>
+    </profile>
+    <profile>
+      <id>sparkr</id>
     </profile>
     <!-- use org.openlabtesting.leveldbjni on aarch64 platform -->
     <profile>

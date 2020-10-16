@@ -56,6 +56,18 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>${hadoop-client-api.artifact}</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>${hadoop-client-runtime.artifact}</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>provided</scope>
+    </dependency>
     <!--
       the AWS module pulls in jackson; its transitive dependencies can create
       intra-jackson-module version problems.
@@ -191,26 +203,12 @@
 
   <profiles>
 
-    <profile>
-      <id>hadoop-2.7</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-client</artifactId>
-          <version>${hadoop.version}</version>
-          <scope>provided</scope>
-        </dependency>
-      </dependencies>
-    </profile>
     <!--
      Hadoop 3 simplifies the classpath, and adds a new committer base class which
      enables store-specific committers.
     -->
     <profile>
       <id>hadoop-3.2</id>
-      <activation>
-        <activeByDefault>true</activeByDefault>
-      </activation>
       <properties>
         <extra.source.dir>src/hadoop-3/main/scala</extra.source.dir>
         <extra.testsource.dir>src/hadoop-3/test/scala</extra.testsource.dir>
@@ -251,18 +249,6 @@
         </plugins>
       </build>
       <dependencies>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-client-api</artifactId>
-          <version>${hadoop.version}</version>
-          <scope>provided</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-client-runtime</artifactId>
-          <version>${hadoop.version}</version>
-          <scope>provided</scope>
-        </dependency>
         <!--
         There's now a hadoop-cloud-storage which transitively pulls in the store JARs,
         but it still needs some selective exclusion across versions, especially 3.0.x.
