@@ -20,10 +20,11 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -658,6 +659,55 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
       If(IsNull(structExpr), Literal(null, dataType), createNamedStructExpr)
     } else {
       createNamedStructExpr
+    }
+  }
+}
+
+object UpdateFields {
+  private def nameParts(fieldName: String): Seq[String] = {
+    require(fieldName != null, "fieldName cannot be null")
+
+    if (fieldName.isEmpty) {
+      fieldName :: Nil
+    } else {
+      CatalystSqlParser.parseMultipartIdentifier(fieldName)
+    }
+  }
+
+  /**
+   * Adds/replaces field of `StructType` into `col` expression by name.
+   */
+  def apply(col: Expression, fieldName: String, expr: Expression): UpdateFields = {
+    updateFieldsHelper(col, nameParts(fieldName), name => WithField(name, expr))
+  }
+
+  /**
+   * Drops fields of `StructType` in `col` expression by name.
+   */
+  def apply(col: Expression, fieldName: String): UpdateFields = {
+    updateFieldsHelper(col, nameParts(fieldName), name => DropField(name))
+  }
+
+  private def updateFieldsHelper(
+      structExpr: Expression,
+      namePartsRemaining: Seq[String],
+      valueFunc: String => StructFieldsOperation) : UpdateFields = {
+    val fieldName = namePartsRemaining.head
+    if (namePartsRemaining.length == 1) {
+      UpdateFields(structExpr, valueFunc(fieldName) :: Nil)
+    } else {
+      val newStruct = if (structExpr.resolved) {
+        val resolver = SQLConf.get.resolver
+        ExtractValue(structExpr, Literal(fieldName), resolver)
+      } else {
+        UnresolvedExtractValue(structExpr, Literal(fieldName))
+      }
+
+      val newValue = updateFieldsHelper(
+        structExpr = newStruct,
+        namePartsRemaining = namePartsRemaining.tail,
+        valueFunc = valueFunc)
+      UpdateFields(structExpr, WithField(fieldName, newValue) :: Nil)
     }
   }
 }
