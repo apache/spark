@@ -149,10 +149,10 @@ case class InsertIntoHadoopFsRelationCommand(
             case fileStatus => fileStatus.getPath
           })
       }.flatten
-      val staticPathFragment =
-        PartitioningUtils.getPathFragment(staticPartitions, partitionColumns)
       val finalOutputPath =
         if (staticPartitions.nonEmpty && partitionColumns.length == staticPartitions.size) {
+          val staticPathFragment =
+            PartitioningUtils.getPathFragment(staticPartitions, partitionColumns)
           if (customPartitionLocations.contains(staticPartitions)) {
             new Path(customPartitionLocations.getOrElse(staticPartitions, staticPathFragment))
           } else {
