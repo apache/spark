@@ -112,12 +112,11 @@ object DataSourceUtils {
   }
 
   def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
-    val config = if (format == "Parquet") {
-      SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key
-    } else if (format == "Avro") {
-      SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key
-    } else {
-      throw new IllegalStateException("unrecognized format " + format)
+    val config = format match {
+      case "Parquet INT96" => SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key
+      case "Parquet" => SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key
+      case "Avro" => SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key
+      case _ => throw new IllegalStateException("unrecognized format " + format)
     }
     new SparkUpgradeException("3.0", "reading dates before 1582-10-15 or timestamps before " +
       s"1900-01-01T00:00:00Z from $format files can be ambiguous, as the files may be written by " +
@@ -130,8 +129,8 @@ object DataSourceUtils {
 
   def newRebaseExceptionInWrite(format: String): SparkUpgradeException = {
     val config = format match {
-      case "Parquet" => SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key
       case "Parquet INT96" => SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key
+      case "Parquet" => SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key
       case "Avro" => SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key
       case _ => throw new IllegalStateException("unrecognized format " + format)
     }
