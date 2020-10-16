@@ -209,7 +209,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
       }
     }
 
-    (rightProjectList, aliased)
+    (rightProjectList, aliased.toSeq)
   }
 
   private def unionTwoSides(
