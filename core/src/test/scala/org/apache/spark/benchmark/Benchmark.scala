@@ -161,6 +161,7 @@ private[spark] class Benchmark(
     // scalastyle:off
     println(s"  Stopped after $i iterations, ${NANOSECONDS.toMillis(runTimes.sum)} ms")
     // scalastyle:on
+    assert(runTimes.nonEmpty)
     val best = runTimes.min
     val avg = runTimes.sum / runTimes.size
     val stdev = if (runTimes.size > 1) {
@@ -182,15 +183,18 @@ private[spark] object Benchmark {
     private var timeStart: Long = 0L
 
     def startTiming(): Unit = {
+      assert(timeStart == 0L, "Already started timing.")
       timeStart = System.nanoTime
     }
 
     def stopTiming(): Unit = {
+      assert(timeStart != 0L, "Have not started timing.")
       accumulatedTime += System.nanoTime - timeStart
       timeStart = 0L
     }
 
     def totalTime(): Long = {
+      assert(timeStart == 0L, "Have not stopped timing.")
       accumulatedTime
     }
   }
