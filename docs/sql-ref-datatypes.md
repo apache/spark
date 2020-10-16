@@ -325,7 +325,7 @@ Spark supports both implicit conversions by type coercion and explicit conversio
 Type Coercion refers to the automatic or implicit conversion of values from one type to another when you need to to resolve type mismatches.
 The following matrix shows the resulting type to which they are implicitly converted to resolve an expression involving different data types.
 
-**Numeric expressions**:
+**Numeric Expressions**:
 
 |               |ByteType   |ShortType  |IntegerType |LongType   |FloatType             |DoubleType            |StringType |DecimalType                  |
 |---------------|-----------|-----------|------------|-----------|----------------------|----------------------|-----------|-----------------------------|
@@ -341,7 +341,7 @@ The following matrix shows the resulting type to which they are implicitly conve
 **Note 1**: DecimalType(precision,scale)   
 **Note 2**: In these cases DecimalType can lose precision, there is no common type for decimal and double because double's range is larger than decimal, and yet decimal is more precise than double so when we cast Decimaltype into DobleType it could lose precision.
 
-**Time expressions**:
+**Time Expressions**:
 
 |                  |DateType     |TimestampType |
 |------------------|-------------|--------------|
