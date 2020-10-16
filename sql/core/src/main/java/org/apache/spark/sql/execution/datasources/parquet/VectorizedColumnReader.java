@@ -104,13 +104,15 @@ public class VectorizedColumnReader {
   private final ZoneId convertTz;
   private static final ZoneId UTC = ZoneOffset.UTC;
   private final String datetimeRebaseMode;
+  private final String int96RebaseMode;
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
       OriginalType originalType,
       PageReader pageReader,
       ZoneId convertTz,
-      String datetimeRebaseMode) throws IOException {
+      String datetimeRebaseMode,
+      String int96RebaseMode) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.convertTz = convertTz;
@@ -136,6 +138,9 @@ public class VectorizedColumnReader {
     assert "LEGACY".equals(datetimeRebaseMode) || "EXCEPTION".equals(datetimeRebaseMode) ||
       "CORRECTED".equals(datetimeRebaseMode);
     this.datetimeRebaseMode = datetimeRebaseMode;
+    assert "LEGACY".equals(int96RebaseMode) || "EXCEPTION".equals(int96RebaseMode) ||
+      "CORRECTED".equals(int96RebaseMode);
+    this.int96RebaseMode = int96RebaseMode;
   }
 
   /**

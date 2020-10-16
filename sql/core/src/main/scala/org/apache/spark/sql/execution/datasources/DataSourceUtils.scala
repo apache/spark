@@ -111,6 +111,12 @@ object DataSourceUtils {
     }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
   }
 
+  def int96RebaseMode(
+      lookupFileMeta: String => String,
+      modeByConfig: String): LegacyBehaviorPolicy.Value = {
+    // TODO: Check the metadata
+    LegacyBehaviorPolicy.withName(modeByConfig)
+  }
   def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
     val config = format match {
       case "Parquet INT96" => SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key

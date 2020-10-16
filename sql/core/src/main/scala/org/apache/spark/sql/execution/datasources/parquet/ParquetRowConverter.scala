@@ -123,6 +123,8 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
  * @param convertTz the optional time zone to convert to int96 data
  * @param datetimeRebaseMode the mode of rebasing date/timestamp from Julian to Proleptic Gregorian
  *                           calendar
+ * @param int96RebaseMode the mode of rebasing INT96 timestamp from Julian to Proleptic Gregorian
+ *                           calendar
  * @param updater An updater which propagates converted field values to the parent container
  */
 private[parquet] class ParquetRowConverter(
@@ -131,6 +133,7 @@ private[parquet] class ParquetRowConverter(
     catalystType: StructType,
     convertTz: Option[ZoneId],
     datetimeRebaseMode: LegacyBehaviorPolicy.Value,
+    int96RebaseMode: LegacyBehaviorPolicy.Value,
     updater: ParentContainerUpdater)
   extends ParquetGroupConverter(updater) with Logging {
 
@@ -186,6 +189,9 @@ private[parquet] class ParquetRowConverter(
 
   private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
     datetimeRebaseMode, "Parquet")
+
+  private val int96RebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
+    int96RebaseMode, "Parquet INT96")
 
   // Converters for each field.
   private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
@@ -371,6 +377,7 @@ private[parquet] class ParquetRowConverter(
           t,
           convertTz,
           datetimeRebaseMode,
+          int96RebaseMode,
           wrappedUpdater)
 
       case t =>
