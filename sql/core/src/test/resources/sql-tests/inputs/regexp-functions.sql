@@ -42,3 +42,4 @@ SELECT regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', 8);
 SELECT regexp_replace('healthy, wealthy, and wise', '\\w', 'something', 26);
 SELECT regexp_replace('healthy, wealthy, and wise', '\\w', 'something', 27);
 SELECT regexp_replace('healthy, wealthy, and wise', '\\w', 'something', 30);
+SELECT regexp_replace('healthy, wealthy, and wise', '\\w', 'something', null);

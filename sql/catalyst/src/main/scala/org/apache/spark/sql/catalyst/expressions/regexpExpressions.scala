@@ -356,11 +356,11 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       return TypeCheckFailure(s"Position expression must be foldable, but got $pos")
     }
 
-    val i = pos.eval().asInstanceOf[Int]
-    if (i > 0) {
+    val posEval = pos.eval()
+    if (posEval == null || posEval.asInstanceOf[Int] > 0) {
       TypeCheckSuccess
     } else {
-      TypeCheckFailure(s"Position expression must be positive, but got: $i")
+      TypeCheckFailure(s"Position expression must be positive, but got: $posEval")
     }
   }
 
