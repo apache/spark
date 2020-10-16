@@ -673,7 +673,7 @@ object StructType extends AbstractDataType {
     if (newFields.isEmpty) {
       None
     } else {
-      Some(StructType(newFields))
+      Some(StructType(newFields.toSeq))
     }
   }
 }
