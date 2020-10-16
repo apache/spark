@@ -83,7 +83,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
           val newStruct = CreateNamedStruct(sorted)
           newStruct
         case other =>
-          throw new AnalysisException(s"`UpdateFields` has incorrect eval expression: $other. " +
+          throw new IllegalStateException(s"`UpdateFields` has incorrect expression: $other. " +
             "Please file a bug report with this error message, stack trace, and the query.")
       }
   }
