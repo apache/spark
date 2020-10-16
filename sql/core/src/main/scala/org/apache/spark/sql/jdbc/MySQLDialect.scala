@@ -54,7 +54,7 @@ private case object MySQLDialect extends JdbcDialect {
       tableName: String,
       columnName: String,
       newDataType: String): String = {
-    s"ALTER TABLE $tableName MODIFY COLUMN $columnName $newDataType"
+    s"ALTER TABLE $tableName MODIFY COLUMN ${quoteIdentifier(columnName)} $newDataType"
   }
 
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
