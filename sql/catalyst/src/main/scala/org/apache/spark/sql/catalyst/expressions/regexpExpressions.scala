@@ -192,6 +192,8 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
 
   override def nullable: Boolean = true
 
+  private def escape(v: String): String = StringUtils.escapeLikeRegex(v, '\\')
+
   private def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
   override def eval(input: InternalRow): Any = {
@@ -207,8 +209,7 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
           if (str == null) {
             hasNull = true
           } else {
-            val regex = Pattern.compile(
-              StringUtils.escapeLikeRegex(str.asInstanceOf[UTF8String].toString, '\\'))
+            val regex = Pattern.compile(escape(str.asInstanceOf[UTF8String].toString))
             val matched = matches(regex, evaluatedValue.asInstanceOf[UTF8String].toString)
             if ((isNot && matched) || !(isNot || matched)) {
               allMatched = false
@@ -236,22 +237,38 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
     val hasNull = ctx.freshName("hasNull")
     val allMatched = ctx.freshName("allMatched")
     val valueArg = ctx.freshName("valueArg")
-    val listCode = listGen.map(x =>
+    val patternCache = ctx.freshName("patternCache")
+    // If some pattern expression is foldable, we don't want to re-evaluate the pattern again.
+    val cacheCode = list.zipWithIndex.collect { case (x, i) if x.foldable =>
+      val xVal = x.eval()
+      if (xVal != null) {
+        val regexStr =
+          StringEscapeUtils.escapeJava(escape(xVal.asInstanceOf[UTF8String].toString()))
+        s"""$patternCache[$i] = $patternClass.compile("$regexStr");"""
+      } else {
+        s"""$patternCache[$i] = null;"""
+      }
+    }.mkString("\n")
+
+    val listCode = listGen.zipWithIndex.map { case (x, i) =>
       s"""
          |${x.code}
          |if (${x.isNull}) {
          |  $hasNull = true; // ${ev.isNull} = true;
          |} else if (!$hasNull && $allMatched) {
-         |  String $rightStr = ${x.value}.toString();
-         |  $patternClass $pattern =
-         |    $patternClass.compile($escapeFunc($rightStr, '$escapedEscapeChar'));
+         |  $patternClass $pattern = $patternCache[$i];
+         |  if ($pattern == null) {
+         |    String $rightStr = ${x.value}.toString();
+         |    $pattern = $patternClass.compile($escapeFunc($rightStr, '$escapedEscapeChar'));
+         |  }
          |  if ($isNot && $pattern.matcher($valueArg.toString()).matches()) {
          |    $allMatched = false;
          |  } else if (!$isNot && !$pattern.matcher($valueArg.toString()).matches()) {
          |    $allMatched = false;
          |  }
          |}
-       """.stripMargin)
+       """.stripMargin
+    }
 
     val resultType = CodeGenerator.javaType(dataType)
     val codes = ctx.splitExpressionsWithCurrentInputs(
@@ -276,6 +293,8 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
     ev.copy(code =
       code"""
             |${valueGen.code}
+            |$patternClass[] $patternCache = new $patternClass[${list.length}];
+            |$cacheCode
             |boolean $hasNull = false;
             |boolean $allMatched = true;
             |if (${valueGen.isNull}) {
