@@ -45,6 +45,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
 
 /**
@@ -1571,6 +1572,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   }
 }
 
+@ExtendedSQLTest
 class ParquetV1FilterSuite extends ParquetFilterSuite {
   override protected def sparkConf: SparkConf =
     super
@@ -1650,6 +1652,7 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
   }
 }
 
+@ExtendedSQLTest
 class ParquetV2FilterSuite extends ParquetFilterSuite {
   // TODO: enable Parquet V2 write path after file source V2 writers are workable.
   override protected def sparkConf: SparkConf =
