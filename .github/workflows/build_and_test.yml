@@ -235,6 +235,9 @@ jobs:
       with:
         python-version: 3.6
         architecture: x64
+    # This step takes much less time (~30s) than other Python versions so it is not included
+    # in the Docker image being used. There is also a technical issue to install Python 3.6 on
+    # Ubuntu 20.04. See also SPARK-33162.
     - name: Install Python packages (Python 3.6)
       if: contains(matrix.modules, 'pyspark')
       run: |
