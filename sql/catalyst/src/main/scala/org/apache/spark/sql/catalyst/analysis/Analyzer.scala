@@ -225,6 +225,7 @@ class Analyzer(
       ResolveInsertInto ::
       ResolveRelations ::
       ResolveTables ::
+      ResolveUnresolvedTableOrView ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
       ResolveDeserializer ::
@@ -863,7 +864,7 @@ class Analyzer(
           u.failAnalysis(s"${ident.quoted} is a temp view not table.")
         }
         u
-      case u @ UnresolvedTableOrView(ident) =>
+      case u @ UnresolvedTableOrView(ident, isResolutionRequired) =>
         lookupTempView(ident)
           .map(_ => ResolvedView(ident.asIdentifier, isTempView = true))
           .getOrElse(u)
@@ -924,7 +925,8 @@ class Analyzer(
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
-      case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident)) =>
+      case u @ UnresolvedTableOrView(
+          NonSessionCatalogAndIdentifier(catalog, ident), isResolutionRequired) =>
         CatalogV2Util.loadTable(catalog, ident)
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
@@ -1024,7 +1026,7 @@ class Analyzer(
           case table => table
         }.getOrElse(u)
 
-      case u @ UnresolvedTableOrView(identifier) =>
+      case u @ UnresolvedTableOrView(identifier, isResolutionRequired) =>
         lookupTableOrView(identifier).getOrElse(u)
     }
 
@@ -1091,6 +1093,13 @@ class Analyzer(
           }
         case _ => None
       }
+    }
+  }
+
+  object ResolveUnresolvedTableOrView extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case u: UnresolvedTableOrView if !u.isResolutionRequired =>
+        NotFoundTableOrView(u.multipartIdentifier)
     }
   }
 
