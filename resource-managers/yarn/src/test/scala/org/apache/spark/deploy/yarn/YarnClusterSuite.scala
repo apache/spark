@@ -162,12 +162,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("run Python application in yarn-client mode") {
-    testPySpark(
-      clientMode = true,
-      // This is a bandaid fix to send the path explicitly so executor sides pick the same
-      // Python executable. Otherwise, this test on GitHub Actions fails. See also SPARK-29250.
-      extraConf = Map("spark.executorEnv.PATH" -> sys.env("PATH"))
-    )
+    testPySpark(true)
   }
 
   test("run Python application in yarn-cluster mode") {
@@ -180,9 +175,9 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       clientMode = false,
       extraConf = Map(
         "spark.yarn.appMasterEnv.PYSPARK_DRIVER_PYTHON"
-          -> sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"),
+          -> sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python"),
         "spark.yarn.appMasterEnv.PYSPARK_PYTHON"
-          -> sys.env.getOrElse("PYSPARK_PYTHON", "python3")),
+          -> sys.env.getOrElse("PYSPARK_PYTHON", "python")),
       extraEnv = Map(
         "PYSPARK_DRIVER_PYTHON" -> "not python",
         "PYSPARK_PYTHON" -> "not python"))
@@ -280,10 +275,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
         s"$sparkHome/python")
     val extraEnvVars = Map(
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
-      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator),
-      "PYSPARK_DRIVER_PYTHON" -> "python3",
-      "PYSPARK_PYTHON" -> "python3"
-    ) ++ extraEnv
+      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator)) ++ extraEnv
 
     val moduleDir = {
       val subdir = new File(tempDir, "pyModules")
