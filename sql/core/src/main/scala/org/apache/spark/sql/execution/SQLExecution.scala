@@ -180,15 +180,15 @@ object SQLExecution {
     exec.submit(() => {
       val originalSession = SparkSession.getActiveSession
       val originalLocalProps = sc.getLocalProperties
-      SparkSession.setActiveSession(activeSession)
+      SparkSession.setActiveSessionInternal(activeSession)
       sc.setLocalProperties(localProps)
       val res = body
       // reset active session and local props.
       sc.setLocalProperties(originalLocalProps)
       if (originalSession.nonEmpty) {
-        SparkSession.setActiveSession(originalSession.get)
+        SparkSession.setActiveSessionInternal(originalSession.get)
       } else {
-        SparkSession.clearActiveSession()
+        SparkSession.clearActiveSessionInternal()
       }
       res
     })

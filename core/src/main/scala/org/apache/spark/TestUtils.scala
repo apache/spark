@@ -255,6 +255,19 @@ private[spark] object TestUtils {
     attempt.isSuccess && attempt.get == 0
   }
 
+  def isPythonVersionAtLeast38(): Boolean = {
+    val attempt = if (Utils.isWindows) {
+      Try(Process(Seq("cmd.exe", "/C", "python3 --version"))
+        .run(ProcessLogger(s => s.startsWith("Python 3.8") || s.startsWith("Python 3.9")))
+        .exitValue())
+    } else {
+      Try(Process(Seq("sh", "-c", "python3 --version"))
+        .run(ProcessLogger(s => s.startsWith("Python 3.8") || s.startsWith("Python 3.9")))
+        .exitValue())
+    }
+    attempt.isSuccess && attempt.get == 0
+  }
+
   /**
    * Returns the response code from an HTTP(S) URL.
    */

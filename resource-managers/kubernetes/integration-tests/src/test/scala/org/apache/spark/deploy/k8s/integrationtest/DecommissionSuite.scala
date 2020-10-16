@@ -26,7 +26,6 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
   test("Test basic decommissioning", k8sTestTag) {
     sparkAppConf
       .set(config.DECOMMISSION_ENABLED.key, "true")
-      .set("spark.kubernetes.pyspark.pythonVersion", "3")
       .set("spark.kubernetes.container.image", pyImage)
       .set(config.STORAGE_DECOMMISSION_ENABLED.key, "true")
       .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key, "true")

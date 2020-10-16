@@ -1458,6 +1458,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val JSON_EXPRESSION_OPTIMIZATION =
+    buildConf("spark.sql.optimizer.enableJsonExpressionOptimization")
+      .doc("Whether to optimize JSON expressions in SQL optimizer. It includes pruning " +
+        "unnecessary columns from from_json, simplifing from_json + to_json, to_json + " +
+        "named_struct(from_json.col1, from_json.col2, ....).")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
     .doc("Whether to delete the expired log files in file stream sink.")
@@ -2342,6 +2351,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_STATISTICAL_AGGREGATE =
+    buildConf("spark.sql.legacy.statisticalAggregate")
+      .internal()
+      .doc("When set to true, statistical aggregate function returns Double.NaN " +
+        "if divide by zero occurred during expression evaluation, otherwise, it returns null. " +
+        "Before version 3.1.0, it returns NaN in divideByZero case by default.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val TRUNCATE_TABLE_IGNORE_PERMISSION_ACL =
     buildConf("spark.sql.truncateTable.ignorePermissionAcl.enabled")
       .internal()
@@ -3222,6 +3241,8 @@ class SQLConf extends Serializable with Logging {
 
   def jsonGeneratorIgnoreNullFields: Boolean = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
 
+  def jsonExpressionOptimization: Boolean = getConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION)
+
   def parallelFileListingInStatsComputation: Boolean =
     getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)
 
@@ -3364,6 +3385,8 @@ class SQLConf extends Serializable with Logging {
   def allowNegativeScaleOfDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED)
 
+  def legacyStatisticalAggregate: Boolean = getConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE)
+
   def truncateTableIgnorePermissionAcl: Boolean =
     getConf(SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL)
 
@@ -3390,6 +3413,9 @@ class SQLConf extends Serializable with Logging {
   def avroFilterPushDown: Boolean = getConf(AVRO_FILTER_PUSHDOWN_ENABLED)
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
+
+  def legacyAllowModifyActiveSession: Boolean =
+    getConf(StaticSQLConf.LEGACY_ALLOW_MODIFY_ACTIVE_SESSION)
 
   def legacyAllowCastNumericToTimestamp: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
