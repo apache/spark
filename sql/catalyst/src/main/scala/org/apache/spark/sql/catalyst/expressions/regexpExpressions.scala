@@ -200,24 +200,26 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
       null
     } else {
       var hasNull = false
-      var matched = true
-      list.foreach { e if !hasNull && matched =>
-        val str = e.eval(input)
-        if (str == null) {
-          hasNull = true
-        } else {
-          val regex =
-            Pattern.compile(StringUtils.escapeLikeRegex(str.asInstanceOf[UTF8String].toString, '\\'))
-          val matches = matches(regex, evaluatedValue.asInstanceOf[UTF8String].toString)
-          if ((isNot && matches) || !(isNot || matches)) {
-            matched = false
+      var allMatched = true
+      list.foreach { e =>
+        if (!hasNull && allMatched) {
+          val str = e.eval(input)
+          if (str == null) {
+            hasNull = true
+          } else {
+            val regex = Pattern.compile(
+              StringUtils.escapeLikeRegex(str.asInstanceOf[UTF8String].toString, '\\'))
+            val matched = matches(regex, evaluatedValue.asInstanceOf[UTF8String].toString)
+            if ((isNot && matched) || !(isNot || matched)) {
+              allMatched = false
+            }
           }
         }
       }
       if (hasNull) {
         null
       } else {
-        matched
+        allMatched
       }
     }
   }
@@ -232,21 +234,21 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
     val rightStr = ctx.freshName("rightStr")
     val escapedEscapeChar = StringEscapeUtils.escapeJava("\\")
     val hasNull = ctx.freshName("hasNull")
-    val matched = ctx.freshName("matched")
+    val allMatched = ctx.freshName("allMatched")
     val valueArg = ctx.freshName("valueArg")
     val listCode = listGen.map(x =>
       s"""
          |${x.code}
          |if (${x.isNull}) {
          |  $hasNull = true; // ${ev.isNull} = true;
-         |} else if (!$hasNull && $matched) {
+         |} else if (!$hasNull && $allMatched) {
          |  String $rightStr = ${x.value}.toString();
          |  $patternClass $pattern =
          |    $patternClass.compile($escapeFunc($rightStr, '$escapedEscapeChar'));
          |  if ($isNot && $pattern.matcher($valueArg.toString()).matches()) {
-         |    $matched = false;
+         |    $allMatched = false;
          |  } else if (!$isNot && !$pattern.matcher($valueArg.toString()).matches()) {
-         |    $matched = false;
+         |    $allMatched = false;
          |  }
          |}
        """.stripMargin)
@@ -256,17 +258,17 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
       expressions = listCode,
       funcName = "likeAll",
       extraArguments = (javaDataType, valueArg) :: (CodeGenerator.JAVA_BOOLEAN, hasNull) ::
-        (resultType, matched) :: Nil,
+        (resultType, allMatched) :: Nil,
       returnType = resultType,
       makeSplitFunction = body =>
         s"""
-           |if (!$hasNull && $matched) {
+           |if (!$hasNull && $allMatched) {
            |  $body;
            |}
          """.stripMargin,
       foldFunctions = _.map { funcCall =>
         s"""
-           |if (!$hasNull && $matched) {
+           |if (!$hasNull && $allMatched) {
            |  $funcCall;
            |}
          """.stripMargin
@@ -275,7 +277,7 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
       code"""
             |${valueGen.code}
             |boolean $hasNull = false;
-            |boolean $matched = true;
+            |boolean $allMatched = true;
             |if (${valueGen.isNull}) {
             |  $hasNull = true;
             |} else {
@@ -283,7 +285,7 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
             |  $codes
             |}
             |final boolean ${ev.isNull} = $hasNull;
-            |final boolean ${ev.value} = $matched;
+            |final boolean ${ev.value} = $allMatched;
       """.stripMargin)
   }
 }
