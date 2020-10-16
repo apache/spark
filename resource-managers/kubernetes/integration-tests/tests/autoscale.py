@@ -23,32 +23,26 @@ from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
     """
-        Usage: decommissioning
+        Usage: autoscale
     """
-    print("Starting decom test")
+    print("Starting autoscale test")
     spark = SparkSession \
         .builder \
-        .appName("DecomTest") \
+        .appName("AutoScale") \
         .getOrCreate()
     sc = spark._sc
-    acc = sc.accumulator(0)
-
-    def addToAcc(x):
-        acc.add(1)
-        return x
 
     initialRdd = sc.parallelize(range(100), 5)
-    accRdd = initialRdd.map(addToAcc)
     # Trigger a shuffle so there are shuffle blocks to migrate
-    rdd = accRdd.map(lambda x: (x, x)).groupByKey()
+    rdd = initialRdd.map(lambda x: (x, x)).groupByKey()
     rdd.collect()
-    print("1st accumulator value is: " + str(acc.value))
-    print("Waiting to give nodes time to finish migration, decom exec 1.")
-    print("...")
-    time.sleep(30)
+    numCores = sc._jsc.sc().getExecutorMemoryStatus().size()
+    print("Have " + str(numCores))
+    print("Waiting for dynamic alloc")
+    time.sleep(150)
+    print("Finished waiting!")
     rdd.count()
     rdd.collect()
-    print("Final accumulator value is: " + str(acc.value))
     print("Finished waiting, stopping Spark.")
     spark.stop()
     print("Done, exiting Python")
