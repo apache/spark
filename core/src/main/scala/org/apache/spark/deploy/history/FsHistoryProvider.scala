@@ -538,6 +538,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                 reader.fileSizeForLastIndex > 0
               } catch {
                 case _: FileNotFoundException => false
+                case NonFatal(e) =>
+                  logWarning(s"Error while reading new log ${reader.rootPath}", e)
+                  false
               }
 
             case NonFatal(e) =>

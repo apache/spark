@@ -36,6 +36,8 @@ import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
+import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
@@ -101,6 +103,16 @@ case class AdaptiveSparkPlanExec(
     OptimizeSkewedJoin(conf),
     OptimizeLocalShuffleReader(conf)
   )
+
+  private def finalStageOptimizerRules: Seq[Rule[SparkPlan]] =
+    context.qe.sparkPlan match {
+      case _: DataWritingCommandExec | _: V2TableWriteExec =>
+        // SPARK-32932: Local shuffle reader could break partitioning that works best
+        // for the following writing command
+        queryStageOptimizerRules.filterNot(_.isInstanceOf[OptimizeLocalShuffleReader])
+      case _ =>
+        queryStageOptimizerRules
+    }
 
   // A list of physical optimizer rules to be applied right after a new stage is created. The input
   // plan to these rules has exchange as its root node.
@@ -235,7 +247,7 @@ case class AdaptiveSparkPlanExec(
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(
         result.newPlan,
-        queryStageOptimizerRules ++ postStageCreationRules,
+        finalStageOptimizerRules ++ postStageCreationRules,
         Some((planChangeLogger, "AQE Final Query Stage Optimization")))
       isFinalPlan = true
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))

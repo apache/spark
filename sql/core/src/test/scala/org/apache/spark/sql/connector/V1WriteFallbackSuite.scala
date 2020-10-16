@@ -130,7 +130,7 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
   }
 
   test("fallback writes should only analyze plan once") {
-    SparkSession.clearActiveSession()
+    SparkSession.clearActiveSessionInternal()
     SparkSession.clearDefaultSession()
     try {
       val session = SparkSession.builder()
@@ -141,7 +141,7 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
       val df = session.createDataFrame(Seq((1, "x"), (2, "y"), (3, "z")))
       df.write.mode("append").option("name", "t1").format(v2Format).saveAsTable("test")
     } finally {
-      SparkSession.setActiveSession(spark)
+      SparkSession.setActiveSessionInternal(spark)
       SparkSession.setDefaultSession(spark)
     }
   }
