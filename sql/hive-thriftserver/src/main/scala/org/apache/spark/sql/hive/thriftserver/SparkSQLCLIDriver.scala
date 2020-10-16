@@ -581,14 +581,10 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         val hasNext = index + 1 < line.length
         if (insideSingleQuote || insideDoubleQuote) {
           // Ignores '/' in any case of quotes
-        } else if (hasNext && line.charAt(index + 1) == '*') {
-          // ignore quotes and ; in bracketed comment
-          bracketedCommentLevel += 1
-        }
-      } else if (line.charAt(index) == '/' && insideBracketedComment) {
-        if (line.charAt(index - 1) == '*') {
-          // record the right bound of bracketed comment
+        } else if (insideBracketedComment && line.charAt(index - 1) == '*' ) {
           bracketedCommentLevel -= 1
+        } else if (hasNext && line.charAt(index + 1) == '*') {
+          bracketedCommentLevel += 1
         }
       }
       // set the escape
