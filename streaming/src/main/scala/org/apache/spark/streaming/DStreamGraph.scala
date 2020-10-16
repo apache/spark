@@ -19,7 +19,7 @@ package org.apache.spark.streaming
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
 import scala.collection.parallel.immutable.ParVector
 
 import org.apache.spark.internal.Logging
@@ -29,8 +29,8 @@ import org.apache.spark.util.Utils
 
 final private[streaming] class DStreamGraph extends Serializable with Logging {
 
-  private val inputStreams = new ArrayBuffer[InputDStream[_]]()
-  private val outputStreams = new ArrayBuffer[DStream[_]]()
+  private var inputStreams = mutable.ArraySeq.empty[InputDStream[_]]
+  private var outputStreams = mutable.ArraySeq.empty[DStream[_]]
 
   @volatile private var inputStreamNameAndID: Seq[(String, Int)] = Nil
 
@@ -91,14 +91,14 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
   def addInputStream(inputStream: InputDStream[_]): Unit = {
     this.synchronized {
       inputStream.setGraph(this)
-      inputStreams += inputStream
+      inputStreams = inputStreams :+ inputStream
     }
   }
 
   def addOutputStream(outputStream: DStream[_]): Unit = {
     this.synchronized {
       outputStream.setGraph(this)
-      outputStreams += outputStream
+      outputStreams = outputStreams :+ outputStream
     }
   }
 

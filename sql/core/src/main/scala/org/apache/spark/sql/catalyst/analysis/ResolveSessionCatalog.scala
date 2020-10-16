@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
@@ -256,16 +256,20 @@ class ResolveSessionCatalog(
     case RenameTableStatement(TempViewOrV1Table(oldName), newName, isView) =>
       AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
 
-    case DescribeRelation(ResolvedTable(_, ident, _: V1Table), partitionSpec, isExtended) =>
+    case DescribeRelation(r @ ResolvedTable(_, ident, _: V1Table), partitionSpec, isExtended)
+        if isSessionCatalog(r.catalog) =>
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
     case DescribeRelation(ResolvedView(ident), partitionSpec, isExtended) =>
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
-    case DescribeColumnStatement(tbl, colNameParts, isExtended) =>
-      val name = parseTempViewOrV1Table(tbl, "Describing columns")
-      DescribeColumnCommand(name.asTableIdentifier, colNameParts, isExtended)
+    case DescribeColumn(r @ ResolvedTable(_, _, _: V1Table), colNameParts, isExtended)
+        if isSessionCatalog(r.catalog) =>
+      DescribeColumnCommand(r.identifier.asTableIdentifier, colNameParts, isExtended)
+
+    case DescribeColumn(ResolvedView(ident), colNameParts, isExtended) =>
+      DescribeColumnCommand(ident.asTableIdentifier, colNameParts, isExtended)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
@@ -318,9 +322,11 @@ class ResolveSessionCatalog(
           ignoreIfExists = c.ifNotExists)
       }
 
-    // v1 REFRESH TABLE supports temp view.
-    case RefreshTableStatement(TempViewOrV1Table(name)) =>
-      RefreshTable(name.asTableIdentifier)
+    case RefreshTable(r @ ResolvedTable(_, _, _: V1Table)) if isSessionCatalog(r.catalog) =>
+      RefreshTableCommand(r.identifier.asTableIdentifier)
+
+    case RefreshTable(r: ResolvedView) =>
+      RefreshTableCommand(r.identifier.asTableIdentifier)
 
     // For REPLACE TABLE [AS SELECT], we should fail if the catalog is resolved to the
     // session catalog and the table provider is not v2.

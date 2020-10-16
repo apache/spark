@@ -1145,11 +1145,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
    * The set of tests that are believed to be working in catalyst. Tests not on includeList or
    * excludeList are implicitly marked as ignored.
    */
-  override def includeList: Seq[String] = if (HiveUtils.isHive23) {
+  override def includeList: Seq[String] =
     commonIncludeList ++ Seq(
       "decimal_1_1"
     )
-  } else {
-    commonIncludeList
-  }
 }

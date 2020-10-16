@@ -80,3 +80,11 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
 
   override def toString: String = s"V1Table($name)"
 }
+
+/**
+ * A V2 table with V1 fallback support. This is used to fallback to V1 table when the V2 one
+ * doesn't implement specific capabilities but V1 already has.
+ */
+private[sql] trait V2TableWithV1Fallback extends Table {
+  def v1Table: CatalogTable
+}

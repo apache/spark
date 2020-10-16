@@ -43,7 +43,7 @@ private[sql] object AvroUtils extends Logging {
       spark: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val conf = spark.sessionState.newHadoopConf()
+    val conf = spark.sessionState.newHadoopConfWithOptions(options)
     val parsedOptions = new AvroOptions(options, conf)
 
     if (parsedOptions.parameters.contains(ignoreExtensionKey)) {

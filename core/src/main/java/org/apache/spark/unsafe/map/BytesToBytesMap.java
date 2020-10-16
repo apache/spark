@@ -808,12 +808,21 @@ public final class BytesToBytesMap extends MemoryConsumer {
         longArray.set(pos * 2 + 1, keyHashcode);
         isDefined = true;
 
-        // We use two array entries per key, so the array size is twice the capacity.
-        // We should compare the current capacity of the array, instead of its size.
-        if (numKeys >= growthThreshold && longArray.size() / 2 < MAX_CAPACITY) {
-          try {
-            growAndRehash();
-          } catch (SparkOutOfMemoryError oom) {
+        // If the map has reached its growth threshold, try to grow it.
+        if (numKeys >= growthThreshold) {
+          // We use two array entries per key, so the array size is twice the capacity.
+          // We should compare the current capacity of the array, instead of its size.
+          if (longArray.size() / 2 < MAX_CAPACITY) {
+            try {
+              growAndRehash();
+            } catch (SparkOutOfMemoryError oom) {
+              canGrowArray = false;
+            }
+          } else {
+            // The map is already at MAX_CAPACITY and cannot grow. Instead, we prevent it from
+            // accepting any more new elements to make sure we don't exceed the load factor. If we
+            // need to spill later, this allows UnsafeKVExternalSorter to reuse the array for
+            // sorting.
             canGrowArray = false;
           }
         }

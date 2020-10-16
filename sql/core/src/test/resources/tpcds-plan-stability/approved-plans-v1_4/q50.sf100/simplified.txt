@@ -42,7 +42,11 @@ TakeOrderedAndProject [s_store_name,s_company_id,s_street_number,s_street_name,s
                           Exchange [sr_ticket_number,sr_item_sk,sr_customer_sk] #5
                             WholeStageCodegen (6)
                               Project [sr_returned_date_sk,sr_item_sk,sr_customer_sk,sr_ticket_number]
-                                BroadcastHashJoin [d_date_sk,sr_returned_date_sk]
+                                BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
+                                  Filter [sr_ticket_number,sr_item_sk,sr_customer_sk,sr_returned_date_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.store_returns [sr_returned_date_sk,sr_item_sk,sr_customer_sk,sr_ticket_number]
                                   InputAdapter
                                     BroadcastExchange #6
                                       WholeStageCodegen (5)
@@ -51,7 +55,3 @@ TakeOrderedAndProject [s_store_name,s_company_id,s_street_number,s_street_name,s
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
-                                  Filter [sr_ticket_number,sr_item_sk,sr_customer_sk,sr_returned_date_sk]
-                                    ColumnarToRow
-                                      InputAdapter
-                                        Scan parquet default.store_returns [sr_returned_date_sk,sr_item_sk,sr_customer_sk,sr_ticket_number]

@@ -194,24 +194,29 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
   }
 
   test("Truncate") {
-    JdbcDialects.registerDialect(testH2Dialect)
-    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
-    val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
-    val df3 = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+      val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
+      val df3 = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
 
-    df.write.jdbc(url1, "TEST.TRUNCATETEST", properties)
-    df2.write.mode(SaveMode.Overwrite).option("truncate", true)
-      .jdbc(url1, "TEST.TRUNCATETEST", properties)
-    assert(1 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
-    assert(2 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
-
-    val m = intercept[AnalysisException] {
-      df3.write.mode(SaveMode.Overwrite).option("truncate", true)
+      df.write.jdbc(url1, "TEST.TRUNCATETEST", properties)
+      df2.write.mode(SaveMode.Overwrite).option("truncate", true)
         .jdbc(url1, "TEST.TRUNCATETEST", properties)
-    }.getMessage
-    assert(m.contains("Column \"seq\" not found"))
-    assert(0 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
-    JdbcDialects.unregisterDialect(testH2Dialect)
+      assert(1 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
+      assert(2 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
+
+      val m = intercept[AnalysisException] {
+        df3.write.mode(SaveMode.Overwrite).option("truncate", true)
+          .jdbc(url1, "TEST.TRUNCATETEST", properties)
+      }.getMessage
+      assert(m.contains("Column \"seq\" not found"))
+      assert(0 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
+    }
   }
 
   test("createTableOptions") {

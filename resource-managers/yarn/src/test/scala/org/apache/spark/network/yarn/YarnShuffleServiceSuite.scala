@@ -405,6 +405,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
       "openBlockRequestLatencyMillis",
       "registeredExecutorsSize",
       "registerExecutorRequestLatencyMillis",
+      "finalizeShuffleMergeLatencyMillis",
       "shuffle-server.usedDirectMemory",
       "shuffle-server.usedHeapMemory"
     ))

@@ -125,10 +125,6 @@ private[hive] class SparkGetTablesOperation(
       tableType,
       comment.getOrElse(""))
     // Since HIVE-7575(Hive 2.0.0), adds 5 additional columns to the ResultSet of GetTables.
-    if (HiveUtils.isHive23) {
-      rowSet.addRow(rowData ++ Array(null, null, null, null, null))
-    } else {
-      rowSet.addRow(rowData)
-    }
+    rowSet.addRow(rowData ++ Array(null, null, null, null, null))
   }
 }

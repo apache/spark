@@ -83,6 +83,8 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Spa
       new MemoryStreamTable(this),
       CaseInsensitiveStringMap.empty(),
       attributes,
+      None,
+      None,
       None)
   }
 

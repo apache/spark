@@ -901,6 +901,23 @@ class Column(val expr: Expression) extends Logging {
    *   // result: org.apache.spark.sql.AnalysisException: Ambiguous reference to fields
    * }}}
    *
+   * This method supports adding/replacing nested fields directly e.g.
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".withField("a.c", lit(3)).withField("a.d", lit(4)))
+   *   // result: {"a":{"a":1,"b":2,"c":3,"d":4}}
+   * }}}
+   *
+   * However, if you are going to add/replace multiple nested fields, it is more optimal to extract
+   * out the nested struct before adding/replacing multiple fields e.g.
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".withField("a", $"struct_col.a".withField("c", lit(3)).withField("d", lit(4))))
+   *   // result: {"a":{"a":1,"b":2,"c":3,"d":4}}
+   * }}}
+   *
    * @group expr_ops
    * @since 3.1.0
    */
@@ -908,32 +925,102 @@ class Column(val expr: Expression) extends Logging {
   def withField(fieldName: String, col: Column): Column = withExpr {
     require(fieldName != null, "fieldName cannot be null")
     require(col != null, "col cannot be null")
+    updateFieldsHelper(expr, nameParts(fieldName), name => WithField(name, col.expr))
+  }
 
-    val nameParts = if (fieldName.isEmpty) {
+  // scalastyle:off line.size.limit
+  /**
+   * An expression that drops fields in `StructType` by name.
+   * This is a no-op if schema doesn't contain field name(s).
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".dropFields("b"))
+   *   // result: {"a":1}
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".dropFields("c"))
+   *   // result: {"a":1,"b":2}
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2, 'c', 3) struct_col")
+   *   df.select($"struct_col".dropFields("b", "c"))
+   *   // result: {"a":1}
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".dropFields("a", "b"))
+   *   // result: org.apache.spark.sql.AnalysisException: cannot resolve 'update_fields(update_fields(`struct_col`))' due to data type mismatch: cannot drop all fields in struct
+   *
+   *   val df = sql("SELECT CAST(NULL AS struct<a:int,b:int>) struct_col")
+   *   df.select($"struct_col".dropFields("b"))
+   *   // result: null of type struct<a:int>
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2, 'b', 3) struct_col")
+   *   df.select($"struct_col".dropFields("b"))
+   *   // result: {"a":1}
+   *
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".dropFields("a.b"))
+   *   // result: {"a":{"a":1}}
+   *
+   *   val df = sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
+   *   df.select($"struct_col".dropFields("a.c"))
+   *   // result: org.apache.spark.sql.AnalysisException: Ambiguous reference to fields
+   * }}}
+   *
+   * This method supports dropping multiple nested fields directly e.g.
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".dropFields("a.b", "a.c"))
+   *   // result: {"a":{"a":1}}
+   * }}}
+   *
+   * However, if you are going to drop multiple nested fields, it is more optimal to extract
+   * out the nested struct before dropping multiple fields from it e.g.
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".withField("a", $"struct_col.a".dropFields("b", "c")))
+   *   // result: {"a":{"a":1}}
+   * }}}
+   *
+   * @group expr_ops
+   * @since 3.1.0
+   */
+  // scalastyle:on line.size.limit
+  def dropFields(fieldNames: String*): Column = withExpr {
+    def dropField(structExpr: Expression, fieldName: String): UpdateFields =
+      updateFieldsHelper(structExpr, nameParts(fieldName), name => DropField(name))
+
+    fieldNames.tail.foldLeft(dropField(expr, fieldNames.head)) {
+      (resExpr, fieldName) => dropField(resExpr, fieldName)
+    }
+  }
+
+  private def nameParts(fieldName: String): Seq[String] = {
+    require(fieldName != null, "fieldName cannot be null")
+
+    if (fieldName.isEmpty) {
       fieldName :: Nil
     } else {
       CatalystSqlParser.parseMultipartIdentifier(fieldName)
     }
-    withFieldHelper(expr, nameParts, Nil, col.expr)
   }
 
-  private def withFieldHelper(
-      struct: Expression,
+  private def updateFieldsHelper(
+      structExpr: Expression,
       namePartsRemaining: Seq[String],
-      namePartsDone: Seq[String],
-      value: Expression) : WithFields = {
-    val name = namePartsRemaining.head
+      valueFunc: String => StructFieldsOperation): UpdateFields = {
+
+    val fieldName = namePartsRemaining.head
     if (namePartsRemaining.length == 1) {
-      WithFields(struct, name :: Nil, value :: Nil)
+      UpdateFields(structExpr, valueFunc(fieldName) :: Nil)
     } else {
-      val newNamesRemaining = namePartsRemaining.tail
-      val newNamesDone = namePartsDone :+ name
-      val newValue = withFieldHelper(
-        struct = UnresolvedExtractValue(struct, Literal(name)),
-        namePartsRemaining = newNamesRemaining,
-        namePartsDone = newNamesDone,
-        value = value)
-      WithFields(struct, name :: Nil, newValue :: Nil)
+      val newValue = updateFieldsHelper(
+        structExpr = UnresolvedExtractValue(structExpr, Literal(fieldName)),
+        namePartsRemaining = namePartsRemaining.tail,
+        valueFunc = valueFunc)
+      UpdateFields(structExpr, WithField(fieldName, newValue) :: Nil)
     }
   }
 

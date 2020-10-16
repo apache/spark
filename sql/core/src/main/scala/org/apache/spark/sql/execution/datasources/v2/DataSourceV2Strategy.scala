@@ -127,8 +127,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             propsWithOwner, writeOptions, ifNotExists) :: Nil
       }
 
-    case RefreshTable(catalog, ident) =>
-      RefreshTableExec(catalog, ident) :: Nil
+    case RefreshTable(r: ResolvedTable) =>
+      RefreshTableExec(r.catalog, r.identifier) :: Nil
 
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
@@ -224,6 +224,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         throw new AnalysisException("DESCRIBE does not support partition for v2 tables.")
       }
       DescribeTableExec(desc.output, r.table, isExtended) :: Nil
+
+    case DescribeColumn(_: ResolvedTable, _, _) =>
+      throw new AnalysisException("Describing columns is not supported for v2 tables.")
 
     case DropTable(catalog, ident, ifExists) =>
       DropTableExec(catalog, ident, ifExists) :: Nil

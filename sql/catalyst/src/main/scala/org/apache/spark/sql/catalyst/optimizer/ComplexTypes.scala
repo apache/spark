@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.types.StructType
 
 /**
  * Simplify redundant [[CreateNamedStruct]], [[CreateArray]] and [[CreateMap]] expressions.
@@ -39,18 +40,13 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
       // Remove redundant field extraction.
       case GetStructField(createNamedStruct: CreateNamedStruct, ordinal, _) =>
         createNamedStruct.valExprs(ordinal)
-      case GetStructField(w @ WithFields(struct, names, valExprs), ordinal, maybeName) =>
-        val name = w.dataType(ordinal).name
-        val matches = names.zip(valExprs).filter(_._1 == name)
-        if (matches.nonEmpty) {
-          // return last matching element as that is the final value for the field being extracted.
-          // For example, if a user submits a query like this:
-          // `$"struct_col".withField("b", lit(1)).withField("b", lit(2)).getField("b")`
-          // we want to return `lit(2)` (and not `lit(1)`).
-          val expr = matches.last._2
-          If(IsNull(struct), Literal(null, expr.dataType), expr)
-        } else {
-          GetStructField(struct, ordinal, maybeName)
+      case GetStructField(u: UpdateFields, ordinal, _)if !u.structExpr.isInstanceOf[UpdateFields] =>
+        val structExpr = u.structExpr
+        u.newExprs(ordinal) match {
+          // if the struct itself is null, then any value extracted from it (expr) will be null
+          // so we don't need to wrap expr in If(IsNull(struct), Literal(null, expr.dataType), expr)
+          case expr: GetStructField if expr.child.semanticEquals(structExpr) => expr
+          case expr => If(IsNull(structExpr), Literal(null, expr.dataType), expr)
         }
       // Remove redundant array indexing.
       case GetArrayStructFields(CreateArray(elems, useStringTypeWhenEmpty), field, ordinal, _, _) =>

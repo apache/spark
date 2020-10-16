@@ -139,21 +139,21 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       val modelDatasetWithDist = modelDataset.withColumn(distCol, hashDistCol)
 
       val relativeError = 0.05
-      val (summary, count) = modelDatasetWithDist.select(distCol)
-        .rdd
-        .mapPartitions { iter =>
-          if (iter.hasNext) {
-            var s = new QuantileSummaries(
-              QuantileSummaries.defaultCompressThreshold, relativeError)
-            var c = 0L
-            while (iter.hasNext) {
-              val Row(dist: Double) = iter.next
-              s = s.insert(dist)
-              c += 1
+      val summary = modelDatasetWithDist.select(distCol).rdd.mapPartitions { iter =>
+        if (iter.hasNext) {
+          var s = new QuantileSummaries(
+            QuantileSummaries.defaultCompressThreshold, relativeError)
+          while (iter.hasNext) {
+            val row = iter.next
+            if (!row.isNullAt(0)) {
+              val v = row.getDouble(0)
+              if (!v.isNaN) s = s.insert(v)
             }
-            Iterator.single((s.compress, c))
-          } else Iterator.empty
-        }.treeReduce { case ((s1, c1), (s2, c2)) => (s1.merge(s2), c1 + c2) }
+          }
+          Iterator.single(s.compress)
+        } else Iterator.empty
+      }.treeReduce((s1, s2) => s1.merge(s2))
+      val count = summary.count
 
       // Compute threshold to get around k elements.
       // To guarantee to have enough neighbors in one pass, we need (p - err) * N >= M

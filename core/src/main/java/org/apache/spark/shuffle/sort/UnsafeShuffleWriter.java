@@ -273,7 +273,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     if (spills.length == 0) {
       final ShuffleMapOutputWriter mapWriter = shuffleExecutorComponents
           .createMapOutputWriter(shuffleId, mapId, partitioner.numPartitions());
-      return mapWriter.commitAllPartitions();
+      mapOutputCommitMessage = mapWriter.commitAllPartitions();
     } else if (spills.length == 1) {
       Optional<SingleSpillShuffleMapOutputWriter> maybeSingleFileWriter =
           shuffleExecutorComponents.createSingleFileMapOutputWriter(shuffleId, mapId);
@@ -281,7 +281,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         // Here, we don't need to perform any metrics updates because the bytes written to this
         // output file would have already been counted as shuffle bytes written.
         long[] partitionLengths = spills[0].partitionLengths;
-        logger.debug("Merge shuffle spills for mapId {} with length {}", mapId,
+        logger.debug("Transfer shuffle spills for mapId {} with length {}", mapId,
             partitionLengths.length);
         mapOutputCommitMessage = maybeSingleFileWriter.get().transferMapSpillFile(
             spills[0].file, partitionLengths);
