@@ -169,8 +169,7 @@ object DateTimeUtils {
    */
   def fromJulianDay(days: Int, nanos: Long): Long = {
     // use Long to avoid rounding errors
-    val micros = (days - JULIAN_DAY_OF_EPOCH).toLong * MICROS_PER_DAY + nanos / NANOS_PER_MICROS
-    rebaseJulianToGregorianMicros(micros)
+    (days - JULIAN_DAY_OF_EPOCH).toLong * MICROS_PER_DAY + nanos / NANOS_PER_MICROS
   }
 
   /**

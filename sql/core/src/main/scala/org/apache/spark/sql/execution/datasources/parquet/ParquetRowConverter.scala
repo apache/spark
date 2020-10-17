@@ -306,9 +306,10 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           // Converts nanosecond timestamps stored as INT96
           override def addBinary(value: Binary): Unit = {
-            val rawTime = ParquetRowConverter.binaryToSQLTimestamp(value)
-            val adjTime = convertTz.map(DateTimeUtils.convertTz(rawTime, _, ZoneOffset.UTC))
-              .getOrElse(rawTime)
+            val julianMicros = ParquetRowConverter.binaryToSQLTimestamp(value)
+            val gregorianMicros = int96RebaseFunc(julianMicros)
+            val adjTime = convertTz.map(DateTimeUtils.convertTz(gregorianMicros, _, ZoneOffset.UTC))
+              .getOrElse(gregorianMicros)
             updater.setLong(adjTime)
           }
         }
