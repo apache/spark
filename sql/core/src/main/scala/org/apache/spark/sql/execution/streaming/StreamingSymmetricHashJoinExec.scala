@@ -152,7 +152,8 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   if (stateFormatVersion < 2 && joinType != Inner) {
-    throw new IllegalArgumentException("The query is using stream-stream outer join with state" +
+    throw new IllegalArgumentException(
+      s"The query is using stream-stream $joinType join with state" +
       s" format version ${stateFormatVersion} - correctness issue is discovered. Please discard" +
       " the checkpoint and rerun the query. See SPARK-26154 for more details.")
   }
@@ -165,7 +166,7 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   require(
-    joinType == Inner || joinType == LeftOuter || joinType == RightOuter,
+    joinType == Inner || joinType == LeftOuter || joinType == RightOuter || joinType == LeftSemi,
     errorMessageForJoinType)
   require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType))
 
@@ -185,6 +186,7 @@ case class StreamingSymmetricHashJoinExec(
     case _: InnerLike => left.output ++ right.output
     case LeftOuter => left.output ++ right.output.map(_.withNullability(true))
     case RightOuter => left.output.map(_.withNullability(true)) ++ right.output
+    case LeftSemi => left.output
     case _ => throwBadJoinTypeException()
   }
 
@@ -193,6 +195,7 @@ case class StreamingSymmetricHashJoinExec(
       PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning
+    case LeftSemi => left.outputPartitioning
     case _ => throwBadJoinTypeException()
   }
 
@@ -246,14 +249,21 @@ case class StreamingSymmetricHashJoinExec(
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
-    //  - `leftSideJoiner.storeAndJoinWithOtherSide(rightSideJoiner)` generates all rows from
-    //    matching new left input with stored right input, and also stores all the left input
+    //  - `leftSideJoiner.storeAndJoinWithOtherSide(rightSideJoiner)`
+    //    - inner, left outer, right outer join: generates all rows from matching new left input
+    //      with stored right input, and also stores all the left input.
+    //    - left semi join: generates all new left input rows from matching new left input with
+    //      stored right input, and also stores all the non-matched left input.
     //
-    //  - `rightSideJoiner.storeAndJoinWithOtherSide(leftSideJoiner)` generates all rows from
-    //    matching new right input with stored left input, and also stores all the right input.
-    //    It also generates all rows from matching new left input with new right input, since
-    //    the new left input has become stored by that point. This tiny asymmetry is necessary
-    //    to avoid duplication.
+    //  - `rightSideJoiner.storeAndJoinWithOtherSide(leftSideJoiner)`
+    //    - inner, left outer, right outer join: generates all rows from matching new right input
+    //      with stored left input, and also stores all the right input.
+    //      It also generates all rows from matching new left input with new right input, since
+    //      the new left input has become stored by that point. This tiny asymmetry is necessary
+    //      to avoid duplication.
+    //    - left semi join: generates all stored left input rows, from matching new right input
+    //      with stored left input, and also stores all the right input. Note only first-time
+    //      matched left input rows will be generated, this is to guarantee left semi semantics.
     val leftOutputIter = leftSideJoiner.storeAndJoinWithOtherSide(rightSideJoiner) {
       (input: InternalRow, matched: InternalRow) => joinedRow.withLeft(input).withRight(matched)
     }
@@ -261,22 +271,21 @@ case class StreamingSymmetricHashJoinExec(
       (input: InternalRow, matched: InternalRow) => joinedRow.withLeft(matched).withRight(input)
     }
 
-    // We need to save the time that the inner join output iterator completes, since outer join
-    // output counts as both update and removal time.
-    var innerOutputCompletionTimeNs: Long = 0
-    def onInnerOutputCompletion = {
-      innerOutputCompletionTimeNs = System.nanoTime
+    // We need to save the time that the one side hash join output iterator completes, since
+    // other join (outer and semi) output counts as both update and removal time.
+    var hashJoinOutputCompletionTimeNs: Long = 0
+    def onHashJoinOutputCompletion(): Unit = {
+      hashJoinOutputCompletionTimeNs = System.nanoTime
     }
-    // This is the iterator which produces the inner join rows. For outer joins, this will be
-    // prepended to a second iterator producing outer join rows; for inner joins, this is the full
-    // output.
-    val innerOutputIter = CompletionIterator[InternalRow, Iterator[InternalRow]](
-      (leftOutputIter ++ rightOutputIter), onInnerOutputCompletion)
-
+    // This is the iterator which produces the inner join rows. For other joins (outer and semi),
+    // this will be prepended to a second iterator producing other rows; for inner joins, this is
+    // the full output.
+    val hashJoinOutputIter = CompletionIterator[InternalRow, Iterator[InternalRow]](
+      leftOutputIter ++ rightOutputIter, onHashJoinOutputCompletion())
 
     val outputIter: Iterator[InternalRow] = joinType match {
       case Inner =>
-        innerOutputIter
+        hashJoinOutputIter
       case LeftOuter =>
         // We generate the outer join input by:
         // * Getting an iterator over the rows that have aged out on the left side. These rows are
@@ -311,7 +320,7 @@ case class StreamingSymmetricHashJoinExec(
           }
         }.map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
 
-        innerOutputIter ++ outerOutputIter
+        hashJoinOutputIter ++ outerOutputIter
       case RightOuter =>
         // See comments for left outer case.
         def matchesWithLeftSideState(rightKeyValue: UnsafeRowPair) = {
@@ -330,11 +339,17 @@ case class StreamingSymmetricHashJoinExec(
           }
         }.map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
 
-        innerOutputIter ++ outerOutputIter
+        hashJoinOutputIter ++ outerOutputIter
+      case LeftSemi =>
+        hashJoinOutputIter
       case _ => throwBadJoinTypeException()
     }
 
-    val outputProjection = UnsafeProjection.create(left.output ++ right.output, output)
+    val outputProjection = if (joinType == LeftSemi) {
+      UnsafeProjection.create(output, output)
+    } else {
+      UnsafeProjection.create(left.output ++ right.output, output)
+    }
     val outputIterWithMetrics = outputIter.map { row =>
       numOutputRows += 1
       outputProjection(row)
@@ -347,24 +362,29 @@ case class StreamingSymmetricHashJoinExec(
 
       // Processing time between inner output completion and here comes from the outer portion of a
       // join, and thus counts as removal time as we remove old state from one side while iterating.
-      if (innerOutputCompletionTimeNs != 0) {
+      if (hashJoinOutputCompletionTimeNs != 0) {
         allRemovalsTimeMs +=
-          math.max(NANOSECONDS.toMillis(System.nanoTime - innerOutputCompletionTimeNs), 0)
+          math.max(NANOSECONDS.toMillis(System.nanoTime - hashJoinOutputCompletionTimeNs), 0)
       }
 
       allRemovalsTimeMs += timeTakenMs {
         // Remove any remaining state rows which aren't needed because they're below the watermark.
         //
         // For inner joins, we have to remove unnecessary state rows from both sides if possible.
+        //
         // For outer joins, we have already removed unnecessary state rows from the outer side
         // (e.g., left side for left outer join) while generating the outer "null" outputs. Now, we
         // have to remove unnecessary state rows from the other side (e.g., right side for the left
         // outer join) if possible. In all cases, nothing needs to be outputted, hence the removal
         // needs to be done greedily by immediately consuming the returned iterator.
+        //
+        // For left semi joins, we have to remove unnecessary state rows from both sides if
+        // possible.
         val cleanupIter = joinType match {
           case Inner => leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()
           case LeftOuter => rightSideJoiner.removeOldState()
           case RightOuter => leftSideJoiner.removeOldState()
+          case LeftSemi => leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()
           case _ => throwBadJoinTypeException()
         }
         while (cleanupIter.hasNext) {
@@ -481,6 +501,26 @@ case class StreamingSymmetricHashJoinExec(
         case _ => (_: InternalRow) => Iterator.empty
       }
 
+      val joinOnlyFirstTimeMatchedRow = joinType == LeftSemi && joinSide == RightSide
+
+      val generateOutputIter: (InternalRow, Iterator[JoinedRow]) => Iterator[InternalRow] =
+        joinSide match {
+          case LeftSide if joinType == LeftSemi =>
+            (input: InternalRow, joinedRowIter: Iterator[JoinedRow]) =>
+              // For left side of left semi join, generate one left row if there is matched
+              // rows from right side. Otherwise, generate nothing.
+              if (joinedRowIter.nonEmpty) {
+                Iterator.single(input)
+              } else {
+                Iterator.empty
+              }
+          case RightSide if joinType == LeftSemi =>
+            (_: InternalRow, joinedRowIter: Iterator[JoinedRow]) =>
+              // For right side of left semi join, generate matched left rows only.
+              joinedRowIter.map(_.getLeft)
+          case _ => (_: InternalRow, joinedRowIter: Iterator[JoinedRow]) => joinedRowIter
+        }
+
       nonLateRows.flatMap { row =>
         val thisRow = row.asInstanceOf[UnsafeRow]
         // If this row fails the pre join filter, that means it can never satisfy the full join
@@ -489,8 +529,12 @@ case class StreamingSymmetricHashJoinExec(
         // the case of inner join).
         if (preJoinFilter(thisRow)) {
           val key = keyGenerator(thisRow)
-          val outputIter: Iterator[JoinedRow] = otherSideJoiner.joinStateManager
-            .getJoinedRows(key, thatRow => generateJoinedRow(thisRow, thatRow), postJoinFilter)
+          val joinedRowIter: Iterator[JoinedRow] = otherSideJoiner.joinStateManager.getJoinedRows(
+            key,
+            thatRow => generateJoinedRow(thisRow, thatRow),
+            postJoinFilter,
+            joinOnlyFirstTimeMatchedRow)
+          val outputIter = generateOutputIter(thisRow, joinedRowIter)
           new AddingProcessedRowToStateCompletionIterator(key, thisRow, outputIter)
         } else {
           generateFilteredJoinedRow(thisRow)
@@ -501,13 +545,19 @@ case class StreamingSymmetricHashJoinExec(
     private class AddingProcessedRowToStateCompletionIterator(
         key: UnsafeRow,
         thisRow: UnsafeRow,
-        subIter: Iterator[JoinedRow])
-      extends CompletionIterator[JoinedRow, Iterator[JoinedRow]](subIter) {
+        subIter: Iterator[InternalRow])
+      extends CompletionIterator[InternalRow, Iterator[InternalRow]](subIter) {
+
       private val iteratorNotEmpty: Boolean = super.hasNext
 
       override def completion(): Unit = {
-        val shouldAddToState = // add only if both removal predicates do not match
-          !stateKeyWatermarkPredicateFunc(key) && !stateValueWatermarkPredicateFunc(thisRow)
+        val isLeftSemiWithMatch =
+          joinType == LeftSemi && joinSide == LeftSide && iteratorNotEmpty
+        // Add to state store only if both removal predicates do not match,
+        // and the row is not matched for left side of left semi join.
+        val shouldAddToState =
+          !stateKeyWatermarkPredicateFunc(key) && !stateValueWatermarkPredicateFunc(thisRow) &&
+          !isLeftSemiWithMatch
         if (shouldAddToState) {
           joinStateManager.append(key, thisRow, matched = iteratorNotEmpty)
           updatedStateRowsCount += 1
