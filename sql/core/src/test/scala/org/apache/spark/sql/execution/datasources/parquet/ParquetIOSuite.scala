@@ -1033,15 +1033,31 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     val N = 8
     Seq(false, true).foreach { dictionaryEncoding =>
       Seq(
-        ("TIMESTAMP_MILLIS", "1001-01-01 01:02:03.123", "1001-01-07 01:09:05.123"),
-        ("TIMESTAMP_MICROS", "1001-01-01 01:02:03.123456", "1001-01-07 01:09:05.123456"),
-        ("INT96", "1001-01-01 01:02:03.123456", "1001-01-07 01:09:05.123456")
-      ).foreach { case (outType, tsStr, nonRebased) =>
+        (
+          "TIMESTAMP_MILLIS",
+          "1001-01-01 01:02:03.123",
+          "1001-01-07 01:09:05.123",
+          SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key,
+          SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key),
+        (
+          "TIMESTAMP_MICROS",
+          "1001-01-01 01:02:03.123456",
+          "1001-01-07 01:09:05.123456",
+          SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key,
+          SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key),
+        (
+          "INT96",
+          "1001-01-01 01:02:03.123456",
+          "1001-01-07 01:09:05.123456",
+          SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key,
+          SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key
+        )
+      ).foreach { case (outType, tsStr, nonRebased, inWriteConf, inReadConf) =>
         withClue(s"output type $outType") {
           withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outType) {
             withTempPath { dir =>
               val path = dir.getAbsolutePath
-              withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+              withSQLConf(inWriteConf -> LEGACY.toString) {
                 Seq.tabulate(N)(_ => tsStr).toDF("tsS")
                   .select($"tsS".cast("timestamp").as("ts"))
                   .repartition(1)
@@ -1054,8 +1070,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
                 // The file metadata indicates if it needs rebase or not, so we can always get the
                 // correct result regardless of the "rebase mode" config.
                 Seq(LEGACY, CORRECTED, EXCEPTION).foreach { mode =>
-                  withSQLConf(
-                    SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key -> mode.toString) {
+                  withSQLConf(inReadConf -> mode.toString) {
                     checkAnswer(
                       spark.read.parquet(path),
                       Seq.tabulate(N)(_ => Row(Timestamp.valueOf(tsStr))))
