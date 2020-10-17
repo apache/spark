@@ -156,9 +156,11 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
       case t: Throwable => // ignore exception
     }
 
-    assert(TestSparkPlugin.executorPlugin.numOnTaskStart == 2)
-    assert(TestSparkPlugin.executorPlugin.numOnTaskSucceeded == 0)
-    assert(TestSparkPlugin.executorPlugin.numOnTaskFailed == 2)
+    eventually(timeout(10.seconds), interval(100.millis)) {
+      assert(TestSparkPlugin.executorPlugin.numOnTaskStart == 2)
+      assert(TestSparkPlugin.executorPlugin.numOnTaskSucceeded == 0)
+      assert(TestSparkPlugin.executorPlugin.numOnTaskFailed == 2)
+    }
   }
 
   test("plugin initialization in non-local mode") {
