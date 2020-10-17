@@ -90,8 +90,8 @@ private[spark] object HiveUtils extends Logging {
       | 2. "maven"
       |   Use Hive jars of specified version downloaded from Maven repositories.
       | 3. "path"
-      |   Use Hive jars configured by `spark.sql.hive.metastore.jars.path` in comma separated format
-      |   support both local or remote paths, it should always be fully qualified URL to indicate
+      |   Use Hive jars configured by `spark.sql.hive.metastore.jars.path` in comma separated format.
+      |   Support both local or remote paths, it should always be fully qualified URL to indicate
       |   other file systems.
       | 4. A classpath in the standard format for both Hive and Hadoop.
       """.stripMargin)
@@ -106,8 +106,8 @@ private[spark] object HiveUtils extends Logging {
       s" 2. hdfs://nameservice/path/to/jar/xxx.jar" +
       s" 3. /path/to/jar/ (path without URI scheme follow conf `fs.defaultFS`'s URI schema)" +
       s" 4. [http/https/ftp]://path/to/jar/xxx.jar" +
-      s"For URI, we can't support path wildcard, but for other URL support nested path wildcard," +
-      s"Such as: " +
+      s"Notice: `http/https/ftp` doesn't support wildcard, but for other URLs support" +
+      s" nested path wildcard, Such as: " +
       s" 1. file://path/to/jar/*, file://path/to/jar/*/*" +
       s" 2. hdfs://nameservice/path/to/jar/*, hdfs://nameservice/path/to/jar/*/*" +
       s"When ${HIVE_METASTORE_JARS.key} is set to `path`, we will use Hive jars configured by this")
@@ -477,7 +477,6 @@ private[spark] object HiveUtils extends Logging {
           .flatMap { path =>
             addLocalHiveJars(new File(path))
           }
-          .map(_.toURI.toURL)
 
       logInfo(
         s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion " +
