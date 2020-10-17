@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.IOException
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.io.FileCommitProtocol
@@ -138,36 +139,35 @@ case class InsertIntoHadoopFsRelationCommand(
       }
     }
 
-    // For dynamic partition overwrite, we do not delete partition directories ahead.
-    // We write to staging directories and move to final partition directories after writing
-    // job is done. So it is ok to have outputPath try to overwrite inputpath.
-    if (mode == SaveMode.Overwrite && !dynamicPartitionOverwrite) {
-      val inputPaths = child.collect {
-        case scan: FileSourceScanExec =>
-          scan.dynamicallySelectedPartitions.flatMap(_.files.map {
-            case fileStatus if !fileStatus.isDirectory => fileStatus.getPath.getParent
-            case fileStatus => fileStatus.getPath
-          })
-      }.flatten
-      val finalOutputPath =
-        if (staticPartitions.nonEmpty && partitionColumns.length == staticPartitions.size) {
-          val staticPathFragment =
-            PartitioningUtils.getPathFragment(staticPartitions, partitionColumns)
-          if (customPartitionLocations.contains(staticPartitions)) {
-            new Path(customPartitionLocations.getOrElse(staticPartitions, staticPathFragment))
-          } else {
-            new Path(outputPath, staticPathFragment)
-          }
-        } else {
-          outputPath
-        }
-      if (inputPaths.contains(finalOutputPath)) {
-        throw new AnalysisException(
-          s"Cannot overwrite a path that is also being read from.")
-      }
-    }
-
     if (doInsertion) {
+      // For dynamic partition overwrite, we do not delete partition directories ahead.
+      // We write to staging directories and move to final partition directories after writing
+      // job is done. So it is ok to have outputPath try to overwrite inputpath.
+      if (mode == SaveMode.Overwrite && !dynamicPartitionOverwrite) {
+        val inputPaths = child.collect {
+          case scan: FileSourceScanExec =>
+            scan.dynamicallySelectedPartitions.flatMap(_.files.map {
+              case fileStatus if !fileStatus.isDirectory => fileStatus.getPath.getParent
+              case fileStatus => fileStatus.getPath
+            })
+        }.flatten
+        val finalOutputPath =
+          if (staticPartitions.nonEmpty && partitionColumns.length == staticPartitions.size) {
+            val staticPathFragment =
+              PartitioningUtils.getPathFragment(staticPartitions, partitionColumns)
+            if (customPartitionLocations.contains(staticPartitions)) {
+              new Path(customPartitionLocations.getOrElse(staticPartitions, staticPathFragment))
+            } else {
+              new Path(qualifiedOutputPath, staticPathFragment)
+            }
+          } else {
+            outputPath
+          }
+        if (inputPaths.exists(isSubDir(_, finalOutputPath, hadoopConf))) {
+          throw new AnalysisException(
+            s"Cannot overwrite a path that is also being read from.")
+        }
+      }
 
       def refreshUpdatedPartitions(updatedPartitionPaths: Set[String]): Unit = {
         val updatedPartitions = updatedPartitionPaths.map(PartitioningUtils.parsePathFragment)
@@ -297,5 +297,26 @@ case class InsertIntoHadoopFsRelationCommand(
         None
       }
     }.toMap
+  }
+
+  private def isSubDir(
+      src: Path,
+      dest: Path,
+      hadoopConf: Configuration): Boolean = {
+    if (src == null) {
+      false
+    } else {
+      val srcFs = src.getFileSystem(hadoopConf)
+      val destFs = dest.getFileSystem(hadoopConf)
+      val fullSrc = srcFs.makeQualified(src).toString + Path.SEPARATOR
+      val fullDest = destFs.makeQualified(dest).toString + Path.SEPARATOR
+      val schemaSrcf = src.toUri.getScheme
+      val schemaDestf = dest.toUri.getScheme
+      if (schemaSrcf != null && schemaDestf != null && !(schemaSrcf == schemaDestf)) {
+        false
+      } else {
+        fullSrc.startsWith(fullDest)
+      }
+    }
   }
 }
