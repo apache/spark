@@ -26,7 +26,7 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.SparkUpgradeException
-import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{SPARK_INT96_NO_REBASE, SPARK_LEGACY_DATETIME, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
@@ -114,9 +114,17 @@ object DataSourceUtils {
   def int96RebaseMode(
       lookupFileMeta: String => String,
       modeByConfig: String): LegacyBehaviorPolicy.Value = {
-    // TODO: Check the metadata
-    LegacyBehaviorPolicy.withName(modeByConfig)
+    if (Utils.isTesting && SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
+      LegacyBehaviorPolicy.CORRECTED
+    } else if (lookupFileMeta(SPARK_INT96_NO_REBASE) != null) {
+      LegacyBehaviorPolicy.CORRECTED
+    } else if (lookupFileMeta(SPARK_VERSION_METADATA_KEY) != null) {
+      LegacyBehaviorPolicy.LEGACY
+    } else {
+      LegacyBehaviorPolicy.withName(modeByConfig)
+    }
   }
+
   def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
     val config = format match {
       case "Parquet INT96" => SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key

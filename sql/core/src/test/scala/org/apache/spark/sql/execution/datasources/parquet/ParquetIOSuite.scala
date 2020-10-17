@@ -1035,7 +1035,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       Seq(
         ("TIMESTAMP_MILLIS", "1001-01-01 01:02:03.123", "1001-01-07 01:09:05.123"),
         ("TIMESTAMP_MICROS", "1001-01-01 01:02:03.123456", "1001-01-07 01:09:05.123456"),
-        ("INT96", "1001-01-01 01:02:03.123456", "1001-01-01 01:02:03.123456")
+        ("INT96", "1001-01-01 01:02:03.123456", "1001-01-07 01:09:05.123456")
       ).foreach { case (outType, tsStr, nonRebased) =>
         withClue(s"output type $outType") {
           withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outType) {
