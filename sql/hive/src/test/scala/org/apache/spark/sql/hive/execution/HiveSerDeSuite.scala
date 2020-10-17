@@ -71,8 +71,8 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
   }
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
-    TestHive.sessionState.sqlParser.parsePlan(sql).collect {
-      case CreateTable(tableDesc, mode, _) => (tableDesc, mode == SaveMode.Ignore)
+    TestHive.sessionState.analyzer.execute(TestHive.sessionState.sqlParser.parsePlan(sql)).collect {
+      case CreateTableCommand(tableDesc, ifNotExists) => (tableDesc, ifNotExists)
     }.head
   }
 

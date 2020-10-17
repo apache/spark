@@ -29,14 +29,15 @@ import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, CTESubstitution, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolvedTable, ResolveInlineTables, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedV2Relation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, StringLiteral}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, Assignment, CreateTableAsSelect, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, ShowTableProperties, SubqueryAlias, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, Assignment, CreateTableAsSelect, CreateTableAsSelectStatement, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, ShowTableProperties, SubqueryAlias, UpdateAction, UpdateTable}
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.TableChange.{UpdateColumnComment, UpdateColumnType}
+import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{CharType, DoubleType, HIVE_TYPE_STRING, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
 
@@ -103,24 +104,6 @@ class PlanResolutionSuite extends AnalysisTest {
     })
     when(newCatalog.name()).thenReturn(CatalogManager.SESSION_CATALOG_NAME)
     newCatalog
-  }
-
-  private def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(parsePlan)(sqlCommand, messages: _*)
-
-  private def parseAs[T: ClassTag](query: String): T = {
-    parsePlan(query) match {
-      case t: T => t
-      case other =>
-        fail(s"Expected to parse ${classTag[T].runtimeClass} from query," +
-            s"got ${other.getClass.getName}: $query")
-    }
-  }
-
-  private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
-    parsePlan(sql).collect {
-      case CreateTable(tableDesc, mode, _) => (tableDesc, mode == SaveMode.Ignore)
-    }.head
   }
 
   private val v1SessionCatalog: SessionCatalog = new SessionCatalog(
@@ -194,6 +177,16 @@ class PlanResolutionSuite extends AnalysisTest {
     parseAndResolve(sql).collect {
       case CreateTable(tableDesc, mode, _) => (tableDesc, mode == SaveMode.Ignore)
     }.head
+  }
+
+  private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
+    val e = intercept[ParseException] {
+      parsePlan(sql)
+    }
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
+    containsThesePhrases.foreach { p =>
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(p.toLowerCase(Locale.ROOT)))
+    }
   }
 
   test("create table - with partitioned by") {
@@ -446,7 +439,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val expectedProperties = Map(
       "p1" -> "v1",
       "p2" -> "v2",
-      "other" -> "20",
+      "option.other" -> "20",
       "provider" -> "parquet",
       "location" -> "s3://bucket/path/to/data",
       "comment" -> "table comment")
@@ -485,7 +478,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val expectedProperties = Map(
       "p1" -> "v1",
       "p2" -> "v2",
-      "other" -> "20",
+      "option.other" -> "20",
       "provider" -> "parquet",
       "location" -> "s3://bucket/path/to/data",
       "comment" -> "table comment")
@@ -560,7 +553,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val expectedProperties = Map(
       "p1" -> "v1",
       "p2" -> "v2",
-      "other" -> "20",
+      "option.other" -> "20",
       "provider" -> "parquet",
       "location" -> "s3://bucket/path/to/data",
       "comment" -> "table comment")
@@ -594,7 +587,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val expectedProperties = Map(
       "p1" -> "v1",
       "p2" -> "v2",
-      "other" -> "20",
+      "option.other" -> "20",
       "provider" -> "parquet",
       "location" -> "s3://bucket/path/to/data",
       "comment" -> "table comment")
@@ -1575,46 +1568,68 @@ class PlanResolutionSuite extends AnalysisTest {
     checkFailure("testcat.tab", "foo")
   }
 
-  private def createTable(
-      table: String,
-      database: Option[String] = None,
-      tableType: CatalogTableType = CatalogTableType.MANAGED,
-      storage: CatalogStorageFormat = CatalogStorageFormat.empty.copy(
-        inputFormat = HiveSerDe.sourceToSerDe("textfile").get.inputFormat,
-        outputFormat = HiveSerDe.sourceToSerDe("textfile").get.outputFormat,
-        serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")),
-      schema: StructType = new StructType,
-      provider: Option[String] = Some("hive"),
-      partitionColumnNames: Seq[String] = Seq.empty,
-      comment: Option[String] = None,
-      mode: SaveMode = SaveMode.ErrorIfExists,
-      query: Option[LogicalPlan] = None): CreateTable = {
-    CreateTable(
-      CatalogTable(
-        identifier = TableIdentifier(table, database),
-        tableType = tableType,
-        storage = storage,
-        schema = schema,
-        provider = provider,
-        partitionColumnNames = partitionColumnNames,
-        comment = comment
-      ), mode, query
-    )
+  private def compareNormalized(plan1: LogicalPlan, plan2: LogicalPlan): Unit = {
+    /**
+     * Normalizes plans:
+     * - CreateTable the createTime in tableDesc will replaced by -1L.
+     */
+    def normalizePlan(plan: LogicalPlan): LogicalPlan = {
+      plan match {
+        case CreateTable(tableDesc, mode, query) =>
+          val newTableDesc = tableDesc.copy(createTime = -1L)
+          CreateTable(newTableDesc, mode, query)
+        case _ => plan // Don't transform
+      }
+    }
+    comparePlans(normalizePlan(plan1), normalizePlan(plan2))
   }
 
   test("create table - schema") {
-    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) STORED AS textfile",
+    def createTable(
+        table: String,
+        database: Option[String] = None,
+        tableType: CatalogTableType = CatalogTableType.MANAGED,
+        storage: CatalogStorageFormat = CatalogStorageFormat.empty.copy(
+          inputFormat = HiveSerDe.sourceToSerDe("textfile").get.inputFormat,
+          outputFormat = HiveSerDe.sourceToSerDe("textfile").get.outputFormat,
+          serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")),
+        schema: StructType = new StructType,
+        provider: Option[String] = Some("hive"),
+        partitionColumnNames: Seq[String] = Seq.empty,
+        comment: Option[String] = None,
+        mode: SaveMode = SaveMode.ErrorIfExists,
+        query: Option[LogicalPlan] = None): CreateTable = {
+      CreateTable(
+        CatalogTable(
+          identifier = TableIdentifier(table, database),
+          tableType = tableType,
+          storage = storage,
+          schema = schema,
+          provider = provider,
+          partitionColumnNames = partitionColumnNames,
+          comment = comment
+        ), mode, query
+      )
+    }
+
+    def compare(sql: String, plan: LogicalPlan): Unit = {
+      compareNormalized(parseAndResolve(sql), plan)
+    }
+
+    compare("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) STORED AS textfile",
       createTable(
         table = "my_tab",
+        database = Some("default"),
         schema = (new StructType)
             .add("a", IntegerType, nullable = true, "test")
             .add("b", StringType)
       )
     )
-    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) " +
+    compare("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) " +
         "PARTITIONED BY (c INT, d STRING COMMENT 'test2')",
       createTable(
         table = "my_tab",
+        database = Some("default"),
         schema = (new StructType)
             .add("a", IntegerType, nullable = true, "test")
             .add("b", StringType)
@@ -1623,10 +1638,11 @@ class PlanResolutionSuite extends AnalysisTest {
         partitionColumnNames = Seq("c", "d")
       )
     )
-    assertEqual("CREATE TABLE my_tab(id BIGINT, nested STRUCT<col1: STRING,col2: INT>) " +
+    compare("CREATE TABLE my_tab(id BIGINT, nested STRUCT<col1: STRING,col2: INT>) " +
         "STORED AS textfile",
       createTable(
         table = "my_tab",
+        database = Some("default"),
         schema = (new StructType)
             .add("id", LongType)
             .add("nested", (new StructType)
@@ -1637,10 +1653,11 @@ class PlanResolutionSuite extends AnalysisTest {
     )
     // Partitioned by a StructType should be accepted by `SparkSqlParser` but will fail an analyze
     // rule in `AnalyzeCreateTable`.
-    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) " +
+    compare("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) " +
         "PARTITIONED BY (nested STRUCT<col1: STRING,col2: INT>)",
       createTable(
         table = "my_tab",
+        database = Some("default"),
         schema = (new StructType)
             .add("a", IntegerType, nullable = true, "test")
             .add("b", StringType)
@@ -1651,8 +1668,10 @@ class PlanResolutionSuite extends AnalysisTest {
         partitionColumnNames = Seq("nested")
       )
     )
-    intercept("CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING)",
-      "no viable alternative at input")
+
+    interceptParseException(parsePlan)(
+      "CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING)",
+      "extraneous input ':'")
   }
 
   test("create hive table - table file format") {
@@ -1661,13 +1680,15 @@ class PlanResolutionSuite extends AnalysisTest {
 
     allSources.foreach { s =>
       val query = s"CREATE TABLE my_tab STORED AS $s"
-      val ct = parseAs[CreateTable](query)
-      val hiveSerde = HiveSerDe.sourceToSerDe(s)
-      assert(hiveSerde.isDefined)
-      assert(ct.tableDesc.storage.serde ==
-          hiveSerde.get.serde.orElse(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")))
-      assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
-      assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
+      parseAndResolve(query) match {
+        case ct: CreateTable =>
+          val hiveSerde = HiveSerDe.sourceToSerDe(s)
+          assert(hiveSerde.isDefined)
+          assert(ct.tableDesc.storage.serde ==
+            hiveSerde.get.serde.orElse(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")))
+          assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
+          assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
+      }
     }
   }
 
@@ -1678,16 +1699,20 @@ class PlanResolutionSuite extends AnalysisTest {
     val query2 = s"$createTableStart DELIMITED FIELDS TERMINATED BY ' ' $fileFormat"
 
     // No conflicting serdes here, OK
-    val parsed1 = parseAs[CreateTable](query1)
-    assert(parsed1.tableDesc.storage.serde == Some("anything"))
-    assert(parsed1.tableDesc.storage.inputFormat == Some("inputfmt"))
-    assert(parsed1.tableDesc.storage.outputFormat == Some("outputfmt"))
+    parseAndResolve(query1) match {
+      case parsed1: CreateTable =>
+        assert(parsed1.tableDesc.storage.serde == Some("anything"))
+        assert(parsed1.tableDesc.storage.inputFormat == Some("inputfmt"))
+        assert(parsed1.tableDesc.storage.outputFormat == Some("outputfmt"))
+    }
 
-    val parsed2 = parseAs[CreateTable](query2)
-    assert(parsed2.tableDesc.storage.serde ==
-        Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-    assert(parsed2.tableDesc.storage.inputFormat == Some("inputfmt"))
-    assert(parsed2.tableDesc.storage.outputFormat == Some("outputfmt"))
+    parseAndResolve(query2) match {
+      case parsed2: CreateTable =>
+        assert(parsed2.tableDesc.storage.serde ==
+            Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+        assert(parsed2.tableDesc.storage.inputFormat == Some("inputfmt"))
+        assert(parsed2.tableDesc.storage.outputFormat == Some("outputfmt"))
+    }
   }
 
   test("create hive table - row format serde and generic file format") {
@@ -1697,12 +1722,14 @@ class PlanResolutionSuite extends AnalysisTest {
     allSources.foreach { s =>
       val query = s"CREATE TABLE my_tab ROW FORMAT SERDE 'anything' STORED AS $s"
       if (supportedSources.contains(s)) {
-        val ct = parseAs[CreateTable](query)
-        val hiveSerde = HiveSerDe.sourceToSerDe(s)
-        assert(hiveSerde.isDefined)
-        assert(ct.tableDesc.storage.serde == Some("anything"))
-        assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
-        assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
+        parseAndResolve(query) match {
+          case ct: CreateTable =>
+            val hiveSerde = HiveSerDe.sourceToSerDe(s)
+            assert(hiveSerde.isDefined)
+            assert(ct.tableDesc.storage.serde == Some("anything"))
+            assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
+            assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
+        }
       } else {
         assertUnsupported(query, Seq("row format serde", "incompatible", s))
       }
@@ -1716,13 +1743,15 @@ class PlanResolutionSuite extends AnalysisTest {
     allSources.foreach { s =>
       val query = s"CREATE TABLE my_tab ROW FORMAT DELIMITED FIELDS TERMINATED BY ' ' STORED AS $s"
       if (supportedSources.contains(s)) {
-        val ct = parseAs[CreateTable](query)
-        val hiveSerde = HiveSerDe.sourceToSerDe(s)
-        assert(hiveSerde.isDefined)
-        assert(ct.tableDesc.storage.serde ==
-            hiveSerde.get.serde.orElse(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")))
-        assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
-        assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
+        parseAndResolve(query) match {
+          case ct: CreateTable =>
+            val hiveSerde = HiveSerDe.sourceToSerDe(s)
+            assert(hiveSerde.isDefined)
+            assert(ct.tableDesc.storage.serde == hiveSerde.get.serde
+                .orElse(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")))
+            assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
+            assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
+        }
       } else {
         assertUnsupported(query, Seq("row format delimited", "only compatible with 'textfile'", s))
       }
@@ -1730,13 +1759,17 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   test("create hive external table - location must be specified") {
-    assertUnsupported(
-      sql = "CREATE EXTERNAL TABLE my_tab STORED AS parquet",
-      containsThesePhrases = Seq("create external table", "location"))
+    val exc = intercept[AnalysisException] {
+      parseAndResolve("CREATE EXTERNAL TABLE my_tab STORED AS parquet")
+    }
+    assert(exc.getMessage.contains("CREATE EXTERNAL TABLE must be accompanied by LOCATION"))
+
     val query = "CREATE EXTERNAL TABLE my_tab STORED AS parquet LOCATION '/something/anything'"
-    val ct = parseAs[CreateTable](query)
-    assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
-    assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
+    parseAndResolve(query) match {
+      case ct: CreateTable =>
+        assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
+        assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
+    }
   }
 
   test("create hive table - property values must be set") {
@@ -1752,12 +1785,17 @@ class PlanResolutionSuite extends AnalysisTest {
 
   test("create hive table - location implies external") {
     val query = "CREATE TABLE my_tab STORED AS parquet LOCATION '/something/anything'"
-    val ct = parseAs[CreateTable](query)
-    assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
-    assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
+    parseAndResolve(query) match {
+      case ct: CreateTable =>
+        assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
+        assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
+    }
   }
 
   test("Duplicate clauses - create hive table") {
+    def intercept(sqlCommand: String, messages: String*): Unit =
+      interceptParseException(parsePlan)(sqlCommand, messages: _*)
+
     def createTableHeader(duplicateClause: String): String = {
       s"CREATE TABLE my_tab(a INT, b STRING) STORED AS parquet $duplicateClause $duplicateClause"
     }
@@ -1892,7 +1930,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val s3 = """CREATE TABLE page_view AS SELECT * FROM src"""
     val (desc, exists) = extractTableDesc(s3)
     assert(exists == false)
-    assert(desc.identifier.database == None)
+    assert(desc.identifier.database == Some("default"))
     assert(desc.identifier.table == "page_view")
     assert(desc.tableType == CatalogTableType.MANAGED)
     assert(desc.storage.locationUri == None)
@@ -1928,7 +1966,7 @@ class PlanResolutionSuite extends AnalysisTest {
                |   ORDER BY key, value""".stripMargin
     val (desc, exists) = extractTableDesc(s5)
     assert(exists == false)
-    assert(desc.identifier.database == None)
+    assert(desc.identifier.database == Some("default"))
     assert(desc.identifier.table == "ctas2")
     assert(desc.tableType == CatalogTableType.MANAGED)
     assert(desc.storage.locationUri == None)
@@ -1957,7 +1995,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val query = "CREATE TABLE my_table (id int, name string)"
     val (desc, allowExisting) = extractTableDesc(query)
     assert(!allowExisting)
-    assert(desc.identifier.database.isEmpty)
+    assert(desc.identifier.database == Some("default"))
     assert(desc.identifier.table == "my_table")
     assert(desc.tableType == CatalogTableType.MANAGED)
     assert(desc.schema == new StructType().add("id", "int").add("name", "string"))
@@ -1985,8 +2023,8 @@ class PlanResolutionSuite extends AnalysisTest {
 
   test("create table - temporary") {
     val query = "CREATE TEMPORARY TABLE tab1 (id int, name string)"
-    val e = intercept[ParseException] { parser.parsePlan(query) }
-    assert(e.message.contains("CREATE TEMPORARY TABLE is not supported yet"))
+    val e = intercept[ParseException] { parsePlan(query) }
+    assert(e.message.contains("Operation not allowed: CREATE TEMPORARY TABLE"))
   }
 
   test("create table - external") {
@@ -2052,9 +2090,9 @@ class PlanResolutionSuite extends AnalysisTest {
     val query1 = s"$baseQuery(id) ON (1, 10, 100)"
     val query2 = s"$baseQuery(id, name) ON ((1, 'x'), (2, 'y'), (3, 'z'))"
     val query3 = s"$baseQuery(id, name) ON ((1, 'x'), (2, 'y'), (3, 'z')) STORED AS DIRECTORIES"
-    val e1 = intercept[ParseException] { parser.parsePlan(query1) }
-    val e2 = intercept[ParseException] { parser.parsePlan(query2) }
-    val e3 = intercept[ParseException] { parser.parsePlan(query3) }
+    val e1 = intercept[ParseException] { parsePlan(query1) }
+    val e2 = intercept[ParseException] { parsePlan(query2) }
+    val e3 = intercept[ParseException] { parsePlan(query3) }
     assert(e1.getMessage.contains("Operation not allowed"))
     assert(e2.getMessage.contains("Operation not allowed"))
     assert(e3.getMessage.contains("Operation not allowed"))
@@ -2106,16 +2144,18 @@ class PlanResolutionSuite extends AnalysisTest {
     val baseQuery = "CREATE TABLE my_table (id int, name string) STORED BY"
     val query1 = s"$baseQuery 'org.papachi.StorageHandler'"
     val query2 = s"$baseQuery 'org.mamachi.StorageHandler' WITH SERDEPROPERTIES ('k1'='v1')"
-    val e1 = intercept[ParseException] { parser.parsePlan(query1) }
-    val e2 = intercept[ParseException] { parser.parsePlan(query2) }
+    val e1 = intercept[ParseException] { parsePlan(query1) }
+    val e2 = intercept[ParseException] { parsePlan(query2) }
     assert(e1.getMessage.contains("Operation not allowed"))
     assert(e2.getMessage.contains("Operation not allowed"))
   }
 
   test("create table - properties") {
     val query = "CREATE TABLE my_table (id int, name string) TBLPROPERTIES ('k1'='v1', 'k2'='v2')"
-    val (desc, _) = extractTableDesc(query)
-    assert(desc.properties == Map("k1" -> "v1", "k2" -> "v2"))
+    parsePlan(query) match {
+      case state: CreateTableStatement =>
+        assert(state.properties == Map("k1" -> "v1", "k2" -> "v2"))
+    }
   }
 
   test("create table(hive) - everything!") {

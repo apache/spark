@@ -47,6 +47,11 @@ public interface TableCatalog extends CatalogPlugin {
   String PROP_LOCATION = "location";
 
   /**
+   * A reserved property to specify a table was created with EXTERNAL.
+   */
+  String PROP_EXTERNAL = "external";
+
+  /**
    * A reserved property to specify the description of the table.
    */
   String PROP_COMMENT = "comment";
@@ -60,6 +65,11 @@ public interface TableCatalog extends CatalogPlugin {
    * A reserved property to specify the owner of the table.
    */
   String PROP_OWNER = "owner";
+
+  /**
+   * A prefix used to pass OPTIONS in table properties
+   */
+  String OPTION_PREFIX = "option.";
 
   /**
    * List the tables in a namespace from the catalog.

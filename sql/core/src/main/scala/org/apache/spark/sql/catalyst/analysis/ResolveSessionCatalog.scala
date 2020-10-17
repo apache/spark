@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
 
 /**
@@ -265,52 +266,46 @@ class ResolveSessionCatalog(
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
     case c @ CreateTableStatement(
-         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
+         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
       assertNoNullTypeInSchema(c.tableSchema)
-      val provider = c.provider.getOrElse(conf.defaultDataSourceName)
-      if (!isV2Provider(provider)) {
-        if (!DDLUtils.isHiveTable(Some(provider))) {
+      buildV1Table(tbl.asTableIdentifier, c) match {
+        case Some(tableDesc) =>
+          val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+          CreateTable(tableDesc, mode, None)
+
+        case None =>
           assertNoCharTypeInSchema(c.tableSchema)
-        }
-        val tableDesc = buildCatalogTable(tbl.asTableIdentifier, c.tableSchema,
-          c.partitioning, c.bucketSpec, c.properties, provider, c.options, c.location,
-          c.comment, c.ifNotExists)
-        val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-        CreateTable(tableDesc, mode, None)
-      } else {
-        assertNoCharTypeInSchema(c.tableSchema)
-        CreateV2Table(
-          catalog.asTableCatalog,
-          tbl.asIdentifier,
-          c.tableSchema,
-          // convert the bucket spec and add it as a transform
-          c.partitioning ++ c.bucketSpec.map(_.asTransform),
-          convertTableProperties(c.properties, c.options, c.location, c.comment, Some(provider)),
-          ignoreIfExists = c.ifNotExists)
+          CreateV2Table(
+            catalog.asTableCatalog,
+            tbl.asIdentifier,
+            c.tableSchema,
+            // convert the bucket spec and add it as a transform
+            c.partitioning ++ c.bucketSpec.map(_.asTransform),
+            convertTableProperties(c),
+            ignoreIfExists = c.ifNotExists)
       }
 
     case c @ CreateTableAsSelectStatement(
-         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
+         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _, _) =>
       if (c.asSelect.resolved) {
         assertNoNullTypeInSchema(c.asSelect.schema)
       }
-      val provider = c.provider.getOrElse(conf.defaultDataSourceName)
-      if (!isV2Provider(provider)) {
-        val tableDesc = buildCatalogTable(tbl.asTableIdentifier, new StructType,
-          c.partitioning, c.bucketSpec, c.properties, provider, c.options, c.location,
-          c.comment, c.ifNotExists)
-        val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-        CreateTable(tableDesc, mode, Some(c.asSelect))
-      } else {
-        CreateTableAsSelect(
-          catalog.asTableCatalog,
-          tbl.asIdentifier,
-          // convert the bucket spec and add it as a transform
-          c.partitioning ++ c.bucketSpec.map(_.asTransform),
-          c.asSelect,
-          convertTableProperties(c.properties, c.options, c.location, c.comment, Some(provider)),
-          writeOptions = c.writeOptions,
-          ignoreIfExists = c.ifNotExists)
+      buildV1Table(tbl.asTableIdentifier, c) match {
+        case Some(tableDesc) =>
+          val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+          CreateTable(tableDesc, mode, Some(c.asSelect))
+
+        case None =>
+          assertNoCharTypeInSchema(c.schema)
+          CreateTableAsSelect(
+            catalog.asTableCatalog,
+            tbl.asIdentifier,
+            // convert the bucket spec and add it as a transform
+            c.partitioning ++ c.bucketSpec.map(_.asTransform),
+            c.asSelect,
+            convertTableProperties(c),
+            writeOptions = c.writeOptions,
+            ignoreIfExists = c.ifNotExists)
       }
 
     case RefreshTable(ResolvedV1TableIdentifier(ident)) =>
@@ -322,7 +317,7 @@ class ResolveSessionCatalog(
     // For REPLACE TABLE [AS SELECT], we should fail if the catalog is resolved to the
     // session catalog and the table provider is not v2.
     case c @ ReplaceTableStatement(
-         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
+         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
       assertNoNullTypeInSchema(c.tableSchema)
       val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
@@ -335,12 +330,12 @@ class ResolveSessionCatalog(
           c.tableSchema,
           // convert the bucket spec and add it as a transform
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
-          convertTableProperties(c.properties, c.options, c.location, c.comment, Some(provider)),
+          convertTableProperties(c),
           orCreate = c.orCreate)
       }
 
     case c @ ReplaceTableAsSelectStatement(
-         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
+         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
       if (c.asSelect.resolved) {
         assertNoNullTypeInSchema(c.asSelect.schema)
       }
@@ -354,7 +349,7 @@ class ResolveSessionCatalog(
           // convert the bucket spec and add it as a transform
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
           c.asSelect,
-          convertTableProperties(c.properties, c.options, c.location, c.comment, Some(provider)),
+          convertTableProperties(c),
           writeOptions = c.writeOptions,
           orCreate = c.orCreate)
       }
@@ -634,6 +629,69 @@ class ResolveSessionCatalog(
     case _ => throw new AnalysisException(s"$sql is only supported with temp views or v1 tables.")
   }
 
+  private def buildV1Table(
+      ident: TableIdentifier,
+      c: CreateTableAsSelectStatement): Option[CatalogTable] = {
+    val schema = new StructType
+    (c.provider, c.serde) match {
+      case (Some(provider), Some(serde)) =>
+        throw new AnalysisException(
+          s"Cannot create table with both USING $provider and ${serde.describe}")
+
+      case (None, Some(serde)) =>
+        Some(buildHiveCatalogTable(
+          ident, schema, c.partitioning, c.bucketSpec, c.properties, serde, c.options, c.location,
+          c.comment, c.external))
+
+      case (None, None) if !conf.convertCTAS =>
+        Some(buildHiveCatalogTable(
+          ident, schema, c.partitioning, c.bucketSpec, c.properties, SerdeInfo.empty, c.options,
+          c.location, c.comment, c.external))
+
+      case (Some(provider), None) if !isV2Provider(provider) =>
+        Some(buildCatalogTable(
+          ident, schema, c.partitioning, c.bucketSpec, c.properties, provider, c.options,
+          c.location, c.comment, c.external))
+
+      case (None, None) if !isV2Provider(conf.defaultDataSourceName) =>
+        Some(buildCatalogTable(
+          ident, schema, c.partitioning, c.bucketSpec, c.properties, conf.defaultDataSourceName,
+          c.options, c.location, c.comment, c.external))
+
+      case _ =>
+        None
+    }
+  }
+
+  private def buildV1Table(
+      ident: TableIdentifier,
+      c: CreateTableStatement): Option[CatalogTable] = {
+    val schema = c.tableSchema
+    (c.provider, c.serde) match {
+      case (Some(provider), Some(serde)) =>
+        throw new AnalysisException(
+          s"Cannot create table with both USING $provider and ${serde.describe}")
+
+      case (None, Some(serde)) =>
+        Some(buildHiveCatalogTable(
+          ident, schema, c.partitioning, c.bucketSpec, c.properties, serde, c.options, c.location,
+          c.comment, c.external))
+
+      case (None, None) =>
+        Some(buildHiveCatalogTable(
+          ident, schema, c.partitioning, c.bucketSpec, c.properties, SerdeInfo.empty, c.options,
+          c.location, c.comment, c.external))
+
+      case (Some(provider), None) if !isV2Provider(provider) =>
+        Some(buildCatalogTable(
+          ident, schema, c.partitioning, c.bucketSpec, c.properties, provider, c.options,
+          c.location, c.comment, c.external))
+
+      case _ =>
+        None
+    }
+  }
+
   private def buildCatalogTable(
       table: TableIdentifier,
       schema: StructType,
@@ -644,7 +702,16 @@ class ResolveSessionCatalog(
       options: Map[String, String],
       location: Option[String],
       comment: Option[String],
-      ifNotExists: Boolean): CatalogTable = {
+      external: Boolean): CatalogTable = {
+    // Hive types are allowed if the provider is "hive"
+    if (!DDLUtils.isHiveTable(Some(provider))) {
+      assertNoCharTypeInSchema(schema)
+    }
+
+    if (external) {
+      throw new AnalysisException(s"Operation not allowed: CREATE EXTERNAL TABLE ... USING")
+    }
+
     val storage = CatalogStorageFormat.empty.copy(
       locationUri = location.map(CatalogUtils.stringToURI),
       properties = options)
@@ -661,6 +728,65 @@ class ResolveSessionCatalog(
       storage = storage,
       schema = schema,
       provider = Some(provider),
+      partitionColumnNames = partitioning.asPartitionColumns,
+      bucketSpec = bucketSpec,
+      properties = properties,
+      comment = comment)
+  }
+
+  private def buildHiveCatalogTable(
+      table: TableIdentifier,
+      schema: StructType,
+      partitioning: Seq[Transform],
+      bucketSpec: Option[BucketSpec],
+      properties: Map[String, String],
+      serdeInfo: SerdeInfo,
+      options: Map[String, String],
+      location: Option[String],
+      comment: Option[String],
+      external: Boolean): CatalogTable = {
+    val defaultStorage = HiveSerDe.getDefaultStorage(conf)
+    val baseStorage = defaultStorage.copy(
+      locationUri = location.map(CatalogUtils.stringToURI),
+      serde = serdeInfo.serde.orElse(defaultStorage.serde),
+      properties = options ++ serdeInfo.serdeProperties)
+
+    val storage = (serdeInfo.storedAs, serdeInfo.formatClasses) match {
+      case (Some(format), None) =>
+        HiveSerDe.sourceToSerDe(format) match {
+          case Some(hiveSerDe) =>
+            baseStorage.copy(
+              inputFormat = hiveSerDe.inputFormat,
+              outputFormat = hiveSerDe.outputFormat,
+              serde = serdeInfo.serde.orElse(hiveSerDe.serde))
+          case _ =>
+            baseStorage
+        }
+      case (None, Some((inFormat, outFormat))) =>
+        baseStorage.copy(
+          inputFormat = Some(inFormat),
+          outputFormat = Some(outFormat))
+
+      case _ =>
+        baseStorage
+    }
+
+    if (external && location.isEmpty) {
+      throw new AnalysisException(s"CREATE EXTERNAL TABLE must be accompanied by LOCATION")
+    }
+
+    val tableType = if (location.isDefined) {
+      CatalogTableType.EXTERNAL
+    } else {
+      CatalogTableType.MANAGED
+    }
+
+    CatalogTable(
+      identifier = table,
+      tableType = tableType,
+      storage = storage,
+      schema = schema,
+      provider = Some(DDLUtils.HIVE_PROVIDER),
       partitionColumnNames = partitioning.asPartitionColumns,
       bucketSpec = bucketSpec,
       properties = properties,

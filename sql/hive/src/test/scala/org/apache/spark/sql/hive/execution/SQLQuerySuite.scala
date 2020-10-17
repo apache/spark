@@ -712,8 +712,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
               |AS SELECT key, value FROM mytable1
             """.stripMargin)
         }.getMessage
-        assert(e.contains("Create Partitioned Table As Select cannot specify data type for " +
-          "the partition columns of the target table"))
+        assert(e.contains("Partition column types may not be specified in Create Table As Select"))
       }
     }
   }
