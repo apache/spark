@@ -1563,7 +1563,8 @@ class SchedulerJob(BaseJob):  # pylint: disable=too-many-instance-attributes
                 state=State.RUNNING,
                 external_trigger=False,
                 session=session,
-                dag_hash=dag_hash
+                dag_hash=dag_hash,
+                creating_job_id=self.id,
             )
 
         self._update_dag_next_dagruns(dag_models, session)

@@ -325,6 +325,7 @@ class BackfillJob(BaseJob):
             session=session,
             conf=self.conf,
             run_type=DagRunType.BACKFILL_JOB,
+            creating_job_id=self.id,
         )
 
         # set required transient field

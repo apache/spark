@@ -58,6 +58,7 @@ class DagRun(Base, LoggingMixin):
     end_date = Column(UtcDateTime)
     _state = Column('state', String(50), default=State.RUNNING)
     run_id = Column(String(ID_LEN))
+    creating_job_id = Column(Integer)
     external_trigger = Column(Boolean, default=True)
     run_type = Column(String(50), nullable=False)
     conf = Column(PickleType)
@@ -98,6 +99,7 @@ class DagRun(Base, LoggingMixin):
         state: Optional[str] = None,
         run_type: Optional[str] = None,
         dag_hash: Optional[str] = None,
+        creating_job_id: Optional[int] = None,
     ):
         self.dag_id = dag_id
         self.run_id = run_id
@@ -108,6 +110,7 @@ class DagRun(Base, LoggingMixin):
         self.state = state
         self.run_type = run_type
         self.dag_hash = dag_hash
+        self.creating_job_id = creating_job_id
         super().__init__()
 
     def __repr__(self):
