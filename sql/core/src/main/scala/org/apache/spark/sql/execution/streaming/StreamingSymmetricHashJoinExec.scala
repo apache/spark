@@ -151,9 +151,8 @@ case class StreamingSymmetricHashJoinExec(
       stateWatermarkPredicates = JoinStateWatermarkPredicates(), stateFormatVersion, left, right)
   }
 
-  if (stateFormatVersion < 2 && joinType != Inner) {
-    throw new IllegalArgumentException(
-      s"The query is using stream-stream $joinType join with state" +
+  if (stateFormatVersion < 2 && (joinType == LeftOuter || joinType == RightOuter)) {
+    throw new IllegalArgumentException("The query is using stream-stream outer join with state" +
       s" format version ${stateFormatVersion} - correctness issue is discovered. Please discard" +
       " the checkpoint and rerun the query. See SPARK-26154 for more details.")
   }
