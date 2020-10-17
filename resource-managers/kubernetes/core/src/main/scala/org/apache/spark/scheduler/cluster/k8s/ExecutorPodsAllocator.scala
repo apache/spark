@@ -61,7 +61,7 @@ private[spark] class ExecutorPodsAllocator(
 
   // Executor IDs that have been requested from Kubernetes but have not been detected in any
   // snapshot yet. Mapped to the timestamp when they were created.
-  private val newlyCreatedExecutors = mutable.Map.empty[Long, Long]
+  private val newlyCreatedExecutors = mutable.LinkedHashMap.empty[Long, Long]
 
   def start(applicationId: String): Unit = {
     snapshotsStore.addSubscriber(podAllocationDelay) {

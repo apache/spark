@@ -16,8 +16,10 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
-import org.scalatest.concurrent.Eventually
 import scala.collection.JavaConverters._
+
+import io.fabric8.kubernetes.api.model.EnvVar
+import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{k8sTestTag, INTERVAL, TIMEOUT}
 
@@ -66,6 +68,7 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
             .withName("spark-example")
             .withImage(image)
             .withImagePullPolicy("IfNotPresent")
+            .withEnv(new EnvVar("HTTP2_DISABLE", "true", null))
             .withCommand("/opt/spark/bin/run-example")
             .addToArgs("--master", s"k8s://https://kubernetes.default.svc")
             .addToArgs("--deploy-mode", "client")

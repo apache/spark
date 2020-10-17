@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -608,7 +609,19 @@ class ExpressionParserSuite extends PlanTest {
 
     // Hive nanosecond notation.
     assertEqual("interval 13.123456789 seconds", intervalLiteral("second", "13.123456789"))
-    assertEqual("interval -13.123456789 second", intervalLiteral("second", "-13.123456789"))
+    assertEqual(
+      "interval -13.123456789 second",
+      Literal(new CalendarInterval(
+        0,
+        -13 * DateTimeUtils.MICROS_PER_SECOND - 123 * DateTimeUtils.MICROS_PER_MILLIS - 456)))
+    assertEqual(
+      "interval 13.123456 second",
+      Literal(new CalendarInterval(
+        0,
+        13 * DateTimeUtils.MICROS_PER_SECOND + 123 * DateTimeUtils.MICROS_PER_MILLIS + 456)))
+    assertEqual(
+      "interval 1.001 second",
+      Literal(CalendarInterval.fromString("interval 1 second 1 millisecond")))
 
     // Non Existing unit
     intercept("interval 10 nanoseconds", "No interval can be constructed")
@@ -675,9 +688,9 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("SPARK-19526 Support ignore nulls keywords for first and last") {
-    assertEqual("first(a ignore nulls)", First('a, Literal(true)).toAggregateExpression())
-    assertEqual("first(a)", First('a, Literal(false)).toAggregateExpression())
-    assertEqual("last(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
-    assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
+    assertEqual("first(a ignore nulls)", First('a, true).toAggregateExpression())
+    assertEqual("first(a)", First('a, false).toAggregateExpression())
+    assertEqual("last(a ignore nulls)", Last('a, true).toAggregateExpression())
+    assertEqual("last(a)", Last('a, false).toAggregateExpression())
   }
 }

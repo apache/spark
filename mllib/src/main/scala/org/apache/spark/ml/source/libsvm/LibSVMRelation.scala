@@ -99,8 +99,8 @@ private[libsvm] class LibSVMFileFormat
         "though the input. If you know the number in advance, please specify it via " +
         "'numFeatures' option to avoid the extra scan.")
 
-      val paths = files.map(_.getPath.toUri.toString)
-      val parsed = MLUtils.parseLibSVMFile(sparkSession, paths)
+      val paths = files.map(_.getPath.toString)
+      val parsed = MLUtils.parseLibSVMFile(sparkSession, paths, options)
       MLUtils.computeNumFeatures(parsed)
     }
 

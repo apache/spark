@@ -280,6 +280,7 @@ abstract class HashExpression[E] extends Expression {
     }
 
     val hashResultType = CodeGenerator.javaType(dataType)
+    val typedSeed = if (dataType.sameType(LongType)) s"${seed}L" else s"$seed"
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = childrenHash,
       funcName = "computeHash",
@@ -294,7 +295,7 @@ abstract class HashExpression[E] extends Expression {
 
     ev.copy(code =
       code"""
-         |$hashResultType ${ev.value} = $seed;
+         |$hashResultType ${ev.value} = $typedSeed;
          |$codes
        """.stripMargin)
   }

@@ -21,6 +21,8 @@ import java.math.BigDecimal
 import java.sql.{Date, DriverManager, SQLException, Timestamp}
 import java.util.{Calendar, GregorianCalendar, Properties}
 
+import scala.collection.JavaConverters._
+
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
@@ -55,6 +57,20 @@ class JDBCSuite extends QueryTest
     override def getCatalystType(
         sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
       Some(StringType)
+  }
+
+  val testH2DialectTinyInt = new JdbcDialect {
+    override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+    override def getCatalystType(
+        sqlType: Int,
+        typeName: String,
+        size: Int,
+        md: MetadataBuilder): Option[DataType] = {
+      sqlType match {
+        case java.sql.Types.TINYINT => Some(ByteType)
+        case _ => None
+      }
+    }
   }
 
   before {
@@ -685,6 +701,17 @@ class JDBCSuite extends QueryTest
     JdbcDialects.unregisterDialect(testH2Dialect)
   }
 
+  test("SPARK-26499: Map TINYINT to ByteType via JdbcDialects") {
+    JdbcDialects.registerDialect(testH2DialectTinyInt)
+    val df = spark.read.jdbc(urlWithUserAndPass, "test.inttypes", new Properties())
+    val rows = df.collect()
+    assert(rows.length === 2)
+    assert(rows(0).get(2).isInstanceOf[Byte])
+    assert(rows(0).getByte(2) === 3)
+    assert(rows(1).isNullAt(2))
+    JdbcDialects.unregisterDialect(testH2DialectTinyInt)
+  }
+
   test("Default jdbc dialect registration") {
     assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") == MySQLDialect)
     assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") == PostgresDialect)
@@ -862,17 +889,37 @@ class JDBCSuite extends QueryTest
       "BIT")
     assert(msSqlServerDialect.getJDBCType(BinaryType).map(_.databaseTypeDefinition).get ==
       "VARBINARY(MAX)")
-    assert(msSqlServerDialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).get ==
-      "SMALLINT")
+    Seq(true, false).foreach { flag =>
+      withSQLConf(SQLConf.LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED.key -> s"$flag") {
+        if (SQLConf.get.legacyMsSqlServerNumericMappingEnabled) {
+          assert(msSqlServerDialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).isEmpty)
+        } else {
+          assert(msSqlServerDialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).get ==
+            "SMALLINT")
+        }
+      }
+    }
   }
 
   test("SPARK-28152 MsSqlServerDialect catalyst type mapping") {
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
     val metadata = new MetadataBuilder().putLong("scale", 1)
-    assert(msSqlServerDialect.getCatalystType(java.sql.Types.SMALLINT, "SMALLINT", 1,
-      metadata).get == ShortType)
-    assert(msSqlServerDialect.getCatalystType(java.sql.Types.REAL, "REAL", 1,
-      metadata).get == FloatType)
+
+    Seq(true, false).foreach { flag =>
+      withSQLConf(SQLConf.LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED.key -> s"$flag") {
+        if (SQLConf.get.legacyMsSqlServerNumericMappingEnabled) {
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.SMALLINT, "SMALLINT", 1,
+            metadata).isEmpty)
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.REAL, "REAL", 1,
+            metadata).isEmpty)
+        } else {
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.SMALLINT, "SMALLINT", 1,
+            metadata).get == ShortType)
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.REAL, "REAL", 1,
+            metadata).get == FloatType)
+        }
+      }
+    }
   }
 
   test("table exists query by jdbc dialect") {
@@ -1216,7 +1263,8 @@ class JDBCSuite extends QueryTest
     testJdbcOptions(new JDBCOptions(parameters))
     testJdbcOptions(new JDBCOptions(CaseInsensitiveMap(parameters)))
     // test add/remove key-value from the case-insensitive map
-    var modifiedParameters = CaseInsensitiveMap(Map.empty) ++ parameters
+    var modifiedParameters =
+      (CaseInsensitiveMap(Map.empty) ++ parameters).asInstanceOf[Map[String, String]]
     testJdbcOptions(new JDBCOptions(modifiedParameters))
     modifiedParameters -= "dbtable"
     assert(modifiedParameters.get("dbTAblE").isEmpty)
@@ -1539,5 +1587,24 @@ class JDBCSuite extends QueryTest
     checkAnswer(
       checkNotPushdown(sql("SELECT name, theid FROM predicateOption WHERE theid = 1")),
       Row("fred", 1) :: Nil)
+  }
+
+  test("SPARK-32364: JDBCOption constructor") {
+    val extraOptions = CaseInsensitiveMap[String](Map("UrL" -> "url1", "dBTable" -> "table1"))
+    val connectionProperties = new Properties()
+    connectionProperties.put("url", "url2")
+    connectionProperties.put("dbtable", "table2")
+
+    // connection property should override the options in extraOptions
+    val params = extraOptions ++ connectionProperties.asScala
+    assert(params.size == 2)
+    assert(params.get("uRl").contains("url2"))
+    assert(params.get("DbtaBle").contains("table2"))
+
+    // JDBCOptions constructor parameter should overwrite the existing conf
+    val options = new JDBCOptions(url, "table3", params)
+    assert(options.asProperties.size == 2)
+    assert(options.asProperties.get("url") == url)
+    assert(options.asProperties.get("dbtable") == "table3")
   }
 }

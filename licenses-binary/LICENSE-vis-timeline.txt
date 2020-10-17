@@ -3,11 +3,11 @@ https://github.com/almende/vis
 
 A dynamic, browser-based visualization library.
 
-@version 4.16.1
-@date    2016-04-18
+@version 4.20.1-SNAPSHOT
+@date    2017-10-12
 
 @license
-Copyright (C) 2011-2016 Almende B.V, http://almende.com
+Copyright (C) 2011-2017 Almende B.V, http://almende.com
 
 Vis.js is dual licensed under both
 

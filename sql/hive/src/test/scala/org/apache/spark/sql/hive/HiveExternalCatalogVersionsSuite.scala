@@ -31,6 +31,7 @@ import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
 /**
@@ -41,6 +42,7 @@ import org.apache.spark.util.Utils
  * expected version under this local directory, e.g. `/tmp/spark-test/spark-2.0.3`, we will skip the
  * downloading for this spark version.
  */
+@SlowHiveTest
 class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   private val wareHousePath = Utils.createTempDir(namePrefix = "warehouse")
   private val tmpDataDir = Utils.createTempDir(namePrefix = "test-data")
@@ -214,11 +216,12 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
       Source.fromURL("https://dist.apache.org/repos/dist/release/spark/").mkString
         .split("\n")
         .filter(_.contains("""<li><a href="spark-"""))
+        .filterNot(_.contains("preview"))
         .map("""<a href="spark-(\d.\d.\d)/">""".r.findFirstMatchIn(_).get.group(1))
         .filter(_ < org.apache.spark.SPARK_VERSION)
     } catch {
       // do not throw exception during object initialization.
-      case NonFatal(_) => Nil
+      case NonFatal(_) => Seq("2.3.4", "2.4.5") // A temporary fallback to use a specific version
     }
   }
 

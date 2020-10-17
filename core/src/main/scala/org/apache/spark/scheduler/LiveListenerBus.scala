@@ -215,10 +215,8 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
       return
     }
 
-    synchronized {
-      queues.asScala.foreach(_.stop())
-      queues.clear()
-    }
+    queues.asScala.foreach(_.stop())
+    queues.clear()
   }
 
   // For testing only.

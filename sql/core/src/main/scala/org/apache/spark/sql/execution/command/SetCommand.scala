@@ -164,7 +164,11 @@ object SetCommand {
 case object ResetCommand extends RunnableCommand with Logging {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.conf.clear()
+    val conf = sparkSession.sessionState.conf
+    conf.clear()
+    sparkSession.sparkContext.conf.getAll.foreach { case (k, v) =>
+      conf.setConfString(k, v)
+    }
     Seq.empty[Row]
   }
 }

@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -394,6 +395,25 @@ class AnalysisErrorSuite extends AnalysisTest {
   )
 
   errorTest(
+    "SPARK-30998: unsupported nested inner generators",
+    {
+      val nestedListRelation = LocalRelation(
+        AttributeReference("nestedList", ArrayType(ArrayType(IntegerType)))())
+      nestedListRelation.select(Explode(Explode($"nestedList")))
+    },
+    "Generators are not supported when it's nested in expressions, but got: " +
+      "explode(explode(nestedList))" :: Nil
+  )
+
+  errorTest(
+    "SPARK-30998: unsupported nested inner generators for aggregates",
+    testRelation.select(Explode(Explode(
+      CreateArray(CreateArray(min($"a") :: max($"a") :: Nil) :: Nil)))),
+    "Generators are not supported when it's nested in expressions, but got: " +
+      "explode(explode(array(array(min(a), max(a)))))" :: Nil
+  )
+
+  errorTest(
     "generator appears in operator which is not Project",
     listRelation.sortBy(Explode('list).asc),
     "Generators are not supported outside the SELECT clause, but got: Sort" :: Nil
@@ -601,5 +621,16 @@ class AnalysisErrorSuite extends AnalysisTest {
       LocalRelation(a))
     assertAnalysisError(plan5,
                         "Accessing outer query column is not allowed in" :: Nil)
+  }
+
+  test("SPARK-30811: CTE should not cause stack overflow when " +
+       "it refers to non-existent table with same name") {
+    val plan = With(
+      UnresolvedRelation(TableIdentifier("t")),
+      Seq("t" -> SubqueryAlias("t",
+        Project(
+          Alias(Literal(1), "x")() :: Nil,
+          UnresolvedRelation(TableIdentifier("t", Option("nonexist")))))))
+    assertAnalysisError(plan, "Table or view not found:" :: Nil)
   }
 }

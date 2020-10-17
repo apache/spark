@@ -18,15 +18,19 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
-import java.text.{DateFormat, SimpleDateFormat}
+import java.text.{DateFormat, ParsePosition, SimpleDateFormat}
 import java.time.Instant
-import java.util.{Calendar, Locale, TimeZone}
+import java.util.{Calendar, GregorianCalendar, Locale, TimeZone}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.{Function => JFunction}
 import javax.xml.bind.DatatypeConverter
 
 import scala.annotation.tailrec
 
+import org.apache.commons.lang3.time.FastDateFormat
+import sun.util.calendar.ZoneInfo
+
+import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -128,10 +132,10 @@ object DateTimeUtils {
   }
 
   def millisToDays(millisUtc: Long, timeZone: TimeZone): SQLDate = {
-    // SPARK-6785: use Math.floor so negative number of days (dates before 1970)
+    // SPARK-6785: use Math.floorDiv so negative number of days (dates before 1970)
     // will correctly work as input for function toJavaDate(Int)
     val millisLocal = millisUtc + timeZone.getOffset(millisUtc)
-    Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
+    Math.floorDiv(millisLocal, MILLIS_PER_DAY).toInt
   }
 
   // reverse of millisToDays
@@ -264,14 +268,14 @@ object DateTimeUtils {
     // When the timestamp is negative i.e before 1970, we need to adjust the millseconds portion.
     // Example - 1965-01-01 10:11:12.123456 is represented as (-157700927876544) in micro precision.
     // In millis precision the above needs to be represented as (-157700927877).
-    Math.floor(us.toDouble / MILLIS_PER_SECOND).toLong
+    Math.floorDiv(us, MICROS_PER_MILLIS)
   }
 
   /*
-   * Converts millseconds since epoch to SQLTimestamp.
+   * Converts milliseconds since epoch to SQLTimestamp.
    */
   def fromMillis(millis: Long): SQLTimestamp = {
-    millis * 1000L
+    millis * MICROS_PER_MILLIS
   }
 
   /**
@@ -1016,15 +1020,15 @@ object DateTimeUtils {
       case TRUNC_TO_DAY =>
         val offset = timeZone.getOffset(millis)
         millis += offset
-        millis - millis % (MILLIS_PER_SECOND * SECONDS_PER_DAY) - offset
+        millis - Math.floorMod(millis, MILLIS_PER_SECOND * SECONDS_PER_DAY) - offset
       case TRUNC_TO_HOUR =>
         val offset = timeZone.getOffset(millis)
         millis += offset
-        millis - millis % (60 * 60 * MILLIS_PER_SECOND) - offset
+        millis - Math.floorMod(millis, 60 * 60 * MILLIS_PER_SECOND) - offset
       case TRUNC_TO_MINUTE =>
-        millis - millis % (60 * MILLIS_PER_SECOND)
+        millis - Math.floorMod(millis, 60 * MILLIS_PER_SECOND)
       case TRUNC_TO_SECOND =>
-        millis - millis % MILLIS_PER_SECOND
+        millis - Math.floorMod(millis, MILLIS_PER_SECOND)
       case TRUNC_TO_WEEK =>
         val dDays = millisToDays(millis, timeZone)
         val prevMonday = getNextDateForDayOfWeek(dDays - 7, MONDAY)
@@ -1079,39 +1083,10 @@ object DateTimeUtils {
 
   /**
    * Lookup the offset for given millis seconds since 1970-01-01 00:00:00 in given timezone.
-   * TODO: Improve handling of normalization differences.
-   * TODO: Replace with JSR-310 or similar system - see SPARK-16788
    */
-  private[sql] def getOffsetFromLocalMillis(millisLocal: Long, tz: TimeZone): Long = {
-    var guess = tz.getRawOffset
-    // the actual offset should be calculated based on milliseconds in UTC
-    val offset = tz.getOffset(millisLocal - guess)
-    if (offset != guess) {
-      guess = tz.getOffset(millisLocal - offset)
-      if (guess != offset) {
-        // fallback to do the reverse lookup using java.sql.Timestamp
-        // this should only happen near the start or end of DST
-        val days = Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
-        val year = getYear(days)
-        val month = getMonth(days)
-        val day = getDayOfMonth(days)
-
-        var millisOfDay = (millisLocal % MILLIS_PER_DAY).toInt
-        if (millisOfDay < 0) {
-          millisOfDay += MILLIS_PER_DAY.toInt
-        }
-        val seconds = (millisOfDay / 1000L).toInt
-        val hh = seconds / 3600
-        val mm = seconds / 60 % 60
-        val ss = seconds % 60
-        val ms = millisOfDay % 1000
-        val calendar = Calendar.getInstance(tz)
-        calendar.set(year, month - 1, day, hh, mm, ss)
-        calendar.set(Calendar.MILLISECOND, ms)
-        guess = (millisLocal - calendar.getTimeInMillis()).toInt
-      }
-    }
-    guess
+  private[sql] def getOffsetFromLocalMillis(millisLocal: Long, tz: TimeZone): Long = tz match {
+    case zoneInfo: ZoneInfo => zoneInfo.getOffsetsByWall(millisLocal, null)
+    case timeZone: TimeZone => timeZone.getOffset(millisLocal - timeZone.getRawOffset)
   }
 
   /**
@@ -1163,5 +1138,63 @@ object DateTimeUtils {
     threadLocalGmtCalendar.remove()
     threadLocalTimestampFormat.remove()
     threadLocalDateFormat.remove()
+  }
+
+  /**
+   * The custom sub-class of `GregorianCalendar` is needed to get access to
+   * protected `fields` immediately after parsing. We cannot use
+   * the `get()` method because it performs normalization of the fraction
+   * part. Accordingly, the `MILLISECOND` field doesn't contain original value.
+   *
+   * Also this class allows to set raw value to the `MILLISECOND` field
+   * directly before formatting.
+   */
+  private class MicrosCalendar(tz: TimeZone, digitsInFraction: Int)
+    extends GregorianCalendar(tz, Locale.US) {
+    // Converts parsed `MILLISECOND` field to seconds fraction in microsecond precision.
+    // For example if the fraction pattern is `SSSS` then `digitsInFraction` = 4, and
+    // if the `MILLISECOND` field was parsed to `1234`.
+    def getMicros(): SQLTimestamp = {
+      // Append 6 zeros to the field: 1234 -> 1234000000
+      val d = fields(Calendar.MILLISECOND) * MICROS_PER_SECOND
+      // Take the first 6 digits from `d`: 1234000000 -> 123400
+      // The rest contains exactly `digitsInFraction`: `0000` = 10 ^ digitsInFraction
+      // So, the result is `(1234 * 1000000) / (10 ^ digitsInFraction)
+      d / Decimal.POW_10(digitsInFraction)
+    }
+
+    // Converts the seconds fraction in microsecond precision to a value
+    // that can be correctly formatted according to the specified fraction pattern.
+    // The method performs operations opposite to `getMicros()`.
+    def setMicros(micros: Long): Unit = {
+      val d = micros * Decimal.POW_10(digitsInFraction)
+      fields(Calendar.MILLISECOND) = (d / MICROS_PER_SECOND).toInt
+    }
+  }
+
+  /**
+   * An instance of the class is aimed to re-use many times. It contains helper objects
+   * `cal` which is reused between `parse()` and `format` invokes.
+   */
+  class TimestampParser(fastDateFormat: FastDateFormat) {
+    private val cal = new MicrosCalendar(
+      fastDateFormat.getTimeZone,
+      fastDateFormat.getPattern.count(_ == 'S'))
+
+    def parse(s: String): SQLTimestamp = {
+      cal.clear() // Clear the calendar because it can be re-used many times
+      if (!fastDateFormat.parse(s, new ParsePosition(0), cal)) {
+        throw new IllegalArgumentException(s"'$s' is an invalid timestamp")
+      }
+      val micros = cal.getMicros()
+      cal.set(Calendar.MILLISECOND, 0)
+      cal.getTimeInMillis * MICROS_PER_MILLIS + micros
+    }
+
+    def format(timestamp: SQLTimestamp): String = {
+      cal.setTimeInMillis(Math.floorDiv(timestamp, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
+      cal.setMicros(Math.floorMod(timestamp, MICROS_PER_SECOND))
+      fastDateFormat.format(cal)
+    }
   }
 }

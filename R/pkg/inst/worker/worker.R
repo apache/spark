@@ -181,7 +181,7 @@ if (isEmpty != 0) {
                     colNames, computeFunc, data)
        } else {
         # gapply mode
-        for (i in 1:length(data)) {
+        for (i in seq_len(length(data))) {
           # Timing reading input data for execution
           inputElap <- elapsedSecs()
           output <- compute(mode, partition, serializer, deserializer, keys[[i]],

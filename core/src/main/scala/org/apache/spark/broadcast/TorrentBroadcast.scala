@@ -123,22 +123,30 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     if (!blockManager.putSingle(broadcastId, value, MEMORY_AND_DISK, tellMaster = false)) {
       throw new SparkException(s"Failed to store $broadcastId in BlockManager")
     }
-    val blocks =
-      TorrentBroadcast.blockifyObject(value, blockSize, SparkEnv.get.serializer, compressionCodec)
-    if (checksumEnabled) {
-      checksums = new Array[Int](blocks.length)
-    }
-    blocks.zipWithIndex.foreach { case (block, i) =>
+    try {
+      val blocks =
+        TorrentBroadcast.blockifyObject(value, blockSize, SparkEnv.get.serializer, compressionCodec)
       if (checksumEnabled) {
-        checksums(i) = calcChecksum(block)
+        checksums = new Array[Int](blocks.length)
       }
-      val pieceId = BroadcastBlockId(id, "piece" + i)
-      val bytes = new ChunkedByteBuffer(block.duplicate())
-      if (!blockManager.putBytes(pieceId, bytes, MEMORY_AND_DISK_SER, tellMaster = true)) {
-        throw new SparkException(s"Failed to store $pieceId of $broadcastId in local BlockManager")
+      blocks.zipWithIndex.foreach { case (block, i) =>
+        if (checksumEnabled) {
+          checksums(i) = calcChecksum(block)
+        }
+        val pieceId = BroadcastBlockId(id, "piece" + i)
+        val bytes = new ChunkedByteBuffer(block.duplicate())
+        if (!blockManager.putBytes(pieceId, bytes, MEMORY_AND_DISK_SER, tellMaster = true)) {
+          throw new SparkException(s"Failed to store $pieceId of $broadcastId " +
+            s"in local BlockManager")
+        }
       }
+      blocks.length
+    } catch {
+      case t: Throwable =>
+        logError(s"Store broadcast $broadcastId fail, remove all pieces of the broadcast")
+        blockManager.removeBroadcast(id, tellMaster = true)
+        throw t
     }
-    blocks.length
   }
 
   /** Fetch torrent blocks from the driver and/or other executors. */

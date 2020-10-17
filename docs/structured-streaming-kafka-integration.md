@@ -378,7 +378,7 @@ The following configurations are optional:
   <td>minPartitions</td>
   <td>int</td>
   <td>none</td>
-  <td>streaming and batch</td>
+  <td>streaming</td>
   <td>Desired minimum number of partitions to read from Kafka.
   By default, Spark has a 1-1 mapping of topicPartitions to Spark partitions consuming from Kafka.
   If you set this option to a value greater than your topicPartitions, Spark will divvy up large

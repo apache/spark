@@ -357,6 +357,25 @@ class ClientSuite extends SparkFunSuite with Matchers {
     sparkConf.get(SECONDARY_JARS) should be (Some(Seq(new File(jar2.toURI).getName)))
   }
 
+  test("SPARK-31582 Being able to not populate Hadoop classpath") {
+    Seq(true, false).foreach { populateHadoopClassPath =>
+      withAppConf(Fixtures.mapAppConf) { conf =>
+        val sparkConf = new SparkConf()
+          .set(POPULATE_HADOOP_CLASSPATH, populateHadoopClassPath)
+        val env = new MutableHashMap[String, String]()
+        val args = new ClientArguments(Array("--jar", USER))
+        populateClasspath(args, conf, sparkConf, env)
+        if (populateHadoopClassPath) {
+          classpath(env) should
+            (contain (Fixtures.knownYARNAppCP) and contain (Fixtures.knownMRAppCP))
+        } else {
+          classpath(env) should
+            (not contain (Fixtures.knownYARNAppCP) and not contain (Fixtures.knownMRAppCP))
+        }
+      }
+    }
+  }
+
   private val matching = Seq(
     ("files URI match test1", "file:///file1", "file:///file2"),
     ("files URI match test2", "file:///c:file1", "file://c:file2"),

@@ -163,10 +163,12 @@ class BlockManagerMaster(
    * amount of remaining memory.
    */
   def getMemoryStatus: Map[BlockManagerId, (Long, Long)] = {
+    if (driverEndpoint == null) return Map.empty
     driverEndpoint.askSync[Map[BlockManagerId, (Long, Long)]](GetMemoryStatus)
   }
 
   def getStorageStatus: Array[StorageStatus] = {
+    if (driverEndpoint == null) return Array.empty
     driverEndpoint.askSync[Array[StorageStatus]](GetStorageStatus)
   }
 

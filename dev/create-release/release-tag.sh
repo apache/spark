@@ -24,7 +24,7 @@ function exit_with_usage {
   local NAME=$(basename $0)
   cat << EOF
 usage: $NAME
-Tags a Spark release on a particular branch.
+Tags a Spark release on a particular branch. Must push after
 
 Inputs are specified with the following environment variables:
 ASF_USERNAME - Apache Username
@@ -64,8 +64,12 @@ init_maven_sbt
 
 ASF_SPARK_REPO="gitbox.apache.org/repos/asf/spark.git"
 
+function uriencode { jq -nSRr --arg v "$1" '$v|@uri'; }
+
+declare -r ENCODED_ASF_PASSWORD=$(uriencode "$ASF_PASSWORD")
+
 rm -rf spark
-git clone "https://$ASF_USERNAME:$ASF_PASSWORD@$ASF_SPARK_REPO" -b $GIT_BRANCH
+git clone "https://$ASF_USERNAME:$ENCODED_ASF_PASSWORD@$ASF_SPARK_REPO" -b $GIT_BRANCH
 cd spark
 
 git config user.name "$GIT_NAME"
@@ -101,14 +105,7 @@ sed -i".tmp7" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$R_NEXT_VERSION"
 
 git commit -a -m "Preparing development version $NEXT_VERSION"
 
-if ! is_dry_run; then
-  # Push changes
-  git push origin $RELEASE_TAG
-  git push origin HEAD:$GIT_BRANCH
-
-  cd ..
-  rm -rf spark
-else
+if is_dry_run; then
   cd ..
   mv spark spark.tag
   echo "Clone with version changes and tag available as spark.tag in the output directory."

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
@@ -280,7 +281,9 @@ case class SampleExec(
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  override def needCopyResult: Boolean = withReplacement
+  override def needCopyResult: Boolean = {
+    child.asInstanceOf[CodegenSupport].needCopyResult || withReplacement
+  }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
@@ -656,7 +659,9 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
   private lazy val relationFuture: Future[Array[InternalRow]] = {
     // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    Future {
+    SQLExecution.withThreadLocalCaptured[Array[InternalRow]](
+      sqlContext.sparkSession,
+      SubqueryExec.executionContext) {
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
       SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
@@ -671,7 +676,7 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
         SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
         rows
       }
-    }(SubqueryExec.executionContext)
+    }
   }
 
   protected override def doPrepare(): Unit = {
@@ -689,5 +694,6 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
 
 object SubqueryExec {
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
+    ThreadUtils.newDaemonCachedThreadPool("subquery",
+      SQLConf.get.getConf(StaticSQLConf.SUBQUERY_MAX_THREAD_THRESHOLD)))
 }

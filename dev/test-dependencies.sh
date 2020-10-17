@@ -56,7 +56,7 @@ OLD_VERSION=$($MVN -q \
     -Dexec.executable="echo" \
     -Dexec.args='${project.version}' \
     --non-recursive \
-    org.codehaus.mojo:exec-maven-plugin:1.6.0:exec)
+    org.codehaus.mojo:exec-maven-plugin:1.6.0:exec | grep -E '[0-9]+\.[0-9]+\.[0-9]+')
 if [ $? != 0 ]; then
     echo -e "Error while getting version string from Maven:\n$OLD_VERSION"
     exit 1
@@ -87,8 +87,24 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
   mkdir -p dev/pr-deps
   $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE dependency:build-classpath -pl assembly \
     | grep "Dependencies classpath:" -A 1 \
-    | tail -n 1 | tr ":" "\n" | rev | cut -d "/" -f 1 | rev | sort \
-    | grep -v spark > dev/pr-deps/spark-deps-$HADOOP_PROFILE
+    | tail -n 1 | tr ":" "\n" | awk -F '/' '{
+      # For each dependency classpath, we fetch the last three parts split by "/": artifact id, version, and jar name.
+      # Since classifier, if exists, always sits between "artifact_id-version-" and ".jar" suffix in the jar name,
+      # we extract classifier and put it right before the jar name explicitly.
+      # For example, `orc-core/1.5.5/nohive/orc-core-1.5.5-nohive.jar`
+      #                              ^^^^^^
+      #                              extracted classifier
+      #               `okio/1.15.0//okio-1.15.0.jar`
+      #                           ^
+      #                           empty for dependencies without classifier
+      artifact_id=$(NF-2);
+      version=$(NF-1);
+      jar_name=$NF;
+      classifier_start_index=length(artifact_id"-"version"-") + 1;
+      classifier_end_index=index(jar_name, ".jar") - 1;
+      classifier=substr(jar_name, classifier_start_index, classifier_end_index - classifier_start_index + 1);
+      print artifact_id"/"version"/"classifier"/"jar_name
+    }' | sort | grep -v spark > dev/pr-deps/spark-deps-$HADOOP_PROFILE
 done
 
 if [[ $@ == **replace-manifest** ]]; then

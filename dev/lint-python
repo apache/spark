@@ -30,7 +30,7 @@ SPHINX_REPORT_PATH="$SPARK_ROOT_DIR/dev/sphinx-report.txt"
 cd "$SPARK_ROOT_DIR"
 
 # compileall: https://docs.python.org/2/library/compileall.html
-python -B -m compileall -q -l $PATHS_TO_CHECK > "$PYCODESTYLE_REPORT_PATH"
+python -B -m compileall -q -l -x "[/\\\\][.]git" $PATHS_TO_CHECK > "$PYCODESTYLE_REPORT_PATH"
 compile_status="${PIPESTATUS[0]}"
 
 # Get pycodestyle at runtime so that we don't rely on it being installed on the build server.

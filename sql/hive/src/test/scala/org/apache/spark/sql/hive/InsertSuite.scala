@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import com.google.common.io.Files
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
@@ -782,6 +783,29 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
             }
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-30201 HiveOutputWriter standardOI should use ObjectInspectorCopyOption.DEFAULT") {
+    withTable("t1", "t2") {
+      withTempDir { dir =>
+        val file = new File(dir, "test.hex")
+        val hex = "AABBCC"
+        val bs = org.apache.commons.codec.binary.Hex.decodeHex(hex.toCharArray)
+        Files.write(bs, file)
+        val path = file.getParent
+        sql(s"create table t1 (c string) STORED AS TEXTFILE location '$path'")
+        checkAnswer(
+          sql("select hex(c) from t1"),
+          Row(hex)
+        )
+
+        sql("create table t2 as select c from t1")
+        checkAnswer(
+          sql("select hex(c) from t2"),
+          Row(hex)
+        )
       }
     }
   }

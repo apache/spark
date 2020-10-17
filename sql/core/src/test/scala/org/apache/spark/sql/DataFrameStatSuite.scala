@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, StringType, StructField, StructType}
 
 class DataFrameStatSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -364,6 +364,30 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     intercept[IllegalArgumentException] {
       ds.stat.freqItems(Seq("value"), 2)
     }
+  }
+
+  test("SPARK-28818: Respect original column nullability in `freqItems`") {
+    val rows = spark.sparkContext.parallelize(
+      Seq(Row("1", "a"), Row("2", null), Row("3", "b"))
+    )
+    val schema = StructType(Seq(
+      StructField("non_null", StringType, false),
+      StructField("nullable", StringType, true)
+    ))
+    val df = spark.createDataFrame(rows, schema)
+
+    val result = df.stat.freqItems(df.columns)
+
+    val nonNullableDataType = result.schema("non_null_freqItems").dataType.asInstanceOf[ArrayType]
+    val nullableDataType = result.schema("nullable_freqItems").dataType.asInstanceOf[ArrayType]
+
+    assert(nonNullableDataType.containsNull == false)
+    assert(nullableDataType.containsNull == true)
+    // Original bug was a NullPointerException exception caused by calling collect(), test for this
+    val resultRow = result.collect()(0)
+
+    assert(resultRow.get(0).asInstanceOf[Seq[String]].toSet == Set("1", "2", "3"))
+    assert(resultRow.get(1).asInstanceOf[Seq[String]].toSet == Set("a", "b", null))
   }
 
   test("sampleBy") {

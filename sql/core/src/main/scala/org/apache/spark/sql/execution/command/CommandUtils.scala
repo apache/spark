@@ -48,11 +48,13 @@ object CommandUtils extends Logging {
 
   def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable): BigInt = {
     val sessionState = spark.sessionState
-    if (catalogTable.partitionColumnNames.isEmpty) {
+    val startTime = System.nanoTime()
+    val totalSize = if (catalogTable.partitionColumnNames.isEmpty) {
       calculateLocationSize(sessionState, catalogTable.identifier, catalogTable.storage.locationUri)
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
+      logInfo(s"Starting to calculate sizes for ${partitions.length} partitions.")
       if (spark.sessionState.conf.parallelFileListingInStatsComputation) {
         val paths = partitions.map(x => new Path(x.storage.locationUri.get))
         val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
@@ -68,6 +70,9 @@ object CommandUtils extends Logging {
         }.sum
       }
     }
+    logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to calculate" +
+      s" the total size for table ${catalogTable.identifier}.")
+    totalSize
   }
 
   def calculateLocationSize(
@@ -103,7 +108,6 @@ object CommandUtils extends Logging {
     }
 
     val startTime = System.nanoTime()
-    logInfo(s"Starting to calculate the total file size under path $locationUri.")
     val size = locationUri.map { p =>
       val path = new Path(p)
       try {
@@ -118,7 +122,7 @@ object CommandUtils extends Logging {
       }
     }.getOrElse(0L)
     val durationInMs = (System.nanoTime() - startTime) / (1000 * 1000)
-    logInfo(s"It took $durationInMs ms to calculate the total file size under path $locationUri.")
+    logDebug(s"It took $durationInMs ms to calculate the total file size under path $locationUri.")
 
     size
   }
@@ -151,5 +155,13 @@ object CommandUtils extends Logging {
 
   private def isDataPath(path: Path, stagingDir: String): Boolean = {
     !path.getName.startsWith(stagingDir) && DataSourceUtils.isDataPath(path)
+  }
+
+  def uncacheTableOrView(sparkSession: SparkSession, name: String): Unit = {
+    try {
+      sparkSession.catalog.uncacheTable(name)
+    } catch {
+      case NonFatal(e) => logWarning("Exception when attempting to uncache $name", e)
+    }
   }
 }

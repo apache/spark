@@ -27,12 +27,13 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.linalg.SQLDataTypes.VectorType
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.{FakeFileSystemRequiringDSOption, Row, SaveMode}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 
-class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
+class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext with SQLHelper {
   // Path for dataset
   var path: String = _
 
@@ -182,6 +183,33 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(e.getMessage.contains("No input path specified for libsvm data"))
     } finally {
       spark.sql("DROP TABLE IF EXISTS libsvmTable")
+    }
+  }
+
+  test("SPARK-32815: Test LibSVM data source on file paths with glob metacharacters") {
+    val basePath = Utils.createDirectory(tempDir.getCanonicalPath, "globbing")
+    // test libsvm writer / reader without specifying schema
+    val svmFileName = "[abc]"
+    val escapedSvmFileName = "\\[abc\\]"
+    val rawData = new java.util.ArrayList[Row]()
+    rawData.add(Row(1.0, Vectors.sparse(2, Seq((0, 2.0), (1, 3.0)))))
+    val struct = new StructType()
+      .add("labelFoo", DoubleType, false)
+      .add("featuresBar", VectorType, false)
+    val df = spark.createDataFrame(rawData, struct)
+    df.write.format("libsvm").save(s"$basePath/$svmFileName")
+    val df2 = spark.read.format("libsvm").load(s"$basePath/$escapedSvmFileName")
+    val row1 = df2.first()
+    val v = row1.getAs[SparseVector](1)
+    assert(v == Vectors.sparse(2, Seq((0, 2.0), (1, 3.0))))
+  }
+
+  test("SPARK-33101: should propagate Hadoop config from DS options to underlying file system") {
+    withSQLConf(
+      "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
+      "fs.file.impl.disable.cache" -> "true") {
+      val df = spark.read.option("ds_option", "value").format("libsvm").load(path)
+      assert(df.columns(0) == "label")
     }
   }
 }

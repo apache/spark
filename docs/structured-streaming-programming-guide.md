@@ -957,8 +957,8 @@ Dataset<Row> words = ... // streaming DataFrame of schema { timestamp: Timestamp
 Dataset<Row> windowedCounts = words
     .withWatermark("timestamp", "10 minutes")
     .groupBy(
-        functions.window(words.col("timestamp"), "10 minutes", "5 minutes"),
-        words.col("word"))
+        window(col("timestamp"), "10 minutes", "5 minutes"),
+        col("word"))
     .count();
 {% endhighlight %}
 
@@ -2059,7 +2059,7 @@ streamingDF.writeStream.foreachBatch { (batchDF: DataFrame, batchId: Long) =>
 
 {% highlight java %}
 streamingDatasetOfString.writeStream().foreachBatch(
-  new VoidFunction2<Dataset<String>, Long> {
+  new VoidFunction2<Dataset<String>, Long>() {
     public void call(Dataset<String> dataset, Long batchId) {
       // Transform and write batchDF
     }    
@@ -2156,7 +2156,7 @@ streamingDatasetOfString.writeStream.foreach(
 In Java, you have to extend the class `ForeachWriter` ([docs](api/java/org/apache/spark/sql/ForeachWriter.html)).
 {% highlight java %}
 streamingDatasetOfString.writeStream().foreach(
-  new ForeachWriter[String] {
+  new ForeachWriter<String>() {
 
     @Override public boolean open(long partitionId, long version) {
       // Open connection

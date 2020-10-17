@@ -17,18 +17,19 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.orc.{OrcFile, Reader, TypeDescription}
+import org.apache.orc.{OrcFile, Reader, TypeDescription, Writer}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types._
@@ -76,10 +77,10 @@ object OrcUtils extends Logging {
     }
   }
 
-  def readSchema(sparkSession: SparkSession, files: Seq[FileStatus])
+  def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
       : Option[StructType] = {
     val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
-    val conf = sparkSession.sessionState.newHadoopConf()
+    val conf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     // TODO: We need to support merge schema. Please see SPARK-11412.
     files.toIterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
       case Some(schema) =>
@@ -143,5 +144,12 @@ object OrcUtils extends Logging {
         }
       }
     }
+  }
+
+  /**
+   * Add a metadata specifying Spark version.
+   */
+  def addSparkVersionMetadata(writer: Writer): Unit = {
+    writer.addUserMetadata(SPARK_VERSION_METADATA_KEY, UTF_8.encode(SPARK_VERSION_SHORT))
   }
 }

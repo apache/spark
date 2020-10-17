@@ -19,6 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 import java.util.concurrent.TimeoutException
+import java.util.function.Supplier
 
 import org.apache.kafka.clients.consumer.{ConsumerRecord, OffsetOutOfRangeException}
 import org.apache.kafka.common.TopicPartition
@@ -70,15 +71,17 @@ class KafkaContinuousReader(
 
   private var offset: Offset = _
   override def setStartOffset(start: ju.Optional[Offset]): Unit = {
-    offset = start.orElse {
-      val offsets = initialOffsets match {
-        case EarliestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchEarliestOffsets())
-        case LatestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchLatestOffsets(None))
-        case SpecificOffsetRangeLimit(p) => offsetReader.fetchSpecificOffsets(p, reportDataLoss)
+    offset = start.orElseGet(new Supplier[Offset] {
+      override def get(): Offset = {
+        val offsets = initialOffsets match {
+          case EarliestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchEarliestOffsets())
+          case LatestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchLatestOffsets(None))
+          case SpecificOffsetRangeLimit(p) => offsetReader.fetchSpecificOffsets(p, reportDataLoss)
+        }
+        logInfo(s"Initial offsets: $offsets")
+        offsets
       }
-      logInfo(s"Initial offsets: $offsets")
-      offsets
-    }
+    })
   }
 
   override def getStartOffset(): Offset = offset

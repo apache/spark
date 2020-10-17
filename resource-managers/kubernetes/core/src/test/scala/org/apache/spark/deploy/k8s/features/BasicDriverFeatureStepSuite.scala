@@ -128,7 +128,6 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val expectedSparkConf = Map(
       KUBERNETES_DRIVER_POD_NAME.key -> "spark-driver-pod",
       "spark.app.id" -> APP_ID,
-      KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> RESOURCE_NAME_PREFIX,
       "spark.kubernetes.submitInDriver" -> "true")
     assert(featureStep.getAdditionalPodSystemProperties() === expectedSparkConf)
   }
@@ -205,7 +204,6 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val expectedSparkConf = Map(
       KUBERNETES_DRIVER_POD_NAME.key -> "spark-driver-pod",
       "spark.app.id" -> APP_ID,
-      KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> RESOURCE_NAME_PREFIX,
       "spark.kubernetes.submitInDriver" -> "true",
       "spark.jars" -> "/opt/spark/jar1.jar,hdfs:///opt/spark/jar2.jar",
       "spark.files" -> "https://localhost:9000/file1.txt,/opt/spark/file2.txt")

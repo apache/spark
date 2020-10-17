@@ -472,11 +472,6 @@ case class JsonTuple(children: Seq[Expression])
     parser.getCurrentToken match {
       // if the user requests a string field it needs to be returned without enclosing
       // quotes which is accomplished via JsonGenerator.writeRaw instead of JsonGenerator.write
-      case JsonToken.VALUE_STRING if parser.hasTextCharacters =>
-        // slight optimization to avoid allocating a String instance, though the characters
-        // still have to be decoded... Jackson doesn't have a way to access the raw bytes
-        generator.writeRaw(parser.getTextCharacters, parser.getTextOffset, parser.getTextLength)
-
       case JsonToken.VALUE_STRING =>
         // the normal String case, pass it through to the output without enclosing quotes
         generator.writeRaw(parser.getText)

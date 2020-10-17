@@ -575,7 +575,7 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
     test6()()()
   }
 
-  test("verify nested non-LMF closures") {
+  test("verify nested LMF closures") {
     assume(ClosureCleanerSuite2.supportsLMFs)
     class A1(val f: Int => Int)
     class A2(val f: Int => Int => Int)
@@ -594,6 +594,6 @@ object ClosureCleanerSuite2 {
   // Scala 2.12 allows better interop with Java 8 via lambda syntax. This is supported
   // by implementing FunctionN classes in Scala’s standard library as Single Abstract
   // Method (SAM) types. Lambdas are implemented via the invokedynamic instruction and
-  // the use of the LambdaMwtaFactory (LMF) machanism.
+  // the use of the LambdaMetaFactory (LMF) machanism; aka "indylambda".
   val supportsLMFs = scala.util.Properties.versionString.contains("2.12")
 }

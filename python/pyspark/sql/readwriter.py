@@ -60,7 +60,7 @@ class OptionUtils(object):
 class DataFrameReader(OptionUtils):
     """
     Interface used to load a :class:`DataFrame` from external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`spark.read`
+    (e.g. file systems, key-value stores, etc). Use :attr:`SparkSession.read`
     to access this.
 
     .. versionadded:: 1.4
@@ -374,6 +374,9 @@ class DataFrameReader(OptionUtils):
                         character. By default (None), it is disabled.
         :param header: uses the first line as names of columns. If None is set, it uses the
                        default value, ``false``.
+                       .. note:: if the given path is a RDD of Strings, this header
+                       option will remove all lines same with the header if exists.
+
         :param inferSchema: infers the input schema automatically from data. It requires one extra
                        pass over the data. If None is set, it uses the default value, ``false``.
         :param enforceSchema: If it is set to ``true``, the specified or inferred schema will be
@@ -564,7 +567,7 @@ class DataFrameReader(OptionUtils):
 class DataFrameWriter(OptionUtils):
     """
     Interface used to write a :class:`DataFrame` to external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`DataFrame.write`
+    (e.g. file systems, key-value stores, etc). Use :attr:`DataFrame.write`
     to access this.
 
     .. versionadded:: 1.4
@@ -726,7 +729,7 @@ class DataFrameWriter(OptionUtils):
         :param partitionBy: names of partitioning columns
         :param options: all other string options
 
-        >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
+        >>> df.write.mode("append").save(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode).options(**options)
         if partitionBy is not None:

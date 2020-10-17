@@ -467,7 +467,8 @@ class SparkSession private(
   @Experimental
   @InterfaceStability.Evolving
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
-    val enc = encoderFor[T]
+    // `ExpressionEncoder` is not thread-safe, here we create a new encoder.
+    val enc = encoderFor[T].copy()
     val attributes = enc.schema.toAttributes
     val encoded = data.map(d => enc.toRow(d).copy())
     val plan = new LocalRelation(attributes, encoded)
@@ -893,7 +894,7 @@ object SparkSession extends Logging {
      * SparkSession exists, the method creates a new SparkSession and assigns the
      * newly created SparkSession as the global default.
      *
-     * In case an existing SparkSession is returned, the config options specified in
+     * In case an existing SparkSession is returned, the non-static config options specified in
      * this builder will be applied to the existing SparkSession.
      *
      * @since 2.0.0
@@ -903,10 +904,7 @@ object SparkSession extends Logging {
       // Get the session from current thread's active session.
       var session = activeThreadSession.get()
       if ((session ne null) && !session.sparkContext.isStopped) {
-        options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
-        if (options.nonEmpty) {
-          logWarning("Using an existing SparkSession; some configuration may not take effect.")
-        }
+        applyModifiableSettings(session)
         return session
       }
 
@@ -915,10 +913,7 @@ object SparkSession extends Logging {
         // If the current thread does not have an active session, get it from the global session.
         session = defaultSession.get()
         if ((session ne null) && !session.sparkContext.isStopped) {
-          options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
-          if (options.nonEmpty) {
-            logWarning("Using an existing SparkSession; some configuration may not take effect.")
-          }
+          applyModifiableSettings(session)
           return session
         }
 
@@ -970,6 +965,22 @@ object SparkSession extends Logging {
       }
 
       return session
+    }
+
+    private def applyModifiableSettings(session: SparkSession): Unit = {
+      val (staticConfs, otherConfs) =
+        options.partition(kv => SQLConf.staticConfKeys.contains(kv._1))
+
+      otherConfs.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
+
+      if (staticConfs.nonEmpty) {
+        logWarning("Using an existing SparkSession; the static sql configurations will not take" +
+          " effect.")
+      }
+      if (otherConfs.nonEmpty) {
+        logWarning("Using an existing SparkSession; some spark core configurations may not take" +
+          " effect.")
+      }
     }
   }
 

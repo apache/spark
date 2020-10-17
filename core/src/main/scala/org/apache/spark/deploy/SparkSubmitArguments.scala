@@ -138,10 +138,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
    * Remove keys that don't start with "spark." from `sparkProperties`.
    */
   private def ignoreNonSparkProperties(): Unit = {
-    sparkProperties.foreach { case (k, v) =>
+    sparkProperties.keys.foreach { k =>
       if (!k.startsWith("spark.")) {
         sparkProperties -= k
-        logWarning(s"Ignoring non-spark config property: $k=$v")
+        logWarning(s"Ignoring non-Spark config property: $k")
       }
     }
   }
@@ -541,7 +541,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |                              directory of each executor. File paths of these files
         |                              in executors can be accessed via SparkFiles.get(fileName).
         |
-        |  --conf PROP=VALUE           Arbitrary Spark configuration property.
+        |  --conf, -c PROP=VALUE       Arbitrary Spark configuration property.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
         |                              specified, this will look for conf/spark-defaults.conf.
         |

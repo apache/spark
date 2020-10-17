@@ -21,6 +21,7 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
@@ -112,36 +113,58 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("Numeric types") {
-    val df = spark.read.jdbc(jdbcUrl, "numbers", new Properties)
-    val rows = df.collect()
-    assert(rows.length == 1)
-    val row = rows(0)
-    val types = row.toSeq.map(x => x.getClass.toString)
-    assert(types.length == 12)
-    assert(types(0).equals("class java.lang.Boolean"))
-    assert(types(1).equals("class java.lang.Integer"))
-    assert(types(2).equals("class java.lang.Short"))
-    assert(types(3).equals("class java.lang.Integer"))
-    assert(types(4).equals("class java.lang.Long"))
-    assert(types(5).equals("class java.lang.Double"))
-    assert(types(6).equals("class java.lang.Float"))
-    assert(types(7).equals("class java.lang.Float"))
-    assert(types(8).equals("class java.math.BigDecimal"))
-    assert(types(9).equals("class java.math.BigDecimal"))
-    assert(types(10).equals("class java.math.BigDecimal"))
-    assert(types(11).equals("class java.math.BigDecimal"))
-    assert(row.getBoolean(0) == false)
-    assert(row.getInt(1) == 255)
-    assert(row.getShort(2) == 32767)
-    assert(row.getInt(3) == 2147483647)
-    assert(row.getLong(4) == 9223372036854775807L)
-    assert(row.getDouble(5) == 1.2345678901234512E14) // float = float(53) has 15-digits precision
-    assert(row.getFloat(6) == 1.23456788103168E14)   // float(24) has 7-digits precision
-    assert(row.getFloat(7) == 1.23456788103168E14)   // real = float(24)
-    assert(row.getAs[BigDecimal](8).equals(new BigDecimal("123.00")))
-    assert(row.getAs[BigDecimal](9).equals(new BigDecimal("12345.12000")))
-    assert(row.getAs[BigDecimal](10).equals(new BigDecimal("922337203685477.5800")))
-    assert(row.getAs[BigDecimal](11).equals(new BigDecimal("214748.3647")))
+    Seq(true, false).foreach { flag =>
+      withSQLConf(SQLConf.LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED.key -> s"$flag") {
+        val df = spark.read.jdbc(jdbcUrl, "numbers", new Properties)
+        val rows = df.collect()
+        assert(rows.length == 1)
+        val row = rows(0)
+        val types = row.toSeq.map(x => x.getClass.toString)
+        assert(types.length == 12)
+        assert(types(0).equals("class java.lang.Boolean"))
+        assert(types(1).equals("class java.lang.Integer"))
+        if (flag) {
+          assert(types(2).equals("class java.lang.Integer"))
+        } else {
+          assert(types(2).equals("class java.lang.Short"))
+        }
+        assert(types(3).equals("class java.lang.Integer"))
+        assert(types(4).equals("class java.lang.Long"))
+        assert(types(5).equals("class java.lang.Double"))
+        if (flag) {
+          assert(types(6).equals("class java.lang.Double"))
+          assert(types(7).equals("class java.lang.Double"))
+        } else {
+          assert(types(6).equals("class java.lang.Float"))
+          assert(types(7).equals("class java.lang.Float"))
+        }
+        assert(types(8).equals("class java.math.BigDecimal"))
+        assert(types(9).equals("class java.math.BigDecimal"))
+        assert(types(10).equals("class java.math.BigDecimal"))
+        assert(types(11).equals("class java.math.BigDecimal"))
+        assert(row.getBoolean(0) == false)
+        assert(row.getInt(1) == 255)
+        if (flag) {
+          assert(row.getInt(2) == 32767)
+        } else {
+          assert(row.getShort(2) == 32767)
+        }
+        assert(row.getInt(3) == 2147483647)
+        assert(row.getLong(4) == 9223372036854775807L)
+        assert(row.getDouble(5) == 1.2345678901234512E14) // float(53) has 15-digits precision
+        if (flag) {
+          assert(row.getDouble(6) == 1.23456788103168E14) // float(24) has 7-digits precision
+          assert(row.getDouble(7) == 1.23456788103168E14) // real = float(24)
+        } else {
+          assert(row.getFloat(6) == 1.23456788103168E14)  // float(24) has 7-digits precision
+          assert(row.getFloat(7) == 1.23456788103168E14)  // real = float(24)
+        }
+        assert(row.getAs[BigDecimal](8).equals(new BigDecimal("123.00")))
+        assert(row.getAs[BigDecimal](9).equals(new BigDecimal("12345.12000")))
+        assert(row.getAs[BigDecimal](10).equals(new BigDecimal("922337203685477.5800")))
+        assert(row.getAs[BigDecimal](11).equals(new BigDecimal("214748.3647")))
+      }
+    }
   }
 
   test("Date types") {

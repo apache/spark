@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.util.Utils
 
@@ -59,7 +59,9 @@ trait QueryExecutionListener {
    * @param funcName the name of the action that triggered this query.
    * @param qe the QueryExecution object that carries detail information like logical plan,
    *           physical plan, etc.
-   * @param exception the exception that failed this query.
+   * @param exception the exception that failed this query. If `java.lang.Error` is thrown during
+   *                  execution, it will be wrapped with an `Exception` and it can be accessed by
+   *                  `exception.getCause`.
    *
    * @note This can be invoked by multiple different threads.
    */
@@ -129,7 +131,14 @@ class ExecutionListenerManager private extends Logging {
     }
   }
 
-  private[sql] def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+  private[sql] def onFailure(funcName: String, qe: QueryExecution, t: Throwable): Unit = {
+    val exception = t match {
+      case e: Exception => e
+      case other: Throwable =>
+        val message = "Hit an error when executing a query" +
+          (if (other.getMessage == null) "" else s": ${other.getMessage}")
+        new QueryExecutionException(message, other)
+    }
     readLock {
       withErrorHandling { listener =>
         listener.onFailure(funcName, qe, exception)

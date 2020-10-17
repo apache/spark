@@ -103,6 +103,20 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSQLContext {
     "select partcol2, min(partcol1) from srcpart where partcol1 = 0 group by partcol2",
     "select max(c1) from (select partcol1 + 1 as c1 from srcpart where partcol1 = 0) t")
 
+  testMetadataOnly(
+    "SPARK-31590 Metadata-only queries should not include subquery in partition filters",
+    """
+      |SELECT partcol1, MAX(partcol2) AS partcol2
+      |FROM srcpart
+      |WHERE partcol1 = (
+      |  SELECT MAX(partcol1)
+      |  FROM srcpart
+      |)
+      |AND partcol2 = 'even'
+      |GROUP BY partcol1
+      |""".stripMargin
+  )
+
   testNotMetadataOnly(
     "Don't optimize metadata only query for non-partition columns",
     "select col1 from srcpart group by col1",

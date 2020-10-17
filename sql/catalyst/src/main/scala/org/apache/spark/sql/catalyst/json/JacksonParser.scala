@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimestampParser
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -52,6 +53,8 @@ class JacksonParser(
 
   private val factory = new JsonFactory()
   options.setJacksonOptions(factory)
+
+  @transient private lazy val timestampParser = new TimestampParser(options.timestampFormat)
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
@@ -213,15 +216,12 @@ class JacksonParser(
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
         case VALUE_STRING =>
           val stringValue = parser.getText
-          // This one will lose microseconds parts.
-          // See https://issues.apache.org/jira/browse/SPARK-10681.
           Long.box {
-            Try(options.timestampFormat.parse(stringValue).getTime * 1000L)
-              .getOrElse {
-                // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
-                // compatibility.
-                DateTimeUtils.stringToTime(stringValue).getTime * 1000L
-              }
+            Try(timestampParser.parse(stringValue)).getOrElse {
+              // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
+              // compatibility.
+              DateTimeUtils.stringToTime(stringValue).getTime * 1000L
+            }
           }
 
         case VALUE_NUMBER_INT =>

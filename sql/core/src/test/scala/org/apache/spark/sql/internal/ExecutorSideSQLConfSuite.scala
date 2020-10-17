@@ -17,8 +17,17 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import java.util.UUID
+
+import org.scalatest.Assertions._
+
+import org.apache.spark.{SparkException, SparkFunSuite, TaskContext}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.debug.codegenStringSeq
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SQLTestUtils
@@ -98,4 +107,87 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-28939: propagate SQLConf also in conversions to RDD") {
+    withSQLConf(SQLConf.USE_CONF_ON_RDD_OPERATION.key -> "true") {
+      val confs = Seq("spark.sql.a" -> "x", "spark.sql.b" -> "y")
+      val physicalPlan = SQLConfAssertPlan(confs)
+      val dummyQueryExecution = FakeQueryExecution(spark, physicalPlan)
+      withSQLConf(confs: _*) {
+        // Force RDD evaluation to trigger asserts
+        dummyQueryExecution.toRdd.collect()
+      }
+      val dummyQueryExecution1 = FakeQueryExecution(spark, physicalPlan)
+      // Without setting the configs assertions fail
+      val e = intercept[SparkException](dummyQueryExecution1.toRdd.collect())
+      assert(e.getCause.isInstanceOf[NoSuchElementException])
+    }
+    withSQLConf(SQLConf.USE_CONF_ON_RDD_OPERATION.key -> "false") {
+      val confs = Seq("spark.sql.a" -> "x", "spark.sql.b" -> "y")
+      val physicalPlan = SQLConfAssertPlan(confs)
+      val dummyQueryExecution = FakeQueryExecution(spark, physicalPlan)
+      withSQLConf(confs: _*) {
+        // Force RDD evaluation to trigger asserts
+        val e = intercept[SparkException](dummyQueryExecution.toRdd.collect())
+        assert(e.getCause.isInstanceOf[NoSuchElementException])
+      }
+    }
+  }
+
+  test("SPARK-30556 propagate local properties to subquery execution thread") {
+    withSQLConf(StaticSQLConf.SUBQUERY_MAX_THREAD_THRESHOLD.key -> "1") {
+      withTempView("l", "m", "n") {
+        Seq(true).toDF().createOrReplaceTempView("l")
+        val confKey = "spark.sql.y"
+
+        def createDataframe(confKey: String, confValue: String): Dataset[Boolean] = {
+          Seq(true)
+            .toDF()
+            .mapPartitions { _ =>
+              TaskContext.get.getLocalProperty(confKey) == confValue match {
+                case true => Iterator(true)
+                case false => Iterator.empty
+              }
+            }
+        }
+
+        // set local configuration and assert
+        val confValue1 = UUID.randomUUID().toString()
+        createDataframe(confKey, confValue1).createOrReplaceTempView("m")
+        spark.sparkContext.setLocalProperty(confKey, confValue1)
+        val result1 = sql("SELECT value, (SELECT MAX(*) FROM m) x FROM l").collect
+        assert(result1.forall(_.getBoolean(1)))
+
+        // change the conf value and assert again
+        val confValue2 = UUID.randomUUID().toString()
+        createDataframe(confKey, confValue2).createOrReplaceTempView("n")
+        spark.sparkContext.setLocalProperty(confKey, confValue2)
+        val result2 = sql("SELECT value, (SELECT MAX(*) FROM n) x FROM l").collect
+        assert(result2.forall(_.getBoolean(1)))
+      }
+    }
+  }
+}
+
+case class SQLConfAssertPlan(confToCheck: Seq[(String, String)]) extends LeafExecNode {
+  override protected def doExecute(): RDD[InternalRow] = {
+    sqlContext
+      .sparkContext
+      .parallelize(0 until 2, 2)
+      .mapPartitions { it =>
+        val confs = SQLConf.get
+        confToCheck.foreach { case (key, expectedValue) =>
+          assert(confs.getConfString(key) == expectedValue)
+        }
+        it.map(i => InternalRow.fromSeq(Seq(i)))
+      }
+  }
+
+  override def output: Seq[Attribute] = Seq.empty
+}
+
+case class FakeQueryExecution(spark: SparkSession, physicalPlan: SparkPlan)
+    extends QueryExecution(spark, LocalRelation()) {
+  override lazy val sparkPlan: SparkPlan = physicalPlan
+  override lazy val executedPlan: SparkPlan = physicalPlan
 }

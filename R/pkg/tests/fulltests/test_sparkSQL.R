@@ -181,7 +181,7 @@ test_that("structField type strings", {
   typeList <- c(primitiveTypes, complexTypes)
   typeStrings <- names(typeList)
 
-  for (i in seq_along(typeStrings)){
+  for (i in seq_along(typeStrings)) {
     typeString <- typeStrings[i]
     expected <- typeList[[i]]
     testField <- structField("_col", typeString)
@@ -212,7 +212,7 @@ test_that("structField type strings", {
   errorList <- c(primitiveErrors, complexErrors)
   typeStrings <- names(errorList)
 
-  for (i in seq_along(typeStrings)){
+  for (i in seq_along(typeStrings)) {
     typeString <- typeStrings[i]
     expected <- paste0("Unsupported type for SparkDataframe: ", errorList[[i]])
     expect_error(structField("_col", typeString), expected)
@@ -875,24 +875,31 @@ test_that("collect() and take() on a DataFrame return the same number of rows an
 })
 
 test_that("collect() support Unicode characters", {
-  lines <- c("{\"name\":\"안녕하세요\"}",
-             "{\"name\":\"您好\", \"age\":30}",
-             "{\"name\":\"こんにちは\", \"age\":19}",
-             "{\"name\":\"Xin chào\"}")
+  jsonPath <- file.path(
+    Sys.getenv("SPARK_HOME"),
+    "R", "pkg", "tests", "fulltests", "data",
+    "test_utils_utf.json"
+  )
 
-  jsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  writeLines(lines, jsonPath)
+  lines <- readLines(jsonPath, encoding = "UTF-8")
+
+  expected <- regmatches(lines, gregexpr('(?<="name": ").*?(?=")', lines, perl = TRUE))
 
   df <- read.df(jsonPath, "json")
   rdf <- collect(df)
   expect_true(is.data.frame(rdf))
-  expect_equal(rdf$name[1], markUtf8("안녕하세요"))
-  expect_equal(rdf$name[2], markUtf8("您好"))
-  expect_equal(rdf$name[3], markUtf8("こんにちは"))
-  expect_equal(rdf$name[4], markUtf8("Xin chào"))
+  expect_equal(rdf$name[1], expected[[1]])
+  expect_equal(rdf$name[2], expected[[2]])
+  expect_equal(rdf$name[3], expected[[3]])
+  expect_equal(rdf$name[4], expected[[4]])
 
   df1 <- createDataFrame(rdf)
-  expect_equal(collect(where(df1, df1$name == markUtf8("您好")))$name, markUtf8("您好"))
+  expect_equal(
+    collect(
+      where(df1, df1$name == expected[[2]])
+    )$name,
+    expected[[2]]
+  )
 })
 
 test_that("multiple pipeline transformations result in an RDD with the correct values", {
@@ -1402,6 +1409,7 @@ test_that("column operators", {
   c5 <- c2 ^ c3 ^ c4
   c6 <- c2 %<=>% c3
   c7 <- !c6
+  expect_true(TRUE)
 })
 
 test_that("column functions", {
@@ -1764,7 +1772,8 @@ test_that("string operators", {
   expect_true(first(select(df, endsWith(df$name, "el")))[[1]])
   expect_equal(first(select(df, substr(df$name, 1, 2)))[[1]], "Mi")
   expect_equal(first(select(df, substr(df$name, 4, 6)))[[1]], "hae")
-  if (as.numeric(R.version$major) >= 3 && as.numeric(R.version$minor) >= 3) {
+  version <- packageVersion("base")
+  if (as.numeric(version$major) >= 3 && as.numeric(version$minor) >= 3) {
     expect_true(startsWith("Hello World", "Hello"))
     expect_false(endsWith("Hello World", "a"))
   }

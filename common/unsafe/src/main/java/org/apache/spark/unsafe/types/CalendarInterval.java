@@ -19,6 +19,7 @@ package org.apache.spark.unsafe.types;
 
 import java.io.Serializable;
 import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -177,11 +178,10 @@ public final class CalendarInterval implements Serializable {
         long minutes = toLongWithRange("minute", m.group(4), 0, 59);
         long seconds = toLongWithRange("second", m.group(5), 0, 59);
         // Hive allow nanosecond precision interval
-        String nanoStr = m.group(7) == null ? null : (m.group(7) + "000000000").substring(0, 9);
-        long nanos = toLongWithRange("nanosecond", nanoStr, 0L, 999999999L);
+        long secondsFraction = parseNanos(m.group(7), seconds < 0);
         result = new CalendarInterval(0, sign * (
           days * MICROS_PER_DAY + hours * MICROS_PER_HOUR + minutes * MICROS_PER_MINUTE +
-          seconds * MICROS_PER_SECOND + nanos / 1000L));
+          seconds * MICROS_PER_SECOND + secondsFraction));
       } catch (Exception e) {
         throw new IllegalArgumentException(
           "Error parsing interval day-time string: " + e.getMessage(), e);
@@ -270,8 +270,8 @@ public final class CalendarInterval implements Serializable {
     } else if (parts.length == 2) {
       long seconds = parts[0].equals("") ? 0L : toLongWithRange("second", parts[0],
         Long.MIN_VALUE / MICROS_PER_SECOND, Long.MAX_VALUE / MICROS_PER_SECOND);
-      long nanos = toLongWithRange("nanosecond", parts[1], 0L, 999999999L);
-      return seconds * MICROS_PER_SECOND + nanos / 1000L;
+      long secondsFraction = parseNanos(parts[1], seconds < 0);
+      return seconds * MICROS_PER_SECOND + secondsFraction;
 
     } else {
       throw new IllegalArgumentException(
@@ -355,6 +355,23 @@ public final class CalendarInterval implements Serializable {
   private void appendUnit(StringBuilder sb, long value, String unit) {
     if (value != 0) {
       sb.append(' ').append(value).append(' ').append(unit).append('s');
+    }
+  }
+
+  // Parses a string with nanoseconds, truncates the result and returns microseconds
+  private static long parseNanos(String nanosStr, boolean isNegative) {
+    if (nanosStr != null) {
+      int maxNanosLen = 9;
+      String alignedStr = nanosStr;
+      if (nanosStr.length() < maxNanosLen) {
+        alignedStr = (nanosStr + "000000000").substring(0, maxNanosLen);
+      }
+      long nanos = toLongWithRange("nanosecond", alignedStr, 0L, 999999999L);
+      long micros = TimeUnit.NANOSECONDS.toMicros(nanos);
+      micros = isNegative ? -micros : micros;
+      return micros;
+    } else {
+      return 0;
     }
   }
 }

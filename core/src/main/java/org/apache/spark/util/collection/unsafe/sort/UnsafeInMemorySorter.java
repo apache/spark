@@ -159,32 +159,26 @@ public final class UnsafeInMemorySorter {
     return (int) (array.size() / (radixSortSupport != null ? 2 : 1.5));
   }
 
+  public long getInitialSize() {
+    return initialSize;
+  }
+
   /**
    * Free the memory used by pointer array.
    */
-  public void free() {
+  public void freeMemory() {
     if (consumer != null) {
       if (array != null) {
         consumer.freeArray(array);
       }
-      array = null;
-    }
-  }
 
-  public void reset() {
-    if (consumer != null) {
-      consumer.freeArray(array);
-      // the call to consumer.allocateArray may trigger a spill which in turn access this instance
-      // and eventually re-enter this method and try to free the array again.  by setting the array
-      // to null and its length to 0 we effectively make the spill code-path a no-op.  setting the
-      // array to null also indicates that it has already been de-allocated which prevents a double
-      // de-allocation in free().
+      // Set the array to null instead of allocating a new array. Allocating an array could have
+      // triggered another spill and this method already is called from UnsafeExternalSorter when
+      // spilling. Attempting to allocate while spilling is dangerous, as we could be holding onto
+      // a large partially complete allocation, which may prevent other memory from being allocated.
+      // Instead we will allocate the new array when it is necessary.
       array = null;
       usableCapacity = 0;
-      pos = 0;
-      nullBoundaryPos = 0;
-      array = consumer.allocateArray(initialSize);
-      usableCapacity = getUsableCapacity();
     }
     pos = 0;
     nullBoundaryPos = 0;
@@ -205,6 +199,10 @@ public final class UnsafeInMemorySorter {
   }
 
   public long getMemoryUsage() {
+    if (array == null) {
+      return 0L;
+    }
+
     return array.size() * 8;
   }
 
@@ -213,16 +211,18 @@ public final class UnsafeInMemorySorter {
   }
 
   public void expandPointerArray(LongArray newArray) {
-    if (newArray.size() < array.size()) {
-      throw new SparkOutOfMemoryError("Not enough memory to grow pointer array");
+    if (array != null) {
+      if (newArray.size() < array.size()) {
+        throw new SparkOutOfMemoryError("Not enough memory to grow pointer array");
+      }
+      Platform.copyMemory(
+        array.getBaseObject(),
+        array.getBaseOffset(),
+        newArray.getBaseObject(),
+        newArray.getBaseOffset(),
+        pos * 8L);
+      consumer.freeArray(array);
     }
-    Platform.copyMemory(
-      array.getBaseObject(),
-      array.getBaseOffset(),
-      newArray.getBaseObject(),
-      newArray.getBaseOffset(),
-      pos * 8L);
-    consumer.freeArray(array);
     array = newArray;
     usableCapacity = getUsableCapacity();
   }
@@ -324,6 +324,7 @@ public final class UnsafeInMemorySorter {
     @Override
     public long getBaseOffset() { return baseOffset; }
 
+    @Override
     public long getCurrentPageNumber() {
       return currentPageNumber;
     }
@@ -340,6 +341,11 @@ public final class UnsafeInMemorySorter {
    * {@code next()} will return the same mutable object.
    */
   public UnsafeSorterIterator getSortedIterator() {
+    if (numRecords() == 0) {
+      // `array` might be null, so make sure that it is not accessed by returning early.
+      return new SortedIterator(0, 0);
+    }
+
     int offset = 0;
     long start = System.nanoTime();
     if (sortComparator != null) {

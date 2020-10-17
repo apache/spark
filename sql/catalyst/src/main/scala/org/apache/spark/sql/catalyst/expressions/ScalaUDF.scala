@@ -21,7 +21,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType, UserDefinedType}
+import org.apache.spark.util.Utils
 
 /**
  * User-defined function.
@@ -1052,7 +1053,7 @@ case class ScalaUDF(
   private[this] val resultConverter = CatalystTypeConverters.createToCatalystConverter(dataType)
 
   lazy val udfErrorMessage = {
-    val funcCls = function.getClass.getSimpleName
+    val funcCls = Utils.getSimpleName(function.getClass)
     val inputTypes = children.map(_.dataType.catalogString).mkString(", ")
     val outputType = dataType.catalogString
     s"Failed to execute user defined function($funcCls: ($inputTypes) => $outputType)"

@@ -131,7 +131,7 @@ hashCode <- function(key) {
     } else {
       asciiVals <- sapply(charToRaw(key), function(x) { strtoi(x, 16L) })
       hashC <- 0
-      for (k in 1:length(asciiVals)) {
+      for (k in seq_len(length(asciiVals))) {
         hashC <- mult31AndAdd(hashC, asciiVals[k])
       }
       as.integer(hashC)
@@ -530,7 +530,10 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
         # Namespaces other than "SparkR" will not be searched.
         if (!isNamespace(func.env) ||
             (getNamespaceName(func.env) == "SparkR" &&
-               !(nodeChar %in% getNamespaceExports("SparkR")))) {
+               !(nodeChar %in% getNamespaceExports("SparkR")) &&
+                  # Note that generic S4 methods should not be set to the environment of
+                  # cleaned closure. It does not work with R 4.0.0+. See also SPARK-31918.
+                  nodeChar != "" && !methods::isGeneric(nodeChar, func.env))) {
           # Only include SparkR internals.
 
           # Set parameter 'inherits' to FALSE since we do not need to search in
@@ -724,7 +727,7 @@ assignNewEnv <- function(data) {
   stopifnot(length(cols) > 0)
 
   env <- new.env()
-  for (i in 1:length(cols)) {
+  for (i in seq_len(length(cols))) {
     assign(x = cols[i], value = data[, cols[i], drop = F], envir = env)
   }
   env
@@ -750,7 +753,7 @@ launchScript <- function(script, combinedArgs, wait = FALSE, stdout = "", stderr
   if (.Platform$OS.type == "windows") {
     scriptWithArgs <- paste(script, combinedArgs, sep = " ")
     # on Windows, intern = F seems to mean output to the console. (documentation on this is missing)
-    shell(scriptWithArgs, translate = TRUE, wait = wait, intern = wait) # nolint
+    shell(scriptWithArgs, translate = TRUE, wait = wait, intern = wait)
   } else {
     # http://stat.ethz.ch/R-manual/R-devel/library/base/html/system2.html
     # stdout = F means discard output

@@ -25,6 +25,7 @@ import org.apache.spark.annotation.{InterfaceStability, Since}
 import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
@@ -311,7 +312,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         case w: StreamWriteSupport if !disabledSources.contains(w.getClass.getCanonicalName) =>
           val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
             w, df.sparkSession.sessionState.conf)
-          options = sessionOptions ++ extraOptions
+          options = sessionOptions ++ extraOptions.toMap
           w
         case _ =>
           val ds = DataSource(
@@ -422,7 +423,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private var trigger: Trigger = Trigger.ProcessingTime(0L)
 
-  private var extraOptions = new scala.collection.mutable.HashMap[String, String]
+  private var extraOptions = CaseInsensitiveMap[String](Map.empty)
 
   private var foreachWriter: ForeachWriter[T] = null
 

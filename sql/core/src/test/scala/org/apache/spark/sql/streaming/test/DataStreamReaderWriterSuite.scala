@@ -43,11 +43,13 @@ object LastOptions {
   var mockStreamSourceProvider = mock(classOf[StreamSourceProvider])
   var mockStreamSinkProvider = mock(classOf[StreamSinkProvider])
   var parameters: Map[String, String] = null
+  var sinkParameters: Map[String, String] = null
   var schema: Option[StructType] = null
   var partitionColumns: Seq[String] = Nil
 
   def clear(): Unit = {
     parameters = null
+    sinkParameters = null
     schema = null
     partitionColumns = null
     reset(mockStreamSourceProvider)
@@ -101,7 +103,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
       parameters: Map[String, String],
       partitionColumns: Seq[String],
       outputMode: OutputMode): Sink = {
-    LastOptions.parameters = parameters
+    LastOptions.sinkParameters = parameters
     LastOptions.partitionColumns = partitionColumns
     LastOptions.mockStreamSinkProvider.createSink(spark, parameters, partitionColumns, outputMode)
     new Sink {
@@ -173,16 +175,48 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
     df.writeStream
       .format("org.apache.spark.sql.streaming.test")
-      .option("opt1", "1")
-      .options(Map("opt2" -> "2"))
+      .option("opt1", "5")
+      .options(Map("opt2" -> "4"))
       .options(map)
       .option("checkpointLocation", newMetadataDir)
       .start()
       .stop()
 
-    assert(LastOptions.parameters("opt1") == "1")
-    assert(LastOptions.parameters("opt2") == "2")
-    assert(LastOptions.parameters("opt3") == "3")
+    assert(LastOptions.sinkParameters("opt1") == "5")
+    assert(LastOptions.sinkParameters("opt2") == "4")
+    assert(LastOptions.sinkParameters("opt3") == "3")
+    assert(LastOptions.sinkParameters.contains("checkpointLocation"))
+  }
+
+  test("SPARK-32832: later option should override earlier options for load()") {
+    spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .option("paTh", "1")
+      .option("PATH", "2")
+      .option("Path", "3")
+      .option("patH", "4")
+      .option("path", "5")
+      .load()
+    assert(LastOptions.parameters("path") == "5")
+  }
+
+  test("SPARK-32832: later option should override earlier options for start()") {
+    val ds = spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .load()
+    assert(LastOptions.parameters.isEmpty)
+
+    ds.writeStream
+      .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", newMetadataDir)
+      .option("paTh", "1")
+      .option("PATH", "2")
+      .option("Path", "3")
+      .option("patH", "4")
+      .option("path", "5")
+      .start()
+      .stop()
+    assert(LastOptions.sinkParameters("path") == "5")
   }
 
   test("partitioning") {

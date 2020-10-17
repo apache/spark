@@ -36,7 +36,9 @@ private[ui] class StagesTab(val parent: SparkUI, val store: AppStatusStore)
   attachPage(new StagePage(this, store))
   attachPage(new PoolPage(this))
 
+  // Show pool information for only live UI.
   def isFairScheduler: Boolean = {
+    sc.isDefined &&
     store
       .environmentInfo()
       .sparkProperties

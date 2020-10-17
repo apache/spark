@@ -17,14 +17,15 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
 import org.apache.spark.sql.types.IntegerType
 
-class LastTestSuite extends SparkFunSuite {
+class FirstLastTestSuite extends SparkFunSuite {
   val input = AttributeReference("input", IntegerType, nullable = true)()
-  val evaluator = DeclarativeAggregateEvaluator(Last(input, Literal(false)), Seq(input))
-  val evaluatorIgnoreNulls = DeclarativeAggregateEvaluator(Last(input, Literal(true)), Seq(input))
+  val evaluator = DeclarativeAggregateEvaluator(Last(input, false), Seq(input))
+  val evaluatorIgnoreNulls = DeclarativeAggregateEvaluator(Last(input, true), Seq(input))
 
   test("empty buffer") {
     assert(evaluator.initialize() === InternalRow(null, false))
@@ -105,5 +106,16 @@ class LastTestSuite extends SparkFunSuite {
     val p2 = evaluatorIgnoreNulls.update(InternalRow(null), InternalRow(null))
     val m1 = evaluatorIgnoreNulls.merge(p1, p2)
     assert(evaluatorIgnoreNulls.eval(m1) === InternalRow(1))
+  }
+
+  test("SPARK-32344: correct error handling for a type mismatch") {
+    val msg1 = intercept[AnalysisException] {
+      new First(input, Literal(1, IntegerType))
+    }.getMessage
+    assert(msg1.contains("The second argument in first should be a boolean literal"))
+    val msg2 = intercept[AnalysisException] {
+      new Last(input, Literal(1, IntegerType))
+    }.getMessage
+    assert(msg2.contains("The second argument in last should be a boolean literal"))
   }
 }

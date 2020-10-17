@@ -21,6 +21,8 @@ import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, TimeZone}
 
+import org.apache.commons.lang3.time.FastDateFormat
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.unsafe.types.UTF8String
@@ -663,6 +665,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c.set(2015, 11, 31, 16, 0, 0)
     assert(millisToDays(c.getTimeInMillis, TimeZonePST) === 16800)
     assert(millisToDays(c.getTimeInMillis, TimeZoneGMT) === 16801)
+    assert(millisToDays(-1 * MILLIS_PER_DAY + 1, TimeZoneGMT) == -1)
 
     c.set(2015, 11, 31, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
@@ -675,12 +678,12 @@ class DateTimeUtilsSuite extends SparkFunSuite {
 
     // There are some days are skipped entirely in some timezone, skip them here.
     val skipped_days = Map[String, Set[Int]](
-      "Kwajalein" -> Set(8632, 8633),
+      "Kwajalein" -> Set(8632, 8633, 8634),
       "Pacific/Apia" -> Set(15338),
       "Pacific/Enderbury" -> Set(9130, 9131),
       "Pacific/Fakaofo" -> Set(15338),
       "Pacific/Kiritimati" -> Set(9130, 9131),
-      "Pacific/Kwajalein" -> Set(8632, 8633),
+      "Pacific/Kwajalein" -> Set(8632, 8633, 8634),
       "MIT" -> Set(15338))
     for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
       val skipped = skipped_days.getOrElse(tz.getID, Set.empty)
@@ -691,5 +694,87 @@ class DateTimeUtilsSuite extends SparkFunSuite {
         }
       }
     }
+  }
+
+  test("parsing timestamp strings up to microsecond precision") {
+    DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
+      def check(pattern: String, input: String, reference: String): Unit = {
+        val parser = new TimestampParser(FastDateFormat.getInstance(pattern, timeZone, Locale.US))
+        val expected = DateTimeUtils.stringToTimestamp(
+          UTF8String.fromString(reference), timeZone).get
+        val actual = parser.parse(input)
+        assert(actual === expected)
+      }
+
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSXXX",
+        "2019-10-14T09:39:07.3220000Z", "2019-10-14T09:39:07.322Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
+        "2019-10-14T09:39:07.322000", "2019-10-14T09:39:07.322")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSX",
+        "2019-10-14T09:39:07.322Z", "2019-10-14T09:39:07.322Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
+        "2019-10-14T09:39:07.123456Z", "2019-10-14T09:39:07.123456Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
+        "2019-10-14T09:39:07.000010Z", "2019-10-14T09:39:07.00001Z")
+      check("yyyy-MM-dd'T'HH:mm:ss.S",
+        "2019-10-14T09:39:07.1", "2019-10-14T09:39:07.1")
+      check("yyyy-MM-dd'T'HH:mm:ss.SS",
+        "2019-10-14T09:39:07.10", "2019-10-14T09:39:07.1")
+
+      try {
+        new TimestampParser(
+          FastDateFormat.getInstance("yyyy/MM/dd HH_mm_ss.SSSSSS", timeZone, Locale.US))
+          .parse("2019/11/14 20#25#30.123456")
+        fail("Expected to throw an exception for the invalid input")
+      } catch {
+        case e: IllegalArgumentException =>
+          assert(e.getMessage.contains("is an invalid timestamp"))
+      }
+    }
+  }
+
+  test("formatting timestamp strings up to microsecond precision") {
+    DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
+      def check(pattern: String, input: String, expected: String): Unit = {
+        val parser = new TimestampParser(FastDateFormat.getInstance(pattern, timeZone, Locale.US))
+        val timestamp = DateTimeUtils.stringToTimestamp(
+          UTF8String.fromString(input), timeZone).get
+        val actual = parser.format(timestamp)
+        assert(actual === expected)
+      }
+
+      check(
+        "yyyy-MM-dd HH:mm:ss.SSSSSSS", "2019-10-14T09:39:07.123456",
+        "2019-10-14 09:39:07.1234560")
+      check(
+        "yyyy-MM-dd HH:mm:ss.SSSSSS", "1960-01-01T09:39:07.123456",
+        "1960-01-01 09:39:07.123456")
+      check(
+        "yyyy-MM-dd HH:mm:ss.SSSSS", "0001-10-14T09:39:07.1",
+        "0001-10-14 09:39:07.10000")
+      check(
+        "yyyy-MM-dd HH:mm:ss.SSSS", "9999-12-31T23:59:59.999",
+        "9999-12-31 23:59:59.9990")
+      check(
+        "yyyy-MM-dd HH:mm:ss.SSS", "1970-01-01T00:00:00.0101",
+        "1970-01-01 00:00:00.010")
+      check(
+        "yyyy-MM-dd HH:mm:ss.SS", "2019-10-14T09:39:07.09",
+        "2019-10-14 09:39:07.09")
+      check(
+        "yyyy-MM-dd HH:mm:ss.S", "2019-10-14T09:39:07.2",
+        "2019-10-14 09:39:07.2")
+      check(
+        "yyyy-MM-dd HH:mm:ss.S", "2019-10-14T09:39:07",
+        "2019-10-14 09:39:07.0")
+      check(
+        "yyyy-MM-dd HH:mm:ss", "2019-10-14T09:39:07.123456",
+        "2019-10-14 09:39:07")
+    }
+  }
+
+  test("toMillis") {
+    assert(DateTimeUtils.toMillis(-9223372036844776001L) === -9223372036844777L)
+    assert(DateTimeUtils.toMillis(-157700927876544L) === -157700927877L)
   }
 }

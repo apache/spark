@@ -393,7 +393,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // converting seconds to us
   private[this] def longToTimestamp(t: Long): Long = t * 1000000L
   // converting us to seconds
-  private[this] def timestampToLong(ts: Long): Long = math.floor(ts.toDouble / 1000000L).toLong
+  private[this] def timestampToLong(ts: Long): Long = {
+    Math.floorDiv(ts, DateTimeUtils.MICROS_PER_SECOND)
+  }
   // converting us to seconds in double
   private[this] def timestampToDouble(ts: Long): Double = {
     ts / 1000000.0
@@ -1071,7 +1073,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   }
   private[this] def longToTimeStampCode(l: ExprValue): Block = code"$l * 1000000L"
   private[this] def timestampToIntegerCode(ts: ExprValue): Block =
-    code"java.lang.Math.floor((double) $ts / 1000000L)"
+    code"java.lang.Math.floorDiv($ts, 1000000L)"
   private[this] def timestampToDoubleCode(ts: ExprValue): Block =
     code"$ts / 1000000.0"
 

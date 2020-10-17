@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.11</artifactId>
-  <version>2.4.5-SNAPSHOT</version>
+  <version>2.4.8-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -134,7 +134,7 @@
     <orc.version>1.5.5</orc.version>
     <orc.classifier>nohive</orc.classifier>
     <hive.parquet.version>1.6.0</hive.parquet.version>
-    <jetty.version>9.3.24.v20180605</jetty.version>
+    <jetty.version>9.3.27.v20190418</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
     <chill.version>0.9.3</chill.version>
     <ivy.version>2.4.0</ivy.version>
@@ -142,9 +142,9 @@
     <codahale.metrics.version>3.1.5</codahale.metrics.version>
     <avro.version>1.8.2</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
-    <aws.kinesis.client.version>1.8.10</aws.kinesis.client.version>
+    <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
-    <aws.java.sdk.version>1.11.271</aws.java.sdk.version>
+    <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
@@ -159,8 +159,9 @@
     <scala.binary.version>2.11</scala.binary.version>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.6.7</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.6.7.1</fasterxml.jackson.databind.version>
-    <snappy.version>1.1.7.3</snappy.version>
+    <fasterxml.jackson-module-scala.version>2.6.7.1</fasterxml.jackson-module-scala.version>
+    <fasterxml.jackson.databind.version>2.6.7.3</fasterxml.jackson.databind.version>
+    <snappy.version>1.1.7.5</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <calcite.version>1.2.0-incubating</calcite.version>
     <commons-codec.version>1.10</commons-codec.version>
@@ -170,7 +171,7 @@
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.5</commons-lang3.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
-    <janino.version>3.0.9</janino.version>
+    <janino.version>3.0.16</janino.version>
     <jersey.version>2.22.2</jersey.version>
     <joda.version>2.9.3</joda.version>
     <jodd.version>3.5.2</jodd.version>
@@ -227,11 +228,30 @@
     <spark.test.home>${session.executionRootDirectory}</spark.test.home>
 
     <CodeCacheSize>1g</CodeCacheSize>
+    <!-- Needed for consistent times -->
+    <maven.build.timestamp.format>yyyy-MM-dd HH:mm:ss z</maven.build.timestamp.format>
   </properties>
   <repositories>
     <repository>
+      <id>gcs-maven-central-mirror</id>
+      <!--
+        Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
+        See https://storage-download.googleapis.com/maven-central/index.html
+      -->
+      <name>GCS Maven Central mirror</name>
+      <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <!--
+        This is used as a fallback when the first try fails.
+      -->
       <id>central</id>
-      <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
       <url>https://repo.maven.apache.org/maven2</url>
       <releases>
@@ -243,6 +263,21 @@
     </repository>
   </repositories>
   <pluginRepositories>
+    <pluginRepository>
+      <id>gcs-maven-central-mirror</id>
+      <!--
+        Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
+        See https://storage-download.googleapis.com/maven-central/index.html
+      -->
+      <name>GCS Maven Central mirror</name>
+      <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </pluginRepository>
     <pluginRepository>
       <id>central</id>
       <url>https://repo.maven.apache.org/maven2</url>
@@ -589,7 +624,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.42.Final</version>
+        <version>4.1.47.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -646,7 +681,7 @@
       <dependency>
         <groupId>com.fasterxml.jackson.module</groupId>
         <artifactId>jackson-module-scala_${scala.binary.version}</artifactId>
-        <version>${fasterxml.jackson.databind.version}</version>
+        <version>${fasterxml.jackson-module-scala.version}</version>
         <exclusions>
           <exclusion>
             <groupId>com.google.guava</groupId>
@@ -2074,11 +2109,39 @@
             </execution>
           </executions>
         </plugin>
-        <plugin>
-          <groupId>org.codehaus.mojo</groupId>
-          <artifactId>build-helper-maven-plugin</artifactId>
-          <version>3.0.0</version>
-        </plugin>
+	<plugin>
+	  <groupId>org.codehaus.mojo</groupId>
+	  <artifactId>build-helper-maven-plugin</artifactId>
+	  <version>3.2.0</version>
+	  <executions>
+	    <execution>
+	      <id>module-timestamp-property</id>
+	      <phase>validate</phase>
+	      <goals>
+		<goal>timestamp-property</goal>
+	      </goals>
+	      <configuration>
+		<name>module.build.timestamp</name>
+		<pattern>${maven.build.timestamp.format}</pattern>
+		<timeSource>current</timeSource>
+		<timeZone>America/Los_Angeles</timeZone>
+	      </configuration>
+	    </execution>
+	    <execution>
+	      <id>local-timestamp-property</id>
+	      <phase>validate</phase>
+	      <goals>
+		<goal>timestamp-property</goal>
+	      </goals>
+	      <configuration>
+		<name>local.build.timestamp</name>
+		<pattern>${maven.build.timestamp.format}</pattern>
+		<timeSource>build</timeSource>
+		<timeZone>America/Los_Angeles</timeZone>
+	      </configuration>
+	    </execution>
+	  </executions>
+	</plugin>
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>

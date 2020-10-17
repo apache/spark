@@ -553,7 +553,7 @@ def nanvl(col1, col2):
 @since(1.4)
 def rand(seed=None):
     """Generates a random column with independent and identically distributed (i.i.d.) samples
-    from U[0.0, 1.0].
+    uniformly distributed in [0.0, 1.0).
 
     .. note:: The function is non-deterministic in general case.
 
@@ -1908,6 +1908,11 @@ def slice(x, start, length):
     """
     Collection function: returns an array containing  all the elements in `x` from index `start`
     (array indices start at 1, or from the end if `start` is negative) with the specified `length`.
+
+    :param x: the array to be sliced
+    :param start: the starting index
+    :param length: the length of the slice
+
     >>> df = spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ['x'])
     >>> df.select(slice(df.x, 2, 2).alias("sliced")).collect()
     [Row(sliced=[2, 3]), Row(sliced=[5])]

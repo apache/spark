@@ -254,7 +254,7 @@ createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0,
       as.list(schema)
     }
     if (is.null(names)) {
-      names <- lapply(1:length(row), function(x) {
+      names <- lapply(seq_len(length(row)), function(x) {
         paste("_", as.character(x), sep = "")
       })
     }
@@ -270,7 +270,7 @@ createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0,
     })
 
     types <- lapply(row, infer_type)
-    fields <- lapply(1:length(row), function(i) {
+    fields <- lapply(seq_len(length(row)), function(i) {
       structField(names[[i]], types[[i]], TRUE)
     })
     schema <- do.call(structType, fields)

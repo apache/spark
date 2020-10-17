@@ -3283,14 +3283,14 @@ class Dataset[T] private[sql](
   private[sql] def collectAsArrowToPython(): Array[Any] = {
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
 
-    withAction("collectAsArrowToPython", queryExecution) { plan =>
-      PythonRDD.serveToStreamWithSync("serve-Arrow") { out =>
+    PythonRDD.serveToStreamWithSync("serve-Arrow") { out =>
+      withAction("collectAsArrowToPython", queryExecution) { plan =>
         val batchWriter = new ArrowBatchStreamWriter(schema, out, timeZoneId)
         val arrowBatchRdd = toArrowBatchRdd(plan)
         val numPartitions = arrowBatchRdd.partitions.length
 
         // Store collection results for worst case of 1 to N-1 partitions
-        val results = new Array[Array[Array[Byte]]](numPartitions - 1)
+        val results = new Array[Array[Array[Byte]]](Math.max(0, numPartitions - 1))
         var lastIndex = -1  // index of last partition written
 
         // Handler to eagerly write partitions to Python in order
@@ -3373,7 +3373,7 @@ class Dataset[T] private[sql](
       sparkSession.listenerManager.onSuccess(name, qe, end - start)
       result
     } catch {
-      case e: Exception =>
+      case e: Throwable =>
         sparkSession.listenerManager.onFailure(name, qe, e)
         throw e
     }

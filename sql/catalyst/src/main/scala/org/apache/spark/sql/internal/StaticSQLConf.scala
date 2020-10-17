@@ -126,4 +126,18 @@ object StaticSQLConf {
       .intConf
       .createWithDefault(1000)
 
+  val SUBQUERY_MAX_THREAD_THRESHOLD =
+    buildStaticConf("spark.sql.subquery.maxThreadThreshold")
+      .internal()
+      .doc("The maximum degree of parallelism to execute the subquery.")
+      .intConf
+      .checkValue(thres => thres > 0 && thres <= 128, "The threshold must be in (0,128].")
+      .createWithDefault(16)
+
+  val DEFAULT_URL_STREAM_HANDLER_FACTORY_ENABLED =
+     buildStaticConf("spark.sql.defaultUrlStreamHandlerFactory.enabled")
+       .doc("When true, set FsUrlStreamHandlerFactory to support ADD JAR against HDFS locations")
+       .internal()
+       .booleanConf
+       .createWithDefault(true)
 }

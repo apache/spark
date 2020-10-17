@@ -1489,7 +1489,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
                 return True
             return "Latest errors: " + ", ".join(map(lambda x: str(x), errors))
 
-        self._eventually(condition)
+        self._eventually(condition, timeout=180.0)
 
 
 class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):

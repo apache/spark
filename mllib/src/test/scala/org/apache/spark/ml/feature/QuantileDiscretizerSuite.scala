@@ -443,4 +443,22 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
       discretizer.fit(df)
     }
   }
+
+  test("[SPARK-31676] QuantileDiscretizer raise error parameter splits given invalid value") {
+    import scala.util.Random
+    val rng = new Random(3)
+
+    val a1 = Array.tabulate(200)(_ => rng.nextDouble * 2.0 - 1.0) ++
+      Array.fill(20)(0.0) ++ Array.fill(20)(-0.0)
+
+    val df1 = sc.parallelize(a1, 2).toDF("id")
+
+    val qd = new QuantileDiscretizer()
+      .setInputCol("id")
+      .setOutputCol("out")
+      .setNumBuckets(200)
+      .setRelativeError(0.0)
+
+    qd.fit(df1) // assert no exception raised here.
+  }
 }

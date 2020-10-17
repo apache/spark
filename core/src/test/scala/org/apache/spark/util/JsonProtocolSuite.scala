@@ -436,6 +436,53 @@ class JsonProtocolSuite extends SparkFunSuite {
     testAccumValue(Some("anything"), 123, JString("123"))
   }
 
+  /** Create an AccumulableInfo and verify we can serialize and deserialize it. */
+  private def testAccumulableInfo(
+      name: String,
+      value: Option[Any],
+      expectedValue: Option[Any]): Unit = {
+    val isInternal = name.startsWith(InternalAccumulator.METRICS_PREFIX)
+    val accum = AccumulableInfo(
+      123L,
+      Some(name),
+      update = value,
+      value = value,
+      internal = isInternal,
+      countFailedValues = false)
+    val json = JsonProtocol.accumulableInfoToJson(accum)
+    val newAccum = JsonProtocol.accumulableInfoFromJson(json)
+    assert(newAccum == accum.copy(update = expectedValue, value = expectedValue))
+  }
+
+  test("SPARK-31923: unexpected value type of internal accumulator") {
+    // Because a user may use `METRICS_PREFIX` in an accumulator name, we should test unexpected
+    // types to make sure we don't crash.
+    import InternalAccumulator.METRICS_PREFIX
+    testAccumulableInfo(
+      METRICS_PREFIX + "fooString",
+      value = Some("foo"),
+      expectedValue = None)
+    testAccumulableInfo(
+      METRICS_PREFIX + "fooList",
+      value = Some(java.util.Arrays.asList("string")),
+      expectedValue = Some(java.util.Collections.emptyList())
+    )
+    val blocks = Seq(
+      (TestBlockId("block1"), BlockStatus(StorageLevel.MEMORY_ONLY, 1L, 2L)),
+      (TestBlockId("block2"), BlockStatus(StorageLevel.DISK_ONLY, 3L, 4L)))
+    testAccumulableInfo(
+      METRICS_PREFIX + "fooList",
+      value = Some(java.util.Arrays.asList(
+        "string",
+        blocks(0),
+        blocks(1))),
+      expectedValue = Some(blocks.asJava)
+    )
+    testAccumulableInfo(
+      METRICS_PREFIX + "fooSet",
+      value = Some(Set("foo")),
+      expectedValue = None)
+  }
 }
 
 

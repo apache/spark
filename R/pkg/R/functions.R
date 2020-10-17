@@ -2614,7 +2614,7 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 
 #' @details
 #' \code{rand}: Generates a random column with independent and identically distributed (i.i.d.)
-#' samples from U[0.0, 1.0].
+#' samples uniformly distributed in [0.0, 1.0).
 #' Note: the function is non-deterministic in general case.
 #'
 #' @rdname column_nonaggregate_functions
@@ -3340,8 +3340,8 @@ setMethod("size",
 #' (array indices start at 1, or from the end if start is negative) with the specified length.
 #'
 #' @rdname column_collection_functions
-#' @param start an index indicating the first element occurring in the result.
-#' @param length a number of consecutive elements chosen to the result.
+#' @param start the starting index
+#' @param length the length of the slice
 #' @aliases slice slice,Column-method
 #' @note slice since 2.4.0
 setMethod("slice",

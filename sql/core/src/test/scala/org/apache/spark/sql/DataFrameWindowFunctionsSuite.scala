@@ -623,39 +623,45 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-24575: Window functions inside WHERE and HAVING clauses") {
-    def checkAnalysisError(df: => DataFrame): Unit = {
-      val thrownException = the [AnalysisException] thrownBy {
+    def checkAnalysisError(df: => DataFrame, clause: String): Unit = {
+      val thrownException = the[AnalysisException] thrownBy {
         df.queryExecution.analyzed
       }
-      assert(thrownException.message.contains("window functions inside WHERE and HAVING clauses"))
+      assert(thrownException.message.contains(s"window functions inside $clause clause"))
     }
 
-    checkAnalysisError(testData2.select('a).where(rank().over(Window.orderBy('b)) === 1))
-    checkAnalysisError(testData2.where('b === 2 && rank().over(Window.orderBy('b)) === 1))
     checkAnalysisError(
-      testData2.groupBy('a)
-        .agg(avg('b).as("avgb"))
-        .where('a > 'avgb && rank().over(Window.orderBy('a)) === 1))
+      testData2.select("a").where(rank().over(Window.orderBy($"b")) === 1), "WHERE")
     checkAnalysisError(
-      testData2.groupBy('a)
-        .agg(max('b).as("maxb"), sum('b).as("sumb"))
-        .where(rank().over(Window.orderBy('a)) === 1))
+      testData2.where($"b" === 2 && rank().over(Window.orderBy($"b")) === 1), "WHERE")
     checkAnalysisError(
-      testData2.groupBy('a)
-        .agg(max('b).as("maxb"), sum('b).as("sumb"))
-        .where('sumb === 5 && rank().over(Window.orderBy('a)) === 1))
+      testData2.groupBy($"a")
+        .agg(avg($"b").as("avgb"))
+        .where($"a" > $"avgb" && rank().over(Window.orderBy($"a")) === 1), "WHERE")
+    checkAnalysisError(
+      testData2.groupBy($"a")
+        .agg(max($"b").as("maxb"), sum($"b").as("sumb"))
+        .where(rank().over(Window.orderBy($"a")) === 1), "WHERE")
+    checkAnalysisError(
+      testData2.groupBy($"a")
+        .agg(max($"b").as("maxb"), sum($"b").as("sumb"))
+        .where($"sumb" === 5 && rank().over(Window.orderBy($"a")) === 1), "WHERE")
 
-    checkAnalysisError(sql("SELECT a FROM testData2 WHERE RANK() OVER(ORDER BY b) = 1"))
-    checkAnalysisError(sql("SELECT * FROM testData2 WHERE b = 2 AND RANK() OVER(ORDER BY b) = 1"))
+    checkAnalysisError(sql("SELECT a FROM testData2 WHERE RANK() OVER(ORDER BY b) = 1"), "WHERE")
     checkAnalysisError(
-      sql("SELECT * FROM testData2 GROUP BY a HAVING a > AVG(b) AND RANK() OVER(ORDER BY a) = 1"))
+      sql("SELECT * FROM testData2 WHERE b = 2 AND RANK() OVER(ORDER BY b) = 1"), "WHERE")
     checkAnalysisError(
-      sql("SELECT a, MAX(b), SUM(b) FROM testData2 GROUP BY a HAVING RANK() OVER(ORDER BY a) = 1"))
+      sql("SELECT * FROM testData2 GROUP BY a HAVING a > AVG(b) AND RANK() OVER(ORDER BY a) = 1"),
+      "HAVING")
+    checkAnalysisError(
+      sql("SELECT a, MAX(b), SUM(b) FROM testData2 GROUP BY a HAVING RANK() OVER(ORDER BY a) = 1"),
+      "HAVING")
     checkAnalysisError(
       sql(
         s"""SELECT a, MAX(b)
            |FROM testData2
            |GROUP BY a
-           |HAVING SUM(b) = 5 AND RANK() OVER(ORDER BY a) = 1""".stripMargin))
+           |HAVING SUM(b) = 5 AND RANK() OVER(ORDER BY a) = 1""".stripMargin),
+      "HAVING")
   }
 }

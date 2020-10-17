@@ -371,6 +371,51 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-32609: DataSourceV2 with different pushedfilters should be different") {
+    def getScanExec(query: DataFrame): DataSourceV2ScanExec = {
+      query.queryExecution.executedPlan.collect {
+        case d: DataSourceV2ScanExec => d
+      }.head
+    }
+
+    Seq(classOf[AdvancedDataSourceV2], classOf[JavaAdvancedDataSourceV2]).foreach { cls =>
+      withClue(cls.getName) {
+        val df = spark.read.format(cls.getName).load()
+        val q1 = df.select('i).filter('i > 6)
+        val q2 = df.select('i).filter('i > 5)
+        val q3 = df.select('i).filter('i > 5)
+        val scan1 = getScanExec(q1)
+        val scan2 = getScanExec(q2)
+        val scan3 = getScanExec(q3)
+        assert(!scan1.equals(scan2))
+        assert(scan2.equals(scan3))
+      }
+    }
+  }
+
+  test("SPARK-32708: same columns with different ExprIds should be equal after canonicalization ") {
+    def getV2ScanExec(query: DataFrame): DataSourceV2ScanExec = {
+      query.queryExecution.executedPlan.collect {
+        case d: DataSourceV2ScanExec => d
+      }.head
+    }
+
+    val df1 = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
+    val q1 = df1.select('i).filter('i > 6)
+    val df2 = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
+    val q2 = df2.select('i).filter('i > 6)
+    val scan1 = getV2ScanExec(q1)
+    val scan2 = getV2ScanExec(q2)
+    assert(scan1.sameResult(scan2))
+    assert(scan1.doCanonicalize().equals(scan2.doCanonicalize()))
+
+    val q3 = df2.select('i).filter('i > 5)
+    val scan3 = getV2ScanExec(q3)
+    assert(!scan1.sameResult(scan3))
+    assert(!scan1.doCanonicalize().equals(scan3.doCanonicalize()))
+  }
+
 }
 
 class SimpleSinglePartitionSource extends DataSourceV2 with ReadSupport {

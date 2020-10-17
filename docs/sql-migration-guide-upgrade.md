@@ -7,6 +7,25 @@ displayTitle: Spark SQL Upgrading Guide
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 2.4.5 to 2.4.6
+
+ - In Spark 2.4.6, the `RESET` command does not reset the static SQL configuration values to the default. It only clears the runtime SQL configuration values.
+ 
+## Upgrading from Spark SQL 2.4.4 to 2.4.5
+
+ - Starting from 2.4.5, SQL configurations are effective also when a Dataset is converted to an RDD and its
+   plan is executed due to action on the derived RDD. The previous behavior can be restored setting
+   `spark.sql.legacy.rdd.applyConf` to `false`: in this case, SQL configurations are ignored for operations
+   performed on a RDD derived from a Dataset.
+
+ - Since Spark 2.4.5, `TRUNCATE TABLE` command tries to set back original permission and ACLs during re-creating the table/partition paths. To restore the behaviour of earlier versions, set `spark.sql.truncateTable.ignorePermissionAcl.enabled` to `true`.
+
+  - Since Spark 2.4.5, `spark.sql.legacy.mssqlserver.numericMapping.enabled` configuration is added in order to support the legacy MsSQLServer dialect mapping behavior using IntegerType and DoubleType for SMALLINT and REAL JDBC types, respectively. To restore the behaviour of 2.4.3 and earlier versions, set `spark.sql.legacy.mssqlserver.numericMapping.enabled` to `true`.
+
+## Upgrading from Spark SQL 2.4.3 to 2.4.4
+
+    - Since Spark 2.4.4, according to [MsSqlServer Guide](https://docs.microsoft.com/en-us/sql/connect/jdbc/using-basic-data-types?view=sql-server-2017), MsSQLServer JDBC Dialect uses ShortType and FloatType for SMALLINT and REAL, respectively. Previously, IntegerType and DoubleType is used.
+
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
   - The value of `spark.executor.heartbeatInterval`, when specified without units like "30" rather than "30s", was

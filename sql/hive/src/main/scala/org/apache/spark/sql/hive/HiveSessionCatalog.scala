@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
-
+import org.apache.spark.util.Utils
 
 private[sql] class HiveSessionCatalog(
     externalCatalogBuilder: () => ExternalCatalog,
@@ -65,49 +65,52 @@ private[sql] class HiveSessionCatalog(
       name: String,
       clazz: Class[_],
       input: Seq[Expression]): Expression = {
-
-    Try(super.makeFunctionExpression(name, clazz, input)).getOrElse {
-      var udfExpr: Option[Expression] = None
-      try {
-        // When we instantiate hive UDF wrapper class, we may throw exception if the input
-        // expressions don't satisfy the hive UDF, such as type mismatch, input number
-        // mismatch, etc. Here we catch the exception and throw AnalysisException instead.
-        if (classOf[UDF].isAssignableFrom(clazz)) {
-          udfExpr = Some(HiveSimpleUDF(name, new HiveFunctionWrapper(clazz.getName), input))
-          udfExpr.get.dataType // Force it to check input data types.
-        } else if (classOf[GenericUDF].isAssignableFrom(clazz)) {
-          udfExpr = Some(HiveGenericUDF(name, new HiveFunctionWrapper(clazz.getName), input))
-          udfExpr.get.dataType // Force it to check input data types.
-        } else if (classOf[AbstractGenericUDAFResolver].isAssignableFrom(clazz)) {
-          udfExpr = Some(HiveUDAFFunction(name, new HiveFunctionWrapper(clazz.getName), input))
-          udfExpr.get.dataType // Force it to check input data types.
-        } else if (classOf[UDAF].isAssignableFrom(clazz)) {
-          udfExpr = Some(HiveUDAFFunction(
-            name,
-            new HiveFunctionWrapper(clazz.getName),
-            input,
-            isUDAFBridgeRequired = true))
-          udfExpr.get.dataType // Force it to check input data types.
-        } else if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
-          udfExpr = Some(HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), input))
-          udfExpr.get.asInstanceOf[HiveGenericUDTF].elementSchema // Force it to check data types.
+    // Current thread context classloader may not be the one loaded the class. Need to switch
+    // context classloader to initialize instance properly.
+    Utils.withContextClassLoader(clazz.getClassLoader) {
+      Try(super.makeFunctionExpression(name, clazz, input)).getOrElse {
+        var udfExpr: Option[Expression] = None
+        try {
+          // When we instantiate hive UDF wrapper class, we may throw exception if the input
+          // expressions don't satisfy the hive UDF, such as type mismatch, input number
+          // mismatch, etc. Here we catch the exception and throw AnalysisException instead.
+          if (classOf[UDF].isAssignableFrom(clazz)) {
+            udfExpr = Some(HiveSimpleUDF(name, new HiveFunctionWrapper(clazz.getName), input))
+            udfExpr.get.dataType // Force it to check input data types.
+          } else if (classOf[GenericUDF].isAssignableFrom(clazz)) {
+            udfExpr = Some(HiveGenericUDF(name, new HiveFunctionWrapper(clazz.getName), input))
+            udfExpr.get.dataType // Force it to check input data types.
+          } else if (classOf[AbstractGenericUDAFResolver].isAssignableFrom(clazz)) {
+            udfExpr = Some(HiveUDAFFunction(name, new HiveFunctionWrapper(clazz.getName), input))
+            udfExpr.get.dataType // Force it to check input data types.
+          } else if (classOf[UDAF].isAssignableFrom(clazz)) {
+            udfExpr = Some(HiveUDAFFunction(
+              name,
+              new HiveFunctionWrapper(clazz.getName),
+              input,
+              isUDAFBridgeRequired = true))
+            udfExpr.get.dataType // Force it to check input data types.
+          } else if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
+            udfExpr = Some(HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), input))
+            udfExpr.get.asInstanceOf[HiveGenericUDTF].elementSchema // Force it to check data types.
+          }
+        } catch {
+          case NonFatal(e) =>
+            val noHandlerMsg = s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e"
+            val errorMsg =
+              if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
+                s"$noHandlerMsg\nPlease make sure your function overrides " +
+                  "`public StructObjectInspector initialize(ObjectInspector[] args)`."
+              } else {
+                noHandlerMsg
+              }
+            val analysisException = new AnalysisException(errorMsg)
+            analysisException.setStackTrace(e.getStackTrace)
+            throw analysisException
         }
-      } catch {
-        case NonFatal(e) =>
-          val noHandlerMsg = s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e"
-          val errorMsg =
-            if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
-              s"$noHandlerMsg\nPlease make sure your function overrides " +
-                "`public StructObjectInspector initialize(ObjectInspector[] args)`."
-            } else {
-              noHandlerMsg
-            }
-          val analysisException = new AnalysisException(errorMsg)
-          analysisException.setStackTrace(e.getStackTrace)
-          throw analysisException
-      }
-      udfExpr.getOrElse {
-        throw new AnalysisException(s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
+        udfExpr.getOrElse {
+          throw new AnalysisException(s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
+        }
       }
     }
   }
@@ -116,7 +119,7 @@ private[sql] class HiveSessionCatalog(
     try {
       lookupFunction0(name, children)
     } catch {
-      case NonFatal(_) =>
+      case NonFatal(_) if children.exists(_.dataType.isInstanceOf[DecimalType]) =>
         // SPARK-16228 ExternalCatalog may recognize `double`-type only.
         val newChildren = children.map { child =>
           if (child.dataType.isInstanceOf[DecimalType]) Cast(child, DoubleType) else child

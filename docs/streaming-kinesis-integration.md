@@ -200,7 +200,7 @@ To run the example,
 
 - Set up Kinesis stream (see earlier section) within AWS. Note the name of the Kinesis stream and the endpoint URL corresponding to the region where the stream was created.
 
-- Set up the environment variables `AWS_ACCESS_KEY_ID` and `AWS_SECRET_KEY` with your AWS credentials.
+- Set up the environment variables `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` with your AWS credentials.
 
 - In the Spark root directory, run the example as
 
@@ -217,8 +217,7 @@ To run the example,
 	</div>
 	<div data-lang="python" markdown="1">
 
-        bin/spark-submit --jars external/kinesis-asl/target/scala-*/\
-            spark-streaming-kinesis-asl-assembly_*.jar \
+        ./bin/spark-submit --jars 'external/kinesis-asl-assembly/target/spark-streaming-kinesis-asl-assembly_*.jar' \
             external/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py \
             [Kinesis app name] [Kinesis stream name] [endpoint URL] [region name]
 

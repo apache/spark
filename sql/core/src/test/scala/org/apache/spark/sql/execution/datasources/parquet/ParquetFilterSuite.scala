@@ -1142,6 +1142,27 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       }
     }
   }
+
+  test("SPARK-30826: case insensitivity of StringStartsWith attribute") {
+    import testImplicits._
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTable("t1") {
+        withTempPath { dir =>
+          val path = dir.toURI.toString
+          Seq("42").toDF("COL").write.parquet(path)
+          spark.sql(
+            s"""
+               |CREATE TABLE t1 (col STRING)
+               |USING parquet
+               |OPTIONS (path '$path')
+           """.stripMargin)
+          checkAnswer(
+            spark.sql("SELECT * FROM t1 WHERE col LIKE '4%'"),
+            Row("42"))
+        }
+      }
+    }
+  }
 }
 
 class NumRowGroupsAcc extends AccumulatorV2[Integer, Integer] {

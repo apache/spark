@@ -18,11 +18,13 @@
 package org.apache.spark.sql
 
 import java.io.{File, FileNotFoundException}
+import java.net.URI
 import java.util.Locale
 
 import scala.collection.mutable
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
@@ -478,6 +480,19 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     }
   }
 
+  test("SPARK-31935: Hadoop file system config should be effective in data source options") {
+    withSQLConf(
+      "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
+      "fs.file.impl.disable.cache" -> "true") {
+      withTempDir { dir =>
+        val path = "file:" + dir.getCanonicalPath.stripPrefix("file:")
+        spark.range(10).write.option("ds_option", "value").mode("overwrite").parquet(path)
+        checkAnswer(
+          spark.read.option("ds_option", "value").parquet(path), spark.range(10).toDF())
+      }
+    }
+  }
+
   test("SPARK-25237 compute correct input metrics in FileScanRDD") {
     withTempPath { p =>
       val path = p.getAbsolutePath
@@ -525,5 +540,12 @@ object TestingUDT {
     override def deserialize(datum: Any): NullData =
       throw new NotImplementedError("Not implemented")
     override def userClass: Class[NullData] = classOf[NullData]
+  }
+}
+
+class FakeFileSystemRequiringDSOption extends LocalFileSystem {
+  override def initialize(name: URI, conf: Configuration): Unit = {
+    super.initialize(name, conf)
+    require(conf.get("ds_option", "") == "value")
   }
 }

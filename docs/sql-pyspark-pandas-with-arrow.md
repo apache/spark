@@ -18,9 +18,11 @@ working with Arrow-enabled data.
 
 ### Ensure PyArrow Installed
 
+To use Apache Arrow in PySpark, [the recommended version of PyArrow](#recommended-pandas-and-pyarrow-versions)
+should be installed.
 If you install PySpark using pip, then PyArrow can be brought in as an extra dependency of the
 SQL module with the command `pip install pyspark[sql]`. Otherwise, you must ensure that PyArrow
-is installed and available on all cluster nodes. The current supported version is 0.8.0.
+is installed and available on all cluster nodes.
 You can install using pip or conda from the conda-forge channel. See PyArrow
 [installation](https://arrow.apache.org/docs/python/install.html) for details.
 
@@ -165,3 +167,26 @@ Note that a standard UDF (non-Pandas) will load timestamp data as Python datetim
 different than a Pandas timestamp. It is recommended to use Pandas time series functionality when
 working with timestamps in `pandas_udf`s to get the best performance, see
 [here](https://pandas.pydata.org/pandas-docs/stable/timeseries.html) for details.
+
+### Recommended Pandas and PyArrow Versions
+
+For usage with pyspark.sql, the supported versions of Pandas is 0.19.2 and PyArrow is 0.8.0. Higher
+versions may be used, however, compatibility and data correctness can not be guaranteed and should
+be verified by the user.
+
+### Compatibiliy Setting for PyArrow >= 0.15.0 and Spark 2.3.x, 2.4.x
+
+Since Arrow 0.15.0, a change in the binary IPC format requires an environment variable to be
+compatible with previous versions of Arrow <= 0.14.1. This is only necessary to do for PySpark
+users with versions 2.3.x and 2.4.x that have manually upgraded PyArrow to 0.15.0. The following
+can be added to `conf/spark-env.sh` to use the legacy Arrow IPC format:
+
+```
+ARROW_PRE_0_15_IPC_FORMAT=1
+```
+
+This will instruct PyArrow >= 0.15.0 to use the legacy IPC format with the older Arrow Java that
+is in Spark 2.3.x and 2.4.x. Not setting this environment variable will lead to a similar error as
+described in [SPARK-29367](https://issues.apache.org/jira/browse/SPARK-29367) when running
+`pandas_udf`s or `toPandas()` with Arrow enabled. More information about the Arrow IPC change can
+be read on the Arrow 0.15.0 release [blog](http://arrow.apache.org/blog/2019/10/06/0.15.0-release/#columnar-streaming-protocol-change-since-0140).

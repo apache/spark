@@ -507,6 +507,9 @@ object PartitioningUtils {
       partitionColumns: Seq[String],
       caseSensitive: Boolean): Unit = {
 
+    SchemaUtils.checkColumnNameDuplication(
+      partitionColumns, partitionColumns.mkString(", "), caseSensitive)
+
     partitionColumnsSchema(schema, partitionColumns, caseSensitive).foreach {
       field => field.dataType match {
         case _: AtomicType => // OK

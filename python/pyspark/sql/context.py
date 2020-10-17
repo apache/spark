@@ -318,7 +318,7 @@ class SQLContext(object):
 
     @since(1.6)
     def dropTempTable(self, tableName):
-        """ Remove the temp table from catalog.
+        """ Remove the temporary table from catalog.
 
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> sqlContext.dropTempTable("table1")

@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
@@ -47,8 +48,20 @@ case class DataSourceV2ScanExec(
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
     case other: DataSourceV2ScanExec =>
-      output == other.output && reader.getClass == other.reader.getClass && options == other.options
+      (output == other.output && reader.getClass == other.reader.getClass
+        && options == other.options && pushedFilters == other.pushedFilters)
     case _ => false
+  }
+
+  override def doCanonicalize(): DataSourceV2ScanExec = {
+    DataSourceV2ScanExec(
+      output.map(QueryPlan.normalizeExprId(_, output)),
+      source,
+      options,
+      QueryPlan.normalizePredicates(
+        pushedFilters,
+        AttributeSeq(pushedFilters.flatMap(_.references).distinct)),
+      reader)
   }
 
   override def hashCode(): Int = {

@@ -438,6 +438,10 @@ object JdbcUtils extends Logging {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setShort(pos, rs.getShort(pos + 1))
 
+    case ByteType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.setByte(pos, rs.getByte(pos + 1))
+
     case StringType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         // TODO(davies): use getBytes for better performance, if the encoding is UTF-8

@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{StringType, StructType}
 
 class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -34,6 +35,24 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
       ("Amy", null, null),
       (null, null, null)
       ).toDF("name", "age", "height")
+  }
+
+  def createNaNDF(): DataFrame = {
+    Seq[(java.lang.Integer, java.lang.Long, java.lang.Short,
+      java.lang.Byte, java.lang.Float, java.lang.Double)](
+      (1, 1L, 1.toShort, 1.toByte, 1.0f, 1.0),
+      (0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN)
+    ).toDF("int", "long", "short", "byte", "float", "double")
+  }
+
+  def createDFWithNestedColumns: DataFrame = {
+    val schema = new StructType()
+      .add("c1", new StructType()
+        .add("c1-1", StringType)
+        .add("c1-2", StringType))
+    val data = Seq(Row(Row(null, "a2")), Row(Row("b1", "b2")), Row(null))
+    spark.createDataFrame(
+      spark.sparkContext.parallelize(data), schema)
   }
 
   test("drop") {
@@ -231,6 +250,37 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("fill with col(*)") {
+    val df = createDF()
+    // If columns are specified with "*", they are ignored.
+    checkAnswer(df.na.fill("new name", Seq("*")), df.collect())
+  }
+
+  test("drop with col(*)") {
+    val df = createDF()
+    val exception = intercept[AnalysisException] {
+      df.na.drop("any", Seq("*"))
+    }
+    assert(exception.getMessage.contains("Cannot resolve column name \"*\""))
+  }
+
+  test("fill with nested columns") {
+    val df = createDFWithNestedColumns
+
+    // Nested columns are ignored for fill().
+    checkAnswer(df.na.fill("a1", Seq("c1.c1-1")), df)
+  }
+
+  test("drop with nested columns") {
+    val df = createDFWithNestedColumns
+
+    // Rows with the specified nested columns whose null values are dropped.
+    assert(df.count == 3)
+    checkAnswer(
+      df.na.drop("any", Seq("c1.c1-1")),
+      Seq(Row(Row("b1", "b2"))))
+  }
+
   test("replace") {
     val input = createDF()
 
@@ -304,5 +354,75 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
         "Bob" -> null
       )).na.drop("name" :: Nil).select("name"),
       Row("Alice") :: Row("David") :: Nil)
+  }
+
+  test("replace nan with float") {
+    checkAnswer(
+      createNaNDF().na.replace("*", Map(
+        Float.NaN -> 10.0f
+      )),
+      Row(1, 1L, 1.toShort, 1.toByte, 1.0f, 1.0) ::
+      Row(0, 0L, 0.toShort, 0.toByte, 10.0f, 10.0) :: Nil)
+  }
+
+  test("replace nan with double") {
+    checkAnswer(
+      createNaNDF().na.replace("*", Map(
+        Double.NaN -> 10.0
+      )),
+      Row(1, 1L, 1.toShort, 1.toByte, 1.0f, 1.0) ::
+      Row(0, 0L, 0.toShort, 0.toByte, 10.0f, 10.0) :: Nil)
+  }
+
+  test("replace float with nan") {
+    checkAnswer(
+      createNaNDF().na.replace("*", Map(
+        1.0f -> Float.NaN
+      )),
+      Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) ::
+      Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) :: Nil)
+  }
+
+  test("replace double with nan") {
+    checkAnswer(
+      createNaNDF().na.replace("*", Map(
+        1.0 -> Double.NaN
+      )),
+      Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) ::
+      Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) :: Nil)
+  }
+
+  test("SPARK-29890: duplicate names are allowed for fill() if column names are not specified.") {
+    val left = Seq(("1", null), ("3", "4")).toDF("col1", "col2")
+    val right = Seq(("1", "2"), ("3", null)).toDF("col1", "col2")
+    val df = left.join(right, Seq("col1"))
+
+    // If column names are specified, the following fails due to ambiguity.
+    val exception = intercept[AnalysisException] {
+      df.na.fill("hello", Seq("col2"))
+    }
+    assert(exception.getMessage.contains("Reference 'col2' is ambiguous"))
+
+    // If column names are not specified, fill() is applied to all the eligible columns.
+    checkAnswer(
+      df.na.fill("hello"),
+      Row("1", "hello", "2") :: Row("3", "4", "hello") :: Nil)
+  }
+
+  test("SPARK-30065: duplicate names are allowed for drop() if column names are not specified.") {
+    val left = Seq(("1", null), ("3", "4"), ("5", "6")).toDF("col1", "col2")
+    val right = Seq(("1", "2"), ("3", null), ("5", "6")).toDF("col1", "col2")
+    val df = left.join(right, Seq("col1"))
+
+    // If column names are specified, the following fails due to ambiguity.
+    val exception = intercept[AnalysisException] {
+      df.na.drop("any", Seq("col2"))
+    }
+    assert(exception.getMessage.contains("Reference 'col2' is ambiguous"))
+
+    // If column names are not specified, drop() is applied to all the eligible rows.
+    checkAnswer(
+      df.na.drop("any"),
+      Row("5", "6", "6") :: Nil)
   }
 }

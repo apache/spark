@@ -31,6 +31,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowHiveTest
 
 
 class ScalaAggregateFunction(schema: StructType) extends UserDefinedAggregateFunction {
@@ -1024,6 +1025,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 class HashAggregationQuerySuite extends AggregationQuerySuite
 
 
+@SlowHiveTest
 class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {

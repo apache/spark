@@ -37,6 +37,8 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
  *     def reduce(b: Int, a: Data): Int = b + a.i
  *     def merge(b1: Int, b2: Int): Int = b1 + b2
  *     def finish(r: Int): Int = r
+ *     def bufferEncoder: Encoder[Int] = Encoders.scalaInt
+ *     def outputEncoder: Encoder[Int] = Encoders.scalaInt
  *   }.toColumn()
  *
  *   val ds: Dataset[Data] = ...

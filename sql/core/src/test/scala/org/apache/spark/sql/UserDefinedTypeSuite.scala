@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.time.{LocalDateTime, ZoneOffset}
+
 import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.rdd.RDD
@@ -143,6 +145,30 @@ private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] 
   }
 
   override def userClass: Class[IExampleSubType] = classOf[IExampleSubType]
+}
+
+private[sql] case class FooWithDate(date: LocalDateTime, s: String, i: Int)
+
+private[sql] object FooWithDate {
+  def concatFoo(a: FooWithDate, b: FooWithDate): FooWithDate = {
+    FooWithDate(b.date, a.s + b.s, a.i)
+  }
+}
+
+private[sql] class LocalDateTimeUDT extends UserDefinedType[LocalDateTime] {
+  override def sqlType: DataType = LongType
+
+  override def serialize(obj: LocalDateTime): Long = {
+    obj.toEpochSecond(ZoneOffset.UTC)
+  }
+
+  def deserialize(datum: Any): LocalDateTime = datum match {
+    case value: Long => LocalDateTime.ofEpochSecond(value, 0, ZoneOffset.UTC)
+  }
+
+  override def userClass: Class[LocalDateTime] = classOf[LocalDateTime]
+
+  private[spark] override def asNullable: LocalDateTimeUDT = this
 }
 
 class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetTest
@@ -314,5 +340,21 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     val data = udt.serialize(vector)
     val ret = Cast(Literal(data, udt), StringType, None)
     checkEvaluation(ret, "(1.0, 3.0, 5.0, 7.0, 9.0)")
+  }
+
+  test("SPARK-30993: UserDefinedType matched to fixed length SQL type shouldn't be corrupted") {
+    UDTRegistration.register(classOf[LocalDateTime].getName, classOf[LocalDateTimeUDT].getName)
+
+    // remove sub-millisecond part as we only use millis based timestamp while serde
+    val date = LocalDateTime.ofEpochSecond(LocalDateTime.now().toEpochSecond(ZoneOffset.UTC),
+      0, ZoneOffset.UTC)
+    val inputDS = List(FooWithDate(date, "Foo", 1), FooWithDate(date, "Foo", 3),
+      FooWithDate(date, "Foo", 3)).toDS()
+    val agg = inputDS.groupByKey(x => x.i).mapGroups { (_, iter) =>
+      iter.reduce(FooWithDate.concatFoo)
+    }
+    val result = agg.collect()
+
+    assert(result.toSet === Set(FooWithDate(date, "FooFoo", 3), FooWithDate(date, "Foo", 1)))
   }
 }

@@ -146,7 +146,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
       (1 to 1000).toDF("col").createOrReplaceTempView(table)
       checkAnswer(
         spark.sql(s"SELECT percentile_approx(col, array(0.25 + 0.25D), 200 + 800D) FROM $table"),
-        Row(Seq(499))
+        Row(Seq(500))
       )
     }
   }
@@ -291,5 +291,24 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
     assert(compressCounts > 0)
     buffer.quantileSummaries
     assert(buffer.isCompressed)
+  }
+
+  test("SPARK-32908: maximum target error in percentile_approx") {
+    withTempView(table) {
+      spark.read
+        .schema("col int")
+        .csv(testFile("test-data/percentile_approx-input.csv.bz2"))
+        .repartition(1)
+        .createOrReplaceTempView(table)
+      checkAnswer(
+        spark.sql(
+          s"""SELECT
+             |  percentile_approx(col, 0.77, 1000),
+             |  percentile_approx(col, 0.77, 10000),
+             |  percentile_approx(col, 0.77, 100000),
+             |  percentile_approx(col, 0.77, 1000000)
+             |FROM $table""".stripMargin),
+        Row(18, 17, 17, 17))
+    }
   }
 }
