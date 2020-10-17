@@ -83,7 +83,7 @@ struct<b:bigint>
 2
 
 
--- !query
+-- !query 9
 SELECT c1 FROM VALUES (1, 2) as t(c1, c2) GROUP BY GROUPING SETS(t.c1) HAVING t.c1 = 1
 -- !query schema
 struct<c1:int>
@@ -91,7 +91,7 @@ struct<c1:int>
 1
 
 
--- !query
+-- !query 10
 SELECT c1 FROM VALUES (1, 2) as t(c1, c2) GROUP BY CUBE(t.c1) HAVING t.c1 = 1
 -- !query schema
 struct<c1:int>
@@ -99,7 +99,7 @@ struct<c1:int>
 1
 
 
--- !query
+-- !query 11
 SELECT c1 FROM VALUES (1, 2) as t(c1, c2) GROUP BY ROLLUP(t.c1) HAVING t.c1 = 1
 -- !query schema
 struct<c1:int>
@@ -107,7 +107,7 @@ struct<c1:int>
 1
 
 
--- !query
+-- !query 12
 SELECT c1 FROM VALUES (1, 2) as t(c1, c2) GROUP BY t.c1 HAVING t.c1 = 1
 -- !query schema
 struct<c1:int>
