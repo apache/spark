@@ -2062,7 +2062,7 @@ object SQLConf {
         "task attempts won't be able to success. If the `FileAlreadyExistsException` might be " +
         "recoverable, you should keep this as disabled and let Spark to retry output tasks. " +
         "This is disabled by default.")
-      .version("3.1.0")
+      .version("3.0.2")
       .booleanConf
       .createWithDefault(false)
 
