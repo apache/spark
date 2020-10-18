@@ -374,11 +374,7 @@ class ResolveSessionCatalog(
 
     // v1 DROP TABLE supports temp view.
     case DropTable(r: ResolvedView, ifExists, purge) =>
-      if (!r.isTempView) {
-        throw new AnalysisException(
-          "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
-      }
-      DropTableCommand(r.identifier.asTableIdentifier, ifExists, isView = true, purge = purge)
+      DropTableCommand(r.identifier.asTableIdentifier, ifExists, isView = false, purge = purge)
 
     // table/view is looked up, but not found. Create 'DropTableCommand' which will handle
     // the non-existing table/view based on 'ifExists'.

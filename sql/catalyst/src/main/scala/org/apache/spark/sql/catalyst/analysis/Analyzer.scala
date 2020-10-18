@@ -1098,6 +1098,8 @@ class Analyzer(
   /**
    * Resolve [[UnresolvedTableOrView]] by replacing it with [[NotFoundTableOrView]]
    * if resolution of table or view is not required.
+   *
+   * This rule should run after [[ResolveRelations]] and [[ResolveTables]] are run.
    */
   object ResolveUnresolvedTableOrView extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {

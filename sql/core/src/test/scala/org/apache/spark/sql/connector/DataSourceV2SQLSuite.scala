@@ -750,7 +750,7 @@ class DataSourceV2SQLSuite
     sql(s"DROP TABLE IF EXISTS testcat.db.notbl")
   }
 
-  test("SPARK-XXXXX: DROP TABLE should resolve to a temporary view first") {
+  test("SPARK-33174: DROP TABLE should resolve to a temporary view first") {
     withTable("testcat.ns.t") {
       withTempView("t") {
         sql("CREATE TABLE testcat.ns.t (id bigint) USING foo")
