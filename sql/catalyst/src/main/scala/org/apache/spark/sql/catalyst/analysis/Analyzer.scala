@@ -864,7 +864,7 @@ class Analyzer(
           u.failAnalysis(s"${ident.quoted} is a temp view not table.")
         }
         u
-      case u @ UnresolvedTableOrView(ident, isResolutionRequired) =>
+      case u @ UnresolvedTableOrView(ident, _) =>
         lookupTempView(ident)
           .map(_ => ResolvedView(ident.asIdentifier, isTempView = true))
           .getOrElse(u)
@@ -925,8 +925,7 @@ class Analyzer(
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
-      case u @ UnresolvedTableOrView(
-          NonSessionCatalogAndIdentifier(catalog, ident), isResolutionRequired) =>
+      case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident), _) =>
         CatalogV2Util.loadTable(catalog, ident)
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
@@ -1096,6 +1095,10 @@ class Analyzer(
     }
   }
 
+  /**
+   * Resolve [[UnresolvedTableOrView]] by replacing it with [[NotFoundTableOrView]]
+   * if resolution of table or view is not required.
+   */
   object ResolveUnresolvedTableOrView extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case u: UnresolvedTableOrView if !u.isResolutionRequired =>

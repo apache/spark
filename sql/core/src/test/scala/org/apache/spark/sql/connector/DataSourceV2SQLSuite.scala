@@ -750,15 +750,25 @@ class DataSourceV2SQLSuite
     sql(s"DROP TABLE IF EXISTS testcat.db.notbl")
   }
 
-  test("DropTable: temporary view") {
-    val t = "testcat.ns.t"
-    withTable(t) {
-      sql(s"CREATE TABLE $t USING foo AS SELECT 1")
-      sql(s"CREATE TEMPORARY VIEW t AS SELECT 1")
-      sql("USE testcat.ns")
-      sql("SHOW TABLES").show
-      sql("DROP TABLE t")
-      sql("SHOW TABLES").show
+  test("SPARK-XXXXX: DROP TABLE should resolve to a temporary view first") {
+    withTable("testcat.ns.t") {
+      withTempView("t") {
+        sql("CREATE TABLE testcat.ns.t (id bigint) USING foo")
+        sql("CREATE TEMPORARY VIEW t AS SELECT 2")
+        sql("USE testcat.ns")
+
+        // Check the temporary view 't' exists.
+        runShowTablesSql(
+          "SHOW TABLES FROM spark_catalog.default LIKE 't'",
+          Seq(Row("", "t", true)),
+          expectV2Catalog = false)
+        sql("DROP TABLE t")
+        // Verify that the temporary view 't' is resolved first and dropped.
+        runShowTablesSql(
+          "SHOW TABLES FROM spark_catalog.default LIKE 't'",
+          Nil,
+          expectV2Catalog = false)
+      }
     }
   }
 

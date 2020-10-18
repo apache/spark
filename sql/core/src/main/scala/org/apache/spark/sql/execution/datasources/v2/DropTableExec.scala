@@ -25,12 +25,12 @@ import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 /**
  * Physical plan node for dropping a table.
  */
-case class DropTableExec(catalog: TableCatalog, ident: Identifier, ifExists: Boolean)
+case class DropTableExec(catalog: Option[TableCatalog], ident: Identifier, ifExists: Boolean)
   extends V2CommandExec {
 
   override def run(): Seq[InternalRow] = {
-    if (catalog != null && catalog.tableExists(ident)) {
-      catalog.dropTable(ident)
+    if (catalog.isDefined && catalog.get.tableExists(ident)) {
+      catalog.get.dropTable(ident)
     } else if (!ifExists) {
       throw new NoSuchTableException(ident)
     }

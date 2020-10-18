@@ -56,6 +56,10 @@ case class UnresolvedTableOrView(
   override def output: Seq[Attribute] = Nil
 }
 
+/**
+ * Holds the name of a table or view that has been looked up in a catalog, but not found.
+ * This logical plan is "resolved".
+ */
 case class NotFoundTableOrView(multipartIdentifier: Seq[String]) extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }
