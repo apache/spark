@@ -638,7 +638,6 @@ class PlanResolutionSuite extends AnalysisTest {
     val tableIdent2 = TableIdentifier("tab", Some("default"))
 
     parseResolveCompare(s"DROP TABLE $tableName1",
-
       DropTableCommand(tableIdent1, ifExists = false, isView = false, purge = false))
     parseResolveCompare(s"DROP TABLE IF EXISTS $tableName1",
       DropTableCommand(tableIdent1, ifExists = true, isView = false, purge = false))
