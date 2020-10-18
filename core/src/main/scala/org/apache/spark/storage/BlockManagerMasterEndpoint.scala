@@ -163,7 +163,8 @@ class BlockManagerMasterEndpoint(
       context.reply(true)
 
     case DecommissionBlockManagers(executorIds) =>
-      decommissioningBlockManagerSet ++= executorIds.flatMap(blockManagerIdByExecutor.get)
+      val bmIds = executorIds.flatMap(blockManagerIdByExecutor.get)
+      decommissionBlockManagers(bmIds)
       context.reply(true)
 
     case GetReplicateInfoForRDDBlocks(blockManagerId) =>
@@ -359,21 +360,42 @@ class BlockManagerMasterEndpoint(
   }
 
   /**
+   * Decommission the given Seq of blockmanagers
+   *    - Adds these block managers to decommissioningBlockManagerSet Set
+   *    - Sends the DecommissionBlockManager message to each of the [[BlockManagerReplicaEndpoint]]
+   */
+  def decommissionBlockManagers(blockManagerIds: Seq[BlockManagerId]): Future[Seq[Unit]] = {
+    val newBlockManagersToDecommission = blockManagerIds.toSet.diff(decommissioningBlockManagerSet)
+    val futures = newBlockManagersToDecommission.map { blockManagerId =>
+      decommissioningBlockManagerSet.add(blockManagerId)
+      val info = blockManagerInfo(blockManagerId)
+      info.storageEndpoint.ask[Unit](DecommissionBlockManager)
+    }
+    Future.sequence{ futures.toSeq }
+  }
+
+  /**
    * Returns a Seq of ReplicateBlock for each RDD block stored by given blockManagerId
    * @param blockManagerId - block manager id for which ReplicateBlock info is needed
    * @return Seq of ReplicateBlock
    */
   private def getReplicateInfoForRDDBlocks(blockManagerId: BlockManagerId): Seq[ReplicateBlock] = {
-    val info = blockManagerInfo(blockManagerId)
+    try {
+      val info = blockManagerInfo(blockManagerId)
 
-    val rddBlocks = info.blocks.keySet().asScala.filter(_.isRDD)
-    rddBlocks.map { blockId =>
-      val currentBlockLocations = blockLocations.get(blockId)
-      val maxReplicas = currentBlockLocations.size + 1
-      val remainingLocations = currentBlockLocations.toSeq.filter(bm => bm != blockManagerId)
-      val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
-      replicateMsg
-    }.toSeq
+      val rddBlocks = info.blocks.keySet().asScala.filter(_.isRDD)
+      rddBlocks.map { blockId =>
+        val currentBlockLocations = blockLocations.get(blockId)
+        val maxReplicas = currentBlockLocations.size + 1
+        val remainingLocations = currentBlockLocations.toSeq.filter(bm => bm != blockManagerId)
+        val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
+        replicateMsg
+      }.toSeq
+    } catch {
+      // If the block manager has already exited, nothing to replicate.
+      case e: java.util.NoSuchElementException =>
+        Seq.empty[ReplicateBlock]
+    }
   }
 
   // Remove a block from the workers that have it. This can only be used to remove

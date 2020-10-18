@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relat
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
-import org.apache.spark.util.Clock
+import org.apache.spark.util.{Clock, Utils}
 
 class MicroBatchExecution(
     sparkSession: SparkSession,
@@ -76,7 +76,7 @@ class MicroBatchExecution(
     // transformation is responsible for replacing attributes with their final values.
 
     val disabledSources =
-      sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders.split(",")
+      Utils.stringToSeq(sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders)
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {
@@ -90,7 +90,7 @@ class MicroBatchExecution(
           StreamingExecutionRelation(source, output)(sparkSession)
         })
 
-      case s @ StreamingRelationV2(src, srcName, table: SupportsRead, options, output, v1) =>
+      case s @ StreamingRelationV2(src, srcName, table: SupportsRead, options, output, _, _, v1) =>
         val dsStr = if (src.nonEmpty) s"[${src.get}]" else ""
         val v2Disabled = disabledSources.contains(src.getOrElse(None).getClass.getCanonicalName)
         if (!v2Disabled && table.supports(TableCapability.MICRO_BATCH_READ)) {

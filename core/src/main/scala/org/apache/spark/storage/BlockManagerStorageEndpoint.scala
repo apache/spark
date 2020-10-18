@@ -62,7 +62,7 @@ class BlockManagerStorageEndpoint(
       }
 
     case DecommissionBlockManager =>
-      context.reply(blockManager.decommissionSelf())
+      context.reply(blockManager.decommissionBlockManager())
 
     case RemoveBroadcast(broadcastId, _) =>
       doAsync[Int]("removing broadcast " + broadcastId, context) {

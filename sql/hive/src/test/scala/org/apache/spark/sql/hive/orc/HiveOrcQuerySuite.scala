@@ -168,9 +168,6 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
     }
   }
 
-  // Since Hive 1.2.1 library code path still has this problem, users may hit this
-  // when spark.sql.hive.convertMetastoreOrc=false. However, after SPARK-22279,
-  // Apache Spark with the default configuration doesn't hit this bug.
   test("SPARK-22267 Spark SQL incorrectly reads ORC files when column order is different") {
     Seq("native", "hive").foreach { orcImpl =>
       withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl) {
@@ -179,10 +176,12 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
           Seq(1 -> 2).toDF("c1", "c2").write.orc(path)
           checkAnswer(spark.read.orc(path), Row(1, 2))
 
-          withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") { // default since 2.3.0
-            withTable("t") {
-              sql(s"CREATE EXTERNAL TABLE t(c2 INT, c1 INT) STORED AS ORC LOCATION '$path'")
-              checkAnswer(spark.table("t"), Row(2, 1))
+          Seq(true, false).foreach { convertMetastoreOrc =>
+            withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString) {
+              withTable("t") {
+                sql(s"CREATE EXTERNAL TABLE t(c2 INT, c1 INT) STORED AS ORC LOCATION '$path'")
+                checkAnswer(spark.table("t"), Row(2, 1))
+              }
             }
           }
         }
@@ -190,9 +189,6 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
     }
   }
 
-  // Since Hive 1.2.1 library code path still has this problem, users may hit this
-  // when spark.sql.hive.convertMetastoreOrc=false. However, after SPARK-22279,
-  // Apache Spark with the default configuration doesn't hit this bug.
   test("SPARK-19809 NullPointerException on zero-size ORC file") {
     Seq("native", "hive").foreach { orcImpl =>
       withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl) {
@@ -201,8 +197,10 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
             sql(s"CREATE TABLE spark_19809(a int) STORED AS ORC LOCATION '$dir'")
             Files.touch(new File(s"${dir.getCanonicalPath}", "zero.orc"))
 
-            withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") { // default since 2.3.0
-              checkAnswer(spark.table("spark_19809"), Seq.empty)
+            Seq(true, false).foreach { convertMetastoreOrc =>
+              withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString) {
+                checkAnswer(spark.table("spark_19809"), Seq.empty)
+              }
             }
           }
         }
@@ -224,7 +222,6 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
   }
 
   test("SPARK-26437 Can not query decimal type when value is 0") {
-    assume(HiveUtils.isHive23, "bad test: This bug fixed by HIVE-13083(Hive 2.0.1)")
     withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "false") {
       withTable("spark_26437") {
         sql("CREATE TABLE spark_26437 STORED AS ORCFILE AS SELECT 0.00 AS c1")

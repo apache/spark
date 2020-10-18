@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.FooEnum.FooEnum
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, If, SpecificInternalRow, UpCast}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, NewInstance}
@@ -89,6 +90,13 @@ class FooAnnotation extends scala.annotation.StaticAnnotation
 case class FooWithAnnotation(f1: String @FooAnnotation, f2: Option[String] @FooAnnotation)
 
 case class SpecialCharAsFieldData(`field.1`: String, `field 2`: String)
+
+object FooEnum extends Enumeration {
+  type FooEnum = Value
+  val E1, E2 = Value
+}
+
+case class FooClassWithEnum(i: Int, e: FooEnum)
 
 object TestingUDT {
   @SQLUserDefinedType(udt = classOf[NestedStructUDT])
@@ -436,5 +444,12 @@ class ScalaReflectionSuite extends SparkFunSuite {
       StructField("f1", StringType),
       StructField("f2", StringType))))
     assert(deserializerFor[FooWithAnnotation].dataType == ObjectType(classOf[FooWithAnnotation]))
+  }
+
+  test("SPARK-32585: Support scala enumeration in ScalaReflection") {
+    assert(serializerFor[FooClassWithEnum].dataType == StructType(Seq(
+      StructField("i", IntegerType, false),
+      StructField("e", StringType, true))))
+    assert(deserializerFor[FooClassWithEnum].dataType == ObjectType(classOf[FooClassWithEnum]))
   }
 }
