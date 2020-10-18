@@ -300,15 +300,7 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           // Converts nanosecond timestamps stored as INT96
           override def addBinary(value: Binary): Unit = {
-            assert(
-              value.length() == 12,
-              "Timestamps (with nanoseconds) are expected to be stored in 12-byte long binaries, " +
-              s"but got a ${value.length()}-byte binary.")
-
-            val buf = value.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
-            val timeOfDayNanos = buf.getLong
-            val julianDay = buf.getInt
-            val rawTime = DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
+            val rawTime = ParquetRowConverter.binaryToSQLTimestamp(value)
             val adjTime = convertTz.map(DateTimeUtils.convertTz(rawTime, _, ZoneOffset.UTC))
               .getOrElse(rawTime)
             updater.setLong(adjTime)

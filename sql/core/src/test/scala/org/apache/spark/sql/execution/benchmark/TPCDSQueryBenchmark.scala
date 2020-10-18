@@ -31,7 +31,8 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
  * To run this:
  * {{{
  *   1. without sbt:
- *        bin/spark-submit --class <this class> <spark sql test jar> --data-location <location>
+ *        bin/spark-submit --jars <spark core test jar>,<spark catalyst test jar>
+ *          --class <this class> <spark sql test jar> --data-location <location>
  *   2. build/sbt "sql/test:runMain <this class> --data-location <TPCDS data location>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt
  *        "sql/test:runMain <this class> --data-location <location>"

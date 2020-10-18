@@ -1533,7 +1533,6 @@
             <artifactId>hive-service</artifactId>
           </exclusion>
           <exclusion>
-            <!-- All classes are covered by spark's hive-thriftserver module -->
             <groupId>${hive.group}</groupId>
             <artifactId>hive-service-rpc</artifactId>
           </exclusion>
@@ -1592,11 +1591,6 @@
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-service</artifactId>
-          </exclusion>
-          <exclusion>
-            <!-- All classes are covered by spark's hive-thriftserver module -->
-            <groupId>${hive.group}</groupId>
-            <artifactId>hive-service-rpc</artifactId>
           </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
@@ -1852,7 +1846,6 @@
             <artifactId>hive-service</artifactId>
           </exclusion>
           <exclusion>
-            <!-- All classes are covered by spark's hive-thriftserver module -->
             <groupId>${hive.group}</groupId>
             <artifactId>hive-service-rpc</artifactId>
           </exclusion>
@@ -2007,7 +2000,6 @@
           </exclusion>
           <!-- Begin of Hive 2.3 exclusion -->
           <exclusion>
-            <!-- All classes are covered by spark's hive-thriftserver module -->
             <groupId>${hive.group}</groupId>
             <artifactId>hive-service-rpc</artifactId>
           </exclusion>
@@ -2029,6 +2021,17 @@
         </exclusions>
       </dependency>
 
+      <dependency>
+        <groupId>${hive.group}</groupId>
+        <artifactId>hive-service-rpc</artifactId>
+        <version>${hive.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>*</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
       <dependency>
         <groupId>net.sf.jpam</groupId>
         <artifactId>jpam</artifactId>
