@@ -17,13 +17,18 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.{Encoders, FakeFileSystemRequiringDSOption, QueryTest, Row}
+import org.scalatest.funsuite.AnyFunSuite
+
+import org.apache.spark.sql.{Dataset, Encoders, FakeFileSystemRequiringDSOption, SparkSession}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 
 // The trait contains tests for all file-based data sources. The tests that are not applicable to
 // all file-based data sources should be placed to `FileBasedDataSourceSuite`.
-trait CommonFileDataSourceSuite { self: QueryTest =>
+trait CommonFileDataSourceSuite extends SQLHelper { self: AnyFunSuite =>
 
+  protected def spark: SparkSession
   protected def dataSourceFormat: String
+  protected def inputDataset: Dataset[_] = spark.createDataset(Seq("abc"))(Encoders.STRING)
 
   test(s"Propagate Hadoop configs from $dataSourceFormat options to underlying file system") {
     withSQLConf(
@@ -33,7 +38,7 @@ trait CommonFileDataSourceSuite { self: QueryTest =>
         withTempPath { dir =>
           val path = dir.getAbsolutePath
           val conf = Map("ds_option" -> "value", "mergeSchema" -> mergeSchema.toString)
-          spark.createDataset(Seq("abc"))(Encoders.STRING)
+          inputDataset
             .write
             .options(conf)
             .format(dataSourceFormat)
