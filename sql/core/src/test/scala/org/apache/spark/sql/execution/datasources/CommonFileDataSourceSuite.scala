@@ -37,12 +37,14 @@ trait CommonFileDataSourceSuite { self: QueryTest =>
             .options(conf)
             .format(dataSourceFormat)
             .save(path)
-          val readback = spark
-            .read
-            .options(conf)
-            .format(dataSourceFormat)
-            .load(path)
-          checkAnswer(readback, Row("abc"))
+          Seq(path, "file:" + path.stripPrefix("file:")).foreach { p =>
+            val readback = spark
+              .read
+              .options(conf)
+              .format(dataSourceFormat)
+              .load(p)
+            checkAnswer(readback, Row("abc"))
+          }
         }
       }
     }
