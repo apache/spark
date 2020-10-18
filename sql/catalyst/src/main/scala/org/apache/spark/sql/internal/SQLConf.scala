@@ -1993,6 +1993,20 @@ object SQLConf {
       .stringConf
       .createWithDefault("")
 
+  val FASTFAIL_ON_FILEFORMAT_OUTPUT =
+    buildConf("spark.sql.execution.fastFailOnFileFormatOutput")
+      .internal()
+      .doc("Whether to fast fail task execution when writing output to FileFormat datasource. " +
+        "If this is enabled, in `FileFormatWriter` we will catch `FileAlreadyExistsException` " +
+        "and fast fail output task without further task retry. Only enabling this if you know " +
+        "the `FileAlreadyExistsException` of the output task is unrecoverable, i.e., further " +
+        "task attempts won't be able to success. If the `FileAlreadyExistsException` might be " +
+        "recoverable, you should keep this as disabled and let Spark to retry output tasks. " +
+        "This is disabled by default.")
+      .version("3.0.2")
+      .booleanConf
+      .createWithDefault(false)
+
   object PartitionOverwriteMode extends Enumeration {
     val STATIC, DYNAMIC = Value
   }
@@ -3089,6 +3103,8 @@ class SQLConf extends Serializable with Logging {
 
   def disabledV2StreamingMicroBatchReaders: String =
     getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
+
+  def fastFailFileFormatOutput: Boolean = getConf(FASTFAIL_ON_FILEFORMAT_OUTPUT)
 
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
 
