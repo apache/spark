@@ -258,7 +258,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     val m = intercept[IllegalArgumentException] {
       step.configurePod(SparkPod.initialPod())
     }.getMessage
-    assert(m.contains("Found duplicated mountPath: `/data`"))
+    assert(m.contains("Found duplicated mountPath: '/data'"))
   }
 
   test("Mounts subpath on emptyDir") {
