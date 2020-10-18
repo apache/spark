@@ -1025,7 +1025,7 @@ class Analyzer(
           case table => table
         }.getOrElse(u)
 
-      case u @ UnresolvedTableOrView(identifier, isResolutionRequired) =>
+      case u @ UnresolvedTableOrView(identifier, _) =>
         lookupTableOrView(identifier).getOrElse(u)
     }
 
