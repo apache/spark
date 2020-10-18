@@ -54,7 +54,7 @@ def basic_datasource_example(spark):
 
     # $example on:manual_load_options_csv$
     df = spark.read.load("examples/src/main/resources/people.csv",
-                         format="csv", sep=":", inferSchema="true", header="true")
+                         format="csv", sep=";", inferSchema="true", header="true")
     # $example off:manual_load_options_csv$
 
     # $example on:manual_save_options_orc$
