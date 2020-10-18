@@ -161,7 +161,7 @@ class TestGetXComEntry(TestXComEndpoint):
             run_id=dag_run_id,
             execution_date=execution_date,
             start_date=execution_date,
-            run_type=DagRunType.MANUAL.value,
+            run_type=DagRunType.MANUAL,
         )
         session.add(dagrun)
 
@@ -344,7 +344,7 @@ class TestGetXComEntries(TestXComEndpoint):
             run_id=dag_run_id,
             execution_date=execution_date,
             start_date=execution_date,
-            run_type=DagRunType.MANUAL.value,
+            run_type=DagRunType.MANUAL,
         )
         session.add(dagrun)
 
@@ -418,7 +418,7 @@ class TestPaginationGetXComEntries(TestXComEndpoint):
             run_id=self.dag_run_id,
             execution_date=self.execution_date_parsed,
             start_date=self.execution_date_parsed,
-            run_type=DagRunType.MANUAL.value,
+            run_type=DagRunType.MANUAL,
         )
         xcom_models = self._create_xcoms(10)
         session.add_all(xcom_models)

@@ -85,7 +85,7 @@ class TestDagRunEndpoint(unittest.TestCase):
         dagrun_model_1 = DagRun(
             dag_id="TEST_DAG_ID",
             run_id="TEST_DAG_RUN_ID_1",
-            run_type=DagRunType.MANUAL.value,
+            run_type=DagRunType.MANUAL,
             execution_date=timezone.parse(self.default_time),
             start_date=timezone.parse(self.default_time),
             external_trigger=True,
@@ -95,7 +95,7 @@ class TestDagRunEndpoint(unittest.TestCase):
         dagrun_model_2 = DagRun(
             dag_id="TEST_DAG_ID",
             run_id="TEST_DAG_RUN_ID_2",
-            run_type=DagRunType.MANUAL.value,
+            run_type=DagRunType.MANUAL,
             execution_date=timezone.parse(self.default_time_2),
             start_date=timezone.parse(self.default_time),
             external_trigger=True,
@@ -109,7 +109,7 @@ class TestDagRunEndpoint(unittest.TestCase):
                     DagRun(
                         dag_id='TEST_DAG_ID_' + str(i),
                         run_id='TEST_DAG_RUN_ID_' + str(i),
-                        run_type=DagRunType.MANUAL.value,
+                        run_type=DagRunType.MANUAL,
                         execution_date=timezone.parse(self.default_time_2),
                         start_date=timezone.parse(self.default_time),
                         external_trigger=True,
@@ -177,7 +177,7 @@ class TestGetDagRun(TestDagRunEndpoint):
         dagrun_model = DagRun(
             dag_id="TEST_DAG_ID",
             run_id="TEST_DAG_RUN_ID",
-            run_type=DagRunType.MANUAL.value,
+            run_type=DagRunType.MANUAL,
             execution_date=timezone.parse(self.default_time),
             start_date=timezone.parse(self.default_time),
             external_trigger=True,
@@ -220,7 +220,7 @@ class TestGetDagRun(TestDagRunEndpoint):
         dagrun_model = DagRun(
             dag_id="TEST_DAG_ID",
             run_id="TEST_DAG_RUN_ID",
-            run_type=DagRunType.MANUAL.value,
+            run_type=DagRunType.MANUAL,
             execution_date=timezone.parse(self.default_time),
             start_date=timezone.parse(self.default_time),
             external_trigger=True,
@@ -369,7 +369,7 @@ class TestGetDagRunsPagination(TestDagRunEndpoint):
             DagRun(
                 dag_id="TEST_DAG_ID",
                 run_id="TEST_DAG_RUN_ID" + str(i),
-                run_type=DagRunType.MANUAL.value,
+                run_type=DagRunType.MANUAL,
                 execution_date=timezone.parse(self.default_time) + timedelta(minutes=i),
                 start_date=timezone.parse(self.default_time),
                 external_trigger=True,
@@ -453,7 +453,7 @@ class TestGetDagRunsPaginationFilters(TestDagRunEndpoint):
             DagRun(
                 dag_id="TEST_DAG_ID",
                 run_id="TEST_START_EXEC_DAY_1" + str(i),
-                run_type=DagRunType.MANUAL.value,
+                run_type=DagRunType.MANUAL,
                 execution_date=timezone.parse(dates[i]),
                 start_date=timezone.parse(dates[i]),
                 external_trigger=True,
@@ -647,7 +647,7 @@ class TestGetDagRunBatchPagination(TestDagRunEndpoint):
             DagRun(
                 dag_id="TEST_DAG_ID",
                 run_id="TEST_DAG_RUN_ID" + str(i),
-                run_type=DagRunType.MANUAL.value,
+                run_type=DagRunType.MANUAL,
                 execution_date=timezone.parse(self.default_time) + timedelta(minutes=i),
                 start_date=timezone.parse(self.default_time),
                 external_trigger=True,
@@ -729,7 +729,7 @@ class TestGetDagRunBatchDateFilters(TestDagRunEndpoint):
             DagRun(
                 dag_id="TEST_DAG_ID",
                 run_id="TEST_START_EXEC_DAY_1" + str(i),
-                run_type=DagRunType.MANUAL.value,
+                run_type=DagRunType.MANUAL,
                 execution_date=timezone.parse(dates[i]),
                 start_date=timezone.parse(dates[i]),
                 external_trigger=True,
