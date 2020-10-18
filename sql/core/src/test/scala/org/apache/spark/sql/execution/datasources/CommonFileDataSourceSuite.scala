@@ -44,7 +44,8 @@ trait CommonFileDataSourceSuite { self: QueryTest =>
               .options(conf)
               .format(dataSourceFormat)
               .load(p)
-            checkAnswer(readback, Row("abc"))
+            // Checks that read doesn't throw the exception from `FakeFileSystemRequiringDSOption`
+            readback.write.mode("overwrite").format("noop").save()
           }
         }
       }
