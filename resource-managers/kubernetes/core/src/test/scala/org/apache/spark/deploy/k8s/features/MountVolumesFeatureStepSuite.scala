@@ -236,6 +236,31 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.container.getVolumeMounts.size() === 2)
   }
 
+  test("mountPath should be unique") {
+    val hpVolumeConf = KubernetesVolumeSpec(
+      "hpVolume",
+      "/data",
+      "",
+      false,
+      KubernetesHostPathVolumeConf("/hostPath/tmp")
+    )
+    val pvcVolumeConf = KubernetesVolumeSpec(
+      "checkpointVolume",
+      "/data",
+      "",
+      true,
+      KubernetesPVCVolumeConf("pvcClaim")
+    )
+    val kubernetesConf = KubernetesTestConf.createDriverConf(
+      volumes = Seq(hpVolumeConf, pvcVolumeConf))
+
+    val step = new MountVolumesFeatureStep(kubernetesConf)
+    val m = intercept[IllegalArgumentException] {
+      step.configurePod(SparkPod.initialPod())
+    }.getMessage
+    assert(m.contains("Found duplicated mountPath: '/data'"))
+  }
+
   test("Mounts subpath on emptyDir") {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
