@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.{Encoders, FakeFileSystemRequiringDSOption, QueryTest, Row}
 
-// The trait contains tests for all file-based data sources.
+// The trait contains tests for all file-based data sources. The tests that are not applicable to
+// all file-based data sources should be placed to `FileBasedDataSourceSuite`.
 trait CommonFileDataSourceSuite { self: QueryTest =>
 
   protected def dataSourceFormat: String
