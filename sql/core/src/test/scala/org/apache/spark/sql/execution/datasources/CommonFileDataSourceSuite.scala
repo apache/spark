@@ -17,15 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.scalatest.funsuite.AnyFunSuite
-
 import org.apache.spark.sql.{Encoders, FakeFileSystemRequiringDSOption, QueryTest, Row}
-import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.test.SQLTestData
 
 // The trait contains tests for all file-based data sources.
-trait CommonFileDataSourceSuite {
-  self: QueryTest with AnyFunSuite with SQLTestData with SQLHelper =>
+trait CommonFileDataSourceSuite { self: QueryTest =>
 
   protected def dataSourceFormat: String
 
