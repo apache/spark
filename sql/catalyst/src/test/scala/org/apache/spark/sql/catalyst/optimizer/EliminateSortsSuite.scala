@@ -99,11 +99,19 @@ class EliminateSortsSuite extends AnalysisTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("remove redundant order by") {
+  test("remove redundant local sort") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc_nullsFirst)
-    val unnecessaryReordered = orderedPlan.limit(2).select('a).orderBy('a.asc, 'b.desc_nullsFirst)
+    val unnecessaryReordered = orderedPlan.limit(2).select('a).sortBy('a.asc, 'b.desc_nullsFirst)
     val optimized = Optimize.execute(unnecessaryReordered.analyze)
     val correctAnswer = orderedPlan.limit(2).select('a).analyze
+    comparePlans(Optimize.execute(optimized), correctAnswer)
+  }
+
+  test("should not remove global sort") {
+    val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc_nullsFirst)
+    val reordered = orderedPlan.limit(2).select('a).orderBy('a.asc, 'b.desc_nullsFirst)
+    val optimized = Optimize.execute(reordered.analyze)
+    val correctAnswer = reordered.analyze
     comparePlans(Optimize.execute(optimized), correctAnswer)
   }
 
@@ -115,19 +123,36 @@ class EliminateSortsSuite extends AnalysisTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("filters don't affect order") {
+  test("filters don't affect order for local sort") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc)
-    val filteredAndReordered = orderedPlan.where('a > Literal(10)).orderBy('a.asc, 'b.desc)
+    val filteredAndReordered = orderedPlan.where('a > Literal(10)).sortBy('a.asc, 'b.desc)
     val optimized = Optimize.execute(filteredAndReordered.analyze)
     val correctAnswer = orderedPlan.where('a > Literal(10)).analyze
     comparePlans(optimized, correctAnswer)
   }
 
-  test("limits don't affect order") {
+  test("should keep global sort when child is a filter operator with the same ordering") {
+    val projectPlan = testRelation.select('a, 'b)
+    val orderedPlan = projectPlan.orderBy('a.asc, 'b.desc)
+    val filteredAndReordered = orderedPlan.where('a > Literal(10)).orderBy('a.asc, 'b.desc)
+    val optimized = Optimize.execute(filteredAndReordered.analyze)
+    val correctAnswer = projectPlan.where('a > Literal(10)).orderBy('a.asc, 'b.desc).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("limits don't affect order for local sort") {
+    val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc)
+    val filteredAndReordered = orderedPlan.limit(Literal(10)).sortBy('a.asc, 'b.desc)
+    val optimized = Optimize.execute(filteredAndReordered.analyze)
+    val correctAnswer = orderedPlan.limit(Literal(10)).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("should keep global sort when child is a limit operator with the same ordering") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc)
     val filteredAndReordered = orderedPlan.limit(Literal(10)).orderBy('a.asc, 'b.desc)
     val optimized = Optimize.execute(filteredAndReordered.analyze)
-    val correctAnswer = orderedPlan.limit(Literal(10)).analyze
+    val correctAnswer = filteredAndReordered.analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -332,5 +357,27 @@ class EliminateSortsSuite extends AnalysisTest {
       .limit(10)
     val correctAnswer = PushDownOptimizer.execute(noOrderByPlan.analyze)
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("remove two consecutive global sorts with same ordering") {
+    Seq(
+      (testRelation.orderBy('a.asc).orderBy('a.asc), testRelation.orderBy('a.asc)),
+      (testRelation.orderBy('a.asc, 'b.desc).orderBy('a.asc),
+        testRelation.orderBy('a.asc, 'b.desc))
+    ).foreach { case (ordered, answer) =>
+      val optimized = Optimize.execute(ordered.analyze)
+      comparePlans(optimized, answer.analyze)
+    }
+  }
+
+  test("should keep global sort when child is a local sort with the same ordering") {
+    val correctAnswer = testRelation.orderBy('a.asc).analyze
+    Seq(
+      testRelation.sortBy('a.asc).orderBy('a.asc),
+      testRelation.orderBy('a.asc).sortBy('a.asc).orderBy('a.asc)
+    ).foreach { ordered =>
+      val optimized = Optimize.execute(ordered.analyze)
+      comparePlans(optimized, correctAnswer)
+    }
   }
 }
