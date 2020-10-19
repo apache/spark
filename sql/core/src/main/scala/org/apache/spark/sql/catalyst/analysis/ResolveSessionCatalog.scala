@@ -44,6 +44,7 @@ class ResolveSessionCatalog(
   extends Rule[LogicalPlan] with LookupCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
+  import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case AlterTableAddColumnsStatement(
@@ -497,19 +498,20 @@ class ResolveSessionCatalog(
         v1TableName.asTableIdentifier,
         "ALTER TABLE RECOVER PARTITIONS")
 
-    case AlterTableAddPartition(
-        r @ ResolvedTable(_, _, _: V1Table), partSpecsAndLocs: Seq[UnresolvedPartitionSpec],
-        ifNotExists) if isSessionCatalog(r.catalog) =>
+    case AlterTableAddPartition(r @ ResolvedTable(_, _, _: V1Table), partSpecsAndLocs, ifNotExists)
+        if isSessionCatalog(r.catalog) && !partSpecsAndLocs.resolved =>
       AlterTableAddPartitionCommand(
         r.identifier.asTableIdentifier,
-        partSpecsAndLocs.map(spec => (spec.spec, spec.location)),
+        partSpecsAndLocs.asInstanceOf[Seq[UnresolvedPartitionSpec]]
+          .map(spec => (spec.spec, spec.location)),
         ifNotExists)
 
-    case AlterTableAddPartition(
-        r: ResolvedView, partitionSpecsAndLocs: Seq[UnresolvedPartitionSpec], ifNotExists) =>
+    case AlterTableAddPartition(r: ResolvedView, partSpecsAndLocs, ifNotExists)
+        if !partSpecsAndLocs.resolved =>
       AlterTableAddPartitionCommand(
         r.identifier.asTableIdentifier,
-        partitionSpecsAndLocs.map(spec => (spec.spec, spec.location)),
+        partSpecsAndLocs.asInstanceOf[Seq[UnresolvedPartitionSpec]]
+          .map(spec => (spec.spec, spec.location)),
         ifNotExists)
 
     case AlterTableRenamePartitionStatement(tbl, from, to) =>
@@ -520,21 +522,20 @@ class ResolveSessionCatalog(
         to)
 
     case AlterTableDropPartition(
-        r @ ResolvedTable(_, _, _: V1Table), specs: Seq[UnresolvedPartitionSpec],
-        ifExists, purge, retainData) if isSessionCatalog(r.catalog) =>
+        r @ ResolvedTable(_, _, _: V1Table), specs, ifExists, purge, retainData)
+        if isSessionCatalog(r.catalog) && !specs.resolved =>
       AlterTableDropPartitionCommand(
         r.identifier.asTableIdentifier,
-        specs.map(_.spec),
+        specs.asInstanceOf[Seq[UnresolvedPartitionSpec]].map(_.spec),
         ifExists,
         purge,
         retainData)
 
-    case AlterTableDropPartition(
-        r: ResolvedView, specs: Seq[UnresolvedPartitionSpec],
-        ifExists, purge, retainData) =>
+    case AlterTableDropPartition(r: ResolvedView, specs, ifExists, purge, retainData)
+        if !specs.resolved =>
       AlterTableDropPartitionCommand(
         r.identifier.asTableIdentifier,
-        specs.map(_.spec),
+        specs.asInstanceOf[Seq[UnresolvedPartitionSpec]].map(_.spec),
         ifExists,
         purge,
         retainData)

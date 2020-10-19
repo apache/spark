@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.catalog.{ResolvedPartitionSpec, UnresolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAddPartition, AlterTableDropPartition, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
@@ -31,27 +30,13 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case r@ AlterTableAddPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, _) =>
-      val resolvedParts = parts.map {
-        case unresolvedPartSpec: UnresolvedPartitionSpec =>
-          ResolvedPartitionSpec(
-            unresolvedPartSpec.spec.asPartitionIdentifier(table.partitionSchema()),
-            unresolvedPartSpec.location)
-        case resolvedPartSpec: ResolvedPartitionSpec =>
-          resolvedPartSpec
-      }
-      r.copy(parts = resolvedParts)
+        ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _)
+        if !partSpecs.resolved =>
+      r.copy(parts = partSpecs.asResolved(table.partitionSchema()))
 
     case r@ AlterTableDropPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, _, _, _) =>
-      val resolvedParts = parts.map {
-        case unresolvedPartSpec: UnresolvedPartitionSpec =>
-          ResolvedPartitionSpec(
-            unresolvedPartSpec.spec.asPartitionIdentifier(table.partitionSchema()),
-            unresolvedPartSpec.location)
-        case resolvedPartSpec: ResolvedPartitionSpec =>
-          resolvedPartSpec
-      }
-      r.copy(parts = resolvedParts)
+        ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _, _, _)
+        if !partSpecs.resolved =>
+      r.copy(parts = partSpecs.asResolved(table.partitionSchema()))
   }
 }

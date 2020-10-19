@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.{PartitionSpec, ResolvedPartitionSpec, UnresolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsDelete, SupportsPartitionManagement, SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.types.{ByteType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructType}
@@ -84,6 +85,18 @@ object DataSourceV2Implicits {
     def asOptions: CaseInsensitiveStringMap = {
       new CaseInsensitiveStringMap(options.asJava)
     }
+  }
+
+  implicit class PartitionSpecsHelper(partSpecs: Seq[PartitionSpec]) {
+    def resolved: Boolean = partSpecs.forall(_.isInstanceOf[ResolvedPartitionSpec])
+
+    def asResolved(partSchema: StructType): Seq[ResolvedPartitionSpec] =
+      partSpecs.asInstanceOf[Seq[UnresolvedPartitionSpec]]
+        .map { unresolvedPartSpec =>
+          ResolvedPartitionSpec(
+            unresolvedPartSpec.spec.asPartitionIdentifier(partSchema),
+            unresolvedPartSpec.location)
+        }
   }
 
   implicit class TablePartitionSpecHelper(partSpec: TablePartitionSpec) {
