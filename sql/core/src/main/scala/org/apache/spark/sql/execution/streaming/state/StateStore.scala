@@ -37,7 +37,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Base trait for a versioned key-value store which provides read operations. Each instance of a
- * `StateStore` represents a specific version of state data, and such instances are created
+ * `ReadStateStore` represents a specific version of state data, and such instances are created
  * through a [[StateStoreProvider]].
  *
  * `abort` method will be called when the task is completed - please clean up the resources in
@@ -74,10 +74,7 @@ trait ReadStateStore {
     iterator()
   }
 
-  /**
-   * Return an iterator containing all the key-value pairs in the StateStore. Implementations must
-   * ensure that updates (puts, removes) can be made while iterating over this iterator.
-   */
+  /** Return an iterator containing all the key-value pairs in the StateStore. */
   def iterator(): Iterator[UnsafeRowPair]
 
   /**
@@ -117,6 +114,12 @@ trait StateStore extends ReadStateStore {
    * order to avoid incorrect usage.
    */
   def commit(): Long
+
+  /**
+   * Return an iterator containing all the key-value pairs in the StateStore. Implementations must
+   * ensure that updates (puts, removes) can be made while iterating over this iterator.
+   */
+  override def iterator(): Iterator[UnsafeRowPair]
 
   /**
    * Abort all the updates that have been made to the store. Implementations should ensure that
