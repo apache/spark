@@ -107,6 +107,35 @@ case class InsertIntoHadoopFsRelationCommand(
         fs, catalogTable.get, qualifiedOutputPath, matchingPartitions)
     }
 
+    // For dynamic partition overwrite, we do not delete partition directories ahead.
+    // We write to staging directories and move to final partition directories after writing
+    // job is done. So it is ok to have outputPath try to overwrite inputpath.
+    if (mode == SaveMode.Overwrite && !dynamicPartitionOverwrite) {
+      val inputPaths = child.collect {
+        case scan: FileSourceScanExec =>
+          scan.dynamicallySelectedPartitions.flatMap(_.files.map {
+            case fileStatus if !fileStatus.isDirectory => fileStatus.getPath.getParent
+            case fileStatus => fileStatus.getPath
+          })
+      }.flatten
+      val finalOutputPath =
+        if (staticPartitions.nonEmpty && partitionColumns.length == staticPartitions.size) {
+          val staticPathFragment =
+            PartitioningUtils.getPathFragment(staticPartitions, partitionColumns)
+          if (customPartitionLocations.contains(staticPartitions)) {
+            new Path(customPartitionLocations.getOrElse(staticPartitions, staticPathFragment))
+          } else {
+            new Path(qualifiedOutputPath, staticPathFragment)
+          }
+        } else {
+          outputPath
+        }
+      if (inputPaths.exists(isSubDir(_, finalOutputPath, hadoopConf))) {
+        throw new AnalysisException(
+          s"Cannot overwrite a path that is also being read from.")
+      }
+    }
+
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
@@ -140,34 +169,6 @@ case class InsertIntoHadoopFsRelationCommand(
     }
 
     if (doInsertion) {
-      // For dynamic partition overwrite, we do not delete partition directories ahead.
-      // We write to staging directories and move to final partition directories after writing
-      // job is done. So it is ok to have outputPath try to overwrite inputpath.
-      if (mode == SaveMode.Overwrite && !dynamicPartitionOverwrite) {
-        val inputPaths = child.collect {
-          case scan: FileSourceScanExec =>
-            scan.dynamicallySelectedPartitions.flatMap(_.files.map {
-              case fileStatus if !fileStatus.isDirectory => fileStatus.getPath.getParent
-              case fileStatus => fileStatus.getPath
-            })
-        }.flatten
-        val finalOutputPath =
-          if (staticPartitions.nonEmpty && partitionColumns.length == staticPartitions.size) {
-            val staticPathFragment =
-              PartitioningUtils.getPathFragment(staticPartitions, partitionColumns)
-            if (customPartitionLocations.contains(staticPartitions)) {
-              new Path(customPartitionLocations.getOrElse(staticPartitions, staticPathFragment))
-            } else {
-              new Path(qualifiedOutputPath, staticPathFragment)
-            }
-          } else {
-            outputPath
-          }
-        if (inputPaths.exists(isSubDir(_, finalOutputPath, hadoopConf))) {
-          throw new AnalysisException(
-            s"Cannot overwrite a path that is also being read from.")
-        }
-      }
 
       def refreshUpdatedPartitions(updatedPartitionPaths: Set[String]): Unit = {
         val updatedPartitions = updatedPartitionPaths.map(PartitioningUtils.parsePathFragment)
