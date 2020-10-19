@@ -26,13 +26,16 @@ import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
 
-abstract class TextSuite extends QueryTest with SharedSparkSession {
+abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFileDataSourceSuite {
   import testImplicits._
+
+  override protected def dataSourceFormat = "text"
 
   test("reading text file") {
     verifyFrame(spark.read.format("text").load(testFile))
