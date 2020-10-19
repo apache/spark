@@ -79,7 +79,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PushLeftSemiLeftAntiThroughJoin,
         LimitPushDown,
         ColumnPruning,
-        InferFiltersFromConstraints,
         // Operator combine
         CollapseRepartition,
         CollapseProject,
@@ -117,14 +116,13 @@ abstract class Optimizer(catalogManager: CatalogManager)
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {
-      val rulesWithoutInferFiltersFromConstraints =
-        operatorOptimizationRuleSet.filterNot(_ == InferFiltersFromConstraints)
       Batch("Operator Optimization before Inferring Filters", fixedPoint,
-        rulesWithoutInferFiltersFromConstraints: _*) ::
+        operatorOptimizationRuleSet: _*) ::
       Batch("Infer Filters", Once,
+        InferFiltersFromGenerate,
         InferFiltersFromConstraints) ::
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
-        rulesWithoutInferFiltersFromConstraints: _*) ::
+        operatorOptimizationRuleSet: _*) ::
       // Set strategy to Once to avoid pushing filter every time because we do not change the
       // join condition.
       Batch("Push extra predicate through join", fixedPoint,
@@ -865,6 +863,41 @@ object TransposeWindow extends Rule[LogicalPlan] {
            w2.expressions.forall(_.deterministic) &&
            compatibleParititions(ps1, ps2) =>
       Project(w1.output, Window(we2, ps2, os2, Window(we1, ps1, os1, grandChild)))
+  }
+}
+
+/**
+ * Infers filters from [[Generate]], such that rows that would have been removed
+ * by this [[Generate]] can be removed earlier - before joins and in data sources.
+ */
+object InferFiltersFromGenerate extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    // This rule does not infer filters from foldable expressions to avoid constant filters
+    // like 'size([1, 2, 3]) > 0'. These do not show up in child's constraints and
+    // then the idempotence will break.
+    case generate @ Generate(e, _, _, _, _, _)
+      if !e.deterministic || e.children.forall(_.foldable) => generate
+
+    case generate @ Generate(g, _, false, _, _, _) if canInferFilters(g) =>
+      // Exclude child's constraints to guarantee idempotency
+      val inferredFilters = ExpressionSet(
+        Seq(
+          GreaterThan(Size(g.children.head), Literal(0)),
+          IsNotNull(g.children.head)
+        )
+      ) -- generate.child.constraints
+
+      if (inferredFilters.nonEmpty) {
+        generate.copy(child = Filter(inferredFilters.reduce(And), generate.child))
+      } else {
+        generate
+      }
+  }
+
+  private def canInferFilters(g: Generator): Boolean = g match {
+    case _: ExplodeBase => true
+    case _: Inline => true
+    case _ => false
   }
 }
 

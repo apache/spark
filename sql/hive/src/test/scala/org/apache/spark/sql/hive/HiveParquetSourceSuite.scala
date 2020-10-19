@@ -230,6 +230,12 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
         withTempPath { path =>
           withTable("parq_tbl1", "parq_tbl2", "parq_tbl3",
             "tbl1", "tbl2", "tbl3", "tbl4", "tbl5", "tbl6") {
+
+            def checkErrorMsg(path: String): String = {
+              s"Path: ${path} is a directory, which is not supported by the record reader " +
+                s"when `mapreduce.input.fileinputformat.input.dir.recursive` is false."
+            }
+
             val parquetTblStatement1 =
               s"""
                  |CREATE EXTERNAL TABLE parq_tbl1(
@@ -287,7 +293,7 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
               val msg = intercept[IOException] {
                 sql("SELECT * FROM tbl1").show()
               }.getMessage
-              assert(msg.contains("Not a file:"))
+              assert(msg.contains(checkErrorMsg(s"$path/l1")))
             }
 
             val l1DirStatement =
@@ -305,7 +311,7 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
               val msg = intercept[IOException] {
                 sql("SELECT * FROM tbl2").show()
               }.getMessage
-              assert(msg.contains("Not a file:"))
+              assert(msg.contains(checkErrorMsg(s"$path/l1/l2")))
             }
 
             val l2DirStatement =
@@ -323,7 +329,7 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
               val msg = intercept[IOException] {
                 sql("SELECT * FROM tbl3").show()
               }.getMessage
-              assert(msg.contains("Not a file:"))
+              assert(msg.contains(checkErrorMsg(s"$path/l1/l2/l3")))
             }
 
             val wildcardTopDirStatement =
@@ -341,7 +347,7 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
               val msg = intercept[IOException] {
                 sql("SELECT * FROM tbl4").show()
               }.getMessage
-              assert(msg.contains("Not a file:"))
+              assert(msg.contains(checkErrorMsg(s"$path/l1/l2")))
             }
 
             val wildcardL1DirStatement =
@@ -359,7 +365,7 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
               val msg = intercept[IOException] {
                 sql("SELECT * FROM tbl5").show()
               }.getMessage
-              assert(msg.contains("Not a file:"))
+              assert(msg.contains(checkErrorMsg(s"$path/l1/l2/l3")))
             }
 
             val wildcardL2DirStatement =

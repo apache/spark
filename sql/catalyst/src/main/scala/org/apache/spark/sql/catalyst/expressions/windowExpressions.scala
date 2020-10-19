@@ -348,15 +348,12 @@ abstract class OffsetWindowFunction
 
   /**
    * (Foldable) expression that contains the number of rows between the current row and the row
-   * where the input expression is evaluated.
+   * where the input expression is evaluated. If `offset` is a positive integer, it means that
+   * the direction of the `offset` is from front to back. If it is a negative integer, the direction
+   * of the `offset` is from back to front. If it is zero, it means that the offset is ignored and
+   * use current row.
    */
   val offset: Expression
-
-  /**
-   * Direction of the number of rows between the current row and the row where the input expression
-   * is evaluated.
-   */
-  val direction: SortDirection
 
   override def children: Seq[Expression] = Seq(input, offset, default)
 
@@ -373,16 +370,7 @@ abstract class OffsetWindowFunction
 
   override def nullable: Boolean = default == null || default.nullable || input.nullable
 
-  override lazy val frame: WindowFrame = {
-    val boundary = direction match {
-      case Ascending => offset
-      case Descending => UnaryMinus(offset) match {
-          case e: Expression if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
-          case o => o
-      }
-    }
-    SpecifiedWindowFrame(RowFrame, boundary, boundary)
-  }
+  override lazy val frame: WindowFrame = SpecifiedWindowFrame(RowFrame, offset, offset)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val check = super.checkInputDataTypes()
@@ -444,8 +432,6 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
   def this(input: Expression) = this(input, Literal(1))
 
   def this() = this(Literal(null))
-
-  override val direction = Ascending
 }
 
 /**
@@ -480,7 +466,7 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
   since = "2.0.0",
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
-case class Lag(input: Expression, offset: Expression, default: Expression)
+case class Lag(input: Expression, inputOffset: Expression, default: Expression)
     extends OffsetWindowFunction {
 
   def this(input: Expression, offset: Expression) = this(input, offset, Literal(null))
@@ -489,7 +475,12 @@ case class Lag(input: Expression, offset: Expression, default: Expression)
 
   def this() = this(Literal(null))
 
-  override val direction = Descending
+  override def children: Seq[Expression] = Seq(input, inputOffset, default)
+
+  override val offset: Expression = UnaryMinus(inputOffset) match {
+    case e: Expression if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
+    case o => o
+  }
 }
 
 abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowFunction {
