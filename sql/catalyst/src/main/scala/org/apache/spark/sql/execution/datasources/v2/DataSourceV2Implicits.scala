@@ -91,12 +91,32 @@ object DataSourceV2Implicits {
     def resolved: Boolean = partSpecs.forall(_.isInstanceOf[ResolvedPartitionSpec])
 
     def asResolved(partSchema: StructType): Seq[ResolvedPartitionSpec] =
-      partSpecs.asInstanceOf[Seq[UnresolvedPartitionSpec]]
+      partSpecs.asUnresolvedPartitionSpecs
         .map { unresolvedPartSpec =>
           ResolvedPartitionSpec(
             unresolvedPartSpec.spec.asPartitionIdentifier(partSchema),
             unresolvedPartSpec.location)
         }
+
+    def asUnresolvedPartitionSpecs: Seq[UnresolvedPartitionSpec] = {
+      if (partSpecs.forall(_.isInstanceOf[UnresolvedPartitionSpec])) {
+        partSpecs.map(_.asInstanceOf[UnresolvedPartitionSpec])
+      } else {
+        throw new IllegalArgumentException(
+          "Failed to cast PartitionSpec as UnresolvedPartitionSpec, " +
+            "some of them has been already resolved")
+      }
+    }
+
+    def asResolvedPartitionSpecs: Seq[ResolvedPartitionSpec] = {
+      if (partSpecs.forall(_.isInstanceOf[ResolvedPartitionSpec])) {
+        partSpecs.map(_.asInstanceOf[ResolvedPartitionSpec])
+      } else {
+        throw new IllegalArgumentException(
+          "Failed to cast PartitionSpec as ResolvedPartitionSpec, " +
+            "some of them did not resolved")
+      }
+    }
   }
 
   implicit class TablePartitionSpecHelper(partSpec: TablePartitionSpec) {

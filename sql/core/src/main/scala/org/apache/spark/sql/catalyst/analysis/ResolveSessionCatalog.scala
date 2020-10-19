@@ -502,16 +502,14 @@ class ResolveSessionCatalog(
         if isSessionCatalog(r.catalog) && !partSpecsAndLocs.resolved =>
       AlterTableAddPartitionCommand(
         r.identifier.asTableIdentifier,
-        partSpecsAndLocs.asInstanceOf[Seq[UnresolvedPartitionSpec]]
-          .map(spec => (spec.spec, spec.location)),
+        partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),
         ifNotExists)
 
     case AlterTableAddPartition(r: ResolvedView, partSpecsAndLocs, ifNotExists)
         if !partSpecsAndLocs.resolved =>
       AlterTableAddPartitionCommand(
         r.identifier.asTableIdentifier,
-        partSpecsAndLocs.asInstanceOf[Seq[UnresolvedPartitionSpec]]
-          .map(spec => (spec.spec, spec.location)),
+        partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),
         ifNotExists)
 
     case AlterTableRenamePartitionStatement(tbl, from, to) =>
@@ -526,7 +524,7 @@ class ResolveSessionCatalog(
         if isSessionCatalog(r.catalog) && !specs.resolved =>
       AlterTableDropPartitionCommand(
         r.identifier.asTableIdentifier,
-        specs.asInstanceOf[Seq[UnresolvedPartitionSpec]].map(_.spec),
+        specs.asUnresolvedPartitionSpecs.map(_.spec),
         ifExists,
         purge,
         retainData)
@@ -535,7 +533,7 @@ class ResolveSessionCatalog(
         if !specs.resolved =>
       AlterTableDropPartitionCommand(
         r.identifier.asTableIdentifier,
-        specs.asInstanceOf[Seq[UnresolvedPartitionSpec]].map(_.spec),
+        specs.asUnresolvedPartitionSpecs.map(_.spec),
         ifExists,
         purge,
         retainData)
