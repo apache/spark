@@ -278,14 +278,16 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       ShowTablePropertiesExec(r.output, rt.table, propertyKey) :: Nil
 
     case AlterTableAddPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement),
-        parts: Seq[ResolvedPartitionSpec], ignoreIfExists) =>
-      AlterTableAddPartitionExec(table, parts, ignoreIfExists) :: Nil
+        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfExists)
+        if parts.resolved =>
+      AlterTableAddPartitionExec(
+        table, parts.asInstanceOf[Seq[ResolvedPartitionSpec]], ignoreIfExists) :: Nil
 
     case AlterTableDropPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement),
-        partIdents: Seq[ResolvedPartitionSpec], ignoreIfNotExists, _, _) =>
-      AlterTableDropPartitionExec(table, partIdents, ignoreIfNotExists) :: Nil
+        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfNotExists, _, _)
+        if parts.resolved =>
+      AlterTableDropPartitionExec(
+        table, parts.asInstanceOf[Seq[ResolvedPartitionSpec]], ignoreIfNotExists) :: Nil
 
     case _ => Nil
   }
