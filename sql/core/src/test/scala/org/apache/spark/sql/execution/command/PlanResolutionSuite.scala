@@ -442,7 +442,8 @@ class PlanResolutionSuite extends AnalysisTest {
       "option.other" -> "20",
       "provider" -> "parquet",
       "location" -> "s3://bucket/path/to/data",
-      "comment" -> "table comment")
+      "comment" -> "table comment",
+      "other" -> "20")
 
     parseAndResolve(sql) match {
       case create: CreateV2Table =>
@@ -481,7 +482,8 @@ class PlanResolutionSuite extends AnalysisTest {
       "option.other" -> "20",
       "provider" -> "parquet",
       "location" -> "s3://bucket/path/to/data",
-      "comment" -> "table comment")
+      "comment" -> "table comment",
+      "other" -> "20")
 
     parseAndResolve(sql, withDefault = true) match {
       case create: CreateV2Table =>
@@ -556,7 +558,8 @@ class PlanResolutionSuite extends AnalysisTest {
       "option.other" -> "20",
       "provider" -> "parquet",
       "location" -> "s3://bucket/path/to/data",
-      "comment" -> "table comment")
+      "comment" -> "table comment",
+      "other" -> "20")
 
     parseAndResolve(sql) match {
       case ctas: CreateTableAsSelect =>
@@ -590,7 +593,8 @@ class PlanResolutionSuite extends AnalysisTest {
       "option.other" -> "20",
       "provider" -> "parquet",
       "location" -> "s3://bucket/path/to/data",
-      "comment" -> "table comment")
+      "comment" -> "table comment",
+      "other" -> "20")
 
     parseAndResolve(sql, withDefault = true) match {
       case ctas: CreateTableAsSelect =>
