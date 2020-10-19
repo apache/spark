@@ -22,8 +22,11 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.apache.spark.sql.{Dataset, Encoders, FakeFileSystemRequiringDSOption, SparkSession}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 
-// The trait contains tests for all file-based data sources. The tests that are not applicable to
-// all file-based data sources should be placed to `FileBasedDataSourceSuite`.
+/**
+ * The trait contains tests for all file-based data sources.
+ * The tests that are not applicable to all file-based data sources should be placed to
+ * [[org.apache.spark.sql.FileBasedDataSourceSuite]].
+ */
 trait CommonFileDataSourceSuite extends SQLHelper { self: AnyFunSuite =>
 
   protected def spark: SparkSession
