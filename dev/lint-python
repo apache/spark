@@ -127,8 +127,8 @@ function mypy_test {
     local MYPY_STATUS=
 
     if ! hash "$MYPY_BUILD" 2> /dev/null; then
-        echo "The $MYPY_BUILD command was not found. Skipping MyPy test check build for now."
-        echo
+        echo "The $MYPY_BUILD command was not found."
+        exit 1;
         return
     fi
 

@@ -287,7 +287,7 @@ jobs:
       run: |
         # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
-        pip3 install flake8 'sphinx<3.1.0' numpy pydata_sphinx_theme ipython nbsphinx
+        pip3 install flake8 'sphinx<3.1.0' numpy pydata_sphinx_theme ipython nbsphinx mypy
     - name: Install R 4.0
       uses: r-lib/actions/setup-r@v1
       with:
