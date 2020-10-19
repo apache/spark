@@ -153,7 +153,7 @@ private[spark] object InstanceBlock {
         var blockMemUsage = 0L
 
         while (iterator.hasNext && blockMemUsage < maxMemUsage) {
-          val instance = iterator.next()
+          val instance: Instance = iterator.next()
           if (numCols < 0L) numCols = instance.features.size
           require(numCols == instance.features.size)
           val nnz = instance.features.numNonzeros
