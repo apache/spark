@@ -334,15 +334,17 @@ private[sql] object CatalogV2Util {
   private def convertToProperties(serdeInfo: Option[SerdeInfo]): Map[String, String] = {
     serdeInfo match {
       case Some(s) =>
-        (s.formatClasses match {
+        ((s.formatClasses match {
           case Some((inputFormat, outputFormat)) =>
             Map("hive.input-format" -> inputFormat, "hive.output-format" -> outputFormat)
           case _ =>
             Map.empty
         }) ++
-        s.storedAs.map("hive.stored-as" -> _).toMap ++
-        s.serde.map("hive.serde" -> _).toMap ++
-        s.serdeProperties.map { case (key, value) => TableCatalog.OPTION_PREFIX + key -> value }
+        s.storedAs.map("hive.stored-as" -> _) ++
+        s.serde.map("hive.serde" -> _) ++
+        s.serdeProperties.map {
+          case (key, value) => TableCatalog.OPTION_PREFIX + key -> value
+        }).toMap
       case None =>
         Map.empty
     }
