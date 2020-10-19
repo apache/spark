@@ -375,7 +375,7 @@ public class TransportConf {
    */
   public int minChunkSizeInMergedShuffleFile() {
     return Ints.checkedCast(JavaUtils.byteStringAsBytes(
-        conf.get("spark.shuffle.server.minChunkSizeInMergedShuffleFile", "2m")));
+      conf.get("spark.shuffle.server.minChunkSizeInMergedShuffleFile", "2m")));
   }
 
   /**
@@ -383,6 +383,6 @@ public class TransportConf {
    */
   public long mergedIndexCacheSize() {
     return JavaUtils.byteStringAsBytes(
-        conf.get("spark.shuffle.server.mergedIndexCacheSize", "100m"));
+      conf.get("spark.shuffle.server.mergedIndexCacheSize", "100m"));
   }
 }

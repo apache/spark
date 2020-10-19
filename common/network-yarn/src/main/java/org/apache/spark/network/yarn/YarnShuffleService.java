@@ -180,7 +180,7 @@ public class YarnShuffleService extends AuxiliaryService {
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
       shuffleMergeManager = new RemoteBlockPushResolver(transportConf, APP_BASE_RELATIVE_PATH);
       blockHandler = new ExternalBlockHandler(
-          transportConf, registeredExecutorFile, shuffleMergeManager);
+        transportConf, registeredExecutorFile, shuffleMergeManager);
 
       // If authentication is enabled, set up the shuffle server to use a
       // special RPC handler that filters out unauthenticated fetch requests

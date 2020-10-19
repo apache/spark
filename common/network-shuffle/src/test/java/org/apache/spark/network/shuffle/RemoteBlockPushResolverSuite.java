@@ -63,10 +63,10 @@ public class RemoteBlockPushResolverSuite {
   @Before
   public void before() throws IOException {
     localDirs = new String[]{Paths.get("target/l1").toAbsolutePath().toString(),
-        Paths.get("target/l2").toAbsolutePath().toString()};
+      Paths.get("target/l2").toAbsolutePath().toString()};
     cleanupLocalDirs();
     MapConfigProvider provider = new MapConfigProvider(
-        ImmutableMap.of("spark.shuffle.server.minChunkSizeInMergedShuffleFile", "4"));
+      ImmutableMap.of("spark.shuffle.server.minChunkSizeInMergedShuffleFile", "4"));
     conf = new TransportConf("shuffle", provider);
     pushResolver = new RemoteBlockPushResolver(conf, MERGE_DIR_RELATIVE_PATH);
   }
@@ -105,12 +105,12 @@ public class RemoteBlockPushResolverSuite {
     registerApplication(TEST_APP, TEST_USER);
     registerExecutor(TEST_APP, prepareBlockManagerLocalDirs(TEST_APP, TEST_USER, localDirs));
     PushBlockStream[] pushBlocks = new PushBlockStream[] {
-        new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0),
-        new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0),
+      new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0),
+      new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0),
     };
     ByteBuffer[] blocks = new ByteBuffer[]{
-        ByteBuffer.wrap(new byte[4]),
-        ByteBuffer.wrap(new byte[5])
+      ByteBuffer.wrap(new byte[4]),
+      ByteBuffer.wrap(new byte[5])
     };
     pushBlockHelper(TEST_APP, pushBlocks, blocks);
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0);
@@ -123,16 +123,16 @@ public class RemoteBlockPushResolverSuite {
     registerApplication(TEST_APP, TEST_USER);
     registerExecutor(TEST_APP, prepareBlockManagerLocalDirs(TEST_APP, TEST_USER, localDirs));
     PushBlockStream[] pushBlocks = new PushBlockStream[] {
-        new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0),
-        new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0),
-        new PushBlockStream(TEST_APP, "shuffle_0_2_0", 0),
-        new PushBlockStream(TEST_APP, "shuffle_0_3_0", 0),
+      new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0),
+      new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0),
+      new PushBlockStream(TEST_APP, "shuffle_0_2_0", 0),
+      new PushBlockStream(TEST_APP, "shuffle_0_3_0", 0),
     };
     ByteBuffer[] buffers = new ByteBuffer[]{
-        ByteBuffer.wrap(new byte[2]),
-        ByteBuffer.wrap(new byte[3]),
-        ByteBuffer.wrap(new byte[5]),
-        ByteBuffer.wrap(new byte[3])
+      ByteBuffer.wrap(new byte[2]),
+      ByteBuffer.wrap(new byte[3]),
+      ByteBuffer.wrap(new byte[5]),
+      ByteBuffer.wrap(new byte[3])
     };
     pushBlockHelper(TEST_APP, pushBlocks, buffers);
     MergedBlockMeta meta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0);
@@ -147,12 +147,12 @@ public class RemoteBlockPushResolverSuite {
 
     PushBlockStream pbStream1 = new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0);
     StreamCallbackWithID stream1 =
-        pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream1.blockId, 0));
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream1.blockId, 0));
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
 
     PushBlockStream pbStream2 = new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0);
     StreamCallbackWithID stream2 =
-        pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream2.blockId, 0));
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream2.blockId, 0));
     // This should be deferred
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[3]));
 
@@ -177,12 +177,12 @@ public class RemoteBlockPushResolverSuite {
 
     PushBlockStream pbStream1 = new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0);
     StreamCallbackWithID stream1 =
-        pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream1.blockId, 0));
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream1.blockId, 0));
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
 
     PushBlockStream pbStream2 = new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0);
     StreamCallbackWithID stream2 =
-        pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream2.blockId, 0));
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream2.blockId, 0));
     // This should be deferred
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[3]));
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[3]));
@@ -207,14 +207,14 @@ public class RemoteBlockPushResolverSuite {
 
     PushBlockStream pbStream1 = new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0);
     StreamCallbackWithID stream1 =
-        pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream1.blockId, 0));
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream1.blockId, 0));
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     stream1.onComplete(stream1.getID());
 
     PushBlockStream pbStream2 = new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0);
     StreamCallbackWithID stream2 =
-        pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream2.blockId, 0));
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream2.blockId, 0));
     // This should be ignored
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
@@ -233,12 +233,12 @@ public class RemoteBlockPushResolverSuite {
 
     PushBlockStream pbStream1 = new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0);
     StreamCallbackWithID stream1 =
-        pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream1.blockId, 0));
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream1.blockId, 0));
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
 
     PushBlockStream pbStream2 = new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0);
     StreamCallbackWithID stream2 =
-        pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream2.blockId, 0));
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream2.blockId, 0));
     // This should be ingored
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
@@ -263,7 +263,7 @@ public class RemoteBlockPushResolverSuite {
     PushBlockStream pushBlock = new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0);
 
     StreamCallbackWithID stream =
-        pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pushBlock.blockId, 0));
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pushBlock.blockId, 0));
     stream.onData(stream.getID(), ByteBuffer.wrap(new byte[4]));
     stream.onFailure(stream.getID(), new RuntimeException("Forced Failure"));
 
@@ -280,7 +280,7 @@ public class RemoteBlockPushResolverSuite {
     PushBlockStream pushBlock = new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0);
 
     StreamCallbackWithID stream =
-        pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pushBlock.blockId, 0));
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pushBlock.blockId, 0));
     stream.onData(stream.getID(), ByteBuffer.wrap(new byte[2]));
     stream.onData(stream.getID(), ByteBuffer.wrap(new byte[3]));
     stream.onData(stream.getID(), ByteBuffer.wrap(new byte[4]));
@@ -299,7 +299,7 @@ public class RemoteBlockPushResolverSuite {
     PushBlockStream pushBlock = new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0);
 
     StreamCallbackWithID stream =
-        pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pushBlock.blockId, 0));
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pushBlock.blockId, 0));
     stream.onData(stream.getID(), ByteBuffer.wrap(new byte[2]));
     stream.onData(stream.getID(), ByteBuffer.wrap(new byte[3]));
     stream.onData(stream.getID(), ByteBuffer.wrap(new byte[4]));
@@ -317,27 +317,27 @@ public class RemoteBlockPushResolverSuite {
     registerApplication(TEST_APP, TEST_USER);
     registerExecutor(TEST_APP, prepareBlockManagerLocalDirs(TEST_APP, TEST_USER, localDirs));
     PushBlockStream[] pushBlocks = new PushBlockStream[] {
-        new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0),
-        new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0)};
+      new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0),
+      new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0)};
     ByteBuffer[] blocks = new ByteBuffer[]{
-        ByteBuffer.wrap(new byte[4]),
-        ByteBuffer.wrap(new byte[5])
+      ByteBuffer.wrap(new byte[4]),
+      ByteBuffer.wrap(new byte[5])
     };
     StreamCallbackWithID stream = pushResolver.receiveBlockDataAsStream(
-        new PushBlockStream(TEST_APP, pushBlocks[0].blockId, 0));
+      new PushBlockStream(TEST_APP, pushBlocks[0].blockId, 0));
     for (ByteBuffer block : blocks) {
       stream.onData(stream.getID(), block);
     }
     stream.onComplete(stream.getID());
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, 0));
     StreamCallbackWithID stream1 = pushResolver.receiveBlockDataAsStream(
-        new PushBlockStream(TEST_APP, pushBlocks[1].blockId, 0));
+      new PushBlockStream(TEST_APP, pushBlocks[1].blockId, 0));
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[4]));
     try {
       stream1.onComplete(stream1.getID());
     } catch (RuntimeException re) {
       assertEquals(
-          "Block shuffle_0_1_0 received after merged shuffle is finalized", re.getMessage());
+        "Block shuffle_0_1_0 received after merged shuffle is finalized", re.getMessage());
       MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0);
       validateChunks(TEST_APP, 0, 0, blockMeta, new int[]{9}, new int[][]{{0}});
       removeApplication(TEST_APP);
@@ -351,14 +351,14 @@ public class RemoteBlockPushResolverSuite {
     registerExecutor(TEST_APP, prepareBlockManagerLocalDirs(TEST_APP, TEST_USER, localDirs));
     PushBlockStream pbStream1 = new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0);
     StreamCallbackWithID stream1 =
-        pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream1.blockId, 0));
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream1.blockId, 0));
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[4]));
     // There is a failure
     stream1.onFailure(stream1.getID(), new RuntimeException("forced error"));
 
     PushBlockStream pbStream2 = new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0);
     StreamCallbackWithID stream2 =
-        pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream2.blockId, 0));
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream2.blockId, 0));
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[5]));
     stream2.onComplete(stream2.getID());
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, 0));
@@ -374,18 +374,18 @@ public class RemoteBlockPushResolverSuite {
 
     PushBlockStream pbStream1 = new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0);
     StreamCallbackWithID stream1 =
-        pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream1.blockId, 0));
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream1.blockId, 0));
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
 
     PushBlockStream pbStream2 = new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0);
     StreamCallbackWithID stream2 =
-        pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream2.blockId, 0));
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream2.blockId, 0));
     // There is a failure
     stream2.onFailure(stream2.getID(), new RuntimeException("forced error"));
 
     PushBlockStream pbStream3 = new PushBlockStream(TEST_APP, "shuffle_0_2_0", 0);
     StreamCallbackWithID stream3 =
-        pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream3.blockId, 0));
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream3.blockId, 0));
     // This should be deferred
     stream3.onData(stream3.getID(), ByteBuffer.wrap(new byte[5]));
     // Since this stream didn't get any opportunity it will throw couldn't find opportunity error
@@ -394,8 +394,8 @@ public class RemoteBlockPushResolverSuite {
       stream3.onComplete(stream2.getID());
     } catch (RuntimeException re) {
       assertEquals(
-          "Couldn't find an opportunity to write block shuffle_0_2_0 to merged shuffle",
-          re.getMessage());
+        "Couldn't find an opportunity to write block shuffle_0_2_0 to merged shuffle",
+        re.getMessage());
       failedEx = re;
     }
     // stream 1 now completes
@@ -417,16 +417,16 @@ public class RemoteBlockPushResolverSuite {
     registerApplication(TEST_APP, TEST_USER);
     registerExecutor(TEST_APP, prepareBlockManagerLocalDirs(TEST_APP, TEST_USER, activeLocalDirs));
     PushBlockStream[] pushBlocks = new PushBlockStream[] {
-        new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0),
-        new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0),
-        new PushBlockStream(TEST_APP, "shuffle_0_2_0", 0),
-        new PushBlockStream(TEST_APP, "shuffle_0_3_0", 0),
+      new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0),
+      new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0),
+      new PushBlockStream(TEST_APP, "shuffle_0_2_0", 0),
+      new PushBlockStream(TEST_APP, "shuffle_0_3_0", 0),
     };
     ByteBuffer[] buffers = new ByteBuffer[]{
-        ByteBuffer.wrap(new byte[2]),
-        ByteBuffer.wrap(new byte[3]),
-        ByteBuffer.wrap(new byte[5]),
-        ByteBuffer.wrap(new byte[3])
+      ByteBuffer.wrap(new byte[2]),
+      ByteBuffer.wrap(new byte[3]),
+      ByteBuffer.wrap(new byte[5]),
+      ByteBuffer.wrap(new byte[3])
     };
     pushBlockHelper(TEST_APP, pushBlocks, buffers);
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0);
@@ -442,24 +442,24 @@ public class RemoteBlockPushResolverSuite {
     registerExecutor(TEST_APP, prepareBlockManagerLocalDirs(TEST_APP, TEST_USER, activeLocalDirs));
     assertEquals(pushResolver.getMergedBlockDirs(TEST_APP).length, 1);
     assertTrue(pushResolver.getMergedBlockDirs(TEST_APP)[0].contains(
-        "l2/usercache/" + TEST_USER + "/appcache/" + TEST_APP + "/merge_manager"));
+      "l2/usercache/" + TEST_USER + "/appcache/" + TEST_APP + "/merge_manager"));
     // Any later app init or executor register from the same application
     // won't change the active local dirs list
     registerApplication(TEST_APP, TEST_USER);
     assertEquals(pushResolver.getMergedBlockDirs(TEST_APP).length, 1);
     assertTrue(pushResolver.getMergedBlockDirs(TEST_APP)[0].contains(
-        "l2/usercache/" + TEST_USER + "/appcache/" + TEST_APP + "/merge_manager"));
+      "l2/usercache/" + TEST_USER + "/appcache/" + TEST_APP + "/merge_manager"));
     activeLocalDirs = Arrays.stream(localDirs).toArray(String[]::new);
     registerExecutor(TEST_APP, prepareBlockManagerLocalDirs(TEST_APP, TEST_USER, activeLocalDirs));
     assertEquals(pushResolver.getMergedBlockDirs(TEST_APP).length, 1);
     assertTrue(pushResolver.getMergedBlockDirs(TEST_APP)[0].contains(
-        "l2/usercache/" + TEST_USER + "/appcache/" + TEST_APP + "/merge_manager"));
+      "l2/usercache/" + TEST_USER + "/appcache/" + TEST_APP + "/merge_manager"));
     removeApplication(TEST_APP);
     try {
       pushResolver.getMergedBlockDirs(TEST_APP);
     } catch (Throwable e) {
       assertTrue(e.getMessage()
-          .startsWith("application " + TEST_APP + " is not registered or NM was restarted."));
+        .startsWith("application " + TEST_APP + " is not registered or NM was restarted."));
       Throwables.propagate(e);
     }
   }
@@ -471,30 +471,33 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.registerApplication(appId, user);
   }
 
-  private void registerExecutor(String TEST_APP, String[] localDirs) throws IOException {
-    pushResolver.registerExecutor(TEST_APP, localDirs);
-    for (String localDir : pushResolver.getMergedBlockDirs(TEST_APP)) {
+  private void registerExecutor(String appId, String[] localDirs) throws IOException {
+    pushResolver.registerExecutor(appId, localDirs);
+    for (String localDir : pushResolver.getMergedBlockDirs(appId)) {
       Files.createDirectories(Paths.get(localDir));
     }
   }
 
-  private String[] prepareBlockManagerLocalDirs(String TEST_APP, String user, String[] localDirs){
+  private String[] prepareBlockManagerLocalDirs(String appId, String user, String[] localDirs){
     return Arrays.stream(localDirs)
-        .map(localDir ->
-            localDir + "/" +
-                String.format(MERGE_DIR_RELATIVE_PATH + BLOCK_MANAGER_DIR, user, TEST_APP))
-        .toArray(String[]::new);
+      .map(localDir ->
+        localDir + "/" + String.format(MERGE_DIR_RELATIVE_PATH + BLOCK_MANAGER_DIR, user, appId))
+      .toArray(String[]::new);
   }
 
-  private void removeApplication(String TEST_APP) {
+  private void removeApplication(String appId) {
     // PushResolver cleans up the local dirs in a different thread which can conflict with the test
     // data of other tests, since they are using the same Application Id.
-    pushResolver.applicationRemoved(TEST_APP,  false);
+    pushResolver.applicationRemoved(appId,  false);
   }
 
   private void validateChunks(
-      String TEST_APP, int shuffleId, int reduceId, MergedBlockMeta meta,
-      int[] expectedSizes, int[][] expectedMapsPerChunk) throws IOException {
+      String appId,
+      int shuffleId,
+      int reduceId,
+      MergedBlockMeta meta,
+      int[] expectedSizes,
+      int[][] expectedMapsPerChunk) throws IOException {
     assertEquals("num chunks", expectedSizes.length, meta.getNumChunks());
     RoaringBitmap[] bitmaps = meta.readChunkBitmaps();
     assertEquals("num of bitmaps", meta.getNumChunks(), bitmaps.length);
@@ -504,21 +507,22 @@ public class RemoteBlockPushResolverSuite {
     }
     for (int i = 0; i < meta.getNumChunks(); i++) {
       FileSegmentManagedBuffer mb =
-          (FileSegmentManagedBuffer) pushResolver.getMergedBlockData(TEST_APP, shuffleId, reduceId,
-              i);
+        (FileSegmentManagedBuffer) pushResolver.getMergedBlockData(appId, shuffleId, reduceId, i);
       assertEquals(expectedSizes[i], mb.getLength());
     }
   }
 
-  private void pushBlockHelper(String TEST_APP, PushBlockStream[] pushBlocks, ByteBuffer[] blocks)
-      throws IOException {
+  private void pushBlockHelper(
+      String appId,
+      PushBlockStream[] pushBlocks,
+      ByteBuffer[] blocks) throws IOException {
     Preconditions.checkArgument(pushBlocks.length == blocks.length);
     for (int i = 0; i < pushBlocks.length; i++) {
       StreamCallbackWithID stream = pushResolver.receiveBlockDataAsStream(
-          new PushBlockStream(TEST_APP, pushBlocks[i].blockId, 0));
+        new PushBlockStream(appId, pushBlocks[i].blockId, 0));
       stream.onData(stream.getID(), blocks[i]);
       stream.onComplete(stream.getID());
     }
-    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, 0));
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(appId, 0));
   }
 }
