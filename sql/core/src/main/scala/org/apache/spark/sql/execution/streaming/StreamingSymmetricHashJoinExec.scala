@@ -151,8 +151,9 @@ case class StreamingSymmetricHashJoinExec(
       stateWatermarkPredicates = JoinStateWatermarkPredicates(), stateFormatVersion, left, right)
   }
 
-  if (stateFormatVersion < 2 && (joinType == LeftOuter || joinType == RightOuter)) {
-    throw new IllegalArgumentException("The query is using stream-stream outer join with state" +
+  if (stateFormatVersion < 2 && joinType != Inner) {
+    throw new IllegalArgumentException(
+      s"The query is using stream-stream $joinType join with state" +
       s" format version ${stateFormatVersion} - correctness issue is discovered. Please discard" +
       " the checkpoint and rerun the query. See SPARK-26154 for more details.")
   }
@@ -283,7 +284,7 @@ case class StreamingSymmetricHashJoinExec(
       leftOutputIter ++ rightOutputIter, onHashJoinOutputCompletion())
 
     val outputIter: Iterator[InternalRow] = joinType match {
-      case Inner =>
+      case Inner | LeftSemi =>
         hashJoinOutputIter
       case LeftOuter =>
         // We generate the outer join input by:
@@ -339,8 +340,6 @@ case class StreamingSymmetricHashJoinExec(
         }.map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
 
         hashJoinOutputIter ++ outerOutputIter
-      case LeftSemi =>
-        hashJoinOutputIter
       case _ => throwBadJoinTypeException()
     }
 
@@ -369,7 +368,8 @@ case class StreamingSymmetricHashJoinExec(
       allRemovalsTimeMs += timeTakenMs {
         // Remove any remaining state rows which aren't needed because they're below the watermark.
         //
-        // For inner joins, we have to remove unnecessary state rows from both sides if possible.
+        // For inner and left semi joins, we have to remove unnecessary state rows from both sides
+        // if possible.
         //
         // For outer joins, we have already removed unnecessary state rows from the outer side
         // (e.g., left side for left outer join) while generating the outer "null" outputs. Now, we
@@ -380,10 +380,10 @@ case class StreamingSymmetricHashJoinExec(
         // For left semi joins, we have to remove unnecessary state rows from both sides if
         // possible.
         val cleanupIter = joinType match {
-          case Inner => leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()
+          case Inner | LeftSemi =>
+            leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()
           case LeftOuter => rightSideJoiner.removeOldState()
           case RightOuter => leftSideJoiner.removeOldState()
-          case LeftSemi => leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()
           case _ => throwBadJoinTypeException()
         }
         while (cleanupIter.hasNext) {

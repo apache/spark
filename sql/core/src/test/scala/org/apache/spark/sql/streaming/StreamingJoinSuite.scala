@@ -974,7 +974,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
       throw writer.exception.get
     }
     assert(e.getMessage.toLowerCase(Locale.ROOT)
-      .contains("the query is using stream-stream outer join with state format version 1"))
+      .contains("the query is using stream-stream leftouter join with state format version 1"))
   }
 
   test("SPARK-29438: ensure UNION doesn't lead stream-stream join to use shifted partition IDs") {

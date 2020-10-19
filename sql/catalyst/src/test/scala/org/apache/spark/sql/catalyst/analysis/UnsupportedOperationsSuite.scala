@@ -506,7 +506,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     OutputMode.Complete(),
     Seq("is not supported in Complete output mode"))
 
-  // Left ousemiter joins: stream-stream allowed with join on watermark attribute
+  // Left semi joins: stream-stream allowed with join on watermark attribute
   // Note that the attribute need not be watermarked on both sides.
   assertSupportedInStreamingPlan(
     s"left semi join with stream-stream relations and join on attribute with left watermark",

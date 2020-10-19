@@ -110,11 +110,11 @@ class SymmetricHashJoinStateManager(
       predicate: JoinedRow => Boolean,
       joinOnlyFirstTimeMatchedRow: Boolean = false): Iterator[JoinedRow] = {
     val numValues = keyToNumValues.get(key)
-    keyWithIndexToValue.getAll(key, numValues).map { keyIdxToValue =>
+    keyWithIndexToValue.getAll(key, numValues).filterNot { keyIdxToValue =>
+      joinOnlyFirstTimeMatchedRow && keyIdxToValue.matched
+    }.map { keyIdxToValue =>
       val joinedRow = generateJoinedRow(keyIdxToValue.value)
-      if (joinOnlyFirstTimeMatchedRow && keyIdxToValue.matched) {
-        null
-      } else if (predicate(joinedRow)) {
+      if (predicate(joinedRow)) {
         if (!keyIdxToValue.matched) {
           keyWithIndexToValue.put(key, keyIdxToValue.valueIndex, keyIdxToValue.value,
             matched = true)
