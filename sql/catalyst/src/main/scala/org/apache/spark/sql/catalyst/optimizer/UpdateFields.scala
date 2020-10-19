@@ -31,11 +31,18 @@ import org.apache.spark.sql.internal.SQLConf
  * Optimizes [[UpdateFields]] expression chains.
  */
 object OptimizeUpdateFields extends Rule[LogicalPlan] {
+  private def canOptimize(names: Seq[String]): Boolean = {
+    if (SQLConf.get.caseSensitiveAnalysis) {
+      names.distinct.length != names.length
+    } else {
+      names.map(_.toLowerCase(Locale.ROOT)).distinct.length != names.length
+    }
+  }
+
   val optimizeUpdateFields: PartialFunction[Expression, Expression] = {
     case UpdateFields(structExpr, fieldOps)
       if fieldOps.forall(_.isInstanceOf[WithField]) &&
-        fieldOps.map(_.asInstanceOf[WithField].name.toLowerCase(Locale.ROOT)).distinct.length !=
-          fieldOps.length =>
+        canOptimize(fieldOps.map(_.asInstanceOf[WithField].name)) =>
       val caseSensitive = SQLConf.get.caseSensitiveAnalysis
 
       val withFields = fieldOps.map(_.asInstanceOf[WithField])
