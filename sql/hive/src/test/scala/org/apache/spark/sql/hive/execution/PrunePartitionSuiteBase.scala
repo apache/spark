@@ -76,12 +76,12 @@ abstract class PrunePartitionSuiteBase extends QueryTest with SQLTestUtils with 
 
   private def getCleanStringRepresentation(exp: Expression): String = exp match {
     case attr: AttributeReference =>
-      attr.sql
+      attr.sql.replaceAll("spark_catalog.default.t.", "")
     case l: Literal =>
       l.sql
     case e: BinaryOperator =>
-      (s"(${getCleanStringRepresentation(e.left)} ${e.symbol} " +
-        s"${getCleanStringRepresentation(e.right)})").replaceAll("spark_catalog.default.t.", "")
+      s"(${getCleanStringRepresentation(e.left)} ${e.symbol} " +
+        s"${getCleanStringRepresentation(e.right)})"
   }
 
   protected def assertPrunedPartitions(
