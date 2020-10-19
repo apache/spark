@@ -46,7 +46,12 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
           // if the struct itself is null, then any value extracted from it (expr) will be null
           // so we don't need to wrap expr in If(IsNull(struct), Literal(null, expr.dataType), expr)
           case expr: GetStructField if expr.child.semanticEquals(structExpr) => expr
-          case expr => If(IsNull(structExpr), Literal(null, expr.dataType), expr)
+          case expr =>
+            if (structExpr.nullable) {
+              If(IsNull(structExpr), Literal(null, expr.dataType), expr)
+            } else {
+              expr
+            }
         }
       // Remove redundant array indexing.
       case GetArrayStructFields(CreateArray(elems, useStringTypeWhenEmpty), field, ordinal, _, _) =>

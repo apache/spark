@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.CombineUnions
+import org.apache.spark.sql.catalyst.optimizer.{CombineUnions, OptimizeUpdateFields}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -88,13 +88,6 @@ object ResolveUnion extends Rule[LogicalPlan] {
       }
   }
 
-  def simplifyWithFields(expr: Expression): Expression = {
-    expr.transformUp {
-      case UpdateFields(UpdateFields(struct, fieldOps1), fieldOps2) =>
-        UpdateFields(struct, fieldOps1 ++ fieldOps2)
-    }
-  }
-
   /**
    * Adds missing fields recursively into given `col` expression, based on the target `StructType`.
    * This is called by `compareAndAddFields` when we find two struct columns with same name but
@@ -119,7 +112,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
       missingFieldsOpt.map { s =>
         val struct = addFieldsInto(col, s.fields)
         // Combines `WithFields`s to reduce expression tree.
-        val reducedStruct = simplifyWithFields(struct)
+        val reducedStruct = struct.transformUp(OptimizeUpdateFields.optimizeUpdateFields)
         val sorted = sortStructFieldsInWithFields(reducedStruct)
         sorted
       }.get
