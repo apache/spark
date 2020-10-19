@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 import java.sql.Driver
 import java.util.Properties
 
-import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 private[jdbc] class PostgresConnectionProvider extends SecureConnectionProvider {
   override val driverClass = "org.postgresql.Driver"
@@ -28,8 +28,7 @@ private[jdbc] class PostgresConnectionProvider extends SecureConnectionProvider 
   override val name: String = "postgres"
 
   override def appEntry(driver: Driver, options: JDBCOptions): String = {
-    val parseURL = driver.getClass.getMethod("parseURL", classOf[String],
-      classOf[Properties])
+    val parseURL = driver.getClass.getMethod("parseURL", classOf[String], classOf[Properties])
     val properties = parseURL.invoke(driver, options.url, null).asInstanceOf[Properties]
     properties.getProperty("jaasApplicationName", "pgjdbc")
   }

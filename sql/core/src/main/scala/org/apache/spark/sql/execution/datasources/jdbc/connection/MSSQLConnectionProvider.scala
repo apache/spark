@@ -23,7 +23,7 @@ import java.util.Properties
 
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
   override val driverClass = "com.microsoft.sqlserver.jdbc.SQLServerDriver"
@@ -38,8 +38,7 @@ private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
     val parseURL = try {
       // The default parser method signature is the following:
       // private Properties parseAndMergeProperties(String Url, Properties suppliedProperties)
-      val m = driver.getClass.getDeclaredMethod(parserMethod, classOf[String],
-        classOf[Properties])
+      val m = driver.getClass.getDeclaredMethod(parserMethod, classOf[String], classOf[Properties])
       m.setAccessible(true)
       Some(m)
     } catch {

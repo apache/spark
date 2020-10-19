@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, DriverWrapper, JDBCOptions}
+import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 
 abstract class ConnectionProviderSuiteBase extends SparkFunSuite with BeforeAndAfterEach {
   protected def registerDriver(driverClass: String): Driver = {
@@ -47,15 +47,6 @@ abstract class ConnectionProviderSuiteBase extends SparkFunSuite with BeforeAndA
       Configuration.setConfiguration(null)
     } finally {
       super.afterEach()
-    }
-  }
-
-  protected def getWrappedDriver(driverClass: String): Driver = {
-    DriverManager.getDrivers.asScala.collectFirst {
-      // here only DriverWrapper instances considered intentionally
-      case d: DriverWrapper if d.wrapped.getClass.getCanonicalName == driverClass => d
-    }.getOrElse {
-      throw new IllegalStateException(s"Did not find registered driver with class $driverClass")
     }
   }
 
