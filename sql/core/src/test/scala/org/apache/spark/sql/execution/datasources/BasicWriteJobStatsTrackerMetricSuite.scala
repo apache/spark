@@ -27,24 +27,24 @@ class BasicWriteJobStatsTrackerMetricSuite extends SparkFunSuite with LocalSpark
       val partitions = "50"
       spark = SparkSession.builder().master("local[4]").getOrCreate()
       val statusStore = spark.sharedState.statusStore
-      val oldExecutionsSize = statusStore.executionsList().size
 
       spark.sql("create table dynamic_partition(i bigint, part bigint) " +
-        "using parquet partitioned by (part)").collect()
+        "using parquet partitioned by (part)")
+      val oldExecutionsSize = statusStore.executionsList().size
       spark.sql("insert overwrite table dynamic_partition partition(part) " +
-        s"select id, id % $partitions as part from range(10000)").collect()
+        s"select id, id % $partitions as part from range(10000)")
 
       // Wait for listener to finish computing the metrics for the executions.
-      while (statusStore.executionsList().size - oldExecutionsSize < 4 ||
+      while (statusStore.executionsList().size - oldExecutionsSize < 1 ||
         statusStore.executionsList().last.metricValues == null) {
         Thread.sleep(100)
       }
 
-      // There should be 4 SQLExecutionUIData in executionsList and the 3rd item is we need,
+      // There should be 2 SQLExecutionUIData in executionsList and the 2nd item is we need,
       // but the executionId is indeterminate in maven test,
       // so the `statusStore.execution(executionId)` API is not used.
-      assert(statusStore.executionsCount() == 4)
-      val executionData = statusStore.executionsList()(2)
+      assert(statusStore.executionsCount() == 2)
+      val executionData = statusStore.executionsList()(1)
       val accumulatorIdOpt =
         executionData.metrics.find(_.name == "number of dynamic part").map(_.accumulatorId)
       assert(accumulatorIdOpt.isDefined)
