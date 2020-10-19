@@ -113,6 +113,8 @@ private[scheduler] class HealthTracker (
         execsToInclude.foreach { exec =>
           val status = executorIdToExcludedStatus.remove(exec).get
           val failedExecsOnNode = nodeToExcludedExecs(status.node)
+          // post both to keep backwards compatibility
+          listenerBus.post(SparkListenerExecutorUnblacklisted(now, exec))
           listenerBus.post(SparkListenerExecutorUnexcluded(now, exec))
           failedExecsOnNode.remove(exec)
           if (failedExecsOnNode.isEmpty) {
@@ -127,6 +129,8 @@ private[scheduler] class HealthTracker (
           s"nodes have reached has timed out")
         nodesToInclude.foreach { node =>
           nodeIdToExcludedExpiryTime.remove(node)
+          // post both to keep backwards compatibility
+          listenerBus.post(SparkListenerNodeUnblacklisted(now, node))
           listenerBus.post(SparkListenerNodeUnexcluded(now, node))
         }
         _excludedNodeList.set(nodeIdToExcludedExpiryTime.keySet.toSet)
@@ -208,6 +212,8 @@ private[scheduler] class HealthTracker (
           logInfo(s"excluding node $host due to fetch failure of external shuffle service")
 
           nodeIdToExcludedExpiryTime.put(host, expiryTimeForNewExcludes)
+          // post both to keep backwards compatibility
+          listenerBus.post(SparkListenerNodeBlacklisted(now, host, 1))
           listenerBus.post(SparkListenerNodeExcluded(now, host, 1))
           _excludedNodeList.set(nodeIdToExcludedExpiryTime.keySet.toSet)
           killExecutorsOnExcludedNode(host)
@@ -219,6 +225,8 @@ private[scheduler] class HealthTracker (
         executorIdToExcludedStatus.put(exec, ExcludedExecutor(host, expiryTimeForNewExcludes))
         // We hardcoded number of failure tasks to 1 for fetch failure, because there's no
         // reattempt for such failure.
+        // post both to keep backwards compatibility
+        listenerBus.post(SparkListenerExecutorBlacklisted(now, exec, 1))
         listenerBus.post(SparkListenerExecutorExcluded(now, exec, 1))
         updateNextExpiryTime()
         killExcludedExecutor(exec)
@@ -254,6 +262,8 @@ private[scheduler] class HealthTracker (
           s" task failures in successful task sets")
         val node = failuresInTaskSet.node
         executorIdToExcludedStatus.put(exec, ExcludedExecutor(node, expiryTimeForNewExcludes))
+        // post both to keep backwards compatibility
+        listenerBus.post(SparkListenerExecutorBlacklisted(now, exec, newTotal))
         listenerBus.post(SparkListenerExecutorExcluded(now, exec, newTotal))
         executorIdToFailureList.remove(exec)
         updateNextExpiryTime()
@@ -270,6 +280,8 @@ private[scheduler] class HealthTracker (
           logInfo(s"Excluding node $node because it has ${excludedExecsOnNode.size} " +
             s"executors excluded: ${excludedExecsOnNode}")
           nodeIdToExcludedExpiryTime.put(node, expiryTimeForNewExcludes)
+          // post both to keep backwards compatibility
+          listenerBus.post(SparkListenerNodeBlacklisted(now, node, excludedExecsOnNode.size))
           listenerBus.post(SparkListenerNodeExcluded(now, node, excludedExecsOnNode.size))
           _excludedNodeList.set(nodeIdToExcludedExpiryTime.keySet.toSet)
           killExecutorsOnExcludedNode(node)

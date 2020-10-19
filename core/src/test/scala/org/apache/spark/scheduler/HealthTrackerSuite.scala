@@ -121,6 +121,8 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
         assertEquivalentToSet(healthTracker.isExecutorExcluded(_), Set("1"))
         verify(listenerBusMock).post(
           SparkListenerExecutorExcluded(0, "1", failuresUntilExcludeed))
+        verify(listenerBusMock).post(
+          SparkListenerExecutorBlacklisted(0, "1", failuresUntilExcludeed))
       }
     }
   }
@@ -180,6 +182,7 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
     assertEquivalentToSet(healthTracker.isNodeExcluded(_), Set())
     assertEquivalentToSet(healthTracker.isExecutorExcluded(_), Set("1"))
     verify(listenerBusMock).post(SparkListenerExecutorExcluded(0, "1", 4))
+    verify(listenerBusMock).post(SparkListenerExecutorBlacklisted(0, "1", 4))
 
     val taskSetExclude1 = createTaskSetExcludelist(stageId = 1)
     // Fail 4 tasks in one task set on executor 2, so that executor gets excluded for the whole
@@ -193,8 +196,10 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
     assert(healthTracker.excludedNodeList() === Set("hostA"))
     assertEquivalentToSet(healthTracker.isNodeExcluded(_), Set("hostA"))
     verify(listenerBusMock).post(SparkListenerNodeExcluded(0, "hostA", 2))
+    verify(listenerBusMock).post(SparkListenerNodeBlacklisted(0, "hostA", 2))
     assertEquivalentToSet(healthTracker.isExecutorExcluded(_), Set("1", "2"))
     verify(listenerBusMock).post(SparkListenerExecutorExcluded(0, "2", 4))
+    verify(listenerBusMock).post(SparkListenerExecutorBlacklisted(0, "2", 4))
 
     // Advance the clock and then make sure hostA and executors 1 and 2 have been removed from the
     // exclude.
@@ -206,6 +211,8 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
     assertEquivalentToSet(healthTracker.isExecutorExcluded(_), Set())
     verify(listenerBusMock).post(SparkListenerExecutorUnexcluded(timeout, "2"))
     verify(listenerBusMock).post(SparkListenerExecutorUnexcluded(timeout, "1"))
+    verify(listenerBusMock).post(SparkListenerExecutorUnblacklisted(timeout, "2"))
+    verify(listenerBusMock).post(SparkListenerExecutorUnblacklisted(timeout, "1"))
     verify(listenerBusMock).post(SparkListenerNodeUnexcluded(timeout, "hostA"))
 
     // Fail one more task, but executor isn't put back into exclude since the count of failures
