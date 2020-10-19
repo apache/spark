@@ -82,7 +82,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
     if (sqlContext != null) {
-      SparkSession.setActiveSession(sqlContext.sparkSession)
+      SparkSession.setActiveSessionInternal(sqlContext.sparkSession)
     }
     super.makeCopy(newArgs)
   }

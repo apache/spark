@@ -221,7 +221,7 @@ object SQLConf {
     .doc("Configures the log level for logging the change from the original plan to the new " +
       "plan after a rule or batch is applied. The value can be 'trace', 'debug', 'info', " +
       "'warn', or 'error'. The default log level is 'trace'.")
-    .version("3.0.0")
+    .version("3.1.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValue(logLevel => Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(logLevel),
@@ -233,7 +233,7 @@ object SQLConf {
     .internal()
     .doc("Configures a list of rules for logging plan changes, in which the rules are " +
       "specified by their rule names and separated by comma.")
-    .version("3.0.0")
+    .version("3.1.0")
     .stringConf
     .createOptional
 
@@ -241,7 +241,7 @@ object SQLConf {
     .internal()
     .doc("Configures a list of batches for logging plan changes, in which the batches " +
       "are specified by their batch names and separated by comma.")
-    .version("3.0.0")
+    .version("3.1.0")
     .stringConf
     .createOptional
 
@@ -951,6 +951,17 @@ object SQLConf {
     .checkValue(_ > 0, "the value of spark.sql.sources.bucketing.maxBuckets must be greater than 0")
     .createWithDefault(100000)
 
+  val AUTO_BUCKETED_SCAN_ENABLED =
+    buildConf("spark.sql.sources.bucketing.autoBucketedScan.enabled")
+      .doc("When true, decide whether to do bucketed scan on input tables based on query plan " +
+        "automatically. Do not use bucketed scan if 1. query does not have operators to utilize " +
+        "bucketing (e.g. join, group-by, etc), or 2. there's an exchange operator between these " +
+        s"operators and table scan. Note when '${BUCKETING_ENABLED.key}' is set to " +
+        "false, this configuration does not take any effect.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
@@ -1444,6 +1455,15 @@ object SQLConf {
         "JSON functions such as to_json. " +
         "If false, it generates null for null fields in JSON objects.")
       .version("3.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val JSON_EXPRESSION_OPTIMIZATION =
+    buildConf("spark.sql.optimizer.enableJsonExpressionOptimization")
+      .doc("Whether to optimize JSON expressions in SQL optimizer. It includes pruning " +
+        "unnecessary columns from from_json, simplifing from_json + to_json, to_json + " +
+        "named_struct(from_json.col1, from_json.col2, ....).")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -2032,6 +2052,20 @@ object SQLConf {
       .stringConf
       .createWithDefault("")
 
+  val FASTFAIL_ON_FILEFORMAT_OUTPUT =
+    buildConf("spark.sql.execution.fastFailOnFileFormatOutput")
+      .internal()
+      .doc("Whether to fast fail task execution when writing output to FileFormat datasource. " +
+        "If this is enabled, in `FileFormatWriter` we will catch `FileAlreadyExistsException` " +
+        "and fast fail output task without further task retry. Only enabling this if you know " +
+        "the `FileAlreadyExistsException` of the output task is unrecoverable, i.e., further " +
+        "task attempts won't be able to success. If the `FileAlreadyExistsException` might be " +
+        "recoverable, you should keep this as disabled and let Spark to retry output tasks. " +
+        "This is disabled by default.")
+      .version("3.0.2")
+      .booleanConf
+      .createWithDefault(false)
+
   object PartitionOverwriteMode extends Enumeration {
     val STATIC, DYNAMIC = Value
   }
@@ -2328,6 +2362,16 @@ object SQLConf {
       .doc("When set to true, user is allowed to use org.apache.spark.sql.functions." +
         "udf(f: AnyRef, dataType: DataType). Otherwise, an exception will be thrown at runtime.")
       .version("3.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_STATISTICAL_AGGREGATE =
+    buildConf("spark.sql.legacy.statisticalAggregate")
+      .internal()
+      .doc("When set to true, statistical aggregate function returns Double.NaN " +
+        "if divide by zero occurred during expression evaluation, otherwise, it returns null. " +
+        "Before version 3.1.0, it returns NaN in divideByZero case by default.")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -2764,6 +2808,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val DISABLED_JDBC_CONN_PROVIDER_LIST =
+    buildConf("spark.sql.sources.disabledJdbcConnProviderList")
+    .internal()
+    .doc("Configures a list of JDBC connection providers, which are disabled. " +
+      "The list contains the name of the JDBC connection providers separated by comma.")
+    .version("3.1.0")
+    .stringConf
+    .createWithDefault("")
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3164,6 +3217,8 @@ class SQLConf extends Serializable with Logging {
 
   def bucketingMaxBuckets: Int = getConf(SQLConf.BUCKETING_MAX_BUCKETS)
 
+  def autoBucketedScanEnabled: Boolean = getConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
+
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
@@ -3199,6 +3254,8 @@ class SQLConf extends Serializable with Logging {
   def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
   def jsonGeneratorIgnoreNullFields: Boolean = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
+
+  def jsonExpressionOptimization: Boolean = getConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION)
 
   def parallelFileListingInStatsComputation: Boolean =
     getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)
@@ -3293,6 +3350,8 @@ class SQLConf extends Serializable with Logging {
   def disabledV2StreamingMicroBatchReaders: String =
     getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
 
+  def fastFailFileFormatOutput: Boolean = getConf(FASTFAIL_ON_FILEFORMAT_OUTPUT)
+
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
@@ -3342,6 +3401,8 @@ class SQLConf extends Serializable with Logging {
   def allowNegativeScaleOfDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED)
 
+  def legacyStatisticalAggregate: Boolean = getConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE)
+
   def truncateTableIgnorePermissionAcl: Boolean =
     getConf(SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL)
 
@@ -3369,6 +3430,9 @@ class SQLConf extends Serializable with Logging {
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
 
+  def legacyAllowModifyActiveSession: Boolean =
+    getConf(StaticSQLConf.LEGACY_ALLOW_MODIFY_ACTIVE_SESSION)
+
   def legacyAllowCastNumericToTimestamp: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
 
@@ -3385,6 +3449,8 @@ class SQLConf extends Serializable with Logging {
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
   def truncateTrashEnabled: Boolean = getConf(SQLConf.TRUNCATE_TRASH_ENABLED)
+
+  def disabledJdbcConnectionProviders: String = getConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 
   /** ********************** SQLConf functionality methods ************ */
 

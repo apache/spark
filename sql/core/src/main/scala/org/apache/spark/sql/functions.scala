@@ -1428,6 +1428,22 @@ object functions {
   def acos(columnName: String): Column = acos(Column(columnName))
 
   /**
+   * @return inverse hyperbolic cosine of `e`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def acosh(e: Column): Column = withExpr { Acosh(e.expr) }
+
+  /**
+   * @return inverse hyperbolic cosine of `columnName`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def acosh(columnName: String): Column = acosh(Column(columnName))
+
+  /**
    * @return inverse sine of `e` in radians, as if computed by `java.lang.Math.asin`
    *
    * @group math_funcs
@@ -1444,7 +1460,23 @@ object functions {
   def asin(columnName: String): Column = asin(Column(columnName))
 
   /**
-   * @return inverse tangent of `e`, as if computed by `java.lang.Math.atan`
+   * @return inverse hyperbolic sine of `e`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def asinh(e: Column): Column = withExpr { Asinh(e.expr) }
+
+  /**
+   * @return inverse hyperbolic sine of `columnName`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def asinh(columnName: String): Column = asinh(Column(columnName))
+
+  /**
+   * @return inverse tangent of `e` as if computed by `java.lang.Math.atan`
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1571,6 +1603,22 @@ object functions {
    * @since 1.4.0
    */
   def atan2(yValue: Double, xName: String): Column = atan2(yValue, Column(xName))
+
+  /**
+   * @return inverse hyperbolic tangent of `e`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def atanh(e: Column): Column = withExpr { Atanh(e.expr) }
+
+  /**
+   * @return inverse hyperbolic tangent of `columnName`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def atanh(columnName: String): Column = atanh(Column(columnName))
 
   /**
    * An expression that returns the string representation of the binary value of the given long
@@ -2318,6 +2366,36 @@ object functions {
     new XxHash64(cols.map(_.expr))
   }
 
+  /**
+   * Returns null if the condition is true, and throws an exception otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.1.0
+   */
+  def assert_true(c: Column): Column = withExpr {
+    new AssertTrue(c.expr)
+  }
+
+  /**
+   * Returns null if the condition is true; throws an exception with the error message otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.1.0
+   */
+  def assert_true(c: Column, e: Column): Column = withExpr {
+    new AssertTrue(c.expr, e.expr)
+  }
+
+  /**
+   * Throws an exception with the provided error message.
+   *
+   * @group misc_funcs
+   * @since 3.1.0
+   */
+  def raise_error(c: Column): Column = withExpr {
+    RaiseError(c.expr)
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -2760,7 +2838,8 @@ object functions {
   }
 
   /**
-   * Returns the current date as a date column.
+   * Returns the current date at the start of query evaluation as a date column.
+   * All calls of current_date within the same query return the same value.
    *
    * @group datetime_funcs
    * @since 1.5.0
@@ -2768,7 +2847,8 @@ object functions {
   def current_date(): Column = withExpr { CurrentDate() }
 
   /**
-   * Returns the current timestamp as a timestamp column.
+   * Returns the current timestamp at the start of query evaluation as a timestamp column.
+   * All calls of current_timestamp within the same query return the same value.
    *
    * @group datetime_funcs
    * @since 1.5.0

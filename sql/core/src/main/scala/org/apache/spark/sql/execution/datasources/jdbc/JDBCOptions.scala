@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
  * Options for the JDBC data source.
  */
 class JDBCOptions(
-    @transient val parameters: CaseInsensitiveMap[String])
+    val parameters: CaseInsensitiveMap[String])
   extends Serializable with Logging {
 
   import JDBCOptions._
@@ -209,7 +209,7 @@ class JDBCOptions(
 }
 
 class JdbcOptionsInWrite(
-    @transient override val parameters: CaseInsensitiveMap[String])
+    override val parameters: CaseInsensitiveMap[String])
   extends JDBCOptions(parameters) {
 
   import JDBCOptions._

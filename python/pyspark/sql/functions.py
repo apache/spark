@@ -934,6 +934,26 @@ def lead(col, offset=1, default=None):
     return Column(sc._jvm.functions.lead(_to_java_column(col), offset, default))
 
 
+@since(3.1)
+def nth_value(col, offset, ignoreNulls=False):
+    """
+    Window function: returns the value that is the `offset`\\th row of the window frame
+    (counting from 1), and `null` if the size of window frame is less than `offset` rows.
+
+    It will return the `offset`\\th non-null value it sees when `ignoreNulls` is set to
+    true. If all values are null, then null is returned.
+
+    This is equivalent to the nth_value function in SQL.
+
+    :param col: name of column or expression
+    :param offset: number of row to use as the value
+    :param ignoreNulls: indicates the Nth value should skip null in the
+        determination of which row to use
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.nth_value(_to_java_column(col), offset, ignoreNulls))
+
+
 @since(1.4)
 def ntile(n):
     """
@@ -955,7 +975,8 @@ def ntile(n):
 @since(1.5)
 def current_date():
     """
-    Returns the current date as a :class:`DateType` column.
+    Returns the current date at the start of query evaluation as a :class:`DateType` column.
+    All calls of current_date within the same query return the same value.
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.current_date())
@@ -963,7 +984,8 @@ def current_date():
 
 def current_timestamp():
     """
-    Returns the current timestamp as a :class:`TimestampType` column.
+    Returns the current timestamp at the start of query evaluation as a :class:`TimestampType`
+    column. All calls of current_timestamp within the same query return the same value.
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.current_timestamp())
@@ -1568,6 +1590,57 @@ def xxhash64(*cols):
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.xxhash64(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
+
+
+@since(3.1)
+def assert_true(col, errMsg=None):
+    """
+    Returns null if the input column is true; throws an exception with the provided error message
+    otherwise.
+
+    >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
+    >>> df.select(assert_true(df.a < df.b).alias('r')).collect()
+    [Row(r=None)]
+    >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
+    >>> df.select(assert_true(df.a < df.b, df.a).alias('r')).collect()
+    [Row(r=None)]
+    >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
+    >>> df.select(assert_true(df.a < df.b, 'error').alias('r')).collect()
+    [Row(r=None)]
+    """
+    sc = SparkContext._active_spark_context
+    if errMsg is None:
+        return Column(sc._jvm.functions.assert_true(_to_java_column(col)))
+    if not isinstance(errMsg, (str, Column)):
+        raise TypeError(
+            "errMsg should be a Column or a str, got {}".format(type(errMsg))
+        )
+
+    errMsg = (
+        _create_column_from_literal(errMsg)
+        if isinstance(errMsg, str)
+        else _to_java_column(errMsg)
+    )
+    return Column(sc._jvm.functions.assert_true(_to_java_column(col), errMsg))
+
+
+@since(3.1)
+def raise_error(errMsg):
+    """
+    Throws an exception with the provided error message.
+    """
+    if not isinstance(errMsg, (str, Column)):
+        raise TypeError(
+            "errMsg should be a Column or a str, got {}".format(type(errMsg))
+        )
+
+    sc = SparkContext._active_spark_context
+    errMsg = (
+        _create_column_from_literal(errMsg)
+        if isinstance(errMsg, str)
+        else _to_java_column(errMsg)
+    )
+    return Column(sc._jvm.functions.raise_error(errMsg))
 
 
 # ---------------------- String/Binary functions ------------------------------
@@ -3426,14 +3499,14 @@ def bucket(numBuckets, col):
     ... ).createOrReplace()
 
     .. warning::
-        This function can be used only in combinatiion with
+        This function can be used only in combination with
         :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
         method of the `DataFrameWriterV2`.
 
     """
     if not isinstance(numBuckets, (int, Column)):
         raise TypeError(
-            "numBuckets should be a Column or and int, got {}".format(type(numBuckets))
+            "numBuckets should be a Column or an int, got {}".format(type(numBuckets))
         )
 
     sc = SparkContext._active_spark_context

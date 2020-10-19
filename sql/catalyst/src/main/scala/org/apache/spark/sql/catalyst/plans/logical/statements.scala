@@ -299,14 +299,6 @@ case class DropViewStatement(
     ifExists: Boolean) extends ParsedStatement
 
 /**
- * A DESCRIBE TABLE tbl_name col_name statement, as parsed from SQL.
- */
-case class DescribeColumnStatement(
-    tableName: Seq[String],
-    colNameParts: Seq[String],
-    isExtended: Boolean) extends ParsedStatement
-
-/**
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.

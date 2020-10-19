@@ -733,4 +733,18 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
          | """.stripMargin)
     checkAnswer(toDF("yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), toDF("yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]"))
   }
+
+  test("SPARK-33134: return partial results only for root JSON objects") {
+    val st = new StructType()
+      .add("c1", LongType)
+      .add("c2", ArrayType(new StructType().add("c3", LongType).add("c4", StringType)))
+    val df1 = Seq("""{"c2": [19], "c1": 123456}""").toDF("c0")
+    checkAnswer(df1.select(from_json($"c0", st)), Row(Row(123456, null)))
+    val df2 = Seq("""{"data": {"c2": [19], "c1": 123456}}""").toDF("c0")
+    checkAnswer(df2.select(from_json($"c0", new StructType().add("data", st))), Row(Row(null)))
+    val df3 = Seq("""[{"c2": [19], "c1": 123456}]""").toDF("c0")
+    checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(null))
+    val df4 = Seq("""{"c2": [19]}""").toDF("c0")
+    checkAnswer(df4.select(from_json($"c0", MapType(StringType, st))), Row(null))
+  }
 }

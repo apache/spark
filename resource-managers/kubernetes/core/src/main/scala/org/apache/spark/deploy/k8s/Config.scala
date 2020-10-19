@@ -285,11 +285,11 @@ private[spark] object Config extends Logging {
 
   val PYSPARK_MAJOR_PYTHON_VERSION =
     ConfigBuilder("spark.kubernetes.pyspark.pythonVersion")
-      .doc("This sets the major Python version. Either 2 or 3. (Python2 or Python3)")
+      .doc("This sets the major Python version. Only 3 is available for Python3.")
       .version("2.4.0")
       .stringConf
-      .checkValue(pv => List("2", "3").contains(pv),
-        "Ensure that major Python version is either Python2 or Python3")
+      .checkValue(pv => List("3").contains(pv),
+        "Ensure that major Python version is Python3")
       .createWithDefault("3")
 
   val KUBERNETES_KERBEROS_KRB5_FILE =

@@ -1424,7 +1424,10 @@ test_that("column functions", {
     date_trunc("quarter", c) + current_date() + current_timestamp()
   c25 <- overlay(c1, c2, c3, c3) + overlay(c1, c2, c3) + overlay(c1, c2, 1) +
     overlay(c1, c2, 3, 4)
-  c26 <- timestamp_seconds(c1)
+  c26 <- timestamp_seconds(c1) + vector_to_array(c) +
+    vector_to_array(c, "float32") + vector_to_array(c, "float64")
+  c27 <- nth_value("x", 1L) + nth_value("y", 2, TRUE) +
+    nth_value(column("v"), 3) + nth_value(column("z"), 4L, FALSE)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1806,7 +1809,7 @@ test_that("column functions", {
   expect_equal(actual, expected)
 
   # Test withField
-  lines <- c("{\"Person\": {\"name\":\"Bob\", \"age\":24}}")
+  lines <- c("{\"Person\": {\"name\":\"Bob\", \"age\":24, \"height\": 170}}")
   jsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   writeLines(lines, jsonPath)
   df <- read.df(jsonPath, "json")
@@ -1817,6 +1820,23 @@ test_that("column functions", {
       )
   )
   expect_equal(result, data.frame(dummy = 42))
+
+  # Test dropFields
+  expect_setequal(
+    colnames(select(
+      withColumn(df, "Person", dropFields(df$Person, "age")),
+      column("Person.*")
+    )),
+    c("name", "height")
+  )
+
+  expect_equal(
+    colnames(select(
+      withColumn(df, "Person", dropFields(df$Person, "height", "name")),
+      column("Person.*")
+    )),
+    "age"
+  )
 })
 
 test_that("column binary mathfunctions", {
@@ -2127,7 +2147,7 @@ test_that("group by, agg functions", {
   df3 <- agg(gd, age = "stddev")
   expect_is(df3, "SparkDataFrame")
   df3_local <- collect(df3)
-  expect_true(is.nan(df3_local[df3_local$name == "Andy", ][1, 2]))
+  expect_true(is.na(df3_local[df3_local$name == "Andy", ][1, 2]))
 
   df4 <- agg(gd, sumAge = sum(df$age))
   expect_is(df4, "SparkDataFrame")
@@ -2158,7 +2178,7 @@ test_that("group by, agg functions", {
   df7 <- agg(gd2, value = "stddev")
   df7_local <- collect(df7)
   expect_true(abs(df7_local[df7_local$name == "ID1", ][1, 2] - 6.928203) < 1e-6)
-  expect_true(is.nan(df7_local[df7_local$name == "ID2", ][1, 2]))
+  expect_true(is.na(df7_local[df7_local$name == "ID2", ][1, 2]))
 
   mockLines3 <- c("{\"name\":\"Andy\", \"age\":30}",
                   "{\"name\":\"Andy\", \"age\":30}",
@@ -3923,6 +3943,24 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   expect_error(refreshByPath("/"), NA)
 
   dropTempView("cars")
+})
+
+test_that("assert_true, raise_error", {
+  df <- read.json(jsonPath)
+  filtered <- filter(df, "age < 20")
+
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20)))$age, c(NULL))
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20, "error message")))$age,
+               c(NULL))
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20, filtered$name)))$age,
+               c(NULL))
+  expect_error(collect(select(df, assert_true(df$age < 20))), "is not true!")
+  expect_error(collect(select(df, assert_true(df$age < 20, "error message"))),
+               "error message")
+  expect_error(collect(select(df, assert_true(df$age < 20, df$name))), "Michael")
+
+  expect_error(collect(select(filtered, raise_error("error message"))), "error message")
+  expect_error(collect(select(filtered, raise_error(filtered$name))), "Justin")
 })
 
 compare_list <- function(list1, list2) {

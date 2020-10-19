@@ -43,7 +43,6 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
   test("python resource") {
     val mainResource = "local:/main.py"
     val sparkConf = new SparkConf(false)
-      .set(PYSPARK_MAJOR_PYTHON_VERSION, "2")
     val spec = applyFeatureStep(
       PythonMainAppResource(mainResource),
       conf = sparkConf,
@@ -58,7 +57,7 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
     val envs = spec.pod.container.getEnv.asScala
       .map { env => (env.getName, env.getValue) }
       .toMap
-    val expected = Map(ENV_PYSPARK_MAJOR_PYTHON_VERSION -> "2")
+    val expected = Map(ENV_PYSPARK_MAJOR_PYTHON_VERSION -> "3")
     assert(envs === expected)
   }
 
@@ -93,7 +92,6 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
   test("SPARK-25355: python resource args with proxy-user") {
     val mainResource = "local:/main.py"
     val sparkConf = new SparkConf(false)
-      .set(PYSPARK_MAJOR_PYTHON_VERSION, "2")
     val spec = applyFeatureStep(
       PythonMainAppResource(mainResource),
       conf = sparkConf,

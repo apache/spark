@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -283,7 +284,7 @@ object FileFormatWriter extends Logging {
     } catch {
       case e: FetchFailedException =>
         throw e
-      case f: FileAlreadyExistsException =>
+      case f: FileAlreadyExistsException if SQLConf.get.fastFailFileFormatOutput =>
         // If any output file to write already exists, it does not make sense to re-run this task.
         // We throw the exception and let Executor throw ExceptionFailure to abort the job.
         throw new TaskOutputFileAlreadyExistException(f)

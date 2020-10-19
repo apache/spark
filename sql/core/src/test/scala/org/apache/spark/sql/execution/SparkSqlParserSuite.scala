@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTable, RefreshResource}
+import org.apache.spark.sql.execution.datasources.{CreateTable, CreateTempViewUsing, RefreshResource}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 
@@ -158,6 +158,15 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("REFRESH @ $a$", "REFRESH statements cannot contain")
     intercept("REFRESH  ", "Resource paths cannot be empty in REFRESH statements")
     intercept("REFRESH", "Resource paths cannot be empty in REFRESH statements")
+  }
+
+  test("SPARK-33118 CREATE TMEPORARY TABLE with LOCATION") {
+    assertEqual("CREATE TEMPORARY TABLE t USING parquet OPTIONS (path '/data/tmp/testspark1')",
+      CreateTempViewUsing(TableIdentifier("t", None), None, false, false, "parquet",
+        Map("path" -> "/data/tmp/testspark1")))
+    assertEqual("CREATE TEMPORARY TABLE t USING parquet LOCATION '/data/tmp/testspark1'",
+      CreateTempViewUsing(TableIdentifier("t", None), None, false, false, "parquet",
+        Map("path" -> "/data/tmp/testspark1")))
   }
 
   private def createTableUsing(

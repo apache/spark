@@ -17,9 +17,11 @@
 
 package org.apache.spark.network.protocol;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 import io.netty.buffer.ByteBuf;
+import org.roaringbitmap.RoaringBitmap;
 
 /** Provides a canonical set of Encoders for simple types. */
 public class Encoders {
@@ -41,6 +43,40 @@ public class Encoders {
       byte[] bytes = new byte[length];
       buf.readBytes(bytes);
       return new String(bytes, StandardCharsets.UTF_8);
+    }
+  }
+
+  /** Bitmaps are encoded with their serialization length followed by the serialization bytes. */
+  public static class Bitmaps {
+    public static int encodedLength(RoaringBitmap b) {
+      // Compress the bitmap before serializing it. Note that since BlockTransferMessage
+      // needs to invoke encodedLength first to figure out the length for the ByteBuf, it
+      // guarantees that the bitmap will always be compressed before being serialized.
+      b.trim();
+      b.runOptimize();
+      return b.serializedSizeInBytes();
+    }
+
+    public static void encode(ByteBuf buf, RoaringBitmap b) {
+      int encodedLength = b.serializedSizeInBytes();
+      // RoaringBitmap requires nio ByteBuffer for serde. We expose the netty ByteBuf as a nio
+      // ByteBuffer. Here, we need to explicitly manage the index so we can write into the
+      // ByteBuffer, and the write is reflected in the underneath ByteBuf.
+      b.serialize(buf.nioBuffer(buf.writerIndex(), encodedLength));
+      buf.writerIndex(buf.writerIndex() + encodedLength);
+    }
+
+    public static RoaringBitmap decode(ByteBuf buf) {
+      RoaringBitmap bitmap = new RoaringBitmap();
+      try {
+        bitmap.deserialize(buf.nioBuffer());
+        // RoaringBitmap deserialize does not advance the reader index of the underlying ByteBuf.
+        // Manually update the index here.
+        buf.readerIndex(buf.readerIndex() + bitmap.serializedSizeInBytes());
+      } catch (IOException e) {
+        throw new RuntimeException("Exception while decoding bitmap", e);
+      }
+      return bitmap;
     }
   }
 
@@ -133,6 +169,33 @@ public class Encoders {
         longs[i] = buf.readLong();
       }
       return longs;
+    }
+  }
+
+  /** Bitmap arrays are encoded with the number of bitmaps followed by per-Bitmap encoding. */
+  public static class BitmapArrays {
+    public static int encodedLength(RoaringBitmap[] bitmaps) {
+      int totalLength = 4;
+      for (RoaringBitmap b : bitmaps) {
+        totalLength += Bitmaps.encodedLength(b);
+      }
+      return totalLength;
+    }
+
+    public static void encode(ByteBuf buf, RoaringBitmap[] bitmaps) {
+      buf.writeInt(bitmaps.length);
+      for (RoaringBitmap b : bitmaps) {
+        Bitmaps.encode(buf, b);
+      }
+    }
+
+    public static RoaringBitmap[] decode(ByteBuf buf) {
+      int numBitmaps = buf.readInt();
+      RoaringBitmap[] bitmaps = new RoaringBitmap[numBitmaps];
+      for (int i = 0; i < bitmaps.length; i ++) {
+        bitmaps[i] = Bitmaps.decode(buf);
+      }
+      return bitmaps;
     }
   }
 }

@@ -25,22 +25,27 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
-private[sql] class DB2ConnectionProvider(driver: Driver, options: JDBCOptions)
-  extends SecureConnectionProvider(driver, options) {
-  override val appEntry: String = "JaasClient"
+private[sql] class DB2ConnectionProvider extends SecureConnectionProvider {
+  override val driverClass = "com.ibm.db2.jcc.DB2Driver"
 
-  override def getConnection(): Connection = {
-    setAuthenticationConfigIfNeeded()
-    UserGroupInformation.loginUserFromKeytabAndReturnUGI(options.principal, options.keytab).doAs(
-      new PrivilegedExceptionAction[Connection]() {
-        override def run(): Connection = {
-          DB2ConnectionProvider.super.getConnection()
+  override val name: String = "db2"
+
+  override def appEntry(driver: Driver, options: JDBCOptions): String = "JaasClient"
+
+  override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
+    val jdbcOptions = new JDBCOptions(options)
+    setAuthenticationConfigIfNeeded(driver, jdbcOptions)
+    UserGroupInformation.loginUserFromKeytabAndReturnUGI(jdbcOptions.principal, jdbcOptions.keytab)
+      .doAs(
+        new PrivilegedExceptionAction[Connection]() {
+          override def run(): Connection = {
+            DB2ConnectionProvider.super.getConnection(driver, options)
+          }
         }
-      }
-    )
+      )
   }
 
-  override def getAdditionalProperties(): Properties = {
+  override def getAdditionalProperties(options: JDBCOptions): Properties = {
     val result = new Properties()
     // 11 is the integer value for kerberos
     result.put("securityMechanism", new String("11"))
@@ -48,14 +53,10 @@ private[sql] class DB2ConnectionProvider(driver: Driver, options: JDBCOptions)
     result
   }
 
-  override def setAuthenticationConfigIfNeeded(): Unit = SecurityConfigurationLock.synchronized {
-    val (parent, configEntry) = getConfigWithAppEntry()
+  override def setAuthenticationConfigIfNeeded(driver: Driver, options: JDBCOptions): Unit = {
+    val (parent, configEntry) = getConfigWithAppEntry(driver, options)
     if (configEntry == null || configEntry.isEmpty) {
-      setAuthenticationConfig(parent)
+      setAuthenticationConfig(parent, driver, options)
     }
   }
-}
-
-private[sql] object DB2ConnectionProvider {
-  val driverClass = "com.ibm.db2.jcc.DB2Driver"
 }

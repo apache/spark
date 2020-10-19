@@ -40,7 +40,7 @@ import org.apache.spark.tags.DockerTest
  *    Pull oracle $ORACLE_DOCKER_IMAGE_NAME image - docker pull $ORACLE_DOCKER_IMAGE_NAME
  * 3. Start docker - sudo service docker start
  * 4. Run spark test - ./build/sbt -Pdocker-integration-tests
- *    "test-only org.apache.spark.sql.jdbc.OracleIntegrationSuite"
+ *    "testOnly org.apache.spark.sql.jdbc.OracleIntegrationSuite"
  *
  * An actual sequence of commands to run the test is as follows
  *
@@ -51,7 +51,7 @@ import org.apache.spark.tags.DockerTest
  *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:18.4.0-xe
  *  $ cd $SPARK_HOME
  *  $ ./build/sbt -Pdocker-integration-tests
- *    "test-only org.apache.spark.sql.jdbc.OracleIntegrationSuite"
+ *    "testOnly org.apache.spark.sql.jdbc.OracleIntegrationSuite"
  *
  * It has been validated with 18.4.0 Express Edition.
  */
@@ -517,5 +517,16 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
          |   oracle.jdbc.mapDateToTimestamp false)
        """.stripMargin.replaceAll("\n", " "))
     assert(sql("select id, d, t from queryOption").collect.toSet == expectedResult)
+  }
+
+  test("SPARK-32992: map Oracle's ROWID type to StringType") {
+    val rows = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT ROWID from datetime")
+      .load()
+      .collect()
+    val types = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(types(0).equals("class java.lang.String"))
+    assert(!rows(0).getString(0).isEmpty)
   }
 }

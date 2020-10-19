@@ -371,7 +371,7 @@ case class MapEntries(child: Expression)
 
   @transient private lazy val childDataType: MapType = child.dataType.asInstanceOf[MapType]
 
-  override def dataType: DataType = {
+  private lazy val internalDataType: DataType = {
     ArrayType(
       StructType(
         StructField("key", childDataType.keyType, false) ::
@@ -379,6 +379,8 @@ case class MapEntries(child: Expression)
         Nil),
       false)
   }
+
+  override def dataType: DataType = internalDataType
 
   override protected def nullSafeEval(input: Any): Any = {
     val childMap = input.asInstanceOf[MapData]
@@ -3504,12 +3506,15 @@ object ArrayUnion {
   since = "2.4.0")
 case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
-  override def dataType: DataType = {
+
+  private lazy val internalDataType: DataType = {
     dataTypeCheck
     ArrayType(elementType,
       left.dataType.asInstanceOf[ArrayType].containsNull &&
         right.dataType.asInstanceOf[ArrayType].containsNull)
   }
+
+  override def dataType: DataType = internalDataType
 
   @transient lazy val evalIntersect: (ArrayData, ArrayData) => ArrayData = {
     if (TypeUtils.typeWithProperEquals(elementType)) {
@@ -3747,10 +3752,12 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
 case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
 
-  override def dataType: DataType = {
+  private lazy val internalDataType: DataType = {
     dataTypeCheck
     left.dataType
   }
+
+  override def dataType: DataType = internalDataType
 
   @transient lazy val evalExcept: (ArrayData, ArrayData) => ArrayData = {
     if (TypeUtils.typeWithProperEquals(elementType)) {
