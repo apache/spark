@@ -15,15 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.jdbc
+package org.apache.spark.sql.execution.datasources.jdbc.connection
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.datasources.jdbc.connection.TestDriver
+import java.sql.{Connection, Driver, DriverPropertyInfo}
+import java.util.Properties
+import java.util.logging.Logger
 
-class DriverRegistrySuite extends SparkFunSuite {
-  test("SPARK-32229: get must give back wrapped driver if wrapped") {
-    val className = classOf[TestDriver].getName
-    DriverRegistry.register(className)
-    assert(DriverRegistry.get(className).isInstanceOf[TestDriver])
-  }
+private[jdbc] class TestDriver() extends Driver {
+  override def connect(url: String, info: Properties): Connection = null
+  override def acceptsURL(url: String): Boolean = false
+  override def getPropertyInfo(url: String, info: Properties): Array[DriverPropertyInfo] =
+    Array.empty
+  override def getMajorVersion: Int = 0
+  override def getMinorVersion: Int = 0
+  override def jdbcCompliant(): Boolean = false
+  override def getParentLogger: Logger = null
 }

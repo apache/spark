@@ -35,11 +35,10 @@ private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
     val configName = "jaasConfigurationName"
     val appEntryDefault = "SQLJDBCDriver"
 
-    val wrappedDriver = DriverRegistry.getWrappedDriver(driver)
     val parseURL = try {
       // The default parser method signature is the following:
       // private Properties parseAndMergeProperties(String Url, Properties suppliedProperties)
-      val m = wrappedDriver.getClass.getDeclaredMethod(parserMethod, classOf[String],
+      val m = driver.getClass.getDeclaredMethod(parserMethod, classOf[String],
         classOf[Properties])
       m.setAccessible(true)
       Some(m)
@@ -50,7 +49,7 @@ private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
     parseURL match {
       case Some(m) =>
         logDebug("Property parser method found, using it")
-        m.invoke(wrappedDriver, options.url, null).asInstanceOf[Properties]
+        m.invoke(driver, options.url, null).asInstanceOf[Properties]
           .getProperty(configName, appEntryDefault)
 
       case None =>

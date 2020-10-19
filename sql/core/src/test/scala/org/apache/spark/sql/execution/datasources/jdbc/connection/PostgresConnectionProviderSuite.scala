@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc.connection
 
-import java.sql.Driver
-
 class PostgresConnectionProviderSuite extends ConnectionProviderSuiteBase {
   test("setAuthenticationConfigIfNeeded must set authentication if not set") {
     val provider = new PostgresConnectionProvider()
@@ -30,15 +28,5 @@ class PostgresConnectionProviderSuite extends ConnectionProviderSuiteBase {
     assert(provider.appEntry(driver, defaultOptions) !== provider.appEntry(driver, customOptions))
     testSecureConnectionProvider(provider, driver, defaultOptions)
     testSecureConnectionProvider(provider, driver, customOptions)
-  }
-
-  test("SPARK-32229: appEntry should handle DriverWrapper instances") {
-    val provider = new PostgresConnectionProvider()
-    registerDriver(provider.driverClass)
-
-    val wrappedDriver: Driver = getWrappedDriver(provider.driverClass)
-
-    assert(provider.appEntry(wrappedDriver, options("jdbc:postgresql://localhost/postgres")) ===
-      "pgjdbc")
   }
 }
