@@ -82,8 +82,7 @@ class ExecutorStageSummary private[spark](
     val shuffleWriteRecords : Long,
     val memoryBytesSpilled : Long,
     val diskBytesSpilled : Long,
-    @deprecated("use isExcludedForStage instead", "3.1.0")
-    val isBlacklistedForStage: Boolean,
+    val isBlacklistedForStage: Boolean, // deprecated
     @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
     @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
     val peakMemoryMetrics: Option[ExecutorMetrics],
@@ -107,16 +106,14 @@ class ExecutorSummary private[spark](
     val totalInputBytes: Long,
     val totalShuffleRead: Long,
     val totalShuffleWrite: Long,
-    @deprecated("use isExcluded instead", "3.1.0")
-    val isBlacklisted: Boolean,
+    val isBlacklisted: Boolean, // deprecated
     val maxMemory: Long,
     val addTime: Date,
     val removeTime: Option[Date],
     val removeReason: Option[String],
     val executorLogs: Map[String, String],
     val memoryMetrics: Option[MemoryMetrics],
-    @deprecated("use isExcludedForStage instead", "3.1.0")
-    val blacklistedInStages: Set[Int],
+    val blacklistedInStages: Set[Int],  // deprecated
     @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
     @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
     val peakMemoryMetrics: Option[ExecutorMetrics],
