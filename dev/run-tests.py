@@ -56,7 +56,7 @@ def determine_modules_for_files(filenames):
     for filename in filenames:
         if filename in ("appveyor.yml",):
             continue
-        if (os.environ.get("AMPLAB_JENKINS") and filename.startswith(".github")):
+        if ("GITHUB_ACTIONS" not in os.environ) and filename.startswith(".github"):
             continue
         matched_at_least_one_module = False
         for module in modules.all_modules:
