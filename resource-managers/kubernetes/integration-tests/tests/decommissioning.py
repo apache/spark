@@ -31,24 +31,36 @@ if __name__ == "__main__":
         .appName("DecomTest") \
         .getOrCreate()
     sc = spark._sc
-    acc = sc.accumulator(0)
+    accs = []
+    rdds = []
+    for x in range(0, 100):
+        acc = sc.accumulator(0)
+        accs.append(acc)
 
-    def addToAcc(x):
-        acc.add(1)
-        return x
+        def addToAcc(x):
+            acc.add(1)
+            return x
 
-    initialRdd = sc.parallelize(range(100), 5)
-    accRdd = initialRdd.map(addToAcc)
-    # Trigger a shuffle so there are shuffle blocks to migrate
-    rdd = accRdd.map(lambda x: (x, x)).groupByKey()
-    rdd.collect()
-    print("1st accumulator value is: " + str(acc.value))
+        initialRdd = sc.parallelize(range(100), 5)
+        accRdd = initialRdd.map(addToAcc)
+        # Trigger a shuffle so there are shuffle blocks to migrate
+        rdd = accRdd.map(lambda x: (x, x)).groupByKey()
+        rdds.append(rdd)
+        rdd.collect()
+        print("1st accumulator value is: " + str(acc.value))
     print("Waiting to give nodes time to finish migration, decom exec 1.")
     print("...")
     time.sleep(30)
-    rdd.count()
-    rdd.collect()
-    print("Final accumulator value is: " + str(acc.value))
+    values = []
+    for x in range(0, 100):
+        rdd = rdds[x]
+        acc = accs[x]
+        values.append(acc.value)
+        rdd.count()
+        rdd.collect()
+        print("Final accumulator value is: " + str(acc.value))
+
+    print("The unique value len is " + str(len(set(values))))
     print("Finished waiting, stopping Spark.")
     spark.stop()
     print("Done, exiting Python")

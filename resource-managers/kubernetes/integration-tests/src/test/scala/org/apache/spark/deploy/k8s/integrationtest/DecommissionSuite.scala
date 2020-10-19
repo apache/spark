@@ -43,7 +43,9 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
         "Received decommission executor message",
         "Acknowledged decommissioning block manager",
         ": Executor decommission.",
-        "Final accumulator value is: 100"),
+        "Final accumulator value is: 100",
+        "The unique value len is 1"
+      ),
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
