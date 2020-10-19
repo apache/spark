@@ -327,20 +327,36 @@ The following matrix shows the resulting type to which they are implicitly conve
 
 **Numeric Expressions**:
 
-|               |ByteType   |ShortType  |IntegerType |LongType   |FloatType             |DoubleType            |StringType |DecimalType                  |
-|---------------|-----------|-----------|------------|-----------|----------------------|----------------------|-----------|-----------------------------|
-|**ByteType**   |--         |ShortType  |IntegerType |LongType   |FloatType             |DoubleType            |DoubleType |DecimalType(3,0)<sup>1</sup> |
-|**ShortType**  |ShortType  |--         |IntegerType |LongType   |FloatType             |DoubleType            |DoubleType |DecimalType(5,0)<sup>1</sup> |
-|**IntegerType**|IntegerType|IntegerType|--          |LongType   |FloatType             |DoubleType            |DoubleType |DecimalType(10,0)<sup>1</sup>|
-|**LongType**   |LongType   |LongType   |LongType    |--         |FloatType             |DoubleType            |DoubleType |DecimalType(20,0)<sup>1</sup>|
-|**FloatType**  |FloatType  |FloatType  |FloatType   |FloatType  |--                    |DoubleType            |DoubleType |DoubleType                   |
-|**DoubleType** |DoubleType |DoubleType |DoubleType  |DoubleType |DoubleType            |--                    |DoubleType |DoubleType                   |
-|**StringType** |DoubleType |DoubleType |DoubleType  |DoubleType |DoubleType            |DoubleType            |--         |DoubleType                   |
-|**DecimalType**|DecimalType|DecimalType|DecimalType |DecimalType|DoubleType<sup>2</sup>|DoubleType<sup>2</sup>|DoubleType |--                           |
+|               |ByteType   |ShortType  |IntegerType |LongType   |FloatType             |DoubleType            |DecimalType                  |
+|---------------|-----------|-----------|------------|-----------|----------------------|----------------------|-----------------------------|
+|**ByteType**   |--         |ShortType  |IntegerType |LongType   |FloatType             |DoubleType            |DecimalType(3,0)<sup>1</sup> |
+|**ShortType**  |ShortType  |--         |IntegerType |LongType   |FloatType             |DoubleType            |DecimalType(5,0)<sup>1</sup> |
+|**IntegerType**|IntegerType|IntegerType|--          |LongType   |FloatType             |DoubleType            |DecimalType(10,0)<sup>1</sup>|
+|**LongType**   |LongType   |LongType   |LongType    |--         |FloatType             |DoubleType            |DecimalType(20,0)<sup>1</sup>|
+|**FloatType**  |FloatType  |FloatType  |FloatType   |FloatType  |--                    |DoubleType            |DoubleType                   |
+|**DoubleType** |DoubleType |DoubleType |DoubleType  |DoubleType |DoubleType            |--                    |DoubleType                   |
+|**DecimalType**|DecimalType|DecimalType|DecimalType |DecimalType|DoubleType<sup>2</sup>|DoubleType<sup>2</sup>|--                           |
 
 **Note 1**: DecimalType(precision,scale)   
 **Note 2**: In these cases DecimalType can lose precision, there is no common type for decimal and double because double's range is larger than decimal, and yet decimal is more precise than double so when we cast Decimaltype into DobleType it could lose precision.
 
+**StringType Behavior**  
+* Arithmetic Expressions:
+
+    |               |ByteType   |ShortType  |IntegerType |LongType   |FloatType    |DoubleType  |
+    |---------------|-----------|-----------|------------|-----------|-------------|------------|
+    |**StringType** |DoubleType |DoubleType |DoubleType  |DoubleType |DoubleType   |DoubleType  |
+
+* Comparison:
+
+    |               |ByteType   |ShortType  |IntegerType |LongType   |FloatType    |DoubleType  |DecimalType |DateType             |TimestampType             |
+    |---------------|-----------|-----------|------------|-----------|-------------|------------|------------|---------------------|--------------------------|
+    |**StringType** |ByteType   |ShortType  |IntegerType |LongType   |FloatType    |DoubleType  |DoubleType  |DateType<sup>1</sup> |TimestampType<sup>1</sup> |
+
+    **Note 1**: If `spark.sql.legacy.typeCoercion.datetimeToString` is true, DateType and TimestampType will be casted to StringType
+    
+* IN Expressions: Expressions like `x IN list_values`.  If the list of values has a StringType element, all the elements will be casted to StringType  
+ 
 **Time Expressions**:
 
 |                  |DateType     |TimestampType |
@@ -387,17 +403,50 @@ DESCRIBE SELECT integerColumn + doubleColumn as result FROM numericTable;
 ```
 
 ```sql
-DESCRIBE dateTable;
-+---------------+---------+-------+
-|       col_name|data_type|comment|
-+---------------+---------+-------+
-|     dateColumn|     date|   null|
-|timestampColumn|timestamp|   null|
-+---------------+---------+-------+
+DESCRIBE SELECT MONTHS_BETWEEN(CAST('2020-10-10' AS Date),CAST('2020-08-13' AS timestamp))
 
-SELECT MONTHS_BETWEEN(dateColumn,timestampColumn) FROM dateTable;
++------------------------------------------------------------------------------------------------+---------+-------+
+|col_name                                                                                        |data_type|comment|
++------------------------------------------------------------------------------------------------+---------+-------+
+|months_between(CAST(CAST(2020-10-10 AS DATE) AS TIMESTAMP), CAST(2020-08-13 AS TIMESTAMP), true)|double   |null   |
++------------------------------------------------------------------------------------------------+---------+-------+
 
 ```
+
+```sql
+DESCRIBE SELECT 1 + '2'
+
++---------------------------------------+---------+-------+
+|col_name                               |data_type|comment|
++---------------------------------------+---------+-------+
+|(CAST(1 AS DOUBLE) + CAST(2 AS DOUBLE))|double   |null   |
++---------------------------------------+---------+-------+
+
+```
+
+```sql
+DESCRIBE SELECT 1 = '2'
+
++--------------------+---------+-------+
+|col_name            |data_type|comment|
++--------------------+---------+-------+
+|(1 = CAST(2 AS INT))|boolean  |null   |
++--------------------+---------+-------+
+
+```
+
+```sql
+DESCRIBE SELECT 1 IN ('2', 3)
+
++-------------------------------------------------------------+---------+-------+
+|col_name                                                     |data_type|comment|
++-------------------------------------------------------------+---------+-------+
+|(CAST(1 AS STRING) IN (CAST(2 AS STRING), CAST(3 AS STRING)))|boolean  |null   |
++-------------------------------------------------------------+---------+-------+
+
+```
+
+
 
 #### Explicit Casting and Store Assignment Casting
 
