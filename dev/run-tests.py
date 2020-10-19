@@ -42,8 +42,8 @@ def determine_modules_for_files(filenames):
     """
     Given a list of filenames, return the set of modules that contain those files.
     If a file is not associated with a more specific submodule, then this method will consider that
-    file to belong to the 'root' module. `.github` directory is ignored if AMPLAB_JENKINS is defined
-    and Appveyor files are ignored always.
+    file to belong to the 'root' module. `.github` directory is counted only in GitHub Actions,
+    and `appveyor.yml` is always ignored because this file is dedicated only to AppVeyor builds.
 
     >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/core/foo"]))
     ['pyspark-core', 'sql']
