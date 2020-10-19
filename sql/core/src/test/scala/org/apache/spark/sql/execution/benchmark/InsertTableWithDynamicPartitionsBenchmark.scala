@@ -55,8 +55,7 @@ object InsertTableWithDynamicPartitionsBenchmark extends DataSourceWriteBenchmar
     spark.sql(s"create table $tableName(i bigint, part bigint) " +
       "using parquet partitioned by (part)")
     benchmark.addCase(s"one partition column, $partitionNumber partitions") { _ =>
-      spark.sql("insert overwrite table " +
-        s"$tableName partition(part) " +
+      spark.sql(s"insert overwrite table $tableName partition(part) " +
         "select id, part1 as part from sourceTable")
     }
   }
@@ -66,8 +65,7 @@ object InsertTableWithDynamicPartitionsBenchmark extends DataSourceWriteBenchmar
     spark.sql(s"create table $tableName(i bigint, part1 bigint, part2 bigint) " +
       "using parquet partitioned by (part1, part2)")
     benchmark.addCase(s"two partition columns, $partitionNumber partitions") { _ =>
-      spark.sql("insert overwrite table " +
-        s"$tableName partition(part1, part2) " +
+      spark.sql(s"insert overwrite table $tableName partition(part1, part2) " +
         "select id, part1, part2 from sourceTable")
     }
   }
@@ -77,8 +75,7 @@ object InsertTableWithDynamicPartitionsBenchmark extends DataSourceWriteBenchmar
     spark.sql(s"create table $tableName(i bigint, part1 bigint, part2 bigint, part3 bigint) " +
       "using parquet partitioned by (part1, part2, part3)")
     benchmark.addCase(s"three partition columns, $partitionNumber partitions") { _ =>
-      spark.sql("insert overwrite table " +
-        s"$tableName partition(part1, part2, part3) " +
+      spark.sql(s"insert overwrite table $tableName partition(part1, part2, part3) " +
         "select id, part1, part2, part3 from sourceTable")
     }
   }
