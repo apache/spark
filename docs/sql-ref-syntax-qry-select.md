@@ -85,6 +85,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
      * [Table-value function](sql-ref-syntax-qry-select-tvf.html)
      * [Inline table](sql-ref-syntax-qry-select-inline-table.html)
      * Subquery
+     * [File](sql-data-sources-load-save-functions.html#run-sql-on-files-directly)
      
 * **PIVOT**
 
