@@ -121,19 +121,13 @@ private[hive] class HiveClientImpl(
   }
 
   // Since HiveClientImpl is thread local, one state per HiveClientImpl
-  def state: SessionState = {
+  val state: SessionState = {
     val original = Thread.currentThread().getContextClassLoader
     if (clientLoader.isolationOn) {
       // Switch to the initClassLoader.
       Thread.currentThread().setContextClassLoader(initClassLoader)
       try {
-        val ret = SessionState.get
-        if (ret != null) {
-          // use thread local state if exists
-          ret
-        } else {
-          newState()
-        }
+        newState()
       } finally {
         Thread.currentThread().setContextClassLoader(original)
       }
