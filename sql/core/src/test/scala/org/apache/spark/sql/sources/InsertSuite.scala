@@ -387,7 +387,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           sql("INSERT OVERWRITE TABLE t4 SELECT id FROM t3")
         }
         assert(e3.getMessage.contains("Cannot overwrite a path that is also being read from."))
-
       }
     }
   }
