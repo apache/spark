@@ -638,7 +638,7 @@ def main():
     else:
         # else we're running locally or Github Actions.
         build_tool = "sbt"
-        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.7")
+        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop3.2")
         hive_version = os.environ.get("HIVE_PROFILE", "hive2.3")
         if "GITHUB_ACTIONS" in os.environ:
             test_env = "github_actions"
