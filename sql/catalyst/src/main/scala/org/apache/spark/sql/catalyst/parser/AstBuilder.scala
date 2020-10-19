@@ -3419,7 +3419,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
     AlterTableAddPartition(
       UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier)),
-      specsAndLocs,
+      specsAndLocs.toSeq,
       ctx.EXISTS != null)
   }
 
@@ -3461,7 +3461,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       .map(spec => UnresolvedPartitionSpec(spec))
     AlterTableDropPartition(
       UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier)),
-      partSpecs,
+      partSpecs.toSeq,
       ignoreIfNotExists = ctx.EXISTS != null,
       purge = ctx.PURGE != null,
       retainData = false)
