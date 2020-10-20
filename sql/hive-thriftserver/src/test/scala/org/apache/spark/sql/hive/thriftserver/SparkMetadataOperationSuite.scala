@@ -401,33 +401,6 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
     }
   }
 
-  test("abc") {
-    withJdbcStatement() { statement =>
-      val metaData = statement.getConnection.getMetaData
-      Seq(
-        () => metaData.allProceduresAreCallable(),
-        () => metaData.getURL,
-        () => metaData.getUserName,
-        () => metaData.isReadOnly,
-        () => metaData.nullsAreSortedHigh,
-        () => metaData.nullsAreSortedLow,
-        () => metaData.nullsAreSortedAtStart(),
-        () => metaData.nullsAreSortedAtEnd()).foreach { func =>
-        val e = intercept[SQLFeatureNotSupportedException](func())
-        assert(e.getMessage === "Method not supported")
-      }
-
-      import org.apache.spark.SPARK_VERSION
-      assert(metaData.allTablesAreSelectable)
-      assert(metaData.getDatabaseProductName === "Spark SQL")
-      assert(metaData.getDatabaseProductVersion === SPARK_VERSION)
-      assert(metaData.getDriverName === "Hive JDBC")
-      assert(metaData.getDriverVersion === HiveVersionInfo.getVersion)
-      assert(metaData.getDatabaseMajorVersion === VersionUtils.majorVersion(SPARK_VERSION))
-      assert(metaData.getDatabaseMinorVersion === VersionUtils.minorVersion(SPARK_VERSION))
-    }
-  }
-
   test("Hive ThriftServer JDBC Database MetaData API Auditing") {
     withJdbcStatement() { statement =>
       val metaData = statement.getConnection.getMetaData
