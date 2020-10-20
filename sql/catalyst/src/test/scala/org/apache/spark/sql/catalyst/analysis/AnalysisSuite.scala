@@ -771,6 +771,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // RuleExecutor only throw exception or log warning when the rule is supposed to run
     // more than once.
     val maxIterations = 2
+    val maxIterationsEnough = 5
     val conf = new SQLConf().copy(SQLConf.ANALYZER_MAX_ITERATIONS -> maxIterations)
     val testAnalyzer = new Analyzer(
       new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
@@ -782,10 +783,26 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       $"a" / $"d" as "div4",
       $"e" / $"e" as "div5")
 
-    val message = intercept[TreeNodeException[LogicalPlan]] {
+    val message1 = intercept[TreeNodeException[LogicalPlan]] {
       testAnalyzer.execute(plan)
     }.getMessage
-    assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+    assert(message1.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+      s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+
+    conf.setConfString(SQLConf.ANALYZER_MAX_ITERATIONS.key, maxIterationsEnough.toString)
+    try {
+      testAnalyzer.execute(plan)
+    } catch {
+      case ex: TreeNodeException[LogicalPlan]
+        if ex.getMessage.contains(SQLConf.ANALYZER_MAX_ITERATIONS.key) =>
+          fail("analyzer.execute should not reach max iterations.")
+    }
+
+    conf.setConfString(SQLConf.ANALYZER_MAX_ITERATIONS.key, maxIterations.toString)
+    val message2 = intercept[TreeNodeException[LogicalPlan]] {
+      testAnalyzer.execute(plan)
+    }.getMessage
+    assert(message2.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
       s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
   }
 
