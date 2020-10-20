@@ -586,6 +586,7 @@ private[spark] class ExecutorMonitor(
       val hadActiveShuffle = hasActiveShuffle
       hasActiveShuffle = ids.exists(shuffleIds.contains)
       if (hadActiveShuffle && isIdle) {
+        shuffleIds.clear()
         updateTimeout()
       }
     }
