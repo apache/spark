@@ -44,7 +44,8 @@ if __name__ == "__main__":
         initialRdd = sc.parallelize(range(100), 5)
         accRdd = initialRdd.map(addToAcc)
         # Trigger a shuffle so there are shuffle blocks to migrate
-        rdd = accRdd.map(lambda x: (x, x)).groupByKey()
+        numPartitions = (x + 1) * 2
+        rdd = accRdd.map(lambda x: (x, x)).groupByKey(numPartitions = numPartitions)
         rdds.append(rdd)
         rdd.collect()
         print("1st accumulator value is: " + str(acc.value))
