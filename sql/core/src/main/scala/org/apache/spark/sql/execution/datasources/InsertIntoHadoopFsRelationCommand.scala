@@ -107,8 +107,6 @@ case class InsertIntoHadoopFsRelationCommand(
         fs, catalogTable.get, qualifiedOutputPath, matchingPartitions)
     }
 
-
-
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
