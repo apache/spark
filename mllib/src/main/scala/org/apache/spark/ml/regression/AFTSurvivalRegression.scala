@@ -397,11 +397,18 @@ class AFTSurvivalRegressionModel private[ml] (
     Array($(quantileProbabilities).map(q => math.exp(math.log(-math.log1p(-q)) * scale)))
   }
 
+  private def lambda2Quantiles(lambda: Double): Vector = {
+    val quantiles = _quantiles(0).clone()
+    var i = 0
+    while (i < quantiles.length) { quantiles(i) *= lambda; i += 1 }
+    Vectors.dense(quantiles)
+  }
+
   @Since("2.0.0")
   def predictQuantiles(features: Vector): Vector = {
     // scale parameter for the Weibull distribution of lifetime
     val lambda = predict(features)
-    Vectors.dense(_quantiles(0).map(_ * lambda))
+    lambda2Quantiles(lambda)
   }
 
   @Since("2.0.0")
@@ -417,21 +424,21 @@ class AFTSurvivalRegressionModel private[ml] (
     var predictionColumns = Seq.empty[Column]
 
     if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { features: Vector => predict(features) }
+      val predCol = udf(predict _).apply(col($(featuresCol)))
       predictionColNames :+= $(predictionCol)
-      predictionColumns :+= predictUDF(col($(featuresCol)))
+      predictionColumns :+= predCol
         .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if (hasQuantilesCol) {
       val quanCol = if ($(predictionCol).nonEmpty) {
-        val lambdaCol = predictionColumns.head
-        udf { lambda: Double => Vectors.dense(_quantiles(0).map(_ * lambda)) }.apply(lambdaCol)
+        udf(lambda2Quantiles _).apply(predictionColumns.head)
       } else {
-        udf { features: Vector => predictQuantiles(features) }.apply(col($(featuresCol)))
+        udf(predictQuantiles _).apply(col($(featuresCol)))
       }
       predictionColNames :+= $(quantilesCol)
-      predictionColumns :+= quanCol.as($(quantilesCol), outputSchema($(quantilesCol)).metadata)
+      predictionColumns :+= quanCol
+        .as($(quantilesCol), outputSchema($(quantilesCol)).metadata)
     }
 
     if (predictionColNames.nonEmpty) {
