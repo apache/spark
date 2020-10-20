@@ -951,7 +951,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         rowFunc: Int => (String, String),
         toJavaType: String => T,
         checkDefaultLegacyRead: String => Unit,
-        tsOutputType: String = "TIMESTAMP_MICROS"): Unit = {
+        tsOutputType: String = "TIMESTAMP_MICROS",
+        inWriteConf: String = SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key,
+        inReadConf: String = SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key): Unit = {
       withTempPaths(2) { paths =>
         paths.foreach(_.delete())
         val path2_4 = getResourceParquetFilePath("test-data/" + fileName)
@@ -962,18 +964,20 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsOutputType) {
           checkDefaultLegacyRead(path2_4)
           // By default we should fail to write ancient datetime values.
-          val e = intercept[SparkException](df.write.parquet(path3_0))
-          assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
-          withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
+          if (tsOutputType != "INT96") {
+            val e = intercept[SparkException](df.write.parquet(path3_0))
+            assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
+          }
+          withSQLConf(inWriteConf -> CORRECTED.toString) {
             df.write.mode("overwrite").parquet(path3_0)
           }
-          withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+          withSQLConf(inWriteConf -> LEGACY.toString) {
             df.write.parquet(path3_0_rebase)
           }
         }
         // For Parquet files written by Spark 3.0, we know the writer info and don't need the
         // config to guide the rebase behavior.
-        withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key -> LEGACY.toString) {
+        withSQLConf(inReadConf -> LEGACY.toString) {
           checkAnswer(
             spark.read.format("parquet").load(path2_4, path3_0, path3_0_rebase),
             (0 until N).flatMap { i =>
@@ -1015,15 +1019,22 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           java.sql.Timestamp.valueOf,
           checkDefaultRead,
           tsOutputType = "TIMESTAMP_MILLIS")
-        // INT96 is a legacy timestamp format and we always rebase the seconds for it.
+      }
+    }
+    Seq(
+      "2_4_5" -> successInRead _,
+      "2_4_6" -> successInRead _).foreach { case (version, checkDefaultRead) =>
+      withAllParquetReaders {
         Seq("plain", "dict").foreach { enc =>
-          checkAnswer(readResourceParquetFile(
-            s"test-data/before_1582_timestamp_int96_${enc}_v$version.snappy.parquet"),
-            Seq.tabulate(N) { i =>
-              Row(
-                java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456"),
-                java.sql.Timestamp.valueOf(s"1001-01-0${i + 1} 01:02:03.123456"))
-            })
+          checkReadMixedFiles(
+            s"before_1582_timestamp_int96_${enc}_v$version.snappy.parquet",
+            "timestamp",
+            (i: Int) => ("1001-01-01 01:02:03.123456", s"1001-01-0${i + 1} 01:02:03.123456"),
+            java.sql.Timestamp.valueOf,
+            checkDefaultRead,
+            tsOutputType = "INT96",
+            inWriteConf = SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key,
+            inReadConf = SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key)
         }
       }
     }
@@ -1033,15 +1044,31 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     val N = 8
     Seq(false, true).foreach { dictionaryEncoding =>
       Seq(
-        ("TIMESTAMP_MILLIS", "1001-01-01 01:02:03.123", "1001-01-07 01:09:05.123"),
-        ("TIMESTAMP_MICROS", "1001-01-01 01:02:03.123456", "1001-01-07 01:09:05.123456"),
-        ("INT96", "1001-01-01 01:02:03.123456", "1001-01-01 01:02:03.123456")
-      ).foreach { case (outType, tsStr, nonRebased) =>
+        (
+          "TIMESTAMP_MILLIS",
+          "1001-01-01 01:02:03.123",
+          "1001-01-07 01:09:05.123",
+          SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key,
+          SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key),
+        (
+          "TIMESTAMP_MICROS",
+          "1001-01-01 01:02:03.123456",
+          "1001-01-07 01:09:05.123456",
+          SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key,
+          SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key),
+        (
+          "INT96",
+          "1001-01-01 01:02:03.123456",
+          "1001-01-07 01:09:05.123456",
+          SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key,
+          SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key
+        )
+      ).foreach { case (outType, tsStr, nonRebased, inWriteConf, inReadConf) =>
         withClue(s"output type $outType") {
           withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outType) {
             withTempPath { dir =>
               val path = dir.getAbsolutePath
-              withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+              withSQLConf(inWriteConf -> LEGACY.toString) {
                 Seq.tabulate(N)(_ => tsStr).toDF("tsS")
                   .select($"tsS".cast("timestamp").as("ts"))
                   .repartition(1)
@@ -1054,8 +1081,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
                 // The file metadata indicates if it needs rebase or not, so we can always get the
                 // correct result regardless of the "rebase mode" config.
                 Seq(LEGACY, CORRECTED, EXCEPTION).foreach { mode =>
-                  withSQLConf(
-                    SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key -> mode.toString) {
+                  withSQLConf(inReadConf -> mode.toString) {
                     checkAnswer(
                       spark.read.parquet(path),
                       Seq.tabulate(N)(_ => Row(Timestamp.valueOf(tsStr))))
@@ -1134,6 +1160,30 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           assert(getMetaData(dir).get(SPARK_LEGACY_DATETIME).isEmpty)
         }
       }
+    }
+  }
+
+  test("SPARK-33160: write the metadata key 'org.apache.spark.int96NoRebase'") {
+    def saveTs(dir: java.io.File): Unit = {
+      Seq(Timestamp.valueOf("1000-01-01 01:02:03")).toDF()
+        .repartition(1)
+        .write
+        .parquet(dir.getAbsolutePath)
+    }
+    withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+      withTempPath { dir =>
+        saveTs(dir)
+        assert(getMetaData(dir).get(SPARK_INT96_NO_REBASE).isEmpty)
+      }
+    }
+    withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
+      withTempPath { dir =>
+        saveTs(dir)
+        assert(getMetaData(dir)(SPARK_INT96_NO_REBASE) === "")
+      }
+    }
+    withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+      withTempPath { dir => intercept[SparkException] { saveTs(dir) } }
     }
   }
 }
