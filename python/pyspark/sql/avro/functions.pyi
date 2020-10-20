@@ -16,12 +16,12 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Dict
+from typing import Dict, Optional
 
 from pyspark.sql._typing import ColumnOrName
 from pyspark.sql.column import Column
 
 def from_avro(
-    data: ColumnOrName, jsonFormatSchema: str, options: Dict[str, str] = ...
+    data: ColumnOrName, jsonFormatSchema: str, options: Optional[Dict[str, str]] = ...
 ) -> Column: ...
 def to_avro(data: ColumnOrName, jsonFormatSchema: str = ...) -> Column: ...
