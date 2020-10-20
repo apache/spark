@@ -246,7 +246,7 @@ private[storage] class BlockManagerDecommissioner(
     shufflesToMigrate.addAll(newShufflesToMigrate.map(x => (x, 0)).asJava)
     migratingShuffles ++= newShufflesToMigrate
     logInfo(s"${newShufflesToMigrate.size} of ${localShuffles.size} local shuffles " +
-      "are added to ${migratingShuffles.size}.")
+      "are added. In total, ${migratingShuffles.size} shuffles are remained.")
 
     // Update the threads doing migrations
     val livePeerSet = bm.getPeers(false).toSet
