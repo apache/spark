@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{FileSystem => _, _}
-import java.net.{HttpURLConnection, InetAddress, URI, UnknownHostException, URL => JURL}
+import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.{Locale, Properties, UUID}
@@ -27,13 +27,14 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.control.NonFatal
+
 import com.google.common.base.Objects
 import com.google.common.io.Files
 import javax.ws.rs.client.ClientBuilder
-import javax.ws.rs.core.{GenericType, MediaType}
+import javax.ws.rs.core.MediaType
 import javax.ws.rs.core.Response.Status.Family
-import net.minidev.json.parser.JSONParser
 import net.minidev.json.{JSONArray, JSONObject}
+import net.minidev.json.parser.JSONParser
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
@@ -51,6 +52,7 @@ import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier
 import org.apache.hadoop.yarn.util.Records
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils
+
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.deploy.{SparkApplication, SparkHadoopUtil}
@@ -63,8 +65,6 @@ import org.apache.spark.internal.config.Python._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.{CallerContext, Utils}
-import org.glassfish.jersey.client.ClientResponse
-
 
 private[spark] class Client(
     val args: ClientArguments,
