@@ -24,11 +24,10 @@ import org.apache.spark.sql.execution.{BaseSubqueryExec, ExecSubqueryExpression,
 import org.apache.spark.sql.internal.SQLConf
 
 case class ReuseAdaptiveSubquery(
-    conf: SQLConf,
     reuseMap: TrieMap[SparkPlan, BaseSubqueryExec]) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.subqueryReuseEnabled) {
+    if (!SQLConf.get.subqueryReuseEnabled) {
       return plan
     }
 

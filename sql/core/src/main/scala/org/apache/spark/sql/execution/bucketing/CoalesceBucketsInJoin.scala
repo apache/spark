@@ -38,7 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
  *   - The ratio of the number of buckets is less than the value set in
  *     COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.
  */
-case class CoalesceBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
+object CoalesceBucketsInJoin extends Rule[SparkPlan] {
   private def updateNumCoalescedBucketsInScan(
       plan: SparkPlan,
       numCoalescedBuckets: Int): SparkPlan = {
@@ -83,14 +83,14 @@ case class CoalesceBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.coalesceBucketsInJoinEnabled) {
+    if (!SQLConf.get.coalesceBucketsInJoinEnabled) {
       return plan
     }
 
     plan transform {
       case ExtractJoinWithBuckets(join, numLeftBuckets, numRightBuckets)
         if math.max(numLeftBuckets, numRightBuckets) / math.min(numLeftBuckets, numRightBuckets) <=
-          conf.coalesceBucketsInJoinMaxBucketRatio =>
+          SQLConf.get.coalesceBucketsInJoinMaxBucketRatio =>
         val numCoalescedBuckets = math.min(numLeftBuckets, numRightBuckets)
         join match {
           case j: SortMergeJoinExec =>

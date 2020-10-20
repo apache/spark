@@ -25,7 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
  * This optimization rule detects a join child that has a high ratio of empty partitions and
  * adds a no-broadcast-hash-join hint to avoid it being broadcast.
  */
-case class DemoteBroadcastHashJoin(conf: SQLConf) extends Rule[LogicalPlan] {
+object DemoteBroadcastHashJoin extends Rule[LogicalPlan] {
 
   private def shouldDemote(plan: LogicalPlan): Boolean = plan match {
     case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.resultOption.get().isDefined
@@ -34,7 +34,7 @@ case class DemoteBroadcastHashJoin(conf: SQLConf) extends Rule[LogicalPlan] {
       val partitionCnt = mapStats.bytesByPartitionId.length
       val nonZeroCnt = mapStats.bytesByPartitionId.count(_ > 0)
       partitionCnt > 0 && nonZeroCnt > 0 &&
-        (nonZeroCnt * 1.0 / partitionCnt) < conf.nonEmptyPartitionRatioForBroadcastJoin
+        (nonZeroCnt * 1.0 / partitionCnt) < SQLConf.get.nonEmptyPartitionRatioForBroadcastJoin
     case _ => false
   }
 

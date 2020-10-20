@@ -34,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
  * each operator by inserting [[ShuffleExchangeExec]] Operators where required.  Also ensure that
  * the input partition ordering requirements are met.
  */
-case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
+object EnsureRequirements extends Rule[SparkPlan] {
 
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
     val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution
@@ -51,7 +51,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         BroadcastExchangeExec(mode, child)
       case (child, distribution) =>
         val numPartitions = distribution.requiredNumPartitions
-          .getOrElse(conf.numShufflePartitions)
+          .getOrElse(SQLConf.get.numShufflePartitions)
         ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child)
     }
 
@@ -93,7 +93,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
           // expected number of shuffle partitions. However, if it's smaller than
           // `conf.numShufflePartitions`, we pick `conf.numShufflePartitions` as the
           // expected number of shuffle partitions.
-          math.max(nonShuffleChildrenNumPartitions.max, conf.defaultNumShufflePartitions)
+          math.max(nonShuffleChildrenNumPartitions.max, SQLConf.get.defaultNumShufflePartitions)
         }
       } else {
         childrenNumPartitions.max

@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
@@ -439,7 +438,7 @@ case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
   )
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    val enableOffHeapColumnVector = sqlContext.conf.offHeapColumnVectorEnabled
+    val enableOffHeapColumnVector = conf.offHeapColumnVectorEnabled
     val numInputRows = longMetric("numInputRows")
     val numOutputBatches = longMetric("numOutputBatches")
     // Instead of creating a new config we are reusing columnBatchSize. In the future if we do
@@ -494,7 +493,6 @@ case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
  * to/from columnar formatted data.
  */
 case class ApplyColumnarRulesAndInsertTransitions(
-    conf: SQLConf,
     columnarRules: Seq[ColumnarRule])
   extends Rule[SparkPlan] {
 

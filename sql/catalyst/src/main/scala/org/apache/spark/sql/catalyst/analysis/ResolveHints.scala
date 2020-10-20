@@ -50,12 +50,12 @@ object ResolveHints {
    *
    * This rule must happen before common table expressions.
    */
-  class ResolveJoinStrategyHints(conf: SQLConf) extends Rule[LogicalPlan] {
+  object ResolveJoinStrategyHints extends Rule[LogicalPlan] {
     private val STRATEGY_HINT_NAMES = JoinStrategyHint.strategies.flatMap(_.hintAliases)
 
-    private val hintErrorHandler = conf.hintErrorHandler
+    private val hintErrorHandler = SQLConf.get.hintErrorHandler
 
-    def resolver: Resolver = conf.resolver
+    def resolver: Resolver = SQLConf.get.resolver
 
     private def createHintInfo(hintName: String): HintInfo = {
       HintInfo(strategy =
@@ -171,7 +171,9 @@ object ResolveHints {
   /**
    * COALESCE Hint accepts names "COALESCE", "REPARTITION", and "REPARTITION_BY_RANGE".
    */
-  class ResolveCoalesceHints(conf: SQLConf) extends Rule[LogicalPlan] {
+  object ResolveCoalesceHints extends Rule[LogicalPlan] {
+
+    val COALESCE_HINT_NAMES: Set[String] = Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE")
 
     /**
      * This function handles hints for "COALESCE" and "REPARTITION".
@@ -260,17 +262,13 @@ object ResolveHints {
     }
   }
 
-  object ResolveCoalesceHints {
-    val COALESCE_HINT_NAMES: Set[String] = Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE")
-  }
-
   /**
    * Removes all the hints, used to remove invalid hints provided by the user.
    * This must be executed after all the other hint rules are executed.
    */
-  class RemoveAllHints(conf: SQLConf) extends Rule[LogicalPlan] {
+  class RemoveAllHints extends Rule[LogicalPlan] {
 
-    private val hintErrorHandler = conf.hintErrorHandler
+    private val hintErrorHandler = SQLConf.get.hintErrorHandler
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
       case h: UnresolvedHint =>
@@ -284,9 +282,9 @@ object ResolveHints {
    * This is executed at the very beginning of the Analyzer to disable
    * the hint functionality.
    */
-  class DisableHints(conf: SQLConf) extends RemoveAllHints(conf: SQLConf) {
+  class DisableHints extends RemoveAllHints {
     override def apply(plan: LogicalPlan): LogicalPlan = {
-      if (conf.getConf(SQLConf.DISABLE_HINTS)) super.apply(plan) else plan
+      if (SQLConf.get.getConf(SQLConf.DISABLE_HINTS)) super.apply(plan) else plan
     }
   }
 }

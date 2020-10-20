@@ -70,12 +70,12 @@ case class ResolveHigherOrderFunctions(catalog: SessionCatalog) extends Rule[Log
  *      be a lambda function defined in an outer scope, or a attribute in produced by the plan's
  *      child. If names are duplicate, the name defined in the most inner scope is used.
  */
-case class ResolveLambdaVariables(conf: SQLConf) extends Rule[LogicalPlan] {
+object ResolveLambdaVariables extends Rule[LogicalPlan] {
 
   type LambdaVariableMap = Map[String, NamedExpression]
 
   private val canonicalizer = {
-    if (!conf.caseSensitiveAnalysis) {
+    if (!SQLConf.get.caseSensitiveAnalysis) {
       // scalastyle:off caselocale
       s: String => s.toLowerCase
       // scalastyle:on caselocale
@@ -157,7 +157,7 @@ case class ResolveLambdaVariables(conf: SQLConf) extends Rule[LogicalPlan] {
       parentLambdaMap.get(canonicalizer(name)) match {
         case Some(lambda) =>
           nestedFields.foldLeft(lambda: Expression) { (expr, fieldName) =>
-            ExtractValue(expr, Literal(fieldName), conf.resolver)
+            ExtractValue(expr, Literal(fieldName), SQLConf.get.resolver)
           }
         case None =>
           UnresolvedAttribute(u.nameParts)

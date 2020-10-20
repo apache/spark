@@ -82,8 +82,8 @@ case class AdaptiveSparkPlanExec(
   // The logical plan optimizer for re-optimizing the current logical plan.
   @transient private val optimizer = new AQEOptimizer(conf)
 
-  @transient private val removeRedundantProjects = RemoveRedundantProjects(conf)
-  @transient private val ensureRequirements = EnsureRequirements(conf)
+  @transient private val removeRedundantProjects = RemoveRedundantProjects
+  @transient private val ensureRequirements = EnsureRequirements
 
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
@@ -96,12 +96,12 @@ case class AdaptiveSparkPlanExec(
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
-    ReuseAdaptiveSubquery(conf, context.subqueryCache),
-    CoalesceShufflePartitions(context.session),
+    ReuseAdaptiveSubquery(context.subqueryCache),
+    CoalesceShufflePartitions,
     // The following two rules need to make use of 'CustomShuffleReaderExec.partitionSpecs'
     // added by `CoalesceShufflePartitions`. So they must be executed after it.
-    OptimizeSkewedJoin(conf),
-    OptimizeLocalShuffleReader(conf)
+    OptimizeSkewedJoin,
+    OptimizeLocalShuffleReader
   )
 
   private def finalStageOptimizerRules: Seq[Rule[SparkPlan]] =
@@ -109,7 +109,7 @@ case class AdaptiveSparkPlanExec(
       case _: DataWritingCommandExec | _: V2TableWriteExec =>
         // SPARK-32932: Local shuffle reader could break partitioning that works best
         // for the following writing command
-        queryStageOptimizerRules.filterNot(_.isInstanceOf[OptimizeLocalShuffleReader])
+        queryStageOptimizerRules.filterNot(_ == OptimizeLocalShuffleReader)
       case _ =>
         queryStageOptimizerRules
     }
@@ -117,8 +117,8 @@ case class AdaptiveSparkPlanExec(
   // A list of physical optimizer rules to be applied right after a new stage is created. The input
   // plan to these rules has exchange as its root node.
   @transient private val postStageCreationRules = Seq(
-    ApplyColumnarRulesAndInsertTransitions(conf, context.session.sessionState.columnarRules),
-    CollapseCodegenStages(conf)
+    ApplyColumnarRulesAndInsertTransitions(context.session.sessionState.columnarRules),
+    CollapseCodegenStages()
   )
 
   @transient private val costEvaluator = SimpleCostEvaluator

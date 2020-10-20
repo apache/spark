@@ -60,7 +60,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
           Cast(e, dt, Option(conf.sessionLocalTimeZone))
       }
     }
-    val rule = DataSourceAnalysis(conf)
+    val rule = DataSourceAnalysis
     test(
       s"convertStaticPartitions only handle INSERT having at least static partitions " +
         s"(caseSensitive: $caseSensitive)") {
