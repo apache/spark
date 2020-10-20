@@ -241,12 +241,14 @@ private[spark] class IndexShuffleBlockResolver(
       val dataBlockData = new FileSegmentManagedBuffer(
         transportConf, dataFile, 0, dataFile.length())
 
-      // Make sure the files exist
-      assert(indexFile.exists() && dataFile.exists())
+      // Make sure the index exist.
+      if (!indexFile.exists()) {
+        throw new FileNotFoundException("Index file is deleted already.")
+      }
 
       List((indexBlockId, indexBlockData), (dataBlockId, dataBlockData))
     } catch {
-      case _: Exception | _: AssertionError => // If we can't load the blocks ignore them.
+      case _: Exception => // If we can't load the blocks ignore them.
         logWarning(s"Failed to resolve shuffle block ${shuffleBlockInfo}, skipping migration. " +
           "This is expected to occur if a block is removed after decommissioning has started.")
         List.empty[(BlockId, ManagedBuffer)]
