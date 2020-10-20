@@ -32,13 +32,13 @@ class ResourceProfile(object):
     .. versionadded:: 3.1.0
     """
 
-    def __init__(self, _java_resource_profile=None, _exec_req={}, _task_req={}):
+    def __init__(self, _java_resource_profile=None, _exec_req=None, _task_req=None):
         if _java_resource_profile is not None:
             self._java_resource_profile = _java_resource_profile
         else:
             self._java_resource_profile = None
-            self._executor_resource_requests = _exec_req
-            self._task_resource_requests = _task_req
+            self._executor_resource_requests = _exec_req or {}
+            self._task_resource_requests = _task_req or {}
 
     @property
     def id(self):

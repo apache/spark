@@ -47,6 +47,8 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'RandomForestRegressor', 'RandomForestRegressionModel',
            'FMRegressor', 'FMRegressionModel']
 
+DEFAULT_QUANTILE_PROBABILITIES = [0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]
+
 
 class Regressor(Predictor, _PredictorParams, metaclass=ABCMeta):
     """
@@ -1654,7 +1656,7 @@ class _AFTSurvivalRegressionParams(_PredictorParams, HasMaxIter, HasTol, HasFitI
     def __init__(self, *args):
         super(_AFTSurvivalRegressionParams, self).__init__(*args)
         self._setDefault(censorCol="censor",
-                         quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
+                         quantileProbabilities=DEFAULT_QUANTILE_PROBABILITIES,
                          maxIter=100, tol=1E-6, blockSize=1)
 
     @since("1.6.0")
@@ -1740,7 +1742,7 @@ class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
     @keyword_only
     def __init__(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
-                 quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
+                 quantileProbabilities=DEFAULT_QUANTILE_PROBABILITIES,
                  quantilesCol=None, aggregationDepth=2, blockSize=1):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
@@ -1758,7 +1760,7 @@ class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
     @since("1.6.0")
     def setParams(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
-                  quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
+                  quantileProbabilities=DEFAULT_QUANTILE_PROBABILITIES,
                   quantilesCol=None, aggregationDepth=2, blockSize=1):
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \

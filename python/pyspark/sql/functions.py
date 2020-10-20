@@ -113,8 +113,10 @@ def _create_window_function(name, doc=''):
     return _
 
 
-def _options_to_str(options):
-    return {key: to_str(value) for (key, value) in options.items()}
+def _options_to_str(options=None):
+    if options:
+        return {key: to_str(value) for (key, value) in options.items()}
+    return {}
 
 _lit_doc = """
     Creates a :class:`Column` of literal value.
@@ -2476,7 +2478,7 @@ def json_tuple(col, *fields):
 
 
 @since(2.1)
-def from_json(col, schema, options={}):
+def from_json(col, schema, options=None):
     """
     Parses a column containing a JSON string into a :class:`MapType` with :class:`StringType`
     as keys type, :class:`StructType` or :class:`ArrayType` with
@@ -2524,7 +2526,7 @@ def from_json(col, schema, options={}):
 
 
 @since(2.1)
-def to_json(col, options={}):
+def to_json(col, options=None):
     """
     Converts a column containing a :class:`StructType`, :class:`ArrayType` or a :class:`MapType`
     into a JSON string. Throws an exception, in the case of an unsupported type.
@@ -2564,7 +2566,7 @@ def to_json(col, options={}):
 
 
 @since(2.4)
-def schema_of_json(json, options={}):
+def schema_of_json(json, options=None):
     """
     Parses a JSON string and infers its schema in DDL format.
 
@@ -2594,7 +2596,7 @@ def schema_of_json(json, options={}):
 
 
 @since(3.0)
-def schema_of_csv(csv, options={}):
+def schema_of_csv(csv, options=None):
     """
     Parses a CSV string and infers its schema in DDL format.
 
@@ -2620,7 +2622,7 @@ def schema_of_csv(csv, options={}):
 
 
 @since(3.0)
-def to_csv(col, options={}):
+def to_csv(col, options=None):
     """
     Converts a column containing a :class:`StructType` into a CSV string.
     Throws an exception, in the case of an unsupported type.
@@ -2931,7 +2933,7 @@ def sequence(start, stop, step=None):
 
 
 @since(3.0)
-def from_csv(col, schema, options={}):
+def from_csv(col, schema, options=None):
     """
     Parses a column containing a CSV string to a row with the specified schema.
     Returns `null`, in the case of an unparseable string.

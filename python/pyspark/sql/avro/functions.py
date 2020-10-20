@@ -26,7 +26,7 @@ from pyspark.util import _print_missing_jar
 
 
 @since(3.0)
-def from_avro(data, jsonFormatSchema, options={}):
+def from_avro(data, jsonFormatSchema, options=None):
     """
     Converts a binary column of Avro format into its corresponding catalyst value.
     The specified schema must match the read data, otherwise the behavior is undefined:
@@ -59,7 +59,7 @@ def from_avro(data, jsonFormatSchema, options={}):
     sc = SparkContext._active_spark_context
     try:
         jc = sc._jvm.org.apache.spark.sql.avro.functions.from_avro(
-            _to_java_column(data), jsonFormatSchema, options)
+            _to_java_column(data), jsonFormatSchema, options or {})
     except TypeError as e:
         if str(e) == "'JavaPackage' object is not callable":
             _print_missing_jar("Avro", "avro", "avro", sc.version)
