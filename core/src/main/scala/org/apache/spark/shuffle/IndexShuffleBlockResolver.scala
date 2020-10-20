@@ -246,9 +246,9 @@ private[spark] class IndexShuffleBlockResolver(
 
       List((indexBlockId, indexBlockData), (dataBlockId, dataBlockData))
     } catch {
-      case e: Exception => // If we can't load the blocks ignore them.
-        logWarning(s"Failed to resolve shuffle block ${shuffleBlockInfo}, skipping migration" +
-          "this is expected to occure if a block is removed after decommissioning has started.")
+      case _: Exception | _: AssertionError => // If we can't load the blocks ignore them.
+        logWarning(s"Failed to resolve shuffle block ${shuffleBlockInfo}, skipping migration. " +
+          "This is expected to occur if a block is removed after decommissioning has started.")
         List.empty[(BlockId, ManagedBuffer)]
     }
   }
