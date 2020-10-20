@@ -349,6 +349,11 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(
       testData2.agg(count($"a"), sumDistinct($"a")), // non-partial
       Row(6, 6.0))
+
+    checkAnswer(
+      testData2.agg(filtered(count($"a"), col("b") === 1)),
+      Row(3))
+
   }
 
   test("null count") {

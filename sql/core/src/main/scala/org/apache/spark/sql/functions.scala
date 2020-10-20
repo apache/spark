@@ -4534,6 +4534,41 @@ object functions {
     Bucket(Literal(numBuckets), e.expr)
   }
 
+
+  /**
+   * Filter an aggregate function: only values matching the where clause will be aggregated
+   *
+   * @group agg_funcs
+   * @since 3.1.0
+   */
+  def filtered(aggregation: Column, where: Column): Column = {
+    aggregation.expr match {
+      case aggregation: AggregateExpression =>
+        Column(AggregateExpression(
+          aggregation.aggregateFunction,
+          aggregation.mode,
+          aggregation.isDistinct,
+          Some(where.expr)
+        ))
+      case other: Expression => throw new AnalysisException(
+        "filtered() is used to convert an aggregation to a filtered aggregation " +
+          "and can only be used as such " +
+          s"but it was called on a column which is not an aggregation: ${other.toString}"
+      )
+    }
+  }
+
+
+  /**
+   * Filter an aggregate function: only values matching the where clause will be aggregated
+   *
+   * @group agg_funcs
+   * @since 3.1.0
+   */
+  def filtered(aggregation: Column, where: String): Column = {
+    filtered(aggregation, Column(where))
+  }
+
   // scalastyle:off line.size.limit
   // scalastyle:off parameter.number
 
