@@ -793,7 +793,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     try {
       testAnalyzer.execute(plan)
     } catch {
-      case ex: TreeNodeException[LogicalPlan]
+      case ex: TreeNodeException[_]
         if ex.getMessage.contains(SQLConf.ANALYZER_MAX_ITERATIONS.key) =>
           fail("analyzer.execute should not reach max iterations.")
     }
