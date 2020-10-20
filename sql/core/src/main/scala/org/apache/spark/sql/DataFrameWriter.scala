@@ -329,7 +329,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         // the schema of input query and the user-specified partitioning to `getTable`. If the
         // query schema is not compatible with the existing data, the write can still success but
         // following reads would fail.
-        if (provider.isInstanceOf[FileDataSourceV2]) {
+        if (provider.isInstanceOf[SchemaOnWriteDataSource]) {
           provider.getTable(
             df.schema.asNullable,
             partitioningAsV2.toArray,
