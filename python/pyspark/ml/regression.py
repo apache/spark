@@ -1742,8 +1742,7 @@ class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
     @keyword_only
     def __init__(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
-                 quantileProbabilities=DEFAULT_QUANTILE_PROBABILITIES,
-                 quantilesCol=None, aggregationDepth=2, blockSize=1):
+                 quantileProbabilities, quantilesCol=None, aggregationDepth=2, blockSize=1):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
@@ -1760,8 +1759,7 @@ class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
     @since("1.6.0")
     def setParams(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
-                  quantileProbabilities=DEFAULT_QUANTILE_PROBABILITIES,
-                  quantilesCol=None, aggregationDepth=2, blockSize=1):
+                  quantileProbabilities, quantilesCol=None, aggregationDepth=2, blockSize=1):
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
