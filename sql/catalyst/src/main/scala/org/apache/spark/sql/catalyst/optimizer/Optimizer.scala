@@ -1036,7 +1036,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
       val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) child else s.copy(order = newOrders)
     case Sort(orders, false, child) if SortOrder.orderingSatisfies(child.outputOrdering, orders) =>
-        child
+      child
     case s @ Sort(_, _, child) => s.copy(child = recursiveRemoveSort(child))
     case j @ Join(originLeft, originRight, _, cond, _) if cond.forall(_.deterministic) =>
       j.copy(left = recursiveRemoveSort(originLeft), right = recursiveRemoveSort(originRight))
