@@ -120,7 +120,7 @@ private[hive] class HiveClientImpl(
     }
   }
 
-  // Since HiveClientImpl is thread local, one state per HiveClientImpl
+  // Create an internal session state for this HiveClientImpl.
   val state: SessionState = {
     val original = Thread.currentThread().getContextClassLoader
     if (clientLoader.isolationOn) {
@@ -255,6 +255,7 @@ private[hive] class HiveClientImpl(
   }
 
   private def msClient: IMetaStoreClient = {
+    // get the ms client from thread local shim
     shim.get().getMSC(client)
   }
 
