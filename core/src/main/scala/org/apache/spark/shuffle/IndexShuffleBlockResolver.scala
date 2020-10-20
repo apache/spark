@@ -245,8 +245,11 @@ private[spark] class IndexShuffleBlockResolver(
       if (!indexFile.exists()) {
         throw new FileNotFoundException("Index file is deleted already.")
       }
-
-      List((indexBlockId, indexBlockData), (dataBlockId, dataBlockData))
+      if (dataFile.exists()) {
+        List((indexBlockId, indexBlockData), (dataBlockId, dataBlockData))
+      } else {
+        List((indexBlockId, indexBlockData))
+      }
     } catch {
       case _: Exception => // If we can't load the blocks ignore them.
         logWarning(s"Failed to resolve shuffle block ${shuffleBlockInfo}, skipping migration. " +
