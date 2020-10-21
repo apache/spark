@@ -82,7 +82,7 @@ There are a couple of additional notes to keep in mind when contributing to code
 Contributing and Maintaining Type Hints
 ----------------------------------------
 
-PySpark type hints are provided using stub files, placed in the same directory as the annotated module, with exception to ``# type: ignore`` in modules which don't have their own stubs (tests, examples, non-public API).
+PySpark type hints are provided using stub files, placed in the same directory as the annotated module, with exception to ``# type: ignore`` in modules which don't have their own stubs (tests, examples and non-public API).
 As a rule of thumb, only public API is annotated.
 
 Annotations should, when possible:
