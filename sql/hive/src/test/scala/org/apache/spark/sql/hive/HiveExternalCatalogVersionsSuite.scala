@@ -318,3 +318,4 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
 object HiveExternalCatalogVersionsSuite {
   private val SPARK_TEST_CACHE_DIR_SYSTEM_PROPERTY = "spark.test.cache-dir"
 }
+
