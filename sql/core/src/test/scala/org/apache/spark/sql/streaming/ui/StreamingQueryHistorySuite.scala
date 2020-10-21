@@ -37,7 +37,7 @@ class StreamingQueryHistorySuite extends SharedSparkSession with BeforeAndAfter 
         null
       }
       assert(appUi.ui.appName == "StructuredKafkaWordCount")
-      assert(appUi.ui.store.store.count(classOf[StreamingQuerySummary]) == 1)
+      assert(appUi.ui.store.store.count(classOf[StreamingQueryData]) == 1)
       assert(appUi.ui.store.store.count(classOf[StreamingQueryProgressWrapper]) == 8)
 
       val store = new StreamingQueryStatusStore(appUi.ui.store.store)

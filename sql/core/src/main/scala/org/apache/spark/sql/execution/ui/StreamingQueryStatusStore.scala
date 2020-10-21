@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.ui
 
-import org.apache.spark.sql.streaming.ui.{StreamingQueryProgressWrapper, StreamingQuerySummary, StreamingQueryUIData}
+import org.apache.spark.sql.streaming.ui.{StreamingQueryData, StreamingQueryProgressWrapper, StreamingQueryUIData}
 import org.apache.spark.status.KVUtils
 import org.apache.spark.util.kvstore.KVStore
 
@@ -28,35 +28,16 @@ import org.apache.spark.util.kvstore.KVStore
  */
 class StreamingQueryStatusStore(store: KVStore) {
 
-  def allQueryUIData: Seq[StreamingQueryUIData] = synchronized {
-    val view = store.view(classOf[StreamingQuerySummary]).index("startTimestamp").first(0L)
+  def allQueryUIData: Seq[StreamingQueryUIData] = {
+    val view = store.view(classOf[StreamingQueryData]).index("startTimestamp").first(0L)
     KVUtils.viewToSeq(view, Int.MaxValue)(_ => true).map(makeUIData)
   }
 
-  // Visible for testing.
-  private[sql] def activeQueryUIData(): Seq[StreamingQueryUIData] = {
-    val view = store.view(classOf[StreamingQuerySummary]).index("active").first(true).last(true)
-    KVUtils.viewToSeq(view, Int.MaxValue)(_ => true).map(makeUIData)
-  }
-
-  // Visible for testing.
-  private[sql] def inactiveQueryUIData(): Seq[StreamingQueryUIData] = {
-    val view = store.view(classOf[StreamingQuerySummary]).index("active").first(false).last(false)
-    KVUtils.viewToSeq(view, Int.MaxValue)(_ => true).map(makeUIData)
-  }
-
-  private def makeUIData(summary: StreamingQuerySummary): StreamingQueryUIData = {
+  private def makeUIData(summary: StreamingQueryData): StreamingQueryUIData = {
     val runId = summary.runId.toString
     val view = store.view(classOf[StreamingQueryProgressWrapper]).index("runId")
       .first(runId).last(runId).index("timestamp").first(0L).last(null)
     val recentProgress = KVUtils.viewToSeq(view, Int.MaxValue)(_ => true).map(_.progress).toArray
-
-    val lastProgress = if (recentProgress.nonEmpty) {
-      recentProgress.last
-    } else {
-      null
-    }
-
-    StreamingQueryUIData(summary, recentProgress, lastProgress)
+    StreamingQueryUIData(summary, recentProgress)
   }
 }

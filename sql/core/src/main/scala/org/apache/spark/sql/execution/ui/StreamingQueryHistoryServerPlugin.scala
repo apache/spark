@@ -34,7 +34,9 @@ class StreamingQueryHistoryServerPlugin extends AppHistoryServerPlugin {
 
   override def setupUI(ui: SparkUI): Unit = {
     val streamingQueryStatusStore = new StreamingQueryStatusStore(ui.store.store)
-    new StreamingQueryTab(streamingQueryStatusStore, ui)
+    if (streamingQueryStatusStore.allQueryUIData.nonEmpty) {
+      new StreamingQueryTab(streamingQueryStatusStore, ui)
+    }
   }
 
   override def displayOrder: Int = 1
