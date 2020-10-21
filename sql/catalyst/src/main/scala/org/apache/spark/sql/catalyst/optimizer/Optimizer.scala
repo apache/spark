@@ -488,7 +488,7 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
         child = lower.child,
         groupingExpressions = upper.groupingExpressions.map(replaceAlias(_, aliasMap)),
         aggregateExpressions = upper.aggregateExpressions.map(
-          replaceAliasButKeepOuter(_, aliasMap))
+          replaceAliasButKeepName(_, aliasMap))
       )
   }
 
@@ -512,9 +512,9 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
 
   /**
    * Replace all attributes, that reference an alias, with the aliased expression,
-   * but keep the name of the name of the outmost attribute.
+   * but keep the name of the outmost attribute.
    */
-  private def replaceAliasButKeepOuter(
+  private def replaceAliasButKeepName(
     expr: NamedExpression,
     aliasMap: AttributeMap[Expression]): NamedExpression = {
 
