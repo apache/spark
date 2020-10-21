@@ -100,18 +100,18 @@ class SymmetricHashJoinStateManager(
    * Get all the matched values for given join condition, with marking matched.
    * This method is designed to mark joined rows properly without exposing internal index of row.
    *
-   * @param joinOnlyFirstTimeMatchedRow Only join with first-time matched row.
-   *                                    This is used for right side of left semi join in
-   *                                    [[StreamingSymmetricHashJoinExec]] only.
+   * @param excludeRowsAlreadyMatched Do not join with rows already matched previously.
+   *                                  This is used for right side of left semi join in
+   *                                  [[StreamingSymmetricHashJoinExec]] only.
    */
   def getJoinedRows(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
       predicate: JoinedRow => Boolean,
-      joinOnlyFirstTimeMatchedRow: Boolean = false): Iterator[JoinedRow] = {
+      excludeRowsAlreadyMatched: Boolean = false): Iterator[JoinedRow] = {
     val numValues = keyToNumValues.get(key)
     keyWithIndexToValue.getAll(key, numValues).filterNot { keyIdxToValue =>
-      joinOnlyFirstTimeMatchedRow && keyIdxToValue.matched
+      excludeRowsAlreadyMatched && keyIdxToValue.matched
     }.map { keyIdxToValue =>
       val joinedRow = generateJoinedRow(keyIdxToValue.value)
       if (predicate(joinedRow)) {

@@ -1088,22 +1088,47 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
     testStream(joined)(
       MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
       CheckNewAnswer(Row(3, 10, 6), Row(4, 10, 8), Row(5, 10, 10)),
+      // states
+      // left: 1, 2, 3, 4 ,5
+      // right: 3, 4, 5, 6, 7
+      assertNumStateRows(total = 10, updated = 10),
       MultiAddData(leftInput, 21)(rightInput, 22),
-      // Watermark = 11, should remove rows having window=[0,10]
+      // Watermark = 11, should remove rows having window=[0,10].
       CheckNewAnswer(),
-      assertNumStateRows(total = 2, updated = 12),
+      // states
+      // left: 21
+      // right: 22
+      //
+      // states evicted
+      // left: 1, 2, 3, 4 ,5 (below watermark)
+      // right: 3, 4, 5, 6, 7 (below watermark)
+      assertNumStateRows(total = 2, updated = 2),
       AddData(leftInput, 22),
       CheckNewAnswer(Row(22, 30, 44)),
+      // Unlike inner/outer joins, given left input row matches with right input row,
+      // we don't buffer the matched left input row to the state store.
+      //
+      // states
+      // left: 21
+      // right: 22
       assertNumStateRows(total = 2, updated = 0),
       StopStream,
       StartStream(),
 
       AddData(leftInput, 1),
-      // Row not add as 1 < state key watermark = 12
+      // Row not add as 1 < state key watermark = 12.
       CheckNewAnswer(),
-      AddData(rightInput, 11),
-      // Row not add as 11 < state key watermark = 12
-      CheckNewAnswer()
+      // states
+      // left: 21
+      // right: 22
+      assertNumStateRows(total = 2, updated = 0, droppedByWatermark = 1),
+      AddData(rightInput, 5),
+      // Row not add as 5 < state key watermark = 12.
+      CheckNewAnswer(),
+      // states
+      // left: 21
+      // right: 22
+      assertNumStateRows(total = 2, updated = 0, droppedByWatermark = 1)
     )
   }
 
@@ -1111,16 +1136,31 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
     val (leftInput, rightInput, joined) = setupWindowedJoinWithLeftCondition("left_semi")
 
     testStream(joined)(
-      MultiAddData(leftInput, 1, 2, 3)(rightInput, 1, 2, 3, 4, 5),
-      // The left rows with leftValue <= 4 should not generate their semi join row and
+      MultiAddData(leftInput, 1, 2, 3)(rightInput, 3, 4, 5),
+      // The left rows with leftValue <= 4 should not generate their semi join rows and
       // not get added to the state.
       CheckNewAnswer(Row(3, 10, 6)),
+      // states
+      // left: 3
+      // right: 3, 4, 5
       assertNumStateRows(total = 4, updated = 4),
       // We shouldn't get more semi join rows when the watermark advances.
       MultiAddData(leftInput, 20)(rightInput, 21),
       CheckNewAnswer(),
+      // states
+      // left: 20
+      // right: 21
+      //
+      // states evicted
+      // left: 3 (below watermark)
+      // right: 3, 4, 5 (below watermark)
+      assertNumStateRows(total = 2, updated = 2),
       AddData(rightInput, 20),
-      CheckNewAnswer((20, 30, 40))
+      CheckNewAnswer((20, 30, 40)),
+      // states
+      // left: 20
+      // right: 21, 20
+      assertNumStateRows(total = 3, updated = 1)
     )
   }
 
@@ -1132,12 +1172,27 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
       // The right rows with rightValue <= 7 should never be added to the state.
       // The right row with rightValue = 9 > 7, hence joined and added to state.
       CheckNewAnswer(Row(3, 10, 6)),
+      // states
+      // left: 3, 4, 5
+      // right: 3
       assertNumStateRows(total = 4, updated = 4),
       // We shouldn't get more semi join rows when the watermark advances.
       MultiAddData(leftInput, 20)(rightInput, 21),
       CheckNewAnswer(),
+      // states
+      // left: 20
+      // right: 21
+      //
+      // states evicted
+      // left: 3, 4, 5 (below watermark)
+      // right: 3 (below watermark)
+      assertNumStateRows(total = 2, updated = 2),
       AddData(rightInput, 20),
-      CheckNewAnswer((20, 30, 40))
+      CheckNewAnswer((20, 30, 40)),
+      // states
+      // left: 20
+      // right: 21, 20
+      assertNumStateRows(total = 3, updated = 1)
     )
   }
 
@@ -1146,21 +1201,42 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
 
     testStream(joined)(
       AddData(leftInput, (1, 5), (3, 5)),
-      CheckAnswer(),
+      CheckNewAnswer(),
+      // states
+      // left: (1, 5), (3, 5)
+      // right: nothing
+      assertNumStateRows(total = 2, updated = 2),
       AddData(rightInput, (1, 10), (2, 5)),
+      // Match left row in the state.
       CheckNewAnswer((1, 5)),
+      // states
+      // left: (1, 5), (3, 5)
+      // right: (1, 10), (2, 5)
+      assertNumStateRows(total = 4, updated = 2),
       AddData(rightInput, (1, 11)),
       // No match as left time is too low and left row is already matched.
       CheckNewAnswer(),
-      assertNumStateRows(total = 5, updated = 5),
-
-      // Increase event time watermark to 20s by adding data with time = 30s on left input.
+      // states
+      // left: (1, 5), (3, 5)
+      // right: (1, 10), (2, 5), (1, 11)
+      assertNumStateRows(total = 5, updated = 1),
+      // Increase event time watermark to 20s by adding data with time = 30s on both inputs.
       AddData(leftInput, (1, 7), (1, 30)),
       CheckNewAnswer((1, 7)),
+      // states
+      // left: (1, 5), (3, 5), (1, 30)
+      // right: (1, 10), (2, 5), (1, 11)
       assertNumStateRows(total = 6, updated = 1),
       // Watermark = 30 - 10 = 20, no matched row.
       AddData(rightInput, (0, 30)),
       CheckNewAnswer(),
+      // states
+      // left: (1, 30)
+      // right: (0, 30)
+      //
+      // states evicted
+      // left: (1, 5), (3, 5) (below watermark = 20)
+      // right: (1, 10), (2, 5), (1, 11) (below watermark = 20)
       assertNumStateRows(total = 2, updated = 1)
     )
   }
@@ -1171,10 +1247,34 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
     testStream(query)(
       AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
       CheckNewAnswer((2, 2), (4, 4)),
+      // batch 1 - global watermark = 0
+      // states
+      // left: (2, 2L), (4, 4L)
+      //       (left rows with value % 2 != 0 is filtered per [[PushDownLeftSemiAntiJoin]])
+      // right: (2, 2L), (4, 4L)
+      assertNumStateRows(total = 4, updated = 4),
       AddData(inputStream, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
       CheckNewAnswer((6, 6), (8, 8), (10, 10)),
+      // batch 2 - global watermark = 5
+      // states
+      // left: (2, 2L), (4, 4L), (6, 6L), (8, 8L), (10, 10L)
+      // right: (6, 6L), (8, 8L), (10, 10L)
+      //
+      // states evicted
+      // left: nothing (it waits for 5 seconds more than watermark due to join condition)
+      // right: (2, 2L), (4, 4L)
+      assertNumStateRows(total = 8, updated = 6),
       AddData(inputStream, (11, 11L), (12, 12L), (13, 13L), (14, 14L), (15, 15L)),
-      CheckNewAnswer((12, 12), (14, 14))
+      CheckNewAnswer((12, 12), (14, 14)),
+      // batch 3 - global watermark = 9
+      // states
+      // left: (4, 4L), (6, 6L), (8, 8L), (10, 10L), (12, 12L), (14, 14L)
+      // right: (10, 10L), (12, 12L), (14, 14L)
+      //
+      // states evicted
+      // left: (2, 2L)
+      // right: (6, 6L), (8, 8L)
+      assertNumStateRows(total = 9, updated = 4)
     )
   }
 }

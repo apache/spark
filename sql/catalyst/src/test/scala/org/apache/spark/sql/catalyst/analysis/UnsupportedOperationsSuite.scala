@@ -494,13 +494,13 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
 
   // Left semi joins: update and complete mode not allowed
   assertNotSupportedInStreamingPlan(
-    s"left semi join with stream-stream relations and update mode",
+    "left semi join with stream-stream relations and update mode",
     streamRelation.join(streamRelation, joinType = LeftSemi,
       condition = Some(attribute === attribute)),
     OutputMode.Update(),
     Seq("is not supported in Update output mode"))
   assertNotSupportedInStreamingPlan(
-    s"left semi join with stream-stream relations and complete mode",
+    "left semi join with stream-stream relations and complete mode",
     Aggregate(Nil, aggExprs("d"), streamRelation.join(streamRelation, joinType = LeftSemi,
       condition = Some(attribute === attribute))),
     OutputMode.Complete(),
@@ -509,17 +509,17 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   // Left semi joins: stream-stream allowed with join on watermark attribute
   // Note that the attribute need not be watermarked on both sides.
   assertSupportedInStreamingPlan(
-    s"left semi join with stream-stream relations and join on attribute with left watermark",
+    "left semi join with stream-stream relations and join on attribute with left watermark",
     streamRelation.join(streamRelation, joinType = LeftSemi,
       condition = Some(attributeWithWatermark === attribute)),
     OutputMode.Append())
   assertSupportedInStreamingPlan(
-    s"left semi join with stream-stream relations and join on attribute with right watermark",
+    "left semi join with stream-stream relations and join on attribute with right watermark",
     streamRelation.join(streamRelation, joinType = LeftSemi,
       condition = Some(attribute === attributeWithWatermark)),
     OutputMode.Append())
   assertNotSupportedInStreamingPlan(
-    s"left semi join with stream-stream relations and join on non-watermarked attribute",
+    "left semi join with stream-stream relations and join on non-watermarked attribute",
     streamRelation.join(streamRelation, joinType = LeftSemi,
       condition = Some(attribute === attribute)),
     OutputMode.Append(),
@@ -527,7 +527,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
 
   // Left semi joins: stream-stream allowed with range condition yielding state value watermark
   assertSupportedInStreamingPlan(
-    s"left semi join with stream-stream relations and state value watermark", {
+    "left semi join with stream-stream relations and state value watermark", {
       val leftRelation = streamRelation
       val rightTimeWithWatermark =
         AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
@@ -541,7 +541,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
 
   // Left semi joins: stream-stream not allowed with insufficient range condition
   assertNotSupportedInStreamingPlan(
-    s"left semi join with stream-stream relations and state value watermark", {
+    "left semi join with stream-stream relations and state value watermark", {
       val leftRelation = streamRelation
       val rightTimeWithWatermark =
         AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)

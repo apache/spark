@@ -250,18 +250,18 @@ case class StreamingSymmetricHashJoinExec(
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
     //  - `leftSideJoiner.storeAndJoinWithOtherSide(rightSideJoiner)`
-    //    - inner, left outer, right outer join: generates all rows from matching new left input
+    //    - Inner, Left Outer, Right Outer Join: generates all rows from matching new left input
     //      with stored right input, and also stores all the left input.
-    //    - left semi join: generates all new left input rows from matching new left input with
+    //    - Left Semi Join: generates all new left input rows from matching new left input with
     //      stored right input, and also stores all the non-matched left input.
     //
     //  - `rightSideJoiner.storeAndJoinWithOtherSide(leftSideJoiner)`
-    //    - inner, left outer, right outer join: generates all rows from matching new right input
+    //    - Inner, Left Outer, Right Outer Join: generates all rows from matching new right input
     //      with stored left input, and also stores all the right input.
     //      It also generates all rows from matching new left input with new right input, since
     //      the new left input has become stored by that point. This tiny asymmetry is necessary
     //      to avoid duplication.
-    //    - left semi join: generates all stored left input rows, from matching new right input
+    //    - Left Semi Join: generates all stored left input rows, from matching new right input
     //      with stored left input, and also stores all the right input. Note only first-time
     //      matched left input rows will be generated, this is to guarantee left semi semantics.
     val leftOutputIter = leftSideJoiner.storeAndJoinWithOtherSide(rightSideJoiner) {
@@ -272,14 +272,14 @@ case class StreamingSymmetricHashJoinExec(
     }
 
     // We need to save the time that the one side hash join output iterator completes, since
-    // other join (outer and semi) output counts as both update and removal time.
+    // other join output counts as both update and removal time.
     var hashJoinOutputCompletionTimeNs: Long = 0
     def onHashJoinOutputCompletion(): Unit = {
       hashJoinOutputCompletionTimeNs = System.nanoTime
     }
-    // This is the iterator which produces the inner join rows. For other joins (outer and semi),
-    // this will be prepended to a second iterator producing other rows; for inner joins, this is
-    // the full output.
+    // This is the iterator which produces the inner and left semi join rows. For other joins,
+    // this will be prepended to a second iterator producing other rows; for inner and left semi
+    // joins, this is the full output.
     val hashJoinOutputIter = CompletionIterator[InternalRow, Iterator[InternalRow]](
       leftOutputIter ++ rightOutputIter, onHashJoinOutputCompletion())
 
@@ -358,8 +358,9 @@ case class StreamingSymmetricHashJoinExec(
       // All processing time counts as update time.
       allUpdatesTimeMs += math.max(NANOSECONDS.toMillis(System.nanoTime - updateStartTimeNs), 0)
 
-      // Processing time between inner output completion and here comes from the outer portion of a
-      // join, and thus counts as removal time as we remove old state from one side while iterating.
+      // Processing time between one side hash join output completion and here comes from the
+      // outer portion of a join, and thus counts as removal time as we remove old state from
+      // one side while iterating.
       if (hashJoinOutputCompletionTimeNs != 0) {
         allRemovalsTimeMs +=
           math.max(NANOSECONDS.toMillis(System.nanoTime - hashJoinOutputCompletionTimeNs), 0)
@@ -376,9 +377,6 @@ case class StreamingSymmetricHashJoinExec(
         // have to remove unnecessary state rows from the other side (e.g., right side for the left
         // outer join) if possible. In all cases, nothing needs to be outputted, hence the removal
         // needs to be done greedily by immediately consuming the returned iterator.
-        //
-        // For left semi joins, we have to remove unnecessary state rows from both sides if
-        // possible.
         val cleanupIter = joinType match {
           case Inner | LeftSemi =>
             leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()
@@ -500,7 +498,7 @@ case class StreamingSymmetricHashJoinExec(
         case _ => (_: InternalRow) => Iterator.empty
       }
 
-      val joinOnlyFirstTimeMatchedRow = joinType == LeftSemi && joinSide == RightSide
+      val excludeRowsAlreadyMatched = joinType == LeftSemi && joinSide == RightSide
 
       val generateOutputIter: (InternalRow, Iterator[JoinedRow]) => Iterator[InternalRow] =
         joinSide match {
@@ -532,7 +530,7 @@ case class StreamingSymmetricHashJoinExec(
             key,
             thatRow => generateJoinedRow(thisRow, thatRow),
             postJoinFilter,
-            joinOnlyFirstTimeMatchedRow)
+            excludeRowsAlreadyMatched)
           val outputIter = generateOutputIter(thisRow, joinedRowIter)
           new AddingProcessedRowToStateCompletionIterator(key, thisRow, outputIter)
         } else {
