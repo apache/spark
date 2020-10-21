@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, CatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AtomicType, IntegralType, StringType}
+import org.apache.spark.sql.types.{AtomicType, DataType, IntegralType, NumericType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -646,16 +646,16 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
 
     object ExtractableLiteral {
-      def unapply(expr: Expression): Option[String] = expr match {
+      def unapply(expr: Expression): Option[(String, DataType)] = expr match {
         case Literal(null, _) => None // `null`s can be cast as other types; we want to avoid NPEs.
-        case Literal(value, _: IntegralType) => Some(value.toString)
-        case Literal(value, _: StringType) => Some(quoteStringLiteral(value.toString))
+        case l @ Literal(value, _: IntegralType) => Some(value.toString, l.dataType)
+        case Literal(value, _: StringType) => Some(quoteStringLiteral(value.toString), StringType)
         case _ => None
       }
     }
 
     object ExtractableLiterals {
-      def unapply(exprs: Seq[Expression]): Option[Seq[String]] = {
+      def unapply(exprs: Seq[Expression]): Option[Seq[(String, DataType)]] = {
         // SPARK-24879: The Hive metastore filter parser does not support "null", but we still want
         // to push down as many predicates as we can while still maintaining correctness.
         // In SQL, the `IN` expression evaluates as follows:
@@ -726,9 +726,9 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     val useAdvanced = SQLConf.get.advancedPartitionPredicatePushdownEnabled
 
     object ExtractAttribute {
-      def unapply(expr: Expression): Option[Attribute] = {
+      def unapply(expr: Expression): Option[(Attribute, DataType)] = {
         expr match {
-          case attr: Attribute => Some(attr)
+          case attr: Attribute => Some(attr, attr.dataType)
           case Cast(child @ AtomicType(), dt: AtomicType, _)
               if Cast.canUpCast(child.dataType.asInstanceOf[AtomicType], dt) => unapply(child)
           case _ => None
@@ -736,21 +736,41 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
     }
 
-    def convert(expr: Expression): Option[String] = expr match {
-      case In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values))
-          if useAdvanced =>
-        Some(convertInToOr(name, values))
+    def compatibleTypes(dt1: Any, dt2: Any): Boolean =
+      (dt1, dt2) match {
+        case (_: NumericType, _: NumericType) => true
+        case (_: StringType, _: StringType) => true
+        case _ => false
+      }
 
-      case InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values))
+    def compatibleTypesIn(dt1: Any, dts: Seq[Any]): Boolean = {
+      dts.forall(compatibleTypes(dt1, _))
+    }
+
+    def convert(expr: Expression): Option[String] = expr match {
+      case In(ExtractAttribute(SupportedAttribute(name), dt1), ExtractableLiterals(values))
+          if useAdvanced && compatibleTypesIn(dt1, values.map(_._2)) =>
+        val newValues = values.map(_._1)
+        Some(convertInToOr(name, newValues))
+
+      case InSet(ExtractAttribute(SupportedAttribute(name), dt1), ExtractableValues(values))
           if useAdvanced =>
         Some(convertInToOr(name, values))
 
       case op @ SpecialBinaryComparison(
-          ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
+          ExtractAttribute(SupportedAttribute(name), dt1), ExtractableLiteral(value, dt2))
+          if compatibleTypes(dt1, dt2) =>
         Some(s"$name ${op.symbol} $value")
 
       case op @ SpecialBinaryComparison(
-          ExtractableLiteral(value), ExtractAttribute(SupportedAttribute(name))) =>
+          ExtractAttribute(SupportedAttribute(name), dt1), ExtractableLiteral(value, dt2))
+          if !compatibleTypes(dt1, dt2) =>
+        logWarning(s"Not creating filter because $dt1 not same as $dt2")
+        None
+
+      case op @ SpecialBinaryComparison(
+          ExtractableLiteral(value, dt2), ExtractAttribute(SupportedAttribute(name), dt1))
+            if (dt1 == dt2) =>
         Some(s"$value ${op.symbol} $name")
 
       case And(expr1, expr2) if useAdvanced =>
@@ -788,11 +808,11 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       hive: Hive,
       table: Table,
       predicates: Seq[Expression]): Seq[Partition] = {
-
+    logWarning(s"Filters on entry are ${predicates.toList}")
     // Hive getPartitionsByFilter() takes a string that represents partition
     // predicates like "str_key=\"value\" and int_key=1 ..."
     val filter = convertFilters(table, predicates)
-
+    logWarning(s"Filters after convert are $filter")
     val partitions =
       if (filter.isEmpty) {
         getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
