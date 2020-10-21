@@ -1214,7 +1214,7 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
       // right: (1, 10), (2, 5)
       assertNumStateRows(total = 4, updated = 2),
       AddData(rightInput, (1, 9)),
-      // No match as left time is too low and left row is already matched.
+      // No match as left row is already matched.
       CheckNewAnswer(),
       // states
       // left: (1, 5), (3, 5)
