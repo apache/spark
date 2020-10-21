@@ -76,6 +76,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         'PYSPARK_PYTHON': which(pyspark_python),
         'PYSPARK_DRIVER_PYTHON': which(pyspark_python),
         'PYSPARK_ROW_FIELD_SORTING_ENABLED': 'true'
+        # Preserve legacy nested timezone behavior for pyarrow>=2, remove after SPARK-32285
+        'PYARROW_IGNORE_TIMEZONE': '1',
     })
 
     # Create a unique temp directory under 'target/' for each run. The TMPDIR variable is
