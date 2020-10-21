@@ -115,6 +115,7 @@ class ArrowTests(ReusedSQLTestCase):
 
     def test_toPandas_fallback_enabled(self):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
+            # TODO update with type that will fail
             schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
             df = self.spark.createDataFrame([({u'a': 1},)], schema=schema)
             with QuietTest(self.sc):
@@ -132,6 +133,7 @@ class ArrowTests(ReusedSQLTestCase):
                         assert_frame_equal(pdf, pd.DataFrame({u'map': [{u'a': 1}]}))
 
     def test_toPandas_fallback_disabled(self):
+        # TODO update with type that will fail
         schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
