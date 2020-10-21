@@ -515,14 +515,14 @@ private[spark] class MesosClusterScheduler(
 
   private def generateCmdOption(desc: MesosDriverDescription, sandboxPath: String): Seq[String] = {
     var options = Seq(
-      "--name", desc.conf.get("spark.app.name"),
+      "--name", shellEscape(desc.conf.get("spark.app.name")),
       "--master", s"mesos://${conf.get("spark.master")}",
       "--driver-cores", desc.cores.toString,
       "--driver-memory", s"${desc.mem}M")
 
     // Assume empty main class means we're running python
     if (!desc.command.mainClass.equals("")) {
-      options ++= Seq("--class", desc.command.mainClass)
+      options ++= Seq("--class", shellEscape(desc.command.mainClass))
     }
 
     desc.conf.getOption(EXECUTOR_MEMORY.key).foreach { v =>
@@ -551,9 +551,9 @@ private[spark] class MesosClusterScheduler(
       .filter { case (key, _) => !replicatedOptionsExcludeList.contains(key) }
       .toMap
     (defaultConf ++ driverConf).toSeq.sortBy(_._1).foreach { case (key, value) =>
-      options ++= Seq("--conf", s"${key}=${value}") }
+      options ++= Seq("--conf", s"${key}=${shellEscape(value)}") }
 
-    options.map(shellEscape)
+    options
   }
 
   /**
