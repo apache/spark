@@ -44,15 +44,13 @@ class CatalogManager(
   import CatalogManager.SESSION_CATALOG_NAME
   import CatalogV2Util._
 
-  SQLConf.get.withSQLConf(conf)
-
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
 
   def catalog(name: String): CatalogPlugin = synchronized {
     if (name.equalsIgnoreCase(SESSION_CATALOG_NAME)) {
       v2SessionCatalog
     } else {
-      catalogs.getOrElseUpdate(name, Catalogs.load(name, SQLConf.get))
+      catalogs.getOrElseUpdate(name, Catalogs.load(name, conf))
     }
   }
 
@@ -66,7 +64,7 @@ class CatalogManager(
   }
 
   private def loadV2SessionCatalog(): CatalogPlugin = {
-    Catalogs.load(SESSION_CATALOG_NAME, SQLConf.get) match {
+    Catalogs.load(SESSION_CATALOG_NAME, conf) match {
       case extension: CatalogExtension =>
         extension.setDelegateCatalog(defaultSessionCatalog)
         extension
@@ -84,7 +82,7 @@ class CatalogManager(
    * in the fallback configuration, spark.sql.sources.write.useV1SourceList
    */
   private[sql] def v2SessionCatalog: CatalogPlugin = {
-    SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { customV2SessionCatalog =>
+    conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { customV2SessionCatalog =>
       try {
         catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
       } catch {
@@ -124,7 +122,7 @@ class CatalogManager(
   private var _currentCatalogName: Option[String] = None
 
   def currentCatalog: CatalogPlugin = synchronized {
-    catalog(_currentCatalogName.getOrElse(SQLConf.get.getConf(SQLConf.DEFAULT_CATALOG)))
+    catalog(_currentCatalogName.getOrElse(conf.getConf(SQLConf.DEFAULT_CATALOG)))
   }
 
   def setCurrentCatalog(catalogName: String): Unit = synchronized {

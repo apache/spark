@@ -60,9 +60,11 @@ trait AnalysisTest extends PlanTest {
       inputPlan: LogicalPlan,
       expectedPlan: LogicalPlan,
       caseSensitive: Boolean = true): Unit = {
-    val analyzer = getAnalyzer(caseSensitive)
-    val actualPlan = analyzer.executeAndCheck(inputPlan, new QueryPlanningTracker)
-    comparePlans(actualPlan, expectedPlan)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+      val analyzer = getAnalyzer(caseSensitive)
+      val actualPlan = analyzer.executeAndCheck(inputPlan, new QueryPlanningTracker)
+      comparePlans(actualPlan, expectedPlan)
+    }
   }
 
   protected override def comparePlans(
@@ -76,18 +78,20 @@ trait AnalysisTest extends PlanTest {
   protected def assertAnalysisSuccess(
       inputPlan: LogicalPlan,
       caseSensitive: Boolean = true): Unit = {
-    val analyzer = getAnalyzer(caseSensitive)
-    val analysisAttempt = analyzer.execute(inputPlan)
-    try analyzer.checkAnalysis(analysisAttempt) catch {
-      case a: AnalysisException =>
-        fail(
-          s"""
-            |Failed to Analyze Plan
-            |$inputPlan
-            |
-            |Partial Analysis
-            |$analysisAttempt
-          """.stripMargin, a)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+      val analyzer = getAnalyzer(caseSensitive)
+      val analysisAttempt = analyzer.execute(inputPlan)
+      try analyzer.checkAnalysis(analysisAttempt) catch {
+        case a: AnalysisException =>
+          fail(
+            s"""
+              |Failed to Analyze Plan
+              |$inputPlan
+              |
+              |Partial Analysis
+              |$analysisAttempt
+            """.stripMargin, a)
+      }
     }
   }
 
@@ -95,22 +99,24 @@ trait AnalysisTest extends PlanTest {
       inputPlan: LogicalPlan,
       expectedErrors: Seq[String],
       caseSensitive: Boolean = true): Unit = {
-    val analyzer = getAnalyzer(caseSensitive)
-    val e = intercept[AnalysisException] {
-      analyzer.checkAnalysis(analyzer.execute(inputPlan))
-    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+      val analyzer = getAnalyzer(caseSensitive)
+      val e = intercept[AnalysisException] {
+        analyzer.checkAnalysis(analyzer.execute(inputPlan))
+      }
 
-    if (!expectedErrors.map(_.toLowerCase(Locale.ROOT)).forall(
-        e.getMessage.toLowerCase(Locale.ROOT).contains)) {
-      fail(
-        s"""Exception message should contain the following substrings:
-           |
-           |  ${expectedErrors.mkString("\n  ")}
-           |
-           |Actual exception message:
-           |
-           |  ${e.getMessage}
-         """.stripMargin)
+      if (!expectedErrors.map(_.toLowerCase(Locale.ROOT)).forall(
+          e.getMessage.toLowerCase(Locale.ROOT).contains)) {
+        fail(
+          s"""Exception message should contain the following substrings:
+             |
+             |  ${expectedErrors.mkString("\n  ")}
+             |
+             |Actual exception message:
+             |
+             |  ${e.getMessage}
+           """.stripMargin)
+      }
     }
   }
 

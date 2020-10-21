@@ -3520,30 +3520,6 @@ class SQLConf extends Serializable with Logging {
     setConfWithCheck(entry.key, entry.stringConverter(value))
   }
 
-  def withConf(props: Properties): SQLConf = settings.synchronized {
-    props.asScala.foreach { case (k, v) => setConfString(k, v) }
-    this
-  }
-
-  def withConfString(key: String, value: String): SQLConf = {
-    setConfString(key, value)
-    this
-  }
-
-  def withConf[T](entry: ConfigEntry[T], value: T): SQLConf = {
-    setConf(entry, value)
-    this
-  }
-
-  def withSQLConf(conf: SQLConf): SQLConf = {
-    if (!conf.equals(this)) {
-      conf.getAllConfs.foreach {
-        case (k, v) => if (v ne null) this.setConfString(k, v)
-      }
-    }
-    this
-  }
-
   /** Return the value of Spark SQL configuration property for the given key. */
   @throws[NoSuchElementException]("if key is not set")
   def getConfString(key: String): String = {

@@ -32,7 +32,8 @@ import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, ORDER_BY_ORDINAL}
 import org.apache.spark.sql.types.IntegerType
 
 class EliminateSortsSuite extends PlanTest {
-  override val conf = new SQLConf().copy(CASE_SENSITIVE -> true, ORDER_BY_ORDINAL -> false)
+  SQLConf.get.setConf(CASE_SENSITIVE, true)
+  SQLConf.get.setConf(ORDER_BY_ORDINAL, false)
   val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
   val analyzer = new Analyzer(catalog, conf)
 
