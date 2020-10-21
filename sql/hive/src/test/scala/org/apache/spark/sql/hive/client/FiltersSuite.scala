@@ -61,7 +61,7 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
 
   filterTest("int and string filter",
     (Literal(1) === a("intcol", IntegerType)) :: (Literal("a") === a("strcol", IntegerType)) :: Nil,
-    "1 = intcol and \"a\" = strcol")
+    "1 = intcol")
 
   filterTest("skip varchar",
     (Literal("") === a("varchar", StringType)) :: Nil,
