@@ -401,34 +401,34 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
     }
   }
 
-  test("Hive ThriftServer JDBC Database MetaData API Auditing") {
+  test("Hive ThriftServer JDBC Database MetaData API Auditing - Method not supported") {
     withJdbcStatement() { statement =>
       val metaData = statement.getConnection.getMetaData
       Seq(
-        () => metaData.allProceduresAreCallable(),
+        () => metaData.allProceduresAreCallable,
         () => metaData.getURL,
         () => metaData.getUserName,
         () => metaData.isReadOnly,
         () => metaData.nullsAreSortedHigh,
         () => metaData.nullsAreSortedLow,
-        () => metaData.nullsAreSortedAtStart(),
-        () => metaData.nullsAreSortedAtEnd(),
-        () => metaData.usesLocalFiles(),
-        () => metaData.usesLocalFilePerTable(),
-        () => metaData.supportsMixedCaseIdentifiers(),
-        () => metaData.supportsMixedCaseQuotedIdentifiers(),
-        () => metaData.storesUpperCaseIdentifiers(),
-        () => metaData.storesUpperCaseQuotedIdentifiers(),
-        () => metaData.storesLowerCaseIdentifiers(),
-        () => metaData.storesLowerCaseQuotedIdentifiers(),
-        () => metaData.storesMixedCaseIdentifiers(),
-        () => metaData.storesMixedCaseQuotedIdentifiers(),
+        () => metaData.nullsAreSortedAtStart,
+        () => metaData.nullsAreSortedAtEnd,
+        () => metaData.usesLocalFiles,
+        () => metaData.usesLocalFilePerTable,
+        () => metaData.supportsMixedCaseIdentifiers,
+        () => metaData.supportsMixedCaseQuotedIdentifiers,
+        () => metaData.storesUpperCaseIdentifiers,
+        () => metaData.storesUpperCaseQuotedIdentifiers,
+        () => metaData.storesLowerCaseIdentifiers,
+        () => metaData.storesLowerCaseQuotedIdentifiers,
+        () => metaData.storesMixedCaseIdentifiers,
+        () => metaData.storesMixedCaseQuotedIdentifiers,
         () => metaData.getSQLKeywords,
         () => metaData.nullPlusNonNullIsNull,
         () => metaData.supportsConvert,
         () => metaData.supportsTableCorrelationNames,
         () => metaData.supportsDifferentTableCorrelationNames,
-        () => metaData.supportsExpressionsInOrderBy(),
+        () => metaData.supportsExpressionsInOrderBy,
         () => metaData.supportsOrderByUnrelated,
         () => metaData.supportsGroupByUnrelated,
         () => metaData.supportsGroupByBeyondSelect,
@@ -492,7 +492,7 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
         () => metaData.updatesAreDetected(ResultSet.TYPE_FORWARD_ONLY),
         () => metaData.deletesAreDetected(ResultSet.TYPE_FORWARD_ONLY),
         () => metaData.insertsAreDetected(ResultSet.TYPE_FORWARD_ONLY),
-        () => metaData.supportsNamedParameters(),
+        () => metaData.supportsNamedParameters,
         () => metaData.supportsMultipleOpenResults,
         () => metaData.supportsGetGeneratedKeys,
         () => metaData.getSuperTypes("", "%", "%"),
@@ -511,7 +511,12 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
         val e = intercept[SQLFeatureNotSupportedException](func())
         assert(e.getMessage === "Method not supported")
       }
+    }
+  }
 
+  test("Hive ThriftServer JDBC Database MetaData API Auditing - Method supported") {
+    withJdbcStatement() { statement =>
+      val metaData = statement.getConnection.getMetaData
       import org.apache.spark.SPARK_VERSION
       assert(metaData.allTablesAreSelectable)
       assert(metaData.getDatabaseProductName === "Spark SQL")
