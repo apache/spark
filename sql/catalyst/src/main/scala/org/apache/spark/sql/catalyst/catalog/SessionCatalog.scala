@@ -68,6 +68,8 @@ class SessionCatalog(
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
+  SQLConf.get.withSQLConf(conf)
+
   // For testing only.
   def this(
       externalCatalog: ExternalCatalog,
