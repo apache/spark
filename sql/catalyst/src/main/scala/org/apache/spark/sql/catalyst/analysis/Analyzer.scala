@@ -136,8 +136,6 @@ class Analyzer(
     maxIterations: Int)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
 
-  SQLConf.get.withSQLConf(conf)
-
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
 
   override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {

@@ -44,8 +44,6 @@ class CatalogManager(
   import CatalogManager.SESSION_CATALOG_NAME
   import CatalogV2Util._
 
-  SQLConf.get.withSQLConf(conf)
-
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
 
   def catalog(name: String): CatalogPlugin = synchronized {
