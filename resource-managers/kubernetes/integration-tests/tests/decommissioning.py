@@ -33,7 +33,7 @@ if __name__ == "__main__":
     sc = spark._sc
     accs = []
     rdds = []
-    for x in range(0, 100):
+    for x in range(0, 25):
         acc = sc.accumulator(0)
         accs.append(acc)
 
@@ -44,7 +44,7 @@ if __name__ == "__main__":
         initialRdd = sc.parallelize(range(100), 5)
         accRdd = initialRdd.map(addToAcc)
         # Trigger a shuffle so there are shuffle blocks to migrate
-        numPartitions = (x + 1) * 2
+        numPartitions = (x + 1) * 5
         rdd = accRdd.map(lambda x: (x, x)).groupByKey(numPartitions = numPartitions)
         rdds.append(rdd)
         rdd.collect()
