@@ -68,6 +68,8 @@ class SessionCatalog(
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
+  SQLConf.get.withSQLConf(conf)
+
   // For testing only.
   def this(
       externalCatalog: ExternalCatalog,
@@ -125,19 +127,19 @@ class SessionCatalog(
    * Format table name, taking into account case sensitivity.
    */
   protected[this] def formatTableName(name: String): String = {
-    if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
+    if (SQLConf.get.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
   }
 
   /**
    * Format database name, taking into account case sensitivity.
    */
   protected[this] def formatDatabaseName(name: String): String = {
-    if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
+    if (SQLConf.get.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
   }
 
   private val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
-    val cacheSize = conf.tableRelationCacheSize
-    val cacheTTL = conf.metadataCacheTTL
+    val cacheSize = SQLConf.get.tableRelationCacheSize
+    val cacheTTL = SQLConf.get.metadataCacheTTL
 
     var builder = CacheBuilder.newBuilder()
       .maximumSize(cacheSize)
@@ -229,7 +231,7 @@ class SessionCatalog(
     if (locationUri.isAbsolute) {
       locationUri
     } else {
-      val fullPath = new Path(conf.warehousePath, CatalogUtils.URIToString(locationUri))
+      val fullPath = new Path(SQLConf.get.warehousePath, CatalogUtils.URIToString(locationUri))
       makeQualifiedPath(fullPath.toUri)
     }
   }
@@ -433,7 +435,7 @@ class SessionCatalog(
   }
 
   private def columnNameResolved(schema: StructType, colName: String): Boolean = {
-    schema.fields.map(_.name).exists(conf.resolver(_, colName))
+    schema.fields.map(_.name).exists(SQLConf.get.resolver(_, colName))
   }
 
   /**
@@ -1127,7 +1129,7 @@ class SessionCatalog(
     val table = formatTableName(tableName.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
-    externalCatalog.listPartitionsByFilter(db, table, predicates, conf.sessionLocalTimeZone)
+    externalCatalog.listPartitionsByFilter(db, table, predicates, SQLConf.get.sessionLocalTimeZone)
   }
 
   /**

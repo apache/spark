@@ -771,22 +771,23 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // RuleExecutor only throw exception or log warning when the rule is supposed to run
     // more than once.
     val maxIterations = 2
-    val conf = new SQLConf().copy(SQLConf.ANALYZER_MAX_ITERATIONS -> maxIterations)
-    val testAnalyzer = new Analyzer(
-      new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+    withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> maxIterations.toString) {
+      val testAnalyzer = new Analyzer(
+        new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
 
-    val plan = testRelation2.select(
-      $"a" / Literal(2) as "div1",
-      $"a" / $"b" as "div2",
-      $"a" / $"c" as "div3",
-      $"a" / $"d" as "div4",
-      $"e" / $"e" as "div5")
+      val plan = testRelation2.select(
+        $"a" / Literal(2) as "div1",
+        $"a" / $"b" as "div2",
+        $"a" / $"c" as "div3",
+        $"a" / $"d" as "div4",
+        $"e" / $"e" as "div5")
 
-    val message = intercept[TreeNodeException[LogicalPlan]] {
-      testAnalyzer.execute(plan)
-    }.getMessage
-    assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
-      s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+      val message = intercept[TreeNodeException[LogicalPlan]] {
+        testAnalyzer.execute(plan)
+      }.getMessage
+      assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+        s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+    }
   }
 
   test("SPARK-30886 Deprecate two-parameter TRIM/LTRIM/RTRIM") {

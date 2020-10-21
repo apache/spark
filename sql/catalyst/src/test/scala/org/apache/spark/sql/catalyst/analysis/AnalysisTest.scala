@@ -31,8 +31,8 @@ import org.apache.spark.sql.internal.SQLConf
 
 trait AnalysisTest extends PlanTest {
 
-  protected lazy val caseSensitiveAnalyzer = makeAnalyzer(caseSensitive = true)
-  protected lazy val caseInsensitiveAnalyzer = makeAnalyzer(caseSensitive = false)
+  protected def caseSensitiveAnalyzer = makeAnalyzer(caseSensitive = true)
+  protected def caseInsensitiveAnalyzer = makeAnalyzer(caseSensitive = false)
 
   protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = Nil
 
@@ -53,7 +53,7 @@ trait AnalysisTest extends PlanTest {
   }
 
   protected def getAnalyzer(caseSensitive: Boolean) = {
-    if (caseSensitive) caseSensitiveAnalyzer else caseInsensitiveAnalyzer
+    makeAnalyzer(caseSensitive)
   }
 
   protected def checkAnalysis(
