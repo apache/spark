@@ -24,8 +24,8 @@ license: |
 
 ## Upgrading from Spark SQL 3.0.1 to 3.0.2
 
-  - In Spark 3.0.2, incomplete interval literals, e.g. `INTERVAL '1'`, `INTERVAL '1 DAY 2'` will fail with IllegalArgumentException. In Spark 3.0.1 and earlier, they result `NULL`s.
-
+  - In Spark 3.0.2, `IllegalArgumentException` is returned for the incomplete interval literals, e.g. `INTERVAL '1'`, `INTERVAL '1 DAY 2'`, which are invalid. In Spark 3.0.1, these literals result in `NULL`s.
+  
 ## Upgrading from Spark SQL 3.0 to 3.0.1
 
 - In Spark 3.0, JSON datasource and JSON function `schema_of_json` infer TimestampType from string values if they match to the pattern defined by the JSON option `timestampFormat`. Since version 3.0.1, the timestamp type inference is disabled by default. Set the JSON option `inferTimestamp` to `true` to enable such type inference.
