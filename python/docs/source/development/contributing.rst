@@ -91,7 +91,7 @@ Annotations should, when possible:
 * In case of conflict between too broad (``Any``) and too narrow argument annotations, prefer the latter as one, as long as it is covering most of the typical use cases.
 * Indicate nonsensical combinations of arguments using ``@overload``  annotations. For example, to indicate that ``*Col`` and ``*Cols`` arguments are mutually exclusive:
 
-  .. code:: python
+  .. code-block:: python
 
     @overload
     def __init__(
@@ -114,6 +114,13 @@ Annotations should, when possible:
 
 
 Complex supporting type definitions, should be placed in dedicated ``_typing.pyi`` stubs. See for example `pyspark.sql._typing.pyi <https://github.com/apache/spark/blob/master/python/pyspark/sql/_typing.pyi>`_.
+
+Annotations can be validated using ``dev/lint-python`` script or by invoking mypy directly:
+
+.. code-block:: bash
+
+    mypy --config python/mypy.ini python/pyspark
+
 
 
 Code Style Guide
