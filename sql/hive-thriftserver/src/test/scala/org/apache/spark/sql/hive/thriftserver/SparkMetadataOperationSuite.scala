@@ -402,6 +402,12 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
   }
 
   test("Hive ThriftServer JDBC Database MetaData API Auditing - Method not supported") {
+    // These APIs belong to the upstream Apache Hive's hive-jdbc artifact where defines the hive
+    // behavior. Users can also use it to interact with Spark ThriftServer directly. Some behaviors
+    // are not fully consistent with Spark e.g. we support correlated subqueries but the hive-jdbc
+    // now fail directly at client side. There is nothing we can do but accept the current
+    // condition and highlight the difference and make it perspective in future changes both from
+    // upstream and inside Spark.
     withJdbcStatement() { statement =>
       val metaData = statement.getConnection.getMetaData
       Seq(
@@ -515,6 +521,11 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
   }
 
   test("Hive ThriftServer JDBC Database MetaData API Auditing - Method supported") {
+    // These APIs belong to the upstream Apache Hive's hive-jdbc artifact where defines the hive
+    // behavior. Users can also use it to interact with Spark ThriftServer directly. Some behaviors
+    // are not fully consistent with Spark e.g. we can work with multiple catalogs.
+    // There is nothing we can do but accept the current condition and highlight the difference
+    // and make it perspective in future changes both from upstream and inside Spark.
     withJdbcStatement() { statement =>
       val metaData = statement.getConnection.getMetaData
       import org.apache.spark.SPARK_VERSION
