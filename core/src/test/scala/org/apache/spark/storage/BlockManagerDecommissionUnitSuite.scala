@@ -208,7 +208,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
 
     // Verify the decom manager handles this correctly
     val bmDecomManager = new BlockManagerDecommissioner(sparkConf, bm)
-    validateDecommissionTimestampsOnManager(bmDecomManager, fail = false)
+    validateDecommissionTimestampsOnManager(bmDecomManager, fail = false, assertDone = false)
   }
 
   test("block decom manager short circuits removed blocks") {
