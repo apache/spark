@@ -120,6 +120,8 @@ class StreamingQueryListenerBus(sparkListenerBus: Option[LiveListenerBus], live:
       listener: StreamingQueryListener,
       event: StreamingQueryListener.Event): Unit = {
     def shouldReport(runId: UUID): Boolean = {
+      // When loaded by Spark History Server, we should process all event coming from replay
+      // listener bus.
       !live || activeQueryRunIds.synchronized { activeQueryRunIds.contains(runId) }
     }
 

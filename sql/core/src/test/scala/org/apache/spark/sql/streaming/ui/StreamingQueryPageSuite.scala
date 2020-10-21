@@ -91,7 +91,7 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(progress.batchId).thenReturn(2)
     when(progress.prettyJson).thenReturn("""{"a":1}""")
 
-    val summary = mock(classOf[StreamingQuerySummary], RETURNS_SMART_NULLS)
+    val summary = mock(classOf[StreamingQueryData], RETURNS_SMART_NULLS)
     when(summary.isActive).thenReturn(true)
     when(summary.name).thenReturn("query")
     when(summary.id).thenReturn(id)
