@@ -893,10 +893,11 @@ object JdbcUtils extends Logging {
       conn: Connection,
       tableName: String,
       changes: Seq[TableChange],
-      options: JDBCOptions): Unit = {
+      options: JDBCOptions,
+      tableSchema: StructType): Unit = {
     val dialect = JdbcDialects.get(options.url)
     if (changes.length == 1) {
-      executeStatement(conn, options, dialect.alterTable(tableName, changes)(0))
+      executeStatement(conn, options, dialect.alterTable(tableName, changes, tableSchema)(0))
     } else {
       val metadata = conn.getMetaData
       if (!metadata.supportsTransactions) {
@@ -907,7 +908,7 @@ object JdbcUtils extends Logging {
         val statement = conn.createStatement
         try {
           statement.setQueryTimeout(options.queryTimeout)
-          for (sql <- dialect.alterTable(tableName, changes)) {
+          for (sql <- dialect.alterTable(tableName, changes, tableSchema)) {
             statement.executeUpdate(sql)
           }
           conn.commit()

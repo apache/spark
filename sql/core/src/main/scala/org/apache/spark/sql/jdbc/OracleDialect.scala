@@ -136,7 +136,8 @@ private case object OracleDialect extends JdbcDialect {
   override def getUpdateColumnNullabilityQuery(
     tableName: String,
     columnName: String,
-    isNullable: Boolean): String = {
+    isNullable: Boolean,
+    dataType: String): String = {
     val nullable = if (isNullable) "NULL" else "NOT NULL"
     s"ALTER TABLE $tableName MODIFY ${quoteIdentifier(columnName)} $nullable"
   }

@@ -75,7 +75,8 @@ private object DB2Dialect extends JdbcDialect {
   override def getUpdateColumnNullabilityQuery(
       tableName: String,
       columnName: String,
-      isNullable: Boolean): String = {
+      isNullable: Boolean,
+      dataType: String): String = {
     val nullable = if (isNullable) "DROP NOT NULL" else "SET NOT NULL"
     s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} $nullable"
   }
