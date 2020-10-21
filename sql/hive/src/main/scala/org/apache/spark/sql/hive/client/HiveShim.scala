@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, CatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AtomicType, DataType, IntegralType, NumericType, StringType}
+import org.apache.spark.sql.types.{AtomicType, ByteType, DataType, IntegerType, IntegralType, LongType, ShortType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -682,15 +682,15 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
 
     object ExtractableValues {
-      private lazy val valueToLiteralString: PartialFunction[Any, String] = {
-        case value: Byte => value.toString
-        case value: Short => value.toString
-        case value: Int => value.toString
-        case value: Long => value.toString
-        case value: UTF8String => quoteStringLiteral(value.toString)
+      private lazy val valueToLiteralString: PartialFunction[Any, (String, DataType)] = {
+        case value: Byte => (value.toString, ByteType)
+        case value: Short => (value.toString, ShortType)
+        case value: Int => (value.toString, IntegerType)
+        case value: Long => (value.toString, LongType)
+        case value: UTF8String => (quoteStringLiteral(value.toString), StringType)
       }
 
-      def unapply(values: Set[Any]): Option[Seq[String]] = {
+      def unapply(values: Set[Any]): Option[Seq[(String, DataType)]] = {
         val extractables = values.toSeq.map(valueToLiteralString.lift)
         if (extractables.nonEmpty && extractables.forall(_.isDefined)) {
           Some(extractables.map(_.get))
@@ -738,7 +738,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
     def compatibleTypes(dt1: Any, dt2: Any): Boolean =
       (dt1, dt2) match {
-        case (_: NumericType, _: NumericType) => true
+        case (_: IntegralType, _: IntegralType) => true
         case (_: StringType, _: StringType) => true
         case _ => false
       }
@@ -748,13 +748,14 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
 
     def convert(expr: Expression): Option[String] = expr match {
-      case In(ExtractAttribute(SupportedAttribute(name), dt1), ExtractableLiterals(values))
-          if useAdvanced && compatibleTypesIn(dt1, values.map(_._2)) =>
-        val newValues = values.map(_._1)
-        Some(convertInToOr(name, newValues))
+      case In(ExtractAttribute(SupportedAttribute(name), dt1), ExtractableLiterals(valsAndDts))
+          if useAdvanced && compatibleTypesIn(dt1, valsAndDts.map(_._2)) =>
+        val values = valsAndDts.map(_._1)
+        Some(convertInToOr(name, values))
 
-      case InSet(ExtractAttribute(SupportedAttribute(name), dt1), ExtractableValues(values))
-          if useAdvanced =>
+      case InSet(ExtractAttribute(SupportedAttribute(name), dt1), ExtractableValues(valsAndDts))
+          if useAdvanced && compatibleTypesIn(dt1, valsAndDts.map(_._2)) =>
+        val values = valsAndDts.map(_._1)
         Some(convertInToOr(name, values))
 
       case op @ SpecialBinaryComparison(
