@@ -167,7 +167,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
       .thenReturn(Seq(BlockManagerId("exec2", "host2", 12345)))
 
     // Verify the decom manager handles this correctly
-    validateDecommissionTimestamps(sparkConf, bm, fail = false, assertDone = false)
+    validateDecommissionTimestamps(sparkConf, bm)
   }
 
   test("block decom manager does not re-add removed shuffle files") {
@@ -208,7 +208,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
 
     // Verify the decom manager handles this correctly
     val bmDecomManager = new BlockManagerDecommissioner(sparkConf, bm)
-    validateDecommissionTimestampsOnManager(bmDecomManager, fail = false, assertDone = false)
+    validateDecommissionTimestampsOnManager(bmDecomManager, fail = false)
   }
 
   test("block decom manager short circuits removed blocks") {
