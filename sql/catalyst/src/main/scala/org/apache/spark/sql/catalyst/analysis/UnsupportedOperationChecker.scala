@@ -297,8 +297,8 @@ object UnsupportedOperationChecker extends Logging {
                     "on the right are not supported")
               }
 
-            // We support streaming left outer joins with static on the right always, and with
-            // stream on both sides under the appropriate conditions.
+            // We support streaming left outer and left semi joins with static on the right always,
+            // and with stream on both sides under the appropriate conditions.
             case LeftOuter | LeftSemi =>
               if (!left.isStreaming && right.isStreaming) {
                 throwError(s"$joinType join with a streaming DataFrame/Dataset " +

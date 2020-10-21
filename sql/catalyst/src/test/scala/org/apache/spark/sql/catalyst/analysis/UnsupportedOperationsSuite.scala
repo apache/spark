@@ -523,7 +523,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     streamRelation.join(streamRelation, joinType = LeftSemi,
       condition = Some(attribute === attribute)),
     OutputMode.Append(),
-    Seq("watermark in the join keys"))
+    Seq("without a watermark in the join keys"))
 
   // Left semi joins: stream-stream allowed with range condition yielding state value watermark
   assertSupportedInStreamingPlan(

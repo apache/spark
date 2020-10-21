@@ -1213,19 +1213,19 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
       // left: (1, 5), (3, 5)
       // right: (1, 10), (2, 5)
       assertNumStateRows(total = 4, updated = 2),
-      AddData(rightInput, (1, 11)),
+      AddData(rightInput, (1, 9)),
       // No match as left time is too low and left row is already matched.
       CheckNewAnswer(),
       // states
       // left: (1, 5), (3, 5)
-      // right: (1, 10), (2, 5), (1, 11)
+      // right: (1, 10), (2, 5), (1, 9)
       assertNumStateRows(total = 5, updated = 1),
       // Increase event time watermark to 20s by adding data with time = 30s on both inputs.
       AddData(leftInput, (1, 7), (1, 30)),
       CheckNewAnswer((1, 7)),
       // states
       // left: (1, 5), (3, 5), (1, 30)
-      // right: (1, 10), (2, 5), (1, 11)
+      // right: (1, 10), (2, 5), (1, 9)
       assertNumStateRows(total = 6, updated = 1),
       // Watermark = 30 - 10 = 20, no matched row.
       AddData(rightInput, (0, 30)),
@@ -1236,7 +1236,7 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
       //
       // states evicted
       // left: (1, 5), (3, 5) (below watermark = 20)
-      // right: (1, 10), (2, 5), (1, 11) (below watermark = 20)
+      // right: (1, 10), (2, 5), (1, 9) (below watermark = 20)
       assertNumStateRows(total = 2, updated = 1)
     )
   }
@@ -1250,8 +1250,9 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
       // batch 1 - global watermark = 0
       // states
       // left: (2, 2L), (4, 4L)
-      //       (left rows with value % 2 != 0 is filtered per [[PushDownLeftSemiAntiJoin]])
+      //       (left rows with value % 2 != 0 is filtered per [[PushPredicateThroughJoin]])
       // right: (2, 2L), (4, 4L)
+      //       (right rows with value % 2 != 0 is filtered per [[PushPredicateThroughJoin]])
       assertNumStateRows(total = 4, updated = 4),
       AddData(inputStream, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
       CheckNewAnswer((6, 6), (8, 8), (10, 10)),
