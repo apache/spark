@@ -58,6 +58,15 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create("foo", StringType).likeAll(
       Literal.create("%foo%", StringType),
       Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create("foo", StringType).likeAll(
+      Literal.create(null, StringType),
+      Literal.create("%foo%", StringType)), null)
+    checkEvaluation(Literal.create("foo", StringType).likeAll(
+      Literal.create("%feo%", StringType),
+      Literal.create(null, StringType)), false)
+    checkEvaluation(Literal.create("foo", StringType).likeAll(
+      Literal.create(null, StringType),
+      Literal.create("%feo%", StringType)), false)
     checkEvaluation(Literal.create("foo", StringType).notLikeAll(
       Literal.create("tee", StringType),
       Literal.create("%yoo%", StringType)), true)
@@ -65,8 +74,17 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create("%oo%", StringType),
       Literal.create("%yoo%", StringType)), false)
     checkEvaluation(Literal.create("foo", StringType).notLikeAll(
+      Literal.create("%foo%", StringType),
+      Literal.create(null, StringType)), false)
+    checkEvaluation(Literal.create("foo", StringType).notLikeAll(
+      Literal.create(null, StringType),
+      Literal.create("%foo%", StringType)), false)
+    checkEvaluation(Literal.create("foo", StringType).notLikeAll(
       Literal.create("%yoo%", StringType),
       Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create("foo", StringType).notLikeAll(
+      Literal.create(null, StringType),
+      Literal.create("%yoo%", StringType)), null)
   }
 
   test("LIKE Pattern") {

@@ -177,7 +177,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
   }
 }
 
-abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with NullIntolerant {
+abstract class LikeAllBase extends Expression with ImplicitCastInputTypes {
   def value: Expression = children.head
   def list: Seq[Expression] = children.tail
   protected def isNot: Boolean
@@ -204,7 +204,7 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
       var hasNull = false
       var allMatched = true
       list.foreach { e =>
-        if (!hasNull && allMatched) {
+        if (allMatched) {
           val str = e.eval(input)
           if (str == null) {
             hasNull = true
@@ -217,7 +217,7 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
           }
         }
       }
-      if (hasNull) {
+      if (allMatched && hasNull) {
         null
       } else {
         allMatched
@@ -239,24 +239,22 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
     val valueArg = ctx.freshName("valueArg")
     val patternCache = ctx.freshName("patternCache")
     // If some regex expression is foldable, we don't want to re-evaluate the pattern again.
-    val evalList = list.zipWithIndex.filter(_._1.foldable).map { case (x, i) =>
-      (x.eval(), i)
-    }
-    val cacheCode = if (evalList.exists(_._1 == null)) {
-      s"$hasNull = true;"
-    } else {
-      evalList.collect { case (x, i) =>
-        val regex = StringEscapeUtils.escapeJava(escape(x.asInstanceOf[UTF8String].toString()))
+    val cacheCode = list.zipWithIndex.collect { case (x, i) if x.foldable =>
+      val xEval = x.eval()
+      if (xEval == null) {
+        s"$patternCache[$i] = null;"
+      } else {
+        val regex = StringEscapeUtils.escapeJava(escape(xEval.asInstanceOf[UTF8String].toString()))
         s"""$patternCache[$i] = $patternClass.compile("$regex");"""
-      }.mkString("\n")
-    }
+      }
+    }.mkString("\n")
 
     val listCode = listGen.zipWithIndex.map { case (x, i) =>
       s"""
          |${x.code}
          |if (${x.isNull}) {
          |  $hasNull = true; // ${ev.isNull} = true;
-         |} else if (!$hasNull && $allMatched) {
+         |} else if ($allMatched) {
          |  $patternClass $pattern = $patternCache[$i];
          |  if ($pattern == null) {
          |    String $rightStr = ${x.value}.toString();
@@ -280,13 +278,13 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
       returnType = resultType,
       makeSplitFunction = body =>
         s"""
-           |if (!$hasNull && $allMatched) {
+           |if ($allMatched) {
            |  $body;
            |}
          """.stripMargin,
       foldFunctions = _.map { funcCall =>
         s"""
-           |if (!$hasNull && $allMatched) {
+           |if ($allMatched) {
            |  $funcCall;
            |}
          """.stripMargin
@@ -304,7 +302,7 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes with N
             |  $javaDataType $valueArg = ${valueGen.value};
             |  $codes
             |}
-            |final boolean ${ev.isNull} = $hasNull;
+            |final boolean ${ev.isNull} = $allMatched && $hasNull;
             |final boolean ${ev.value} = $allMatched;
       """.stripMargin)
   }
