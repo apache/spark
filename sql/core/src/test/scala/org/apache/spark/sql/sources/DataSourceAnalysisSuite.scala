@@ -51,21 +51,26 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   Seq(true, false).foreach { caseSensitive =>
-    val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
     def cast(e: Expression, dt: DataType): Expression = {
-      conf.storeAssignmentPolicy match {
+      SQLConf.get.storeAssignmentPolicy match {
         case StoreAssignmentPolicy.ANSI | StoreAssignmentPolicy.STRICT =>
-          AnsiCast(e, dt, Option(conf.sessionLocalTimeZone))
+          AnsiCast(e, dt, Option(SQLConf.get.sessionLocalTimeZone))
         case _ =>
-          Cast(e, dt, Option(conf.sessionLocalTimeZone))
+          Cast(e, dt, Option(SQLConf.get.sessionLocalTimeZone))
       }
     }
-    val rule = DataSourceAnalysis
+
+    def rule(caseSensitive: Boolean): DataSourceAnalysis.type =
+    {
+      SQLConf.get.setConf(SQLConf.CASE_SENSITIVE, caseSensitive)
+      DataSourceAnalysis
+    }
+
     test(
       s"convertStaticPartitions only handle INSERT having at least static partitions " +
         s"(caseSensitive: $caseSensitive)") {
       intercept[AssertionError] {
-        rule.convertStaticPartitions(
+        rule(caseSensitive).convertStaticPartitions(
           sourceAttributes = Seq('e.int, 'f.int),
           providedPartitions = Map("b" -> None, "c" -> None),
           targetAttributes = targetAttributes,
@@ -76,7 +81,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
     test(s"Missing columns (caseSensitive: $caseSensitive)") {
       // Missing columns.
       intercept[AnalysisException] {
-        rule.convertStaticPartitions(
+        rule(caseSensitive).convertStaticPartitions(
           sourceAttributes = Seq('e.int),
           providedPartitions = Map("b" -> Some("1"), "c" -> None),
           targetAttributes = targetAttributes,
@@ -87,7 +92,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
     test(s"Missing partitioning columns (caseSensitive: $caseSensitive)") {
       // Missing partitioning columns.
       intercept[AnalysisException] {
-        rule.convertStaticPartitions(
+        rule(caseSensitive).convertStaticPartitions(
           sourceAttributes = Seq('e.int, 'f.int),
           providedPartitions = Map("b" -> Some("1")),
           targetAttributes = targetAttributes,
@@ -96,7 +101,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
 
       // Missing partitioning columns.
       intercept[AnalysisException] {
-        rule.convertStaticPartitions(
+        rule(caseSensitive).convertStaticPartitions(
           sourceAttributes = Seq('e.int, 'f.int, 'g.int),
           providedPartitions = Map("b" -> Some("1")),
           targetAttributes = targetAttributes,
@@ -105,7 +110,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
 
       // Wrong partitioning columns.
       intercept[AnalysisException] {
-        rule.convertStaticPartitions(
+        rule(caseSensitive).convertStaticPartitions(
           sourceAttributes = Seq('e.int, 'f.int),
           providedPartitions = Map("b" -> Some("1"), "d" -> None),
           targetAttributes = targetAttributes,
@@ -116,7 +121,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
     test(s"Wrong partitioning columns (caseSensitive: $caseSensitive)") {
       // Wrong partitioning columns.
       intercept[AnalysisException] {
-        rule.convertStaticPartitions(
+        rule(caseSensitive).convertStaticPartitions(
           sourceAttributes = Seq('e.int, 'f.int),
           providedPartitions = Map("b" -> Some("1"), "d" -> Some("2")),
           targetAttributes = targetAttributes,
@@ -125,7 +130,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
 
       // Wrong partitioning columns.
       intercept[AnalysisException] {
-        rule.convertStaticPartitions(
+        rule(caseSensitive).convertStaticPartitions(
           sourceAttributes = Seq('e.int),
           providedPartitions = Map("b" -> Some("1"), "c" -> Some("3"), "d" -> Some("2")),
           targetAttributes = targetAttributes,
@@ -135,7 +140,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
       if (caseSensitive) {
         // Wrong partitioning columns.
         intercept[AnalysisException] {
-          rule.convertStaticPartitions(
+          rule(caseSensitive).convertStaticPartitions(
             sourceAttributes = Seq('e.int, 'f.int),
             providedPartitions = Map("b" -> Some("1"), "C" -> Some("3")),
             targetAttributes = targetAttributes,
@@ -149,7 +154,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
       s" (caseSensitive: $caseSensitive)") {
       // Static partitions need to appear before dynamic partitions.
       intercept[AnalysisException] {
-        rule.convertStaticPartitions(
+        rule(caseSensitive).convertStaticPartitions(
           sourceAttributes = Seq('e.int, 'f.int),
           providedPartitions = Map("b" -> None, "c" -> Some("3")),
           targetAttributes = targetAttributes,
@@ -162,7 +167,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
         val nonPartitionedAttributes = Seq('e.int, 'f.int)
         val expected = nonPartitionedAttributes ++
           Seq(cast(Literal("1"), IntegerType), cast(Literal("3"), IntegerType))
-        val actual = rule.convertStaticPartitions(
+        val actual = rule(caseSensitive).convertStaticPartitions(
           sourceAttributes = nonPartitionedAttributes,
           providedPartitions = Map("b" -> Some("1"), "C" -> Some("3")),
           targetAttributes = targetAttributes,
@@ -174,7 +179,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
         val nonPartitionedAttributes = Seq('e.int, 'f.int)
         val expected = nonPartitionedAttributes ++
           Seq(cast(Literal("1"), IntegerType), cast(Literal("3"), IntegerType))
-        val actual = rule.convertStaticPartitions(
+        val actual = rule(caseSensitive).convertStaticPartitions(
           sourceAttributes = nonPartitionedAttributes,
           providedPartitions = Map("b" -> Some("1"), "c" -> Some("3")),
           targetAttributes = targetAttributes,
@@ -186,7 +191,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
       {
         val nonPartitionedAttributes = Seq('e.int, 'f.int)
         val expected = nonPartitionedAttributes ++ Seq(cast(Literal("1"), IntegerType))
-        val actual = rule.convertStaticPartitions(
+        val actual = rule(caseSensitive).convertStaticPartitions(
           sourceAttributes = nonPartitionedAttributes,
           providedPartitions = Map("b" -> Some("1")),
           targetAttributes = Seq('a.int, 'd.int, 'b.int),
@@ -202,7 +207,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
         nonPartitionedAttributes ++
           Seq(cast(Literal("1"), IntegerType)) ++
           dynamicPartitionAttributes
-      val actual = rule.convertStaticPartitions(
+      val actual = rule(caseSensitive).convertStaticPartitions(
         sourceAttributes = nonPartitionedAttributes ++ dynamicPartitionAttributes,
         providedPartitions = Map("b" -> Some("1"), "c" -> None),
         targetAttributes = targetAttributes,
