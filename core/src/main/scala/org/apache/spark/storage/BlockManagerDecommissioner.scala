@@ -83,38 +83,42 @@ private[storage] class BlockManagerDecommissioner(
               Thread.sleep(SLEEP_TIME_SECS * 1000L)
             case Some((shuffleBlockInfo, retryCount)) =>
               if (retryCount < maxReplicationFailuresForDecommission) {
-                logInfo(s"Trying to migrate shuffle ${shuffleBlockInfo} to ${peer} " +
-                  s"($retryCount / $maxReplicationFailuresForDecommission)")
                 val blocks = bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo)
-                logInfo(s"Got migration sub-blocks ${blocks}")
+                if (blocks.isEmpty) {
+                  logInfo(s"Ignore empty shuffle block $shuffleBlockInfo")
+                } else {
+                  logInfo(s"Got migration sub-blocks ${blocks}")
+                  logInfo(s"Trying to migrate shuffle ${shuffleBlockInfo} to ${peer} " +
+                    s"($retryCount / $maxReplicationFailuresForDecommission)")
 
-                // Migrate the components of the blocks.
-                try {
-                  blocks.foreach { case (blockId, buffer) =>
-                    logDebug(s"Migrating sub-block ${blockId}")
-                    bm.blockTransferService.uploadBlockSync(
-                      peer.host,
-                      peer.port,
-                      peer.executorId,
-                      blockId,
-                      buffer,
-                      StorageLevel.DISK_ONLY,
-                      null)// class tag, we don't need for shuffle
-                    logDebug(s"Migrated sub block ${blockId}")
-                  }
-                  logInfo(s"Migrated ${shuffleBlockInfo} to ${peer}")
-                } catch {
-                  case e: IOException =>
-                    // If a block got deleted before netty opened the file handle, then trying to
-                    // load the blocks now will fail. This is most likely to occur if we start
-                    // migrating blocks and then the shuffle TTL cleaner kicks in. However this
-                    // could also happen with manually managed shuffles or a GC event on the driver
-                    // a no longer referenced RDD with shuffle files.
-                    if (bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo).isEmpty) {
-                      logWarning(s"Skipping block ${shuffleBlockInfo}, block deleted.")
-                    } else {
-                      throw e
+                  // Migrate the components of the blocks.
+                  try {
+                    blocks.foreach { case (blockId, buffer) =>
+                      logDebug(s"Migrating sub-block ${blockId}")
+                      bm.blockTransferService.uploadBlockSync(
+                        peer.host,
+                        peer.port,
+                        peer.executorId,
+                        blockId,
+                        buffer,
+                        StorageLevel.DISK_ONLY,
+                        null) // class tag, we don't need for shuffle
+                      logDebug(s"Migrated sub block ${blockId}")
                     }
+                    logInfo(s"Migrated ${shuffleBlockInfo} to ${peer}")
+                  } catch {
+                    case e: IOException =>
+                      // If a block got deleted before netty opened the file handle, then trying to
+                      // load the blocks now will fail. This is most likely to occur if we start
+                      // migrating blocks and then the shuffle TTL cleaner kicks in. However this
+                      // could also happen with manually managed shuffles or a GC event on the
+                      // driver a no longer referenced RDD with shuffle files.
+                      if (bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo).isEmpty) {
+                        logWarning(s"Skipping block ${shuffleBlockInfo}, block deleted.")
+                      } else {
+                        throw e
+                      }
+                  }
                 }
               } else {
                 logError(s"Skipping block ${shuffleBlockInfo} because it has failed ${retryCount}")

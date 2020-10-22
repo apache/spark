@@ -252,7 +252,7 @@ private[spark] class IndexShuffleBlockResolver(
       }
     } catch {
       case _: Exception => // If we can't load the blocks ignore them.
-        logWarning(s"Failed to resolve shuffle block ${shuffleBlockInfo}, skipping migration. " +
+        logWarning(s"Failed to resolve shuffle block ${shuffleBlockInfo}. " +
           "This is expected to occur if a block is removed after decommissioning has started.")
         List.empty[(BlockId, ManagedBuffer)]
     }
