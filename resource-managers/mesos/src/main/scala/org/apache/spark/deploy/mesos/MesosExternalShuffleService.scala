@@ -43,7 +43,7 @@ private[mesos] class MesosExternalBlockHandler(
   extends ExternalBlockHandler(transportConf, null) with Logging {
 
   ThreadUtils.newDaemonSingleThreadScheduledExecutor("shuffle-cleaner-watcher")
-    .scheduleAtFixedRate(new CleanerThread(), 0, cleanerIntervalS, TimeUnit.SECONDS)
+    .schedulerWithFixedDelay(new CleanerThread(), 0, cleanerIntervalS, TimeUnit.SECONDS)
 
   // Stores a map of app id to app state (timeout value and last heartbeat)
   private val connectedApps = new ConcurrentHashMap[String, AppState]()

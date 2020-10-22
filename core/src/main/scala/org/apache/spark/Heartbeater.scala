@@ -45,7 +45,8 @@ private[spark] class Heartbeater(
     val heartbeatTask = new Runnable() {
       override def run(): Unit = Utils.logUncaughtExceptions(reportHeartbeat())
     }
-    heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
+    heartbeater.scheduleWithFixedDelay(
+      heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
   }
 
   /** Stops the heartbeat thread. */

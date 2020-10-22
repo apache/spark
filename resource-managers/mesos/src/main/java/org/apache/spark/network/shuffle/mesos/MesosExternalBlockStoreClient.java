@@ -89,7 +89,7 @@ public class MesosExternalBlockStoreClient extends ExternalBlockStoreClient {
 
     @Override
     public void onSuccess(ByteBuffer response) {
-      heartbeaterThread.scheduleAtFixedRate(
+      heartbeaterThread.scheduleWithFixedDelay(
           new Heartbeater(client), 0, heartbeatIntervalMs, TimeUnit.MILLISECONDS);
       logger.info("Successfully registered app " + appId + " with external shuffle service.");
     }

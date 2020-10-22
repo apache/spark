@@ -152,7 +152,7 @@ private[deploy] class Master(
       logInfo(s"Spark Master is acting as a reverse proxy. Master, Workers and " +
        s"Applications UIs are available at $masterWebUiUrl")
     }
-    checkForWorkerTimeOutTask = forwardMessageThread.scheduleAtFixedRate(
+    checkForWorkerTimeOutTask = forwardMessageThread.scheduleWithFixedDelay(
       () => Utils.tryLogNonFatalError { self.send(CheckForWorkerTimeOut) },
       0, workerTimeoutMs, TimeUnit.MILLISECONDS)
 

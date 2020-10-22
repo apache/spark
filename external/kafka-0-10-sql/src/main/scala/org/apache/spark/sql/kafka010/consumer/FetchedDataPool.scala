@@ -60,7 +60,7 @@ private[consumer] class FetchedDataPool(
 
   private def startEvictorThread(): Option[ScheduledFuture[_]] = {
     if (evictorThreadRunIntervalMillis > 0) {
-      val future = executorService.scheduleAtFixedRate(() => {
+      val future = executorService.scheduleWithFixedDelay(() => {
         Utils.tryLogNonFatalError(removeIdleFetchedData())
       }, 0, evictorThreadRunIntervalMillis, TimeUnit.MILLISECONDS)
       Some(future)

@@ -361,7 +361,7 @@ private[deploy] class Worker(
         if (connectionAttemptCount == INITIAL_REGISTRATION_RETRIES) {
           registrationRetryTimer.foreach(_.cancel(true))
           registrationRetryTimer = Some(
-            forwardMessageScheduler.scheduleAtFixedRate(
+            forwardMessageScheduler.scheduleWithFixedDelay(
               () => Utils.tryLogNonFatalError { self.send(ReregisterWithMaster) },
               PROLONGED_REGISTRATION_RETRY_INTERVAL_SECONDS,
               PROLONGED_REGISTRATION_RETRY_INTERVAL_SECONDS,
@@ -394,7 +394,7 @@ private[deploy] class Worker(
         registered = false
         registerMasterFutures = tryRegisterAllMasters()
         connectionAttemptCount = 0
-        registrationRetryTimer = Some(forwardMessageScheduler.scheduleAtFixedRate(
+        registrationRetryTimer = Some(forwardMessageScheduler.scheduleWithFixedDelay(
           () => Utils.tryLogNonFatalError { Option(self).foreach(_.send(ReregisterWithMaster)) },
           INITIAL_REGISTRATION_RETRY_INTERVAL_SECONDS,
           INITIAL_REGISTRATION_RETRY_INTERVAL_SECONDS,
@@ -447,13 +447,13 @@ private[deploy] class Worker(
         logInfo(s"Successfully registered with master $preferredMasterAddress")
         registered = true
         changeMaster(masterRef, masterWebUiUrl, masterAddress)
-        forwardMessageScheduler.scheduleAtFixedRate(
+        forwardMessageScheduler.scheduleWithFixedDelay(
           () => Utils.tryLogNonFatalError { self.send(SendHeartbeat) },
           0, HEARTBEAT_MILLIS, TimeUnit.MILLISECONDS)
         if (CLEANUP_ENABLED) {
           logInfo(
             s"Worker cleanup enabled; old application directories will be deleted in: $workDir")
-          forwardMessageScheduler.scheduleAtFixedRate(
+          forwardMessageScheduler.scheduleWithFixedDelay(
             () => Utils.tryLogNonFatalError { self.send(WorkDirCleanup) },
             CLEANUP_INTERVAL_MILLIS, CLEANUP_INTERVAL_MILLIS, TimeUnit.MILLISECONDS)
         }

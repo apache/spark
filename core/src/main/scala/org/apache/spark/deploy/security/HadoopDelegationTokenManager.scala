@@ -116,7 +116,7 @@ private[spark] class HadoopDelegationTokenManager(
         }
       }
       val tgtRenewalPeriod = sparkConf.get(KERBEROS_RELOGIN_PERIOD)
-      renewalExecutor.scheduleAtFixedRate(tgtRenewalTask, tgtRenewalPeriod, tgtRenewalPeriod,
+      renewalExecutor.scheduleWithFixedDelay(tgtRenewalTask, tgtRenewalPeriod, tgtRenewalPeriod,
         TimeUnit.SECONDS)
     }
 
