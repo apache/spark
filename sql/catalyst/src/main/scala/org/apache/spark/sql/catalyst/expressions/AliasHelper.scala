@@ -57,9 +57,9 @@ trait AliasHelper {
     aliasMap: AttributeMap[Alias]): Expression = {
     // Use transformUp to prevent infinite recursion when the replacement expression
     // redefines the same ExprId,
-    expr.transformUp {
-      case a: Attribute => aliasMap.get(a).map(_.child).getOrElse(a)
-    }
+    trimAliases(expr.transformUp {
+      case a: Attribute => aliasMap.getOrElse(a, a)
+    })
   }
 
   /**
@@ -69,14 +69,11 @@ trait AliasHelper {
   protected def replaceAliasButKeepName(
      expr: NamedExpression,
      aliasMap: AttributeMap[Alias]): NamedExpression = {
-
-    val replaced = expr match {
-      case a: Attribute if aliasMap.contains(a) =>
-        Alias(replaceAlias(a, aliasMap), a.name)(a.exprId, a.qualifier)
-      case _ => replaceAlias(expr, aliasMap)
-    }
-
-    replaced.asInstanceOf[NamedExpression]
+    // Use transformUp to prevent infinite recursion when the replacement expression
+    // redefines the same ExprId,
+    trimNonTopLevelAliases(expr.transformUp {
+      case a: Attribute => aliasMap.getOrElse(a, a)
+    }).asInstanceOf[NamedExpression]
   }
 
   protected def trimAliases(e: Expression): Expression = {
