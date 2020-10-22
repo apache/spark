@@ -71,9 +71,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       mainClass = "",
       expectedLogOnCompletion = Seq(
         "Finished waiting, stopping Spark",
-        "Received decommission executor message",
-        "Acknowledged decommissioning block manager",
-        ": Executor decommission."),
+        "Decommission executors"),
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
@@ -108,9 +106,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       mainClass = "",
       expectedLogOnCompletion = Seq(
         "Finished waiting, stopping Spark",
-        "Received decommission executor message",
-        "Acknowledged decommissioning block manager",
-        ": Executor decommission."),
+        "Decommission executors"),
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
