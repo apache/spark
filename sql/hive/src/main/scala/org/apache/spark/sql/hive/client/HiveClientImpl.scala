@@ -78,6 +78,8 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  * object and overrides any exiting options. Then, options in extraConfig will be applied
  * to the HiveConf object and overrides any existing options.
  *
+ * HiveClientImpl could be used in multiple threads, objects in this class should share nothing.
+ *
  * @param version the version of hive used when pick function calls that are not compatible.
  * @param sparkConf all configuration options set in SparkConf.
  * @param hadoopConf the base Configuration object used by the HiveConf created inside
@@ -101,7 +103,9 @@ private[hive] class HiveClientImpl(
   import HiveClientImpl._
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
-  private val outputBuffer = new CircularBuffer()
+  private val outputBuffer: ThreadLocal[CircularBuffer] = new ThreadLocal[CircularBuffer]() {
+    override def initialValue(): CircularBuffer = new CircularBuffer()
+  }
 
   private val shim: ThreadLocal[Shim] = new ThreadLocal[Shim]() {
     override def initialValue(): Shim = version match {
@@ -120,17 +124,23 @@ private[hive] class HiveClientImpl(
     }
   }
 
-  // Create an internal session state for this HiveClientImpl.
-  val state: SessionState = {
-    val original = Thread.currentThread().getContextClassLoader
+  // Get an internal thread local session state for this HiveClientImpl.
+  def state: SessionState = {
     if (clientLoader.isolationOn) {
-      // Switch to the initClassLoader.
-      Thread.currentThread().setContextClassLoader(initClassLoader)
-      try {
-        newState()
-      } finally {
-        Thread.currentThread().setContextClassLoader(original)
+      // Get state from thread local
+      var ret = SessionState.get
+      if (ret == null) {
+        val original = Thread.currentThread().getContextClassLoader
+        // Switch to the initClassLoader.
+        Thread.currentThread().setContextClassLoader(initClassLoader)
+        try {
+          // newState() will create a new state and set it to thread local
+          ret = newState()
+        } finally {
+          Thread.currentThread().setContextClassLoader(original)
+        }
       }
+      ret
     } else {
       // Isolation off means we detect a CliSessionState instance in current thread.
       // 1: Inside the spark project, we have already started a CliSessionState in
@@ -170,8 +180,8 @@ private[hive] class HiveClientImpl(
     // got changed. We reset it to clientLoader.ClassLoader here.
     state.getConf.setClassLoader(clientLoader.classLoader)
     SessionState.start(state)
-    state.out = new PrintStream(outputBuffer, true, UTF_8.name())
-    state.err = new PrintStream(outputBuffer, true, UTF_8.name())
+    state.out = new PrintStream(outputBuffer.get(), true, UTF_8.name())
+    state.err = new PrintStream(outputBuffer.get(), true, UTF_8.name())
     state
   }
 
@@ -835,7 +845,7 @@ private[hive] class HiveClientImpl(
             |======================
             |HIVE FAILURE OUTPUT
             |======================
-            |${outputBuffer.toString}
+            |${outputBuffer.get().toString}
             |======================
             |END HIVE FAILURE OUTPUT
             |======================

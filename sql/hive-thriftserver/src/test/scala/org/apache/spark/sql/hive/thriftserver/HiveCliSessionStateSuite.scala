@@ -48,7 +48,7 @@ class HiveCliSessionStateSuite extends SparkFunSuite {
     }
   }
 
-  test("SessionState will not be reused") {
+  test("SessionState will be reused in the same thread") {
     withSessionClear { () =>
       val sparkConf = new SparkConf()
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
@@ -58,6 +58,34 @@ class HiveCliSessionStateSuite extends SparkFunSuite {
       val hiveClient = HiveUtils.newClientForMetadata(sparkConf, hadoopConf)
       val s1 = hiveClient.getState
       val s2 = hiveClient.newSession().getState
+      assert(s1 === s2)
+    }
+  }
+
+  test("SessionState will not be reused in different threads") {
+    withSessionClear { () =>
+      val sparkConf = new SparkConf()
+      val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+      HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
+        case (key, value) => hadoopConf.set(key, value)
+      }
+      val hiveClient = HiveUtils.newClientForMetadata(sparkConf, hadoopConf)
+      var s1: Any = null
+      var s2: Any = null
+      val t1 = new Thread() {
+        override def run(): Unit = {
+          s1 = hiveClient.getState
+        }
+      }
+      val t2 = new Thread() {
+        override def run(): Unit = {
+          s2 = hiveClient.newSession().getState
+        }
+      }
+      t1.start()
+      t2.start()
+      t1.join()
+      t2.join()
       assert(s1 !== s2)
     }
   }
