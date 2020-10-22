@@ -2666,7 +2666,7 @@ object SQLConf {
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.LEGACY.toString)
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
   val LEGACY_PARQUET_REBASE_MODE_IN_READ =
     buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
@@ -2696,7 +2696,7 @@ object SQLConf {
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.LEGACY.toString)
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
   val LEGACY_AVRO_REBASE_MODE_IN_WRITE =
     buildConf("spark.sql.legacy.avro.datetimeRebaseModeInWrite")

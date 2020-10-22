@@ -1022,7 +1022,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       }
     }
     Seq(
-      "2_4_5" -> successInRead _,
+      "2_4_5" -> failInRead _,
       "2_4_6" -> successInRead _).foreach { case (version, checkDefaultRead) =>
       withAllParquetReaders {
         Seq("plain", "dict").foreach { enc =>

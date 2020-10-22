@@ -47,6 +47,8 @@ license: |
   - In Spark 3.1, `IllegalArgumentException` is returned for the incomplete interval literals, e.g. `INTERVAL '1'`, `INTERVAL '1 DAY 2'`, which are invalid. In Spark 3.0, these literals result in `NULL`s.
 
   - In Spark 3.1, we remove the built-in Hive 1.2. You need to migrate your custom SerDes to Hive 2.3. See [HIVE-15167](https://issues.apache.org/jira/browse/HIVE-15167) for more details.
+  
+  - In Spark 3.1, loading and saving of timestamps from/to parquet files fails if the timestamps are before 1900-01-01 00:00:00Z, and loaded (saved) as the INT96 type. In Spark 3.0, the actions don't fail but might lead to shifting of the input timestamps due to rebasing from/to Julian to/from Proleptic Gregorian calendar. To restore the behavior before Spark 3.1, you can set `spark.sql.legacy.parquet.int96RebaseModeInRead` or/and `spark.sql.legacy.parquet.int96RebaseModeInWrite` to `LEGACY`.
 
 ## Upgrading from Spark SQL 3.0 to 3.0.1
 
