@@ -130,7 +130,7 @@ class EliminateSortsSuite extends AnalysisTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-33183: filters should not affect order for local sort") {
+  test("SPARK-33183: remove top level local sort with filter operators") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc)
     val filteredAndReordered = orderedPlan.where('a > Literal(10)).sortBy('a.asc, 'b.desc)
     val optimized = Optimize.execute(filteredAndReordered.analyze)
@@ -138,7 +138,7 @@ class EliminateSortsSuite extends AnalysisTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-33183: should not remove global sort with filter operators") {
+  test("SPARK-33183: keep top level global sort with filter operators") {
     val projectPlan = testRelation.select('a, 'b)
     val orderedPlan = projectPlan.orderBy('a.asc, 'b.desc)
     val filteredAndReordered = orderedPlan.where('a > Literal(10)).orderBy('a.asc, 'b.desc)

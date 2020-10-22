@@ -83,6 +83,7 @@ case class AdaptiveSparkPlanExec(
   @transient private val optimizer = new AQEOptimizer(conf)
 
   @transient private val removeRedundantProjects = RemoveRedundantProjects
+  @transient private val removeRedundantSorts = RemoveRedundantSorts
   @transient private val ensureRequirements = EnsureRequirements
 
   // A list of physical plan rules to be applied before creation of query stages. The physical
@@ -90,6 +91,7 @@ case class AdaptiveSparkPlanExec(
   // Exchange nodes) after running these rules.
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
     removeRedundantProjects,
+    removeRedundantSorts,
     ensureRequirements
   ) ++ context.session.sessionState.queryStagePrepRules
 
