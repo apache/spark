@@ -66,7 +66,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       Utils.deleteRecursively(wareHousePath)
       Utils.deleteRecursively(tmpDataDir)
       // Only delete sparkTestingDir if it wasn't defined to a static location by the system prop
-      if (System.getProperty(SPARK_TEST_CACHE_DIR_SYSTEM_PROPERTY).isEmpty) {
+      if (Option(System.getProperty(SPARK_TEST_CACHE_DIR_SYSTEM_PROPERTY)).isEmpty) {
         Utils.deleteRecursively(sparkTestingDir)
       }
     } finally {
