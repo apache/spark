@@ -170,7 +170,7 @@
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.10.0</fasterxml.jackson.version>
-    <snappy.version>1.1.7.5</snappy.version>
+    <snappy.version>1.1.8</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <commons-codec.version>1.10</commons-codec.version>
     <commons-io.version>2.5</commons-io.version>
@@ -242,6 +242,15 @@
     <orc.deps.scope>compile</orc.deps.scope>
     <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
+
+    <!--
+      These default to Hadoop 3.x shaded client/minicluster jars, but are switched to hadoop-client
+      when the Hadoop profile is hadoop-2.7, because these are only available in 3.x. Note that,
+      as result we have to include the same hadoop-client dependency multiple times in hadoop-2.7.
+    -->
+    <hadoop-client-api.artifact>hadoop-client-api</hadoop-client-api.artifact>
+    <hadoop-client-runtime.artifact>hadoop-client-runtime</hadoop-client-runtime.artifact>
+    <hadoop-client-minicluster.artifact>hadoop-client-minicluster</hadoop-client-minicluster.artifact>
 
     <!--
       Overridable test home. So that you can call individual pom files directly without
@@ -852,6 +861,11 @@
         <version>2.0.1</version>
       </dependency>
       <dependency>
+        <groupId>javax.xml.bind</groupId>
+        <artifactId>jaxb-api</artifactId>
+        <version>2.2.11</version>
+      </dependency>
+      <dependency>
         <groupId>org.scalanlp</groupId>
         <artifactId>breeze_${scala.binary.version}</artifactId>
         <version>1.0</version>
@@ -1059,6 +1073,26 @@
         <version>${curator.version}</version>
         <scope>test</scope>
       </dependency>
+      <!-- Hadoop 3.x dependencies -->
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client-api</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client-runtime</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>runtime</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client-minicluster</artifactId>
+        <version>${yarn.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <!-- End of Hadoop 3.x dependencies -->
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-client</artifactId>
@@ -1631,6 +1665,14 @@
           <exclusion>
             <groupId>org.apache.ant</groupId>
             <artifactId>ant</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-auth</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.apache.zookeeper</groupId>
@@ -2396,17 +2438,6 @@
                 </rules>
               </configuration>
             </execution>
-            <execution>
-              <id>enforce-no-duplicate-dependencies</id>
-              <goals>
-                <goal>enforce</goal>
-              </goals>
-              <configuration>
-                <rules>
-                  <banDuplicatePomDependencyVersions/>
-                </rules>
-              </configuration>
-            </execution>
           </executions>
         </plugin>
 	<plugin>
@@ -2866,6 +2897,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
+          <createDependencyReducedPom>false</createDependencyReducedPom>
           <artifactSet>
             <includes>
               <include>org.spark-project.spark:unused</include>
@@ -3127,6 +3159,9 @@
         <hadoop.version>2.7.4</hadoop.version>
         <curator.version>2.7.1</curator.version>
         <commons-io.version>2.4</commons-io.version>
+        <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
+        <hadoop-client-runtime.artifact>hadoop-client</hadoop-client-runtime.artifact>
+        <hadoop-client-minicluster.artifact>hadoop-client</hadoop-client-minicluster.artifact>
       </properties>
     </profile>
 

@@ -60,4 +60,10 @@ package object sql {
    * values.
    */
   private[sql] val SPARK_LEGACY_DATETIME = "org.apache.spark.legacyDateTime"
+
+  /**
+   * Parquet file metadata key to indicate that the file with INT96 column type was written
+   * without rebasing.
+   */
+  private[sql] val SPARK_INT96_NO_REBASE = "org.apache.spark.int96NoRebase"
 }

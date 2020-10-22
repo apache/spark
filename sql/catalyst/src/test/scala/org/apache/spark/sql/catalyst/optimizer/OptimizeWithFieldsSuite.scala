@@ -19,19 +19,21 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Literal, UpdateFields, WithField}
+import org.apache.spark.sql.catalyst.expressions.{Alias, GetStructField, Literal, UpdateFields, WithField}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 
-
-class CombineUpdateFieldsSuite extends PlanTest {
+class OptimizeWithFieldsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("CombineUpdateFields", FixedPoint(10), CombineUpdateFields) :: Nil
+    val batches = Batch("OptimizeUpdateFields", FixedPoint(10),
+      OptimizeUpdateFields, SimplifyExtractValueOps) :: Nil
   }
 
   private val testRelation = LocalRelation('a.struct('a1.int))
+  private val testRelation2 = LocalRelation('a.struct('a1.int).notNull)
 
   test("combines two adjacent UpdateFields Expressions") {
     val originalQuery = testRelation
@@ -69,5 +71,59 @@ class CombineUpdateFieldsSuite extends PlanTest {
       .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-32941: optimize WithFields followed by GetStructField") {
+    val originalQuery = testRelation2
+      .select(Alias(
+        GetStructField(UpdateFields('a,
+          WithField("b1", Literal(4)) :: Nil), 1), "out")())
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation2
+      .select(Alias(Literal(4), "out")())
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-32941: optimize WithFields chain - case insensitive") {
+    val originalQuery = testRelation
+      .select(
+        Alias(UpdateFields('a,
+          WithField("b1", Literal(4)) :: WithField("b1", Literal(5)) :: Nil), "out1")(),
+        Alias(UpdateFields('a,
+          WithField("b1", Literal(4)) :: WithField("B1", Literal(5)) :: Nil), "out2")())
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .select(
+        Alias(UpdateFields('a, WithField("b1", Literal(5)) :: Nil), "out1")(),
+        Alias(UpdateFields('a, WithField("B1", Literal(5)) :: Nil), "out2")())
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-32941: optimize WithFields chain - case sensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val originalQuery = testRelation
+        .select(
+          Alias(UpdateFields('a,
+            WithField("b1", Literal(4)) :: WithField("b1", Literal(5)) :: Nil), "out1")(),
+          Alias(UpdateFields('a,
+              WithField("b1", Literal(4)) :: WithField("B1", Literal(5)) :: Nil), "out2")())
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer = testRelation
+        .select(
+          Alias(UpdateFields('a, WithField("b1", Literal(5)) :: Nil), "out1")(),
+          Alias(
+            UpdateFields('a,
+              WithField("b1", Literal(4)) :: WithField("B1", Literal(5)) :: Nil), "out2")())
+        .analyze
+
+      comparePlans(optimized, correctAnswer)
+    }
   }
 }

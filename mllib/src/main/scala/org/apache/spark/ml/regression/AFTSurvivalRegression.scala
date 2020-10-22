@@ -383,22 +383,32 @@ class AFTSurvivalRegressionModel private[ml] (
 
   /** @group setParam */
   @Since("1.6.0")
-  def setQuantileProbabilities(value: Array[Double]): this.type = set(quantileProbabilities, value)
+  def setQuantileProbabilities(value: Array[Double]): this.type = {
+    set(quantileProbabilities, value)
+    _quantiles(0) = $(quantileProbabilities).map(q => math.exp(math.log(-math.log1p(-q)) * scale))
+    this
+  }
 
   /** @group setParam */
   @Since("1.6.0")
   def setQuantilesCol(value: String): this.type = set(quantilesCol, value)
 
+  private lazy val _quantiles = {
+    Array($(quantileProbabilities).map(q => math.exp(math.log(-math.log1p(-q)) * scale)))
+  }
+
+  private def lambda2Quantiles(lambda: Double): Vector = {
+    val quantiles = _quantiles(0).clone()
+    var i = 0
+    while (i < quantiles.length) { quantiles(i) *= lambda; i += 1 }
+    Vectors.dense(quantiles)
+  }
+
   @Since("2.0.0")
   def predictQuantiles(features: Vector): Vector = {
     // scale parameter for the Weibull distribution of lifetime
-    val lambda = math.exp(BLAS.dot(coefficients, features) + intercept)
-    // shape parameter for the Weibull distribution of lifetime
-    val k = 1 / scale
-    val quantiles = $(quantileProbabilities).map {
-      q => lambda * math.exp(math.log(-math.log1p(-q)) / k)
-    }
-    Vectors.dense(quantiles)
+    val lambda = predict(features)
+    lambda2Quantiles(lambda)
   }
 
   @Since("2.0.0")
@@ -414,24 +424,20 @@ class AFTSurvivalRegressionModel private[ml] (
     var predictionColumns = Seq.empty[Column]
 
     if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { features: Vector => predict(features) }
+      val predCol = udf(predict _).apply(col($(featuresCol)))
       predictionColNames :+= $(predictionCol)
-      predictionColumns :+= predictUDF(col($(featuresCol)))
+      predictionColumns :+= predCol
         .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if (hasQuantilesCol) {
-      val baseQuantiles = $(quantileProbabilities)
-        .map(q => math.exp(math.log(-math.log1p(-q)) * scale))
-      val lambdaCol = if ($(predictionCol).nonEmpty) {
-        predictionColumns.head
+      val quanCol = if ($(predictionCol).nonEmpty) {
+        udf(lambda2Quantiles _).apply(predictionColumns.head)
       } else {
-        udf { features: Vector => predict(features) }.apply(col($(featuresCol)))
+        udf(predictQuantiles _).apply(col($(featuresCol)))
       }
-      val predictQuantilesUDF =
-        udf { lambda: Double => Vectors.dense(baseQuantiles.map(q => q * lambda)) }
       predictionColNames :+= $(quantilesCol)
-      predictionColumns :+= predictQuantilesUDF(lambdaCol)
+      predictionColumns :+= quanCol
         .as($(quantilesCol), outputSchema($(quantilesCol)).metadata)
     }
 

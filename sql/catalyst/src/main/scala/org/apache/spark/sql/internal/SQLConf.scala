@@ -893,6 +893,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val THRIFTSERVER_QUERY_TIMEOUT =
+    buildConf("spark.sql.thriftServer.queryTimeout")
+      .doc("Set a query duration timeout in seconds in Thrift Server. If the timeout is set to " +
+        "a positive value, a running query will be cancelled automatically when the timeout is " +
+        "exceeded, otherwise the query continues to run till completion. If timeout values are " +
+        "set for each statement via `java.sql.Statement.setQueryTimeout` and they are smaller " +
+        "than this configuration value, they take precedence.")
+      .version("3.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(0L)
+
   val THRIFTSERVER_UI_STATEMENT_LIMIT =
     buildConf("spark.sql.thriftserver.ui.retainedStatements")
       .doc("The number of SQL statements kept in the JDBC/ODBC web UI history.")
@@ -2654,6 +2665,20 @@ object SQLConf {
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
+  val LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.legacy.parquet.int96RebaseModeInWrite")
+      .internal()
+      .doc("When LEGACY, which is the default, Spark will rebase INT96 timestamps from " +
+        "Proleptic Gregorian calendar to the legacy hybrid (Julian + Gregorian) calendar when " +
+        "writing Parquet files. When CORRECTED, Spark will not do rebase and write the timestamps" +
+        " as it is. When EXCEPTION, Spark will fail the writing if it sees ancient timestamps " +
+        "that are ambiguous between the two calendars.")
+      .version("3.1.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+
   val LEGACY_PARQUET_REBASE_MODE_IN_READ =
     buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
       .internal()
@@ -2664,6 +2689,21 @@ object SQLConf {
         "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
         "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown.")
       .version("3.0.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+
+  val LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.legacy.parquet.int96RebaseModeInRead")
+      .internal()
+      .doc("When LEGACY, which is the default, Spark will rebase INT96 timestamps from " +
+        "the legacy hybrid (Julian + Gregorian) calendar to Proleptic Gregorian calendar when " +
+        "reading Parquet files. When CORRECTED, Spark will not do rebase and read the timestamps " +
+        "as it is. When EXCEPTION, Spark will fail the reading if it sees ancient timestamps " +
+        "that are ambiguous between the two calendars. This config is only effective if the " +
+        "writer info (like Spark, Hive) of the Parquet files is unknown.")
+      .version("3.1.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
