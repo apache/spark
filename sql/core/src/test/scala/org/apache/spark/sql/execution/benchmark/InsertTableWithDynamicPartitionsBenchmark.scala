@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.SparkSession
 
 /**
  * Benchmark to measure insert into table with dynamic partition columns.
@@ -32,10 +31,6 @@ import org.apache.spark.sql.SparkSession
  * }}}
  */
 object InsertTableWithDynamicPartitionsBenchmark extends DataSourceWriteBenchmark {
-
-  override def getSparkSession: SparkSession = {
-    SparkSession.builder().master("local[4]").getOrCreate()
-  }
 
   def prepareSourceTableAndGetTotalRows(numberRows: Long, sourceTable: String,
       part1Step: Int, part2Step: Int, part3Step: Int): Long = {
