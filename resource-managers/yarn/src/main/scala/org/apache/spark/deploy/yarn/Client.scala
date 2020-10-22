@@ -28,13 +28,12 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.common.base.Objects
 import com.google.common.io.Files
 import javax.ws.rs.client.ClientBuilder
 import javax.ws.rs.core.MediaType
 import javax.ws.rs.core.Response.Status.Family
-import net.minidev.json.{JSONArray, JSONObject}
-import net.minidev.json.parser.JSONParser
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
@@ -1191,23 +1190,15 @@ private[spark] class Client(
       .get()
     response.getStatusInfo.getFamily match {
       case Family.SUCCESSFUL =>
-        val rawResponse = new JSONParser(JSONParser.MODE_PERMISSIVE)
-          .parse(response.readEntity(classOf[String]))
-
-        import scala.reflect.runtime.universe._
-        def castWithWarn[T: TypeTag]: Any => Option[T] = {
-          case matched: T => Some(matched)
-          case o =>
-            logWarning(s"Malformed status response from RM appattempts; "
-              + s"expected ${typeTag[T].tpe} but was ${o.getClass}")
-            None
-        }
-        Option(rawResponse).flatMap(castWithWarn[JSONObject])
-          .map(_.get("appAttempts")).flatMap(castWithWarn[JSONObject])
-          .map(_.get("appAttempt")).flatMap(castWithWarn[JSONArray])
-          .map(arr => arr.get(arr.size() - 1)).flatMap(castWithWarn[JSONObject])
-          .map(_.getAsString("logsLink"))
-          .map(baseUrl => (s"$baseUrl/stdout?start=-4096", s"$baseUrl/stderr?start=-4096"))
+        val objectMapper = new ObjectMapper()
+        // If JSON response is malformed somewhere along the way, MissingNode will be returned,
+        // which allows for safe continuation of chaining. The `elements()` call will be empty,
+        // and None will get returned.
+        objectMapper.readTree(response.readEntity(classOf[String]))
+            .path("appAttempts").path("appAttempt")
+            .elements().asScala.toList.takeRight(1).headOption
+            .map(_.path("logsLink").asText())
+            .map(baseUrl => (s"$baseUrl/stdout?start=-4096", s"$baseUrl/stderr?start=-4096"))
       case _ =>
         logInfo(s"Unable to fetch app attempts info from $baseRmUrl, got "
           + s"status code ${response.getStatus}: ${response.getStatusInfo.getReasonPhrase}")
