@@ -130,16 +130,16 @@ jobs:
       if: contains(matrix.modules, 'pyspark')
       # PyArrow is not supported in PyPy yet, see ARROW-2651.
       run: |
-        python3.6 -m pip install numpy 'pyarrow<0.12.0' 'pandas<1.0.0' scipy xmlrunner
+        python3.6 -m pip install numpy 'pyarrow<0.12.0' 'pandas<0.25.0' scipy xmlrunner
         python3.6 -m pip list
-        # PyPy does not have xmlrunner, and pandas<1.0.0 installation fails in PyPy3, just skipping.
+        # PyPy does not have xmlrunner, and pandas<0.25.0 installation fails in PyPy3, just skipping.
         pypy3 -m pip install numpy scipy
         pypy3 -m pip list
     - name: Install Python packages (Python 2.7)
       if: contains(matrix.modules, 'pyspark') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
       run: |
         # Some tests do not pass in PySpark with PyArrow, for example, pyspark.sql.tests.ArrowTests.
-        python2.7 -m pip install numpy 'pandas<1.0.0' scipy xmlrunner
+        python2.7 -m pip install numpy 'pandas<0.25.0' scipy xmlrunner
         python2.7 -m pip list
     # SparkR
     - name: Install R 4.0
