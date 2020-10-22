@@ -23,6 +23,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -168,23 +169,24 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     assert(exp.cause.get.getMessage.contains("Schema \"bad_test\" not found"))
   }
 
-  test("alter table ... add column") {
-    withTable("h2.test.alt_table") {
-      sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")
-      sql("ALTER TABLE h2.test.alt_table ADD COLUMNS (C1 INTEGER, C2 STRING)")
-      var t = spark.table("h2.test.alt_table")
+  test("ALTER TABLE ... add column") {
+    val tableName = "h2.test.alt_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (ID INTEGER) USING _")
+      sql(s"ALTER TABLE $tableName ADD COLUMNS (C1 INTEGER, C2 STRING)")
+      var t = spark.table(tableName)
       var expectedSchema = new StructType()
         .add("ID", IntegerType)
         .add("C1", IntegerType)
         .add("C2", StringType)
       assert(t.schema === expectedSchema)
-      sql("ALTER TABLE h2.test.alt_table ADD COLUMNS (c3 DOUBLE)")
-      t = spark.table("h2.test.alt_table")
+      sql(s"ALTER TABLE $tableName ADD COLUMNS (c3 DOUBLE)")
+      t = spark.table(tableName)
       expectedSchema = expectedSchema.add("c3", DoubleType)
       assert(t.schema === expectedSchema)
       // Add already existing column
       val msg = intercept[AnalysisException] {
-        sql("ALTER TABLE h2.test.alt_table ADD COLUMNS (c3 DOUBLE)")
+        sql(s"ALTER TABLE $tableName ADD COLUMNS (c3 DOUBLE)")
       }.getMessage
       assert(msg.contains("Cannot add column, because c3 already exists"))
     }
@@ -197,18 +199,19 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("alter table ... rename column") {
-    withTable("h2.test.alt_table") {
-      sql("CREATE TABLE h2.test.alt_table (id INTEGER, C0 INTEGER) USING _")
-      sql("ALTER TABLE h2.test.alt_table RENAME COLUMN id TO C")
-      val t = spark.table("h2.test.alt_table")
+  test("ALTER TABLE ... rename column") {
+    val tableName = "h2.test.alt_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (id INTEGER, C0 INTEGER) USING _")
+      sql(s"ALTER TABLE $tableName RENAME COLUMN id TO C")
+      val t = spark.table(tableName)
       val expectedSchema = new StructType()
         .add("C", IntegerType)
         .add("C0", IntegerType)
       assert(t.schema === expectedSchema)
       // Rename to already existing column
       val msg = intercept[AnalysisException] {
-        sql("ALTER TABLE h2.test.alt_table RENAME COLUMN C TO C0")
+        sql(s"ALTER TABLE $tableName RENAME COLUMN C TO C0")
       }.getMessage
       assert(msg.contains("Cannot rename column, because C0 already exists"))
     }
@@ -221,17 +224,18 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("alter table ... drop column") {
-    withTable("h2.test.alt_table") {
-      sql("CREATE TABLE h2.test.alt_table (C1 INTEGER, C2 INTEGER, c3 INTEGER) USING _")
-      sql("ALTER TABLE h2.test.alt_table DROP COLUMN C1")
-      sql("ALTER TABLE h2.test.alt_table DROP COLUMN c3")
-      val t = spark.table("h2.test.alt_table")
+  test("ALTER TABLE ... drop column") {
+    val tableName = "h2.test.alt_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (C1 INTEGER, C2 INTEGER, c3 INTEGER) USING _")
+      sql(s"ALTER TABLE $tableName DROP COLUMN C1")
+      sql(s"ALTER TABLE $tableName DROP COLUMN c3")
+      val t = spark.table(tableName)
       val expectedSchema = new StructType().add("C2", IntegerType)
       assert(t.schema === expectedSchema)
       // Drop not existing column
       val msg = intercept[AnalysisException] {
-        sql("ALTER TABLE h2.test.alt_table DROP COLUMN bad_column")
+        sql(s"ALTER TABLE $tableName DROP COLUMN bad_column")
       }.getMessage
       assert(msg.contains("Cannot delete missing field bad_column in test.alt_table schema"))
     }
@@ -244,22 +248,23 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("alter table ... update column type") {
-    withTable("h2.test.alt_table") {
-      sql("CREATE TABLE h2.test.alt_table (ID INTEGER, deptno INTEGER) USING _")
-      sql("ALTER TABLE h2.test.alt_table ALTER COLUMN id TYPE DOUBLE")
-      sql("ALTER TABLE h2.test.alt_table ALTER COLUMN deptno TYPE DOUBLE")
-      val t = spark.table("h2.test.alt_table")
+  test("ALTER TABLE ... update column type") {
+    val tableName = "h2.test.alt_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (ID INTEGER, deptno INTEGER) USING _")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN id TYPE DOUBLE")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN deptno TYPE DOUBLE")
+      val t = spark.table(tableName)
       val expectedSchema = new StructType().add("ID", DoubleType).add("deptno", DoubleType)
       assert(t.schema === expectedSchema)
       // Update not existing column
       val msg1 = intercept[AnalysisException] {
-        sql("ALTER TABLE h2.test.alt_table ALTER COLUMN bad_column TYPE DOUBLE")
+        sql(s"ALTER TABLE $tableName ALTER COLUMN bad_column TYPE DOUBLE")
       }.getMessage
       assert(msg1.contains("Cannot update missing field bad_column in test.alt_table schema"))
       // Update column to wrong type
       val msg2 = intercept[ParseException] {
-        sql("ALTER TABLE h2.test.alt_table ALTER COLUMN id TYPE bad_type")
+        sql(s"ALTER TABLE $tableName ALTER COLUMN id TYPE bad_type")
       }.getMessage
       assert(msg2.contains("DataType bad_type is not supported"))
     }
@@ -272,18 +277,19 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("alter table ... update column nullability") {
-    withTable("h2.test.alt_table") {
-      sql("CREATE TABLE h2.test.alt_table (ID INTEGER NOT NULL, deptno INTEGER NOT NULL) USING _")
-      sql("ALTER TABLE h2.test.alt_table ALTER COLUMN ID DROP NOT NULL")
-      sql("ALTER TABLE h2.test.alt_table ALTER COLUMN deptno DROP NOT NULL")
-      val t = spark.table("h2.test.alt_table")
+  test("ALTER TABLE ... update column nullability") {
+    val tableName = "h2.test.alt_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (ID INTEGER NOT NULL, deptno INTEGER NOT NULL) USING _")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN ID DROP NOT NULL")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN deptno DROP NOT NULL")
+      val t = spark.table(tableName)
       val expectedSchema = new StructType()
         .add("ID", IntegerType, nullable = true).add("deptno", IntegerType, nullable = true)
       assert(t.schema === expectedSchema)
       // Update nullability of not existing column
       val msg = intercept[AnalysisException] {
-        sql("ALTER TABLE h2.test.alt_table ALTER COLUMN bad_column DROP NOT NULL")
+        sql(s"ALTER TABLE $tableName ALTER COLUMN bad_column DROP NOT NULL")
       }.getMessage
       assert(msg.contains("Cannot update missing field bad_column in test.alt_table"))
     }
@@ -296,17 +302,18 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("alter table ... update column comment not supported") {
-    withTable("h2.test.alt_table") {
-      sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")
+  test("ALTER TABLE ... update column comment not supported") {
+    val tableName = "h2.test.alt_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (ID INTEGER) USING _")
       val exp = intercept[AnalysisException] {
-        sql("ALTER TABLE h2.test.alt_table ALTER COLUMN ID COMMENT 'test'")
+        sql(s"ALTER TABLE $tableName ALTER COLUMN ID COMMENT 'test'")
       }
       assert(exp.getMessage.contains("Failed table altering: test.alt_table"))
       assert(exp.cause.get.getMessage.contains("Unsupported TableChange"))
       // Update comment for not existing column
       val msg = intercept[AnalysisException] {
-        sql("ALTER TABLE h2.test.alt_table ALTER COLUMN bad_column COMMENT 'test'")
+        sql(s"ALTER TABLE $tableName ALTER COLUMN bad_column COMMENT 'test'")
       }.getMessage
       assert(msg.contains("Cannot update missing field bad_column in test.alt_table"))
     }
@@ -316,6 +323,72 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         sql(s"ALTER TABLE $table ALTER COLUMN ID COMMENT 'test'")
       }.getMessage
       assert(msg.contains("Table not found"))
+    }
+  }
+
+  test("ALTER TABLE case sensitivity") {
+    val tableName = "h2.test.alt_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (c1 INTEGER NOT NULL, c2 INTEGER) USING _")
+      var t = spark.table(tableName)
+      var expectedSchema = new StructType().add("c1", IntegerType).add("c2", IntegerType)
+      assert(t.schema === expectedSchema)
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val msg = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $tableName RENAME COLUMN C2 TO c3")
+        }.getMessage
+        assert(msg.contains("Cannot rename missing field C2 in test.alt_table schema"))
+      }
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        sql(s"ALTER TABLE $tableName RENAME COLUMN C2 TO c3")
+        expectedSchema = new StructType().add("c1", IntegerType).add("c3", IntegerType)
+        t = spark.table(tableName)
+        assert(t.schema === expectedSchema)
+      }
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val msg = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $tableName DROP COLUMN C3")
+        }.getMessage
+        assert(msg.contains("Cannot delete missing field C3 in test.alt_table schema"))
+      }
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        sql(s"ALTER TABLE $tableName DROP COLUMN C3")
+        expectedSchema = new StructType().add("c1", IntegerType)
+        t = spark.table(tableName)
+        assert(t.schema === expectedSchema)
+      }
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val msg = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $tableName ALTER COLUMN C1 TYPE DOUBLE")
+        }.getMessage
+        assert(msg.contains("Cannot update missing field C1 in test.alt_table schema"))
+      }
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        sql(s"ALTER TABLE $tableName ALTER COLUMN C1 TYPE DOUBLE")
+        expectedSchema = new StructType().add("c1", DoubleType)
+        t = spark.table(tableName)
+        assert(t.schema === expectedSchema)
+      }
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val msg = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $tableName ALTER COLUMN C1 DROP NOT NULL")
+        }.getMessage
+        assert(msg.contains("Cannot update missing field C1 in test.alt_table schema"))
+      }
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        sql(s"ALTER TABLE $tableName ALTER COLUMN C1 DROP NOT NULL")
+        expectedSchema = new StructType().add("c1", DoubleType, nullable = true)
+        t = spark.table(tableName)
+        assert(t.schema === expectedSchema)
+      }
     }
   }
 }

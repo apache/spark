@@ -893,6 +893,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val THRIFTSERVER_QUERY_TIMEOUT =
+    buildConf("spark.sql.thriftServer.queryTimeout")
+      .doc("Set a query duration timeout in seconds in Thrift Server. If the timeout is set to " +
+        "a positive value, a running query will be cancelled automatically when the timeout is " +
+        "exceeded, otherwise the query continues to run till completion. If timeout values are " +
+        "set for each statement via `java.sql.Statement.setQueryTimeout` and they are smaller " +
+        "than this configuration value, they take precedence.")
+      .version("3.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(0L)
+
   val THRIFTSERVER_UI_STATEMENT_LIMIT =
     buildConf("spark.sql.thriftserver.ui.retainedStatements")
       .doc("The number of SQL statements kept in the JDBC/ODBC web UI history.")
@@ -1455,6 +1466,15 @@ object SQLConf {
         "JSON functions such as to_json. " +
         "If false, it generates null for null fields in JSON objects.")
       .version("3.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val JSON_EXPRESSION_OPTIMIZATION =
+    buildConf("spark.sql.optimizer.enableJsonExpressionOptimization")
+      .doc("Whether to optimize JSON expressions in SQL optimizer. It includes pruning " +
+        "unnecessary columns from from_json, simplifing from_json + to_json, to_json + " +
+        "named_struct(from_json.col1, from_json.col2, ....).")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -2042,6 +2062,20 @@ object SQLConf {
       .version("2.4.0")
       .stringConf
       .createWithDefault("")
+
+  val FASTFAIL_ON_FILEFORMAT_OUTPUT =
+    buildConf("spark.sql.execution.fastFailOnFileFormatOutput")
+      .internal()
+      .doc("Whether to fast fail task execution when writing output to FileFormat datasource. " +
+        "If this is enabled, in `FileFormatWriter` we will catch `FileAlreadyExistsException` " +
+        "and fast fail output task without further task retry. Only enabling this if you know " +
+        "the `FileAlreadyExistsException` of the output task is unrecoverable, i.e., further " +
+        "task attempts won't be able to success. If the `FileAlreadyExistsException` might be " +
+        "recoverable, you should keep this as disabled and let Spark to retry output tasks. " +
+        "This is disabled by default.")
+      .version("3.0.2")
+      .booleanConf
+      .createWithDefault(false)
 
   object PartitionOverwriteMode extends Enumeration {
     val STATIC, DYNAMIC = Value
@@ -2631,6 +2665,20 @@ object SQLConf {
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
+  val LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.legacy.parquet.int96RebaseModeInWrite")
+      .internal()
+      .doc("When LEGACY, which is the default, Spark will rebase INT96 timestamps from " +
+        "Proleptic Gregorian calendar to the legacy hybrid (Julian + Gregorian) calendar when " +
+        "writing Parquet files. When CORRECTED, Spark will not do rebase and write the timestamps" +
+        " as it is. When EXCEPTION, Spark will fail the writing if it sees ancient timestamps " +
+        "that are ambiguous between the two calendars.")
+      .version("3.1.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+
   val LEGACY_PARQUET_REBASE_MODE_IN_READ =
     buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
       .internal()
@@ -2641,6 +2689,21 @@ object SQLConf {
         "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
         "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown.")
       .version("3.0.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+
+  val LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.legacy.parquet.int96RebaseModeInRead")
+      .internal()
+      .doc("When LEGACY, which is the default, Spark will rebase INT96 timestamps from " +
+        "the legacy hybrid (Julian + Gregorian) calendar to Proleptic Gregorian calendar when " +
+        "reading Parquet files. When CORRECTED, Spark will not do rebase and read the timestamps " +
+        "as it is. When EXCEPTION, Spark will fail the reading if it sees ancient timestamps " +
+        "that are ambiguous between the two calendars. This config is only effective if the " +
+        "writer info (like Spark, Hive) of the Parquet files is unknown.")
+      .version("3.1.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
@@ -3232,6 +3295,8 @@ class SQLConf extends Serializable with Logging {
 
   def jsonGeneratorIgnoreNullFields: Boolean = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
 
+  def jsonExpressionOptimization: Boolean = getConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION)
+
   def parallelFileListingInStatsComputation: Boolean =
     getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)
 
@@ -3325,6 +3390,8 @@ class SQLConf extends Serializable with Logging {
   def disabledV2StreamingMicroBatchReaders: String =
     getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
 
+  def fastFailFileFormatOutput: Boolean = getConf(FASTFAIL_ON_FILEFORMAT_OUTPUT)
+
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
@@ -3402,6 +3469,9 @@ class SQLConf extends Serializable with Logging {
   def avroFilterPushDown: Boolean = getConf(AVRO_FILTER_PUSHDOWN_ENABLED)
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
+
+  def legacyAllowModifyActiveSession: Boolean =
+    getConf(StaticSQLConf.LEGACY_ALLOW_MODIFY_ACTIVE_SESSION)
 
   def legacyAllowCastNumericToTimestamp: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)

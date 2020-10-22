@@ -1763,7 +1763,9 @@ Here is the compatibility matrix.
   <tr>
     <td colspan="2" style="vertical-align: middle;">Queries with <code>mapGroupsWithState</code></td>
     <td style="vertical-align: middle;">Update</td>
-    <td style="vertical-align: middle;"></td>
+    <td style="vertical-align: middle;">
+      Aggregations not allowed in a query with <code>mapGroupsWithState</code>.
+    </td>
   </tr>
   <tr>
     <td rowspan="2" style="vertical-align: middle;">Queries with <code>flatMapGroupsWithState</code></td>
@@ -1777,7 +1779,7 @@ Here is the compatibility matrix.
     <td style="vertical-align: middle;">Update operation mode</td>
     <td style="vertical-align: middle;">Update</td>
     <td style="vertical-align: middle;">
-      Aggregations not allowed after <code>flatMapGroupsWithState</code>.
+      Aggregations not allowed in a query with <code>flatMapGroupsWithState</code>.
     </td>
   </tr>
   <tr>

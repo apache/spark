@@ -212,11 +212,11 @@ object UnsupportedOperationChecker extends Logging {
         case m: FlatMapGroupsWithState if m.isStreaming =>
 
           // Check compatibility with output modes and aggregations in query
-          val aggsAfterFlatMapGroups = collectStreamingAggregates(plan)
+          val aggsInQuery = collectStreamingAggregates(plan)
 
           if (m.isMapGroupsWithState) {                       // check mapGroupsWithState
             // allowed only in update query output mode and without aggregation
-            if (aggsAfterFlatMapGroups.nonEmpty) {
+            if (aggsInQuery.nonEmpty) {
               throwError(
                 "mapGroupsWithState is not supported with aggregation " +
                   "on a streaming DataFrame/Dataset")
@@ -225,8 +225,8 @@ object UnsupportedOperationChecker extends Logging {
                 "mapGroupsWithState is not supported with " +
                   s"$outputMode output mode on a streaming DataFrame/Dataset")
             }
-          } else {                                           // check latMapGroupsWithState
-            if (aggsAfterFlatMapGroups.isEmpty) {
+          } else {                                           // check flatMapGroupsWithState
+            if (aggsInQuery.isEmpty) {
               // flatMapGroupsWithState without aggregation: operation's output mode must
               // match query output mode
               m.outputMode match {
@@ -252,7 +252,7 @@ object UnsupportedOperationChecker extends Logging {
               } else if (collectStreamingAggregates(m).nonEmpty) {
                 throwError(
                   "flatMapGroupsWithState in append mode is not supported after " +
-                    s"aggregation on a streaming DataFrame/Dataset")
+                    "aggregation on a streaming DataFrame/Dataset")
               }
             }
           }
