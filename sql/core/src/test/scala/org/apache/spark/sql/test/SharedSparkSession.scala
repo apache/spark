@@ -144,7 +144,7 @@ trait SharedSparkSessionBase
           }
         }
       } finally {
-        SparkSession.clearActiveSession()
+        SparkSession.clearActiveSessionInternal()
         SparkSession.clearDefaultSession()
       }
     }

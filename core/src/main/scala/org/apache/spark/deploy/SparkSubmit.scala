@@ -1182,10 +1182,12 @@ private[spark] object SparkSubmitUtils {
   def resolveDependencyPaths(
       artifacts: Array[AnyRef],
       cacheDirectory: File): String = {
-    artifacts.map { artifactInfo =>
-      val artifact = artifactInfo.asInstanceOf[Artifact].getModuleRevisionId
+    artifacts.map { ai =>
+      val artifactInfo = ai.asInstanceOf[Artifact]
+      val artifact = artifactInfo.getModuleRevisionId
+      val testSuffix = if (artifactInfo.getType == "test-jar") "-tests" else ""
       cacheDirectory.getAbsolutePath + File.separator +
-        s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}.jar"
+        s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}${testSuffix}.jar"
     }.mkString(",")
   }
 

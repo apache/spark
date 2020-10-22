@@ -107,6 +107,8 @@ class InMemoryTable(
           case (micros: Long, TimestampType) =>
             val localDate = DateTimeUtils.microsToInstant(micros).atZone(UTC).toLocalDate
             ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, localDate)
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
       case MonthsTransform(ref) =>
         extractor(ref.fieldNames, schema, row) match {
@@ -115,6 +117,8 @@ class InMemoryTable(
           case (micros: Long, TimestampType) =>
             val localDate = DateTimeUtils.microsToInstant(micros).atZone(UTC).toLocalDate
             ChronoUnit.MONTHS.between(EPOCH_LOCAL_DATE, localDate)
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
       case DaysTransform(ref) =>
         extractor(ref.fieldNames, schema, row) match {
@@ -122,11 +126,15 @@ class InMemoryTable(
             days
           case (micros: Long, TimestampType) =>
             ChronoUnit.DAYS.between(Instant.EPOCH, DateTimeUtils.microsToInstant(micros))
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
       case HoursTransform(ref) =>
         extractor(ref.fieldNames, schema, row) match {
           case (micros: Long, TimestampType) =>
             ChronoUnit.HOURS.between(Instant.EPOCH, DateTimeUtils.microsToInstant(micros))
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
       case BucketTransform(numBuckets, ref) =>
         (extractor(ref.fieldNames, schema, row).hashCode() & Integer.MAX_VALUE) % numBuckets

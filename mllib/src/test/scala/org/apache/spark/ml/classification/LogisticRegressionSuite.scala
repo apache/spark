@@ -400,10 +400,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("thresholds prediction") {
-    val blr = new LogisticRegression().setFamily("binomial")
+    val blr = new LogisticRegression().setFamily("binomial").setThreshold(1.0)
     val binaryModel = blr.fit(smallBinaryDataset)
 
-    binaryModel.setThreshold(1.0)
     testTransformer[(Double, Vector)](smallBinaryDataset.toDF(), binaryModel, "prediction") {
       row => assert(row.getDouble(0) === 0.0)
     }
