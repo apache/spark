@@ -62,8 +62,8 @@ private[scheduler] class TaskSetExcludelist(
    */
   private val nodeToExecsWithFailures = new HashMap[String, HashSet[String]]()
   private val nodeToExcludedTaskIndexes = new HashMap[String, HashSet[Int]]()
-  private val excludededExecs = new HashSet[String]()
-  private val excludededNodes = new HashSet[String]()
+  private val excludedExecs = new HashSet[String]()
+  private val excludedNodes = new HashSet[String]()
 
   private var latestFailureReason: String = null
 
@@ -97,11 +97,11 @@ private[scheduler] class TaskSetExcludelist(
    * scheduler, where those filters will already have been applied.
    */
   def isExecutorExcludedForTaskSet(executorId: String): Boolean = {
-    excludededExecs.contains(executorId)
+    excludedExecs.contains(executorId)
   }
 
   def isNodeExcludedForTaskSet(node: String): Boolean = {
-    excludededNodes.contains(node)
+    excludedNodes.contains(node)
   }
 
   private[scheduler] def updateExcludedForFailedTask(
@@ -133,12 +133,12 @@ private[scheduler] class TaskSetExcludelist(
     // Check if enough tasks have failed on the executor to exclude it for the entire stage.
     val numFailures = execFailures.numUniqueTasksWithFailures
     if (numFailures >= MAX_FAILURES_PER_EXEC_STAGE) {
-      if (excludededExecs.add(exec)) {
+      if (excludedExecs.add(exec)) {
         logInfo(s"Excluding executor ${exec} for stage $stageId")
         // This executor has been excluded for this stage.  Let's check if it
         // the whole node should be excluded.
         val excludedExecutorsOnNode =
-          execsWithFailuresOnNode.filter(excludededExecs.contains(_))
+          execsWithFailuresOnNode.filter(excludedExecs.contains(_))
         val now = clock.getTimeMillis()
         // SparkListenerExecutorBlacklistedForStage is deprecated but post both events
         // to keep backward compatibility
@@ -148,7 +148,7 @@ private[scheduler] class TaskSetExcludelist(
           SparkListenerExecutorExcludedForStage(now, exec, numFailures, stageId, stageAttemptId))
         val numFailExec = excludedExecutorsOnNode.size
         if (numFailExec >= MAX_FAILED_EXEC_PER_NODE_STAGE) {
-          if (excludededNodes.add(host)) {
+          if (excludedNodes.add(host)) {
             logInfo(s"Excluding ${host} for stage $stageId")
             // SparkListenerNodeBlacklistedForStage is deprecated but post both events
             // to keep backward compatibility
