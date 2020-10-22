@@ -1380,7 +1380,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  private def createSecurityManager(conf: SparkConf, attempt: AttemptInfoWrapper): SecurityManager = {
+  private def createSecurityManager(conf: SparkConf,
+      attempt: AttemptInfoWrapper): SecurityManager = {
     val secManager = new SecurityManager(conf)
     secManager.setAcls(historyUiAclsEnable)
     // make sure to set admin acls before view acls so they are properly picked up
