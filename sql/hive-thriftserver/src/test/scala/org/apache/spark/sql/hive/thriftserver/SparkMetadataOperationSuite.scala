@@ -19,11 +19,10 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.sql.{DatabaseMetaData, ResultSet, SQLFeatureNotSupportedException}
 
-import scala.util.Random
-
 import org.apache.hive.common.util.HiveVersionInfo
 import org.apache.hive.service.cli.HiveSQLException
 
+import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.types._
 import org.apache.spark.util.VersionUtils
@@ -528,7 +527,6 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
     // and make it perspective in future changes both from upstream and inside Spark.
     withJdbcStatement() { statement =>
       val metaData = statement.getConnection.getMetaData
-      import org.apache.spark.SPARK_VERSION
       assert(metaData.allTablesAreSelectable)
       assert(metaData.getDatabaseProductName === "Spark SQL")
       assert(metaData.getDatabaseProductVersion === SPARK_VERSION)
@@ -582,12 +580,15 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       assert(!metaData.getProcedureColumns("", "%", "%", "%").next())
       assert(!metaData.getImportedKeys("", "default", "").next())
 
-      // We should disable these two APIs
+      // TODO: SPARK-33219 Disable GetPrimaryKeys and GetCrossReference APIs explicitly
+      // for Spark ThriftServer
       assert(!metaData.getPrimaryKeys("", "default", "").next())
       assert(!metaData.getCrossReference("", "default", "src", "", "default", "src2").next())
 
       assert(!metaData.getIndexInfo("", "default", "src", true, true).next())
-      assert(metaData.supportsResultSetType(new Random().nextInt()))
+      assert(metaData.supportsResultSetType(ResultSet.TYPE_FORWARD_ONLY))
+      assert(metaData.supportsResultSetType(ResultSet.TYPE_SCROLL_INSENSITIVE))
+      assert(metaData.supportsResultSetType(ResultSet.TYPE_SCROLL_SENSITIVE))
       assert(!metaData.supportsBatchUpdates)
       assert(!metaData.getUDTs(",", "%", "%", null).next())
       assert(!metaData.supportsSavepoints)
