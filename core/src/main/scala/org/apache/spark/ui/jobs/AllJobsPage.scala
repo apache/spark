@@ -147,7 +147,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
                       e.removeReason.map { reason =>
-                        s"""<br>Reason: ${reason.replace("\n", " ").replaceAll("'", "\"")}"""
+                        s"""<br>Reason: ${reason.replace("\n", " ").replaceAll("'", "")}"""
                       }.getOrElse("")
                    }"' +
              |    'data-html="true">Executor ${e.id} removed</div>'
