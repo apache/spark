@@ -87,6 +87,7 @@ private[deploy] object DeployMessages {
    * decommissioning. It's used for the case where decommission is triggered at Worker.
    *
    * @param id the worker id
+   * @param workerRef the worker endpoint ref
    */
   case class WorkerDecommissioning(id: String, workerRef: RpcEndpointRef) extends DeployMessage
 
