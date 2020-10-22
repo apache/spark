@@ -111,8 +111,8 @@ private[storage] class BlockManagerDecommissioner(
                       // If a block got deleted before netty opened the file handle, then trying to
                       // load the blocks now will fail. This is most likely to occur if we start
                       // migrating blocks and then the shuffle TTL cleaner kicks in. However this
-                      // could also happen with manually managed shuffles or a GC event on the driver
-                      // a no longer referenced RDD with shuffle files.
+                      // could also happen with manually managed shuffles or a GC event on the
+                      // driver a no longer referenced RDD with shuffle files.
                       if (bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo).isEmpty) {
                         logWarning(s"Skipping block ${shuffleBlockInfo}, block deleted.")
                       } else {
