@@ -54,11 +54,11 @@ trait AliasHelper {
    */
   protected def replaceAlias(
     expr: Expression,
-    aliases: AttributeMap[Alias]): Expression = {
+    aliasMap: AttributeMap[Alias]): Expression = {
     // Use transformUp to prevent infinite recursion when the replacement expression
     // redefines the same ExprId,
     expr.transformUp {
-      case a: Attribute => aliases.get(a).map(_.child).getOrElse(a)
+      case a: Attribute => aliasMap.get(a).map(_.child).getOrElse(a)
     }
   }
 
