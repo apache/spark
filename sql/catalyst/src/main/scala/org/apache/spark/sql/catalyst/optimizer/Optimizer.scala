@@ -494,8 +494,8 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
   }
 
   private def lowerIsRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
-    val isDeterministic = upper.aggregateExpressions.forall(_.deterministic) &&
-      lower.aggregateExpressions.forall(_.deterministic)
+    val isDeterministic = !CollapseProject.haveCommonNonDeterministicOutput(
+      upper.aggregateExpressions, lower.aggregateExpressions)
 
     val upperReferencesOnlyGrouping = upper.references.subsetOf(AttributeSet(
       lower.aggregateExpressions.filter(!isAggregate(_)).map(_.toAttribute)))
@@ -795,13 +795,15 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
   }
 
-  private def haveCommonNonDeterministicOutput(
+  def haveCommonNonDeterministicOutput(
       upper: Seq[NamedExpression], lower: Seq[NamedExpression]): Boolean = {
     val aliases = getAliasMap(lower)
 
     // Collapse upper and lower Projects if and only if their overlapped expressions are all
     // deterministic.
-    upper.map(replaceAlias(_, aliases)).exists(!_.deterministic)
+    upper.exists(_.collect {
+      case a: Attribute if aliases.contains(a) => aliases(a).child
+    }.exists(!_.deterministic))
   }
 
   private def buildCleanedProjectList(
