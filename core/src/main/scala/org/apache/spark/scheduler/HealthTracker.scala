@@ -406,7 +406,7 @@ private[spark] object HealthTracker extends Logging {
    * 2. Is it enabled via the legacy timeout conf?
    * 3. Default is off
    */
-  def isExluceOnFailureEnabled(conf: SparkConf): Boolean = {
+  def isExcludeOnFailureEnabled(conf: SparkConf): Boolean = {
     conf.get(config.EXCLUDE_ON_FAILURE_ENABLED) match {
       case Some(enabled) =>
         enabled

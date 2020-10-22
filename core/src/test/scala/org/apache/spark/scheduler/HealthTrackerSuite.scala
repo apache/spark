@@ -426,9 +426,9 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
 
   test("exclude still respects legacy configs") {
     val conf = new SparkConf().setMaster("local")
-    assert(!HealthTracker.isExluceOnFailureEnabled(conf))
+    assert(!HealthTracker.isExcludeOnFailureEnabled(conf))
     conf.set(config.EXCLUDE_ON_FAILURE_LEGACY_TIMEOUT_CONF, 5000L)
-    assert(HealthTracker.isExluceOnFailureEnabled(conf))
+    assert(HealthTracker.isExcludeOnFailureEnabled(conf))
     assert(5000 === HealthTracker.getExludeOnFailureTimeout(conf))
     // the new conf takes precedence, though
     conf.set(config.EXCLUDE_ON_FAILURE_TIMEOUT_CONF, 1000L)
@@ -436,10 +436,10 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
 
     // if you explicitly set the legacy conf to 0, that also would disable excluding
     conf.set(config.EXCLUDE_ON_FAILURE_LEGACY_TIMEOUT_CONF, 0L)
-    assert(!HealthTracker.isExluceOnFailureEnabled(conf))
+    assert(!HealthTracker.isExcludeOnFailureEnabled(conf))
     // but again, the new conf takes precedence
     conf.set(config.EXCLUDE_ON_FAILURE_ENABLED, true)
-    assert(HealthTracker.isExluceOnFailureEnabled(conf))
+    assert(HealthTracker.isExcludeOnFailureEnabled(conf))
     assert(1000 === HealthTracker.getExludeOnFailureTimeout(conf))
   }
 

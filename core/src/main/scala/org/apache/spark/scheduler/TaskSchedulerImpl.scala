@@ -1225,7 +1225,7 @@ private[spark] object TaskSchedulerImpl {
   }
 
   private def maybeCreateHealthTracker(sc: SparkContext): Option[HealthTracker] = {
-    if (HealthTracker.isExluceOnFailureEnabled(sc.conf)) {
+    if (HealthTracker.isExcludeOnFailureEnabled(sc.conf)) {
       val executorAllocClient: Option[ExecutorAllocationClient] = sc.schedulerBackend match {
         case b: ExecutorAllocationClient => Some(b)
         case _ => None

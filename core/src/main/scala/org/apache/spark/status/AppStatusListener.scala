@@ -283,12 +283,14 @@ private[spark] class AppStatusListener(
     }
   }
 
+  // Note, the blacklisted functions are left here for backwards compatibility to allow
+  // new history server to properly read and display older event logs.
   override def onExecutorBlacklisted(event: SparkListenerExecutorBlacklisted): Unit = {
-    updateExclusionStatus(event.executorId, true)
+    updateExecExclusionStatus(event.executorId, true)
   }
 
   override def onExecutorExcluded(event: SparkListenerExecutorExcluded): Unit = {
-    updateExclusionStatus(event.executorId, true)
+    updateExecExclusionStatus(event.executorId, true)
   }
 
   override def onExecutorBlacklistedForStage(
@@ -335,11 +337,11 @@ private[spark] class AppStatusListener(
   }
 
   override def onExecutorUnblacklisted(event: SparkListenerExecutorUnblacklisted): Unit = {
-    updateExclusionStatus(event.executorId, false)
+    updateExecExclusionStatus(event.executorId, false)
   }
 
   override def onExecutorUnexcluded(event: SparkListenerExecutorUnexcluded): Unit = {
-    updateExclusionStatus(event.executorId, false)
+    updateExecExclusionStatus(event.executorId, false)
   }
 
   override def onNodeBlacklisted(event: SparkListenerNodeBlacklisted): Unit = {
@@ -384,9 +386,19 @@ private[spark] class AppStatusListener(
     }
   }
 
-  private def updateExclusionStatus(execId: String, excluded: Boolean): Unit = {
+  private def updateExecExclusionStatus(execId: String, excluded: Boolean): Unit = {
     liveExecutors.get(execId).foreach { exec =>
-      exec.isExcluded = excluded
+      updateExecExclusionStatus(exec, excluded, System.nanoTime())
+    }
+  }
+
+  private def updateExecExclusionStatus(exec: LiveExecutor, excluded: Boolean, now: Long): Unit = {
+    // Since we are sending both blacklisted and excluded events for backwards compatibility
+    // we need to protect against double counting so don't increment if already in
+    // that state. Also protects against executor being excluded and then node being
+    // separately excluded which could result in this being called twice for same
+    // executor.
+    if (exec.isExcluded != excluded) {
       if (excluded) {
         appStatusSource.foreach(_.BLACKLISTED_EXECUTORS.inc())
         appStatusSource.foreach(_.EXCLUDED_EXECUTORS.inc())
@@ -394,18 +406,18 @@ private[spark] class AppStatusListener(
         appStatusSource.foreach(_.UNBLACKLISTED_EXECUTORS.inc())
         appStatusSource.foreach(_.UNEXCLUDED_EXECUTORS.inc())
       }
-      liveUpdate(exec, System.nanoTime())
+      exec.isExcluded = excluded
+      liveUpdate(exec, now)
     }
   }
 
   private def updateNodeExcluded(host: String, excluded: Boolean): Unit = {
     val now = System.nanoTime()
 
-    // Implicitly unexclude every executor associated with the node.
+    // Implicitly (un)exclude every executor associated with the node.
     liveExecutors.values.foreach { exec =>
       if (exec.hostname == host) {
-        exec.isExcluded = excluded
-        liveUpdate(exec, now)
+        updateExecExclusionStatus(exec, excluded, now)
       }
     }
   }
