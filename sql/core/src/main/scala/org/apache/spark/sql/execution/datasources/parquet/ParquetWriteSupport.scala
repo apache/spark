@@ -31,7 +31,7 @@ import org.apache.parquet.io.api.{Binary, RecordConsumer}
 
 import org.apache.spark.SPARK_VERSION_SHORT
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SPARK_INT96_NO_REBASE, SPARK_LEGACY_DATETIME, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -123,9 +123,9 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       }
     } ++ {
       if (int96RebaseMode == LegacyBehaviorPolicy.LEGACY) {
-        None
+        Some(SPARK_LEGACY_INT96 -> "")
       } else {
-        Some(SPARK_INT96_NO_REBASE -> "")
+        None
       }
     }
 

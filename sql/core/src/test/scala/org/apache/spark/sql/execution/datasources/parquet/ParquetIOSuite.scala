@@ -1163,9 +1163,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  test("SPARK-33160: write the metadata key 'org.apache.spark.int96NoRebase'") {
-    def saveTs(dir: java.io.File): Unit = {
-      Seq(Timestamp.valueOf("1000-01-01 01:02:03")).toDF()
+  test("SPARK-33160: write the metadata key 'org.apache.spark.legacyINT96'") {
+    def saveTs(dir: java.io.File, ts: String = "1000-01-01 01:02:03"): Unit = {
+      Seq(Timestamp.valueOf(ts)).toDF()
         .repartition(1)
         .write
         .parquet(dir.getAbsolutePath)
@@ -1173,17 +1173,23 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
       withTempPath { dir =>
         saveTs(dir)
-        assert(getMetaData(dir).get(SPARK_INT96_NO_REBASE).isEmpty)
+        assert(getMetaData(dir)(SPARK_LEGACY_INT96) === "")
       }
     }
     withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
       withTempPath { dir =>
         saveTs(dir)
-        assert(getMetaData(dir)(SPARK_INT96_NO_REBASE) === "")
+        assert(getMetaData(dir).get(SPARK_LEGACY_INT96).isEmpty)
       }
     }
     withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
       withTempPath { dir => intercept[SparkException] { saveTs(dir) } }
+    }
+    withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+      withTempPath { dir =>
+        saveTs(dir, "2020-10-22 01:02:03")
+        assert(getMetaData(dir).get(SPARK_LEGACY_INT96).isEmpty)
+      }
     }
   }
 }
