@@ -250,7 +250,7 @@ private[deploy] class Master(
         workerRef.send(MasterInStandby)
       } else {
         // We use foreach since get gives us an option and we can skip the failures.
-        idToWorker.get(id).foreach(w => decommissionWorker(w))
+        idToWorker.get(id).foreach(decommissionWorker)
       }
 
     case DecommissionWorkers(ids) =>
