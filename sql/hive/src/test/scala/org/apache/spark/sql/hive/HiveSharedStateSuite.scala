@@ -41,8 +41,9 @@ class HiveSharedStateSuite extends SparkFunSuite {
     val tmpDb = "tmp_db"
 
     // The initial configs used to generate SharedState, none of these should affect the global
-    // shared SparkContext's configurations. Especially, all these configs are passed to the cloned
-    // confs inside SharedState for share.
+    // shared SparkContext's configurations, except spark.sql.warehouse.dir.
+    // Especially, all these configs are passed to the cloned confs inside SharedState for sharing
+    // cross sessions.
     val initialConfigs = Map("spark.foo" -> "bar",
       WAREHOUSE_PATH.key -> wareHouseDir,
       ConfVars.METASTOREWAREHOUSE.varname -> wareHouseDir,
