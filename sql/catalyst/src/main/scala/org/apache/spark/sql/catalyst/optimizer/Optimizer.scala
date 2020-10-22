@@ -764,7 +764,9 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
 
     // Collapse upper and lower Projects if and only if their overlapped expressions are all
     // deterministic.
-    upper.map(replaceAlias(_, aliases)).exists(!_.deterministic)
+    upper.exists(_.collect {
+      case a: Attribute if aliases.contains(a) => aliases(a).child
+    }.exists(!_.deterministic))
   }
 
   private def buildCleanedProjectList(
