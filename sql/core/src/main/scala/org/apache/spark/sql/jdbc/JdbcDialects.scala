@@ -25,11 +25,9 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -202,17 +200,12 @@ abstract class JdbcDialect extends Serializable {
 
   /**
    * Alter an existing table.
-   * TODO (SPARK-32523): Override this method in the dialects that have different syntax.
    *
    * @param tableName The name of the table to be altered.
    * @param changes Changes to apply to the table.
-   * @param tableSchema Schema of the table to be altered.
    * @return The SQL statements to use for altering the table.
    */
-  def alterTable(
-      tableName: String,
-      changes: Seq[TableChange],
-      tableSchema: StructType): Array[String] = {
+  def alterTable(tableName: String, changes: Seq[TableChange]): Array[String] = {
     val updateClause = ArrayBuilder.make[String]
     for (change <- changes) {
       change match {
@@ -233,16 +226,7 @@ abstract class JdbcDialect extends Serializable {
           updateClause += getUpdateColumnTypeQuery(tableName, name(0), dataType)
         case updateNull: UpdateColumnNullability if updateNull.fieldNames.length == 1 =>
           val name = updateNull.fieldNames
-          val columnNameEquality = if (SQLConf.get.caseSensitiveAnalysis) {
-            caseSensitiveResolution
-          } else {
-            caseInsensitiveResolution
-          }
-          val columnDataType =
-            tableSchema.filter(x => columnNameEquality(x.name, name(0))).head.dataType
-          val jdbcDataType = JdbcUtils.getJdbcType(columnDataType, this).databaseTypeDefinition
-          updateClause +=
-            getUpdateColumnNullabilityQuery(tableName, name(0), updateNull.nullable(), jdbcDataType)
+          updateClause += getUpdateColumnNullabilityQuery(tableName, name(0), updateNull.nullable())
         case _ =>
           throw new SQLFeatureNotSupportedException(s"Unsupported TableChange $change")
       }
@@ -269,8 +253,7 @@ abstract class JdbcDialect extends Serializable {
   def getUpdateColumnNullabilityQuery(
       tableName: String,
       columnName: String,
-      isNullable: Boolean,
-      dataType: String): String = {
+      isNullable: Boolean): String = {
     val nullable = if (isNullable) "NULL" else "NOT NULL"
     s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} SET $nullable"
   }

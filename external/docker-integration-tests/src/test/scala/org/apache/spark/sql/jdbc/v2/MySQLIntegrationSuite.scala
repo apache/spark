@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc.v2
 
-import java.sql.Connection
+import java.sql.{Connection, SQLFeatureNotSupportedException}
 
 import org.scalatest.time.SpanSugar._
 
@@ -77,4 +77,13 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     assert(msg1.contains("Cannot update alt_table field ID: string cannot be cast to int"))
   }
 
+  override def testUpdateColumnNullability(tbl: String): Unit = {
+    sql("CREATE TABLE mysql.alt_table (ID STRING NOT NULL) USING _")
+    // Update nullability is unsupported for mysql db.
+    val msg = intercept[AnalysisException] {
+      sql("ALTER TABLE mysql.alt_table ALTER COLUMN ID DROP NOT NULL")
+    }.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
+
+    assert(msg.contains("UpdateColumnNullability is not supported"))
+  }
 }

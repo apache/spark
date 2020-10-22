@@ -139,10 +139,7 @@ class JDBCTableCatalog extends TableCatalog with Logging {
     checkNamespace(ident.namespace())
     withConnection { conn =>
       classifyException(s"Failed table altering: $ident") {
-        val optionsWithTableName = new JDBCOptions(
-          options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
-        val tableSchema: StructType = JdbcUtils.getSchemaOption(conn, optionsWithTableName).get
-        JdbcUtils.alterTable(conn, getTableName(ident), changes, options, tableSchema)
+        JdbcUtils.alterTable(conn, getTableName(ident), changes, options)
       }
       loadTable(ident)
     }
