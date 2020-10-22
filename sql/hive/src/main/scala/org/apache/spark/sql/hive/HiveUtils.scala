@@ -91,8 +91,7 @@ private[spark] object HiveUtils extends Logging {
       |   Use Hive jars of specified version downloaded from Maven repositories.
       | 3. "path"
       |   Use Hive jars configured by `spark.sql.hive.metastore.jars.path`
-      |   in comma separated format. Support both local or remote paths, it should always
-      |   be fully qualified URL to indicate other file systems.
+      |   in comma separated format. Support both local or remote paths.
       | 4. A classpath in the standard format for both Hive and Hadoop.
       """.stripMargin)
     .version("1.4.0")
@@ -100,16 +99,16 @@ private[spark] object HiveUtils extends Logging {
     .createWithDefault("builtin")
 
   val HIVE_METASTORE_JARS_PATH = buildStaticConf("spark.sql.hive.metastore.jars.path")
-    .doc(s"Comma separated fully qualified URL of Hive jars, support both local and remote paths," +
+    .doc(s"Comma separated URL of Hive jars, support both local and remote paths," +
       s"Such as: " +
-      s" 1. file://path/to/jar/xxx.jar" +
-      s" 2. hdfs://nameservice/path/to/jar/xxx.jar" +
-      s" 3. /path/to/jar/ (path without URI scheme follow conf `fs.defaultFS`'s URI schema)" +
-      s" 4. [http/https/ftp]://path/to/jar/xxx.jar" +
-      s"Notice: `http/https/ftp` doesn't support wildcard, but for other URLs support" +
-      s" nested path wildcard, Such as: " +
-      s" 1. file://path/to/jar/*, file://path/to/jar/*/*" +
-      s" 2. hdfs://nameservice/path/to/jar/*, hdfs://nameservice/path/to/jar/*/*" +
+      s" 1. file://path/to/jar/xxx.jar\n" +
+      s" 2. hdfs://nameservice/path/to/jar/xxx.jar\n" +
+      s" 3. /path/to/jar/ (path without URI scheme follow conf `fs.defaultFS`'s URI schema)\n" +
+      s" 4. [http/https/ftp]://path/to/jar/xxx.jar\n" +
+      s"Notice: `http/https/ftp` doesn't support wildcard, but other URLs support" +
+      s"nested path wildcard, Such as: " +
+      s" 1. file://path/to/jar/*, file://path/to/jar/*/*\n" +
+      s" 2. hdfs://nameservice/path/to/jar/*, hdfs://nameservice/path/to/jar/*/*\n" +
       s"When ${HIVE_METASTORE_JARS.key} is set to `path`, we will use Hive jars configured by this")
     .version("3.1.0")
     .stringConf
