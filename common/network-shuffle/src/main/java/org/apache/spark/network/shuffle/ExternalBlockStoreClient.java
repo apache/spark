@@ -158,6 +158,42 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     }
   }
 
+  /**
+   * Invoked by Spark driver to notify external shuffle services to finalize the shuffle merge
+   * for a given shuffle. This allows the driver to start the shuffle reducer stage after properly
+   * finishing the shuffle merge process associated with the shuffle mapper stage.
+   *
+   * @param host host of shuffle server
+   * @param port port of shuffle server.
+   * @param shuffleId shuffle ID of the shuffle to be finalized
+   * @param listener the listener to receive MergeStatuses
+   */
+  public void finalizeShuffleMerge(
+      String host,
+      int port,
+      int shuffleId,
+      MergeFinalizerListener listener) {
+    checkInit();
+    try {
+      TransportClient client = clientFactory.createClient(host, port);
+      ByteBuffer finalizeShuffleMerge = new FinalizeShuffleMerge(appId, shuffleId).toByteBuffer();
+      client.sendRpc(finalizeShuffleMerge, new RpcResponseCallback() {
+        @Override
+        public void onSuccess(ByteBuffer response) {
+          listener.onShuffleMergeSuccess(
+                  (MergeStatuses) BlockTransferMessage.Decoder.fromByteBuffer(response));
+        }
+
+        @Override
+        public void onFailure(Throwable e) {
+          listener.onShuffleMergeFailure(e);
+        }
+      });
+    } catch (Exception e) {
+      logger.error("Exception while sending finalizeShuffleMerge request", e);
+    }
+  }
+
   @Override
   public MetricSet shuffleMetrics() {
     checkInit();
