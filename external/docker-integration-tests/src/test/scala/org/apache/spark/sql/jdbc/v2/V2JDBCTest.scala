@@ -28,6 +28,24 @@ trait V2JDBCTest extends SharedSparkSession {
   // dialect specific update column type test
   def testUpdateColumnType(tbl: String): Unit
 
+  def testUpdateColumnNullability(tbl: String): Unit = {
+    sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL) USING _")
+    var t = spark.table(s"$catalogName.alt_table")
+    // nullable is true in the expecteSchema because Spark always sets nullable to true
+    // regardless of the JDBC metadata https://github.com/apache/spark/pull/18445
+    var expectedSchema = new StructType().add("ID", StringType, nullable = true)
+    assert(t.schema === expectedSchema)
+    sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN ID DROP NOT NULL")
+    t = spark.table(s"$catalogName.alt_table")
+    expectedSchema = new StructType().add("ID", StringType, nullable = true)
+    assert(t.schema === expectedSchema)
+    // Update nullability of not existing column
+    val msg = intercept[AnalysisException] {
+      sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN bad_column DROP NOT NULL")
+    }.getMessage
+    assert(msg.contains("Cannot update missing field bad_column"))
+  }
+
   test("SPARK-33034: ALTER TABLE ... add new columns") {
     withTable(s"$catalogName.alt_table") {
       sql(s"CREATE TABLE $catalogName.alt_table (ID STRING) USING _")
@@ -73,21 +91,7 @@ trait V2JDBCTest extends SharedSparkSession {
 
   test("SPARK-33034: ALTER TABLE ... update column nullability") {
     withTable(s"$catalogName.alt_table") {
-      sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL) USING _")
-      var t = spark.table(s"$catalogName.alt_table")
-      // nullable is true in the expecteSchema because Spark always sets nullable to true
-      // regardless of the JDBC metadata https://github.com/apache/spark/pull/18445
-      var expectedSchema = new StructType().add("ID", StringType, nullable = true)
-      assert(t.schema === expectedSchema)
-      sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN ID DROP NOT NULL")
-      t = spark.table(s"$catalogName.alt_table")
-      expectedSchema = new StructType().add("ID", StringType, nullable = true)
-      assert(t.schema === expectedSchema)
-      // Update nullability of not existing column
-      val msg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN bad_column DROP NOT NULL")
-      }.getMessage
-      assert(msg.contains("Cannot update missing field bad_column"))
+      testUpdateColumnNullability(s"$catalogName.alt_table")
     }
     // Update column nullability in not existing table
     val msg = intercept[AnalysisException] {
