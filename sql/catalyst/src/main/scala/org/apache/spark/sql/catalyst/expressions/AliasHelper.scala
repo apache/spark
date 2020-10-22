@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.analysis.MultiAlias
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 
@@ -25,32 +26,78 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
  */
 trait AliasHelper {
 
-  protected def getAliasMap(plan: Project): AttributeMap[Expression] = {
+  protected def getAliasMap(plan: Project): AttributeMap[Alias] = {
     // Create a map of Aliases to their values from the child projection.
-    // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
-    AttributeMap(plan.projectList.collect { case a: Alias => (a.toAttribute, a.child) })
+    // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> Alias(a + b, c)).
+    getAliasMap(plan.projectList)
   }
 
-  protected def getAliasMap(plan: Aggregate): AttributeMap[Expression] = {
+  protected def getAliasMap(plan: Aggregate): AttributeMap[Alias] = {
     // Find all the aliased expressions in the aggregate list that don't include any actual
     // AggregateExpression or PythonUDF, and create a map from the alias to the expression
     val aliasMap = plan.aggregateExpressions.collect {
       case a: Alias if a.child.find(e => e.isInstanceOf[AggregateExpression] ||
         PythonUDF.isGroupedAggPandasUDF(e)).isEmpty =>
-        (a.toAttribute, a.child)
+        (a.toAttribute, a)
     }
     AttributeMap(aliasMap)
   }
 
-  // Substitute any known alias from a map.
+  protected def getAliasMap(exprs: Seq[NamedExpression]): AttributeMap[Alias] = {
+    // Create a map of Aliases to their values from the child projection.
+    // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> Alias(a + b, c)).
+    AttributeMap(exprs.collect { case a: Alias => (a.toAttribute, a) })
+  }
+
+  /**
+   * Replace all attributes, that reference an alias, with the aliased expression
+   */
   protected def replaceAlias(
-    condition: Expression,
-    aliases: AttributeMap[Expression]): Expression = {
+    expr: Expression,
+    aliases: AttributeMap[Alias]): Expression = {
     // Use transformUp to prevent infinite recursion when the replacement expression
     // redefines the same ExprId,
-    condition.transformUp {
-      case a: Attribute =>
-        aliases.getOrElse(a, a)
+    expr.transformUp {
+      case a: Attribute => aliases.get(a).map(_.child).getOrElse(a)
     }
+  }
+
+  /**
+   * Replace all attributes, that reference an alias, with the aliased expression,
+   * but keep the name of the outmost attribute.
+   */
+  protected def replaceAliasButKeepName(
+     expr: NamedExpression,
+     aliasMap: AttributeMap[Alias]): NamedExpression = {
+
+    val replaced = expr match {
+      case a: Attribute if aliasMap.contains(a) =>
+        Alias(replaceAlias(a, aliasMap), a.name)(a.exprId, a.qualifier)
+      case _ => replaceAlias(expr, aliasMap)
+    }
+
+    replaced.asInstanceOf[NamedExpression]
+  }
+
+  protected def trimAliases(e: Expression): Expression = {
+    e.transformDown {
+      case Alias(child, _) => child
+      case MultiAlias(child, _) => child
+    }
+  }
+
+  protected def trimNonTopLevelAliases(e: Expression): Expression = e match {
+    case a: Alias =>
+      a.copy(child = trimAliases(a.child))(
+        exprId = a.exprId,
+        qualifier = a.qualifier,
+        explicitMetadata = Some(a.metadata))
+    case a: MultiAlias =>
+      a.copy(child = trimAliases(a.child))
+    case other => trimAliases(other)
+  }
+
+  protected def trimNonTopLevelAliases(e: NamedExpression): NamedExpression = {
+    trimNonTopLevelAliases(e.asInstanceOf[Expression]).asInstanceOf[NamedExpression]
   }
 }
