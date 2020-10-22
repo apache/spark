@@ -60,8 +60,25 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     "1 = intcol")
 
   filterTest("int and string filter",
-    (Literal(1) === a("intcol", IntegerType)) :: (Literal("a") === a("strcol", IntegerType)) :: Nil,
-    "1 = intcol")
+    (Literal(1) === a("intcol", IntegerType)) :: (Literal("a") === a("strcol", StringType)) :: Nil,
+    "1 = intcol and \"a\" = strcol")
+
+  filterTest("int and string/int filter",
+    (Literal(1) === a("intcol1", IntegerType)) ::
+      (Literal("a") === a("intcol2", IntegerType)) :: Nil,
+    "1 = intcol1")
+
+  filterTest("int filter with in",
+    (a("intcol", IntegerType) in (Literal(1), Literal(2))) :: Nil,
+    "(intcol = 1 or intcol = 2)")
+
+  filterTest("int filter with inset",
+    (a("intcol", IntegerType) in ((0 to 11).map(Literal(_)): _*)) :: Nil,
+    "(" + (0 to 11).map(x => s"intcol = $x").mkString(" or ") + ")")
+
+  filterTest("string filter with in",
+    (a("strcol", StringType) in (Literal("1"), Literal("2"))) :: Nil,
+    "(strcol = \"1\" or strcol = \"2\")")
 
   filterTest("skip varchar",
     (Literal("") === a("varchar", StringType)) :: Nil,
