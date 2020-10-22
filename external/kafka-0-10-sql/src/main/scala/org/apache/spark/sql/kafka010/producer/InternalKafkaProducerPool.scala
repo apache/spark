@@ -56,7 +56,7 @@ private[producer] class InternalKafkaProducerPool(
   private def startEvictorThread(): Option[ScheduledFuture[_]] = {
     val evictorThreadRunIntervalMillis = conf.get(PRODUCER_CACHE_EVICTOR_THREAD_RUN_INTERVAL)
     if (evictorThreadRunIntervalMillis > 0) {
-      val future = executorService.scheduleWithFixedDelay(() => {
+      val future = executorService.scheduleAtFixedRate(() => {
         Utils.tryLogNonFatalError(evictExpired())
       }, 0, evictorThreadRunIntervalMillis, TimeUnit.MILLISECONDS)
       Some(future)

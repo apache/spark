@@ -101,7 +101,7 @@ private[r] class RBackendHandler(server: RBackend)
       val backendConnectionTimeout = conf.get(R_BACKEND_CONNECTION_TIMEOUT)
       val interval = Math.min(heartBeatInterval, backendConnectionTimeout - 1)
 
-      execService.scheduleWithFixedDelay(pingRunner, interval, interval, TimeUnit.SECONDS)
+      execService.scheduleAtFixedRate(pingRunner, interval, interval, TimeUnit.SECONDS)
       handleMethodCall(isStatic, objId, methodName, numArgs, dis, dos)
       execService.shutdown()
       execService.awaitTermination(1, TimeUnit.SECONDS)
