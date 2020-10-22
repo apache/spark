@@ -33,7 +33,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
-import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
+import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
@@ -41,8 +41,10 @@ import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
 
-abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
+abstract class OrcSuite extends OrcTest with BeforeAndAfterAll with CommonFileDataSourceSuite {
   import testImplicits._
+
+  override protected def dataSourceFormat = "orc"
 
   var orcTableDir: File = null
   var orcTableAsDir: File = null

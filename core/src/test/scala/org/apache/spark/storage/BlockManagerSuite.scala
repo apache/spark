@@ -240,7 +240,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val driverEndpoint = rpcEnv.setupEndpoint(CoarseGrainedSchedulerBackend.ENDPOINT_NAME,
       new RpcEndpoint {
         private val executorSet = mutable.HashSet[String]()
-        override val rpcEnv: RpcEnv = this.rpcEnv
+        override val rpcEnv: RpcEnv = BlockManagerSuite.this.rpcEnv
         override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
           case CoarseGrainedClusterMessages.RegisterExecutor(executorId, _, _, _, _, _, _, _) =>
             executorSet += executorId
@@ -254,7 +254,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     def createAndRegisterBlockManager(timeout: Boolean): BlockManagerId = {
       val id = if (timeout) "timeout" else "normal"
       val bmRef = rpcEnv.setupEndpoint(s"bm-$id", new RpcEndpoint {
-        override val rpcEnv: RpcEnv = this.rpcEnv
+        override val rpcEnv: RpcEnv = BlockManagerSuite.this.rpcEnv
         private def reply[T](context: RpcCallContext, response: T): Unit = {
           if (timeout) {
             Thread.sleep(conf.getTimeAsMs(Network.RPC_ASK_TIMEOUT.key) + 1000)

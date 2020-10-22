@@ -36,12 +36,20 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.{SparkConf, SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
+abstract class CSVSuite
+  extends QueryTest
+  with SharedSparkSession
+  with TestCsvData
+  with CommonFileDataSourceSuite {
+
   import testImplicits._
+
+  override protected def dataSourceFormat = "csv"
 
   private val carsFile = "test-data/cars.csv"
   private val carsMalformedFile = "test-data/cars-malformed.csv"

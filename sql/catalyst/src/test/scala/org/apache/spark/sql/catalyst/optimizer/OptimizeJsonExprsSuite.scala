@@ -29,6 +29,15 @@ import org.apache.spark.sql.types._
 
 class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
+  private var jsonExpressionOptimizeEnabled: Boolean = _
+  protected override def beforeAll(): Unit = {
+    jsonExpressionOptimizeEnabled = SQLConf.get.jsonExpressionOptimization
+  }
+
+  protected override def afterAll(): Unit = {
+    SQLConf.get.setConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION, jsonExpressionOptimizeEnabled)
+  }
+
   object Optimizer extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Json optimization", FixedPoint(10), OptimizeJsonExprs) :: Nil
   }
@@ -265,5 +274,17 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
       val row = create_row(v)
       checkEvaluation(e1, e2.eval(row), row)
     })
+  }
+
+  test("SPARK-33078: disable json optimization") {
+    withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "false") {
+      val options = Map.empty[String, String]
+
+      val query = testRelation
+        .select(JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct"))
+      val optimized = Optimizer.execute(query.analyze)
+
+      comparePlans(optimized, query.analyze)
+    }
   }
 }

@@ -65,7 +65,7 @@ private[hive] trait SparkOperation extends Operation with Logging {
 
     try {
       // Set active SparkSession
-      SparkSession.setActiveSession(sqlContext.sparkSession)
+      SparkSession.setActiveSessionInternal(sqlContext.sparkSession)
 
       // Set scheduler pool
       sqlContext.sparkSession.conf.getOption(SQLConf.THRIFTSERVER_POOL.key) match {
@@ -81,8 +81,8 @@ private[hive] trait SparkOperation extends Operation with Logging {
       sqlContext.sparkContext.setLocalProperties(originalProps)
 
       originalSession match {
-        case Some(session) => SparkSession.setActiveSession(session)
-        case None => SparkSession.clearActiveSession()
+        case Some(session) => SparkSession.setActiveSessionInternal(session)
+        case None => SparkSession.clearActiveSessionInternal()
       }
     }
   }

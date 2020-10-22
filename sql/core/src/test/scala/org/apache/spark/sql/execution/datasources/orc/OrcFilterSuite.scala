@@ -39,10 +39,6 @@ import org.apache.spark.sql.types._
 
 /**
  * A test suite that tests Apache ORC filter API based filter pushdown optimization.
- * OrcFilterSuite and HiveOrcFilterSuite is logically duplicated to provide the same test coverage.
- * The difference are the packages containing 'Predicate' and 'SearchArgument' classes.
- * - OrcFilterSuite uses 'org.apache.orc.storage.ql.io.sarg' package.
- * - HiveOrcFilterSuite uses 'org.apache.hadoop.hive.ql.io.sarg' package.
  */
 class OrcFilterSuite extends OrcTest with SharedSparkSession {
 

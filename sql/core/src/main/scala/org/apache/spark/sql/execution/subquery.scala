@@ -80,7 +80,8 @@ case class ScalarSubquery(
   @volatile private var updated: Boolean = false
 
   def updateResult(): Unit = {
-    val rows = plan.executeCollect()
+    // Only return the first two rows as an array to avoid Driver OOM.
+    val rows = plan.executeTake(2)
     if (rows.length > 1) {
       sys.error(s"more than one row returned by a subquery used as an expression:\n$plan")
     }

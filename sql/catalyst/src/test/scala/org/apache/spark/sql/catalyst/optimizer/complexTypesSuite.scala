@@ -44,7 +44,7 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
          BooleanSimplification,
          SimplifyConditionals,
          SimplifyBinaryComparison,
-         CombineUpdateFields,
+         OptimizeUpdateFields,
          SimplifyExtractValueOps) :: Nil
   }
 
@@ -698,7 +698,6 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     val expected = structLevel2.select(
       UpdateFields('a1, Seq(
         // scalastyle:off line.size.limit
-        WithField("a2", UpdateFields(GetStructField('a1, 0), WithField("b3", 2) :: Nil)),
         WithField("a2", UpdateFields(GetStructField('a1, 0), WithField("b3", 2) :: WithField("c3", 3) :: Nil))
         // scalastyle:on line.size.limit
       )).as("a1"))
@@ -732,7 +731,6 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
 
       structLevel2.select(
         UpdateFields('a1, Seq(
-          WithField("a2", repeatedExpr),
           WithField("a2", UpdateFields(
             If(IsNull('a1), Literal(null, repeatedExprDataType), repeatedExpr),
             WithField("c3", Literal(3)) :: Nil))
@@ -763,7 +761,6 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
 
     val expected = structLevel2.select(
       UpdateFields('a1, Seq(
-        WithField("a2", UpdateFields(GetStructField('a1, 0), Seq(DropField("b3")))),
         WithField("a2", UpdateFields(GetStructField('a1, 0), Seq(DropField("b3"), DropField("c3"))))
       )).as("a1"))
 
@@ -797,7 +794,6 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
 
       structLevel2.select(
         UpdateFields('a1, Seq(
-          WithField("a2", repeatedExpr),
           WithField("a2", UpdateFields(
             If(IsNull('a1), Literal(null, repeatedExprDataType), repeatedExpr),
             DropField("c3") :: Nil))

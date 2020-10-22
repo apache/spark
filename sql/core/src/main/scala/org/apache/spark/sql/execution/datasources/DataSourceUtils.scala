@@ -26,7 +26,7 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.SparkUpgradeException
-import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{SPARK_INT96_NO_REBASE, SPARK_LEGACY_DATETIME, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
@@ -111,13 +111,26 @@ object DataSourceUtils {
     }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
   }
 
-  def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
-    val config = if (format == "Parquet") {
-      SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key
-    } else if (format == "Avro") {
-      SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key
+  def int96RebaseMode(
+      lookupFileMeta: String => String,
+      modeByConfig: String): LegacyBehaviorPolicy.Value = {
+    if (Utils.isTesting && SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
+      LegacyBehaviorPolicy.CORRECTED
+    } else if (lookupFileMeta(SPARK_INT96_NO_REBASE) != null) {
+      LegacyBehaviorPolicy.CORRECTED
+    } else if (lookupFileMeta(SPARK_VERSION_METADATA_KEY) != null) {
+      LegacyBehaviorPolicy.LEGACY
     } else {
-      throw new IllegalStateException("unrecognized format " + format)
+      LegacyBehaviorPolicy.withName(modeByConfig)
+    }
+  }
+
+  def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
+    val config = format match {
+      case "Parquet INT96" => SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key
+      case "Parquet" => SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key
+      case "Avro" => SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key
+      case _ => throw new IllegalStateException("unrecognized format " + format)
     }
     new SparkUpgradeException("3.0", "reading dates before 1582-10-15 or timestamps before " +
       s"1900-01-01T00:00:00Z from $format files can be ambiguous, as the files may be written by " +
@@ -129,12 +142,11 @@ object DataSourceUtils {
   }
 
   def newRebaseExceptionInWrite(format: String): SparkUpgradeException = {
-    val config = if (format == "Parquet") {
-      SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key
-    } else if (format == "Avro") {
-      SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key
-    } else {
-      throw new IllegalStateException("unrecognized format " + format)
+    val config = format match {
+      case "Parquet INT96" => SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key
+      case "Parquet" => SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key
+      case "Avro" => SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key
+      case _ => throw new IllegalStateException("unrecognized format " + format)
     }
     new SparkUpgradeException("3.0", "writing dates before 1582-10-15 or timestamps before " +
       s"1900-01-01T00:00:00Z into $format files can be dangerous, as the files may be read by " +

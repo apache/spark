@@ -925,7 +925,7 @@ class Column(val expr: Expression) extends Logging {
   def withField(fieldName: String, col: Column): Column = withExpr {
     require(fieldName != null, "fieldName cannot be null")
     require(col != null, "col cannot be null")
-    updateFieldsHelper(expr, nameParts(fieldName), name => WithField(name, col.expr))
+    UpdateFields(expr, fieldName, col.expr)
   }
 
   // scalastyle:off line.size.limit
@@ -989,38 +989,8 @@ class Column(val expr: Expression) extends Logging {
    */
   // scalastyle:on line.size.limit
   def dropFields(fieldNames: String*): Column = withExpr {
-    def dropField(structExpr: Expression, fieldName: String): UpdateFields =
-      updateFieldsHelper(structExpr, nameParts(fieldName), name => DropField(name))
-
-    fieldNames.tail.foldLeft(dropField(expr, fieldNames.head)) {
-      (resExpr, fieldName) => dropField(resExpr, fieldName)
-    }
-  }
-
-  private def nameParts(fieldName: String): Seq[String] = {
-    require(fieldName != null, "fieldName cannot be null")
-
-    if (fieldName.isEmpty) {
-      fieldName :: Nil
-    } else {
-      CatalystSqlParser.parseMultipartIdentifier(fieldName)
-    }
-  }
-
-  private def updateFieldsHelper(
-      structExpr: Expression,
-      namePartsRemaining: Seq[String],
-      valueFunc: String => StructFieldsOperation): UpdateFields = {
-
-    val fieldName = namePartsRemaining.head
-    if (namePartsRemaining.length == 1) {
-      UpdateFields(structExpr, valueFunc(fieldName) :: Nil)
-    } else {
-      val newValue = updateFieldsHelper(
-        structExpr = UnresolvedExtractValue(structExpr, Literal(fieldName)),
-        namePartsRemaining = namePartsRemaining.tail,
-        valueFunc = valueFunc)
-      UpdateFields(structExpr, WithField(fieldName, newValue) :: Nil)
+    fieldNames.tail.foldLeft(UpdateFields(expr, fieldNames.head)) {
+      (resExpr, fieldName) => UpdateFields(resExpr, fieldName)
     }
   }
 

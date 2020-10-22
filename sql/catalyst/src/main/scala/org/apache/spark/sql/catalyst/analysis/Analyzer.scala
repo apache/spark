@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
+import org.apache.spark.sql.catalyst.optimizer.OptimizeUpdateFields
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -207,6 +208,11 @@ class Analyzer(
 
   lazy val batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
+      // This rule optimizes `UpdateFields` expression chains so looks more like optimization rule.
+      // However, when manipulating deeply nested schema, `UpdateFields` expression tree could be
+      // very complex and make analysis impossible. Thus we need to optimize `UpdateFields` early
+      // at the beginning of analysis.
+      OptimizeUpdateFields,
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
@@ -470,7 +476,7 @@ class Analyzer(
      */
     private def constructGroupByAlias(groupByExprs: Seq[Expression]): Seq[Alias] = {
       groupByExprs.map {
-        case e: NamedExpression => Alias(e, e.name)()
+        case e: NamedExpression => Alias(e, e.name)(qualifier = e.qualifier)
         case other => Alias(other, other.toString)()
       }
     }
@@ -2974,6 +2980,9 @@ class Analyzer(
    */
   object ResolveWindowFrame extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      case WindowExpression(wf: OffsetWindowFunction,
+        WindowSpecDefinition(_, _, f: SpecifiedWindowFrame)) if wf.frame != f =>
+        failAnalysis(s"Cannot specify window frame for ${wf.prettyName} function")
       case WindowExpression(wf: WindowFunction, WindowSpecDefinition(_, _, f: SpecifiedWindowFrame))
           if wf.frame != UnspecifiedFrame && wf.frame != f =>
         failAnalysis(s"Window Frame $f must match the required frame ${wf.frame}")

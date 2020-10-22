@@ -591,6 +591,13 @@ class DDLParserSuite extends AnalysisTest {
         None))
   }
 
+  test("alter table: update column type invalid type") {
+    val msg = intercept[ParseException] {
+      parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c TYPE bad_type")
+    }.getMessage
+    assert(msg.contains("DataType bad_type is not supported"))
+  }
+
   test("alter table: update column type") {
     comparePlans(
       parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c TYPE bigint"),

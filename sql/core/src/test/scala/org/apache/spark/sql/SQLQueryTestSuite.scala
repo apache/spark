@@ -49,22 +49,22 @@ import org.apache.spark.util.Utils
  *
  * To run the entire test suite:
  * {{{
- *   build/sbt "sql/test-only *SQLQueryTestSuite"
+ *   build/sbt "sql/testOnly *SQLQueryTestSuite"
  * }}}
  *
  * To run a single test file upon change:
  * {{{
- *   build/sbt "~sql/test-only *SQLQueryTestSuite -- -z inline-table.sql"
+ *   build/sbt "~sql/testOnly *SQLQueryTestSuite -- -z inline-table.sql"
  * }}}
  *
  * To re-generate golden files for entire suite, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *SQLQueryTestSuite"
  * }}}
  *
  * To re-generate golden file for a single test, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite -- -z describe.sql"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *SQLQueryTestSuite -- -z describe.sql"
  * }}}
  *
  * The format for input files is simple:
