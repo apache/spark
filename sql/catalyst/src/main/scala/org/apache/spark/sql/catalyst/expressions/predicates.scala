@@ -97,7 +97,7 @@ object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePr
   }
 }
 
-trait PredicateHelper extends Logging with AliasHelper {
+trait PredicateHelper extends AliasHelper with Logging {
   protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
     condition match {
       case And(cond1, cond2) =>
@@ -117,18 +117,13 @@ trait PredicateHelper extends Logging with AliasHelper {
       plan: LogicalPlan): Option[(Expression, LogicalPlan)] = {
 
     plan match {
-      case Project(projectList, child) =>
-        val aliases = AttributeMap(projectList.collect {
-          case a @ Alias(child, _) => (a.toAttribute, child)
-        })
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliases), child)
+      case p: Project =>
+        val aliases = getAliasMap(p)
+        findExpressionAndTrackLineageDown(replaceAlias(exp, aliases), p.child)
       // we can unwrap only if there are row projections, and no aggregation operation
-      case Aggregate(_, aggregateExpressions, child) =>
-        val aliasMap = AttributeMap(aggregateExpressions.collect {
-          case a: Alias if a.child.find(_.isInstanceOf[AggregateExpression]).isEmpty =>
-            (a.toAttribute, a.child)
-        })
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), child)
+      case a: Aggregate =>
+        val aliasMap = getAliasMap(a)
+        findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), a.child)
       case l: LeafNode if exp.references.subsetOf(l.outputSet) =>
         Some((exp, l))
       case other =>

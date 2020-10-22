@@ -484,6 +484,7 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case upper @ Aggregate(_, _, lower: Aggregate) if lowerIsRedundant(upper, lower) =>
       val aliasMap = getAliasMap(lower)
+
       upper.copy(
         child = lower.child,
         groupingExpressions = upper.groupingExpressions.map(replaceAlias(_, aliasMap)),
@@ -508,23 +509,6 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
   private def isAggregate(expr: Expression): Boolean = {
     expr.find(e => e.isInstanceOf[AggregateExpression] ||
       PythonUDF.isGroupedAggPandasUDF(e)).isDefined
-  }
-
-  /**
-   * Replace all attributes, that reference an alias, with the aliased expression,
-   * but keep the name of the outmost attribute.
-   */
-  private def replaceAliasButKeepName(
-    expr: NamedExpression,
-    aliasMap: AttributeMap[Expression]): NamedExpression = {
-
-    val replaced = expr match {
-      case a: Attribute if aliasMap.contains(a) =>
-        Alias(replaceAlias(a, aliasMap), a.name)(a.exprId, a.qualifier)
-      case _ => replaceAlias(expr, aliasMap)
-    }
-
-    replaced.asInstanceOf[NamedExpression]
   }
 }
 
@@ -782,7 +766,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
  *    and the upper project consists of the same number of columns which is equal or aliasing.
  *    `GlobalLimit(LocalLimit)` pattern is also considered.
  */
-object CollapseProject extends Rule[LogicalPlan] {
+object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p1 @ Project(_, p2: Project) =>
@@ -811,43 +795,20 @@ object CollapseProject extends Rule[LogicalPlan] {
       s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
   }
 
-  private def collectAliases(projectList: Seq[NamedExpression]): AttributeMap[Alias] = {
-    AttributeMap(projectList.collect {
-      case a: Alias => a.toAttribute -> a
-    })
-  }
-
   private def haveCommonNonDeterministicOutput(
       upper: Seq[NamedExpression], lower: Seq[NamedExpression]): Boolean = {
-    // Create a map of Aliases to their values from the lower projection.
-    // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
-    val aliases = collectAliases(lower)
+    val aliases = getAliasMap(lower)
 
     // Collapse upper and lower Projects if and only if their overlapped expressions are all
     // deterministic.
-    upper.exists(_.collect {
-      case a: Attribute if aliases.contains(a) => aliases(a).child
-    }.exists(!_.deterministic))
+    upper.map(replaceAlias(_, aliases)).exists(!_.deterministic)
   }
 
   private def buildCleanedProjectList(
       upper: Seq[NamedExpression],
       lower: Seq[NamedExpression]): Seq[NamedExpression] = {
-    // Create a map of Aliases to their values from the lower projection.
-    // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
-    val aliases = collectAliases(lower)
-
-    // Substitute any attributes that are produced by the lower projection, so that we safely
-    // eliminate it.
-    // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...'
-    // Use transformUp to prevent infinite recursion.
-    val rewrittenUpper = upper.map(_.transformUp {
-      case a: Attribute => aliases.getOrElse(a, a)
-    })
-    // collapse upper and lower Projects may introduce unnecessary Aliases, trim them here.
-    rewrittenUpper.map { p =>
-      CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression]
-    }
+    val aliases = getAliasMap(lower)
+    upper.map(replaceAliasButKeepName(_, aliases))
   }
 
   private def isRenaming(list1: Seq[NamedExpression], list2: Seq[NamedExpression]): Boolean = {

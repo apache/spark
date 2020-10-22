@@ -2193,7 +2193,7 @@ class Analyzer(
    * those in a HAVING clause or ORDER BY clause.  These expressions are pushed down to the
    * underlying aggregate operator and then projected away after the original operator.
    */
-  object ResolveAggregateFunctions extends Rule[LogicalPlan] {
+  object ResolveAggregateFunctions extends Rule[LogicalPlan] with AliasHelper {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       // Resolve aggregate with having clause to Filter(..., Aggregate()). Note, to avoid wrongly
       // resolve the having condition expression, here we skip resolving it in ResolveReferences
@@ -2226,8 +2226,7 @@ class Analyzer(
           // Aggregate.
           checkAnalysis(resolvedAggregate)
 
-          val originalAggExprs = aggregate.aggregateExpressions.map(
-            CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+          val originalAggExprs = aggregate.aggregateExpressions.map(trimNonTopLevelAliases)
 
           // If the ordering expression is same with original aggregate expression, we don't need
           // to push down this ordering expression and can reference the original aggregate
@@ -2370,7 +2369,7 @@ class Analyzer(
             case _ => false
           }.isDefined }
       }
-      CleanupAliases.trimNonTopLevelAliases(expr) match {
+      trimNonTopLevelAliases(expr) match {
         case UnresolvedAlias(g: Generator, _) => hasInnerGenerator(g)
         case Alias(g: Generator, _) => hasInnerGenerator(g)
         case MultiAlias(g: Generator, _) => hasInnerGenerator(g)
@@ -2440,7 +2439,7 @@ class Analyzer(
 
         val projectExprs = Array.ofDim[NamedExpression](aggList.length)
         val newAggList = aggList
-          .map(CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+          .map(trimNonTopLevelAliases)
           .zipWithIndex
           .flatMap {
             case (AliasedGenerator(generator, names, outer), idx) =>
@@ -2483,7 +2482,7 @@ class Analyzer(
         var resolvedGenerator: Generate = null
 
         val newProjectList = projectList
-          .map(CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+          .map(trimNonTopLevelAliases)
           .flatMap {
             case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
               // It's a sanity check, this should not happen as the previous case will throw
@@ -3495,45 +3494,23 @@ object EliminateUnions extends Rule[LogicalPlan] {
  * are not in its `children`, e.g. `RuntimeReplaceable`, the transformation for Aliases in this
  * rule can't work for those parameters.
  */
-object CleanupAliases extends Rule[LogicalPlan] {
-  def trimAliases(e: Expression): Expression = {
-    e.transformDown {
-      case Alias(child, _) => child
-      case MultiAlias(child, _) => child
-    }
-  }
-
-  def trimNonTopLevelAliases(e: Expression): Expression = e match {
-    case a: Alias =>
-      a.copy(child = trimAliases(a.child))(
-        exprId = a.exprId,
-        qualifier = a.qualifier,
-        explicitMetadata = Some(a.metadata))
-    case a: MultiAlias =>
-      a.copy(child = trimAliases(a.child))
-    case other => trimAliases(other)
-  }
-
+object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case Project(projectList, child) =>
-      val cleanedProjectList =
-        projectList.map(trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+      val cleanedProjectList = projectList.map(trimNonTopLevelAliases)
       Project(cleanedProjectList, child)
 
     case Aggregate(grouping, aggs, child) =>
-      val cleanedAggs = aggs.map(trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+      val cleanedAggs = aggs.map(trimNonTopLevelAliases)
       Aggregate(grouping.map(trimAliases), cleanedAggs, child)
 
     case Window(windowExprs, partitionSpec, orderSpec, child) =>
-      val cleanedWindowExprs =
-        windowExprs.map(e => trimNonTopLevelAliases(e).asInstanceOf[NamedExpression])
+      val cleanedWindowExprs = windowExprs.map(trimNonTopLevelAliases)
       Window(cleanedWindowExprs, partitionSpec.map(trimAliases),
         orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child)
 
     case CollectMetrics(name, metrics, child) =>
-      val cleanedMetrics = metrics.map {
-        e => trimNonTopLevelAliases(e).asInstanceOf[NamedExpression]
-      }
+      val cleanedMetrics = metrics.map(trimNonTopLevelAliases)
       CollectMetrics(name, cleanedMetrics, child)
 
     // Operators that operate on objects should only have expressions from encoders, which should
