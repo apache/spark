@@ -2574,15 +2574,15 @@ class DataFrameSuite extends QueryTest
     val schema = StructType.fromDDL("a int, b int, c long, d string")
 
     withTable("test_table") {
-      val jsonDF = Seq("""{"a":1, "b":2, "c": 123, "d": "test"}""").toDF("json")
-      jsonDF.write.saveAsTable("test_table")
+      val jsonDf = Seq("""{"a":1, "b":2, "c": 123, "d": "test"}""").toDF("json")
+      jsonDf.write.saveAsTable("test_table")
 
       Seq("1", "2", "3", "4").foreach { maxCommonExprs =>
         withSQLConf(SQLConf.MAX_COMMON_EXPRS_IN_COLLAPSE_PROJECT.key -> maxCommonExprs) {
 
-          val jsonDF = spark.read.table("test_table")
+          val jsonDf = spark.read.table("test_table")
           val jsonStruct = UnresolvedAttribute("struct")
-          val df = jsonDF
+          val df = jsonDf
             .select(from_json('json, schema, options).as("struct"))
             .select(
               Column(GetStructField(jsonStruct, 0)).as("a"),

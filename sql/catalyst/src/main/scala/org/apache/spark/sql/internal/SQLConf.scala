@@ -1937,10 +1937,14 @@ object SQLConf {
         "if merging two Project, Spark SQL will skip the merging. Note that normally " +
         "in whole-stage codegen Project operator will de-duplicate expressions internally, " +
         "but in edge cases Spark cannot do whole-stage codegen and fallback to interpreted " +
-        "mode. In such cases, users can use this config to avoid duplicate expressions")
+        "mode. In such cases, users can use this config to avoid duplicate expressions. " +
+        "Note that even users exclude `CollapseProject` rule using " +
+        "`spark.sql.optimizer.excludedRules`, at physical planning phase Spark will still " +
+        "collapse projections. This config is also effective on collapsing projections in " +
+        "the physical planning.")
       .version("3.1.0")
       .intConf
-      .checkValue(m => m > 0, "maxCommonExprsInCollapseProject must be larger than zero.")
+      .checkValue(_ > 0, "The value of maxCommonExprsInCollapseProject must be larger than zero.")
       .createWithDefault(20)
 
   val DECIMAL_OPERATIONS_ALLOW_PREC_LOSS =

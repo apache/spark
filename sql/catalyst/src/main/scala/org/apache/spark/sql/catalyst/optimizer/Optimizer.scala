@@ -759,10 +759,8 @@ object CollapseProject extends Rule[LogicalPlan] {
 
   private def collapseProjects(plan: LogicalPlan): LogicalPlan = plan match {
     case p1 @ Project(_, p2: Project) =>
-      val maxCommonExprs = SQLConf.get.maxCommonExprsInCollapseProject
-
       if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList) ||
-          getLargestNumOfCommonOutput(p1.projectList, p2.projectList) > maxCommonExprs) {
+          moreThanMaxAllowedCommonOutput(p1.projectList, p2.projectList)) {
         p1
       } else {
         collapseProjects(
@@ -777,9 +775,10 @@ object CollapseProject extends Rule[LogicalPlan] {
     })
   }
 
-  // Counts for the largest times common outputs from lower operator are used in upper operators.
-  private def getLargestNumOfCommonOutput(
-      upper: Seq[NamedExpression], lower: Seq[NamedExpression]): Int = {
+  // Whether the largest times common outputs from lower operator used in upper operators is
+  // larger than allowed.
+  private def moreThanMaxAllowedCommonOutput(
+      upper: Seq[NamedExpression], lower: Seq[NamedExpression]): Boolean = {
     val aliases = collectAliases(lower)
     val exprMap = mutable.HashMap.empty[Attribute, Int]
 
@@ -787,10 +786,10 @@ object CollapseProject extends Rule[LogicalPlan] {
       case a: Attribute if aliases.contains(a) => exprMap.update(a, exprMap.getOrElse(a, 0) + 1)
     })
 
-    if (exprMap.size > 0) {
-      exprMap.maxBy(_._2)._2
+    if (exprMap.nonEmpty) {
+      exprMap.maxBy(_._2)._2 > SQLConf.get.maxCommonExprsInCollapseProject
     } else {
-      0
+      false
     }
   }
 

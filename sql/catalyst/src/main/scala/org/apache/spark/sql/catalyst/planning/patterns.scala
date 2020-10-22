@@ -135,13 +135,11 @@ object ScanOperation extends OperationHelper with PredicateHelper {
       case a: Attribute if aliases.contains(a) => exprMap.update(a, exprMap.getOrElse(a, 0) + 1)
     })
 
-    val commonOutputs = if (exprMap.size > 0) {
-      exprMap.maxBy(_._2)._2
+    if (exprMap.nonEmpty) {
+      exprMap.maxBy(_._2)._2 > SQLConf.get.maxCommonExprsInCollapseProject
     } else {
-      0
+      false
     }
-
-    commonOutputs > SQLConf.get.maxCommonExprsInCollapseProject
   }
 
   private def collectProjectsAndFilters(plan: LogicalPlan): ScanReturnType = {
