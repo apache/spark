@@ -44,7 +44,7 @@ import org.apache.spark.util.Utils
  * Note that, this test suite will automatically download spark binary packages of different
  * versions to a local directory. If the `spark.test.cache-dir` system property is defined, this
  * directory will be used. If there is already a spark folder with expected version under this
- * local directory, e.g. `/<cache-dir>/spark-2.0.3`, downloading for this spark version will be
+ * local directory, e.g. `/{cache-dir}/spark-2.0.3`, downloading for this spark version will be
  * skipped. If the system property is not present, a temporary directory will be used and cleaned
  * up after the test.
  */
