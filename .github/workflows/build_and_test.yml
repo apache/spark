@@ -131,7 +131,7 @@ jobs:
       # PyArrow is not supported in PyPy yet, see ARROW-2651.
       # TODO(SPARK-32247): scipy installation with PyPy fails for an unknown reason.
       run: |
-        python3.6 -m pip install numpy 'pyarrow<3.0.0' pandas scipy xmlrunner
+        python3.6 -m pip install numpy 'pyarrow<2.0.0' pandas scipy xmlrunner
         python3.6 -m pip list
         # PyPy does not have xmlrunner
         pypy3 -m pip install numpy pandas
