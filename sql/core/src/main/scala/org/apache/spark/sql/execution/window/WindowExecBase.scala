@@ -136,13 +136,14 @@ trait WindowExecBase extends UnaryExecNode {
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
             case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
-            case f: OffsetWindowSpec if f.isRelative =>
+            case f: OffsetWindowFunction =>
               collect("RELATIVE_OFFSET", frame, e, f)
             case f: OffsetWindowSpec if !f.ignoreNulls &&
               frame.frameType == RowFrame && frame.lower == UnboundedPreceding =>
               frame.upper match {
                 case UnboundedFollowing => collect("UNBOUNDED_OFFSET", f.fakeFrame, e, f)
-                case _ => collect("UNBOUNDED_PRECEDING_OFFSET", f.fakeFrame, e, f)
+                case CurrentRow => collect("UNBOUNDED_PRECEDING_OFFSET", f.fakeFrame, e, f)
+                case _ => collect("AGGREGATE", frame, e, f)
               }
             case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
             case f: PythonUDF => collect("AGGREGATE", frame, e, f)
