@@ -17,6 +17,7 @@
 
 package org.apache.spark;
 
+import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.scheduler.*;
 
 /**
@@ -27,7 +28,11 @@ import org.apache.spark.scheduler.*;
  * new methods to SparkListener: forgetting to add a method will result in a compilation error (if
  * this was a concrete Scala class, default implementations of new event handlers would be inherited
  * from the SparkListener trait).
+ *
+ * Please note until Spark 3.1.0 this was missing the DevelopApi annotation, this needs to be
+ * taken into account if changing this API before a major release.
  */
+@DeveloperApi
 public class SparkFirehoseListener implements SparkListenerInterface {
 
   public void onEvent(SparkListenerEvent event) { }
