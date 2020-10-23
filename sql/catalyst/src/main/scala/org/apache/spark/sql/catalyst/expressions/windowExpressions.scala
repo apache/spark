@@ -360,7 +360,7 @@ trait OffsetWindowSpec extends Expression {
    * the offset is start with the current row. otherwise, the offset is starts with the first
    * row of the entire window frame.
    */
-  val isRelative: Boolean = true
+  val isRelative: Boolean
 
   lazy val fakeFrame = SpecifiedWindowFrame(RowFrame, offset, offset)
 }
@@ -370,7 +370,7 @@ trait OffsetWindowSpec extends Expression {
  * by a number of rows within the partition. For instance: an OffsetWindowfunction for value x with
  * offset -2, will get the value of x 2 rows back in the partition.
  */
-abstract class OffsetWindowFunction
+abstract class FrameLessOffsetWindowFunction
   extends WindowFunction with OffsetWindowSpec with Unevaluable with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(input, offset, default)
@@ -389,6 +389,8 @@ abstract class OffsetWindowFunction
   override def nullable: Boolean = default == null || default.nullable || input.nullable
 
   override val ignoreNulls = false
+
+  override val isRelative = true
 
   override lazy val frame: WindowFrame = fakeFrame
 
@@ -445,7 +447,7 @@ abstract class OffsetWindowFunction
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class Lead(input: Expression, offset: Expression, default: Expression)
-    extends OffsetWindowFunction {
+    extends FrameLessOffsetWindowFunction {
 
   def this(input: Expression, offset: Expression) = this(input, offset, Literal(null))
 
@@ -487,7 +489,7 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class Lag(input: Expression, inputOffset: Expression, default: Expression)
-    extends OffsetWindowFunction {
+    extends FrameLessOffsetWindowFunction {
 
   def this(input: Expression, offset: Expression) = this(input, offset, Literal(null))
 

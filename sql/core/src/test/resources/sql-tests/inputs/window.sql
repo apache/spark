@@ -226,6 +226,16 @@ FROM
 ORDER BY salary DESC;
 
 SELECT
+    employee_name,
+    salary,
+    nth_value(employee_name, 2) OVER (
+      ORDER BY salary DESC
+      ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) second_highest_salary
+FROM
+    basic_pays
+ORDER BY salary DESC;
+
+SELECT
 	employee_name,
 	department,
 	salary,
