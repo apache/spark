@@ -745,10 +745,10 @@ class DataSourceV2SQLSuite
 
   test("DropTable: if exists") {
     val ex = intercept[AnalysisException] {
-      sql(s"DROP TABLE testcat.db.notbl")
+      sql("DROP TABLE testcat.db.notbl")
     }
     assert(ex.getMessage.contains("Table or view not found: testcat.db.notbl"))
-    sql(s"DROP TABLE IF EXISTS testcat.db.notbl")
+    sql("DROP TABLE IF EXISTS testcat.db.notbl")
   }
 
   test("SPARK-33174: DROP TABLE should resolve to a temporary view first") {

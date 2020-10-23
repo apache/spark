@@ -261,14 +261,14 @@ class ResolveSessionCatalog(
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
-    case DescribeRelation(ResolvedView(ident, _), partitionSpec, isExtended) =>
+    case DescribeRelation(ResolvedView(ident), partitionSpec, isExtended) =>
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
     case DescribeColumn(r @ ResolvedTable(_, _, _: V1Table), colNameParts, isExtended)
         if isSessionCatalog(r.catalog) =>
       DescribeColumnCommand(r.identifier.asTableIdentifier, colNameParts, isExtended)
 
-    case DescribeColumn(ResolvedView(ident, _), colNameParts, isExtended) =>
+    case DescribeColumn(ResolvedView(ident), colNameParts, isExtended) =>
       DescribeColumnCommand(ident.asTableIdentifier, colNameParts, isExtended)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
