@@ -43,6 +43,7 @@ public class OneForOneStreamManager extends StreamManager {
 
   private final AtomicLong nextStreamId;
   private final ConcurrentHashMap<Long, StreamState> streams;
+  private final AtomicLong totalChunksBeingTransferred = new AtomicLong(0);
 
   /** State of a single stream. */
   private static class StreamState {
@@ -124,6 +125,7 @@ public class OneForOneStreamManager extends StreamManager {
       StreamState state = entry.getValue();
       if (state.associatedChannel == channel) {
         streams.remove(entry.getKey());
+        totalChunksBeingTransferred.addAndGet((-state.chunksBeingTransferred.get()));
 
         try {
           // Release all remaining buffers.
@@ -167,7 +169,7 @@ public class OneForOneStreamManager extends StreamManager {
   public void chunkBeingSent(long streamId) {
     StreamState streamState = streams.get(streamId);
     if (streamState != null) {
-      streamState.chunksBeingTransferred.incrementAndGet();
+      totalChunksBeingTransferred.incrementAndGet();
     }
 
   }
@@ -181,7 +183,7 @@ public class OneForOneStreamManager extends StreamManager {
   public void chunkSent(long streamId) {
     StreamState streamState = streams.get(streamId);
     if (streamState != null) {
-      streamState.chunksBeingTransferred.decrementAndGet();
+      totalChunksBeingTransferred.decrementAndGet();
     }
   }
 
@@ -192,11 +194,7 @@ public class OneForOneStreamManager extends StreamManager {
 
   @Override
   public long chunksBeingTransferred() {
-    long sum = 0L;
-    for (StreamState streamState: streams.values()) {
-      sum += streamState.chunksBeingTransferred.get();
-    }
-    return sum;
+    return totalChunksBeingTransferred.get();
   }
 
   /**
