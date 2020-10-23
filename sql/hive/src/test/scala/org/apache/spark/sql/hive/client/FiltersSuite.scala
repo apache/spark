@@ -72,9 +72,17 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     (a("intcol", IntegerType) in (Literal(1), Literal(2))) :: Nil,
     "(intcol = 1 or intcol = 2)")
 
+  filterTest("int/string filter with in",
+    (a("intcol", IntegerType) in (Literal("1"), Literal("2"))) :: Nil,
+    "")
+
   filterTest("int filter with inset",
     (a("intcol", IntegerType) in ((0 to 11).map(Literal(_)): _*)) :: Nil,
     "(" + (0 to 11).map(x => s"intcol = $x").mkString(" or ") + ")")
+
+  filterTest("int/string filter with inset",
+    (a("intcol", IntegerType) in ((0 to 11).map(x => Literal(x.toString)): _*)) :: Nil,
+    "")
 
   filterTest("string filter with in",
     (a("strcol", StringType) in (Literal("1"), Literal("2"))) :: Nil,
