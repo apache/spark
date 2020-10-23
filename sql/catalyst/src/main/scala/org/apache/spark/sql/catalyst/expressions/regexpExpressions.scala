@@ -244,12 +244,12 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes {
     val cacheCode = list.zipWithIndex.collect { case (x, i) if x.foldable =>
       val xEval = x.eval()
       if (xEval == null) {
-        s"$patternCache[$i] = null;"
+        ""
       } else {
         val regex = StringEscapeUtils.escapeJava(escape(xEval.asInstanceOf[UTF8String].toString()))
         s"""$patternCache[$i] = $patternClass.compile("$regex");"""
       }
-    }.mkString("\n")
+    }.filterNot(_.isEmpty).mkString("\n")
 
     val listCode = listGen.zipWithIndex.map { case (x, i) =>
       s"""
@@ -297,11 +297,11 @@ abstract class LikeAllBase extends Expression with ImplicitCastInputTypes {
             |$patternClass[] $patternCache = new $patternClass[${list.length}];
             |boolean $hasNull = false;
             |boolean $allMatched = true;
-            |$cacheCode
             |if (${valueGen.isNull}) {
             |  $hasNull = true;
             |} else {
             |  $javaDataType $valueArg = ${valueGen.value};
+            |  $cacheCode
             |  $codes
             |}
             |final boolean ${ev.isNull} = $allMatched && $hasNull;
