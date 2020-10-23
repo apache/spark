@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This class provides utility methods related to tree traversal of an [[AdaptiveSparkPlanExec]]
@@ -139,15 +138,21 @@ trait AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Returns a cloned [[SparkSession]] with adaptive execution disabled, or the original
-   * [[SparkSession]] if its adaptive execution is already disabled.
+   * Returns a cloned [[SparkSession]] with all specified configurations disabled, or
+   * the original [[SparkSession]] if all configurations are already disabled.
    */
-  def getOrCloneSessionWithAqeOff[T](session: SparkSession): SparkSession = {
-    if (!session.sessionState.conf.adaptiveExecutionEnabled) {
+  def getOrCloneSessionWithConfigsOff(
+      session: SparkSession,
+      configurations: Seq[String]): SparkSession = {
+    val configsEnabled = configurations.filter(
+      session.sessionState.conf.getConfString(_, "false").toBoolean)
+    if (configsEnabled.isEmpty) {
       session
     } else {
       val newSession = session.cloneSession()
-      newSession.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
+      configsEnabled.foreach(conf => {
+        newSession.sessionState.conf.setConfString(conf, "false")
+      })
       newSession
     }
   }

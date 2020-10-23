@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.columnar.{DefaultCachedBatchSerializer, In
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
@@ -54,6 +55,17 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   @transient @volatile
   private var cachedData = IndexedSeq[CachedData]()
+
+  /**
+   * Configurations needs to be turned off, to avoid regression for cached query, so that the
+   * outputPartitioning of the underlying cached query plan can be leveraged later.
+   * Configurations include:
+   * 1. AQE
+   * 2. Automatic bucketed table scan
+   */
+  private val configsOff = Seq(
+    SQLConf.ADAPTIVE_EXECUTION_ENABLED.key,
+    SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key)
 
   /** Clears all cached tables. */
   def clearCache(): Unit = this.synchronized {
@@ -79,10 +91,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
-      // Turn off AQE so that the outputPartitioning of the underlying plan can be leveraged.
-      val sessionWithAqeOff = getOrCloneSessionWithAqeOff(query.sparkSession)
-      val inMemoryRelation = sessionWithAqeOff.withActive {
-        val qe = sessionWithAqeOff.sessionState.executePlan(planToCache)
+      // Turn off configs so that the outputPartitioning of the underlying plan can be leveraged.
+      val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(
+        query.sparkSession, configsOff)
+      val inMemoryRelation = sessionWithConfigsOff.withActive {
+        val qe = sessionWithConfigsOff.sessionState.executePlan(planToCache)
         InMemoryRelation(
           storageLevel,
           qe,
@@ -188,10 +201,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
     needToRecache.map { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
-      // Turn off AQE so that the outputPartitioning of the underlying plan can be leveraged.
-      val sessionWithAqeOff = getOrCloneSessionWithAqeOff(spark)
-      val newCache = sessionWithAqeOff.withActive {
-        val qe = sessionWithAqeOff.sessionState.executePlan(cd.plan)
+      // Turn off configs so that the outputPartitioning of the underlying plan can be leveraged.
+      val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark, configsOff)
+      val newCache = sessionWithConfigsOff.withActive {
+        val qe = sessionWithConfigsOff.sessionState.executePlan(cd.plan)
         InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
       }
       val recomputedPlan = cd.copy(cachedRepresentation = newCache)
