@@ -1524,7 +1524,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     }
   }
 
-  test("check ui view permissions without retrieving ui") {
+  test("SPARK-33215: check ui view permissions without retrieving ui") {
     val conf = createTestConf()
       .set(HISTORY_SERVER_UI_ACLS_ENABLE, true)
       .set(HISTORY_SERVER_UI_ADMIN_ACLS, Seq("user1", "user2"))
