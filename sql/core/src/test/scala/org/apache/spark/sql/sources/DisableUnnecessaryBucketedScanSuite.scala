@@ -236,8 +236,7 @@ abstract class DisableUnnecessaryBucketedScanSuite extends QueryTest with SQLTes
           case HashPartitioning(Seq(column: AttributeReference), 8) if column.name == "i" => true
           case _ => false
         })
-        val aggregateQueryPlan = sql("SELECT SUM(i) FROM t1 GROUP BY i").queryExecution
-          .executedPlan
+        val aggregateQueryPlan = sql("SELECT SUM(i) FROM t1 GROUP BY i").queryExecution.executedPlan
         assert(aggregateQueryPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
       }
     }
