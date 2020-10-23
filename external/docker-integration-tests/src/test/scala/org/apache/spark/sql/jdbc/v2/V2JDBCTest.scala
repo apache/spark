@@ -23,7 +23,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
-trait V2JDBCTest extends SharedSparkSession {
+private[v2] trait V2JDBCTest extends SharedSparkSession {
   val catalogName: String
   // dialect specific update column type test
   def testUpdateColumnType(tbl: String): Unit
@@ -44,6 +44,14 @@ trait V2JDBCTest extends SharedSparkSession {
       sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN bad_column DROP NOT NULL")
     }.getMessage
     assert(msg.contains("Cannot update missing field bad_column"))
+  }
+
+  def testRenameColumn(tbl: String): Unit = {
+    sql(s"CREATE TABLE $tbl (ID STRING NOT NULL) USING _")
+    sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO ID2")
+    val t = spark.table(s"$tbl")
+    val expectedSchema = new StructType().add("ID2", StringType, nullable = true)
+    assert(t.schema === expectedSchema)
   }
 
   test("SPARK-33034: ALTER TABLE ... add new columns") {
@@ -110,6 +118,12 @@ trait V2JDBCTest extends SharedSparkSession {
     assert(msg.contains("Table not found"))
   }
 
+  test("ALTER TABLE - rename column") {
+    withTable(s"$catalogName.alt_table") {
+      testRenameColumn(s"$catalogName.alt_table")
+    }
+  }
+
   test("SPARK-33034: ALTER TABLE ... update column nullability") {
     withTable(s"$catalogName.alt_table") {
       testUpdateColumnNullability(s"$catalogName.alt_table")
@@ -121,3 +135,4 @@ trait V2JDBCTest extends SharedSparkSession {
     assert(msg.contains("Table not found"))
   }
 }
+

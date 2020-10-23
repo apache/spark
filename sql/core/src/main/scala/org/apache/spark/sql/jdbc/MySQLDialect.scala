@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.{SQLFeatureNotSupportedException, Types}
 import java.util.Locale
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, LongType, MetadataBuilder}
 
 private case object MySQLDialect extends JdbcDialect {
@@ -55,6 +56,25 @@ private case object MySQLDialect extends JdbcDialect {
       columnName: String,
       newDataType: String): String = {
     s"ALTER TABLE $tableName MODIFY COLUMN ${quoteIdentifier(columnName)} $newDataType"
+  }
+
+  // See Old Syntax: https://dev.mysql.com/doc/refman/5.6/en/alter-table.html
+  // According to https://dev.mysql.com/worklog/task/?id=10761 old syntax works for
+  // both versions of MySQL i.e. 5.x and 8.0
+  // The old syntax requires us to have type definition. Since we do not have type
+  // information, we throw the exception.
+  override def getRenameColumnQuery(
+      tableName: String,
+      columnName: String,
+      newName: String): String = {
+    if (SQLConf.get.jdbcMySQLVersion.matches("^8\\.[0-9].*")) {
+      s"ALTER TABLE $tableName RENAME COLUMN ${quoteIdentifier(columnName)} TO" +
+        s" ${quoteIdentifier(newName)}"
+    } else {
+      throw new SQLFeatureNotSupportedException(
+        s"Rename column is only supported for Mysql version 8.0 and above. " +
+        s"To fix this error, please configure the mysql version, ${SQLConf.JDBC_MYSQL_VERSION.key}")
+    }
   }
 
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html

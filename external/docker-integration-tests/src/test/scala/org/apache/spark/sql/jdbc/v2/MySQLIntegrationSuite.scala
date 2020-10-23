@@ -24,6 +24,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -50,12 +51,20 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     override val jdbcPort: Int = 3306
 
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass"
+      s"jdbc:mysql://$ip:$port/" +
+        s"mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true&useSSL=false"
   }
 
-  override def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
-    .set("spark.sql.catalog.mysql.url", db.getJdbcUrl(dockerIp, externalPort))
+  override def sparkConf: SparkConf = {
+    val sparkConf = if (db.imageName.matches(".*mysql.8\\.[0-9].*")) {
+      super.sparkConf.set(SQLConf.JDBC_MYSQL_VERSION.key, "8.0")
+    } else {
+      super.sparkConf
+    }
+    sparkConf
+      .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
+      .set("spark.sql.catalog.mysql.url", db.getJdbcUrl(dockerIp, externalPort))
+  }
 
   override val connectionTimeout = timeout(7.minutes)
 
@@ -77,11 +86,26 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     assert(msg1.contains("Cannot update alt_table field ID: string cannot be cast to int"))
   }
 
+  override def testRenameColumn(tbl: String): Unit = {
+    if (db.imageName.matches(".*mysql.5\\.[0-9].*")) {
+      sql(s"CREATE TABLE $tbl (ID STRING NOT NULL) USING _")
+      // Update nullability is unsupported for mysql db.
+      val msg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO ID2")
+      }.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
+      assert(msg.contains("Rename column is only supported for Mysql version 8.0 and above. " +
+        s"To fix this error, please configure the mysql version, " +
+        s"${SQLConf.JDBC_MYSQL_VERSION.key}"))
+    } else {
+      super.testRenameColumn(tbl)
+    }
+  }
+
   override def testUpdateColumnNullability(tbl: String): Unit = {
-    sql("CREATE TABLE mysql.alt_table (ID STRING NOT NULL) USING _")
+    sql(s"CREATE TABLE $tbl (ID STRING NOT NULL) USING _")
     // Update nullability is unsupported for mysql db.
     val msg = intercept[AnalysisException] {
-      sql("ALTER TABLE mysql.alt_table ALTER COLUMN ID DROP NOT NULL")
+      sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
     }.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
 
     assert(msg.contains("UpdateColumnNullability is not supported"))
