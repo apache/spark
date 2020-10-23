@@ -99,7 +99,14 @@ class EliminateSortsSuite extends AnalysisTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-33183: remove redundant sortBy") {
+  test("SPARK-33183: remove consecutive no-op sorts") {
+    val plan = testRelation.orderBy().orderBy().orderBy()
+    val optimized = Optimize.execute(plan.analyze)
+    val correctAnswer = testRelation.analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-33183: remove redundant sort by") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc_nullsFirst)
     val unnecessaryReordered = orderedPlan.limit(2).select('a).sortBy('a.asc, 'b.desc_nullsFirst)
     val optimized = Optimize.execute(unnecessaryReordered.analyze)

@@ -1031,14 +1031,18 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
  *    function is order irrelevant
  */
 object EliminateSorts extends Rule[LogicalPlan] {
-  // transformUp is needed here to ensure idempotency of this rule when removing consecutive
-  // local sorts.
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
+
+  val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
-      if (newOrders.isEmpty) child else s.copy(order = newOrders)
+      if (newOrders.isEmpty) {
+        applyLocally.lift(child).getOrElse(child)
+      } else {
+        s.copy(order = newOrders)
+      }
     case Sort(orders, false, child) if SortOrder.orderingSatisfies(child.outputOrdering, orders) =>
-      child
+      applyLocally.lift(child).getOrElse(child)
     case s @ Sort(_, _, child) => s.copy(child = recursiveRemoveSort(child))
     case j @ Join(originLeft, originRight, _, cond, _) if cond.forall(_.deterministic) =>
       j.copy(left = recursiveRemoveSort(originLeft), right = recursiveRemoveSort(originRight))
