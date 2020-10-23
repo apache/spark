@@ -309,25 +309,8 @@
   </properties>
   <repositories>
     <repository>
-      <id>gcs-maven-central-mirror</id>
-      <!--
-        Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
-        See https://storage-download.googleapis.com/maven-central/index.html
-      -->
-      <name>GCS Maven Central mirror</name>
-      <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <!--
-        This is used as a fallback when the first try fails.
-      -->
       <id>central</id>
+      <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
       <url>https://repo.maven.apache.org/maven2</url>
       <releases>
@@ -337,23 +320,20 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
-  </repositories>
-  <pluginRepositories>
-    <pluginRepository>
-      <id>gcs-maven-central-mirror</id>
-      <!--
-        Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
-        See https://storage-download.googleapis.com/maven-central/index.html
-      -->
-      <name>GCS Maven Central mirror</name>
-      <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
+    <repository>
+      <id>nexus</id>
+      <name>Kyligence Repository</name>
+      <url>http://repository.kyligence.io:8081/repository/maven-public/
+      </url>
       <releases>
         <enabled>true</enabled>
       </releases>
       <snapshots>
-        <enabled>false</enabled>
+        <enabled>true</enabled>
       </snapshots>
-    </pluginRepository>
+    </repository>
+  </repositories>
+  <pluginRepositories>
     <pluginRepository>
       <id>central</id>
       <url>https://repo.maven.apache.org/maven2</url>
@@ -3387,6 +3367,19 @@
       </plugin>
     </plugins>
   </build>
+
+  <distributionManagement>
+    <snapshotRepository>
+      <id>user-snapshots</id>
+      <name>User Project SNAPSHOTS</name>
+      <url>http://repository.kyligence.io:8081/repository/maven-snapshots/</url>
+    </snapshotRepository>
+    <repository>
+      <id>user-releases</id>
+      <name>User Project Release</name>
+      <url>http://repository.kyligence.io:8081/repository/maven-releases/</url>
+    </repository>
+  </distributionManagement>
 
   <profiles>
 
