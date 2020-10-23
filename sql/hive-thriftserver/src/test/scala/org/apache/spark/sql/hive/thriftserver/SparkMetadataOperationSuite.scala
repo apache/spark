@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.sql.{DatabaseMetaData, ResultSet}
+import java.sql.{DatabaseMetaData, ResultSet, SQLFeatureNotSupportedException}
 
+import org.apache.hive.common.util.HiveVersionInfo
 import org.apache.hive.service.cli.HiveSQLException
 
+import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.types._
+import org.apache.spark.util.VersionUtils
 
 class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
 
@@ -394,6 +397,207 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
         assert(rowSet.getString("IS_NULLABLE") === "YES")
         assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
       }
+    }
+  }
+
+  test("Hive ThriftServer JDBC Database MetaData API Auditing - Method not supported") {
+    // These APIs belong to the upstream Apache Hive's hive-jdbc artifact where defines the hive
+    // behavior. Users can also use it to interact with Spark ThriftServer directly. Some behaviors
+    // are not fully consistent with Spark e.g. we support correlated subqueries but the hive-jdbc
+    // now fail directly at client side. There is nothing we can do but accept the current
+    // condition and highlight the difference and make it perspective in future changes both from
+    // upstream and inside Spark.
+    withJdbcStatement() { statement =>
+      val metaData = statement.getConnection.getMetaData
+      Seq(
+        () => metaData.allProceduresAreCallable,
+        () => metaData.getURL,
+        () => metaData.getUserName,
+        () => metaData.isReadOnly,
+        () => metaData.nullsAreSortedHigh,
+        () => metaData.nullsAreSortedLow,
+        () => metaData.nullsAreSortedAtStart,
+        () => metaData.nullsAreSortedAtEnd,
+        () => metaData.usesLocalFiles,
+        () => metaData.usesLocalFilePerTable,
+        () => metaData.supportsMixedCaseIdentifiers,
+        () => metaData.supportsMixedCaseQuotedIdentifiers,
+        () => metaData.storesUpperCaseIdentifiers,
+        () => metaData.storesUpperCaseQuotedIdentifiers,
+        () => metaData.storesLowerCaseIdentifiers,
+        () => metaData.storesLowerCaseQuotedIdentifiers,
+        () => metaData.storesMixedCaseIdentifiers,
+        () => metaData.storesMixedCaseQuotedIdentifiers,
+        () => metaData.getSQLKeywords,
+        () => metaData.nullPlusNonNullIsNull,
+        () => metaData.supportsConvert,
+        () => metaData.supportsTableCorrelationNames,
+        () => metaData.supportsDifferentTableCorrelationNames,
+        () => metaData.supportsExpressionsInOrderBy,
+        () => metaData.supportsOrderByUnrelated,
+        () => metaData.supportsGroupByUnrelated,
+        () => metaData.supportsGroupByBeyondSelect,
+        () => metaData.supportsLikeEscapeClause,
+        () => metaData.supportsMultipleTransactions,
+        () => metaData.supportsMinimumSQLGrammar,
+        () => metaData.supportsCoreSQLGrammar,
+        () => metaData.supportsExtendedSQLGrammar,
+        () => metaData.supportsANSI92EntryLevelSQL,
+        () => metaData.supportsANSI92IntermediateSQL,
+        () => metaData.supportsANSI92FullSQL,
+        () => metaData.supportsIntegrityEnhancementFacility,
+        () => metaData.isCatalogAtStart,
+        () => metaData.supportsSubqueriesInComparisons,
+        () => metaData.supportsSubqueriesInExists,
+        () => metaData.supportsSubqueriesInIns,
+        () => metaData.supportsSubqueriesInQuantifieds,
+        // Spark support this, see https://issues.apache.org/jira/browse/SPARK-18455
+        () => metaData.supportsCorrelatedSubqueries,
+        () => metaData.supportsOpenCursorsAcrossCommit,
+        () => metaData.supportsOpenCursorsAcrossRollback,
+        () => metaData.supportsOpenStatementsAcrossCommit,
+        () => metaData.supportsOpenStatementsAcrossRollback,
+        () => metaData.getMaxBinaryLiteralLength,
+        () => metaData.getMaxCharLiteralLength,
+        () => metaData.getMaxColumnsInGroupBy,
+        () => metaData.getMaxColumnsInIndex,
+        () => metaData.getMaxColumnsInOrderBy,
+        () => metaData.getMaxColumnsInSelect,
+        () => metaData.getMaxColumnsInTable,
+        () => metaData.getMaxConnections,
+        () => metaData.getMaxCursorNameLength,
+        () => metaData.getMaxIndexLength,
+        () => metaData.getMaxSchemaNameLength,
+        () => metaData.getMaxProcedureNameLength,
+        () => metaData.getMaxCatalogNameLength,
+        () => metaData.getMaxRowSize,
+        () => metaData.doesMaxRowSizeIncludeBlobs,
+        () => metaData.getMaxStatementLength,
+        () => metaData.getMaxStatements,
+        () => metaData.getMaxTableNameLength,
+        () => metaData.getMaxTablesInSelect,
+        () => metaData.getMaxUserNameLength,
+        () => metaData.supportsTransactionIsolationLevel(1),
+        () => metaData.supportsDataDefinitionAndDataManipulationTransactions,
+        () => metaData.supportsDataManipulationTransactionsOnly,
+        () => metaData.dataDefinitionCausesTransactionCommit,
+        () => metaData.dataDefinitionIgnoredInTransactions,
+        () => metaData.getColumnPrivileges("", "%", "%", "%"),
+        () => metaData.getTablePrivileges("", "%", "%"),
+        () => metaData.getBestRowIdentifier("", "%", "%", 0, true),
+        () => metaData.getVersionColumns("", "%", "%"),
+        () => metaData.getExportedKeys("", "default", ""),
+        () => metaData.supportsResultSetConcurrency(ResultSet.TYPE_FORWARD_ONLY, 2),
+        () => metaData.ownUpdatesAreVisible(ResultSet.TYPE_FORWARD_ONLY),
+        () => metaData.ownDeletesAreVisible(ResultSet.TYPE_FORWARD_ONLY),
+        () => metaData.ownInsertsAreVisible(ResultSet.TYPE_FORWARD_ONLY),
+        () => metaData.othersUpdatesAreVisible(ResultSet.TYPE_FORWARD_ONLY),
+        () => metaData.othersDeletesAreVisible(ResultSet.TYPE_FORWARD_ONLY),
+        () => metaData.othersInsertsAreVisible(ResultSet.TYPE_FORWARD_ONLY),
+        () => metaData.updatesAreDetected(ResultSet.TYPE_FORWARD_ONLY),
+        () => metaData.deletesAreDetected(ResultSet.TYPE_FORWARD_ONLY),
+        () => metaData.insertsAreDetected(ResultSet.TYPE_FORWARD_ONLY),
+        () => metaData.supportsNamedParameters,
+        () => metaData.supportsMultipleOpenResults,
+        () => metaData.supportsGetGeneratedKeys,
+        () => metaData.getSuperTypes("", "%", "%"),
+        () => metaData.getSuperTables("", "%", "%"),
+        () => metaData.getAttributes("", "%", "%", "%"),
+        () => metaData.getResultSetHoldability,
+        () => metaData.locatorsUpdateCopy,
+        () => metaData.supportsStatementPooling,
+        () => metaData.getRowIdLifetime,
+        () => metaData.supportsStoredFunctionsUsingCallSyntax,
+        () => metaData.autoCommitFailureClosesAllResultSets,
+        () => metaData.getClientInfoProperties,
+        () => metaData.getFunctionColumns("", "%", "%", "%"),
+        () => metaData.getPseudoColumns("", "%", "%", "%"),
+        () => metaData.generatedKeyAlwaysReturned).foreach { func =>
+        val e = intercept[SQLFeatureNotSupportedException](func())
+        assert(e.getMessage === "Method not supported")
+      }
+    }
+  }
+
+  test("Hive ThriftServer JDBC Database MetaData API Auditing - Method supported") {
+    // These APIs belong to the upstream Apache Hive's hive-jdbc artifact where defines the hive
+    // behavior. Users can also use it to interact with Spark ThriftServer directly. Some behaviors
+    // are not fully consistent with Spark e.g. we can work with multiple catalogs.
+    // There is nothing we can do but accept the current condition and highlight the difference
+    // and make it perspective in future changes both from upstream and inside Spark.
+    withJdbcStatement() { statement =>
+      val metaData = statement.getConnection.getMetaData
+      assert(metaData.allTablesAreSelectable)
+      assert(metaData.getDatabaseProductName === "Spark SQL")
+      assert(metaData.getDatabaseProductVersion === SPARK_VERSION)
+      assert(metaData.getDriverName === "Hive JDBC")
+      assert(metaData.getDriverVersion === HiveVersionInfo.getVersion)
+      assert(metaData.getDatabaseMajorVersion === VersionUtils.majorVersion(SPARK_VERSION))
+      assert(metaData.getDatabaseMinorVersion === VersionUtils.minorVersion(SPARK_VERSION))
+      assert(metaData.getIdentifierQuoteString === " ",
+        "This method returns a space \" \" if identifier quoting is not supported")
+      assert(metaData.getNumericFunctions === "")
+      assert(metaData.getStringFunctions === "")
+      assert(metaData.getSystemFunctions === "")
+      assert(metaData.getTimeDateFunctions === "")
+      assert(metaData.getSearchStringEscape === "\\")
+      assert(metaData.getExtraNameCharacters === "")
+      assert(metaData.supportsAlterTableWithAddColumn())
+      assert(!metaData.supportsAlterTableWithDropColumn())
+      assert(metaData.supportsColumnAliasing())
+      assert(metaData.supportsGroupBy)
+      assert(!metaData.supportsMultipleResultSets)
+      assert(!metaData.supportsNonNullableColumns)
+      assert(metaData.supportsOuterJoins)
+      assert(metaData.supportsFullOuterJoins)
+      assert(metaData.supportsLimitedOuterJoins)
+      assert(metaData.getSchemaTerm === "database")
+      assert(metaData.getProcedureTerm === "UDF")
+      assert(metaData.getCatalogTerm === "instance")
+      assert(metaData.getCatalogSeparator === ".")
+      assert(metaData.supportsSchemasInDataManipulation)
+      assert(!metaData.supportsSchemasInProcedureCalls)
+      assert(metaData.supportsSchemasInTableDefinitions)
+      assert(!metaData.supportsSchemasInIndexDefinitions)
+      assert(!metaData.supportsSchemasInPrivilegeDefinitions)
+      // This is actually supported, but hive jdbc package return false
+      assert(!metaData.supportsCatalogsInDataManipulation)
+      assert(!metaData.supportsCatalogsInProcedureCalls)
+      // This is actually supported, but hive jdbc package return false
+      assert(!metaData.supportsCatalogsInTableDefinitions)
+      assert(!metaData.supportsCatalogsInIndexDefinitions)
+      assert(!metaData.supportsCatalogsInPrivilegeDefinitions)
+      assert(!metaData.supportsPositionedDelete)
+      assert(!metaData.supportsPositionedUpdate)
+      assert(!metaData.supportsSelectForUpdate)
+      assert(!metaData.supportsStoredProcedures)
+      // This is actually supported, but hive jdbc package return false
+      assert(!metaData.supportsUnion)
+      assert(metaData.supportsUnionAll)
+      assert(metaData.getMaxColumnNameLength === 128)
+      assert(metaData.getDefaultTransactionIsolation === java.sql.Connection.TRANSACTION_NONE)
+      assert(!metaData.supportsTransactions)
+      assert(!metaData.getProcedureColumns("", "%", "%", "%").next())
+      assert(!metaData.getImportedKeys("", "default", "").next())
+
+      // TODO: SPARK-33219 Disable GetPrimaryKeys and GetCrossReference APIs explicitly
+      // for Spark ThriftServer
+      assert(!metaData.getPrimaryKeys("", "default", "").next())
+      assert(!metaData.getCrossReference("", "default", "src", "", "default", "src2").next())
+
+      assert(!metaData.getIndexInfo("", "default", "src", true, true).next())
+      assert(metaData.supportsResultSetType(ResultSet.TYPE_FORWARD_ONLY))
+      assert(metaData.supportsResultSetType(ResultSet.TYPE_SCROLL_INSENSITIVE))
+      assert(metaData.supportsResultSetType(ResultSet.TYPE_SCROLL_SENSITIVE))
+      assert(!metaData.supportsBatchUpdates)
+      assert(!metaData.getUDTs(",", "%", "%", null).next())
+      assert(!metaData.supportsSavepoints)
+      assert(!metaData.supportsResultSetHoldability(ResultSet.HOLD_CURSORS_OVER_COMMIT))
+      assert(metaData.getJDBCMajorVersion === 3)
+      assert(metaData.getJDBCMinorVersion === 0)
+      assert(metaData.getSQLStateType === DatabaseMetaData.sqlStateSQL)
+      assert(metaData.getMaxLogicalLobSize === 0)
+      assert(!metaData.supportsRefCursors)
     }
   }
 }
