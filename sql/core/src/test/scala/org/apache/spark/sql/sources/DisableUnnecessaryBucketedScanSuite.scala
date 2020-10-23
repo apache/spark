@@ -226,21 +226,19 @@ abstract class DisableUnnecessaryBucketedScanSuite extends QueryTest with SQLTes
     withTable("t1") {
       withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
         df1.write.format("parquet").bucketBy(8, "i").saveAsTable("t1")
-        sql("CACHE TABLE tempTable AS SELECT i FROM t1")
-        assertCached(spark.table("tempTable"))
+        spark.catalog.cacheTable("t1")
+        assertCached(spark.table("t1"))
 
         // Verify cached bucketed table scan not disabled
-        val partitioning = spark.table("tempTable").queryExecution.executedPlan
+        val partitioning = spark.table("t1").queryExecution.executedPlan
           .outputPartitioning
         assert(partitioning match {
           case HashPartitioning(Seq(column: AttributeReference), 8) if column.name == "i" => true
           case _ => false
         })
-        val aggregateQueryPlan = sql("SELECT SUM(i) FROM tempTable GROUP BY i").queryExecution
+        val aggregateQueryPlan = sql("SELECT SUM(i) FROM t1 GROUP BY i").queryExecution
           .executedPlan
         assert(aggregateQueryPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
-
-        uncacheTable("tempTable")
       }
     }
   }
