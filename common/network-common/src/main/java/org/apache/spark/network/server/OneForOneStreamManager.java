@@ -169,6 +169,7 @@ public class OneForOneStreamManager extends StreamManager {
   public void chunkBeingSent(long streamId) {
     StreamState streamState = streams.get(streamId);
     if (streamState != null) {
+      streamState.chunksBeingTransferred.incrementAndGet();
       totalChunksBeingTransferred.incrementAndGet();
     }
 
@@ -183,6 +184,7 @@ public class OneForOneStreamManager extends StreamManager {
   public void chunkSent(long streamId) {
     StreamState streamState = streams.get(streamId);
     if (streamState != null) {
+      streamState.chunksBeingTransferred.decrementAndGet();
       totalChunksBeingTransferred.decrementAndGet();
     }
   }
