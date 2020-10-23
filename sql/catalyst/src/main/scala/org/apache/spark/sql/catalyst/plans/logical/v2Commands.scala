@@ -395,6 +395,11 @@ case class DropTable(
 }
 
 /**
+ * The logical plan for handling non-existing table for DROP TABLE command.
+ */
+case class NoopDropTable(multipartIdentifier: Seq[String]) extends Command
+
+/**
  * The logical plan of the ALTER TABLE command that works for v2 tables.
  */
 case class AlterTable(

@@ -2882,11 +2882,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
     // DROP TABLE works with either a table or a temporary view.
-    // The table/view name is not required to be resolved due to the "ifExists" flag.
     DropTable(
-      UnresolvedTableOrView(
-        visitMultipartIdentifier(ctx.multipartIdentifier()),
-        isResolutionRequired = false),
+      UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier())),
       ctx.EXISTS != null,
       ctx.PURGE != null)
   }

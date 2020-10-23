@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.analysis.{NotFoundTableOrView, ResolvedNamespace, ResolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable}
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -229,10 +229,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       throw new AnalysisException("Describing columns is not supported for v2 tables.")
 
     case DropTable(r: ResolvedTable, ifExists, _) =>
-      DropTableExec(Some(r.catalog), r.identifier, ifExists) :: Nil
+      DropTableExec(r.catalog, r.identifier, ifExists) :: Nil
 
-    case DropTable(n: NotFoundTableOrView, ifExists, _) =>
-      DropTableExec(None, n.multipartIdentifier.asIdentifier, ifExists) :: Nil
+    case NoopDropTable(multipartIdentifier) =>
+      NoopDropTableExec(multipartIdentifier) :: Nil
 
     case AlterTable(catalog, ident, _, changes) =>
       AlterTableExec(catalog, ident, changes) :: Nil

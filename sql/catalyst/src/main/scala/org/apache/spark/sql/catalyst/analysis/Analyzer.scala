@@ -231,7 +231,6 @@ class Analyzer(
       ResolveInsertInto ::
       ResolveRelations ::
       ResolveTables ::
-      ResolveUnresolvedTableOrView ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
       ResolveDeserializer ::
@@ -265,7 +264,9 @@ class Analyzer(
       ResolveUnion ::
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
-    Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
+    Batch("Post-Hoc Resolution", Once,
+      Seq(ResolveNoopDropTable) ++
+      postHocResolutionRules: _*),
     Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,
       new ResolveHints.RemoveAllHints(conf)),
@@ -870,7 +871,7 @@ class Analyzer(
           u.failAnalysis(s"${ident.quoted} is a temp view not table.")
         }
         u
-      case u @ UnresolvedTableOrView(ident, _) =>
+      case u @ UnresolvedTableOrView(ident) =>
         lookupTempView(ident)
           .map(_ => ResolvedView(ident.asIdentifier, isTempView = true))
           .getOrElse(u)
@@ -931,7 +932,7 @@ class Analyzer(
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
-      case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident), _) =>
+      case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident)) =>
         CatalogV2Util.loadTable(catalog, ident)
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
@@ -1031,7 +1032,7 @@ class Analyzer(
           case table => table
         }.getOrElse(u)
 
-      case u @ UnresolvedTableOrView(identifier, _) =>
+      case u @ UnresolvedTableOrView(identifier) =>
         lookupTableOrView(identifier).getOrElse(u)
     }
 
@@ -1098,19 +1099,6 @@ class Analyzer(
           }
         case _ => None
       }
-    }
-  }
-
-  /**
-   * Resolve [[UnresolvedTableOrView]] by replacing it with [[NotFoundTableOrView]]
-   * if resolution of table or view is not required.
-   *
-   * This rule should run after [[ResolveRelations]] and [[ResolveTables]] are run.
-   */
-  object ResolveUnresolvedTableOrView extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case u: UnresolvedTableOrView if !u.isResolutionRequired =>
-        NotFoundTableOrView(u.multipartIdentifier)
     }
   }
 

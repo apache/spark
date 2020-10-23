@@ -160,8 +160,6 @@ class PlanResolutionSuite extends AnalysisTest {
       new ResolveCatalogs(catalogManager),
       new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v"), _ => false),
       analyzer.ResolveTables,
-      analyzer.ResolveUnresolvedTableOrView,
-      new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v"), _ => false),
       analyzer.ResolveReferences,
       analyzer.ResolveSubqueryColumnAliases,
       analyzer.ResolveReferences,
@@ -632,10 +630,10 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   test("drop table") {
-    val tableName1 = "db.tab"
-    val tableIdent1 = TableIdentifier("tab", Option("db"))
-    val tableName2 = "tab"
-    val tableIdent2 = TableIdentifier("tab", Some("default"))
+    val tableName1 = "db.v1Table"
+    val tableIdent1 = TableIdentifier("v1Table", Option("db"))
+    val tableName2 = "v1Table"
+    val tableIdent2 = TableIdentifier("v1Table", Some("default"))
 
     parseResolveCompare(s"DROP TABLE $tableName1",
       DropTableCommand(tableIdent1, ifExists = false, isView = false, purge = false))

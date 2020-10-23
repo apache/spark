@@ -18,25 +18,13 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 
 /**
- * Physical plan node for dropping a table.
+ * Physical plan node for no-op to handle unresolved table or temp view in DROP TABLE command.
  */
-case class DropTableExec(catalog: TableCatalog, ident: Identifier, ifExists: Boolean)
-  extends V2CommandExec {
+case class NoopDropTableExec(multipartIdentifier: Seq[String]) extends V2CommandExec {
+  override protected def run(): Seq[InternalRow] = Nil
 
-  override def run(): Seq[InternalRow] = {
-    if (catalog.tableExists(ident)) {
-      catalog.dropTable(ident)
-    } else if (!ifExists) {
-      throw new NoSuchTableException(ident)
-    }
-
-    Seq.empty
-  }
-
-  override def output: Seq[Attribute] = Seq.empty
+  override def output: Seq[Attribute] = Nil
 }
