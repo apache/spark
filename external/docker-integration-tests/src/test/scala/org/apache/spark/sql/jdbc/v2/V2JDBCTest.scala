@@ -73,29 +73,6 @@ trait V2JDBCTest extends SharedSparkSession {
     assert(msg.contains("Table not found"))
   }
 
-  test("SPARK-33034: ALTER TABLE ... rename column") {
-    withTable(s"$catalogName.alt_table") {
-      sql(s"CREATE TABLE $catalogName.alt_table (id INTEGER, C0 INTEGER) USING _")
-      sql(s"ALTER TABLE $catalogName.alt_table RENAME COLUMN id TO C")
-      val t = spark.table(s"$catalogName.alt_table")
-      val expectedSchema = catalogName match {
-        case "oracle" => new StructType().add("C", DecimalType(10, 0)).add("C0", DecimalType(10, 0))
-        case _ => new StructType().add("C", IntegerType).add("C0", IntegerType)
-      }
-      assert(t.schema === expectedSchema)
-      // Rename to already existing column
-      val msg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $catalogName.alt_table RENAME COLUMN C TO C0")
-      }.getMessage
-      assert(msg.contains("Cannot rename column, because C0 already exists"))
-    }
-    // Rename a column in a not existing table
-    val msg = intercept[AnalysisException] {
-      sql(s"ALTER TABLE $catalogName.not_existing_table RENAME COLUMN ID TO C")
-    }.getMessage
-    assert(msg.contains("Table not found"))
-  }
-
   test("SPARK-33034: ALTER TABLE ... drop column") {
     withTable(s"$catalogName.alt_table") {
       sql(s"CREATE TABLE $catalogName.alt_table (C1 INTEGER, C2 INTEGER, c3 INTEGER) USING _")
