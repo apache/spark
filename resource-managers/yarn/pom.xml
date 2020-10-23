@@ -65,6 +65,15 @@
           <classifier>tests</classifier>
           <scope>test</scope>
         </dependency>
+        <!--
+          Hack to exclude org.apache.hadoop:hadoop-yarn-server-resourcemanager:jar:tests.
+          See the parent pom.xml for more details.
+        -->
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
+          <scope>test</scope>
+        </dependency>
       </dependencies>
     </profile>
   </profiles>
