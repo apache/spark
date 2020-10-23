@@ -218,8 +218,7 @@ private[spark] class ExecutorPodsAllocator(
     if (newlyCreatedExecutors.isEmpty
         && knownPodCount < currentTotalExpectedExecutors) {
       val numExecutorsToAllocate = math.min(
-        currentTotalExpectedExecutors - knownPodCount,
-        podAllocationSize)
+        currentTotalExpectedExecutors - knownPodCount, podAllocationSize)
       logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes.")
       for ( _ <- 0 until numExecutorsToAllocate) {
         val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
