@@ -744,9 +744,10 @@ class DataSourceV2SQLSuite
   }
 
   test("DropTable: if exists") {
-    intercept[NoSuchTableException] {
+    val ex = intercept[AnalysisException] {
       sql(s"DROP TABLE testcat.db.notbl")
     }
+    assert(ex.getMessage.contains("Table or view not found: testcat.db.notbl"))
     sql(s"DROP TABLE IF EXISTS testcat.db.notbl")
   }
 

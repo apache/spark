@@ -23,18 +23,11 @@ import org.apache.spark.sql.catalyst.rules.Rule
 /**
  * A rule for handling [[DropTable]] logical plan when the table or temp view is not resolved.
  * If "ifExists" flag is set to true, the plan is resolved to [[NoopDropTable]],
- * which is a no-op command. If the flag is set to false, the rule throws [[NoSuchTableException]].
+ * which is a no-op command.
  */
 object ResolveNoopDropTable extends Rule[LogicalPlan] {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case DropTable(u: UnresolvedTableOrView, ifExists, _) =>
-      if (ifExists) {
-        NoopDropTable(u.multipartIdentifier)
-      } else {
-        throw new NoSuchTableException(
-          s"Table or temp view not found: ${u.multipartIdentifier.quoted}")
-      }
+    case DropTable(u: UnresolvedTableOrView, ifExists, _) if ifExists =>
+      NoopDropTable(u.multipartIdentifier)
   }
 }

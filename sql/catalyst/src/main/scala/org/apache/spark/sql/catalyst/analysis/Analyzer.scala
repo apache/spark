@@ -873,7 +873,7 @@ class Analyzer(
         u
       case u @ UnresolvedTableOrView(ident) =>
         lookupTempView(ident)
-          .map(_ => ResolvedView(ident.asIdentifier, isTempView = true))
+          .map(_ => ResolvedView(ident.asIdentifier, isTemp = true))
           .getOrElse(u)
     }
 
@@ -1027,7 +1027,7 @@ class Analyzer(
       case u @ UnresolvedTable(identifier) =>
         lookupTableOrView(identifier).map {
           case v: ResolvedView =>
-            val viewStr = if (v.isTempView) "temp view" else "view"
+            val viewStr = if (v.isTemp) "temp view" else "view"
             u.failAnalysis(s"${v.identifier.quoted} is a $viewStr not table.")
           case table => table
         }.getOrElse(u)
@@ -1041,7 +1041,7 @@ class Analyzer(
         case SessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
-              ResolvedView(ident, isTempView = false)
+              ResolvedView(ident, isTemp = false)
             case table =>
               ResolvedTable(catalog.asTableCatalog, ident, table)
           }
