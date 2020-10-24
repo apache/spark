@@ -91,7 +91,7 @@ def lit(col):
     >>> df.select(lit(5).alias('height')).withColumn('spark_user', lit(True)).take(1)
     [Row(height=5, spark_user=True)]
     """
-    return _invoke_function("lit", col)
+    return col if isinstance(col, Column) else _invoke_function("lit", col)
 
 
 @since(1.3)
@@ -2591,11 +2591,7 @@ def element_at(col, extraction):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.element_at(
-        _to_java_column(col),
-        _to_java_column(
-            extraction if isinstance(extraction, Column) else lit(extraction)
-        )
-    ))
+        _to_java_column(col), lit(extraction)._jc))
 
 
 @since(2.4)
