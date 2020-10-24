@@ -114,9 +114,11 @@ case class TestRelationAcceptAnySchema(output: Seq[AttributeReference])
 }
 
 abstract class DataSourceV2ANSIAnalysisSuite extends DataSourceV2AnalysisBaseSuite {
-  override def getSQLConf(caseSensitive: Boolean): SQLConf =
-    super.getSQLConf(caseSensitive)
-      .copy(SQLConf.STORE_ASSIGNMENT_POLICY -> StoreAssignmentPolicy.ANSI)
+  override def getSQLConf(caseSensitive: Boolean): SQLConf = {
+    SQLConf.get.setConf(SQLConf.CASE_SENSITIVE, caseSensitive)
+    SQLConf.get.setConf(SQLConf.STORE_ASSIGNMENT_POLICY, StoreAssignmentPolicy.ANSI.toString)
+    SQLConf.get
+  }
 
 
   // For Ansi store assignment policy, expression `AnsiCast` is used instead of `Cast`.
@@ -133,9 +135,11 @@ abstract class DataSourceV2ANSIAnalysisSuite extends DataSourceV2AnalysisBaseSui
 }
 
 abstract class DataSourceV2StrictAnalysisSuite extends DataSourceV2AnalysisBaseSuite {
-  override def getSQLConf(caseSensitive: Boolean): SQLConf =
-    super.getSQLConf(caseSensitive)
-      .copy(SQLConf.STORE_ASSIGNMENT_POLICY -> StoreAssignmentPolicy.STRICT)
+  override def getSQLConf(caseSensitive: Boolean): SQLConf = {
+    SQLConf.get.setConf(SQLConf.CASE_SENSITIVE, caseSensitive)
+    SQLConf.get.setConf(SQLConf.STORE_ASSIGNMENT_POLICY, StoreAssignmentPolicy.STRICT.toString)
+    SQLConf.get
+  }
 
   test("byName: fail canWrite check") {
     val parsedPlan = byName(table, widerTable)
