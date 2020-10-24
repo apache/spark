@@ -106,7 +106,7 @@ object OptimizeLocalShuffleReader extends Rule[SparkPlan] {
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!SQLConf.get.getConf(SQLConf.LOCAL_SHUFFLE_READER_ENABLED)) {
+    if (!conf.getConf(SQLConf.LOCAL_SHUFFLE_READER_ENABLED)) {
       return plan
     }
 

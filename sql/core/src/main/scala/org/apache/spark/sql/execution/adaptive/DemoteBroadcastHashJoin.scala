@@ -34,7 +34,7 @@ object DemoteBroadcastHashJoin extends Rule[LogicalPlan] {
       val partitionCnt = mapStats.bytesByPartitionId.length
       val nonZeroCnt = mapStats.bytesByPartitionId.count(_ > 0)
       partitionCnt > 0 && nonZeroCnt > 0 &&
-        (nonZeroCnt * 1.0 / partitionCnt) < SQLConf.get.nonEmptyPartitionRatioForBroadcastJoin
+        (nonZeroCnt * 1.0 / partitionCnt) < conf.nonEmptyPartitionRatioForBroadcastJoin
     case _ => false
   }
 

@@ -32,8 +32,6 @@ import org.apache.spark.sql.internal.SQLConf
 private[sql] object PruneHiveTablePartitions
   extends Rule[LogicalPlan] with CastSupport with PredicateHelper {
 
-  override def conf: SQLConf = SQLConf.get
-
   /**
    * Extract the partition filters from the filters on the table.
    */

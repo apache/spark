@@ -182,7 +182,7 @@ class Analyzer(
 
   private def executeSameContext(plan: LogicalPlan): LogicalPlan = super.execute(plan)
 
-  def resolver: Resolver = SQLConf.get.resolver
+  def resolver: Resolver = conf.resolver
 
   /**
    * If the plan cannot be resolved within maxIterations, analyzer will throw exception to inform
@@ -739,7 +739,7 @@ class Analyzer(
               s"value data type ${value.dataType.simpleString} does not match " +
               s"pivot column data type ${pivotColumn.dataType.catalogString}")
           }
-          Cast(value, pivotColumn.dataType, Some(SQLConf.get.sessionLocalTimeZone)).eval(EmptyRow)
+          Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
         }
         // Group-by expressions coming from SQL are implicit and need to be deduced.
         val groupByExprs = groupByExprsOpt.getOrElse {
@@ -752,7 +752,7 @@ class Analyzer(
             case n: NamedExpression => n.name
             case _ =>
               val utf8Value =
-                Cast(value, StringType, Some(SQLConf.get.sessionLocalTimeZone)).eval(EmptyRow)
+                Cast(value, StringType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
               Option(utf8Value).map(_.toString).getOrElse("null")
           }
           if (singleAgg) {
@@ -795,7 +795,7 @@ class Analyzer(
               If(
                 EqualNullSafe(
                   pivotColumn,
-                  Cast(value, pivotColumn.dataType, Some(SQLConf.get.sessionLocalTimeZone))),
+                  Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone))),
                 e, Literal(null))
             }
             aggregates.map { aggregate =>
@@ -988,11 +988,11 @@ class Analyzer(
       case view @ View(desc, _, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
         val newChild = AnalysisContext.withAnalysisContext(desc.viewCatalogAndNamespace) {
-          if (AnalysisContext.get.nestedViewDepth > SQLConf.get.maxNestedViewDepth) {
+          if (AnalysisContext.get.nestedViewDepth > conf.maxNestedViewDepth) {
             view.failAnalysis(s"The depth of view ${desc.identifier} exceeds the maximum " +
-              s"view resolution depth (${SQLConf.get.maxNestedViewDepth}). " +
-              s"Analysis is aborted to avoid errors. " +
-              s"Increase the value of ${SQLConf.MAX_NESTED_VIEW_DEPTH.key} to work around this.")
+              s"view resolution depth (${conf.maxNestedViewDepth}). Analysis is aborted to " +
+              s"avoid errors. Increase the value of ${SQLConf.MAX_NESTED_VIEW_DEPTH.key} to work " +
+              "around this.")
           }
           executeSameContext(child)
         }
@@ -1114,7 +1114,7 @@ class Analyzer(
 
         if (!i.overwrite) {
           AppendData.byPosition(r, query)
-        } else if (SQLConf.get.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
+        } else if (conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
           OverwritePartitionsDynamic.byPosition(r, query)
         } else {
           OverwriteByExpression.byPosition(r, query, staticDeleteExpression(r, staticPartitions))
@@ -1137,7 +1137,7 @@ class Analyzer(
         partitionSpec: Map[String, Option[String]]): Unit = {
       // check that each partition name is a partition column. otherwise, it is not valid
       partitionSpec.keySet.foreach { partitionName =>
-        partitionColumnNames.find(name => SQLConf.get.resolver(name, partitionName)) match {
+        partitionColumnNames.find(name => conf.resolver(name, partitionName)) match {
           case Some(_) =>
           case None =>
             throw new AnalysisException(
@@ -1159,7 +1159,7 @@ class Analyzer(
         val withStaticPartitionValues = {
           // for each static name, find the column name it will replace and check for unknowns.
           val outputNameToStaticName = staticPartitions.keySet.map(staticName =>
-            relation.output.find(col => SQLConf.get.resolver(col.name, staticName)) match {
+            relation.output.find(col => conf.resolver(col.name, staticName)) match {
               case Some(attr) =>
                 attr.name -> staticName
               case _ =>
@@ -1196,7 +1196,7 @@ class Analyzer(
         Literal(true)
       } else {
         staticPartitions.map { case (name, value) =>
-          relation.output.find(col => SQLConf.get.resolver(col.name, name)) match {
+          relation.output.find(col => conf.resolver(col.name, name)) match {
             case Some(attr) =>
               // the delete expression must reference the table's column names, but these attributes
               // are not available when CheckAnalysis runs because the relation is not a child of
@@ -1811,12 +1811,12 @@ class Analyzer(
 
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case agg @ Aggregate(groups, aggs, child)
-          if SQLConf.get.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
+          if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
             groups.exists(!_.resolved) =>
         agg.copy(groupingExpressions = mayResolveAttrByAggregateExprs(groups, aggs, child))
 
       case gs @ GroupingSets(selectedGroups, groups, child, aggs)
-          if SQLConf.get.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
+          if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
             groups.exists(_.isInstanceOf[UnresolvedAttribute]) =>
         gs.copy(
           selectedGroupByExprs = selectedGroups.map(mayResolveAttrByAggregateExprs(_, aggs, child)),
@@ -1947,7 +1947,7 @@ class Analyzer(
     }
 
     def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
-      val funcName = if (SQLConf.get.caseSensitiveAnalysis) {
+      val funcName = if (conf.caseSensitiveAnalysis) {
         name.funcName
       } else {
         name.funcName.toLowerCase(Locale.ROOT)
@@ -1962,7 +1962,7 @@ class Analyzer(
     }
 
     protected def formatDatabaseName(name: String): String = {
-      if (SQLConf.get.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
+      if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
     }
   }
 
@@ -3082,7 +3082,7 @@ class Analyzer(
 
   private def validateStoreAssignmentPolicy(): Unit = {
     // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2.
-    if (SQLConf.get.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY) {
+    if (conf.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY) {
       val configKey = SQLConf.STORE_ASSIGNMENT_POLICY.key
       throw new AnalysisException(s"""
         |"LEGACY" store assignment policy is disallowed in Spark data source V2.
@@ -3338,8 +3338,7 @@ class Analyzer(
             val parent = add.fieldNames().init
             if (parent.nonEmpty) {
               // Adding a nested field, need to normalize the parent column and position
-              val target = schema.findNestedField(
-                parent, includeCollections = true, SQLConf.get.resolver)
+              val target = schema.findNestedField(parent, includeCollections = true, conf.resolver)
               if (target.isEmpty) {
                 // Leave unresolved. Throws error in CheckAnalysis
                 Some(add)
@@ -3360,7 +3359,7 @@ class Analyzer(
           case typeChange: UpdateColumnType =>
             // Hive style syntax provides the column type, even if it may not have changed
             val fieldOpt = schema.findNestedField(
-              typeChange.fieldNames(), includeCollections = true, SQLConf.get.resolver)
+              typeChange.fieldNames(), includeCollections = true, conf.resolver)
 
             if (fieldOpt.isEmpty) {
               // We couldn't resolve the field. Leave it to CheckAnalysis
@@ -3387,16 +3386,14 @@ class Analyzer(
               case after: After =>
                 // Need to resolve column as well as position reference
                 val fieldOpt = schema.findNestedField(
-                  position.fieldNames(), includeCollections = true, SQLConf.get.resolver)
+                  position.fieldNames(), includeCollections = true, conf.resolver)
 
                 if (fieldOpt.isEmpty) {
                   Some(position)
                 } else {
                   val (normalizedPath, field) = fieldOpt.get
                   val targetCol = schema.findNestedField(
-                    normalizedPath :+ after.column(),
-                    includeCollections = true,
-                    SQLConf.get.resolver)
+                    normalizedPath :+ after.column(), includeCollections = true, conf.resolver)
                   if (targetCol.isEmpty) {
                     // Leave unchanged to CheckAnalysis
                     Some(position)
@@ -3449,7 +3446,7 @@ class Analyzer(
         fieldNames: Array[String],
         copy: Array[String] => TableChange): Option[TableChange] = {
       val fieldOpt = schema.findNestedField(
-        fieldNames, includeCollections = true, SQLConf.get.resolver)
+        fieldNames, includeCollections = true, conf.resolver)
       fieldOpt.map { case (path, field) => copy((path :+ field.name).toArray) }
     }
 
@@ -3461,8 +3458,7 @@ class Analyzer(
       position match {
         case null => null
         case after: After =>
-          (struct.fieldNames ++ fieldsAdded)
-            .find(n => SQLConf.get.resolver(n, after.column())) match {
+          (struct.fieldNames ++ fieldsAdded).find(n => conf.resolver(n, after.column())) match {
             case Some(colName) =>
               ColumnPosition.after(colName)
             case None =>

@@ -71,7 +71,7 @@ object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!SQLConf.get.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) return plan
+    if (!conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) return plan
 
     // We always remove the special metadata from `AttributeReference` at the end of this rule, so
     // Dataset column reference only exists in the root node via Dataset transformations like

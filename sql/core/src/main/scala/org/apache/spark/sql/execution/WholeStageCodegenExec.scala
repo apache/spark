@@ -888,9 +888,9 @@ case class CollapseCodegenStages(
       val willFallback = plan.expressions.exists(_.find(e => !supportCodegen(e)).isDefined)
       // the generated code will be huge if there are too many columns
       val hasTooManyOutputFields =
-        WholeStageCodegenExec.isTooManyFields(SQLConf.get, plan.schema)
+        WholeStageCodegenExec.isTooManyFields(conf, plan.schema)
       val hasTooManyInputFields =
-        plan.children.exists(p => WholeStageCodegenExec.isTooManyFields(SQLConf.get, p.schema))
+        plan.children.exists(p => WholeStageCodegenExec.isTooManyFields(conf, p.schema))
       !willFallback && !hasTooManyOutputFields && !hasTooManyInputFields
     case _ => false
   }
@@ -939,7 +939,7 @@ case class CollapseCodegenStages(
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (SQLConf.get.wholeStageEnabled) {
+    if (conf.wholeStageEnabled) {
       insertWholeStageCodegen(plan)
     } else {
       plan

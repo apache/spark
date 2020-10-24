@@ -103,7 +103,7 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
 object ReuseExchange extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!SQLConf.get.exchangeReuseEnabled) {
+    if (!conf.exchangeReuseEnabled) {
       return plan
     }
     // Build a hash map using schema of exchanges to avoid O(N*N) sameResult calls.

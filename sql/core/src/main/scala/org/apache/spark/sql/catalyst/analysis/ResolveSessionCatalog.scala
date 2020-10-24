@@ -125,7 +125,7 @@ class ResolveSessionCatalog(
           a.comment.map(c => builder.putString("comment", c))
           val colName = a.column(0)
           val dataType = a.dataType.getOrElse {
-            v1Table.schema.findNestedField(Seq(colName), resolver = SQLConf.get.resolver)
+            v1Table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
               .map(_._2.dataType)
               .getOrElse {
                 throw new AnalysisException(
@@ -275,7 +275,7 @@ class ResolveSessionCatalog(
     case c @ CreateTableStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
       assertNoNullTypeInSchema(c.tableSchema)
-      val provider = c.provider.getOrElse(SQLConf.get.defaultDataSourceName)
+      val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         if (!DDLUtils.isHiveTable(Some(provider))) {
           assertNoCharTypeInSchema(c.tableSchema)
@@ -302,7 +302,7 @@ class ResolveSessionCatalog(
       if (c.asSelect.resolved) {
         assertNoNullTypeInSchema(c.asSelect.schema)
       }
-      val provider = c.provider.getOrElse(SQLConf.get.defaultDataSourceName)
+      val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         val tableDesc = buildCatalogTable(tbl.asTableIdentifier, new StructType,
           c.partitioning, c.bucketSpec, c.properties, provider, c.options, c.location,
@@ -332,7 +332,7 @@ class ResolveSessionCatalog(
     case c @ ReplaceTableStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
       assertNoNullTypeInSchema(c.tableSchema)
-      val provider = c.provider.getOrElse(SQLConf.get.defaultDataSourceName)
+      val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw new AnalysisException("REPLACE TABLE is only supported with v2 tables.")
       } else {
@@ -352,7 +352,7 @@ class ResolveSessionCatalog(
       if (c.asSelect.resolved) {
         assertNoNullTypeInSchema(c.asSelect.schema)
       }
-      val provider = c.provider.getOrElse(SQLConf.get.defaultDataSourceName)
+      val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw new AnalysisException("REPLACE TABLE AS SELECT is only supported with v2 tables.")
       } else {
@@ -486,7 +486,7 @@ class ResolveSessionCatalog(
       }
       val sql = "SHOW COLUMNS"
       val v1TableName = parseTempViewOrV1Table(nameParts, sql).asTableIdentifier
-      val resolver = SQLConf.get.resolver
+      val resolver = conf.resolver
       val db = ns match {
         case Some(db) if v1TableName.database.exists(!resolver(_, db.head)) =>
           throw new AnalysisException(
@@ -721,7 +721,7 @@ class ResolveSessionCatalog(
   }
 
   private def isV2Provider(provider: String): Boolean = {
-    DataSource.lookupDataSourceV2(provider, SQLConf.get) match {
+    DataSource.lookupDataSourceV2(provider, conf) match {
       // TODO(SPARK-28396): Currently file source v2 can't work with tables.
       case Some(_: FileDataSourceV2) => false
       case Some(_) => true

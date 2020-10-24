@@ -152,9 +152,7 @@ object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
       case _ => false
     }.isDefined
 
-    if (!SQLConf.get.bucketingEnabled ||
-      !SQLConf.get.autoBucketedScanEnabled ||
-      !hasBucketedScanWithoutFilter) {
+    if (!conf.bucketingEnabled || !conf.autoBucketedScanEnabled || !hasBucketedScanWithoutFilter) {
       plan
     } else {
       disableBucketWithInterestingPartition(plan, false, false, true)

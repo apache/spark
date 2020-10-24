@@ -53,9 +53,9 @@ object ResolveHints {
   object ResolveJoinStrategyHints extends Rule[LogicalPlan] {
     private val STRATEGY_HINT_NAMES = JoinStrategyHint.strategies.flatMap(_.hintAliases)
 
-    private val hintErrorHandler = SQLConf.get.hintErrorHandler
+    private val hintErrorHandler = conf.hintErrorHandler
 
-    def resolver: Resolver = SQLConf.get.resolver
+    def resolver: Resolver = conf.resolver
 
     private def createHintInfo(hintName: String): HintInfo = {
       HintInfo(strategy =
@@ -268,7 +268,7 @@ object ResolveHints {
    */
   class RemoveAllHints extends Rule[LogicalPlan] {
 
-    private val hintErrorHandler = SQLConf.get.hintErrorHandler
+    private val hintErrorHandler = conf.hintErrorHandler
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
       case h: UnresolvedHint =>
@@ -284,7 +284,7 @@ object ResolveHints {
    */
   class DisableHints extends RemoveAllHints {
     override def apply(plan: LogicalPlan): LogicalPlan = {
-      if (SQLConf.get.getConf(SQLConf.DISABLE_HINTS)) super.apply(plan) else plan
+      if (conf.getConf(SQLConf.DISABLE_HINTS)) super.apply(plan) else plan
     }
   }
 }

@@ -37,7 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object RemoveRedundantProjects extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!SQLConf.get.getConf(SQLConf.REMOVE_REDUNDANT_PROJECTS_ENABLED)) {
+    if (!conf.getConf(SQLConf.REMOVE_REDUNDANT_PROJECTS_ENABLED)) {
       plan
     } else {
       removeProject(plan, true)

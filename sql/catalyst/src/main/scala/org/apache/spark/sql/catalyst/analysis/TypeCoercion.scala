@@ -443,10 +443,8 @@ object TypeCoercion {
         p.makeCopy(Array(left, Cast(right, TimestampType)))
 
       case p @ BinaryComparison(left, right)
-          if findCommonTypeForBinaryComparison(
-            left.dataType, right.dataType, SQLConf.get).isDefined =>
-        val commonType =
-          findCommonTypeForBinaryComparison(left.dataType, right.dataType, SQLConf.get).get
+          if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
+        val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
         p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
 
       case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
@@ -795,7 +793,7 @@ object TypeCoercion {
         p transformExpressionsUp {
           // Skip nodes if unresolved or empty children
           case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
-          case c @ Concat(children) if SQLConf.get.concatBinaryAsString ||
+          case c @ Concat(children) if conf.concatBinaryAsString ||
             !children.map(_.dataType).forall(_ == BinaryType) =>
             val newChildren = c.children.map { e =>
               ImplicitTypeCasts.implicitCast(e, StringType).getOrElse(e)
@@ -846,7 +844,7 @@ object TypeCoercion {
           case c @ Elt(children) =>
             val index = children.head
             val newIndex = ImplicitTypeCasts.implicitCast(index, IntegerType).getOrElse(index)
-            val newInputs = if (SQLConf.get.eltOutputAsString ||
+            val newInputs = if (conf.eltOutputAsString ||
               !children.tail.map(_.dataType).forall(_ == BinaryType)) {
               children.tail.map { e =>
                 ImplicitTypeCasts.implicitCast(e, StringType).getOrElse(e)

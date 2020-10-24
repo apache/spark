@@ -83,14 +83,14 @@ object CoalesceBucketsInJoin extends Rule[SparkPlan] {
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!SQLConf.get.coalesceBucketsInJoinEnabled) {
+    if (!conf.coalesceBucketsInJoinEnabled) {
       return plan
     }
 
     plan transform {
       case ExtractJoinWithBuckets(join, numLeftBuckets, numRightBuckets)
         if math.max(numLeftBuckets, numRightBuckets) / math.min(numLeftBuckets, numRightBuckets) <=
-          SQLConf.get.coalesceBucketsInJoinMaxBucketRatio =>
+          conf.coalesceBucketsInJoinMaxBucketRatio =>
         val numCoalescedBuckets = math.min(numLeftBuckets, numRightBuckets)
         join match {
           case j: SortMergeJoinExec =>

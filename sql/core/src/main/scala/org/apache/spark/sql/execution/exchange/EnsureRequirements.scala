@@ -51,7 +51,7 @@ object EnsureRequirements extends Rule[SparkPlan] {
         BroadcastExchangeExec(mode, child)
       case (child, distribution) =>
         val numPartitions = distribution.requiredNumPartitions
-          .getOrElse(SQLConf.get.numShufflePartitions)
+          .getOrElse(conf.numShufflePartitions)
         ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child)
     }
 
@@ -93,7 +93,7 @@ object EnsureRequirements extends Rule[SparkPlan] {
           // expected number of shuffle partitions. However, if it's smaller than
           // `conf.numShufflePartitions`, we pick `conf.numShufflePartitions` as the
           // expected number of shuffle partitions.
-          math.max(nonShuffleChildrenNumPartitions.max, SQLConf.get.defaultNumShufflePartitions)
+          math.max(nonShuffleChildrenNumPartitions.max, conf.defaultNumShufflePartitions)
         }
       } else {
         childrenNumPartitions.max

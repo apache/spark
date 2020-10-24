@@ -27,7 +27,7 @@ case class ReuseAdaptiveSubquery(
     reuseMap: TrieMap[SparkPlan, BaseSubqueryExec]) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!SQLConf.get.subqueryReuseEnabled) {
+    if (!conf.subqueryReuseEnabled) {
       return plan
     }
 

@@ -75,7 +75,7 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
   type LambdaVariableMap = Map[String, NamedExpression]
 
   private val canonicalizer = {
-    if (!SQLConf.get.caseSensitiveAnalysis) {
+    if (!conf.caseSensitiveAnalysis) {
       // scalastyle:off caselocale
       s: String => s.toLowerCase
       // scalastyle:on caselocale
@@ -157,7 +157,7 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
       parentLambdaMap.get(canonicalizer(name)) match {
         case Some(lambda) =>
           nestedFields.foldLeft(lambda: Expression) { (expr, fieldName) =>
-            ExtractValue(expr, Literal(fieldName), SQLConf.get.resolver)
+            ExtractValue(expr, Literal(fieldName), conf.resolver)
           }
         case None =>
           UnresolvedAttribute(u.nameParts)

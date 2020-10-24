@@ -60,8 +60,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
 
-  def conf: SQLConf = SQLConf.get
-  def resolver: Resolver = SQLConf.get.resolver
+  def resolver: Resolver = conf.resolver
 
   // Visible for testing.
   def convertStaticPartitions(

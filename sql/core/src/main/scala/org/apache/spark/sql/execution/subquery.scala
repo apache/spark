@@ -203,7 +203,7 @@ object PlanSubqueries extends Rule[SparkPlan] {
 object ReuseSubquery extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!SQLConf.get.subqueryReuseEnabled) {
+    if (!conf.subqueryReuseEnabled) {
       return plan
     }
     // Build a hash map using schema of subqueries to avoid O(N*N) sameResult calls.

@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.DataType
 object ResolveTimeZone extends Rule[LogicalPlan] {
   private val transformTimeZoneExprs: PartialFunction[Expression, Expression] = {
     case e: TimeZoneAwareExpression if e.timeZoneId.isEmpty =>
-      e.withTimeZone(SQLConf.get.sessionLocalTimeZone)
+      e.withTimeZone(conf.sessionLocalTimeZone)
     // Casts could be added in the subquery plan through the rule TypeCoercion while coercing
     // the types between the value expression and list query expression of IN expression.
     // We need to subject the subquery plan through ResolveTimeZone again to setup timezone

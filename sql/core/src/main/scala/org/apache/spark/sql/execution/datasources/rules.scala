@@ -40,7 +40,7 @@ import org.apache.spark.sql.util.SchemaUtils
  */
 object ResolveSQLOnFile extends Rule[LogicalPlan] {
   private def maybeSQLFile(u: UnresolvedRelation): Boolean = {
-    SQLConf.get.runSQLonFile && u.multipartIdentifier.size == 2
+    conf.runSQLonFile && u.multipartIdentifier.size == 2
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -112,8 +112,8 @@ object PreprocessTableCreation extends Rule[LogicalPlan] {
       }
 
       // Check if the specified data source match the data source of the existing table.
-      val existingProvider = DataSource.lookupDataSource(existingTable.provider.get, SQLConf.get)
-      val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get, SQLConf.get)
+      val existingProvider = DataSource.lookupDataSource(existingTable.provider.get, conf)
+      val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get, conf)
       // TODO: Check that options from the resolved relation match the relation that we are
       // inserting into (i.e. using the same compression).
       // If the one of the provider is [[FileDataSourceV2]] and the other one is its corresponding
@@ -139,7 +139,7 @@ object PreprocessTableCreation extends Rule[LogicalPlan] {
             s"(${query.schema.catalogString})")
       }
 
-      val resolver = SQLConf.get.resolver
+      val resolver = conf.resolver
       val tableCols = existingTable.schema.map(_.name)
 
       // As we are inserting into an existing table, we should respect the existing schema and
@@ -193,7 +193,7 @@ object PreprocessTableCreation extends Rule[LogicalPlan] {
         tableDesc = existingTable,
         query = Some(TableOutputResolver.resolveOutputColumns(
           tableDesc.qualifiedName, existingTable.schema.toAttributes, newQuery,
-          byName = true, SQLConf.get)))
+          byName = true, conf)))
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
     // config, and do various checks:
@@ -244,7 +244,7 @@ object PreprocessTableCreation extends Rule[LogicalPlan] {
       val schema = create.tableSchema
       val partitioning = create.partitioning
       val identifier = create.tableName
-      val isCaseSensitive = SQLConf.get.caseSensitiveAnalysis
+      val isCaseSensitive = conf.caseSensitiveAnalysis
       // Check that columns are not duplicated in the schema
       val flattenedSchema = SchemaUtils.explodeNestedFieldNames(schema)
       SchemaUtils.checkColumnNameDuplication(
@@ -265,7 +265,7 @@ object PreprocessTableCreation extends Rule[LogicalPlan] {
         create
       } else {
         // Resolve and normalize partition columns as necessary
-        val resolver = SQLConf.get.resolver
+        val resolver = conf.resolver
         val normalizedPartitions = partitioning.map {
           case transform: RewritableTransform =>
             val rewritten = transform.references().map { ref =>
@@ -290,7 +290,7 @@ object PreprocessTableCreation extends Rule[LogicalPlan] {
     SchemaUtils.checkSchemaColumnNameDuplication(
       schema,
       "in the table definition of " + table.identifier,
-      SQLConf.get.caseSensitiveAnalysis)
+      conf.caseSensitiveAnalysis)
 
     assertNoNullTypeInSchema(schema)
 
@@ -316,12 +316,12 @@ object PreprocessTableCreation extends Rule[LogicalPlan] {
       tableName = table.identifier.unquotedString,
       tableCols = schema.map(_.name),
       partCols = table.partitionColumnNames,
-      resolver = SQLConf.get.resolver)
+      resolver = conf.resolver)
 
     SchemaUtils.checkColumnNameDuplication(
       normalizedPartitionCols,
       "in the partition schema",
-      SQLConf.get.resolver)
+      conf.resolver)
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
       if (DDLUtils.isHiveTable(table)) {
@@ -350,16 +350,16 @@ object PreprocessTableCreation extends Rule[LogicalPlan] {
           tableName = table.identifier.unquotedString,
           tableCols = schema.map(_.name),
           bucketSpec = bucketSpec,
-          resolver = SQLConf.get.resolver)
+          resolver = conf.resolver)
 
         SchemaUtils.checkColumnNameDuplication(
           normalizedBucketSpec.bucketColumnNames,
           "in the bucket definition",
-          SQLConf.get.resolver)
+          conf.resolver)
         SchemaUtils.checkColumnNameDuplication(
           normalizedBucketSpec.sortColumnNames,
           "in the sort definition",
-          SQLConf.get.resolver)
+          conf.resolver)
 
         normalizedBucketSpec.sortColumnNames.map(schema(_)).map(_.dataType).foreach {
           case dt if RowOrdering.isOrderable(dt) => // OK
@@ -389,7 +389,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
       catalogTable: Option[CatalogTable]): InsertIntoStatement = {
 
     val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
-      insert.partitionSpec, partColNames, tblName, SQLConf.get.resolver)
+      insert.partitionSpec, partColNames, tblName, conf.resolver)
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
@@ -415,7 +415,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
     }
 
     val newQuery = TableOutputResolver.resolveOutputColumns(
-      tblName, expectedColumns, insert.query, byName = false, SQLConf.get)
+      tblName, expectedColumns, insert.query, byName = false, conf)
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw new AnalysisException(

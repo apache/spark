@@ -50,7 +50,7 @@ object ResolveHiveSerdeTable extends Rule[LogicalPlan] {
         throw new AnalysisException("Creating bucketed Hive serde table is not supported yet.")
       }
 
-      val defaultStorage = HiveSerDe.getDefaultStorage(SQLConf.get)
+      val defaultStorage = HiveSerDe.getDefaultStorage(conf)
       val options = new HiveOptions(table.storage.properties)
 
       val fileStorage = if (options.fileFormat.isDefined) {
@@ -119,7 +119,7 @@ object DetermineTableStats extends Rule[LogicalPlan] {
     val partitionCols = relation.partitionCols
     // For partitioned tables, the partition directory may be outside of the table directory.
     // Which is expensive to get table size. Please see how we implemented it in the AnalyzeTable.
-    val sizeInBytes = if (SQLConf.get.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
+    val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
       try {
         val hadoopConf = SparkSession.active.sessionState.newHadoopConf()
         val tablePath = new Path(table.location)
@@ -128,10 +128,10 @@ object DetermineTableStats extends Rule[LogicalPlan] {
       } catch {
         case e: IOException =>
           logWarning("Failed to get table size from HDFS.", e)
-          SQLConf.get.defaultSizeInBytes
+          conf.defaultSizeInBytes
       }
     } else {
-      SQLConf.get.defaultSizeInBytes
+      conf.defaultSizeInBytes
     }
 
     val stats = Some(Statistics(sizeInBytes = BigInt(sizeInBytes)))

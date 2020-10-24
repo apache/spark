@@ -66,8 +66,8 @@ object OptimizeSkewedJoin extends Rule[SparkPlan] {
    * ADVISORY_PARTITION_SIZE_IN_BYTES.
    */
   private def isSkewed(size: Long, medianSize: Long): Boolean = {
-    size > medianSize * SQLConf.get.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR) &&
-      size > SQLConf.get.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD)
+    size > medianSize * conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR) &&
+      size > conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD)
   }
 
   private def medianSize(stats: MapOutputStatistics): Long = {
@@ -86,7 +86,7 @@ object OptimizeSkewedJoin extends Rule[SparkPlan] {
    * advisory partition size if avg size is smaller than it.
    */
   private def targetSize(sizes: Seq[Long], medianSize: Long): Long = {
-    val advisorySize = SQLConf.get.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+    val advisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
     val nonSkewSizes = sizes.filterNot(isSkewed(_, medianSize))
     if (nonSkewSizes.isEmpty) {
       advisorySize
@@ -251,7 +251,7 @@ object OptimizeSkewedJoin extends Rule[SparkPlan] {
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!SQLConf.get.getConf(SQLConf.SKEW_JOIN_ENABLED)) {
+    if (!conf.getConf(SQLConf.SKEW_JOIN_ENABLED)) {
       return plan
     }
 
