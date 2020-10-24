@@ -244,6 +244,7 @@ class Analyzer(
       ExtractGenerator ::
       ResolveGenerate ::
       ResolveFunctions ::
+      new SubstituteUnresolvedOrdinals(conf) ::
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
@@ -1775,17 +1776,29 @@ class Analyzer(
       // Replace the index with the corresponding expression in aggregateExpressions. The index is
       // a 1-base position of aggregateExpressions, which is output columns (select expression)
       case Aggregate(groups, aggs, child) if aggs.forall(_.resolved) &&
-        groups.exists(_.isInstanceOf[UnresolvedOrdinal]) =>
-        val newGroups = groups.map {
-          case u @ UnresolvedOrdinal(index) if index > 0 && index <= aggs.size =>
-            aggs(index - 1)
-          case ordinal @ UnresolvedOrdinal(index) =>
-            ordinal.failAnalysis(
-              s"GROUP BY position $index is not in select list " +
-                s"(valid range is [1, ${aggs.size}])")
-          case o => o
-        }
+        groups.exists(_.find(e => e.isInstanceOf[UnresolvedOrdinal]).isDefined) =>
+        val newGroups = groups.map(resolveOrdinal(aggs, _))
         Aggregate(newGroups, aggs, child)
+
+      case GroupingSets(selectedGroups, groups, child, aggs) if aggs.forall(_.resolved) &&
+        (groups.exists(_.find(e => e.isInstanceOf[UnresolvedOrdinal]).isDefined) ||
+          selectedGroups.exists(exprs =>
+            exprs.exists(_.find(e => e.isInstanceOf[UnresolvedOrdinal]).isDefined))) =>
+        val newGroups = groups.map(resolveOrdinal(aggs, _))
+        val newSelectedGroups = selectedGroups.map(exprs => exprs.map(resolveOrdinal(aggs, _)))
+        GroupingSets(newSelectedGroups, newGroups, child, aggs)
+    }
+
+    def resolveOrdinal(aggs: Seq[Expression], expr: Expression): Expression = {
+      expr.transformDown {
+        case u @ UnresolvedOrdinal(index) if index > 0 && index <= aggs.size =>
+          aggs(index - 1)
+        case ordinal @ UnresolvedOrdinal(index) =>
+          ordinal.failAnalysis(
+            s"GROUP BY position $index is not in select list " +
+              s"(valid range is [1, ${aggs.size}])")
+        case o => o
+      }
     }
   }
 
