@@ -3691,6 +3691,26 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(sql("SELECT id FROM t WHERE (SELECT true)"), Row(0L))
     }
   }
+
+  test("SPARK-33229: Support GROUP BY use Separate columns and CUBE/ROLLUP") {
+    withTable("t") {
+      sql("CREATE TABLE t USING PARQUET AS SELECT id AS a, id AS b, id AS c FROM range(1)")
+      checkAnswer(sql("SELECT a, b, c, count(*) FROM t GROUP BY CUBE(a, b, c)"),
+        Row(0, 0, 0, 1) :: Row(0, 0, null, 1) ::
+          Row(0, null, 0, 1) :: Row(0, null, null, 1) ::
+          Row(null, 0, 0, 1) :: Row(null, 0, null, 1) ::
+          Row(null, null, 0, 1) :: Row(null, null, null, 1) :: Nil)
+      checkAnswer(sql("select a, b, c, count(*) FROM t GROUP BY a, CUBE(b, c)"),
+        Row(0, 0, 0, 1) :: Row(0, 0, null, 1) ::
+          Row(0, null, 0, 1) :: Row(0, null, null, 1) :: Nil)
+
+      checkAnswer(sql("SELECT a, b, c, count(*) FROM t GROUP BY ROLLUP(a, b, c)"),
+        Row(0, 0, 0, 1) :: Row(0, 0, null, 1) ::
+          Row(0, null, null, 1) :: Row(null, null, null, 1) :: Nil)
+      checkAnswer(sql("select a, b, c, count(*) FROM t GROUP BY a, ROLLUP(b, c)"),
+        Row(0, 0, 0, 1) :: Row(0, 0, null, 1) :: Row(0, null, null, 1) :: Nil)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

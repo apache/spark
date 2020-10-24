@@ -621,10 +621,10 @@ class Analyzer(
       val aggForResolving = h.child match {
         // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
         // groupingExpressions for condition resolving.
-        case a @ Aggregate(Seq(c @ Cube(groupByExprs)), _, _) =>
-          a.copy(groupingExpressions = groupByExprs)
-        case a @ Aggregate(Seq(r @ Rollup(groupByExprs)), _, _) =>
-          a.copy(groupingExpressions = groupByExprs)
+        case a @ Aggregate(MixedExprsWithCube(cube, others), _, _) =>
+          a.copy(groupingExpressions = cube.groupByExprs ++ others)
+        case a @ Aggregate(MixedExprsWithRollup(rollup, others), _, _) =>
+          a.copy(groupingExpressions = rollup.groupByExprs ++ others)
         case g: GroupingSets =>
           Aggregate(
             getFinalGroupByExpressions(g.selectedGroupByExprs, g.groupByExprs),
@@ -638,12 +638,16 @@ class Analyzer(
       if (resolvedInfo.nonEmpty) {
         val (extraAggExprs, resolvedHavingCond) = resolvedInfo.get
         val newChild = h.child match {
-          case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child) =>
+          case Aggregate(MixedExprsWithCube(cube, others), aggregateExpressions, child) =>
             constructAggregate(
-              cubeExprs(groupByExprs), groupByExprs, aggregateExpressions ++ extraAggExprs, child)
-          case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child) =>
+              cubeExprs(cube.groupByExprs).map(_ ++ others),
+              cube.groupByExprs ++ others,
+              aggregateExpressions ++ extraAggExprs, child)
+          case Aggregate(MixedExprsWithRollup(rollup, others), aggregateExpressions, child) =>
             constructAggregate(
-              rollupExprs(groupByExprs), groupByExprs, aggregateExpressions ++ extraAggExprs, child)
+              rollupExprs(rollup.groupByExprs).map(_ ++ others),
+              rollup.groupByExprs ++ others,
+              aggregateExpressions ++ extraAggExprs, child)
           case x: GroupingSets =>
             constructAggregate(
               x.selectedGroupByExprs, x.groupByExprs, x.aggregations ++ extraAggExprs, x.child)
@@ -670,12 +674,14 @@ class Analyzer(
     // Filter/Sort.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
       case h @ UnresolvedHaving(
-          _, agg @ Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, _))
-          if agg.childrenResolved && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
+          _, agg @ Aggregate(MixedExprsWithCube(cube, others), aggregateExpressions, _))
+          if agg.childrenResolved &&
+            (cube.groupByExprs ++ others ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(h)
       case h @ UnresolvedHaving(
-          _, agg @ Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, _))
-          if agg.childrenResolved && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
+          _, agg @ Aggregate(MixedExprsWithRollup(rollup, others), aggregateExpressions, _))
+          if agg.childrenResolved &&
+            (rollup.groupByExprs ++ others ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(h)
       case h @ UnresolvedHaving(_, g: GroupingSets)
           if g.childrenResolved && g.expressions.forall(_.resolved) =>
@@ -684,12 +690,18 @@ class Analyzer(
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
 
       // Ensure group by expressions and aggregate expressions have been resolved.
-      case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child)
-        if (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
-        constructAggregate(cubeExprs(groupByExprs), groupByExprs, aggregateExpressions, child)
-      case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child)
-        if (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
-        constructAggregate(rollupExprs(groupByExprs), groupByExprs, aggregateExpressions, child)
+      case Aggregate(MixedExprsWithCube(cube, others), aggregateExpressions, child)
+        if (cube.groupByExprs ++ others ++ aggregateExpressions).forall(_.resolved) =>
+        constructAggregate(
+          cubeExprs(cube.groupByExprs).map(_ ++ others),
+          cube.groupByExprs ++ others,
+          aggregateExpressions, child)
+      case Aggregate(MixedExprsWithRollup(rollup, others), aggregateExpressions, child)
+        if (rollup.groupByExprs ++ others ++ aggregateExpressions).forall(_.resolved) =>
+        constructAggregate(
+          rollupExprs(rollup.groupByExprs).map(_ ++ others),
+          rollup.groupByExprs ++ others,
+          aggregateExpressions, child)
       // Ensure all the expressions have been resolved.
       case x: GroupingSets if x.expressions.forall(_.resolved) =>
         constructAggregate(x.selectedGroupByExprs, x.groupByExprs, x.aggregations, x.child)

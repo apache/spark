@@ -151,3 +151,26 @@ object GroupingID {
     if (SQLConf.get.integerGroupingIdEnabled) IntegerType else LongType
   }
 }
+
+object MixedExprsWithCube {
+  def unapply(exprs: Seq[Expression]): Option[(Cube, Seq[Expression])] = {
+    val (cubes, others) = exprs.partition(_.isInstanceOf[Cube])
+    if (cubes.size == 1) {
+      Some((cubes.head.asInstanceOf[Cube], others))
+    } else {
+      None
+    }
+  }
+}
+
+object MixedExprsWithRollup {
+  def unapply(exprs: Seq[Expression]): Option[(Rollup, Seq[Expression])] = {
+    val (rollups, others) = exprs.partition(_.isInstanceOf[Rollup])
+    if (rollups.size == 1) {
+      Some((rollups.head.asInstanceOf[Rollup], others))
+    } else {
+      None
+    }
+  }
+}
+
