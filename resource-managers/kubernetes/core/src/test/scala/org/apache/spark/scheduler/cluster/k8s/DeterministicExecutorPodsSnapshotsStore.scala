@@ -21,6 +21,8 @@ import scala.collection.mutable
 
 class DeterministicExecutorPodsSnapshotsStore extends ExecutorPodsSnapshotsStore {
 
+  ExecutorPodsSnapshot.setShouldCheckAllContainers(false)
+
   private val snapshotsBuffer = mutable.Buffer.empty[ExecutorPodsSnapshot]
   private val subscribers = mutable.Buffer.empty[Seq[ExecutorPodsSnapshot] => Unit]
 
