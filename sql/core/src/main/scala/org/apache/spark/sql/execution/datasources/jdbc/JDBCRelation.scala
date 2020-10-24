@@ -265,19 +265,6 @@ private[sql] case class JDBCRelation(
     }
   }
 
-  override def unhandledAggregates(aggregates: Array[AggregateFunc]):
-    Array[AggregateFunc] = {
-    if (jdbcOptions.pushDownAggregate) {
-      if (JDBCRDD.compileAggregates(aggregates, JdbcDialects.get(jdbcOptions.url)).isEmpty) {
-        aggregates
-      } else {
-        Array.empty[AggregateFunc]
-      }
-    } else {
-      aggregates
-    }
-  }
-
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(

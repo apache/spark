@@ -704,7 +704,7 @@ object DataSourceStrategy
     (nonconvertiblePredicates ++ unhandledPredicates, pushedFilters, handledFilters)
   }
 
-  def translateAggregate(aggregates: AggregateExpression): Option[AggregateFunc] = {
+  protected[sql] def translateAggregate(aggregates: AggregateExpression): Option[AggregateFunc] = {
 
     def columnAsString(e: Expression): String = e match {
       case AttributeReference(name, _, _, _) => name
@@ -715,19 +715,25 @@ object DataSourceStrategy
       case _ => ""
     }
 
+    val filter = if (aggregates.filter.nonEmpty) {
+      translateFilter(aggregates.filter.get, false)
+    } else {
+      Option.empty[Filter]
+    }
+
     aggregates.aggregateFunction match {
       case aggregate.Min(child) =>
         val columnName = columnAsString(child)
-        if (!columnName.isEmpty) Some(Min(columnName)) else None
+        if (!columnName.isEmpty) Some(Min(columnName, aggregates.isDistinct, filter)) else None
       case aggregate.Max(child) =>
         val columnName = columnAsString(child)
-        if (!columnName.isEmpty) Some(Max(columnName)) else None
+        if (!columnName.isEmpty) Some(Max(columnName, aggregates.isDistinct, filter)) else None
       case aggregate.Average(child) =>
         val columnName = columnAsString(child)
-        if (!columnName.isEmpty) Some(Avg(columnName)) else None
+        if (!columnName.isEmpty) Some(Avg(columnName, aggregates.isDistinct, filter)) else None
       case aggregate.Sum(child) =>
         val columnName = columnAsString(child)
-        if (!columnName.isEmpty) Some(Sum(columnName)) else None
+        if (!columnName.isEmpty) Some(Sum(columnName, aggregates.isDistinct, filter)) else None
       case _ => None
     }
   }

@@ -232,17 +232,6 @@ abstract class BaseRelation {
    * @since 1.6.0
    */
   def unhandledFilters(filters: Array[Filter]): Array[Filter] = filters
-
-  /**
-   * Returns the list of [[Aggregate]]s that this datasource may not be able to handle.
-   * These returned [[Aggregate]]s will be evaluated by Spark SQL after data is output by a scan.
-   * By default, this function will return all aggregates, as it is always safe to
-   * double evaluate a [[Aggregate]].
-   *
-   * @since 3.1.0
-   */
-  def unhandledAggregates(aggregates: Array[AggregateFunc]): Array[AggregateFunc] =
-    aggregates
 }
 
 /**

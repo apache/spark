@@ -133,14 +133,38 @@ object JDBCRDD extends Logging {
     })
   }
 
-  def compileAggregates(aggregates: Seq[AggregateFunc], dialect: JdbcDialect):
-  Map[String, Array[String]] = {
+  def compileAggregates(
+      aggregates: Seq[AggregateFunc],
+      dialect: JdbcDialect): (Map[String, Array[String]], Array[Filter]) = {
+    var filters = Array.empty[Filter]
     def quote(colName: String): String = dialect.quoteIdentifier(colName)
     val compiledAggregates = aggregates.map {
-      case Min(column) => Some(quote(column) -> s"MIN(${quote(column)})")
-      case Max(column) => Some(quote(column) -> s"MAX(${quote(column)})")
-      case Sum(column) => Some(quote(column) -> s"SUM(${quote(column)})")
-      case Avg(column) => Some(quote(column) -> s"AVG(${quote(column)})")
+      case Min(column, isDistinct, filter) =>
+        if (filter.nonEmpty) filters +:= filter.get
+        if (isDistinct) {
+          Some(quote(column) -> s"MIN(DISTINCT(${quote(column)}))")
+        } else {
+          Some(quote(column) -> s"MIN(${quote(column)})")
+        }
+      case Max(column, isDistinct, filter) =>
+        if (filter.nonEmpty) filters +:= filter.get
+        if (isDistinct) {
+          Some(quote(column) -> s"MAX(DISTINCT(${quote(column)}))")
+        } else {
+          Some(quote(column) -> s"MAX(${quote(column)})")
+        }
+      case Sum(column, isDistinct, _) =>
+        if (isDistinct) {
+          Some(quote(column) -> s"SUM(DISTINCT(${quote(column)}))")
+        } else {
+          Some(quote(column) -> s"SUM(${quote(column)})")
+        }
+      case Avg(column, isDistinct, _) =>
+        if (isDistinct) {
+          Some(quote(column) -> s"AVG(DISTINCT(${quote(column)}))")
+        } else {
+          Some(quote(column) -> s"AVG(${quote(column)})")
+        }
       case _ => None
     }
     var map: Map[String, Array[String]] = Map()
@@ -155,7 +179,7 @@ object JDBCRDD extends Logging {
         }
       }
     }
-    map
+    (map, filters)
   }
 
   /**
@@ -218,17 +242,20 @@ private[jdbc] class JDBCRDD(
    */
   override def getPartitions: Array[Partition] = partitions
 
-  private var updatedSchema: StructType = schema
+  private var updatedSchema: StructType = new StructType()
+
+  private var updatedFilters = Array.empty[Filter]
 
   /**
    * `columns`, but as a String suitable for injection into a SQL query.
    */
   private val columnList: String = {
-    val compiledAggregates = JDBCRDD.compileAggregates(aggregation.aggregateExpressions,
+    val compiledAgg = JDBCRDD.compileAggregates(aggregation.aggregateExpressions,
       JdbcDialects.get(url))
+    val compiledAggregates = compiledAgg._1
+    updatedFilters = filters ++ compiledAgg._2
     val flippedMap = compiledAggregates.map(_.swap)
     val colDataTypeMap: Map[String, StructField] = columns.zip(schema.fields).toMap
-    updatedSchema = new StructType()
     val sb = new StringBuilder()
     columns.map(c => compiledAggregates.getOrElse(c, c)).foreach(
       x => x match {
@@ -238,15 +265,39 @@ private[jdbc] class JDBCRDD(
         case array: Array[String] =>
           sb.append(", ").append(array.mkString(", "))
           for (a <- array) {
-            if (a.contains("MAX") || a.contains("MIN") || a.contains("SUM")) {
+            if (a.contains("MAX") || a.contains("MIN")) {
               // get the original column data type
-              // todo: change data type for SUM
               updatedSchema = updatedSchema.add(colDataTypeMap.get(flippedMap.get(array).get).get)
-            } else { // AVG
+            } else if (a.contains("SUM")) {
+              // Same as Spark, promote to the largest types to prevent overflows.
+              // IntegralType: if not Long, promote to Long
+              // FractionalType: if not Double, promote to Double
+              // DecimalType.Fixed(precision, scale):
+              //   follow what is done in Sum.resultType, +10 to precision
               val dataField = colDataTypeMap.get(flippedMap.get(array).get).get
-              updatedSchema = updatedSchema.add(dataField.name, DoubleType, dataField.nullable)
+              dataField.dataType match {
+                case DecimalType.Fixed(precision, scale) =>
+                  updatedSchema = updatedSchema.add(
+                    dataField.name, DecimalType.bounded(precision + 10, scale), dataField.nullable)
+                case _: IntegralType =>
+                  updatedSchema = updatedSchema.add(dataField.name, LongType, dataField.nullable)
+                case _ =>
+                  updatedSchema = updatedSchema.add(dataField.name, DoubleType, dataField.nullable)
+              }
+            } else { // AVG
+              // Same as Spark, promote to the largest types to prevent overflows.
+              // DecimalType.Fixed(precision, scale):
+              //   follow what is done in Average.resultType, +4 to precision and scale
+              // promote to Double for other data types
+              val dataField = colDataTypeMap.get(flippedMap.get(array).get).get
+              dataField.dataType match {
+                case DecimalType.Fixed(p, s) => updatedSchema =
+                  updatedSchema.add(
+                    dataField.name, DecimalType.bounded(p + 4, s + 4), dataField.nullable)
+                case _ => updatedSchema =
+                  updatedSchema.add(dataField.name, DoubleType, dataField.nullable)
+               }
             }
-
           }
       }
     )
@@ -258,7 +309,7 @@ private[jdbc] class JDBCRDD(
    * `filters`, but as a WHERE clause suitable for injection into a SQL query.
    */
   private val filterWhereClause: String =
-    filters
+    updatedFilters
       .flatMap(JDBCRDD.compileFilter(_, JdbcDialects.get(url)))
       .map(p => s"($p)").mkString(" AND ")
 

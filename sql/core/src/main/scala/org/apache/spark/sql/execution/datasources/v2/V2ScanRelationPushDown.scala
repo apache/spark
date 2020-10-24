@@ -78,8 +78,17 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
             var index = 0
             val aggOutputBuilder = ArrayBuilder.make[AttributeReference]
             for (a <- resultAttributes) {
+              val newName = if (a.name.contains("FILTER")) {
+                a.name.substring(0, a.name.indexOf("FILTER") - 1)
+              } else if (a.name.contains("DISTINCT")) {
+                a.name.replace("DISTINCT ", "")
+              } else {
+                a.name
+              }
+
               aggOutputBuilder +=
-                a.copy(dataType = aggregates(index).dataType)(exprId = NamedExpression.newExprId,
+                a.copy(name = newName,
+                  dataType = aggregates(index).dataType)(exprId = NamedExpression.newExprId,
                   qualifier = a.qualifier)
               index += 1
             }
@@ -98,24 +107,23 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
 
             var i = 0
             plan.transformExpressions {
-            case agg: AggregateExpression =>
-              val aggFunction: aggregate.AggregateFunction = {
+              case agg: AggregateExpression =>
                 i += 1
-                if (agg.aggregateFunction.isInstanceOf[aggregate.Max]) {
-                  aggregate.Max(aggOutput(i - 1))
-                } else if (agg.aggregateFunction.isInstanceOf[aggregate.Min]) {
-                  aggregate.Min(aggOutput(i - 1))
-                } else if (agg.aggregateFunction.isInstanceOf[aggregate.Average]) {
-                  aggregate.Average(aggOutput(i - 1))
-                } else if (agg.aggregateFunction.isInstanceOf[aggregate.Sum]) {
-                  aggregate.Sum(aggOutput(i - 1))
-                } else {
-                  agg.aggregateFunction
+                val aggFunction: aggregate.AggregateFunction = {
+                  if (agg.aggregateFunction.isInstanceOf[aggregate.Max]) {
+                    aggregate.Max(aggOutput(i - 1))
+                  } else if (agg.aggregateFunction.isInstanceOf[aggregate.Min]) {
+                    aggregate.Min(aggOutput(i - 1))
+                  } else if (agg.aggregateFunction.isInstanceOf[aggregate.Average]) {
+                    aggregate.Average(aggOutput(i - 1))
+                  } else if (agg.aggregateFunction.isInstanceOf[aggregate.Sum]) {
+                    aggregate.Sum(aggOutput(i - 1))
+                  } else {
+                    agg.aggregateFunction
+                  }
                 }
-              }
-              agg.transform {
-                case a: aggregate.AggregateFunction => aggFunction
-              }
+                // Aggregate filter is pushed to datasource
+                agg.copy(aggregateFunction = aggFunction, filter = None)
             }
           }
 

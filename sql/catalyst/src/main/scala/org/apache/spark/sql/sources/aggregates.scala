@@ -24,10 +24,7 @@ abstract class AggregateFunc
 
 // Todo: add Count
 
-case class Avg(column: String) extends AggregateFunc
-
-case class Min(column: String) extends AggregateFunc
-
-case class Max(column: String) extends AggregateFunc
-
-case class Sum(column: String) extends AggregateFunc
+case class Avg(column: String, isDistinct: Boolean, filter: Option[Filter]) extends AggregateFunc
+case class Min(column: String, isDistinct: Boolean, filter: Option[Filter]) extends AggregateFunc
+case class Max(column: String, isDistinct: Boolean, filter: Option[Filter]) extends AggregateFunc
+case class Sum(column: String, isDistinct: Boolean, filter: Option[Filter]) extends AggregateFunc
