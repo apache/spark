@@ -1083,7 +1083,7 @@ object SparkSession extends Logging {
    *
    * @since 3.1.0
    */
-  def getOrCloneSessionWithConfigsOff(
+  private[sql] def getOrCloneSessionWithConfigsOff(
       session: SparkSession,
       configurations: Seq[ConfigEntry[Boolean]]): SparkSession = {
     val configsEnabled = configurations.filter(session.sessionState.conf.getConf(_))
