@@ -325,7 +325,7 @@ def signum(col):
 def sin(col):
     """
     :param col: angle in radians
-    :return: sine of the angle, as if computed by `java.lang.Math.sin()
+    :return: sine of the angle, as if computed by `java.lang.Math.sin()`
     """
     return _invoke_function_over_column("sin", col)
 
@@ -354,7 +354,7 @@ def tanh(col):
     """
     :param col: hyperbolic angle
     :return: hyperbolic tangent of the given value
-             as if computed by `java.lang.Math.tanh()
+             as if computed by `java.lang.Math.tanh()`
     """
     return _invoke_function_over_column("tanh", col)
 
