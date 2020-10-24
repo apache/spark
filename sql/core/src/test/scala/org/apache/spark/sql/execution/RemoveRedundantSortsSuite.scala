@@ -64,50 +64,49 @@ abstract class RemoveRedundantSortsSuiteBase
     withTempView("t1", "t2") {
       spark.range(1000).select('id as "key").createOrReplaceTempView("t1")
       spark.range(1000).select('id as "key").createOrReplaceTempView("t2")
+      
       val queryTemplate = """
-        |SELECT t1.key FROM
+        |SELECT /*+ BROADCAST(%s) */ t1.key FROM
         | (SELECT key FROM t1 WHERE key > 10 ORDER BY key DESC LIMIT 10) t1
-        |%s
+        |JOIN
         | (SELECT key FROM t2 WHERE key > 50 ORDER BY key DESC LIMIT 100) t2
         |ON t1.key = t2.key
         |ORDER BY %s
       """.stripMargin
 
-      val innerJoinAsc = queryTemplate.format("JOIN", "t2.key ASC")
+      val innerJoinAsc = queryTemplate.format("t1", "t2.key ASC")
       checkSorts(innerJoinAsc, 1, 1)
 
-      val innerJoinDesc = queryTemplate.format("JOIN", "t2.key DESC")
+      val innerJoinDesc = queryTemplate.format("t1", "t2.key DESC")
       checkSorts(innerJoinDesc, 0, 1)
 
-      val innerJoinDesc1 = queryTemplate.format("JOIN", "t1.key DESC")
+      val innerJoinDesc1 = queryTemplate.format("t1", "t1.key DESC")
       checkSorts(innerJoinDesc1, 1, 1)
 
-      val leftOuterJoinDesc = queryTemplate.format("LEFT JOIN", "t1.key DESC")
+      val leftOuterJoinDesc = queryTemplate.format("t2", "t1.key DESC")
       checkSorts(leftOuterJoinDesc, 0, 1)
     }
   }
 
   test("remove redundant sorts with sort merge join") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      withTempView("t1", "t2") {
-        spark.range(1000).select('id as "key").createOrReplaceTempView("t1")
-        spark.range(1000).select('id as "key").createOrReplaceTempView("t2")
-        val query = """
-          |SELECT t1.key FROM
-          | (SELECT key FROM t1 WHERE key > 10 ORDER BY key DESC LIMIT 10) t1
-          |JOIN
-          | (SELECT key FROM t2 WHERE key > 50 ORDER BY key DESC LIMIT 100) t2
-          |ON t1.key = t2.key
-          |ORDER BY t1.key
-        """.stripMargin
+    withTempView("t1", "t2") {
+      spark.range(1000).select('id as "key").createOrReplaceTempView("t1")
+      spark.range(1000).select('id as "key").createOrReplaceTempView("t2")
+      val query = """
+        |SELECT /*+ MERGE(t1) */ t1.key FROM
+        | (SELECT key FROM t1 WHERE key > 10 ORDER BY key DESC LIMIT 10) t1
+        |JOIN
+        | (SELECT key FROM t2 WHERE key > 50 ORDER BY key DESC LIMIT 100) t2
+        |ON t1.key = t2.key
+        |ORDER BY t1.key
+      """.stripMargin
 
-        val queryAsc = query + " ASC"
-        checkSorts(queryAsc, 2, 3)
+      val queryAsc = query + " ASC"
+      checkSorts(queryAsc, 2, 3)
 
-        // Top level sort should only be eliminated if it's order is descending with SMJ.
-        val queryDesc = query + " DESC"
-        checkSorts(queryDesc, 3, 3)
-      }
+      // Top level sort should only be eliminated if it's order is descending with SMJ.
+      val queryDesc = query + " DESC"
+      checkSorts(queryDesc, 3, 3)
     }
   }
 
