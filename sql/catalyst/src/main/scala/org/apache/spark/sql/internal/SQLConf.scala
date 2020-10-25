@@ -695,8 +695,8 @@ object SQLConf {
   val PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD =
     buildConf("spark.sql.parquet.pushdown.inFilterThreshold")
       .doc("The maximum number of values to filter push-down optimization for IN predicate. " +
-        "Large threshold won't necessarily provide much better performance. " +
-        "The experiment argued that 300 is the limit threshold. " +
+        "Spark will push-down a value greater than or equal to its minimum value and " +
+        "less than or equal to its maximum value if its value exceeds this threshold. " +
         "By setting this value to 0 this feature can be disabled. " +
         s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
         "enabled.")

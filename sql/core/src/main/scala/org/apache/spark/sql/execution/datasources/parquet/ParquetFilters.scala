@@ -599,7 +599,8 @@ class ParquetFilters(
         createFilterHelper(pred, canPartialPushDownConjuncts = false)
           .map(FilterApi.not)
 
-      case sources.In(name, values) if values.nonEmpty && canMakeFilterOn(name, values.head) =>
+      case sources.In(name, values) if pushDownInFilterThreshold > 0 &&
+        values.nonEmpty && canMakeFilterOn(name, values.head) =>
         if (values.length <= pushDownInFilterThreshold) {
           values.flatMap { v =>
             makeEq.lift(nameToParquetField(name).fieldType)
