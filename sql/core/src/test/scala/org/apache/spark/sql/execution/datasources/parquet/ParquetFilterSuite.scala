@@ -28,7 +28,6 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
-import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
@@ -69,9 +68,10 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
 abstract class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSparkSession {
 
   protected def createParquetFilters(
-      schema: MessageType,
+      schema: StructType,
       caseSensitive: Option[Boolean] = None): ParquetFilters =
-    new ParquetFilters(schema, conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
+    new ParquetFilters(schema, new SparkToParquetSchemaConverter(conf).convert(schema),
+      conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
       conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
       conf.parquetFilterPushDownInFilterThreshold,
       caseSensitive.getOrElse(conf.caseSensitiveAnalysis))
@@ -618,9 +618,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
             millisData.map(i => Tuple1(Timestamp.valueOf(i))).toDF
               .write.format(dataSourceName).save(file.getCanonicalPath)
             readParquetFile(file.getCanonicalPath) { df =>
-              val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
               assertResult(None) {
-                createParquetFilters(schema).createFilter(sources.IsNull("_1"))
+                createParquetFilters(df.schema).createFilter(sources.IsNull("_1"))
               }
             }
           }
@@ -684,14 +683,12 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       StructField("cdecimal3", DecimalType(DecimalType.MAX_PRECISION, scale))
     ))
 
-    val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
-
     val decimal = new JBigDecimal(10).setScale(scale)
     val decimal1 = new JBigDecimal(10).setScale(scale + 1)
     assert(decimal.scale() === scale)
     assert(decimal1.scale() === scale + 1)
 
-    val parquetFilters = createParquetFilters(parquetSchema)
+    val parquetFilters = createParquetFilters(schema)
     assertResult(Some(lt(intColumn("cdecimal1"), 1000: Integer))) {
       parquetFilters.createFilter(sources.LessThan("cdecimal1", decimal))
     }
@@ -867,8 +864,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       StructField("c", DoubleType, nullable = true)
     ))
 
-    val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
-    val parquetFilters = createParquetFilters(parquetSchema)
+    val parquetFilters = createParquetFilters(schema)
     assertResult(Some(and(
       lt(intColumn("a"), 10: Integer),
       gt(doubleColumn("c"), 1.5: java.lang.Double)))
@@ -1011,8 +1007,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       StructField("c", DoubleType, nullable = true)
     ))
 
-    val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
-    val parquetFilters = createParquetFilters(parquetSchema)
+    val parquetFilters = createParquetFilters(schema)
     // Testing
     // case sources.Or(lhs, rhs) =>
     //   ...
@@ -1066,8 +1061,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       StructField("c", DoubleType, nullable = true)
     ))
 
-    val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
-    val parquetFilters = createParquetFilters(parquetSchema)
+    val parquetFilters = createParquetFilters(schema)
     assertResult(Seq(sources.And(sources.LessThan("a", 10), sources.GreaterThan("c", 1.5D)))) {
       parquetFilters.convertibleFilters(
         Seq(sources.And(
@@ -1361,9 +1355,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           Seq("1str1", "2str2", "3str3", "4str4").map(Row(_)))
       }
 
-      val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
       assertResult(None) {
-        createParquetFilters(schema).createFilter(sources.StringStartsWith("_1", null))
+        createParquetFilters(df.schema).createFilter(sources.StringStartsWith("_1", null))
       }
     }
 
@@ -1387,8 +1380,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       StructField("a", IntegerType, nullable = false)
     ))
 
-    val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
-    val parquetFilters = createParquetFilters(parquetSchema)
+    val parquetFilters = createParquetFilters(schema)
     assertResult(Some(FilterApi.eq(intColumn("a"), null: Integer))) {
       parquetFilters.createFilter(sources.In("a", Array(null)))
     }
@@ -1416,8 +1408,16 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     assert(parquetFilters.createFilter(sources.In("a",
       Range(0, conf.parquetFilterPushDownInFilterThreshold).toArray)).isDefined)
     assert(parquetFilters.createFilter(sources.In("a",
-      Range(0, conf.parquetFilterPushDownInFilterThreshold + 1).toArray)).isEmpty)
+      Range(0, conf.parquetFilterPushDownInFilterThreshold + 1).toArray)).isDefined)
     assert(parquetFilters.createFilter(sources.In("a", Array.empty)).isEmpty)
+
+    assertResult(Some(and(
+      FilterApi.gtEq(intColumn("a"), -10: Integer),
+      FilterApi.ltEq(intColumn("a"), 100: Integer)))
+    ) {
+      parquetFilters.createFilter(sources.In("a",
+        Range(0, conf.parquetFilterPushDownInFilterThreshold).toArray ++ Array(100, -10, 70)))
+    }
 
     import testImplicits._
     withTempPath { path =>
@@ -1433,7 +1433,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
             val filter = s"a in(${Range(0, count).mkString(",")})"
             assert(df.where(filter).count() === count)
             val actual = stripSparkFilter(df.where(filter)).collect().length
-            if (pushEnabled && count <= conf.parquetFilterPushDownInFilterThreshold) {
+            if (pushEnabled) {
               assert(actual > 1 && actual < data.length)
             } else {
               assert(actual === data.length)
@@ -1452,11 +1452,10 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         schema: StructType,
         expected: FilterPredicate,
         filter: sources.Filter): Unit = {
-      val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
       val caseSensitiveParquetFilters =
-        createParquetFilters(parquetSchema, caseSensitive = Some(true))
+        createParquetFilters(schema, caseSensitive = Some(true))
       val caseInsensitiveParquetFilters =
-        createParquetFilters(parquetSchema, caseSensitive = Some(false))
+        createParquetFilters(schema, caseSensitive = Some(false))
       assertResult(Some(expected)) {
         caseInsensitiveParquetFilters.createFilter(filter)
       }
@@ -1515,11 +1514,17 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         FilterApi.eq(intColumn("cint"), 20: Integer)),
       sources.In("CINT", Array(10, 20)))
 
+    testCaseInsensitiveResolution(
+      schema,
+      FilterApi.and(
+        FilterApi.gtEq(intColumn("cint"), -10: Integer),
+        FilterApi.ltEq(intColumn("cint"), 20: Integer)),
+      sources.In("CINT", Array(-10, 20) ++ Range(0, conf.parquetFilterPushDownInFilterThreshold)))
+
     val dupFieldSchema = StructType(
       Seq(StructField("cint", IntegerType), StructField("cINT", IntegerType)))
-    val dupParquetSchema = new SparkToParquetSchemaConverter(conf).convert(dupFieldSchema)
     val dupCaseInsensitiveParquetFilters =
-      createParquetFilters(dupParquetSchema, caseSensitive = Some(false))
+      createParquetFilters(dupFieldSchema, caseSensitive = Some(false))
     assertResult(None) {
       dupCaseInsensitiveParquetFilters.createFilter(sources.EqualTo("CINT", 1000))
     }
@@ -1635,8 +1640,7 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
         // "parquet" is in `NESTED_PREDICATE_PUSHDOWN_V1_SOURCE_LIST`.
         if (nestedPredicatePushdown || !containsNestedColumnOrDot) {
           assert(selectedFilters.nonEmpty, "No filter is pushed down")
-          val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
-          val parquetFilters = createParquetFilters(schema)
+          val parquetFilters = createParquetFilters(df.schema)
           // In this test suite, all the simple predicates are convertible here.
           assert(parquetFilters.convertibleFilters(selectedFilters) === selectedFilters)
           val pushedParquetFilters = selectedFilters.map { pred =>
@@ -1695,8 +1699,7 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
           val sourceFilters = filters.flatMap(DataSourceStrategy.translateFilter(_, true)).toArray
           val pushedFilters = scan.pushedFilters
           assert(pushedFilters.nonEmpty, "No filter is pushed down")
-          val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
-          val parquetFilters = createParquetFilters(schema)
+          val parquetFilters = createParquetFilters(df.schema)
           // In this test suite, all the simple predicates are convertible here.
           assert(parquetFilters.convertibleFilters(sourceFilters) === pushedFilters)
           val pushedParquetFilters = pushedFilters.map { pred =>

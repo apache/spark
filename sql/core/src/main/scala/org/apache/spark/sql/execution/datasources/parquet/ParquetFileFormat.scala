@@ -273,7 +273,8 @@ class ParquetFileFormat
       // Try to push down filters when filter push-down is enabled.
       val pushed = if (enableParquetFilterPushDown) {
         val parquetSchema = footerFileMetaData.getSchema
-        val parquetFilters = new ParquetFilters(parquetSchema, pushDownDate, pushDownTimestamp,
+        val parquetFilters = new ParquetFilters(dataSchema, parquetSchema,
+          pushDownDate, pushDownTimestamp,
           pushDownDecimal, pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive)
         filters
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
