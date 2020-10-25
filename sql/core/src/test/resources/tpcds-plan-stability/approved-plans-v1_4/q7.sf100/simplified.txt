@@ -1,30 +1,30 @@
-TakeOrderedAndProject [agg1,agg2,agg3,agg4,i_item_id]
+TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
   WholeStageCodegen (6)
-    HashAggregate [count,count,count,count,i_item_id,sum,sum,sum,sum] [agg1,agg2,agg3,agg4,avg(UnscaledValue(ss_coupon_amt)),avg(UnscaledValue(ss_list_price)),avg(UnscaledValue(ss_sales_price)),avg(cast(ss_quantity as bigint)),count,count,count,count,sum,sum,sum,sum]
+    HashAggregate [i_item_id,sum,count,sum,count,sum,count,sum,count] [avg(cast(ss_quantity as bigint)),avg(UnscaledValue(ss_list_price)),avg(UnscaledValue(ss_coupon_amt)),avg(UnscaledValue(ss_sales_price)),agg1,agg2,agg3,agg4,sum,count,sum,count,sum,count,sum,count]
       InputAdapter
         Exchange [i_item_id] #1
           WholeStageCodegen (5)
-            HashAggregate [i_item_id,ss_coupon_amt,ss_list_price,ss_quantity,ss_sales_price] [count,count,count,count,count,count,count,count,sum,sum,sum,sum,sum,sum,sum,sum]
-              Project [i_item_id,ss_coupon_amt,ss_list_price,ss_quantity,ss_sales_price]
-                BroadcastHashJoin [i_item_sk,ss_item_sk]
-                  Project [ss_coupon_amt,ss_item_sk,ss_list_price,ss_quantity,ss_sales_price]
-                    BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
-                      Project [ss_coupon_amt,ss_item_sk,ss_list_price,ss_quantity,ss_sales_price,ss_sold_date_sk]
-                        BroadcastHashJoin [p_promo_sk,ss_promo_sk]
-                          Project [ss_coupon_amt,ss_item_sk,ss_list_price,ss_promo_sk,ss_quantity,ss_sales_price,ss_sold_date_sk]
-                            BroadcastHashJoin [cd_demo_sk,ss_cdemo_sk]
-                              Filter [ss_cdemo_sk,ss_item_sk,ss_promo_sk,ss_sold_date_sk]
+            HashAggregate [i_item_id,ss_quantity,ss_list_price,ss_coupon_amt,ss_sales_price] [sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
+              Project [ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt,i_item_id]
+                BroadcastHashJoin [ss_item_sk,i_item_sk]
+                  Project [ss_item_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt]
+                    BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                      Project [ss_sold_date_sk,ss_item_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt]
+                        BroadcastHashJoin [ss_promo_sk,p_promo_sk]
+                          Project [ss_sold_date_sk,ss_item_sk,ss_promo_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt]
+                            BroadcastHashJoin [ss_cdemo_sk,cd_demo_sk]
+                              Filter [ss_cdemo_sk,ss_sold_date_sk,ss_item_sk,ss_promo_sk]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.store_sales [ss_cdemo_sk,ss_coupon_amt,ss_item_sk,ss_list_price,ss_promo_sk,ss_quantity,ss_sales_price,ss_sold_date_sk]
+                                    Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_cdemo_sk,ss_promo_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt]
                               InputAdapter
                                 BroadcastExchange #2
                                   WholeStageCodegen (1)
                                     Project [cd_demo_sk]
-                                      Filter [cd_demo_sk,cd_education_status,cd_gender,cd_marital_status]
+                                      Filter [cd_gender,cd_marital_status,cd_education_status,cd_demo_sk]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.customer_demographics [cd_demo_sk,cd_education_status,cd_gender,cd_marital_status]
+                                            Scan parquet default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_education_status]
                           InputAdapter
                             BroadcastExchange #3
                               WholeStageCodegen (2)
@@ -32,12 +32,12 @@ TakeOrderedAndProject [agg1,agg2,agg3,agg4,i_item_id]
                                   Filter [p_channel_email,p_channel_event,p_promo_sk]
                                     ColumnarToRow
                                       InputAdapter
-                                        Scan parquet default.promotion [p_channel_email,p_channel_event,p_promo_sk]
+                                        Scan parquet default.promotion [p_promo_sk,p_channel_email,p_channel_event]
                       InputAdapter
                         BroadcastExchange #4
                           WholeStageCodegen (3)
                             Project [d_date_sk]
-                              Filter [d_date_sk,d_year]
+                              Filter [d_year,d_date_sk]
                                 ColumnarToRow
                                   InputAdapter
                                     Scan parquet default.date_dim [d_date_sk,d_year]
@@ -47,4 +47,4 @@ TakeOrderedAndProject [agg1,agg2,agg3,agg4,i_item_id]
                         Filter [i_item_sk]
                           ColumnarToRow
                             InputAdapter
-                              Scan parquet default.item [i_item_id,i_item_sk]
+                              Scan parquet default.item [i_item_sk,i_item_id]

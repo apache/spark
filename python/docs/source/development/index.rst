@@ -23,4 +23,6 @@ Development
     :maxdepth: 2
 
     contributing
-
+    testing
+    debugging
+    setting_ide

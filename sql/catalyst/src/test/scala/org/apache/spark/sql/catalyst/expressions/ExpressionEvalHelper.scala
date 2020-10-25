@@ -164,7 +164,11 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
         val errMsg = intercept[T] {
           eval
         }.getMessage
-        if (!errMsg.contains(expectedErrMsg)) {
+        if (errMsg == null) {
+          if (expectedErrMsg != null) {
+            fail(s"Expected null error message, but `$errMsg` found")
+          }
+        } else if (!errMsg.contains(expectedErrMsg)) {
           fail(s"Expected error message is `$expectedErrMsg`, but `$errMsg` found")
         }
       }

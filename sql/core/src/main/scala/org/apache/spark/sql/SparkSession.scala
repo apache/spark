@@ -81,7 +81,8 @@ class SparkSession private(
     @transient val sparkContext: SparkContext,
     @transient private val existingSharedState: Option[SharedState],
     @transient private val parentSessionState: Option[SessionState],
-    @transient private[sql] val extensions: SparkSessionExtensions)
+    @transient private[sql] val extensions: SparkSessionExtensions,
+    @transient private val initialSessionOptions: Map[String, String])
   extends Serializable with Closeable with Logging { self =>
 
   // The call site where this SparkSession was constructed.
@@ -97,7 +98,7 @@ class SparkSession private(
     this(sc, None, None,
       SparkSession.applyExtensions(
         sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
-        new SparkSessionExtensions))
+        new SparkSessionExtensions), Map.empty)
   }
 
   sparkContext.assertNotStopped()
@@ -134,12 +135,6 @@ class SparkSession private(
   }
 
   /**
-   * Initial options for session. This options are applied once when sessionState is created.
-   */
-  @transient
-  private[sql] val initialSessionOptions = new scala.collection.mutable.HashMap[String, String]
-
-  /**
    * State isolated across sessions, including SQL configurations, temporary tables, registered
    * functions, and everything else that accepts a [[org.apache.spark.sql.internal.SQLConf]].
    * If `parentSessionState` is not null, the `SessionState` will be a copy of the parent.
@@ -156,8 +151,8 @@ class SparkSession private(
       .getOrElse {
         val state = SparkSession.instantiateSessionState(
           SparkSession.sessionStateClassName(sparkContext.conf),
-          self)
-        initialSessionOptions.foreach { case (k, v) => state.conf.setConfString(k, v) }
+          self,
+          initialSessionOptions)
         state
       }
   }
@@ -244,7 +239,12 @@ class SparkSession private(
    * @since 2.0.0
    */
   def newSession(): SparkSession = {
-    new SparkSession(sparkContext, Some(sharedState), parentSessionState = None, extensions)
+    new SparkSession(
+      sparkContext,
+      Some(sharedState),
+      parentSessionState = None,
+      extensions,
+      initialSessionOptions)
   }
 
   /**
@@ -260,7 +260,12 @@ class SparkSession private(
    * implementation is Hive, this will initialize the metastore, which may take some time.
    */
   private[sql] def cloneSession(): SparkSession = {
-    val result = new SparkSession(sparkContext, Some(sharedState), Some(sessionState), extensions)
+    val result = new SparkSession(
+      sparkContext,
+      Some(sharedState),
+      Some(sessionState),
+      extensions,
+      Map.empty)
     result.sessionState // force copy of SessionState
     result
   }
@@ -760,9 +765,9 @@ class SparkSession private(
     // set and not the default session. This to prevent that we promote the default session to the
     // active session once we are done.
     val old = SparkSession.activeThreadSession.get()
-    SparkSession.setActiveSession(this)
+    SparkSession.setActiveSessionInternal(this)
     try block finally {
-      SparkSession.setActiveSession(old)
+      SparkSession.setActiveSessionInternal(old)
     }
   }
 }
@@ -939,10 +944,9 @@ object SparkSession extends Logging {
           sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
           extensions)
 
-        session = new SparkSession(sparkContext, None, None, extensions)
-        options.foreach { case (k, v) => session.initialSessionOptions.put(k, v) }
+        session = new SparkSession(sparkContext, None, None, extensions, options.toMap)
         setDefaultSession(session)
-        setActiveSession(session)
+        setActiveSessionInternal(session)
         registerContextListener(sparkContext)
       }
 
@@ -980,7 +984,16 @@ object SparkSession extends Logging {
    *
    * @since 2.0.0
    */
+  @deprecated("This method is deprecated and will be removed in future versions.", "3.1.0")
   def setActiveSession(session: SparkSession): Unit = {
+    if (SQLConf.get.legacyAllowModifyActiveSession) {
+      setActiveSessionInternal(session)
+    } else {
+      throw new UnsupportedOperationException("Not allowed to modify active Spark session.")
+    }
+  }
+
+  private[sql] def setActiveSessionInternal(session: SparkSession): Unit = {
     activeThreadSession.set(session)
   }
 
@@ -990,7 +1003,16 @@ object SparkSession extends Logging {
    *
    * @since 2.0.0
    */
+  @deprecated("This method is deprecated and will be removed in future versions.", "3.1.0")
   def clearActiveSession(): Unit = {
+    if (SQLConf.get.legacyAllowModifyActiveSession) {
+      clearActiveSessionInternal()
+    } else {
+      throw new UnsupportedOperationException("Not allowed to modify active Spark session.")
+    }
+  }
+
+  private[spark] def clearActiveSessionInternal(): Unit = {
     activeThreadSession.remove()
   }
 
@@ -1104,12 +1126,16 @@ object SparkSession extends Logging {
    */
   private def instantiateSessionState(
       className: String,
-      sparkSession: SparkSession): SessionState = {
+      sparkSession: SparkSession,
+      options: Map[String, String]): SessionState = {
     try {
-      // invoke `new [Hive]SessionStateBuilder(SparkSession, Option[SessionState])`
+      // invoke new [Hive]SessionStateBuilder(
+      //   SparkSession,
+      //   Option[SessionState],
+      //   Map[String, String])
       val clazz = Utils.classForName(className)
       val ctor = clazz.getConstructors.head
-      ctor.newInstance(sparkSession, None).asInstanceOf[BaseSessionStateBuilder].build()
+      ctor.newInstance(sparkSession, None, options).asInstanceOf[BaseSessionStateBuilder].build()
     } catch {
       case NonFatal(e) =>
         throw new IllegalArgumentException(s"Error while instantiating '$className':", e)
@@ -1141,7 +1167,7 @@ object SparkSession extends Logging {
            |
          """.stripMargin)
       session.get.stop()
-      SparkSession.clearActiveSession()
+      SparkSession.clearActiveSessionInternal()
       SparkSession.clearDefaultSession()
     }
   }

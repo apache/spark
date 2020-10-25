@@ -82,7 +82,7 @@ Input [6]: [i_item_sk#1, i_manager_id#5, ss_sold_date_sk#10, ss_item_sk#11, ss_s
 Output [3]: [d_date_sk#15, d_month_seq#16, d_moy#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [In(d_month_seq, [1222,1228,1223,1227,1219,1226,1224,1225,1230,1220,1221,1229]), LessThanOrEqual(d_date_sk,2452487), GreaterThanOrEqual(d_date_sk,2452123), IsNotNull(d_date_sk)]
+PushedFilters: [In(d_month_seq, [1222,1228,1223,1227,1219,1226,1224,1225,1230,1220,1221,1229]), GreaterThanOrEqual(d_date_sk,2452123), LessThanOrEqual(d_date_sk,2452487), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_month_seq:int,d_moy:int>
 
 (12) ColumnarToRow [codegen id : 2]
@@ -90,7 +90,7 @@ Input [3]: [d_date_sk#15, d_month_seq#16, d_moy#17]
 
 (13) Filter [codegen id : 2]
 Input [3]: [d_date_sk#15, d_month_seq#16, d_moy#17]
-Condition : (((d_month_seq#16 INSET (1222,1228,1223,1227,1219,1226,1224,1225,1230,1220,1221,1229) AND (d_date_sk#15 <= 2452487)) AND (d_date_sk#15 >= 2452123)) AND isnotnull(d_date_sk#15))
+Condition : (((d_month_seq#16 INSET (1222,1228,1223,1227,1219,1226,1224,1225,1230,1220,1221,1229) AND (d_date_sk#15 >= 2452123)) AND (d_date_sk#15 <= 2452487)) AND isnotnull(d_date_sk#15))
 
 (14) Project [codegen id : 2]
 Output [2]: [d_date_sk#15, d_moy#17]

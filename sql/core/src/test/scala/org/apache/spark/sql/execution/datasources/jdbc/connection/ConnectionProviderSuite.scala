@@ -19,27 +19,55 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 import javax.security.auth.login.Configuration
 
-class ConnectionProviderSuite extends ConnectionProviderSuiteBase {
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
+
+class ConnectionProviderSuite extends ConnectionProviderSuiteBase with SharedSparkSession {
+  test("All built-in providers must be loaded") {
+    IntentionallyFaultyConnectionProvider.constructed = false
+    val providers = ConnectionProvider.loadProviders()
+    assert(providers.exists(_.isInstanceOf[BasicConnectionProvider]))
+    assert(providers.exists(_.isInstanceOf[DB2ConnectionProvider]))
+    assert(providers.exists(_.isInstanceOf[MariaDBConnectionProvider]))
+    assert(providers.exists(_.isInstanceOf[MSSQLConnectionProvider]))
+    assert(providers.exists(_.isInstanceOf[PostgresConnectionProvider]))
+    assert(providers.exists(_.isInstanceOf[OracleConnectionProvider]))
+    assert(IntentionallyFaultyConnectionProvider.constructed)
+    assert(!providers.exists(_.isInstanceOf[IntentionallyFaultyConnectionProvider]))
+    assert(providers.size === 6)
+  }
+
+  test("Disabled provider must not be loaded") {
+    withSQLConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST.key -> "db2") {
+      val providers = ConnectionProvider.loadProviders()
+      assert(!providers.exists(_.isInstanceOf[DB2ConnectionProvider]))
+      assert(providers.size === 5)
+    }
+  }
+
   test("Multiple security configs must be reachable") {
     Configuration.setConfiguration(null)
-    val postgresDriver = registerDriver(PostgresConnectionProvider.driverClass)
-    val postgresProvider = new PostgresConnectionProvider(
-      postgresDriver, options("jdbc:postgresql://localhost/postgres"))
-    val db2Driver = registerDriver(DB2ConnectionProvider.driverClass)
-    val db2Provider = new DB2ConnectionProvider(db2Driver, options("jdbc:db2://localhost/db2"))
+    val postgresProvider = new PostgresConnectionProvider()
+    val postgresDriver = registerDriver(postgresProvider.driverClass)
+    val postgresOptions = options("jdbc:postgresql://localhost/postgres")
+    val postgresAppEntry = postgresProvider.appEntry(postgresDriver, postgresOptions)
+    val db2Provider = new DB2ConnectionProvider()
+    val db2Driver = registerDriver(db2Provider.driverClass)
+    val db2Options = options("jdbc:db2://localhost/db2")
+    val db2AppEntry = db2Provider.appEntry(db2Driver, db2Options)
 
     // Make sure no authentication for the databases are set
     val oldConfig = Configuration.getConfiguration
-    assert(oldConfig.getAppConfigurationEntry(postgresProvider.appEntry) == null)
-    assert(oldConfig.getAppConfigurationEntry(db2Provider.appEntry) == null)
+    assert(oldConfig.getAppConfigurationEntry(postgresAppEntry) == null)
+    assert(oldConfig.getAppConfigurationEntry(db2AppEntry) == null)
 
-    postgresProvider.setAuthenticationConfigIfNeeded()
-    db2Provider.setAuthenticationConfigIfNeeded()
+    postgresProvider.setAuthenticationConfigIfNeeded(postgresDriver, postgresOptions)
+    db2Provider.setAuthenticationConfigIfNeeded(db2Driver, db2Options)
 
     // Make sure authentication for the databases are set
     val newConfig = Configuration.getConfiguration
     assert(oldConfig != newConfig)
-    assert(newConfig.getAppConfigurationEntry(postgresProvider.appEntry) != null)
-    assert(newConfig.getAppConfigurationEntry(db2Provider.appEntry) != null)
+    assert(newConfig.getAppConfigurationEntry(postgresAppEntry) != null)
+    assert(newConfig.getAppConfigurationEntry(db2AppEntry) != null)
   }
 }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.types._
 
 /** The mode of an [[AggregateFunction]]. */
@@ -133,7 +133,6 @@ case class AggregateExpression(
   override def children: Seq[Expression] = aggregateFunction +: filter.toSeq
 
   override def dataType: DataType = aggregateFunction.dataType
-  override def foldable: Boolean = false
   override def nullable: Boolean = aggregateFunction.nullable
 
   @transient
@@ -374,8 +373,7 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
  */
 abstract class DeclarativeAggregate
   extends AggregateFunction
-  with Serializable
-  with Unevaluable {
+  with Serializable {
 
   /**
    * Expressions for initializing empty aggregation buffers.
@@ -421,6 +419,12 @@ abstract class DeclarativeAggregate
     /** Represents this attribute at the input buffer side (the data value is read-only). */
     def right: AttributeReference = inputAggBufferAttributes(aggBufferAttributes.indexOf(a))
   }
+
+  final override def eval(input: InternalRow = null): Any =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+
+  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
 }
 
 

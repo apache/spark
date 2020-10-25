@@ -45,7 +45,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
           if (jobStatus == status) Some(jobId) else None
         }
         if (jobs.nonEmpty) {
-          <li>
+          <li class="job-url">
             <strong>{label} </strong>
             {jobs.toSeq.sorted.map { jobId =>
               <a href={jobURL(request, jobId.intValue())}>{jobId.toString}</a><span>&nbsp;</span>

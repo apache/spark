@@ -45,7 +45,7 @@ import org.apache.spark.util.Utils
 class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with BeforeAndAfter {
 
   before {
-    SparkSession.setActiveSession(spark)  // set this before force initializing 'joinExec'
+    SparkSession.setActiveSessionInternal(spark)  // set this before force initializing 'joinExec'
     spark.streams.stateStoreCoordinator   // initialize the lazy coordinator
   }
 
@@ -492,7 +492,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
   import org.apache.spark.sql.functions._
 
   before {
-    SparkSession.setActiveSession(spark) // set this before force initializing 'joinExec'
+    SparkSession.setActiveSessionInternal(spark) // set this before force initializing 'joinExec'
     spark.streams.stateStoreCoordinator // initialize the lazy coordinator
   }
 

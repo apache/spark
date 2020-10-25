@@ -681,8 +681,8 @@ class TaskSetManagerSuite
     assert(manager.myLocalityLevels === Array(PROCESS_LOCAL, NODE_LOCAL, ANY))
 
     // Decommission all executors on host0, to mimic CoarseGrainedSchedulerBackend.
-    sched.executorDecommission(exec0, ExecutorDecommissionInfo("test", true))
-    sched.executorDecommission(exec1, ExecutorDecommissionInfo("test", true))
+    sched.executorDecommission(exec0, ExecutorDecommissionInfo("test", Some(host0)))
+    sched.executorDecommission(exec1, ExecutorDecommissionInfo("test", Some(host0)))
 
     assert(manager.myLocalityLevels === Array(ANY))
   }
@@ -707,7 +707,7 @@ class TaskSetManagerSuite
     assert(manager.myLocalityLevels === Array(PROCESS_LOCAL, NODE_LOCAL, ANY))
 
     // Decommission the only executor (without the host) that the task is interested in running on.
-    sched.executorDecommission(exec0, ExecutorDecommissionInfo("test", false))
+    sched.executorDecommission(exec0, ExecutorDecommissionInfo("test", None))
 
     assert(manager.myLocalityLevels === Array(NODE_LOCAL, ANY))
   }
@@ -2029,8 +2029,7 @@ class TaskSetManagerSuite
     // decommission exec-2. All tasks running on exec-2 (i.e. TASK 2,3) will be now
     // checked if they should be speculated.
     // (TASK 2 -> 15, TASK 3 -> 15)
-    sched.executorDecommission("exec2", ExecutorDecommissionInfo("decom",
-      isHostDecommissioned = false))
+    sched.executorDecommission("exec2", ExecutorDecommissionInfo("decom", None))
     assert(sched.getExecutorDecommissionState("exec2").map(_.startTime) ===
       Some(clock.getTimeMillis()))
 

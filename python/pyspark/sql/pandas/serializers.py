@@ -136,7 +136,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         import pandas as pd
         import pyarrow as pa
         from pyspark.sql.pandas.types import _check_series_convert_timestamps_internal
-        from pandas.api.types import is_categorical
+        from pandas.api.types import is_categorical_dtype
         # Make input conform to [(series1, type1), (series2, type2), ...]
         if not isinstance(series, (list, tuple)) or \
                 (len(series) == 2 and isinstance(series[1], pa.DataType)):
@@ -148,18 +148,21 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             # Ensure timestamp series are in expected form for Spark internal representation
             if t is not None and pa.types.is_timestamp(t):
                 s = _check_series_convert_timestamps_internal(s, self._timezone)
-            elif is_categorical(s.dtype):
+            elif is_categorical_dtype(s.dtype):
                 # Note: This can be removed once minimum pyarrow version is >= 0.16.1
                 s = s.astype(s.dtypes.categories.dtype)
             try:
                 array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
-            except pa.ArrowException as e:
-                error_msg = "Exception thrown when converting pandas.Series (%s) to Arrow " + \
-                            "Array (%s). It can be caused by overflows or other unsafe " + \
-                            "conversions warned by Arrow. Arrow safe type check can be " + \
-                            "disabled by using SQL config " + \
-                            "`spark.sql.execution.pandas.convertToArrowArraySafely`."
-                raise RuntimeError(error_msg % (s.dtype, t), e)
+            except ValueError as e:
+                if self._safecheck:
+                    error_msg = "Exception thrown when converting pandas.Series (%s) to " + \
+                                "Arrow Array (%s). It can be caused by overflows or other " + \
+                                "unsafe conversions warned by Arrow. Arrow safe type check " + \
+                                "can be disabled by using SQL config " + \
+                                "`spark.sql.execution.pandas.convertToArrowArraySafely`."
+                    raise ValueError(error_msg % (s.dtype, t)) from e
+                else:
+                    raise e
             return array
 
         arrs = []

@@ -1,10 +1,10 @@
 WholeStageCodegen (10)
-  Project [i_category,i_class,i_current_price,i_item_desc,itemrevenue,revenueratio]
-    Sort [i_category,i_class,i_item_desc,i_item_id,revenueratio]
+  Project [i_item_desc,i_category,i_class,i_current_price,itemrevenue,revenueratio]
+    Sort [i_category,i_class,i_item_id,i_item_desc,revenueratio]
       InputAdapter
-        Exchange [i_category,i_class,i_item_desc,i_item_id,revenueratio] #1
+        Exchange [i_category,i_class,i_item_id,i_item_desc,revenueratio] #1
           WholeStageCodegen (9)
-            Project [_w0,_we0,i_category,i_class,i_current_price,i_item_desc,i_item_id,itemrevenue]
+            Project [i_item_desc,i_category,i_class,i_current_price,itemrevenue,_w0,_we0,i_item_id]
               InputAdapter
                 Window [_w1,i_class]
                   WholeStageCodegen (8)
@@ -12,25 +12,25 @@ WholeStageCodegen (10)
                       InputAdapter
                         Exchange [i_class] #2
                           WholeStageCodegen (7)
-                            HashAggregate [i_category,i_class,i_current_price,i_item_desc,i_item_id,sum] [_w0,_w1,itemrevenue,sum,sum(UnscaledValue(ss_ext_sales_price))]
+                            HashAggregate [i_item_id,i_item_desc,i_category,i_class,i_current_price,sum] [sum(UnscaledValue(ss_ext_sales_price)),itemrevenue,_w0,_w1,sum]
                               InputAdapter
-                                Exchange [i_category,i_class,i_current_price,i_item_desc,i_item_id] #3
+                                Exchange [i_item_id,i_item_desc,i_category,i_class,i_current_price] #3
                                   WholeStageCodegen (6)
-                                    HashAggregate [i_category,i_class,i_current_price,i_item_desc,i_item_id,ss_ext_sales_price] [sum,sum]
-                                      Project [i_category,i_class,i_current_price,i_item_desc,i_item_id,ss_ext_sales_price]
-                                        SortMergeJoin [i_item_sk,ss_item_sk]
+                                    HashAggregate [i_item_id,i_item_desc,i_category,i_class,i_current_price,ss_ext_sales_price] [sum,sum]
+                                      Project [ss_ext_sales_price,i_item_id,i_item_desc,i_current_price,i_class,i_category]
+                                        SortMergeJoin [ss_item_sk,i_item_sk]
                                           InputAdapter
                                             WholeStageCodegen (3)
                                               Sort [ss_item_sk]
                                                 InputAdapter
                                                   Exchange [ss_item_sk] #4
                                                     WholeStageCodegen (2)
-                                                      Project [ss_ext_sales_price,ss_item_sk]
-                                                        BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
-                                                          Filter [ss_item_sk,ss_sold_date_sk]
+                                                      Project [ss_item_sk,ss_ext_sales_price]
+                                                        BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                                          Filter [ss_sold_date_sk,ss_item_sk]
                                                             ColumnarToRow
                                                               InputAdapter
-                                                                Scan parquet default.store_sales [ss_ext_sales_price,ss_item_sk,ss_sold_date_sk]
+                                                                Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_ext_sales_price]
                                                           InputAdapter
                                                             BroadcastExchange #5
                                                               WholeStageCodegen (1)
@@ -38,7 +38,7 @@ WholeStageCodegen (10)
                                                                   Filter [d_date,d_date_sk]
                                                                     ColumnarToRow
                                                                       InputAdapter
-                                                                        Scan parquet default.date_dim [d_date,d_date_sk]
+                                                                        Scan parquet default.date_dim [d_date_sk,d_date]
                                           InputAdapter
                                             WholeStageCodegen (5)
                                               Sort [i_item_sk]
@@ -48,4 +48,4 @@ WholeStageCodegen (10)
                                                       Filter [i_category,i_item_sk]
                                                         ColumnarToRow
                                                           InputAdapter
-                                                            Scan parquet default.item [i_category,i_class,i_current_price,i_item_desc,i_item_id,i_item_sk]
+                                                            Scan parquet default.item [i_item_sk,i_item_id,i_item_desc,i_current_price,i_class,i_category]
