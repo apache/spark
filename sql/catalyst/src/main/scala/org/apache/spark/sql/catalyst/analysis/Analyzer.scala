@@ -438,7 +438,7 @@ class Analyzer(
         Seq(Seq.empty)
     }
 
-    def constructMixedGroupByExpressions(
+    private def constructMixedGroupByExpressions(
         cubes: Seq[Cube],
         rollups: Seq[Rollup],
         others: Seq[Expression]): Seq[Seq[Expression]] = {
@@ -651,8 +651,8 @@ class Analyzer(
       if (resolvedInfo.nonEmpty) {
         val (extraAggExprs, resolvedHavingCond) = resolvedInfo.get
         val newChild = h.child match {
-          case Aggregate(
-          GroupByOperator(cubes, rollups, others, groupByExpressions), aggregateExpressions, child) =>
+          case Aggregate(GroupByOperator(cubes, rollups, others, groupByExpressions),
+          aggregateExpressions, child) =>
             constructAggregate(
               constructMixedGroupByExpressions(cubes, rollups, others),
               groupByExpressions,
