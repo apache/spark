@@ -636,8 +636,8 @@ class Analyzer(
       val aggForResolving = h.child match {
         // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
         // groupingExpressions for condition resolving.
-        case a @ Aggregate(GroupByOperator(_, _, _, groupByExpressions), _, _) =>
-          a.copy(groupingExpressions = groupByExpressions)
+        case a @ Aggregate(GroupByOperator(_, _, _, groups), _, _) =>
+          a.copy(groupingExpressions = groups)
         case g: GroupingSets =>
           Aggregate(
             getFinalGroupByExpressions(g.selectedGroupByExprs, g.groupByExprs),
@@ -651,10 +651,10 @@ class Analyzer(
       if (resolvedInfo.nonEmpty) {
         val (extraAggExprs, resolvedHavingCond) = resolvedInfo.get
         val newChild = h.child match {
-          case Aggregate(GroupByOperator(cubes, rollups, others, groupByExpressions),
-          aggregateExpressions, child) =>
+          case Aggregate(
+          GroupByOperator(cubes, rollups, others, groups), aggregateExpressions, child) =>
             constructAggregate(constructMixedGroupByExpressions(cubes, rollups, others),
-              groupByExpressions, aggregateExpressions ++ extraAggExprs, child)
+              groups, aggregateExpressions ++ extraAggExprs, child)
           case x: GroupingSets =>
             constructAggregate(
               x.selectedGroupByExprs, x.groupByExprs, x.aggregations ++ extraAggExprs, x.child)
@@ -681,8 +681,8 @@ class Analyzer(
     // Filter/Sort.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
       case h @ UnresolvedHaving(
-          _, agg @ Aggregate(GroupByOperator(_, _, _, groupByExpressions), aggregateExpressions, _))
-          if agg.childrenResolved && (groupByExpressions ++ aggregateExpressions).forall(_.resolved) =>
+          _, agg @ Aggregate(GroupByOperator(_, _, _, groups), aggregateExpressions, _))
+          if agg.childrenResolved && (groups ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(h)
       case h @ UnresolvedHaving(_, g: GroupingSets)
           if g.childrenResolved && g.expressions.forall(_.resolved) =>
@@ -692,11 +692,11 @@ class Analyzer(
 
       // Ensure group by expressions and aggregate expressions have been resolved.
       case Aggregate(
-      GroupByOperator(cubes, rollups, others, groupByExpressions), aggregateExpressions, child)
-        if (groupByExpressions ++ aggregateExpressions).forall(_.resolved) =>
+      GroupByOperator(cubes, rollups, others, groups), aggregateExpressions, child)
+        if (groups ++ aggregateExpressions).forall(_.resolved) =>
         constructAggregate(
           constructMixedGroupByExpressions(cubes, rollups, others),
-          groupByExpressions,
+          groups,
           aggregateExpressions, child)
       // Ensure all the expressions have been resolved.
       case x: GroupingSets if x.expressions.forall(_.resolved) =>

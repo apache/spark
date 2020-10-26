@@ -163,9 +163,9 @@ object GroupByOperator {
     } else {
       val cubes = groupingSets.filter(_.isInstanceOf[Cube]).map(_.asInstanceOf[Cube])
       val rollups = groupingSets.filter(_.isInstanceOf[Rollup]).map(_.asInstanceOf[Rollup])
-      val groupbyExpressions =
+      val groups =
         cubes.flatMap(_.groupByExprs) ++ rollups.flatMap(_.groupByExprs) ++ others
-      Some((cubes, rollups, others, groupbyExpressions.distinct))
+      Some((cubes, rollups, others, groups.distinct))
     }
   }
 }
