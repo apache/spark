@@ -1776,7 +1776,7 @@ class Analyzer(
       // Replace the index with the corresponding expression in aggregateExpressions. The index is
       // a 1-base position of aggregateExpressions, which is output columns (select expression)
       case Aggregate(groups, aggs, child) if aggs.forall(_.resolved) &&
-        groups.exists(_.find(e => e.isInstanceOf[UnresolvedOrdinal]).isDefined) =>
+        groups.exists(_.find(_.isInstanceOf[UnresolvedOrdinal]).isDefined) =>
         val newGroups = groups.map(resolveOrdinal(aggs, _))
         Aggregate(newGroups, aggs, child)
 

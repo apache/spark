@@ -54,6 +54,15 @@ select count(a), a from (select 1 as a) tmp group by 2 having a > 0;
 -- mixed cases: group-by ordinals and aliases
 select a, a AS k, count(b) from data group by k, 1;
 
+-- can use ordinal in CUBE
+select a, b, count(1) from data group by cube(1, 2);
+
+-- can use ordinal in ROLLUP
+select a, b, count(1) from data group by rollup(1, 2);
+
+-- can use ordinal in GROUPING SETS
+select a, b, count(1) from data group by grouping sets((1), (2), (1, 2));
+
 -- turn off group by ordinal
 set spark.sql.groupByOrdinal=false;
 
