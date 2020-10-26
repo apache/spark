@@ -583,7 +583,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def table(tableName: String): DataFrame = {
-    table(sessionState.sqlParser.parseMultipartIdentifier(tableName))
+    read.table(tableName)
   }
 
   private[sql] def table(multipartIdentifier: Seq[String]): DataFrame = {
