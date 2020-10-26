@@ -88,32 +88,35 @@ TakeOrderedAndProject [segment,num_customers,segment_base]
                                                             Exchange [ss_customer_sk] #8
                                                               WholeStageCodegen (10)
                                                                 Filter [ss_customer_sk,ss_sold_date_sk]
+                                                                  SubqueryBroadcast [d_date_sk] #1
+                                                                    ReusedExchange [d_date_sk] #9
                                                                   ColumnarToRow
                                                                     InputAdapter
                                                                       Scan parquet default.store_sales [ss_sold_date_sk,ss_customer_sk,ss_ext_sales_price]
+                                                                        ReusedSubquery [d_date_sk] #1
                                     InputAdapter
                                       WholeStageCodegen (15)
                                         Sort [ca_address_sk]
                                           InputAdapter
-                                            Exchange [ca_address_sk] #9
+                                            Exchange [ca_address_sk] #10
                                               WholeStageCodegen (14)
                                                 Filter [ca_address_sk,ca_county,ca_state]
                                                   ColumnarToRow
                                                     InputAdapter
                                                       Scan parquet default.customer_address [ca_address_sk,ca_county,ca_state]
                                 InputAdapter
-                                  BroadcastExchange #10
+                                  BroadcastExchange #11
                                     WholeStageCodegen (16)
                                       Filter [s_county,s_state]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.store [s_county,s_state]
                             InputAdapter
-                              BroadcastExchange #11
+                              BroadcastExchange #9
                                 WholeStageCodegen (17)
                                   Project [d_date_sk]
                                     Filter [d_month_seq,d_date_sk]
-                                      Subquery #1
+                                      Subquery #2
                                         WholeStageCodegen (2)
                                           HashAggregate [(d_month_seq + 1)]
                                             InputAdapter
@@ -125,7 +128,7 @@ TakeOrderedAndProject [segment,num_customers,segment_base]
                                                         ColumnarToRow
                                                           InputAdapter
                                                             Scan parquet default.date_dim [d_month_seq,d_year,d_moy]
-                                      Subquery #2
+                                      Subquery #3
                                         WholeStageCodegen (2)
                                           HashAggregate [(d_month_seq + 3)]
                                             InputAdapter

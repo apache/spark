@@ -31,9 +31,12 @@ TakeOrderedAndProject [Excess Discount Amount ]
                                             Project [ws_item_sk,ws_ext_discount_amt]
                                               BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
                                                 Filter [ws_sold_date_sk,ws_item_sk]
+                                                  SubqueryBroadcast [i_item_sk] #1
+                                                    ReusedExchange [i_item_sk] #3
                                                   ColumnarToRow
                                                     InputAdapter
                                                       Scan parquet default.web_sales [ws_sold_date_sk,ws_item_sk,ws_ext_discount_amt]
+                                                        ReusedSubquery [i_item_sk] #1
                                                 InputAdapter
                                                   BroadcastExchange #5
                                                     WholeStageCodegen (2)
@@ -43,8 +46,11 @@ TakeOrderedAndProject [Excess Discount Amount ]
                                                             InputAdapter
                                                               Scan parquet default.date_dim [d_date_sk,d_date]
                       Filter [ws_item_sk,ws_ext_discount_amt,ws_sold_date_sk]
+                        SubqueryBroadcast [d_date_sk] #2
+                          ReusedExchange [d_date_sk] #5
                         ColumnarToRow
                           InputAdapter
                             Scan parquet default.web_sales [ws_sold_date_sk,ws_item_sk,ws_ext_discount_amt]
+                              ReusedSubquery [d_date_sk] #2
                   InputAdapter
                     ReusedExchange [d_date_sk] #5

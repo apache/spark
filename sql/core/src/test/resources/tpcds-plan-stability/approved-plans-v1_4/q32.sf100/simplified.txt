@@ -26,9 +26,12 @@ CollectLimit
                                   Project [cs_item_sk,cs_ext_discount_amt]
                                     BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                                       Filter [cs_sold_date_sk,cs_item_sk]
+                                        SubqueryBroadcast [i_item_sk] #1
+                                          ReusedExchange [i_item_sk] #2
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.catalog_sales [cs_sold_date_sk,cs_item_sk,cs_ext_discount_amt]
+                                              ReusedSubquery [i_item_sk] #1
                                       InputAdapter
                                         BroadcastExchange #4
                                           WholeStageCodegen (2)
@@ -38,8 +41,11 @@ CollectLimit
                                                   InputAdapter
                                                     Scan parquet default.date_dim [d_date_sk,d_date]
             Filter [cs_item_sk,cs_ext_discount_amt,cs_sold_date_sk]
+              SubqueryBroadcast [d_date_sk] #2
+                ReusedExchange [d_date_sk] #4
               ColumnarToRow
                 InputAdapter
                   Scan parquet default.catalog_sales [cs_sold_date_sk,cs_item_sk,cs_ext_discount_amt]
+                    ReusedSubquery [d_date_sk] #2
         InputAdapter
           ReusedExchange [d_date_sk] #4

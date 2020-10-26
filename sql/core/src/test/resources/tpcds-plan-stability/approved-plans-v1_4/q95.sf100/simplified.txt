@@ -29,13 +29,22 @@ TakeOrderedAndProject [order count ,total shipping cost ,total net profit ]
                                                         Exchange [ws_order_number] #4
                                                           WholeStageCodegen (1)
                                                             Filter [ws_ship_date_sk,ws_ship_addr_sk,ws_web_site_sk]
+                                                              SubqueryBroadcast [ca_address_sk] #1
+                                                                ReusedExchange [ca_address_sk] #5
+                                                              SubqueryBroadcast [web_site_sk] #2
+                                                                ReusedExchange [web_site_sk] #6
+                                                              SubqueryBroadcast [d_date_sk] #3
+                                                                ReusedExchange [d_date_sk] #7
                                                               ColumnarToRow
                                                                 InputAdapter
                                                                   Scan parquet default.web_sales [ws_ship_date_sk,ws_ship_addr_sk,ws_web_site_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit]
+                                                                    ReusedSubquery [ca_address_sk] #1
+                                                                    ReusedSubquery [web_site_sk] #2
+                                                                    ReusedSubquery [d_date_sk] #3
                                                   WholeStageCodegen (8)
                                                     Sort [ws_order_number]
                                                       InputAdapter
-                                                        Exchange [ws_order_number] #5
+                                                        Exchange [ws_order_number] #8
                                                           WholeStageCodegen (7)
                                                             Project [ws_order_number]
                                                               SortMergeJoin [ws_order_number,ws_order_number,ws_warehouse_sk,ws_warehouse_sk]
@@ -43,7 +52,7 @@ TakeOrderedAndProject [order count ,total shipping cost ,total net profit ]
                                                                   WholeStageCodegen (4)
                                                                     Sort [ws_order_number]
                                                                       InputAdapter
-                                                                        Exchange [ws_order_number] #6
+                                                                        Exchange [ws_order_number] #9
                                                                           WholeStageCodegen (3)
                                                                             Filter [ws_order_number,ws_warehouse_sk]
                                                                               ColumnarToRow
@@ -53,7 +62,7 @@ TakeOrderedAndProject [order count ,total shipping cost ,total net profit ]
                                                                   WholeStageCodegen (6)
                                                                     Sort [ws_order_number]
                                                                       InputAdapter
-                                                                        ReusedExchange [ws_warehouse_sk,ws_order_number] #6
+                                                                        ReusedExchange [ws_warehouse_sk,ws_order_number] #9
                                         WholeStageCodegen (18)
                                           Project [wr_order_number]
                                             SortMergeJoin [ws_order_number,wr_order_number]
@@ -61,7 +70,7 @@ TakeOrderedAndProject [order count ,total shipping cost ,total net profit ]
                                                 WholeStageCodegen (15)
                                                   Sort [ws_order_number]
                                                     InputAdapter
-                                                      Exchange [ws_order_number] #7
+                                                      Exchange [ws_order_number] #10
                                                         WholeStageCodegen (14)
                                                           Project [ws_order_number]
                                                             SortMergeJoin [ws_order_number,ws_order_number,ws_warehouse_sk,ws_warehouse_sk]
@@ -69,24 +78,24 @@ TakeOrderedAndProject [order count ,total shipping cost ,total net profit ]
                                                                 WholeStageCodegen (11)
                                                                   Sort [ws_order_number]
                                                                     InputAdapter
-                                                                      ReusedExchange [ws_warehouse_sk,ws_order_number] #6
+                                                                      ReusedExchange [ws_warehouse_sk,ws_order_number] #9
                                                               InputAdapter
                                                                 WholeStageCodegen (13)
                                                                   Sort [ws_order_number]
                                                                     InputAdapter
-                                                                      ReusedExchange [ws_warehouse_sk,ws_order_number] #6
+                                                                      ReusedExchange [ws_warehouse_sk,ws_order_number] #9
                                               InputAdapter
                                                 WholeStageCodegen (17)
                                                   Sort [wr_order_number]
                                                     InputAdapter
-                                                      Exchange [wr_order_number] #8
+                                                      Exchange [wr_order_number] #11
                                                         WholeStageCodegen (16)
                                                           Filter [wr_order_number]
                                                             ColumnarToRow
                                                               InputAdapter
                                                                 Scan parquet default.web_returns [wr_order_number]
                                     InputAdapter
-                                      BroadcastExchange #9
+                                      BroadcastExchange #5
                                         WholeStageCodegen (19)
                                           Project [ca_address_sk]
                                             Filter [ca_state,ca_address_sk]
@@ -94,7 +103,7 @@ TakeOrderedAndProject [order count ,total shipping cost ,total net profit ]
                                                 InputAdapter
                                                   Scan parquet default.customer_address [ca_address_sk,ca_state]
                                 InputAdapter
-                                  BroadcastExchange #10
+                                  BroadcastExchange #6
                                     WholeStageCodegen (20)
                                       Project [web_site_sk]
                                         Filter [web_company_name,web_site_sk]
@@ -102,7 +111,7 @@ TakeOrderedAndProject [order count ,total shipping cost ,total net profit ]
                                             InputAdapter
                                               Scan parquet default.web_site [web_site_sk,web_company_name]
                             InputAdapter
-                              BroadcastExchange #11
+                              BroadcastExchange #7
                                 WholeStageCodegen (21)
                                   Project [d_date_sk]
                                     Filter [d_date,d_date_sk]

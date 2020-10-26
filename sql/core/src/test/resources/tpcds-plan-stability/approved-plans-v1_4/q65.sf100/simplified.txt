@@ -21,11 +21,14 @@ TakeOrderedAndProject [s_store_name,i_item_desc,revenue,i_current_price,i_wholes
                                         Project [ss_item_sk,ss_store_sk,ss_sales_price]
                                           BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                             Filter [ss_sold_date_sk,ss_store_sk,ss_item_sk]
+                                              SubqueryBroadcast [ss_store_sk] #1
+                                                ReusedExchange [ss_store_sk,ave] #3
                                               ColumnarToRow
                                                 InputAdapter
                                                   Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_store_sk,ss_sales_price]
+                                                    ReusedSubquery [ss_store_sk] #1
                                             InputAdapter
-                                              BroadcastExchange #3
+                                              BroadcastExchange #4
                                                 WholeStageCodegen (1)
                                                   Project [d_date_sk]
                                                     Filter [d_month_seq,d_date_sk]
@@ -33,7 +36,7 @@ TakeOrderedAndProject [s_store_name,i_item_desc,revenue,i_current_price,i_wholes
                                                         InputAdapter
                                                           Scan parquet default.date_dim [d_date_sk,d_month_seq]
                             InputAdapter
-                              BroadcastExchange #4
+                              BroadcastExchange #3
                                 WholeStageCodegen (6)
                                   HashAggregate [ss_store_sk,sum,count] [avg(revenue),ave,sum,count]
                                     InputAdapter
@@ -52,7 +55,7 @@ TakeOrderedAndProject [s_store_name,i_item_desc,revenue,i_current_price,i_wholes
                                                               InputAdapter
                                                                 Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_store_sk,ss_sales_price]
                                                           InputAdapter
-                                                            ReusedExchange [d_date_sk] #3
+                                                            ReusedExchange [d_date_sk] #4
                         InputAdapter
                           BroadcastExchange #7
                             WholeStageCodegen (7)

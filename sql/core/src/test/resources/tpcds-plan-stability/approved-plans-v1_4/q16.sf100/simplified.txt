@@ -25,13 +25,22 @@ TakeOrderedAndProject [order count ,total shipping cost ,total net profit ]
                                                 Exchange [cs_order_number] #2
                                                   WholeStageCodegen (1)
                                                     Filter [cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk]
+                                                      SubqueryBroadcast [ca_address_sk] #1
+                                                        ReusedExchange [ca_address_sk] #3
+                                                      SubqueryBroadcast [cc_call_center_sk] #2
+                                                        ReusedExchange [cc_call_center_sk] #4
+                                                      SubqueryBroadcast [d_date_sk] #3
+                                                        ReusedExchange [d_date_sk] #5
                                                       ColumnarToRow
                                                         InputAdapter
                                                           Scan parquet default.catalog_sales [cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk,cs_warehouse_sk,cs_order_number,cs_ext_ship_cost,cs_net_profit]
+                                                            ReusedSubquery [ca_address_sk] #1
+                                                            ReusedSubquery [cc_call_center_sk] #2
+                                                            ReusedSubquery [d_date_sk] #3
                                           WholeStageCodegen (4)
                                             Sort [cs_order_number]
                                               InputAdapter
-                                                Exchange [cs_order_number] #3
+                                                Exchange [cs_order_number] #6
                                                   WholeStageCodegen (3)
                                                     Project [cs_warehouse_sk,cs_order_number]
                                                       ColumnarToRow
@@ -40,13 +49,13 @@ TakeOrderedAndProject [order count ,total shipping cost ,total net profit ]
                                   WholeStageCodegen (7)
                                     Sort [cr_order_number]
                                       InputAdapter
-                                        Exchange [cr_order_number] #4
+                                        Exchange [cr_order_number] #7
                                           WholeStageCodegen (6)
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.catalog_returns [cr_order_number]
                               InputAdapter
-                                BroadcastExchange #5
+                                BroadcastExchange #3
                                   WholeStageCodegen (8)
                                     Project [ca_address_sk]
                                       Filter [ca_state,ca_address_sk]
@@ -54,7 +63,7 @@ TakeOrderedAndProject [order count ,total shipping cost ,total net profit ]
                                           InputAdapter
                                             Scan parquet default.customer_address [ca_address_sk,ca_state]
                           InputAdapter
-                            BroadcastExchange #6
+                            BroadcastExchange #4
                               WholeStageCodegen (9)
                                 Project [cc_call_center_sk]
                                   Filter [cc_county,cc_call_center_sk]
@@ -62,7 +71,7 @@ TakeOrderedAndProject [order count ,total shipping cost ,total net profit ]
                                       InputAdapter
                                         Scan parquet default.call_center [cc_call_center_sk,cc_county]
                       InputAdapter
-                        BroadcastExchange #7
+                        BroadcastExchange #5
                           WholeStageCodegen (10)
                             Project [d_date_sk]
                               Filter [d_date,d_date_sk]

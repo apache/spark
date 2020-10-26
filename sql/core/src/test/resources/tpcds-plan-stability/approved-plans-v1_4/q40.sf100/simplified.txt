@@ -20,20 +20,26 @@ TakeOrderedAndProject [w_state,i_item_id,sales_before,sales_after]
                                       Exchange [cs_order_number,cs_item_sk] #2
                                         WholeStageCodegen (1)
                                           Filter [cs_warehouse_sk,cs_item_sk,cs_sold_date_sk]
+                                            SubqueryBroadcast [i_item_sk] #1
+                                              ReusedExchange [i_item_sk,i_item_id] #3
+                                            SubqueryBroadcast [d_date_sk] #2
+                                              ReusedExchange [d_date_sk,d_date] #4
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.catalog_sales [cs_sold_date_sk,cs_warehouse_sk,cs_item_sk,cs_order_number,cs_sales_price]
+                                                  ReusedSubquery [i_item_sk] #1
+                                                  ReusedSubquery [d_date_sk] #2
                                 WholeStageCodegen (4)
                                   Sort [cr_order_number,cr_item_sk]
                                     InputAdapter
-                                      Exchange [cr_order_number,cr_item_sk] #3
+                                      Exchange [cr_order_number,cr_item_sk] #5
                                         WholeStageCodegen (3)
                                           Filter [cr_order_number,cr_item_sk]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.catalog_returns [cr_item_sk,cr_order_number,cr_refunded_cash]
                           InputAdapter
-                            BroadcastExchange #4
+                            BroadcastExchange #3
                               WholeStageCodegen (5)
                                 Project [i_item_sk,i_item_id]
                                   Filter [i_current_price,i_item_sk]
@@ -41,7 +47,7 @@ TakeOrderedAndProject [w_state,i_item_id,sales_before,sales_after]
                                       InputAdapter
                                         Scan parquet default.item [i_item_sk,i_item_id,i_current_price]
                       InputAdapter
-                        BroadcastExchange #5
+                        BroadcastExchange #4
                           WholeStageCodegen (6)
                             Filter [d_date,d_date_sk]
                               ColumnarToRow
