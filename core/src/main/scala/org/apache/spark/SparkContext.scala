@@ -61,7 +61,7 @@ import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.shuffle.ShuffleDataIOUtils
 import org.apache.spark.shuffle.api.ShuffleDriverComponents
-import org.apache.spark.status.{AppStatusSource, AppStatusStore}
+import org.apache.spark.status.{AppLiveStatusPlugin, AppStatusSource, AppStatusStore, ElementTrackingStore}
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
@@ -617,6 +617,7 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     _executorAllocationManager.foreach(_.start())
 
+    loadLiveStatusPlugins()
     setupAndStartListenerBus()
     postEnvironmentUpdate()
     postApplicationStart()
@@ -2440,6 +2441,27 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
+
+  private def loadLiveStatusPlugins(): Unit = {
+    try {
+      conf.get(APP_LIVE_STATUS_PLUGINS).foreach { classNames =>
+        val plugins = Utils.loadExtensions(classOf[AppLiveStatusPlugin], classNames, conf)
+        plugins.foreach { plugin =>
+          val pluginName = plugin.getClass.getName
+          try {
+            plugin.createListeners(conf, _statusStore.store.asInstanceOf[ElementTrackingStore])
+              .foreach(listenerBus.addToSharedQueue(_))
+          } catch {
+            case e: Exception =>
+              logWarning(s"Exception when registering live app status plugin ${pluginName}", e)
+          }
+        }
+      }
+    } catch {
+      case e: Exception =>
+        logWarning(s"Exception when registering live app status plugins", e)
+    }
+  }
 
   /**
    * Registers listeners specified in spark.extraListeners, then starts the listener bus.

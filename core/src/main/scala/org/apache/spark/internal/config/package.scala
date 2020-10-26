@@ -1221,6 +1221,12 @@ package object config {
       .toSequence
       .createWithDefault(Nil)
 
+  private[spark] val APP_LIVE_STATUS_PLUGINS = ConfigBuilder("spark.appLiveStatusPlugins")
+    .doc("Class names of AppLiveStatusPlugin to add to SparkContext during initialization")
+    .stringConf
+    .toSequence
+    .createOptional
+
   private[spark] val EXTRA_LISTENERS = ConfigBuilder("spark.extraListeners")
     .doc("Class names of listeners to add to SparkContext during initialization.")
     .version("1.3.0")
