@@ -119,7 +119,7 @@ private class ClientEndpoint(
         asyncSendToMasterAndForwardReply[KillDriverResponse](RequestKillDriver(driverId))
     }
     logInfo("... waiting before polling master for driver state")
-    forwardMessageThread.scheduleWithFixedDelay(() => Utils.tryLogNonFatalError {
+    forwardMessageThread.scheduleAtFixedRate(() => Utils.tryLogNonFatalError {
       monitorDriverStatus()
     }, 5000, REPORT_DRIVER_STATUS_INTERVAL, TimeUnit.MILLISECONDS)
   }
