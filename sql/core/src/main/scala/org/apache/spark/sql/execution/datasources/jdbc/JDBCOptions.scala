@@ -206,6 +206,8 @@ class JDBCOptions(
   }
   // The principal name of user's keytab file
   val principal = parameters.getOrElse(JDBC_PRINCIPAL, null)
+
+  val tableComment = parameters.get(JDBC_TABLE_COMMENT)
 }
 
 class JdbcOptionsInWrite(
@@ -260,4 +262,5 @@ object JDBCOptions {
   val JDBC_PUSHDOWN_PREDICATE = newOption("pushDownPredicate")
   val JDBC_KEYTAB = newOption("keytab")
   val JDBC_PRINCIPAL = newOption("principal")
+  val JDBC_TABLE_COMMENT = newOption("tableComment")
 }

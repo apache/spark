@@ -146,5 +146,19 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
     }.getMessage
     assert(msg.contains("Table not found"))
   }
+
+  test("CREATE TABLE with table comment") {
+    withTable(s"$catalogName.new_table") {
+      val logAppender = new LogAppender("table comment")
+      withLogAppender(logAppender) {
+        sql(s"CREATE TABLE $catalogName.new_table(i INT) USING _ COMMENT 'this is a comment'")
+      }
+      val createCommentWarning = logAppender.loggingEvents
+        .filter(_.getLevel == Level.WARN)
+        .map(_.getRenderedMessage)
+        .exists(_.contains("Cannot create JDBC table comment"))
+      assert(createCommentWarning === false)
+    }
+  }
 }
 

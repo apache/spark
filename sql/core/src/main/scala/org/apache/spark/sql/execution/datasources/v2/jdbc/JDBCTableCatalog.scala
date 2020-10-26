@@ -123,8 +123,14 @@ class JDBCTableCatalog extends TableCatalog with Logging {
         "ignored: " + properties.asScala.map { case (k, v) => s"$k=$v" }.mkString("[", ", ", "]"))
     }
 
-    val writeOptions = new JdbcOptionsInWrite(
-      options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
+    val tableComment = properties.get("comment")
+    val tableOptions = if (tableComment != null) {
+      options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)) +
+        (JDBCOptions.JDBC_TABLE_COMMENT -> properties.get("comment"))
+    } else {
+      options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident))
+    }
+    val writeOptions = new JdbcOptionsInWrite(tableOptions)
     val caseSensitive = SQLConf.get.caseSensitiveAnalysis
     withConnection { conn =>
       classifyException(s"Failed table creation: $ident") {

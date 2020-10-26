@@ -265,6 +265,10 @@ abstract class JdbcDialect extends Serializable {
     s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} SET $nullable"
   }
 
+  def getTableCommentQuery(table: String, comment: String): String = {
+    s"COMMENT ON TABLE $table IS '$comment'"
+  }
+
   /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
    * @param message The error message to be placed to the returned exception.
