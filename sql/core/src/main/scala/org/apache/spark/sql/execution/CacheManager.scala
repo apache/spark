@@ -92,7 +92,6 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
-      // Turn off configs so that the outputPartitioning of the underlying plan can be leveraged.
       val sessionWithConfigsOff = SparkSession.getOrCloneSessionWithConfigsOff(
         query.sparkSession, forceDisableConfigs)
       val inMemoryRelation = sessionWithConfigsOff.withActive {
@@ -202,7 +201,6 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
     needToRecache.map { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
-      // Turn off configs so that the outputPartitioning of the underlying plan can be leveraged.
       val sessionWithConfigsOff = SparkSession.getOrCloneSessionWithConfigsOff(
         spark, forceDisableConfigs)
       val newCache = sessionWithConfigsOff.withActive {
