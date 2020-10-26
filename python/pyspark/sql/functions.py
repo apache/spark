@@ -21,7 +21,6 @@ A collections of builtin functions
 import sys
 import functools
 import warnings
-import numbers
 
 from pyspark import since, SparkContext
 from pyspark.rdd import PythonEvalType
@@ -74,8 +73,10 @@ def _invoke_binary_math_function(name, col1, col2):
     """
     return _invoke_function(
         name,
-        float(col1) if isinstance(col1, numbers.Real) else _to_java_column(col1),
-        float(col2) if isinstance(col2, numbers.Real) else _to_java_column(col2)
+        # For legacy reasons, the arguments here can be implicitly converted into floats,
+        # if they are not columns or strings.
+        _to_java_column(col1) if isinstance(col1, (str, Column)) else float(col1),
+        _to_java_column(col2) if isinstance(col2, (str, Column)) else float(col2)
     )
 
 
