@@ -34,9 +34,12 @@ import org.apache.spark.unsafe.types.CalendarInterval
        -1
   """,
   since = "1.0.0")
-case class UnaryMinus(child: Expression) extends UnaryExpression
-    with ExpectsInputTypes with NullIntolerant {
-  private val checkOverflow = SQLConf.get.ansiEnabled
+case class UnaryMinus(
+    child: Expression,
+    checkOverflow: Boolean = SQLConf.get.ansiEnabled)
+  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+
+  def this(child: Expression) = this(child, SQLConf.get.ansiEnabled)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
@@ -104,7 +107,8 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
   """,
   since = "1.5.0")
 case class UnaryPositive(child: Expression)
-    extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+
   override def prettyName: String = "positive"
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
@@ -131,7 +135,7 @@ case class UnaryPositive(child: Expression)
   """,
   since = "1.2.0")
 case class Abs(child: Expression)
-    extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
@@ -149,9 +153,8 @@ case class Abs(child: Expression)
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 }
 
-abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
-
-  protected val failOnError = SQLConf.get.ansiEnabled
+abstract class BinaryArithmetic(failOnError: Boolean)
+  extends BinaryOperator with NullIntolerant with Serializable {
 
   override def dataType: DataType = left.dataType
 
@@ -233,7 +236,12 @@ object BinaryArithmetic {
        3
   """,
   since = "1.0.0")
-case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
+case class Add(
+    left: Expression,
+    right: Expression,
+    checkOverflow: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic(checkOverflow) {
+
+  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -241,12 +249,12 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def decimalMethod: String = "$plus"
 
-  override def calendarIntervalMethod: String = if (failOnError) "addExact" else "add"
+  override def calendarIntervalMethod: String = if (checkOverflow) "addExact" else "add"
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
-    case CalendarIntervalType if failOnError =>
+    case CalendarIntervalType if checkOverflow =>
       IntervalUtils.addExact(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
     case CalendarIntervalType =>
@@ -266,7 +274,12 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
        1
   """,
   since = "1.0.0")
-case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
+case class Subtract(
+    left: Expression,
+    right: Expression,
+    checkOverflow: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic(checkOverflow) {
+
+  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -274,12 +287,12 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
 
   override def decimalMethod: String = "$minus"
 
-  override def calendarIntervalMethod: String = if (failOnError) "subtractExact" else "subtract"
+  override def calendarIntervalMethod: String = if (checkOverflow) "subtractExact" else "subtract"
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
-    case CalendarIntervalType if failOnError =>
+    case CalendarIntervalType if checkOverflow =>
       IntervalUtils.subtractExact(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
     case CalendarIntervalType =>
@@ -299,22 +312,27 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
        6
   """,
   since = "1.0.0")
-case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
+case class Multiply(
+    left: Expression,
+    right: Expression,
+    checkOverflow: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic(checkOverflow) {
+
+  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
   override def inputType: AbstractDataType = NumericType
 
   override def symbol: String = "*"
   override def decimalMethod: String = "$times"
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 
   override def exactMathMethod: Option[String] = Some("multiplyExact")
 }
 
-// Common base trait for Divide and Remainder, since these two classes are almost identical
-trait DivModLike extends BinaryArithmetic {
+// Common base class for Divide and Remainder, since these two classes are almost identical
+abstract class DivModLike(failOnError: Boolean) extends BinaryArithmetic(failOnError) {
 
   protected def decimalToDataTypeCodeGen(decimalResult: String): String = decimalResult
 
@@ -368,10 +386,10 @@ trait DivModLike extends BinaryArithmetic {
       s" || $isZero"
     }
     val failOnErrorBranch = if (failOnError) {
-      code"""
+      s"""
         } else if ($isZero) {
           throw new ArithmeticException("divide by zero");
-        """
+      """
     } else {
       ""
     }
@@ -424,7 +442,12 @@ trait DivModLike extends BinaryArithmetic {
   """,
   since = "1.0.0")
 // scalastyle:on line.size.limit
-case class Divide(left: Expression, right: Expression) extends DivModLike {
+case class Divide(
+    left: Expression,
+    right: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike(failOnError) {
+
+  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
   override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
 
@@ -450,7 +473,10 @@ case class Divide(left: Expression, right: Expression) extends DivModLike {
 // scalastyle:on line.size.limit
 case class IntegralDivide(
     left: Expression,
-    right: Expression) extends DivModLike {
+    right: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike(failOnError) {
+
+  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
   override def inputType: AbstractDataType = TypeCollection(LongType, DecimalType)
 
@@ -481,12 +507,6 @@ case class IntegralDivide(
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
 }
 
-object IntegralDivide {
-  def apply(left: Expression, right: Expression): IntegralDivide = {
-    new IntegralDivide(left, right)
-  }
-}
-
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns the remainder after `expr1`/`expr2`.",
   examples = """
@@ -497,7 +517,12 @@ object IntegralDivide {
        0.2
   """,
   since = "1.0.0")
-case class Remainder(left: Expression, right: Expression) extends DivModLike {
+case class Remainder(
+    left: Expression,
+    right: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike(failOnError) {
+
+  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
   override def inputType: AbstractDataType = NumericType
 
@@ -545,7 +570,12 @@ case class Remainder(left: Expression, right: Expression) extends DivModLike {
        2
   """,
   since = "1.5.0")
-case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
+case class Pmod(
+    left: Expression,
+    right: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic(failOnError) {
+
+  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
   override def toString: String = s"pmod($left, $right)"
 
@@ -607,10 +637,10 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
       s" || $isZero"
     }
     val failOnErrorBranch = if (failOnError) {
-      code"""
+      s"""
         } else if ($isZero) {
           throw new ArithmeticException("divide by zero");
-        """
+      """
     } else {
       ""
     }

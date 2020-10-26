@@ -34,7 +34,7 @@ import org.apache.spark.sql.types._
        1
   """,
   since = "1.4.0")
-case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic {
+case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic(false) {
 
   override def inputType: AbstractDataType = IntegralType
 
@@ -67,7 +67,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
        7
   """,
   since = "1.4.0")
-case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
+case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic(false) {
 
   override def inputType: AbstractDataType = IntegralType
 
@@ -100,7 +100,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
        6
   """,
   since = "1.4.0")
-case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
+case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic(false) {
 
   override def inputType: AbstractDataType = IntegralType
 

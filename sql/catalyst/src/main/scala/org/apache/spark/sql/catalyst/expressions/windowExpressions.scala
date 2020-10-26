@@ -235,7 +235,7 @@ case class SpecifiedWindowFrame(
 
   private def boundarySql(expr: Expression): String = expr match {
     case e: SpecialFrameBoundary => e.sql
-    case UnaryMinus(n) => n.sql + " PRECEDING"
+    case UnaryMinus(n, _) => n.sql + " PRECEDING"
     case e: Expression => e.sql + " FOLLOWING"
   }
 
