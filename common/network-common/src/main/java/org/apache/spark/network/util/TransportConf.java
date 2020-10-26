@@ -379,7 +379,7 @@ public class TransportConf {
   }
 
   /**
-   * The size of cache used in push-based shuffle for storing merged index files.
+   * The size of cache in memory which is used in push-based shuffle for storing merged index files.
    */
   public long mergedIndexCacheSize() {
     return JavaUtils.byteStringAsBytes(
