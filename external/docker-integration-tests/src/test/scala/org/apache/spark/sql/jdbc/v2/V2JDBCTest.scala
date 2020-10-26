@@ -75,14 +75,11 @@ trait V2JDBCTest extends SharedSparkSession {
 
   test("SPARK-33034: ALTER TABLE ... drop column") {
     withTable(s"$catalogName.alt_table") {
-      sql(s"CREATE TABLE $catalogName.alt_table (C1 INTEGER, C2 INTEGER, c3 INTEGER) USING _")
+      sql(s"CREATE TABLE $catalogName.alt_table (C1 INTEGER, C2 STRING, c3 INTEGER) USING _")
       sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN C1")
       sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN c3")
       val t = spark.table(s"$catalogName.alt_table")
-      val expectedSchema = catalogName match {
-        case "oracle" => new StructType().add("C2", DecimalType(10, 0))
-        case _ => new StructType().add("C2", IntegerType)
-      }
+      val expectedSchema = new StructType().add("C2", StringType)
       assert(t.schema === expectedSchema)
       // Drop not existing column
       val msg = intercept[AnalysisException] {
