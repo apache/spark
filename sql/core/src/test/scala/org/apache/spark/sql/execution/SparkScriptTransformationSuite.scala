@@ -25,8 +25,6 @@ import org.apache.spark.sql.test.SharedSparkSession
 class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with SharedSparkSession {
   import testImplicits._
 
-  override def isHive23OrSpark: Boolean = true
-
   override def createScriptTransformationExec(
       input: Seq[Expression],
       script: String,
