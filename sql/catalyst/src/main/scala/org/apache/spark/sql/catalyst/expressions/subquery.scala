@@ -90,6 +90,7 @@ object SubqueryExpression {
    */
   def hasSubquery(e: Expression): Boolean = {
     e.find {
+      case _: DynamicPruningSubquery => false
       case _: SubqueryExpression => true
       case _ => false
     }.isDefined

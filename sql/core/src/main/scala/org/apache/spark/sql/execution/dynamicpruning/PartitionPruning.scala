@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -46,21 +47,28 @@ import org.apache.spark.sql.internal.SQLConf
  *    subquery query twice, we keep the duplicated subquery
  *    (3) otherwise, we drop the subquery.
  */
-object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
+object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
+
+  case class TableScanType(logicalRelation: LogicalRelation, isPartitionCol: Boolean)
 
   /**
-   * Search the partitioned table scan for a given partition column in a logical plan
+   * Search the table scan for a given column in a logical plan
    */
-  def getPartitionTableScan(a: Expression, plan: LogicalPlan): Option[LogicalRelation] = {
+  private def getTableScan(
+      a: Expression,
+      plan: LogicalPlan): Option[TableScanType] = {
     val srcInfo: Option[(Expression, LogicalPlan)] = findExpressionAndTrackLineageDown(a, plan)
     srcInfo.flatMap {
       case (resExp, l: LogicalRelation) =>
         l.relation match {
-          case fs: HadoopFsRelation =>
-            val partitionColumns = AttributeSet(
-              l.resolve(fs.partitionSchema, fs.sparkSession.sessionState.analyzer.resolver))
+          case fs @ HadoopFsRelation(_, partitionSchema, dataSchema, _, _, _) =>
+            val resolver = fs.sparkSession.sessionState.analyzer.resolver
+            val partitionColumns = AttributeSet(l.resolve(partitionSchema, resolver))
+            val dataColumns = AttributeSet(l.resolve(dataSchema, resolver))
             if (resExp.references.subsetOf(partitionColumns)) {
-              return Some(l)
+              return Some(TableScanType(l, isPartitionCol = true))
+            } else if (resExp.references.subsetOf(dataColumns)) {
+              return Some(TableScanType(l, isPartitionCol = false))
             } else {
               None
             }
@@ -79,7 +87,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
    *  should run regardless of the join strategy, or is too expensive and it should be run only if
    *  we can reuse the results of a broadcast
    */
-  private def insertPredicate(
+  private def insertPartitionPredicate(
       pruningKey: Expression,
       pruningPlan: LogicalPlan,
       filteringKey: Expression,
@@ -104,6 +112,22 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  private def insertDataPredicate(
+      pruningKey: Expression,
+      pruningPlan: LogicalPlan,
+      filteringKey: Expression,
+      filteringPlan: LogicalPlan,
+      joinKeys: Seq[Expression]): LogicalPlan = {
+    Filter(
+      DynamicPruningSubquery(
+        pruningKey,
+        filteringPlan,
+        joinKeys,
+        joinKeys.indexOf(filteringKey),
+        onlyInBroadcast = true),
+      pruningPlan)
+  }
+
   /**
    * Given an estimated filtering ratio we assume the partition pruning has benefit if
    * the size in bytes of the partitioned plan after filtering is greater than the size
@@ -111,7 +135,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
    * using column statistics if they are available, otherwise we use the config value of
    * `spark.sql.optimizer.joinFilterRatio`.
    */
-  private def pruningHasBenefit(
+  private def partitionPruningHasBenefit(
       partExpr: Expression,
       partPlan: LogicalPlan,
       otherExpr: Expression,
@@ -152,6 +176,22 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     filterRatio * partPlan.stats.sizeInBytes.toFloat > overhead.toFloat
   }
 
+  private def dataPruningHasBenefit(
+      prunRelation: LogicalRelation,
+      prunPlan: LogicalPlan,
+      otherPlan: LogicalPlan): Boolean = {
+    val shuffleStages = prunPlan.collect {
+      case j @ Join(left, right, _, _, hint)
+        if !canBroadcastBySize(left, SQLConf.get) && !canBroadcastBySize(right, SQLConf.get)
+          && !hintToBroadcastLeft(hint) && !hintToBroadcastRight(hint) => j
+      case a: Aggregate => a
+    }
+
+    shuffleStages.nonEmpty &&
+      prunRelation.stats.sizeInBytes >= SQLConf.get.dynamicDataPruningSideThreshold &&
+      canBroadcastBySize(otherPlan, SQLConf.get)
+  }
+
   /**
    * Returns whether an expression is likely to be selective
    */
@@ -177,12 +217,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * To be able to prune partitions on a join key, the filtering side needs to
+   * To be able to prune dynamic filter on a join key, the filtering side needs to
    * meet the following requirements:
    *   (1) it can not be a stream
    *   (2) it needs to contain a selective predicate used for filtering
    */
-  private def hasPartitionPruningFilter(plan: LogicalPlan): Boolean = {
+  private def hasDynamicPruningFilter(plan: LogicalPlan): Boolean = {
     !plan.isStreaming && hasSelectivePredicate(plan)
   }
 
@@ -231,18 +271,34 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
 
             // there should be a partitioned table and a filter on the dimension table,
             // otherwise the pruning will not trigger
-            var partScan = getPartitionTableScan(l, left)
-            if (partScan.isDefined && canPruneLeft(joinType) &&
-                hasPartitionPruningFilter(right)) {
-              val hasBenefit = pruningHasBenefit(l, partScan.get, r, right)
-              newLeft = insertPredicate(l, newLeft, r, right, rightKeys, hasBenefit)
-            } else {
-              partScan = getPartitionTableScan(r, right)
-              if (partScan.isDefined && canPruneRight(joinType) &&
-                  hasPartitionPruningFilter(left) ) {
-                val hasBenefit = pruningHasBenefit(r, partScan.get, l, left)
-                newRight = insertPredicate(r, newRight, l, left, leftKeys, hasBenefit)
-              }
+            getTableScan(l, left) match {
+              // partition pruning
+              case Some(scan) if SQLConf.get.dynamicPartitionPruningEnabled &&
+                scan.isPartitionCol && canPruneLeft(joinType) &&
+                hasDynamicPruningFilter(right) =>
+                val hasBenefit = partitionPruningHasBenefit(l, scan.logicalRelation, r, right)
+                newLeft = insertPartitionPredicate(l, newLeft, r, right, rightKeys, hasBenefit)
+              // data pruning
+              case Some(scan) if SQLConf.get.dynamicDataPruningEnabled &&
+                !scan.isPartitionCol && canPruneLeft(joinType) && hasDynamicPruningFilter(right) &&
+                dataPruningHasBenefit(scan.logicalRelation, left, right) =>
+                newLeft = insertDataPredicate(l, newLeft, r, right, rightKeys)
+              case _ =>
+            }
+
+            getTableScan(r, right) match {
+              // partition pruning
+              case Some(scan) if SQLConf.get.dynamicPartitionPruningEnabled &&
+                scan.isPartitionCol && canPruneRight(joinType) &&
+                hasDynamicPruningFilter(left) =>
+                val hasBenefit = partitionPruningHasBenefit(r, scan.logicalRelation, l, left)
+                newRight = insertPartitionPredicate(r, newRight, l, left, leftKeys, hasBenefit)
+              // data pruning
+              case Some(scan) if SQLConf.get.dynamicDataPruningEnabled &&
+                !scan.isPartitionCol && canPruneRight(joinType) && hasDynamicPruningFilter(left) &&
+                dataPruningHasBenefit(scan.logicalRelation, right, left) =>
+                newRight = insertDataPredicate(r, newRight, l, left, leftKeys)
+              case _ =>
             }
           case _ =>
         }
@@ -253,7 +309,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     // Do not rewrite subqueries.
     case s: Subquery if s.correlated => plan
-    case _ if !SQLConf.get.dynamicPartitionPruningEnabled => plan
+    case _ if !SQLConf.get.dynamicFilterPruningEnabled => plan
     case _ => prune(plan)
   }
 }

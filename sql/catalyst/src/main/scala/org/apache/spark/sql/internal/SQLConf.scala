@@ -245,6 +245,13 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val DYNAMIC_FILTER_PRUNING_ENABLED =
+    buildConf("spark.sql.optimizer.dynamicFilterPruning.enabled")
+      .doc("When true, we will generate predicate for partition column when it's used as join key")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val DYNAMIC_PARTITION_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
       .doc("When true, we will generate predicate for partition column when it's used as join key")
@@ -281,6 +288,23 @@ object SQLConf {
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val DYNAMIC_DATA_PRUNING_ENABLED =
+    buildConf("spark.sql.optimizer.dynamicDataPruning.enabled")
+      .doc("When true, we will generate predicate for column when it's used as join key " +
+        "and has shuffle.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val DYNAMIC_DATA_PRUNING_SIDE_THRESHOLD =
+    buildConf("spark.sql.optimizer.dynamicDataPruning.pruningSideThreshold")
+      .internal()
+      .doc("Specifies the lower limit of the threshold for a " +
+        "dynamic shuffle pruning to be considered.")
+      .version("3.1.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("10GB")
 
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
@@ -2905,6 +2929,8 @@ class SQLConf extends Serializable with Logging {
 
   def planChangeBatches: Option[String] = getConf(PLAN_CHANGE_LOG_BATCHES)
 
+  def dynamicFilterPruningEnabled: Boolean = getConf(DYNAMIC_FILTER_PRUNING_ENABLED)
+
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
 
   def dynamicPartitionPruningUseStats: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_USE_STATS)
@@ -2914,6 +2940,12 @@ class SQLConf extends Serializable with Logging {
 
   def dynamicPartitionPruningReuseBroadcastOnly: Boolean =
     getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
+
+  def dynamicDataPruningEnabled: Boolean = {
+    exchangeReuseEnabled && getConf(DYNAMIC_DATA_PRUNING_ENABLED)
+  }
+
+  def dynamicDataPruningSideThreshold: Long = getConf(DYNAMIC_DATA_PRUNING_SIDE_THRESHOLD)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
