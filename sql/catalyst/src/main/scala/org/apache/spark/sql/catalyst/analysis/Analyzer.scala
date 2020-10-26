@@ -653,10 +653,8 @@ class Analyzer(
         val newChild = h.child match {
           case Aggregate(GroupByOperator(cubes, rollups, others, groupByExpressions),
           aggregateExpressions, child) =>
-            constructAggregate(
-              constructMixedGroupByExpressions(cubes, rollups, others),
-              groupByExpressions,
-              aggregateExpressions ++ extraAggExprs, child)
+            constructAggregate(constructMixedGroupByExpressions(cubes, rollups, others),
+              groupByExpressions, aggregateExpressions ++ extraAggExprs, child)
           case x: GroupingSets =>
             constructAggregate(
               x.selectedGroupByExprs, x.groupByExprs, x.aggregations ++ extraAggExprs, x.child)
