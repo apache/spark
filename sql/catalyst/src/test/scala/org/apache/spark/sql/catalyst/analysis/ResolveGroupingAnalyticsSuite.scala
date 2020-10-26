@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class ResolveGroupingAnalyticsSuite extends AnalysisTest {
@@ -111,16 +110,14 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
       Seq(UnresolvedAlias(Multiply(unresolved_a, Literal(2))),
         unresolved_b, UnresolvedAlias(count(unresolved_c))))
 
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val resultPlan = getAnalyzer.executeAndCheck(originalPlan2, new QueryPlanningTracker)
-      val gExpressions = resultPlan.asInstanceOf[Aggregate].groupingExpressions
-      assert(gExpressions.size == 3)
-      val firstGroupingExprAttrName =
-        gExpressions(0).asInstanceOf[AttributeReference].name.replaceAll("#[0-9]*", "#0")
-      assert(firstGroupingExprAttrName == "(a#0 * 2)")
-      assert(gExpressions(1).asInstanceOf[AttributeReference].name == "b")
-      assert(gExpressions(2).asInstanceOf[AttributeReference].name == VirtualColumn.groupingIdName)
-    }
+    val resultPlan = getAnalyzer.executeAndCheck(originalPlan2, new QueryPlanningTracker)
+    val gExpressions = resultPlan.asInstanceOf[Aggregate].groupingExpressions
+    assert(gExpressions.size == 3)
+    val firstGroupingExprAttrName =
+      gExpressions(0).asInstanceOf[AttributeReference].name.replaceAll("#[0-9]*", "#0")
+    assert(firstGroupingExprAttrName == "(a#0 * 2)")
+    assert(gExpressions(1).asInstanceOf[AttributeReference].name == "b")
+    assert(gExpressions(2).asInstanceOf[AttributeReference].name == VirtualColumn.groupingIdName)
   }
 
   test("cube") {

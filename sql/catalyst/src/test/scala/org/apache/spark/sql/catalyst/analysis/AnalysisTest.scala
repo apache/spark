@@ -51,9 +51,8 @@ trait AnalysisTest extends PlanTest {
   protected def checkAnalysis(
       inputPlan: LogicalPlan,
       expectedPlan: LogicalPlan,
-      caseSensitive: Boolean = true,
-      extraConf: Map[String, String] = Map()): Unit = {
-    withSQLConf((extraConf + (SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString)).toSeq: _*) {
+      caseSensitive: Boolean = true): Unit = {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val analyzer = getAnalyzer
       val actualPlan = analyzer.executeAndCheck(inputPlan, new QueryPlanningTracker)
       comparePlans(actualPlan, expectedPlan)
@@ -70,9 +69,8 @@ trait AnalysisTest extends PlanTest {
 
   protected def assertAnalysisSuccess(
       inputPlan: LogicalPlan,
-      caseSensitive: Boolean = true,
-      extraConf: Map[String, String] = Map()): Unit = {
-    withSQLConf((extraConf + (SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString)).toSeq: _*) {
+      caseSensitive: Boolean = true): Unit = {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val analyzer = getAnalyzer
       val analysisAttempt = analyzer.execute(inputPlan)
       try analyzer.checkAnalysis(analysisAttempt) catch {
@@ -92,9 +90,8 @@ trait AnalysisTest extends PlanTest {
   protected def assertAnalysisError(
       inputPlan: LogicalPlan,
       expectedErrors: Seq[String],
-      caseSensitive: Boolean = true,
-      extraConf: Map[String, String] = Map()): Unit = {
-    withSQLConf((extraConf + (SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString)).toSeq: _*) {
+      caseSensitive: Boolean = true): Unit = {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val analyzer = getAnalyzer
       val e = intercept[AnalysisException] {
         analyzer.checkAnalysis(analyzer.execute(inputPlan))

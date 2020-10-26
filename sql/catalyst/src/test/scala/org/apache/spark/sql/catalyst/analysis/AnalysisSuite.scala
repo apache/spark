@@ -197,22 +197,20 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("divide should be casted into fractional types") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      val plan = getAnalyzer.execute(
-        testRelation2.select(
-          $"a" / Literal(2) as "div1",
-          $"a" / $"b" as "div2",
-          $"a" / $"c" as "div3",
-          $"a" / $"d" as "div4",
-          $"e" / $"e" as "div5"))
-      val pl = plan.asInstanceOf[Project].projectList
+    val plan = getAnalyzer.execute(
+      testRelation2.select(
+        $"a" / Literal(2) as "div1",
+        $"a" / $"b" as "div2",
+        $"a" / $"c" as "div3",
+        $"a" / $"d" as "div4",
+        $"e" / $"e" as "div5"))
+    val pl = plan.asInstanceOf[Project].projectList
 
-      assert(pl(0).dataType == DoubleType)
-      assert(pl(1).dataType == DoubleType)
-      assert(pl(2).dataType == DoubleType)
-      assert(pl(3).dataType == DoubleType)
-      assert(pl(4).dataType == DoubleType)
-    }
+    assert(pl(0).dataType == DoubleType)
+    assert(pl(1).dataType == DoubleType)
+    assert(pl(2).dataType == DoubleType)
+    assert(pl(3).dataType == DoubleType)
+    assert(pl(4).dataType == DoubleType)
   }
 
   test("pull out nondeterministic expressions from RepartitionByExpression") {
@@ -255,32 +253,29 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("Analysis may leave unnecessary aliases") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val att1 = testRelation.output.head
-      var plan = testRelation.select(
-        CreateStruct(Seq(att1, ((att1.as("aa")) + 1).as("a_plus_1"))).as("col"),
-        att1
-      )
-      val prevPlan = getAnalyzer.execute(plan)
-      plan = prevPlan.select(CreateArray(Seq(
-        CreateStruct(Seq(att1, (att1 + 1).as("a_plus_1"))).as("col1"),
+    val att1 = testRelation.output.head
+    var plan = testRelation.select(
+      CreateStruct(Seq(att1, ((att1.as("aa")) + 1).as("a_plus_1"))).as("col"),
+      att1
+    )
+    val prevPlan = getAnalyzer.execute(plan)
+    plan = prevPlan.select(CreateArray(Seq(
+      CreateStruct(Seq(att1, (att1 + 1).as("a_plus_1"))).as("col1"),
+      /** alias should be eliminated by [[CleanupAliases]] */
+      "col".attr.as("col2")
+    )).as("arr"))
+    plan = getAnalyzer.execute(plan)
 
-        /** alias should be eliminated by [[CleanupAliases]] */
-        "col".attr.as("col2")
-      )).as("arr"))
-      plan = getAnalyzer.execute(plan)
-
-      val expectedPlan = prevPlan.select(
-        CreateArray(Seq(
-          CreateNamedStruct(Seq(
-            Literal(att1.name), att1,
-            Literal("a_plus_1"), (att1 + 1))),
+    val expectedPlan = prevPlan.select(
+      CreateArray(Seq(
+        CreateNamedStruct(Seq(
+          Literal(att1.name), att1,
+          Literal("a_plus_1"), (att1 + 1))),
           Symbol("col").struct(prevPlan.output(0).dataType.asInstanceOf[StructType]).notNull
-        )).as("arr")
-      )
+      )).as("arr")
+    )
 
-      checkAnalysis(plan, expectedPlan)
-    }
+    checkAnalysis(plan, expectedPlan)
   }
 
   test("SPARK-10534: resolve attribute references in order by clause") {

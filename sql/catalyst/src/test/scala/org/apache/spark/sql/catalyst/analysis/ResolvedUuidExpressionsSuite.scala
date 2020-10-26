@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Test suite for resolving Uuid expressions.
@@ -37,6 +36,7 @@ class ResolvedUuidExpressionsSuite extends AnalysisTest {
   private lazy val uuid1Ref = uuid1.toAttribute
 
   private val tracker = new QueryPlanningTracker
+  private val analyzer = getAnalyzer
 
   private def getUuidExpressions(plan: LogicalPlan): Seq[Uuid] = {
     plan.flatMap {
@@ -48,35 +48,28 @@ class ResolvedUuidExpressionsSuite extends AnalysisTest {
   }
 
   test("analyzed plan sets random seed for Uuid expression") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val plan = r.select(a, uuid1)
-      val resolvedPlan = getAnalyzer.executeAndCheck(plan, tracker)
-      getUuidExpressions(resolvedPlan).foreach { u =>
-        assert(u.resolved)
-        assert(u.randomSeed.isDefined)
-      }
+    val plan = r.select(a, uuid1)
+    val resolvedPlan = analyzer.executeAndCheck(plan, tracker)
+    getUuidExpressions(resolvedPlan).foreach { u =>
+      assert(u.resolved)
+      assert(u.randomSeed.isDefined)
     }
   }
 
   test("Uuid expressions should have different random seeds") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val plan = r.select(a, uuid1).groupBy(uuid1Ref)(uuid2, uuid3)
-      val resolvedPlan = getAnalyzer.executeAndCheck(plan, tracker)
-      assert(getUuidExpressions(resolvedPlan).map(_.randomSeed.get).distinct.length == 3)
-    }
+    val plan = r.select(a, uuid1).groupBy(uuid1Ref)(uuid2, uuid3)
+    val resolvedPlan = analyzer.executeAndCheck(plan, tracker)
+    assert(getUuidExpressions(resolvedPlan).map(_.randomSeed.get).distinct.length == 3)
   }
 
   test("Different analyzed plans should have different random seeds in Uuids") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val analyzer = getAnalyzer
-      val plan = r.select(a, uuid1).groupBy(uuid1Ref)(uuid2, uuid3)
-      val resolvedPlan1 = analyzer.executeAndCheck(plan, tracker)
-      val resolvedPlan2 = analyzer.executeAndCheck(plan, tracker)
-      val uuids1 = getUuidExpressions(resolvedPlan1)
-      val uuids2 = getUuidExpressions(resolvedPlan2)
-      assert(uuids1.distinct.length == 3)
-      assert(uuids2.distinct.length == 3)
-      assert(uuids1.intersect(uuids2).length == 0)
-    }
+    val plan = r.select(a, uuid1).groupBy(uuid1Ref)(uuid2, uuid3)
+    val resolvedPlan1 = analyzer.executeAndCheck(plan, tracker)
+    val resolvedPlan2 = analyzer.executeAndCheck(plan, tracker)
+    val uuids1 = getUuidExpressions(resolvedPlan1)
+    val uuids2 = getUuidExpressions(resolvedPlan2)
+    assert(uuids1.distinct.length == 3)
+    assert(uuids2.distinct.length == 3)
+    assert(uuids1.intersect(uuids2).length == 0)
   }
 }
