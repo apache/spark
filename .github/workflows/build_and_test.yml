@@ -294,7 +294,6 @@ jobs:
         mkdir -p ~/.m2
         # The followings are also used by `r-lib/actions/setup-r` to avoid
         # R issues at docker environment
-        export NOT_CRAN=true
         export TZ=UTC
         export _R_CHECK_SYSTEM_CLOCK_=FALSE
         ./dev/run-tests --parallelism 2 --modules sparkr
