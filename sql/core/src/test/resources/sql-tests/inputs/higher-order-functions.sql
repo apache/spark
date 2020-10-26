@@ -92,3 +92,6 @@ select transform_values(ys, (k, v) -> k + v) as v from nested;
 -- use non reversed keywords: all is non reversed only if !ansi
 select transform(ys, all -> all * all) as v from values (array(32, 97)) as t(ys);
 select transform(ys, (all, i) -> all + i) as v from values (array(32, 97)) as t(ys);
+
+-- SPARK-32819: Aggregate on nested string arrays
+select aggregate(split('abcdefgh',''), array(array('')), (acc, x) -> array(array(x)));

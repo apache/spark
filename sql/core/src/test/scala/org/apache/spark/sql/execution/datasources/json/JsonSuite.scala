@@ -2824,6 +2824,19 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       }
     }
   }
+
+  test("SPARK-32810: JSON data source should be able to read files with " +
+    "escaped glob metacharacter in the paths") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      // test JSON writer / reader without specifying schema
+      val jsonTableName = "{def}"
+      spark.range(3).coalesce(1).write.json(s"$basePath/$jsonTableName")
+      val readback = spark.read
+        .json(s"$basePath/${"""(\[|\]|\{|\})""".r.replaceAllIn(jsonTableName, """\\$1""")}")
+      assert(readback.collect sameElements Array(Row(0), Row(1), Row(2)))
+    }
+  }
 }
 
 class JsonV1Suite extends JsonSuite {

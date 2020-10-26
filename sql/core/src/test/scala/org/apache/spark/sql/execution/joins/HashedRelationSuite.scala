@@ -360,6 +360,45 @@ class HashedRelationSuite extends SharedSparkSession {
     assert(java.util.Arrays.equals(os.toByteArray, os2.toByteArray))
   }
 
+  test("SPARK-31511: Make BytesToBytesMap iterators thread-safe") {
+    val ser = sparkContext.env.serializer.newInstance()
+    val key = Seq(BoundReference(0, LongType, false))
+
+    val unsafeProj = UnsafeProjection.create(
+      Seq(BoundReference(0, LongType, false), BoundReference(1, IntegerType, true)))
+    val rows = (0 until 10000).map(i => unsafeProj(InternalRow(Int.int2long(i), i + 1)).copy())
+    val unsafeHashed = UnsafeHashedRelation(rows.iterator, key, 1, mm)
+
+    val os = new ByteArrayOutputStream()
+    val thread1 = new Thread {
+      override def run(): Unit = {
+        val out = new ObjectOutputStream(os)
+        unsafeHashed.asInstanceOf[UnsafeHashedRelation].writeExternal(out)
+        out.flush()
+      }
+    }
+
+    val thread2 = new Thread {
+      override def run(): Unit = {
+        val threadOut = new ObjectOutputStream(new ByteArrayOutputStream())
+        unsafeHashed.asInstanceOf[UnsafeHashedRelation].writeExternal(threadOut)
+        threadOut.flush()
+      }
+    }
+
+    thread1.start()
+    thread2.start()
+    thread1.join()
+    thread2.join()
+
+    val unsafeHashed2 = ser.deserialize[UnsafeHashedRelation](ser.serialize(unsafeHashed))
+    val os2 = new ByteArrayOutputStream()
+    val out2 = new ObjectOutputStream(os2)
+    unsafeHashed2.writeExternal(out2)
+    out2.flush()
+    assert(java.util.Arrays.equals(os.toByteArray, os2.toByteArray))
+  }
+
   // This test require 4G heap to run, should run it manually
   ignore("build HashedRelation that is larger than 1G") {
     val unsafeProj = UnsafeProjection.create(
@@ -582,7 +621,7 @@ class HashedRelationSuite extends SharedSparkSession {
     }
   }
 
-  test("EmptyHashedRelation return null in get / getValue") {
+  test("EmptyHashedRelation override methods behavior test") {
     val buildKey = Seq(BoundReference(0, LongType, false))
     val hashed = HashedRelation(Seq.empty[InternalRow].toIterator, buildKey, 1, mm)
     assert(hashed == EmptyHashedRelation)
@@ -592,6 +631,10 @@ class HashedRelationSuite extends SharedSparkSession {
     assert(hashed.get(key) == null)
     assert(hashed.getValue(0L) == null)
     assert(hashed.getValue(key) == null)
+
+    assert(hashed.keys().isEmpty)
+    assert(hashed.keyIsUnique)
+    assert(hashed.estimatedSize == 0)
   }
 
   test("SPARK-32399: test methods related to key index") {

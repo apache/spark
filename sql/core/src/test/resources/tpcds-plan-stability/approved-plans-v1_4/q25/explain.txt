@@ -53,7 +53,7 @@ TakeOrderedAndProject (48)
 Output [6]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ticket_number#5, ss_net_profit#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_customer_sk), IsNotNull(ss_ticket_number), IsNotNull(ss_sold_date_sk), IsNotNull(ss_store_sk)]
+PushedFilters: [IsNotNull(ss_customer_sk), IsNotNull(ss_item_sk), IsNotNull(ss_ticket_number), IsNotNull(ss_sold_date_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ticket_number:int,ss_net_profit:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 8]
@@ -61,13 +61,13 @@ Input [6]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss
 
 (3) Filter [codegen id : 8]
 Input [6]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ticket_number#5, ss_net_profit#6]
-Condition : ((((isnotnull(ss_item_sk#2) AND isnotnull(ss_customer_sk#3)) AND isnotnull(ss_ticket_number#5)) AND isnotnull(ss_sold_date_sk#1)) AND isnotnull(ss_store_sk#4))
+Condition : ((((isnotnull(ss_customer_sk#3) AND isnotnull(ss_item_sk#2)) AND isnotnull(ss_ticket_number#5)) AND isnotnull(ss_sold_date_sk#1)) AND isnotnull(ss_store_sk#4))
 
 (4) Scan parquet default.store_returns
 Output [5]: [sr_returned_date_sk#7, sr_item_sk#8, sr_customer_sk#9, sr_ticket_number#10, sr_net_loss#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
-PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_customer_sk), IsNotNull(sr_item_sk), IsNotNull(sr_returned_date_sk)]
+PushedFilters: [IsNotNull(sr_customer_sk), IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number), IsNotNull(sr_returned_date_sk)]
 ReadSchema: struct<sr_returned_date_sk:bigint,sr_item_sk:bigint,sr_customer_sk:bigint,sr_ticket_number:bigint,sr_net_loss:decimal(7,2)>
 
 (5) ColumnarToRow [codegen id : 1]
@@ -75,7 +75,7 @@ Input [5]: [sr_returned_date_sk#7, sr_item_sk#8, sr_customer_sk#9, sr_ticket_num
 
 (6) Filter [codegen id : 1]
 Input [5]: [sr_returned_date_sk#7, sr_item_sk#8, sr_customer_sk#9, sr_ticket_number#10, sr_net_loss#11]
-Condition : (((isnotnull(sr_ticket_number#10) AND isnotnull(sr_customer_sk#9)) AND isnotnull(sr_item_sk#8)) AND isnotnull(sr_returned_date_sk#7))
+Condition : (((isnotnull(sr_customer_sk#9) AND isnotnull(sr_item_sk#8)) AND isnotnull(sr_ticket_number#10)) AND isnotnull(sr_returned_date_sk#7))
 
 (7) BroadcastExchange
 Input [5]: [sr_returned_date_sk#7, sr_item_sk#8, sr_customer_sk#9, sr_ticket_number#10, sr_net_loss#11]

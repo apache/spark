@@ -67,7 +67,12 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
 * **SORTED BY**
 
-    Determines the order in which the data is stored in buckets. Default is Ascending order.
+    Specifies an ordering of bucket columns. Optionally, one can use ASC for an ascending order or DESC for a descending order after any column names in the SORTED BY clause.
+    If not specified, ASC is assumed by default.
+   
+* **INTO num_buckets BUCKETS**
+
+    Specifies buckets numbers, which is used in `CLUSTERED BY` clause.
 
 * **LOCATION**
 

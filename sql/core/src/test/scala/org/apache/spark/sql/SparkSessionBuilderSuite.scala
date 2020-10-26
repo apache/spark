@@ -22,7 +22,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.internal.config.EXECUTOR_ALLOW_SPARK_CONTEXT
 import org.apache.spark.internal.config.UI.UI_ENABLED
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf._
 
 /**
@@ -33,7 +33,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   override def afterEach(): Unit = {
     // This suite should not interfere with the other test suites.
     SparkSession.getActiveSession.foreach(_.stop())
-    SparkSession.clearActiveSession()
+    SparkSession.clearActiveSessionInternal()
     SparkSession.getDefaultSession.foreach(_.stop())
     SparkSession.clearDefaultSession()
   }
@@ -64,7 +64,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   test("get active or default session") {
     val session = SparkSession.builder().master("local").getOrCreate()
     assert(SparkSession.active == session)
-    SparkSession.clearActiveSession()
+    SparkSession.clearActiveSessionInternal()
     assert(SparkSession.active == session)
     SparkSession.clearDefaultSession()
     intercept[IllegalStateException](SparkSession.active)
@@ -82,7 +82,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   test("use session from active thread session and propagate config options") {
     val defaultSession = SparkSession.builder().master("local").getOrCreate()
     val activeSession = defaultSession.newSession()
-    SparkSession.setActiveSession(activeSession)
+    SparkSession.setActiveSessionInternal(activeSession)
     val session = SparkSession.builder().config("spark-config2", "a").getOrCreate()
 
     assert(activeSession != defaultSession)
@@ -90,7 +90,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(session.conf.get("spark-config2") == "a")
     assert(session.sessionState.conf == SQLConf.get)
     assert(SQLConf.get.getConfString("spark-config2") == "a")
-    SparkSession.clearActiveSession()
+    SparkSession.clearActiveSessionInternal()
 
     assert(SparkSession.builder().getOrCreate() == defaultSession)
   }
@@ -105,7 +105,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("create a new session if the active thread session has been stopped") {
     val activeSession = SparkSession.builder().master("local").getOrCreate()
-    SparkSession.setActiveSession(activeSession)
+    SparkSession.setActiveSessionInternal(activeSession)
     activeSession.stop()
     val newSession = SparkSession.builder().master("local").getOrCreate()
     assert(newSession != activeSession)
@@ -181,7 +181,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       .master("local")
       .getOrCreate()
     val postFirstCreation = context.listenerBus.listeners.size()
-    SparkSession.clearActiveSession()
+    SparkSession.clearActiveSessionInternal()
     SparkSession.clearDefaultSession()
 
     SparkSession
@@ -190,7 +190,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       .master("local")
       .getOrCreate()
     val postSecondCreation = context.listenerBus.listeners.size()
-    SparkSession.clearActiveSession()
+    SparkSession.clearActiveSessionInternal()
     SparkSession.clearDefaultSession()
     assert(postFirstCreation == postSecondCreation)
   }
@@ -211,7 +211,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(session1.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532")
 
     // do not propagate static sql configs to the existing default session
-    SparkSession.clearActiveSession()
+    SparkSession.clearActiveSessionInternal()
     val session2 = SparkSession
       .builder()
       .config(WAREHOUSE_PATH.key, "SPARK-31532-db")
@@ -279,6 +279,25 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       SparkSession.builder.master("local")
         .config(EXECUTOR_ALLOW_SPARK_CONTEXT.key, true).getOrCreate().stop()
       ()
+    }
+  }
+
+  test("SPARK-33139: Test SparkSession.setActiveSession/clearActiveSession") {
+    Seq(true, false).foreach { allowModifyActiveSession =>
+      val session = SparkSession.builder()
+        .master("local")
+        .config(StaticSQLConf.LEGACY_ALLOW_MODIFY_ACTIVE_SESSION.key, allowModifyActiveSession)
+        .getOrCreate()
+
+      val newSession = session.newSession()
+      if (!allowModifyActiveSession) {
+        intercept[UnsupportedOperationException](SparkSession.setActiveSession(newSession))
+        intercept[UnsupportedOperationException](SparkSession.clearActiveSession())
+      } else {
+        SparkSession.setActiveSession(newSession)
+        SparkSession.clearActiveSession()
+      }
+      session.stop()
     }
   }
 }

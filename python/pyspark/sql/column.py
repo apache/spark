@@ -329,6 +329,86 @@ class Column(object):
                 DeprecationWarning)
         return self[name]
 
+    @since(3.1)
+    def withField(self, fieldName, col):
+        """
+        An expression that adds/replaces a field in :class:`StructType` by name.
+
+        >>> from pyspark.sql import Row
+        >>> from pyspark.sql.functions import lit
+        >>> df = spark.createDataFrame([Row(a=Row(b=1, c=2))])
+        >>> df.withColumn('a', df['a'].withField('b', lit(3))).select('a.b').show()
+        +---+
+        |  b|
+        +---+
+        |  3|
+        +---+
+        >>> df.withColumn('a', df['a'].withField('d', lit(4))).select('a.d').show()
+        +---+
+        |  d|
+        +---+
+        |  4|
+        +---+
+        """
+        if not isinstance(fieldName, str):
+            raise TypeError("fieldName should be a string")
+
+        if not isinstance(col, Column):
+            raise TypeError("col should be a Column")
+
+        return Column(self._jc.withField(fieldName, col._jc))
+
+    @since(3.1)
+    def dropFields(self, *fieldNames):
+        """
+        An expression that drops fields in :class:`StructType` by name.
+
+        >>> from pyspark.sql import Row
+        >>> from pyspark.sql.functions import col, lit
+        >>> df = spark.createDataFrame([
+        ...     Row(a=Row(b=1, c=2, d=3, e=Row(f=4, g=5, h=6)))])
+        >>> df.withColumn('a', df['a'].dropFields('b')).show()
+        +-----------------+
+        |                a|
+        +-----------------+
+        |{2, 3, {4, 5, 6}}|
+        +-----------------+
+
+        >>> df.withColumn('a', df['a'].dropFields('b', 'c')).show()
+        +--------------+
+        |             a|
+        +--------------+
+        |{3, {4, 5, 6}}|
+        +--------------+
+
+        This method supports dropping multiple nested fields directly e.g.
+
+        >>> df.withColumn("a", col("a").dropFields("e.g", "e.h")).show()
+        +--------------+
+        |             a|
+        +--------------+
+        |{1, 2, 3, {4}}|
+        +--------------+
+
+        However, if you are going to add/replace multiple nested fields,
+        it is preffered to extract out the nested struct before
+        adding/replacing multiple fields e.g.
+
+        >>> df.select(col("a").withField(
+        ...     "e", col("a.e").dropFields("g", "h")).alias("a")
+        ... ).show()
+        +--------------+
+        |             a|
+        +--------------+
+        |{1, 2, 3, {4}}|
+        +--------------+
+
+        """
+        sc = SparkContext._active_spark_context
+
+        jc = self._jc.dropFields(_to_seq(sc, fieldNames))
+        return Column(jc)
+
     def __getattr__(self, item):
         if item.startswith("__"):
             raise AttributeError(item)

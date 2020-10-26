@@ -859,20 +859,24 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  private def getMetaData(dir: java.io.File): Map[String, String] = {
+    val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
+    val conf = new Configuration()
+    val hadoopInputFile = HadoopInputFile.fromPath(new Path(file), conf)
+    val parquetReadOptions = HadoopReadOptions.builder(conf).build()
+    val m = ParquetFileReader.open(hadoopInputFile, parquetReadOptions)
+    val metadata = try {
+      m.getFileMetaData.getKeyValueMetaData
+    } finally {
+      m.close()
+    }
+    metadata.asScala.toMap
+  }
+
   test("Write Spark version into Parquet metadata") {
     withTempPath { dir =>
-      val path = dir.getAbsolutePath
-      spark.range(1).repartition(1).write.parquet(path)
-      val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
-
-      val conf = new Configuration()
-      val hadoopInputFile = HadoopInputFile.fromPath(new Path(file), conf)
-      val parquetReadOptions = HadoopReadOptions.builder(conf).build()
-      val m = ParquetFileReader.open(hadoopInputFile, parquetReadOptions)
-      val metaData = m.getFileMetaData.getKeyValueMetaData
-      m.close()
-
-      assert(metaData.get(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION_SHORT)
+      spark.range(1).repartition(1).write.parquet(dir.getAbsolutePath)
+      assert(getMetaData(dir)(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION_SHORT)
     }
   }
 
@@ -1105,6 +1109,29 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
               spark.read.parquet(path),
               Seq.tabulate(N)(_ => Row(Date.valueOf("1001-01-07"))))
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-33163: write the metadata key 'org.apache.spark.legacyDateTime'") {
+    def saveTs(dir: java.io.File): Unit = {
+      Seq(Timestamp.valueOf("2020-10-15 01:02:03")).toDF()
+        .repartition(1)
+        .write
+        .parquet(dir.getAbsolutePath)
+    }
+    withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+      withTempPath { dir =>
+        saveTs(dir)
+        assert(getMetaData(dir)(SPARK_LEGACY_DATETIME) === "")
+      }
+    }
+    Seq(CORRECTED, EXCEPTION).foreach { mode =>
+      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> mode.toString) {
+        withTempPath { dir =>
+          saveTs(dir)
+          assert(getMetaData(dir).get(SPARK_LEGACY_DATETIME).isEmpty)
         }
       }
     }

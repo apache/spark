@@ -20,6 +20,7 @@ package org.apache.spark.sql.types
 import scala.math.Numeric._
 import scala.math.Ordering
 
+import org.apache.spark.sql.catalyst.util.SQLOrderingUtil
 import org.apache.spark.sql.types.Decimal.DecimalIsConflicted
 
 private[sql] object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOrdering {
@@ -148,7 +149,7 @@ private[sql] object FloatExactNumeric extends FloatIsFractional {
     }
   }
 
-  override def compare(x: Float, y: Float): Int = java.lang.Float.compare(x, y)
+  override def compare(x: Float, y: Float): Int = SQLOrderingUtil.compareFloats(x, y)
 }
 
 private[sql] object DoubleExactNumeric extends DoubleIsFractional {
@@ -176,7 +177,7 @@ private[sql] object DoubleExactNumeric extends DoubleIsFractional {
     }
   }
 
-  override def compare(x: Double, y: Double): Int = java.lang.Double.compare(x, y)
+  override def compare(x: Double, y: Double): Int = SQLOrderingUtil.compareDoubles(x, y)
 }
 
 private[sql] object DecimalExactNumeric extends DecimalIsConflicted {
