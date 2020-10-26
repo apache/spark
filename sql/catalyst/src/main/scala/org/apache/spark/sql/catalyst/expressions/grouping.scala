@@ -152,25 +152,20 @@ object GroupingID {
   }
 }
 
-object MixedExprsWithCube {
-  def unapply(exprs: Seq[Expression]): Option[(Cube, Seq[Expression])] = {
-    val (cubes, others) = exprs.partition(_.isInstanceOf[Cube])
-    if (cubes.size == 1) {
-      Some((cubes.head.asInstanceOf[Cube], others))
-    } else {
+
+object GroupByOperator {
+  type GroupByOperatorType = Option[(Seq[Cube], Seq[Rollup], Seq[Expression], Seq[Expression])]
+
+  def unapply(exprs: Seq[Expression]): GroupByOperatorType = {
+    val (groupingSets, others) = exprs.partition(_.isInstanceOf[GroupingSet])
+    if (groupingSets.isEmpty) {
       None
+    } else {
+      val cubes = groupingSets.filter(_.isInstanceOf[Cube]).map(_.asInstanceOf[Cube])
+      val rollups = groupingSets.filter(_.isInstanceOf[Rollup]).map(_.asInstanceOf[Rollup])
+      val groupbyExpressions =
+        cubes.flatMap(_.groupByExprs) ++ rollups.flatMap(_.groupByExprs) ++ others
+      Some((cubes, rollups, others, groupbyExpressions.distinct))
     }
   }
 }
-
-object MixedExprsWithRollup {
-  def unapply(exprs: Seq[Expression]): Option[(Rollup, Seq[Expression])] = {
-    val (rollups, others) = exprs.partition(_.isInstanceOf[Rollup])
-    if (rollups.size == 1) {
-      Some((rollups.head.asInstanceOf[Rollup], others))
-    } else {
-      None
-    }
-  }
-}
-

@@ -3700,15 +3700,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           Row(0, null, 0, 1) :: Row(0, null, null, 1) ::
           Row(null, 0, 0, 1) :: Row(null, 0, null, 1) ::
           Row(null, null, 0, 1) :: Row(null, null, null, 1) :: Nil)
-      checkAnswer(sql("select a, b, c, count(*) FROM t GROUP BY a, CUBE(b, c)"),
+      checkAnswer(sql("SELECT a, b, c, count(*) FROM t GROUP BY a, CUBE(b, c)"),
         Row(0, 0, 0, 1) :: Row(0, 0, null, 1) ::
           Row(0, null, 0, 1) :: Row(0, null, null, 1) :: Nil)
 
       checkAnswer(sql("SELECT a, b, c, count(*) FROM t GROUP BY ROLLUP(a, b, c)"),
         Row(0, 0, 0, 1) :: Row(0, 0, null, 1) ::
           Row(0, null, null, 1) :: Row(null, null, null, 1) :: Nil)
-      checkAnswer(sql("select a, b, c, count(*) FROM t GROUP BY a, ROLLUP(b, c)"),
+      checkAnswer(sql("SELECT a, b, c, count(*) FROM t GROUP BY a, ROLLUP(b, c)"),
         Row(0, 0, 0, 1) :: Row(0, 0, null, 1) :: Row(0, null, null, 1) :: Nil)
+
+      checkAnswer(sql("SELECT a, b, c, count(*) FROM t GROUP BY ROLLUP(a, b), CUBE(b, c)"),
+        Row(0, 0, 0, 1) :: Row(0, 0, 0, 1) :: Row(0, 0, 0, 1) ::
+          Row(0, 0, null, 1) :: Row(0, 0, null, 1) :: Row(0, 0, null, 1) ::
+          Row(0, null, 0, 1) :: Row(0, null, null, 1) :: Row(null, 0, 0, 1) ::
+          Row(null, 0, null, 1) :: Row(null, null, 0, 1) :: Row(null, null, null, 1) :: Nil)
     }
   }
 }
