@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.jdbc.v2
 
+import org.apache.log4j.Level
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
