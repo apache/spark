@@ -232,7 +232,7 @@ private[spark] object Config extends Logging {
       .doc("Time to wait before considering a pending executor timedout.")
       .version("3.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
-      .checkValue(value => value > 0, "Allocation batch delay must be a positive time value.")
+      .checkValue(value => value > 0, "Allocation executor timeout must be a positive time value.")
       .createWithDefaultString("600s")
 
   val KUBERNETES_EXECUTOR_LOST_REASON_CHECK_MAX_ATTEMPTS =
