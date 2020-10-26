@@ -57,11 +57,22 @@ select a, a AS k, count(b) from data group by k, 1;
 -- can use ordinal in CUBE
 select a, b, count(1) from data group by cube(1, 2);
 
+-- mixed cases: can use ordinal in CUBE
+select a, b, count(1) from data group by cube(1, b);
+
 -- can use ordinal in ROLLUP
 select a, b, count(1) from data group by rollup(1, 2);
 
+-- mixed cases: can use ordinal in ROLLUP
+select a, b, count(1) from data group by rollup(1, b);
+
 -- can use ordinal in GROUPING SETS
 select a, b, count(1) from data group by grouping sets((1), (2), (1, 2));
+
+-- mixed cases: can use ordinal in GROUPING SETS
+select a, b, count(1) from data group by grouping sets((1), (b), (a, 2));
+
+select a, b, count(1) from data group by a, 2 grouping sets((1), (b), (a, 2));
 
 -- turn off group by ordinal
 set spark.sql.groupByOrdinal=false;
