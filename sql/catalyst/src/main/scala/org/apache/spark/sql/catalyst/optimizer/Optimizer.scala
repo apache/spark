@@ -1033,7 +1033,7 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
 object EliminateSorts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
 
-  val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
+  private val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) {
