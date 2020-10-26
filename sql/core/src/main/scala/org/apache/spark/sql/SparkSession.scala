@@ -1080,8 +1080,6 @@ object SparkSession extends Logging {
   /**
    * Returns a cloned SparkSession with all specified configurations disabled, or
    * the original SparkSession if all configurations are already disabled.
-   *
-   * @since 3.1.0
    */
   private[sql] def getOrCloneSessionWithConfigsOff(
       session: SparkSession,
