@@ -15,8 +15,10 @@
 # limitations under the License.
 #
 
-from pyspark.ml.param.shared import *
-from pyspark.ml.util import *
+from pyspark import since
+from pyspark.ml.param import Params
+from pyspark.ml.param.shared import HasCheckpointInterval, HasSeed, HasWeightCol, Param, \
+    TypeConverters, HasMaxIter, HasStepSize, HasValidationIndicatorCol
 from pyspark.ml.wrapper import JavaPredictionModel
 from pyspark.ml.common import inherit_doc
 

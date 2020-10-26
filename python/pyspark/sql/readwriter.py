@@ -14,12 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import sys
 
 from py4j.java_gateway import JavaClass
 
 from pyspark import RDD, since
 from pyspark.sql.column import _to_seq, _to_java_column
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType
 from pyspark.sql import utils
 from pyspark.sql.utils import to_str
 
@@ -429,6 +430,9 @@ class DataFrameReader(OptionUtils):
                         character. By default (None), it is disabled.
         :param header: uses the first line as names of columns. If None is set, it uses the
                        default value, ``false``.
+                       .. note:: if the given path is a RDD of Strings, this header
+                       option will remove all lines same with the header if exists.
+
         :param inferSchema: infers the input schema automatically from data. It requires one extra
                        pass over the data. If None is set, it uses the default value, ``false``.
         :param enforceSchema: If it is set to ``true``, the specified or inferred schema will be
@@ -1225,7 +1229,6 @@ class DataFrameWriterV2(object):
         Overwrite rows matching the given filter condition with the contents of the data frame in
         the output table.
         """
-        condition = _to_java_column(column)
         self._jwriter.overwrite(condition)
 
     @since(3.1)

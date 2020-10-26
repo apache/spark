@@ -92,8 +92,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Executors that have been lost, but for which we don't yet know the real exit reason.
   private val executorsPendingLossReason = new HashSet[String]
 
-  // Executors which are being decommissioned
-  protected val executorsPendingDecommission = new HashSet[String]
+  // Executors which are being decommissioned. Maps from executorId to workerHost.
+  protected val executorsPendingDecommission = new HashMap[String, Option[String]]
 
   // A map of ResourceProfile id to map of hostname with its possible task number running on it
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
@@ -191,6 +191,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         executorDataMap.get(executorId).foreach(_.executorEndpoint.send(StopExecutor))
         removeExecutor(executorId, reason)
 
+      // Do not change this code without running the K8s integration suites
       case DecommissionExecutor(executorId, decommissionInfo) =>
         logError(s"Received decommission executor message ${executorId}: $decommissionInfo")
         decommissionExecutor(executorId, decommissionInfo, adjustTargetNumExecutors = false)
@@ -272,6 +273,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         removeWorker(workerId, host, message)
         context.reply(true)
 
+      // Do not change this code without running the K8s integration suites
       case DecommissionExecutor(executorId, decommissionInfo) =>
         logError(s"Received decommission executor message ${executorId}: ${decommissionInfo}.")
         context.reply(decommissionExecutor(executorId, decommissionInfo,
@@ -390,16 +392,23 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         case Some(executorInfo) =>
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
-          val killed = CoarseGrainedSchedulerBackend.this.synchronized {
+          val lossReason = CoarseGrainedSchedulerBackend.this.synchronized {
             addressToExecutorId -= executorInfo.executorAddress
             executorDataMap -= executorId
             executorsPendingLossReason -= executorId
-            executorsPendingDecommission -= executorId
-            executorsPendingToRemove.remove(executorId).getOrElse(false)
+            val killedByDriver = executorsPendingToRemove.remove(executorId).getOrElse(false)
+            val workerHostOpt = executorsPendingDecommission.remove(executorId)
+            if (killedByDriver) {
+              ExecutorKilled
+            } else if (workerHostOpt.isDefined) {
+              ExecutorDecommission(workerHostOpt.get)
+            } else {
+              reason
+            }
           }
           totalCoreCount.addAndGet(-executorInfo.totalCores)
           totalRegisteredExecutors.addAndGet(-1)
-          scheduler.executorLost(executorId, if (killed) ExecutorKilled else reason)
+          scheduler.executorLost(executorId, lossReason)
           listenerBus.post(
             SparkListenerExecutorRemoved(System.currentTimeMillis(), executorId, reason.toString))
         case None =>
@@ -462,11 +471,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
       adjustTargetNumExecutors: Boolean): Seq[String] = {
 
-    val executorsToDecommission = executorsAndDecomInfo.filter { case (executorId, _) =>
+    // Do not change this code without running the K8s integration suites
+    val executorsToDecommission = executorsAndDecomInfo.filter { case (executorId, decomInfo) =>
       CoarseGrainedSchedulerBackend.this.synchronized {
         // Only bother decommissioning executors which are alive.
         if (isExecutorActive(executorId)) {
-          executorsPendingDecommission += executorId
+          executorsPendingDecommission(executorId) = decomInfo.workerHost
           true
         } else {
           false
@@ -484,24 +494,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }.map(_._1)
   }
 
-
+  // Do not change this code without running the K8s integration suites
   private def doDecommission(executorId: String,
       decomInfo: ExecutorDecommissionInfo): Boolean = {
 
     logInfo(s"Asking executor $executorId to decommissioning.")
-    try {
-      scheduler.executorDecommission(executorId, decomInfo)
-      if (driverEndpoint != null) {
-        logInfo("Propagating executor decommission to driver.")
-        driverEndpoint.send(DecommissionExecutor(executorId, decomInfo))
-      }
-    } catch {
-      case e: Exception =>
-        logError(s"Unexpected error during decommissioning ${e.toString}", e)
-        return false
-    }
+    scheduler.executorDecommission(executorId, decomInfo)
     // Send decommission message to the executor (it could have originated on the executor
-    // but not necessarily.
+    // but not necessarily).
     CoarseGrainedSchedulerBackend.this.synchronized {
       executorDataMap.get(executorId) match {
         case Some(executorInfo) =>
@@ -656,7 +656,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       !executorsPendingToRemove.contains(id) &&
       !executorsPendingLossReason.contains(id) &&
       !executorsPendingDecommission.contains(id)
-
   }
 
   /**

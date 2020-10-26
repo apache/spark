@@ -14,17 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+import sys
 import itertools
 from multiprocessing.pool import ThreadPool
 
 import numpy as np
 
-from pyspark import keyword_only
+from pyspark import keyword_only, since, SparkContext
 from pyspark.ml import Estimator, Model
 from pyspark.ml.common import _py2java, _java2py
 from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasCollectSubModels, HasParallelism, HasSeed
-from pyspark.ml.util import *
+from pyspark.ml.util import MLReadable, MLWritable, JavaMLWriter, JavaMLReader
 from pyspark.ml.wrapper import JavaParams
 from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
 from pyspark.sql.types import BooleanType
@@ -273,10 +275,10 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
     """
 
     @keyword_only
-    def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
+    def __init__(self, *, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
                  seed=None, parallelism=1, collectSubModels=False, foldCol=""):
         """
-        __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
+        __init__(self, \\*, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
                  seed=None, parallelism=1, collectSubModels=False, foldCol="")
         """
         super(CrossValidator, self).__init__()
@@ -286,10 +288,10 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
+    def setParams(self, *, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
                   seed=None, parallelism=1, collectSubModels=False, foldCol=""):
         """
-        setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
+        setParams(self, \\*, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
                   seed=None, parallelism=1, collectSubModels=False, foldCol=""):
         Sets params for cross validator.
         """
@@ -535,7 +537,10 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
             extra = dict()
         bestModel = self.bestModel.copy(extra)
         avgMetrics = list(self.avgMetrics)
-        subModels = [model.copy() for model in self.subModels]
+        subModels = [
+            [sub_model.copy() for sub_model in fold_sub_models]
+            for fold_sub_models in self.subModels
+        ]
         return self._copyValues(CrossValidatorModel(bestModel, avgMetrics, subModels), extra=extra)
 
     @since("2.3.0")
@@ -681,11 +686,11 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     """
 
     @keyword_only
-    def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
-                 parallelism=1, collectSubModels=False, seed=None):
+    def __init__(self, *, estimator=None, estimatorParamMaps=None, evaluator=None,
+                 trainRatio=0.75, parallelism=1, collectSubModels=False, seed=None):
         """
-        __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,\
-                 parallelism=1, collectSubModels=False, seed=None)
+        __init__(self, \\*, estimator=None, estimatorParamMaps=None, evaluator=None, \
+                 trainRatio=0.75, parallelism=1, collectSubModels=False, seed=None)
         """
         super(TrainValidationSplit, self).__init__()
         self._setDefault(parallelism=1)
@@ -694,11 +699,11 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
 
     @since("2.0.0")
     @keyword_only
-    def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
-                  parallelism=1, collectSubModels=False, seed=None):
+    def setParams(self, *, estimator=None, estimatorParamMaps=None, evaluator=None,
+                  trainRatio=0.75, parallelism=1, collectSubModels=False, seed=None):
         """
-        setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,\
-                  parallelism=1, collectSubModels=False, seed=None):
+        setParams(self, \\*, estimator=None, estimatorParamMaps=None, evaluator=None, \
+                  trainRatio=0.75, parallelism=1, collectSubModels=False, seed=None):
         Sets params for the train validation split.
         """
         kwargs = self._input_kwargs

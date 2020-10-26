@@ -44,7 +44,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.SupportsStreamingUpdate
+import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
@@ -315,7 +315,7 @@ abstract class StreamExecution(
       startLatch.countDown()
 
       // While active, repeatedly attempt to run batches.
-      SparkSession.setActiveSession(sparkSession)
+      SparkSession.setActiveSessionInternal(sparkSession)
 
       updateStatusMessage("Initializing sources")
       // force initialization of the logical plan so that the sources can be created
@@ -630,9 +630,9 @@ abstract class StreamExecution(
         writeBuilder.asInstanceOf[SupportsTruncate].truncate().buildForStreaming()
 
       case Update =>
-        require(writeBuilder.isInstanceOf[SupportsStreamingUpdate],
+        require(writeBuilder.isInstanceOf[SupportsStreamingUpdateAsAppend],
           table.name + " does not support Update mode.")
-        writeBuilder.asInstanceOf[SupportsStreamingUpdate].update().buildForStreaming()
+        writeBuilder.asInstanceOf[SupportsStreamingUpdateAsAppend].buildForStreaming()
     }
   }
 

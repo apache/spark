@@ -32,7 +32,7 @@ import org.apache.orc.impl.RecordReaderImpl
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
-import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{FakeFileSystemRequiringDSOption, Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -120,8 +120,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
   }
 
-  protected def testSelectiveDictionaryEncoding(isSelective: Boolean,
-      isHive23: Boolean = false): Unit = {
+  protected def testSelectiveDictionaryEncoding(isSelective: Boolean, isHiveOrc: Boolean): Unit = {
     val tableName = "orcTable"
 
     withTempDir { dir =>
@@ -174,7 +173,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
           // Hive 0.11 and RLE v2 is introduced in Hive 0.12 ORC with more improvements.
           // For more details, see https://orc.apache.org/specification/
           assert(stripe.getColumns(1).getKind === DICTIONARY_V2)
-          if (isSelective || isHive23) {
+          if (isSelective || isHiveOrc) {
             assert(stripe.getColumns(2).getKind === DIRECT_V2)
           } else {
             assert(stripe.getColumns(2).getKind === DICTIONARY_V2)
@@ -538,6 +537,21 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       }
     }
   }
+
+  test("SPARK-33094: should propagate Hadoop config from DS options to underlying file system") {
+    withSQLConf(
+      "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
+      "fs.file.impl.disable.cache" -> "true") {
+      Seq(false, true).foreach { mergeSchema =>
+        withTempPath { dir =>
+          val path = dir.getAbsolutePath
+          val conf = Map("ds_option" -> "value", "mergeSchema" -> mergeSchema.toString)
+          spark.range(1).write.options(conf).orc(path)
+          checkAnswer(spark.read.options(conf).orc(path), Row(0))
+        }
+      }
+    }
+  }
 }
 
 class OrcSourceSuite extends OrcSuite with SharedSparkSession {
@@ -581,7 +595,7 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
   }
 
   test("Enforce direct encoding column-wise selectively") {
-    testSelectiveDictionaryEncoding(isSelective = true)
+    testSelectiveDictionaryEncoding(isSelective = true, isHiveOrc = false)
   }
 
   test("SPARK-11412 read and merge orc schemas in parallel") {

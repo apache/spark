@@ -21,7 +21,7 @@ from pyspark import since
 from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.group_ops import PandasGroupedOpsMixin
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StructField, IntegerType, StringType
 
 __all__ = ["GroupedData"]
 

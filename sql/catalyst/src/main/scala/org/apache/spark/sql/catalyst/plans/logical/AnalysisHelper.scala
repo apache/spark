@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.CheckAnalysis
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
 import org.apache.spark.util.Utils
@@ -115,6 +115,19 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
           afterRule.mapChildren(_.resolveOperatorsDown(rule))
         }
       }
+    } else {
+      self
+    }
+  }
+
+  /**
+   * A variant of `transformUpWithNewOutput`, which skips touching already analyzed plan.
+   */
+  def resolveOperatorsUpWithNewOutput(
+      rule: PartialFunction[LogicalPlan, (LogicalPlan, Seq[(Attribute, Attribute)])])
+  : LogicalPlan = {
+    if (!analyzed) {
+      transformUpWithNewOutput(rule, skipCond = _.analyzed)
     } else {
       self
     }

@@ -23,7 +23,8 @@ import time
 import unittest
 
 from pyspark.sql import SparkSession, Row
-from pyspark.sql.types import *
+from pyspark.sql.types import StringType, IntegerType, DoubleType, StructType, StructField, \
+    BooleanType, DateType, TimestampType, FloatType
 from pyspark.sql.utils import AnalysisException, IllegalArgumentException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils, have_pyarrow, have_pandas, \
     pandas_requirement_message, pyarrow_requirement_message
@@ -517,7 +518,7 @@ class DataFrameTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(data, schema)
         return df.toPandas()
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas(self):
         import numpy as np
         pdf = self._to_pandas()
@@ -529,7 +530,7 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEquals(types[4], np.object)  # datetime.date
         self.assertEquals(types[5], 'datetime64[ns]')
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_with_duplicated_column_names(self):
         import numpy as np
 
@@ -542,7 +543,7 @@ class DataFrameTests(ReusedSQLTestCase):
                 self.assertEquals(types.iloc[0], np.int32)
                 self.assertEquals(types.iloc[1], np.int32)
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_on_cross_join(self):
         import numpy as np
 
@@ -568,7 +569,7 @@ class DataFrameTests(ReusedSQLTestCase):
             with self.assertRaisesRegexp(ImportError, 'Pandas >= .* must be installed'):
                 self._to_pandas()
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_avoid_astype(self):
         import numpy as np
         schema = StructType().add("a", IntegerType()).add("b", StringType())\
@@ -580,7 +581,7 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEquals(types[1], np.object)
         self.assertEquals(types[2], np.float64)
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_empty_dataframe(self):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
             # SPARK-29188 test that toPandas() on an empty dataframe has the correct dtypes
@@ -600,7 +601,7 @@ class DataFrameTests(ReusedSQLTestCase):
             dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
             self.assertTrue(np.all(dtypes_when_empty_df == dtypes_when_nonempty_df))
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_null_dataframe(self):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
             # SPARK-29188 test that toPandas() on a dataframe with only nulls has correct dtypes
@@ -628,7 +629,7 @@ class DataFrameTests(ReusedSQLTestCase):
             self.assertEqual(types[7], np.object)
             self.assertTrue(np.can_cast(np.datetime64, types[8]))
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_mixed_dataframe(self):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
             # SPARK-29188 test that toPandas() on a dataframe with some nulls has correct dtypes
@@ -656,7 +657,7 @@ class DataFrameTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(data)
         self.assertEqual(df.first(), Row(longarray=[-9223372036854775808, 0, 9223372036854775807]))
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_create_dataframe_from_pandas_with_timestamp(self):
         import pandas as pd
         from datetime import datetime
@@ -684,7 +685,7 @@ class DataFrameTests(ReusedSQLTestCase):
                 self.spark.createDataFrame(pdf)
 
     # Regression test for SPARK-23360
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_create_dataframe_from_pandas_with_dst(self):
         import pandas as pd
         from pandas.util.testing import assert_frame_equal
@@ -888,7 +889,7 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        pandas_requirement_message or pyarrow_requirement_message)
+        pandas_requirement_message or pyarrow_requirement_message)  # type: ignore
     def test_query_execution_listener_on_collect_with_arrow(self):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
             self.assertFalse(
@@ -903,10 +904,10 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_dataframe import *
+    from pyspark.sql.tests.test_dataframe import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

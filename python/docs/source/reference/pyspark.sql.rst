@@ -33,6 +33,7 @@ Core Classes
     Column
     Row
     GroupedData
+    PandasCogroupedOps
     DataFrameNaFunctions
     DataFrameStatFunctions
     Window
@@ -291,6 +292,7 @@ Functions
     asc_nulls_last
     ascii
     asin
+    assert_true
     atan
     atan2
     avg
@@ -408,6 +410,7 @@ Functions
     months_between
     nanvl
     next_day
+    nth_value
     ntile
     overlay
     pandas_udf
@@ -418,6 +421,7 @@ Functions
     pow
     quarter
     radians
+    raise_error
     rand
     randn
     rank
@@ -539,4 +543,5 @@ Grouping
     GroupedData.min
     GroupedData.pivot
     GroupedData.sum
+    PandasCogroupedOps.applyInPandas
 

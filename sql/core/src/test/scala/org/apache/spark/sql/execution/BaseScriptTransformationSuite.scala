@@ -63,16 +63,6 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     uncaughtExceptionHandler.cleanStatus()
   }
 
-  def isHive23OrSpark: Boolean
-
-  // In Hive 1.2, the string representation of a decimal omits trailing zeroes.
-  // But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
-  val decimalToString: Column => Column = if (isHive23OrSpark) {
-    c => c.cast("string")
-  } else {
-    c => c.cast("decimal(1, 0)").cast("string")
-  }
-
   def createScriptTransformationExec(
       input: Seq[Expression],
       script: String,
@@ -120,7 +110,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   test("SPARK-25990: TRANSFORM should handle different data types correctly") {
     assume(TestUtils.testCommandAvailable("python"))
-    val scriptFilePath = getTestResourcePath("test_script.py")
+    val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
 
     withTempView("v") {
       val df = Seq(
@@ -142,14 +132,14 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         'a.cast("string"),
         'b.cast("string"),
         'c.cast("string"),
-        decimalToString('d),
+        'd.cast("string"),
         'e.cast("string")).collect())
     }
   }
 
   test("SPARK-25990: TRANSFORM should handle schema less correctly (no serde)") {
     assume(TestUtils.testCommandAvailable("python"))
-    val scriptFilePath = getTestResourcePath("test_script.py")
+    val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
 
     withTempView("v") {
       val df = Seq(

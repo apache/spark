@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.File
 import java.sql.Timestamp
 
+import org.apache.commons.io.FileUtils
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
@@ -35,8 +37,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
   import testImplicits._
 
   import ScriptTransformationIOSchema._
-
-  override def isHive23OrSpark: Boolean = HiveUtils.isHive23
 
   override def createScriptTransformationExec(
       input: Seq[Expression],
@@ -158,7 +158,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
   test("SPARK-25990: TRANSFORM should handle schema less correctly (hive serde)") {
     assume(TestUtils.testCommandAvailable("python"))
-    val scriptFilePath = getTestResourcePath("test_script.py")
+    val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsolutePath
 
     withTempView("v") {
       val df = Seq(

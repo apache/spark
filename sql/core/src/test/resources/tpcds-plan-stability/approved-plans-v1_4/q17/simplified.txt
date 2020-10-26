@@ -1,47 +1,47 @@
-TakeOrderedAndProject [as_store_returns_quantityave,as_store_returns_quantitycount,as_store_returns_quantitystdev,catalog_sales_quantityave,catalog_sales_quantitycount,catalog_sales_quantitycov,catalog_sales_quantitystdev,i_item_desc,i_item_id,s_state,store_returns_quantitycov,store_sales_quantityave,store_sales_quantitycount,store_sales_quantitycov,store_sales_quantitystdev]
+TakeOrderedAndProject [i_item_id,i_item_desc,s_state,store_sales_quantitycount,store_sales_quantityave,store_sales_quantitystdev,store_sales_quantitycov,as_store_returns_quantitycount,as_store_returns_quantityave,as_store_returns_quantitystdev,store_returns_quantitycov,catalog_sales_quantitycount,catalog_sales_quantityave,catalog_sales_quantitystdev,catalog_sales_quantitycov]
   WholeStageCodegen (9)
-    HashAggregate [avg,avg,avg,count,count,count,count,count,count,i_item_desc,i_item_id,m2,m2,m2,n,n,n,s_state,sum,sum,sum] [as_store_returns_quantityave,as_store_returns_quantitycount,as_store_returns_quantitystdev,avg,avg,avg,avg(cast(cs_quantity as bigint)),avg(cast(sr_return_quantity as bigint)),avg(cast(ss_quantity as bigint)),catalog_sales_quantityave,catalog_sales_quantitycount,catalog_sales_quantitycov,catalog_sales_quantitystdev,count,count,count,count,count,count,count(cs_quantity),count(sr_return_quantity),count(ss_quantity),m2,m2,m2,n,n,n,stddev_samp(cast(cs_quantity as double)),stddev_samp(cast(sr_return_quantity as double)),stddev_samp(cast(ss_quantity as double)),store_returns_quantitycov,store_sales_quantityave,store_sales_quantitycount,store_sales_quantitycov,store_sales_quantitystdev,sum,sum,sum]
+    HashAggregate [i_item_id,i_item_desc,s_state,count,sum,count,n,avg,m2,count,sum,count,n,avg,m2,count,sum,count,n,avg,m2] [count(ss_quantity),avg(cast(ss_quantity as bigint)),stddev_samp(cast(ss_quantity as double)),count(sr_return_quantity),avg(cast(sr_return_quantity as bigint)),stddev_samp(cast(sr_return_quantity as double)),count(cs_quantity),avg(cast(cs_quantity as bigint)),stddev_samp(cast(cs_quantity as double)),store_sales_quantitycount,store_sales_quantityave,store_sales_quantitystdev,store_sales_quantitycov,as_store_returns_quantitycount,as_store_returns_quantityave,as_store_returns_quantitystdev,store_returns_quantitycov,catalog_sales_quantitycount,catalog_sales_quantityave,catalog_sales_quantitystdev,catalog_sales_quantitycov,count,sum,count,n,avg,m2,count,sum,count,n,avg,m2,count,sum,count,n,avg,m2]
       InputAdapter
-        Exchange [i_item_desc,i_item_id,s_state] #1
+        Exchange [i_item_id,i_item_desc,s_state] #1
           WholeStageCodegen (8)
-            HashAggregate [cs_quantity,i_item_desc,i_item_id,s_state,sr_return_quantity,ss_quantity] [avg,avg,avg,avg,avg,avg,count,count,count,count,count,count,count,count,count,count,count,count,m2,m2,m2,m2,m2,m2,n,n,n,n,n,n,sum,sum,sum,sum,sum,sum]
-              Project [cs_quantity,i_item_desc,i_item_id,s_state,sr_return_quantity,ss_quantity]
-                BroadcastHashJoin [i_item_sk,ss_item_sk]
-                  Project [cs_quantity,s_state,sr_return_quantity,ss_item_sk,ss_quantity]
-                    BroadcastHashJoin [s_store_sk,ss_store_sk]
-                      Project [cs_quantity,sr_return_quantity,ss_item_sk,ss_quantity,ss_store_sk]
+            HashAggregate [i_item_id,i_item_desc,s_state,ss_quantity,sr_return_quantity,cs_quantity] [count,sum,count,n,avg,m2,count,sum,count,n,avg,m2,count,sum,count,n,avg,m2,count,sum,count,n,avg,m2,count,sum,count,n,avg,m2,count,sum,count,n,avg,m2]
+              Project [ss_quantity,sr_return_quantity,cs_quantity,s_state,i_item_id,i_item_desc]
+                BroadcastHashJoin [ss_item_sk,i_item_sk]
+                  Project [ss_item_sk,ss_quantity,sr_return_quantity,cs_quantity,s_state]
+                    BroadcastHashJoin [ss_store_sk,s_store_sk]
+                      Project [ss_item_sk,ss_store_sk,ss_quantity,sr_return_quantity,cs_quantity]
                         BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                          Project [cs_quantity,cs_sold_date_sk,sr_return_quantity,ss_item_sk,ss_quantity,ss_store_sk]
-                            BroadcastHashJoin [d_date_sk,sr_returned_date_sk]
-                              Project [cs_quantity,cs_sold_date_sk,sr_return_quantity,sr_returned_date_sk,ss_item_sk,ss_quantity,ss_store_sk]
-                                BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
-                                  Project [cs_quantity,cs_sold_date_sk,sr_return_quantity,sr_returned_date_sk,ss_item_sk,ss_quantity,ss_sold_date_sk,ss_store_sk]
-                                    BroadcastHashJoin [cs_bill_customer_sk,cs_item_sk,sr_customer_sk,sr_item_sk]
-                                      Project [sr_customer_sk,sr_item_sk,sr_return_quantity,sr_returned_date_sk,ss_item_sk,ss_quantity,ss_sold_date_sk,ss_store_sk]
-                                        BroadcastHashJoin [sr_customer_sk,sr_item_sk,sr_ticket_number,ss_customer_sk,ss_item_sk,ss_ticket_number]
-                                          Filter [ss_customer_sk,ss_item_sk,ss_sold_date_sk,ss_store_sk,ss_ticket_number]
+                          Project [ss_item_sk,ss_store_sk,ss_quantity,sr_return_quantity,cs_sold_date_sk,cs_quantity]
+                            BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
+                              Project [ss_item_sk,ss_store_sk,ss_quantity,sr_returned_date_sk,sr_return_quantity,cs_sold_date_sk,cs_quantity]
+                                BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                  Project [ss_sold_date_sk,ss_item_sk,ss_store_sk,ss_quantity,sr_returned_date_sk,sr_return_quantity,cs_sold_date_sk,cs_quantity]
+                                    BroadcastHashJoin [sr_customer_sk,sr_item_sk,cs_bill_customer_sk,cs_item_sk]
+                                      Project [ss_sold_date_sk,ss_item_sk,ss_store_sk,ss_quantity,sr_returned_date_sk,sr_item_sk,sr_customer_sk,sr_return_quantity]
+                                        BroadcastHashJoin [ss_customer_sk,ss_item_sk,ss_ticket_number,sr_customer_sk,sr_item_sk,sr_ticket_number]
+                                          Filter [ss_customer_sk,ss_item_sk,ss_ticket_number,ss_sold_date_sk,ss_store_sk]
                                             ColumnarToRow
                                               InputAdapter
-                                                Scan parquet default.store_sales [ss_customer_sk,ss_item_sk,ss_quantity,ss_sold_date_sk,ss_store_sk,ss_ticket_number]
+                                                Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_quantity]
                                           InputAdapter
                                             BroadcastExchange #2
                                               WholeStageCodegen (1)
-                                                Filter [sr_customer_sk,sr_item_sk,sr_returned_date_sk,sr_ticket_number]
+                                                Filter [sr_customer_sk,sr_item_sk,sr_ticket_number,sr_returned_date_sk]
                                                   ColumnarToRow
                                                     InputAdapter
-                                                      Scan parquet default.store_returns [sr_customer_sk,sr_item_sk,sr_return_quantity,sr_returned_date_sk,sr_ticket_number]
+                                                      Scan parquet default.store_returns [sr_returned_date_sk,sr_item_sk,sr_customer_sk,sr_ticket_number,sr_return_quantity]
                                       InputAdapter
                                         BroadcastExchange #3
                                           WholeStageCodegen (2)
                                             Filter [cs_bill_customer_sk,cs_item_sk,cs_sold_date_sk]
                                               ColumnarToRow
                                                 InputAdapter
-                                                  Scan parquet default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_sold_date_sk]
+                                                  Scan parquet default.catalog_sales [cs_sold_date_sk,cs_bill_customer_sk,cs_item_sk,cs_quantity]
                                   InputAdapter
                                     BroadcastExchange #4
                                       WholeStageCodegen (3)
                                         Project [d_date_sk]
-                                          Filter [d_date_sk,d_quarter_name]
+                                          Filter [d_quarter_name,d_date_sk]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.date_dim [d_date_sk,d_quarter_name]
@@ -49,7 +49,7 @@ TakeOrderedAndProject [as_store_returns_quantityave,as_store_returns_quantitycou
                                 BroadcastExchange #5
                                   WholeStageCodegen (4)
                                     Project [d_date_sk]
-                                      Filter [d_date_sk,d_quarter_name]
+                                      Filter [d_quarter_name,d_date_sk]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.date_dim [d_date_sk,d_quarter_name]
@@ -61,11 +61,11 @@ TakeOrderedAndProject [as_store_returns_quantityave,as_store_returns_quantitycou
                             Filter [s_store_sk]
                               ColumnarToRow
                                 InputAdapter
-                                  Scan parquet default.store [s_state,s_store_sk]
+                                  Scan parquet default.store [s_store_sk,s_state]
                   InputAdapter
                     BroadcastExchange #7
                       WholeStageCodegen (7)
                         Filter [i_item_sk]
                           ColumnarToRow
                             InputAdapter
-                              Scan parquet default.item [i_item_desc,i_item_id,i_item_sk]
+                              Scan parquet default.item [i_item_sk,i_item_id,i_item_desc]

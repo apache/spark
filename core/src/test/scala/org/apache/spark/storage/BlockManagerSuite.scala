@@ -144,10 +144,28 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     blockManager
   }
 
+  // Save modified system properties so that we can restore them after tests.
+  val originalArch = System.getProperty("os.arch")
+  val originalCompressedOops = System.getProperty(TEST_USE_COMPRESSED_OOPS_KEY)
+
+  def reinitializeSizeEstimator(arch: String, useCompressedOops: String): Unit = {
+    def set(k: String, v: String): Unit = {
+      if (v == null) {
+        System.clearProperty(k)
+      } else {
+        System.setProperty(k, v)
+      }
+    }
+    set("os.arch", arch)
+    set(TEST_USE_COMPRESSED_OOPS_KEY, useCompressedOops)
+    val initialize = PrivateMethod[Unit](Symbol("initialize"))
+    SizeEstimator invokePrivate initialize()
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
-    System.setProperty("os.arch", "amd64")
+    reinitializeSizeEstimator("amd64", "true")
     conf = new SparkConf(false)
     init(conf)
 
@@ -168,12 +186,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         liveListenerBus, None, blockManagerInfo, mapOutputTracker)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true))
-
-    val initialize = PrivateMethod[Unit](Symbol("initialize"))
-    SizeEstimator invokePrivate initialize()
   }
 
   override def afterEach(): Unit = {
+    // Restore system properties and SizeEstimator to their original states.
+    reinitializeSizeEstimator(originalArch, originalCompressedOops)
+
     try {
       conf = null
       allStores.foreach(_.stop())
@@ -222,7 +240,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val driverEndpoint = rpcEnv.setupEndpoint(CoarseGrainedSchedulerBackend.ENDPOINT_NAME,
       new RpcEndpoint {
         private val executorSet = mutable.HashSet[String]()
-        override val rpcEnv: RpcEnv = this.rpcEnv
+        override val rpcEnv: RpcEnv = BlockManagerSuite.this.rpcEnv
         override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
           case CoarseGrainedClusterMessages.RegisterExecutor(executorId, _, _, _, _, _, _, _) =>
             executorSet += executorId
@@ -236,7 +254,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     def createAndRegisterBlockManager(timeout: Boolean): BlockManagerId = {
       val id = if (timeout) "timeout" else "normal"
       val bmRef = rpcEnv.setupEndpoint(s"bm-$id", new RpcEndpoint {
-        override val rpcEnv: RpcEnv = this.rpcEnv
+        override val rpcEnv: RpcEnv = BlockManagerSuite.this.rpcEnv
         private def reply[T](context: RpcCallContext, response: T): Unit = {
           if (timeout) {
             Thread.sleep(conf.getTimeAsMs(Network.RPC_ASK_TIMEOUT.key) + 1000)

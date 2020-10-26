@@ -2173,14 +2173,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitMultiUnitsInterval(ctx: MultiUnitsIntervalContext): CalendarInterval = {
     withOrigin(ctx) {
-      val units = ctx.intervalUnit().asScala
+      val units = ctx.unit.asScala
       val values = ctx.intervalValue().asScala
       try {
         assert(units.length == values.length)
         val kvs = units.indices.map { i =>
           val u = units(i).getText
           val v = if (values(i).STRING() != null) {
-            string(values(i).STRING())
+            val value = string(values(i).STRING())
+            // SPARK-32840: For invalid cases, e.g. INTERVAL '1 day 2' hour,
+            // INTERVAL 'interval 1' day, we need to check ahead before they are concatenated with
+            // units and become valid ones, e.g. '1 day 2 hour'.
+            // Ideally, we only ensure the value parts don't contain any units here.
+            if (value.exists(Character.isLetter)) {
+              throw new ParseException("Can only use numbers in the interval value part for" +
+                s" multiple unit value pairs interval form, but got invalid value: $value", ctx)
+            }
+            value
           } else {
             values(i).getText
           }
@@ -3222,7 +3231,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[DescribeColumnStatement]] or [[DescribeRelation]] commands.
+   * Create a [[DescribeColumn]] or [[DescribeRelation]] commands.
    */
   override def visitDescribeRelation(ctx: DescribeRelationContext): LogicalPlan = withOrigin(ctx) {
     val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
@@ -3230,8 +3239,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       if (ctx.partitionSpec != null) {
         throw new ParseException("DESC TABLE COLUMN for a specific partition is not supported", ctx)
       } else {
-        DescribeColumnStatement(
-          visitMultipartIdentifier(ctx.multipartIdentifier()),
+        DescribeColumn(
+          UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier())),
           ctx.describeColName.nameParts.asScala.map(_.getText).toSeq,
           isExtended)
       }
@@ -3403,7 +3412,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[RefreshTableStatement]].
+   * Create a [[RefreshTable]].
    *
    * For example:
    * {{{
@@ -3411,7 +3420,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitRefreshTable(ctx: RefreshTableContext): LogicalPlan = withOrigin(ctx) {
-    RefreshTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()))
+    RefreshTable(UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier())))
   }
 
   /**

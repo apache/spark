@@ -25,6 +25,7 @@ import scala.concurrent.duration._
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.cli.OperationState
 import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl}
+import org.apache.hive.service.rpc.thrift.TProtocolVersion
 import org.mockito.Mockito.{doReturn, mock, spy, when, RETURNS_DEEP_STUBS}
 import org.mockito.invocation.InvocationOnMock
 
@@ -64,7 +65,7 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
   ).foreach { case (finalState, transition) =>
     test("SPARK-32057 SparkExecuteStatementOperation should not transiently become ERROR " +
       s"before being set to $finalState") {
-      val hiveSession = new HiveSessionImpl(ThriftserverShimUtils.testedProtocolVersions.head,
+      val hiveSession = new HiveSessionImpl(TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V1,
       "username", "password", new HiveConf, "ip address")
       hiveSession.open(new util.HashMap)
 

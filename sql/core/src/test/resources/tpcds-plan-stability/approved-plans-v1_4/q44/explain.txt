@@ -40,7 +40,7 @@ TakeOrderedAndProject (36)
 (1) Scan parquet default.store_sales
 Output [3]: [ss_item_sk#1, ss_store_sk#2, ss_net_profit#3]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_store_sk), EqualTo(ss_store_sk,4)]
 ReadSchema: struct<ss_item_sk:int,ss_store_sk:int,ss_net_profit:decimal(7,2)>
 
@@ -155,7 +155,7 @@ Input [4]: [item_sk#10, rnk#16, item_sk#20, rnk#24]
 (27) Scan parquet default.item
 Output [2]: [i_item_sk#26, i_product_name#27]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_product_name:string>
 
@@ -210,7 +210,7 @@ Subquery:1 Hosting operator id = 8 Hosting Expression = Subquery scalar-subquery
 (37) Scan parquet default.store_sales
 Output [3]: [ss_addr_sk#33, ss_store_sk#2, ss_net_profit#3]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_store_sk), EqualTo(ss_store_sk,4), IsNull(ss_addr_sk)]
 ReadSchema: struct<ss_addr_sk:int,ss_store_sk:int,ss_net_profit:decimal(7,2)>
 

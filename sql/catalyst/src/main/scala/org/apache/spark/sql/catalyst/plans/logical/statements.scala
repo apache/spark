@@ -299,14 +299,6 @@ case class DropViewStatement(
     ifExists: Boolean) extends ParsedStatement
 
 /**
- * A DESCRIBE TABLE tbl_name col_name statement, as parsed from SQL.
- */
-case class DescribeColumnStatement(
-    tableName: Seq[String],
-    colNameParts: Seq[String],
-    isExtended: Boolean) extends ParsedStatement
-
-/**
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.
@@ -428,11 +420,6 @@ case class TruncateTableStatement(
 case class ShowPartitionsStatement(
     tableName: Seq[String],
     partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
-
-/**
- * A REFRESH TABLE statement, as parsed from SQL
- */
-case class RefreshTableStatement(tableName: Seq[String]) extends ParsedStatement
 
 /**
  * A SHOW COLUMNS statement, as parsed from SQL

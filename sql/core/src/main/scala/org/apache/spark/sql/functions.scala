@@ -684,8 +684,9 @@ object functions {
   def min(columnName: String): Column = min(Column(columnName))
 
   /**
-   * Aggregate function: returns and array of the approximate percentile values
-   * of numeric column col at the given percentages.
+   * Aggregate function: returns the approximate `percentile` of the numeric column `col` which
+   * is the smallest value in the ordered `col` values (sorted from least to greatest) such that
+   * no more than `percentage` of `col` values is less than the value or equal to that value.
    *
    * If percentage is an array, each value must be between 0.0 and 1.0.
    * If it is a single floating point value, it must be between 0.0 and 1.0.
@@ -991,6 +992,35 @@ object functions {
    */
   def lead(e: Column, offset: Int, defaultValue: Any): Column = withExpr {
     Lead(e.expr, Literal(offset), Literal(defaultValue))
+  }
+
+  /**
+   * Window function: returns the value that is the `offset`th row of the window frame
+   * (counting from 1), and `null` if the size of window frame is less than `offset` rows.
+   *
+   * It will return the `offset`th non-null value it sees when ignoreNulls is set to true.
+   * If all values are null, then null is returned.
+   *
+   * This is equivalent to the nth_value function in SQL.
+   *
+   * @group window_funcs
+   * @since 3.1.0
+   */
+  def nth_value(e: Column, offset: Int, ignoreNulls: Boolean): Column = withExpr {
+    NthValue(e.expr, Literal(offset), ignoreNulls)
+  }
+
+  /**
+   * Window function: returns the value that is the `offset`th row of the window frame
+   * (counting from 1), and `null` if the size of window frame is less than `offset` rows.
+   *
+   * This is equivalent to the nth_value function in SQL.
+   *
+   * @group window_funcs
+   * @since 3.1.0
+   */
+  def nth_value(e: Column, offset: Int): Column = withExpr {
+    NthValue(e.expr, Literal(offset), false)
   }
 
   /**
@@ -1398,6 +1428,22 @@ object functions {
   def acos(columnName: String): Column = acos(Column(columnName))
 
   /**
+   * @return inverse hyperbolic cosine of `e`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def acosh(e: Column): Column = withExpr { Acosh(e.expr) }
+
+  /**
+   * @return inverse hyperbolic cosine of `columnName`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def acosh(columnName: String): Column = acosh(Column(columnName))
+
+  /**
    * @return inverse sine of `e` in radians, as if computed by `java.lang.Math.asin`
    *
    * @group math_funcs
@@ -1414,7 +1460,23 @@ object functions {
   def asin(columnName: String): Column = asin(Column(columnName))
 
   /**
-   * @return inverse tangent of `e`, as if computed by `java.lang.Math.atan`
+   * @return inverse hyperbolic sine of `e`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def asinh(e: Column): Column = withExpr { Asinh(e.expr) }
+
+  /**
+   * @return inverse hyperbolic sine of `columnName`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def asinh(columnName: String): Column = asinh(Column(columnName))
+
+  /**
+   * @return inverse tangent of `e` as if computed by `java.lang.Math.atan`
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1541,6 +1603,22 @@ object functions {
    * @since 1.4.0
    */
   def atan2(yValue: Double, xName: String): Column = atan2(yValue, Column(xName))
+
+  /**
+   * @return inverse hyperbolic tangent of `e`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def atanh(e: Column): Column = withExpr { Atanh(e.expr) }
+
+  /**
+   * @return inverse hyperbolic tangent of `columnName`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def atanh(columnName: String): Column = atanh(Column(columnName))
 
   /**
    * An expression that returns the string representation of the binary value of the given long
@@ -2288,6 +2366,36 @@ object functions {
     new XxHash64(cols.map(_.expr))
   }
 
+  /**
+   * Returns null if the condition is true, and throws an exception otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.1.0
+   */
+  def assert_true(c: Column): Column = withExpr {
+    new AssertTrue(c.expr)
+  }
+
+  /**
+   * Returns null if the condition is true; throws an exception with the error message otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.1.0
+   */
+  def assert_true(c: Column, e: Column): Column = withExpr {
+    new AssertTrue(c.expr, e.expr)
+  }
+
+  /**
+   * Throws an exception with the provided error message.
+   *
+   * @group misc_funcs
+   * @since 3.1.0
+   */
+  def raise_error(c: Column): Column = withExpr {
+    RaiseError(c.expr)
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -2730,7 +2838,8 @@ object functions {
   }
 
   /**
-   * Returns the current date as a date column.
+   * Returns the current date at the start of query evaluation as a date column.
+   * All calls of current_date within the same query return the same value.
    *
    * @group datetime_funcs
    * @since 1.5.0
@@ -2738,7 +2847,8 @@ object functions {
   def current_date(): Column = withExpr { CurrentDate() }
 
   /**
-   * Returns the current timestamp as a timestamp column.
+   * Returns the current timestamp at the start of query evaluation as a timestamp column.
+   * All calls of current_timestamp within the same query return the same value.
    *
    * @group datetime_funcs
    * @since 1.5.0

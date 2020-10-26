@@ -31,7 +31,7 @@ try:
         from jira.utils import JIRAError
 except ImportError:
     print("This tool requires the jira-python library")
-    print("Install using 'sudo pip install jira'")
+    print("Install using 'sudo pip3 install jira'")
     sys.exit(-1)
 
 try:
