@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.analysis.TestRelations.testRelation2
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.internal.SQLConf
 
 class SubstituteUnresolvedOrdinalsSuite extends AnalysisTest {
@@ -44,14 +43,11 @@ class SubstituteUnresolvedOrdinalsSuite extends AnalysisTest {
     checkAnalysis(plan, testRelation2.orderBy(a.asc, b.asc))
 
     // order by ordinal can be turned off by config
-    var newPlan: LogicalPlan = null
     withSQLConf(SQLConf.ORDER_BY_ORDINAL.key -> "false") {
-      newPlan = SubstituteUnresolvedOrdinals.apply(plan)
+      comparePlans(
+        SubstituteUnresolvedOrdinals.apply(plan),
+        testRelation2.orderBy(Literal(1).asc, Literal(2).asc))
     }
-
-    comparePlans(
-      newPlan,
-      testRelation2.orderBy(Literal(1).asc, Literal(2).asc))
   }
 
   test("group by ordinal") {
@@ -65,12 +61,10 @@ class SubstituteUnresolvedOrdinalsSuite extends AnalysisTest {
     checkAnalysis(plan2, testRelation2.groupBy(a, b)(a, b))
 
     // group by ordinal can be turned off by config
-    var newPlan2: LogicalPlan = null
     withSQLConf(SQLConf.GROUP_BY_ORDINAL.key -> "false") {
-      newPlan2 = SubstituteUnresolvedOrdinals.apply(plan2)
+      comparePlans(
+        SubstituteUnresolvedOrdinals.apply(plan2),
+        testRelation2.groupBy(Literal(1), Literal(2))('a, 'b))
     }
-    comparePlans(
-      newPlan2,
-      testRelation2.groupBy(Literal(1), Literal(2))('a, 'b))
   }
 }

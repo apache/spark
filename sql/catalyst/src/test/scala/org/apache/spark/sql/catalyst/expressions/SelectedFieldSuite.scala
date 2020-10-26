@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class SelectedFieldSuite extends AnalysisTest {
@@ -532,10 +533,14 @@ class SelectedFieldSuite extends AnalysisTest {
   }
 
   private def unapplySelect(expr: String, relation: LocalRelation) = {
-    val parsedExpr = parseAsCatalystExpression(Seq(expr)).head
-    val select = relation.select(parsedExpr)
-    val analyzed = caseSensitiveAnalyzer.execute(select)
-    SelectedField.unapply(analyzed.expressions.head)
+    var selectedField: Option[StructField] = None
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val parsedExpr = parseAsCatalystExpression(Seq(expr)).head
+      val select = relation.select(parsedExpr)
+      val analyzed = getAnalyzer.execute(select)
+      selectedField = SelectedField.unapply(analyzed.expressions.head)
+    }
+    selectedField
   }
 
   private def parseAsCatalystExpression(exprs: Seq[String]) = {

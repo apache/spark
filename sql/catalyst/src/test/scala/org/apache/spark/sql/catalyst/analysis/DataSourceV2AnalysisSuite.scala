@@ -114,31 +114,48 @@ case class TestRelationAcceptAnySchema(output: Seq[AttributeReference])
 }
 
 abstract class DataSourceV2ANSIAnalysisSuite extends DataSourceV2AnalysisBaseSuite {
-  override def getSQLConf(caseSensitive: Boolean): SQLConf = {
-    SQLConf.get.setConf(SQLConf.CASE_SENSITIVE, caseSensitive)
-    SQLConf.get.setConf(SQLConf.STORE_ASSIGNMENT_POLICY, StoreAssignmentPolicy.ANSI.toString)
-    SQLConf.get
-  }
-
 
   // For Ansi store assignment policy, expression `AnsiCast` is used instead of `Cast`.
   override def checkAnalysis(
       inputPlan: LogicalPlan,
       expectedPlan: LogicalPlan,
-      caseSensitive: Boolean): Unit = {
+      caseSensitive: Boolean = true,
+      extraConf: Map[String, String] = Map()): Unit = {
     val expectedPlanWithAnsiCast = expectedPlan transformAllExpressions {
       case c: Cast => AnsiCast(c.child, c.dataType, c.timeZoneId)
       case other => other
     }
-    super.checkAnalysis(inputPlan, expectedPlanWithAnsiCast, caseSensitive)
+    super.checkAnalysis(inputPlan, expectedPlanWithAnsiCast, caseSensitive,
+      Map(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.ANSI.toString))
+  }
+
+  override def assertAnalysisError(
+      inputPlan: LogicalPlan,
+      expectedErrors: Seq[String],
+      caseSensitive: Boolean = true,
+      extraConf: Map[String, String] = Map()): Unit = {
+    super.assertAnalysisError(inputPlan, expectedErrors, caseSensitive,
+      Map(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.ANSI.toString))
   }
 }
 
 abstract class DataSourceV2StrictAnalysisSuite extends DataSourceV2AnalysisBaseSuite {
-  override def getSQLConf(caseSensitive: Boolean): SQLConf = {
-    SQLConf.get.setConf(SQLConf.CASE_SENSITIVE, caseSensitive)
-    SQLConf.get.setConf(SQLConf.STORE_ASSIGNMENT_POLICY, StoreAssignmentPolicy.STRICT.toString)
-    SQLConf.get
+  override def checkAnalysis(
+      inputPlan: LogicalPlan,
+      expectedPlan: LogicalPlan,
+      caseSensitive: Boolean = true,
+      extraConf: Map[String, String] = Map()): Unit = {
+    super.checkAnalysis(inputPlan, expectedPlan, caseSensitive,
+      Map(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.STRICT.toString))
+  }
+
+  override def assertAnalysisError(
+      inputPlan: LogicalPlan,
+      expectedErrors: Seq[String],
+      caseSensitive: Boolean = true,
+      extraConf: Map[String, String] = Map()): Unit = {
+    super.assertAnalysisError(inputPlan, expectedErrors, caseSensitive,
+      Map(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.STRICT.toString))
   }
 
   test("byName: fail canWrite check") {
@@ -204,11 +221,7 @@ abstract class DataSourceV2StrictAnalysisSuite extends DataSourceV2AnalysisBaseS
 
 abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
 
-  protected def getSQLConf(caseSensitive: Boolean): SQLConf =
-    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
-
-  override def getAnalyzer(caseSensitive: Boolean): Analyzer = {
-    val conf = getSQLConf(caseSensitive)
+  override def getAnalyzer: Analyzer = {
     val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf)
     catalog.createDatabase(
       CatalogDatabase("default", "", new URI("loc"), Map.empty),

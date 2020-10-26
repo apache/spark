@@ -31,13 +31,9 @@ import org.apache.spark.sql.internal.SQLConf
 
 trait AnalysisTest extends PlanTest {
 
-  protected def caseSensitiveAnalyzer = makeAnalyzer(caseSensitive = true)
-  protected def caseInsensitiveAnalyzer = makeAnalyzer(caseSensitive = false)
-
   protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = Nil
 
-  private def makeAnalyzer(caseSensitive: Boolean): Analyzer = {
-    val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
+  protected def getAnalyzer: Analyzer = {
     val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf)
     catalog.createDatabase(
       CatalogDatabase("default", "", new URI("loc"), Map.empty),
@@ -52,16 +48,13 @@ trait AnalysisTest extends PlanTest {
     }
   }
 
-  protected def getAnalyzer(caseSensitive: Boolean) = {
-    makeAnalyzer(caseSensitive)
-  }
-
   protected def checkAnalysis(
       inputPlan: LogicalPlan,
       expectedPlan: LogicalPlan,
-      caseSensitive: Boolean = true): Unit = {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-      val analyzer = getAnalyzer(caseSensitive)
+      caseSensitive: Boolean = true,
+      extraConf: Map[String, String] = Map()): Unit = {
+    withSQLConf((extraConf + (SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString)).toSeq: _*) {
+      val analyzer = getAnalyzer
       val actualPlan = analyzer.executeAndCheck(inputPlan, new QueryPlanningTracker)
       comparePlans(actualPlan, expectedPlan)
     }
@@ -77,9 +70,10 @@ trait AnalysisTest extends PlanTest {
 
   protected def assertAnalysisSuccess(
       inputPlan: LogicalPlan,
-      caseSensitive: Boolean = true): Unit = {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-      val analyzer = getAnalyzer(caseSensitive)
+      caseSensitive: Boolean = true,
+      extraConf: Map[String, String] = Map()): Unit = {
+    withSQLConf((extraConf + (SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString)).toSeq: _*) {
+      val analyzer = getAnalyzer
       val analysisAttempt = analyzer.execute(inputPlan)
       try analyzer.checkAnalysis(analysisAttempt) catch {
         case a: AnalysisException =>
@@ -98,9 +92,10 @@ trait AnalysisTest extends PlanTest {
   protected def assertAnalysisError(
       inputPlan: LogicalPlan,
       expectedErrors: Seq[String],
-      caseSensitive: Boolean = true): Unit = {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-      val analyzer = getAnalyzer(caseSensitive)
+      caseSensitive: Boolean = true,
+      extraConf: Map[String, String] = Map()): Unit = {
+    withSQLConf((extraConf + (SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString)).toSeq: _*) {
+      val analyzer = getAnalyzer
       val e = intercept[AnalysisException] {
         analyzer.checkAnalysis(analyzer.execute(inputPlan))
       }
