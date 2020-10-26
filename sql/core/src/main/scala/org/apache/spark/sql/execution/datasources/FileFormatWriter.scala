@@ -103,7 +103,7 @@ object FileFormatWriter extends Logging {
       fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataSchema)
 
     val description = new WriteJobDescription(
-      uuid = UUID.randomUUID().toString,
+      uuid = UUID.randomUUID.toString,
       serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
       outputWriterFactory = outputWriterFactory,
       allColumns = outputSpec.outputColumns,
@@ -133,6 +133,10 @@ object FileFormatWriter extends Logging {
     }
 
     SQLExecution.checkSQLExecutionId(sparkSession)
+
+    // propagate the decription UUID into the jobs, so that committers
+    // get an ID guaranteed to be unique.
+    job.getConfiguration.set("spark.sql.sources.writeJobUUID", description.uuid)
 
     // This call shouldn't be put into the `try` block below because it only initializes and
     // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
