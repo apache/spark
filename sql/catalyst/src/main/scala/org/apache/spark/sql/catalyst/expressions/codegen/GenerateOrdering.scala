@@ -71,13 +71,9 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], BaseOrdering] with
     ctx.INPUT_ROW = row
     // to use INPUT_ROW we must make sure currentVars is null
     ctx.currentVars = null
-    ordering.map(_.child.genCode(ctx)) match {
-      case stream: Stream[ExprCode] =>
-        // The calls to `genCode()` modify `ctx`, so we must force them to occur immediately to
-        // avoid unpredictable modifications to `ctx` when `stream` is used later.
-        stream.force
-      case other => other
-    }
+    // SPARK-33260: To avoid unpredictable modifications to `ctx` when `ordering` is a Stream, we
+    // use `toIndexedSeq` to make the transformation eager.
+    ordering.toIndexedSeq.map(_.child.genCode(ctx))
   }
 
   /**
