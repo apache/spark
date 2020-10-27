@@ -176,6 +176,11 @@ class FrameLessOffsetWindowFunctionFrame(
 }
 
 /**
+ * The unbounded offset window frame is an internal window frame just used to optimize the
+ * performance for the window function that returns the value of the input column offset
+ * by a number of rows within the partition and has specified ROWS BETWEEN UNBOUNDED PRECEDING
+ * AND UNBOUNDED FOLLOWING. The internal window frame is not a popular window frame cannot be
+ * specified and used directly by the users.
  * The unbounded offset window frame calculates frames containing NTH_VALUE statements.
  * The unbounded offset window frame return the same value for all rows in the window partition.
  */
@@ -213,6 +218,11 @@ class UnboundedOffsetWindowFunctionFrame(
 }
 
 /**
+ * The unbounded preceding offset window frame is an internal window frame just used to optimize
+ * the performance for the window function that returns the value of the input column offset
+ * by a number of rows within the partition and has specified ROWS BETWEEN UNBOUNDED PRECEDING
+ * AND CURRENT ROW. The internal window frame is not a popular window frame cannot be specified
+ * and used directly by the users.
  * The unbounded preceding offset window frame calculates frames containing NTH_VALUE statements.
  * The unbounded preceding offset window frame return the same value for rows which index
  * (starting from 1) equal to or greater than offset in the window partition.
