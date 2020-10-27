@@ -360,7 +360,7 @@ class MasterSuite extends SparkFunSuite
     localCluster.start()
     val masterUrl = s"http://localhost:${localCluster.masterWebUIPort}"
     try {
-      eventually(timeout(5 seconds), interval(100 milliseconds)) {
+      eventually(timeout(5.seconds), interval(100.milliseconds)) {
         val json = Source.fromURL(s"$masterUrl/json")
           .getLines().mkString("\n")
         val JArray(workers) = (parse(json) \ "workers")
@@ -374,11 +374,6 @@ class MasterSuite extends SparkFunSuite
           (workerResponse \ "cores").extract[Int] should be (2)
         }
 
-        // with LocalCluster, we have masters and workers in the same JVM, each overwriting
-        // system property spark.ui.proxyBase.
-        // so we need to manage this property explicitly for test
-        System.getProperty("spark.ui.proxyBase") should startWith ("/proxy/worker-")
-        System.getProperties().remove("spark.ui.proxyBase")
         val html = Source.fromURL(s"$masterUrl/").getLines().mkString("\n")
         html should include ("Spark Master at spark://")
         html should include ("""href="/static""")
@@ -401,7 +396,7 @@ class MasterSuite extends SparkFunSuite
     localCluster.start()
     val masterUrl = s"http://localhost:${localCluster.masterWebUIPort}"
     try {
-      eventually(timeout(5 seconds), interval(100 milliseconds)) {
+      eventually(timeout(5.seconds), interval(100.milliseconds)) {
         val json = Source.fromURL(s"$masterUrl/json")
           .getLines().mkString("\n")
         val JArray(workers) = (parse(json) \ "workers")
