@@ -97,6 +97,19 @@ class SortSuite extends SparkPlanTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-33260: sort order is a Stream") {
+    val input = Seq(
+      ("Hello", 4, 2.0),
+      ("Hello", 1, 1.0),
+      ("World", 8, 3.0)
+    )
+    checkAnswer(
+      input.toDF("a", "b", "c"),
+      (child: SparkPlan) => SortExec(Stream('a.asc, 'b.asc, 'c.asc), global = true, child = child),
+      input.sortBy(t => (t._1, t._2, t._3)).map(Row.fromTuple),
+      sortAnswers = false)
+  }
+
   // Test sorting on different data types
   for (
     dataType <- DataTypeTestUtils.atomicTypes ++ Set(NullType);
