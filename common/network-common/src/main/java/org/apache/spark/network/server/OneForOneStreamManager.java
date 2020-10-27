@@ -43,7 +43,7 @@ public class OneForOneStreamManager extends StreamManager {
 
   private final AtomicLong nextStreamId;
   private final ConcurrentHashMap<Long, StreamState> streams;
-  private Long numChunksBeingTransferred = 0l;
+  private Long numChunksBeingTransferred = 0L;
   private final Object lock = new Object();
 
   /** State of a single stream. */
