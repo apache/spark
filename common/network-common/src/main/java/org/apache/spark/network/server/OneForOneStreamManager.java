@@ -44,6 +44,7 @@ public class OneForOneStreamManager extends StreamManager {
   private final AtomicLong nextStreamId;
   private final ConcurrentHashMap<Long, StreamState> streams;
   private Long numChunksBeingTransferred = 0l;
+  private final Object lock = new Object();
 
   /** State of a single stream. */
   private static class StreamState {
@@ -124,7 +125,7 @@ public class OneForOneStreamManager extends StreamManager {
     for (Map.Entry<Long, StreamState> entry: streams.entrySet()) {
       StreamState state = entry.getValue();
       if (state.associatedChannel == channel) {
-        synchronized (numChunksBeingTransferred) {
+        synchronized (lock) {
           streams.remove(entry.getKey());
           numChunksBeingTransferred -= state.chunksBeingTransferred.get();
         }
@@ -171,7 +172,7 @@ public class OneForOneStreamManager extends StreamManager {
   public void chunkBeingSent(long streamId) {
     StreamState streamState = streams.get(streamId);
     if (streamState != null) {
-      synchronized (numChunksBeingTransferred) {
+      synchronized (lock) {
         streamState.chunksBeingTransferred.incrementAndGet();
         numChunksBeingTransferred += 1;
       }
@@ -188,7 +189,7 @@ public class OneForOneStreamManager extends StreamManager {
   public void chunkSent(long streamId) {
     StreamState streamState = streams.get(streamId);
     if (streamState != null) {
-      synchronized (numChunksBeingTransferred) {
+      synchronized (lock) {
         streamState.chunksBeingTransferred.decrementAndGet();
         numChunksBeingTransferred -= 1;
       }
