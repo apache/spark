@@ -1781,11 +1781,10 @@ class Analyzer(
         Aggregate(newGroups, aggs, child)
 
       case GroupingSets(selectedGroups, groups, child, aggs) if aggs.forall(_.resolved) &&
-        (groups.exists(_.find(e => e.isInstanceOf[UnresolvedOrdinal]).isDefined) ||
-          selectedGroups.exists(exprs =>
-            exprs.exists(_.find(e => e.isInstanceOf[UnresolvedOrdinal]).isDefined))) =>
+        (groups.exists(_.find(_.isInstanceOf[UnresolvedOrdinal]).isDefined) ||
+          selectedGroups.exists(_.exists(_.find(_.isInstanceOf[UnresolvedOrdinal]).isDefined))) =>
+        val newSelectedGroups = selectedGroups.map(_.map(resolveOrdinal(aggs, _)))
         val newGroups = groups.map(resolveOrdinal(aggs, _))
-        val newSelectedGroups = selectedGroups.map(exprs => exprs.map(resolveOrdinal(aggs, _)))
         GroupingSets(newSelectedGroups, newGroups, child, aggs)
     }
 
