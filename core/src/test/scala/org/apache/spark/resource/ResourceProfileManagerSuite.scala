@@ -67,7 +67,8 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
       rpmanager.isSupported(immrprof)
     }.getMessage()
 
-    assert(error.contains("ResourceProfiles are only supported on YARN with dynamic allocation"))
+    assert(error.contains(
+      "ResourceProfiles are only supported on YARN and Kubernetes with dynamic allocation"))
   }
 
   test("isSupported yarn with dynamic allocation") {
@@ -84,7 +85,22 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     assert(rpmanager.isSupported(immrprof) == true)
   }
 
-  test("isSupported yarn with local mode") {
+  test("isSupported k8s with dynamic allocation") {
+    val conf = new SparkConf().setMaster("k8s://foo").set(EXECUTOR_CORES, 4)
+    conf.set(DYN_ALLOCATION_ENABLED, true)
+    conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, true)
+    conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
+    val rpmanager = new ResourceProfileManager(conf, listenerBus)
+    // default profile should always work
+    val defaultProf = rpmanager.defaultResourceProfile
+    val rprof = new ResourceProfileBuilder()
+    val gpuExecReq =
+      new ExecutorResourceRequests().resource("gpu", 2, "someScript", "nvidia")
+    val immrprof = rprof.require(gpuExecReq).build
+    assert(rpmanager.isSupported(immrprof) == true)
+  }
+
+  test("isSupported with local mode") {
     val conf = new SparkConf().setMaster("local").set(EXECUTOR_CORES, 4)
     conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
     val rpmanager = new ResourceProfileManager(conf, listenerBus)
@@ -98,7 +114,8 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
       rpmanager.isSupported(immrprof)
     }.getMessage()
 
-    assert(error.contains("ResourceProfiles are only supported on YARN with dynamic allocation"))
+    assert(error.contains(
+      "ResourceProfiles are only supported on YARN and Kubernetes with dynamic allocation"))
   }
 
   test("ResourceProfileManager has equivalent profile") {

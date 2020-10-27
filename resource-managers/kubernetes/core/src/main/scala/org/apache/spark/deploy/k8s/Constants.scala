@@ -21,6 +21,7 @@ private[spark] object Constants {
   // Labels
   val SPARK_APP_ID_LABEL = "spark-app-selector"
   val SPARK_EXECUTOR_ID_LABEL = "spark-exec-id"
+  val SPARK_RESOURCE_PROFILE_ID_LABEL = "spark-exec-resourceprofile-id"
   val SPARK_ROLE_LABEL = "spark-role"
   val SPARK_POD_DRIVER_ROLE = "driver"
   val SPARK_POD_EXECUTOR_ROLE = "executor"
@@ -63,6 +64,7 @@ private[spark] object Constants {
   val ENV_DRIVER_BIND_ADDRESS = "SPARK_DRIVER_BIND_ADDRESS"
   val ENV_SPARK_CONF_DIR = "SPARK_CONF_DIR"
   val ENV_SPARK_USER = "SPARK_USER"
+  val ENV_RESOURCE_PROFILE_ID = "SPARK_RESOURCE_PROFILE_ID"
   // Spark app configs for containers
   val SPARK_CONF_VOLUME = "spark-conf-volume"
   val SPARK_CONF_DIR_INTERNAL = "/opt/spark/conf"

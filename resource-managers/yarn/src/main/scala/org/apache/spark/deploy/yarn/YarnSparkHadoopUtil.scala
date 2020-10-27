@@ -185,32 +185,11 @@ object YarnSparkHadoopUtil {
   }
 
   /**
-   * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
-   */
-  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf): Int = {
-    val sizeInMB = Utils.memoryStringToMb(sparkConf.get(MEMORY_OFFHEAP_SIZE).toString)
-    checkOffHeapEnabled(sparkConf, sizeInMB).toInt
-  }
-
-  /**
    * Get offHeap memory size from [[ExecutorResourceRequest]]
    * return 0 if MEMORY_OFFHEAP_ENABLED is false.
    */
   def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf,
     execRequest: ExecutorResourceRequest): Long = {
-    checkOffHeapEnabled(sparkConf, execRequest.amount)
-  }
-
-  /**
-   * return 0 if MEMORY_OFFHEAP_ENABLED is false.
-   */
-  def checkOffHeapEnabled(sparkConf: SparkConf, offHeapSize: Long): Long = {
-    if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
-      require(offHeapSize > 0,
-        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
-      offHeapSize
-    } else {
-      0
-    }
+    Utils.checkOffHeapEnabled(sparkConf, execRequest.amount)
   }
 }

@@ -52,18 +52,21 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
 
   private val dynamicEnabled = Utils.isDynamicAllocationEnabled(sparkConf)
   private val master = sparkConf.getOption("spark.master")
-  private val isNotYarn = master.isDefined && !master.get.equals("yarn")
+  private val isYarn = master.isDefined && master.get.equals("yarn")
+  private val isK8s = master.isDefined && master.get.startsWith("k8s://")
   private val errorForTesting = !isTesting || sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)
 
   // If we use anything except the default profile, its only supported on YARN right now.
   // Throw an exception if not supported.
   private[spark] def isSupported(rp: ResourceProfile): Boolean = {
     val isNotDefaultProfile = rp.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-    val notYarnAndNotDefaultProfile = isNotDefaultProfile && isNotYarn
-    val YarnNotDynAllocAndNotDefaultProfile = isNotDefaultProfile && !isNotYarn && !dynamicEnabled
-    if (errorForTesting && (notYarnAndNotDefaultProfile || YarnNotDynAllocAndNotDefaultProfile)) {
-      throw new SparkException("ResourceProfiles are only supported on YARN with dynamic " +
-        "allocation enabled.")
+    val notYarnOrK8sAndNotDefaultProfile = isNotDefaultProfile && !(isYarn || isK8s)
+    val YarnOrK8sNotDynAllocAndNotDefaultProfile =
+      isNotDefaultProfile && (isYarn || isK8s) && !dynamicEnabled
+    if (errorForTesting &&
+        (notYarnOrK8sAndNotDefaultProfile || YarnOrK8sNotDynAllocAndNotDefaultProfile)) {
+      throw new SparkException("ResourceProfiles are only supported on YARN and Kubernetes " +
+        "with dynamic allocation enabled.")
     }
     true
   }
