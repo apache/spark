@@ -29,6 +29,10 @@ class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
     Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE
   }
 
+  override protected def userFeatureStepConf: ConfigEntry[_] = {
+    Config.KUBERNETES_EXECUTOR_POD_FEATURE_STEP
+  }
+
   override protected def buildPod(sparkConf: SparkConf, client: KubernetesClient): SparkPod = {
     sparkConf.set("spark.driver.host", "https://driver.host.com")
     val conf = KubernetesTestConf.createExecutorConf(sparkConf = sparkConf)

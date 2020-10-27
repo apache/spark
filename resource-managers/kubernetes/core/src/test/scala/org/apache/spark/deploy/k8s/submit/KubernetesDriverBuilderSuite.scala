@@ -17,6 +17,7 @@
 package org.apache.spark.deploy.k8s.submit
 
 import io.fabric8.kubernetes.client.KubernetesClient
+import org.mockito.Mockito.mock
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s._
@@ -28,9 +29,12 @@ class KubernetesDriverBuilderSuite extends PodBuilderSuite {
     Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE
   }
 
+  override protected def userFeatureStepConf: ConfigEntry[_] = {
+    Config.KUBERNETES_DRIVER_POD_FEATURE_STEP
+  }
+
   override protected def buildPod(sparkConf: SparkConf, client: KubernetesClient): SparkPod = {
     val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
     new KubernetesDriverBuilder().buildFromFeatures(conf, client).pod
   }
-
 }
