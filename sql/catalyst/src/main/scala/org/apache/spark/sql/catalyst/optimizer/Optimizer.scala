@@ -795,7 +795,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
   }
 
-  private def haveCommonNonDeterministicOutput(
+  def haveCommonNonDeterministicOutput(
       upper: Seq[NamedExpression], lower: Seq[NamedExpression]): Boolean = {
     val aliases = getAliasMap(lower)
 
