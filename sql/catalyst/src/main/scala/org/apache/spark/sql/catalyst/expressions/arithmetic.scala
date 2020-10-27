@@ -344,6 +344,7 @@ abstract class DivModLike(failOnError: Boolean) extends BinaryArithmetic(failOnE
   }
 
   final override def eval(input: InternalRow): Any = {
+    // evaluate right first as we have a chance to skip left if right is 0
     val input2 = right.eval(input)
     if (input2 == null || (!failOnError && isZero(input2))) {
       null
@@ -399,6 +400,7 @@ abstract class DivModLike(failOnError: Boolean) extends BinaryArithmetic(failOnE
     } else {
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
+    // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       ev.copy(code = code"""
         ${eval2.code}
@@ -594,6 +596,7 @@ case class Pmod(
   }
 
   final override def eval(input: InternalRow): Any = {
+    // evaluate right first as we have a chance to skip left if right is 0
     val input2 = right.eval(input)
     if (input2 == null || (!failOnError && isZero(input2))) {
       null
@@ -679,6 +682,7 @@ case class Pmod(
         """
     }
 
+    // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       ev.copy(code = code"""
         ${eval2.code}
