@@ -136,7 +136,7 @@ trait WindowExecBase extends UnaryExecNode {
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
             case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
-            case f: FrameLessOffsetWindowFunction => collect("RELATIVE_OFFSET", frame, e, f)
+            case f: FrameLessOffsetWindowFunction => collect("FRAME_LESS_OFFSET", frame, e, f)
             case f: OffsetWindowSpec if !f.ignoreNulls &&
               frame.frameType == RowFrame && frame.lower == UnboundedPreceding =>
               frame.upper match {
@@ -178,10 +178,10 @@ trait WindowExecBase extends UnaryExecNode {
 
         // Create the factory to produce WindowFunctionFrame.
         val factory = key match {
-          // Offset Frame
-          case ("RELATIVE_OFFSET", _, IntegerLiteral(offset), _) =>
+          // Frameless offset Frame
+          case ("FRAME_LESS_OFFSET", _, IntegerLiteral(offset), _) =>
             target: InternalRow =>
-              new RelativeOffsetWindowFunctionFrame(
+              new FrameLessOffsetWindowFunctionFrame(
                 target,
                 ordinal,
                 // OFFSET frame functions are guaranteed be OffsetWindowFunctions.

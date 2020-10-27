@@ -366,9 +366,10 @@ trait OffsetWindowSpec extends Expression {
 }
 
 /**
- * An offset window function is a window function that returns the value of the input column offset
- * by a number of rows within the partition. For instance: an OffsetWindowfunction for value x with
- * offset -2, will get the value of x 2 rows back in the partition.
+ * A frameless offset window function is a window function that cannot specify window frame and
+ * returns the value of the input column offset by a number of rows within the partition.
+ * For instance: a FrameLessOffsetWindowFunction for value x with offset -2, will get the value of
+ * x 2 rows back in the partition.
  */
 abstract class FrameLessOffsetWindowFunction
   extends WindowFunction with OffsetWindowSpec with Unevaluable with ImplicitCastInputTypes {

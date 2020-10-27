@@ -147,9 +147,13 @@ abstract class OffsetWindowFunctionFrameBase(
 }
 
 /**
- * The relative offset window frame calculates frames containing LEAD/LAG statements.
+ * The frameless offset window frame is an internal window frame just used to optimize the
+ * performance for the window function that returns the value of the input column offset
+ * by a number of rows within the partition. The internal window frame is not a popular
+ * window frame cannot be specified and used directly by the users. This window frame
+ * calculates frames containing LEAD/LAG statements.
  */
-class RelativeOffsetWindowFunctionFrame(
+class FrameLessOffsetWindowFunctionFrame(
     target: InternalRow,
     ordinal: Int,
     expressions: Array[OffsetWindowSpec],
@@ -226,7 +230,7 @@ class UnboundedPrecedingOffsetWindowFunctionFrame(
   }
 
   override def write(index: Int, current: InternalRow): Unit = {
-    if (index >= inputIndex && inputIndex < input.length && selectedRow != null) {
+    if (index >= inputIndex && selectedRow != null) {
       projection(selectedRow)
     } else {
       fillDefaultValue(EmptyRow)
