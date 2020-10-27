@@ -957,7 +957,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
     // two state stores
     val provider1 = newStoreProvider(storeId)
-    val restoreStore = provider1.getReadOnlyStore(1)
+    val restoreStore = provider1.getReadStore(1)
     val saveStore = provider1.getStore(1)
 
     put(saveStore, key, get(restoreStore, key).get + 1)

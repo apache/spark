@@ -252,7 +252,7 @@ trait StateStoreProvider {
    * modification. Providers can override and return optimized version of [[ReadStateStore]]
    * based on the fact the instance will be only used for reading.
    */
-  def getReadOnlyStore(version: Long): ReadStateStore =
+  def getReadStore(version: Long): ReadStateStore =
     new WrappedReadStateStore(getStore(version))
 
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
@@ -440,7 +440,7 @@ object StateStore extends Logging {
     require(version >= 0)
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       indexOrdinal, storeConf, hadoopConf)
-    storeProvider.getReadOnlyStore(version)
+    storeProvider.getReadStore(version)
   }
 
   /** Get or create a store associated with the id. */

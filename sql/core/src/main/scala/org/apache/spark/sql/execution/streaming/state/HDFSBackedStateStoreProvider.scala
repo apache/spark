@@ -219,7 +219,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   }
 
   /** Get the state store for reading to specific `version` of the store. */
-  override def getReadOnlyStore(version: Long): ReadStateStore = {
+  override def getReadStore(version: Long): ReadStateStore = {
     val newMap = getLoadedMapForStore(version)
     logInfo(s"Retrieved version $version of ${HDFSBackedStateStoreProvider.this} for readonly")
     new HDFSBackedReadStateStore(version, newMap)
