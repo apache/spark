@@ -129,18 +129,6 @@ abstract class OffsetWindowFunctionFrameBase(
     newMutableProjection(boundExpressions, Nil).target(target)
   }
 
-  override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    input = rows
-    inputIterator = input.generateIterator()
-    // drain the first few rows if offset is larger than zero
-    inputIndex = 0
-    while (inputIndex < offset) {
-      if (inputIterator.hasNext) inputIterator.next()
-      inputIndex += 1
-    }
-    inputIndex = offset
-  }
-
   override def currentLowerBound(): Int = throw new UnsupportedOperationException()
 
   override def currentUpperBound(): Int = throw new UnsupportedOperationException()
@@ -162,6 +150,18 @@ class FrameLessOffsetWindowFunctionFrame(
     offset: Int)
   extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
+
+  override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    input = rows
+    inputIterator = input.generateIterator()
+    // drain the first few rows if offset is larger than zero
+    inputIndex = 0
+    while (inputIndex < offset) {
+      if (inputIterator.hasNext) inputIterator.next()
+      inputIndex += 1
+    }
+    inputIndex = offset
+  }
 
   override def write(index: Int, current: InternalRow): Unit = {
     if (inputIndex >= 0 && inputIndex < input.length) {
