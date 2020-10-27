@@ -28,8 +28,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 
-private[sql] class PruneHiveTablePartitions
-
 /**
  * Prune hive table partitions using partition filters on [[HiveTableRelation]]. The pruned
  * partitions will be kept in [[HiveTableRelation.prunedPartitions]], and the statistics of
@@ -41,6 +39,8 @@ private[sql] class PruneHiveTablePartitions
  *
  * TODO: merge this with PruneFileSourcePartitions after we completely make hive as a data source.
  */
+private[sql] class PruneHiveTablePartitions
+
 private[sql] object PruneHiveTablePartitions
   extends Rule[LogicalPlan] with CastSupport with PredicateHelper {
 
