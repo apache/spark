@@ -196,13 +196,13 @@ class UnboundedOffsetWindowFunctionFrame(
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
-    if (offset >= input.length) {
+    if (offset > input.length) {
       fillDefaultValue(EmptyRow)
     } else {
       inputIterator = input.generateIterator()
-      // drain the first few rows if offset is larger than zero
+      // drain the first few rows if offset is larger than one
       inputIndex = 0
-      while (inputIndex < offset) {
+      while (inputIndex < offset - 1) {
         if (inputIterator.hasNext) inputIterator.next()
         inputIndex += 1
       }
@@ -240,7 +240,14 @@ class UnboundedPrecedingOffsetWindowFunctionFrame(
   var selectedRow: UnsafeRow = null
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    super.prepare(rows)
+    input = rows
+    inputIterator = input.generateIterator()
+    // drain the first few rows if offset is larger than one
+    inputIndex = 0
+    while (inputIndex < offset - 1) {
+      if (inputIterator.hasNext) inputIterator.next()
+      inputIndex += 1
+    }
     if (inputIndex >= 0 && inputIndex < input.length) {
       selectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
     }

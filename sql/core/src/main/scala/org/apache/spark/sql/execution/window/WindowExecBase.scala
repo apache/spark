@@ -200,7 +200,7 @@ trait WindowExecBase extends UnaryExecNode {
                 child.output,
                 (expressions, schema) =>
                   MutableProjection.create(expressions, schema),
-                offset - 1)
+                offset)
             }
           case ("UNBOUNDED_PRECEDING_OFFSET", _, IntegerLiteral(offset), _) =>
             target: InternalRow => {
@@ -212,7 +212,7 @@ trait WindowExecBase extends UnaryExecNode {
                 child.output,
                 (expressions, schema) =>
                   MutableProjection.create(expressions, schema),
-                offset - 1)
+                offset)
             }
 
           // Entire Partition Frame.
