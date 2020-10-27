@@ -110,7 +110,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RemoveRedundantAggregates,
         UnwrapCastInBinaryComparison,
         RemoveNoopOperators,
-        CombineUpdateFields,
+        OptimizeUpdateFields,
         SimplifyExtractValueOps,
         OptimizeJsonExprs,
         CombineConcats) ++
@@ -795,7 +795,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
   }
 
-  def haveCommonNonDeterministicOutput(
+  private def haveCommonNonDeterministicOutput(
       upper: Seq[NamedExpression], lower: Seq[NamedExpression]): Boolean = {
     val aliases = getAliasMap(lower)
 

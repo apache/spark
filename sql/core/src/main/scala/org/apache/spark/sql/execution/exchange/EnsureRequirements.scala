@@ -34,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
  * each operator by inserting [[ShuffleExchangeExec]] Operators where required.  Also ensure that
  * the input partition ordering requirements are met.
  */
-case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
+object EnsureRequirements extends Rule[SparkPlan] {
 
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
     val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution

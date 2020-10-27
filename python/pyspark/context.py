@@ -63,12 +63,59 @@ class SparkContext(object):
     connection to a Spark cluster, and can be used to create :class:`RDD` and
     broadcast variables on that cluster.
 
-    .. note:: Only one :class:`SparkContext` should be active per JVM. You must `stop()`
-        the active :class:`SparkContext` before creating a new one.
+    When you create a new SparkContext, at least the master and app name should
+    be set, either through the named parameters here or through `conf`.
 
-    .. note:: :class:`SparkContext` instance is not supported to share across multiple
-        processes out of the box, and PySpark does not guarantee multi-processing execution.
-        Use threads instead for concurrent processing purpose.
+    Parameters
+    ----------
+    master : str, optional
+        Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+    appName : str, optional
+        A name for your job, to display on the cluster web UI.
+    sparkHome : str, optional
+        Location where Spark is installed on cluster nodes.
+    pyFiles : str, optional
+        Collection of .zip or .py files to send to the cluster
+        and add to PYTHONPATH.  These can be paths on the local file
+        system or HDFS, HTTP, HTTPS, or FTP URLs.
+    environment : dict, optional
+        A dictionary of environment variables to set on
+        worker nodes.
+    batchSize : int, optional
+        The number of Python objects represented as a single
+        Java object. Set 1 to disable batching, 0 to automatically choose
+        the batch size based on object sizes, or -1 to use an unlimited
+        batch size
+    serializer : :class:`pyspark.serializers.Serializer`, optional
+        The serializer for RDDs.
+    conf : dict, optional
+        A :class:`SparkConf` object setting Spark properties.
+    gateway : optional
+        Use an existing gateway and JVM, otherwise a new JVM
+        will be instantiated. This is only used internally.
+    jsc : optional
+        The JavaSparkContext instance. This is only used internally.
+    profiler_cls : :class:`pyspark.profiler.Profiler`, optional
+        A class of custom Profiler used to do profiling
+        (default is :class:`pyspark.profiler.BasicProfiler`).
+
+    Notes
+    -----
+    Only one :class:`SparkContext` should be active per JVM. You must `stop()`
+    the active :class:`SparkContext` before creating a new one.
+
+    :class:`SparkContext` instance is not supported to share across multiple
+    processes out of the box, and PySpark does not guarantee multi-processing execution.
+    Use threads instead for concurrent processing purpose.
+
+    Examples
+    --------
+    >>> from pyspark.context import SparkContext
+    >>> sc = SparkContext('local', 'test')
+    >>> sc2 = SparkContext('local', 'test2') # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
     """
 
     _gateway = None
@@ -83,40 +130,6 @@ class SparkContext(object):
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
                  environment=None, batchSize=0, serializer=PickleSerializer(), conf=None,
                  gateway=None, jsc=None, profiler_cls=BasicProfiler):
-        """
-        Create a new SparkContext. At least the master and app name should be set,
-        either through the named parameters here or through `conf`.
-
-        :param master: Cluster URL to connect to
-               (e.g. mesos://host:port, spark://host:port, local[4]).
-        :param appName: A name for your job, to display on the cluster web UI.
-        :param sparkHome: Location where Spark is installed on cluster nodes.
-        :param pyFiles: Collection of .zip or .py files to send to the cluster
-               and add to PYTHONPATH.  These can be paths on the local file
-               system or HDFS, HTTP, HTTPS, or FTP URLs.
-        :param environment: A dictionary of environment variables to set on
-               worker nodes.
-        :param batchSize: The number of Python objects represented as a single
-               Java object. Set 1 to disable batching, 0 to automatically choose
-               the batch size based on object sizes, or -1 to use an unlimited
-               batch size
-        :param serializer: The serializer for RDDs.
-        :param conf: A :class:`SparkConf` object setting Spark properties.
-        :param gateway: Use an existing gateway and JVM, otherwise a new JVM
-               will be instantiated.
-        :param jsc: The JavaSparkContext instance (optional).
-        :param profiler_cls: A class of custom Profiler used to do profiling
-               (default is pyspark.profiler.BasicProfiler).
-
-
-        >>> from pyspark.context import SparkContext
-        >>> sc = SparkContext('local', 'test')
-
-        >>> sc2 = SparkContext('local', 'test2') # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        ValueError:...
-        """
         if (conf is None or
                 conf.get("spark.executor.allowSparkContext", "false").lower() != "true"):
             # In order to prevent SparkContext from being created in executors.

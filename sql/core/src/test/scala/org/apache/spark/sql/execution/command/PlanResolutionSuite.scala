@@ -155,10 +155,10 @@ class PlanResolutionSuite extends AnalysisTest {
     // TODO: run the analyzer directly.
     val rules = Seq(
       CTESubstitution,
-      ResolveInlineTables(conf),
+      ResolveInlineTables,
       analyzer.ResolveRelations,
       new ResolveCatalogs(catalogManager),
-      new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v"), _ => false),
+      new ResolveSessionCatalog(catalogManager, _ == Seq("v"), _ => false),
       analyzer.ResolveTables,
       analyzer.ResolveReferences,
       analyzer.ResolveSubqueryColumnAliases,

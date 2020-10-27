@@ -172,7 +172,7 @@ object SetCommand {
 case class ResetCommand(config: Option[String]) extends RunnableCommand with IgnoreCachedData {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val defaults = sparkSession.sparkContext.conf
+    val defaults = sparkSession.sharedState.conf
     config match {
       case Some(key) =>
         sparkSession.conf.unset(key)

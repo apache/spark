@@ -873,7 +873,6 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
  * failed to generate/compile code.
  */
 case class CollapseCodegenStages(
-    conf: SQLConf,
     codegenStageCounter: AtomicInteger = new AtomicInteger(0))
   extends Rule[SparkPlan] {
 

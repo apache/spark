@@ -24,8 +24,7 @@ import warnings
 
 from pyspark import since, SparkContext
 from pyspark.rdd import PythonEvalType
-from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal, \
-    _create_column_from_name
+from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import StringType, DataType
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
@@ -42,154 +41,457 @@ from pyspark.sql.utils import to_str
 # since it requires to make every single overridden definition.
 
 
-def _create_function(name, doc=""):
-    """Create a PySpark function by its name"""
-    def _(col):
-        sc = SparkContext._active_spark_context
-        jc = getattr(sc._jvm.functions, name)(col._jc if isinstance(col, Column) else col)
-        return Column(jc)
-    _.__name__ = name
-    _.__doc__ = doc
-    return _
-
-
-def _create_function_over_column(name, doc=""):
-    """Similar with `_create_function` but creates a PySpark function that takes a column
-    (as string as well). This is mainly for PySpark functions to take strings as
-    column names.
+def _get_get_jvm_function(name, sc):
     """
-    def _(col):
-        sc = SparkContext._active_spark_context
-        jc = getattr(sc._jvm.functions, name)(_to_java_column(col))
-        return Column(jc)
-    _.__name__ = name
-    _.__doc__ = doc
-    return _
+    Retrieves JVM function identified by name from
+    Java gateway associated with sc.
+    """
+    return getattr(sc._jvm.functions, name)
 
 
-def _wrap_deprecated_function(func, message):
-    """ Wrap the deprecated function to print out deprecation warnings"""
-    def _(col):
-        warnings.warn(message, DeprecationWarning)
-        return func(col)
-    return functools.wraps(func)(_)
+def _invoke_function(name, *args):
+    """
+    Invokes JVM function identified by name with args
+    and wraps the result with :class:`Column`.
+    """
+    jf = _get_get_jvm_function(name, SparkContext._active_spark_context)
+    return Column(jf(*args))
 
 
-def _create_binary_mathfunction(name, doc=""):
-    """ Create a binary mathfunction by name"""
-    def _(col1, col2):
-        sc = SparkContext._active_spark_context
+def _invoke_function_over_column(name, col):
+    """
+    Invokes unary JVM function identified by name
+    and wraps the result with :class:`Column`.
+    """
+    return _invoke_function(name, _to_java_column(col))
+
+
+def _invoke_binary_math_function(name, col1, col2):
+    """
+    Invokes binary JVM math function identified by name
+    and wraps the result with :class:`Column`.
+    """
+    return _invoke_function(
+        name,
         # For legacy reasons, the arguments here can be implicitly converted into floats,
         # if they are not columns or strings.
-        if isinstance(col1, Column):
-            arg1 = col1._jc
-        elif isinstance(col1, str):
-            arg1 = _create_column_from_name(col1)
-        else:
-            arg1 = float(col1)
-
-        if isinstance(col2, Column):
-            arg2 = col2._jc
-        elif isinstance(col2, str):
-            arg2 = _create_column_from_name(col2)
-        else:
-            arg2 = float(col2)
-
-        jc = getattr(sc._jvm.functions, name)(arg1, arg2)
-        return Column(jc)
-    _.__name__ = name
-    _.__doc__ = doc
-    return _
-
-
-def _create_window_function(name, doc=''):
-    """ Create a window function by name """
-    def _():
-        sc = SparkContext._active_spark_context
-        jc = getattr(sc._jvm.functions, name)()
-        return Column(jc)
-    _.__name__ = name
-    _.__doc__ = 'Window function: ' + doc
-    return _
+        _to_java_column(col1) if isinstance(col1, (str, Column)) else float(col1),
+        _to_java_column(col2) if isinstance(col2, (str, Column)) else float(col2)
+    )
 
 
 def _options_to_str(options):
     return {key: to_str(value) for (key, value) in options.items()}
 
-_lit_doc = """
+
+@since(1.3)
+def lit(col):
+    """
     Creates a :class:`Column` of literal value.
 
     >>> df.select(lit(5).alias('height')).withColumn('spark_user', lit(True)).take(1)
     [Row(height=5, spark_user=True)]
     """
-_functions = {
-    'lit': _lit_doc,
-    'col': 'Returns a :class:`Column` based on the given column name.',
-    'column': 'Returns a :class:`Column` based on the given column name.',
-    'asc': 'Returns a sort expression based on the ascending order of the given column name.',
-    'desc': 'Returns a sort expression based on the descending order of the given column name.',
-}
+    return col if isinstance(col, Column) else _invoke_function("lit", col)
 
-_functions_over_column = {
-    'sqrt': 'Computes the square root of the specified float value.',
-    'abs': 'Computes the absolute value.',
 
-    'max': 'Aggregate function: returns the maximum value of the expression in a group.',
-    'min': 'Aggregate function: returns the minimum value of the expression in a group.',
-    'count': 'Aggregate function: returns the number of items in a group.',
-    'sum': 'Aggregate function: returns the sum of all values in the expression.',
-    'avg': 'Aggregate function: returns the average of the values in a group.',
-    'mean': 'Aggregate function: returns the average of the values in a group.',
-    'sumDistinct': 'Aggregate function: returns the sum of distinct values in the expression.',
-}
+@since(1.3)
+def col(col):
+    """
+    Returns a :class:`Column` based on the given column name.'
+    """
+    return _invoke_function("col", col)
 
-_functions_1_4_over_column = {
-    # unary math functions
-    'acos': ':return: inverse cosine of `col`, as if computed by `java.lang.Math.acos()`',
-    'asin': ':return: inverse sine of `col`, as if computed by `java.lang.Math.asin()`',
-    'atan': ':return: inverse tangent of `col`, as if computed by `java.lang.Math.atan()`',
-    'cbrt': 'Computes the cube-root of the given value.',
-    'ceil': 'Computes the ceiling of the given value.',
-    'cos': """:param col: angle in radians
-           :return: cosine of the angle, as if computed by `java.lang.Math.cos()`.""",
-    'cosh': """:param col: hyperbolic angle
-           :return: hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh()`""",
-    'exp': 'Computes the exponential of the given value.',
-    'expm1': 'Computes the exponential of the given value minus one.',
-    'floor': 'Computes the floor of the given value.',
-    'log': 'Computes the natural logarithm of the given value.',
-    'log10': 'Computes the logarithm of the given value in Base 10.',
-    'log1p': 'Computes the natural logarithm of the given value plus one.',
-    'rint': 'Returns the double value that is closest in value to the argument and' +
-            ' is equal to a mathematical integer.',
-    'signum': 'Computes the signum of the given value.',
-    'sin': """:param col: angle in radians
-           :return: sine of the angle, as if computed by `java.lang.Math.sin()`""",
-    'sinh': """:param col: hyperbolic angle
-           :return: hyperbolic sine of the given value,
-                    as if computed by `java.lang.Math.sinh()`""",
-    'tan': """:param col: angle in radians
-           :return: tangent of the given value, as if computed by `java.lang.Math.tan()`""",
-    'tanh': """:param col: hyperbolic angle
-            :return: hyperbolic tangent of the given value,
-                     as if computed by `java.lang.Math.tanh()`""",
-    'toDegrees': '.. note:: Deprecated in 2.1, use :func:`degrees` instead.',
-    'toRadians': '.. note:: Deprecated in 2.1, use :func:`radians` instead.',
-    'bitwiseNOT': 'Computes bitwise not.',
-}
 
-_functions_2_4 = {
-    'asc_nulls_first': 'Returns a sort expression based on the ascending order of the given' +
-                       ' column name, and null values return before non-null values.',
-    'asc_nulls_last': 'Returns a sort expression based on the ascending order of the given' +
-                      ' column name, and null values appear after non-null values.',
-    'desc_nulls_first': 'Returns a sort expression based on the descending order of the given' +
-                        ' column name, and null values appear before non-null values.',
-    'desc_nulls_last': 'Returns a sort expression based on the descending order of the given' +
-                       ' column name, and null values appear after non-null values',
-}
+@since(1.3)
+def column(col):
+    """
+    Returns a :class:`Column` based on the given column name.'
+    """
+    return col(col)
 
-_collect_list_doc = """
+
+@since(1.3)
+def asc(col):
+    """
+    Returns a sort expression based on the ascending order of the given column name.
+    """
+    return _invoke_function("asc", col)
+
+
+@since(1.3)
+def desc(col):
+    """
+    Returns a sort expression based on the descending order of the given column name.
+    """
+    return _invoke_function("desc", col)
+
+
+@since(1.3)
+def sqrt(col):
+    """
+    Computes the square root of the specified float value.
+    """
+    return _invoke_function_over_column("sqrt", col)
+
+
+@since(1.3)
+def abs(col):
+    """
+    Computes the absolute value.
+    """
+    return _invoke_function_over_column("abs", col)
+
+
+@since(1.3)
+def max(col):
+    """
+    Aggregate function: returns the maximum value of the expression in a group.
+    """
+    return _invoke_function_over_column("max", col)
+
+
+@since(1.3)
+def min(col):
+    """
+    Aggregate function: returns the minimum value of the expression in a group.
+    """
+    return _invoke_function_over_column("min", col)
+
+
+@since(1.3)
+def count(col):
+    """
+    Aggregate function: returns the number of items in a group.
+    """
+    return _invoke_function_over_column("count", col)
+
+
+@since(1.3)
+def sum(col):
+    """
+    Aggregate function: returns the sum of all values in the expression.
+    """
+    return _invoke_function_over_column("sum", col)
+
+
+@since(1.3)
+def avg(col):
+    """
+    Aggregate function: returns the average of the values in a group.
+    """
+    return _invoke_function_over_column("avg", col)
+
+
+@since(1.3)
+def mean(col):
+    """
+    Aggregate function: returns the average of the values in a group.
+    """
+    return _invoke_function_over_column("mean", col)
+
+
+@since(1.3)
+def sumDistinct(col):
+    """
+    Aggregate function: returns the sum of distinct values in the expression.
+    """
+    return _invoke_function_over_column("sumDistinct", col)
+
+
+@since(1.4)
+def acos(col):
+    """
+    :return: inverse cosine of `col`, as if computed by `java.lang.Math.acos()`
+    """
+    return _invoke_function_over_column("acos", col)
+
+
+@since(1.4)
+def asin(col):
+    """
+    :return: inverse sine of `col`, as if computed by `java.lang.Math.asin()`
+    """
+    return _invoke_function_over_column("asin", col)
+
+
+@since(1.4)
+def atan(col):
+    """
+    :return: inverse tangent of `col`, as if computed by `java.lang.Math.atan()`
+    """
+    return _invoke_function_over_column("atan", col)
+
+
+@since(1.4)
+def cbrt(col):
+    """
+    Computes the cube-root of the given value.
+    """
+    return _invoke_function_over_column("cbrt", col)
+
+
+@since(1.4)
+def ceil(col):
+    """
+    Computes the ceiling of the given value.
+    """
+    return _invoke_function_over_column("ceil", col)
+
+
+@since(1.4)
+def cos(col):
+    """
+    :param col: angle in radians
+    :return: cosine of the angle, as if computed by `java.lang.Math.cos()`.
+    """
+    return _invoke_function_over_column("cos", col)
+
+
+@since(1.4)
+def cosh(col):
+    """
+    :param col: hyperbolic angle
+    :return: hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh()`
+    """
+    return _invoke_function_over_column("cosh", col)
+
+
+@since(1.4)
+def exp(col):
+    """
+    Computes the exponential of the given value.
+    """
+    return _invoke_function_over_column("exp", col)
+
+
+@since(1.4)
+def expm1(col):
+    """
+    Computes the exponential of the given value minus one.
+    """
+    return _invoke_function_over_column("expm1", col)
+
+
+@since(1.4)
+def floor(col):
+    """
+    Computes the floor of the given value.
+    """
+    return _invoke_function_over_column("floor", col)
+
+
+@since(1.4)
+def log(col):
+    """
+    Computes the natural logarithm of the given value.
+    """
+    return _invoke_function_over_column("log", col)
+
+
+@since(1.4)
+def log10(col):
+    """
+    Computes the logarithm of the given value in Base 10.
+    """
+    return _invoke_function_over_column("log10", col)
+
+
+@since(1.4)
+def log1p(col):
+    """
+    Computes the natural logarithm of the given value plus one.
+    """
+    return _invoke_function_over_column("log1p", col)
+
+
+@since(1.4)
+def rint(col):
+    """
+    Returns the double value that is closest in value to the argument and
+    is equal to a mathematical integer.
+    """
+    return _invoke_function_over_column("rint", col)
+
+
+@since(1.4)
+def signum(col):
+    """
+    Computes the signum of the given value.
+    """
+    return _invoke_function_over_column("signum", col)
+
+
+@since(1.4)
+def sin(col):
+    """
+    :param col: angle in radians
+    :return: sine of the angle, as if computed by `java.lang.Math.sin()`
+    """
+    return _invoke_function_over_column("sin", col)
+
+
+@since(1.4)
+def sinh(col):
+    """
+    :param col: hyperbolic angle
+    :return: hyperbolic sine of the given value,
+             as if computed by `java.lang.Math.sinh()`
+    """
+    return _invoke_function_over_column("sinh", col)
+
+
+@since(1.4)
+def tan(col):
+    """
+    :param col: angle in radians
+    :return: tangent of the given value, as if computed by `java.lang.Math.tan()`
+    """
+    return _invoke_function_over_column("tan", col)
+
+
+@since(1.4)
+def tanh(col):
+    """
+    :param col: hyperbolic angle
+    :return: hyperbolic tangent of the given value
+             as if computed by `java.lang.Math.tanh()`
+    """
+    return _invoke_function_over_column("tanh", col)
+
+
+@since(1.4)
+def toDegrees(col):
+    """
+    .. note:: Deprecated in 2.1, use :func:`degrees` instead.
+    """
+    warnings.warn("Deprecated in 2.1, use degrees instead.", DeprecationWarning)
+    return degrees(col)
+
+
+@since(1.4)
+def toRadians(col):
+    """
+    .. note:: Deprecated in 2.1, use :func:`radians` instead.
+    """
+    warnings.warn("Deprecated in 2.1, use radians instead.", DeprecationWarning)
+    return radians(col)
+
+
+@since(1.4)
+def bitwiseNOT(col):
+    """
+    Computes bitwise not.
+    """
+    return _invoke_function_over_column("bitwiseNOT", col)
+
+
+@since(2.4)
+def asc_nulls_first(col):
+    """
+    Returns a sort expression based on the ascending order of the given
+    column name, and null values return before non-null values.
+    """
+    return _invoke_function("asc_nulls_first", col)
+
+
+@since(2.4)
+def asc_nulls_last(col):
+    """
+    Returns a sort expression based on the ascending order of the given
+    column name, and null values appear after non-null values.
+    """
+    return _invoke_function("asc_nulls_last", col)
+
+
+@since(2.4)
+def desc_nulls_first(col):
+    """
+    Returns a sort expression based on the descending order of the given
+    column name, and null values appear before non-null values.
+    """
+    return _invoke_function("desc_nulls_first", col)
+
+
+@since(2.4)
+def desc_nulls_last(col):
+    """
+    Returns a sort expression based on the descending order of the given
+    column name, and null values appear after non-null values.
+    """
+    return _invoke_function("desc_nulls_last", col)
+
+
+@since(1.6)
+def stddev(col):
+    """
+    Aggregate function: alias for stddev_samp.
+    """
+    return _invoke_function_over_column("stddev", col)
+
+
+@since(1.6)
+def stddev_samp(col):
+    """
+    Aggregate function: returns the unbiased sample standard deviation of
+    the expression in a group.
+    """
+    return _invoke_function_over_column("stddev_samp", col)
+
+
+@since(1.6)
+def stddev_pop(col):
+    """
+    Aggregate function: returns population standard deviation of
+    the expression in a group.
+    """
+    return _invoke_function_over_column("stddev_pop", col)
+
+
+@since(1.6)
+def variance(col):
+    """
+    Aggregate function: alias for var_samp
+    """
+    return _invoke_function_over_column("variance", col)
+
+
+@since(1.6)
+def var_samp(col):
+    """
+    Aggregate function: returns the unbiased sample variance of
+    the values in a group.
+    """
+    return _invoke_function_over_column("var_samp", col)
+
+
+@since(1.6)
+def var_pop(col):
+    """
+    Aggregate function: returns the population variance of the values in a group.
+    """
+    return _invoke_function_over_column("var_pop", col)
+
+
+@since(1.6)
+def skewness(col):
+    """
+    Aggregate function: returns the skewness of the values in a group.
+    """
+    return _invoke_function_over_column("skewness", col)
+
+
+@since(1.6)
+def kurtosis(col):
+    """
+    Aggregate function: returns the kurtosis of the values in a group.
+    """
+    return _invoke_function_over_column("kurtosis", col)
+
+
+@since(1.6)
+def collect_list(col):
+    """
     Aggregate function: returns a list of objects with duplicates.
 
     .. note:: The function is non-deterministic because the order of collected results depends
@@ -199,7 +501,12 @@ _collect_list_doc = """
     >>> df2.agg(collect_list('age')).collect()
     [Row(collect_list(age)=[2, 5, 5])]
     """
-_collect_set_doc = """
+    return _invoke_function_over_column("collect_list", col)
+
+
+@since(1.6)
+def collect_set(col):
+    """
     Aggregate function: returns a set of objects with duplicate elements eliminated.
 
     .. note:: The function is non-deterministic because the order of collected results depends
@@ -209,111 +516,118 @@ _collect_set_doc = """
     >>> df2.agg(collect_set('age')).collect()
     [Row(collect_set(age)=[5, 2])]
     """
-_functions_1_6_over_column = {
-    # unary math functions
-    'stddev': 'Aggregate function: alias for stddev_samp.',
-    'stddev_samp': 'Aggregate function: returns the unbiased sample standard deviation of' +
-                   ' the expression in a group.',
-    'stddev_pop': 'Aggregate function: returns population standard deviation of' +
-                  ' the expression in a group.',
-    'variance': 'Aggregate function: alias for var_samp.',
-    'var_samp': 'Aggregate function: returns the unbiased sample variance of' +
-                ' the values in a group.',
-    'var_pop':  'Aggregate function: returns the population variance of the values in a group.',
-    'skewness': 'Aggregate function: returns the skewness of the values in a group.',
-    'kurtosis': 'Aggregate function: returns the kurtosis of the values in a group.',
-    'collect_list': _collect_list_doc,
-    'collect_set': _collect_set_doc
-}
+    return _invoke_function_over_column("collect_set", col)
 
-_functions_2_1_over_column = {
-    # unary math functions
-    'degrees': """
-               Converts an angle measured in radians to an approximately equivalent angle
-               measured in degrees.
 
-               :param col: angle in radians
-               :return: angle in degrees, as if computed by `java.lang.Math.toDegrees()`
-               """,
-    'radians': """
-               Converts an angle measured in degrees to an approximately equivalent angle
-               measured in radians.
+@since(2.1)
+def degrees(col):
+    """
+    Converts an angle measured in radians to an approximately equivalent angle
+    measured in degrees.
 
-               :param col: angle in degrees
-               :return: angle in radians, as if computed by `java.lang.Math.toRadians()`
-               """,
-}
+    :param col: angle in radians
+    :return: angle in degrees, as if computed by `java.lang.Math.toDegrees()`
+    """
+    return _invoke_function_over_column("degrees", col)
 
-# math functions that take two arguments as input
-_binary_mathfunctions = {
-    'atan2': """
-             :param col1: coordinate on y-axis
-             :param col2: coordinate on x-axis
-             :return: the `theta` component of the point
-                (`r`, `theta`)
-                in polar coordinates that corresponds to the point
-                (`x`, `y`) in Cartesian coordinates,
-                as if computed by `java.lang.Math.atan2()`
-             """,
-    'hypot': 'Computes ``sqrt(a^2 + b^2)`` without intermediate overflow or underflow.',
-    'pow': 'Returns the value of the first argument raised to the power of the second argument.',
-}
 
-_window_functions = {
-    'row_number':
-        """returns a sequential number starting at 1 within a window partition.""",
-    'dense_rank':
-        """returns the rank of rows within a window partition, without any gaps.
+@since(2.1)
+def radians(col):
+    """
+    Converts an angle measured in degrees to an approximately equivalent angle
+    measured in radians.
 
-        The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
-        sequence when there are ties. That is, if you were ranking a competition using dense_rank
-        and had three people tie for second place, you would say that all three were in second
-        place and that the next person came in third. Rank would give me sequential numbers, making
-        the person that came in third place (after the ties) would register as coming in fifth.
+    :param col: angle in degrees
+    :return: angle in radians, as if computed by `java.lang.Math.toRadians()`
+    """
+    return _invoke_function_over_column("radians", col)
 
-        This is equivalent to the DENSE_RANK function in SQL.""",
-    'rank':
-        """returns the rank of rows within a window partition.
 
-        The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
-        sequence when there are ties. That is, if you were ranking a competition using dense_rank
-        and had three people tie for second place, you would say that all three were in second
-        place and that the next person came in third. Rank would give me sequential numbers, making
-        the person that came in third place (after the ties) would register as coming in fifth.
+@since(1.4)
+def atan2(col1, col2):
+    """
+    :param col1: coordinate on y-axis
+    :param col2: coordinate on x-axis
+    :return: the `theta` component of the point
+          (`r`, `theta`)
+          in polar coordinates that corresponds to the point
+          (`x`, `y`) in Cartesian coordinates,
+          as if computed by `java.lang.Math.atan2()`
+    """
+    return _invoke_binary_math_function("atan2", col1, col2)
 
-        This is equivalent to the RANK function in SQL.""",
-    'cume_dist':
-        """returns the cumulative distribution of values within a window partition,
-        i.e. the fraction of rows that are below the current row.""",
-    'percent_rank':
-        """returns the relative rank (i.e. percentile) of rows within a window partition.""",
-}
 
-# Wraps deprecated functions (keys) with the messages (values).
-_functions_deprecated = {
-    'toDegrees': 'Deprecated in 2.1, use degrees instead.',
-    'toRadians': 'Deprecated in 2.1, use radians instead.',
-}
+@since(1.4)
+def hypot(col1, col2):
+    """
+    Computes ``sqrt(a^2 + b^2)`` without intermediate overflow or underflow.
+    """
+    return _invoke_binary_math_function("hypot", col1, col2)
 
-for _name, _doc in _functions.items():
-    globals()[_name] = since(1.3)(_create_function(_name, _doc))
-for _name, _doc in _functions_over_column.items():
-    globals()[_name] = since(1.3)(_create_function_over_column(_name, _doc))
-for _name, _doc in _functions_1_4_over_column.items():
-    globals()[_name] = since(1.4)(_create_function_over_column(_name, _doc))
-for _name, _doc in _binary_mathfunctions.items():
-    globals()[_name] = since(1.4)(_create_binary_mathfunction(_name, _doc))
-for _name, _doc in _window_functions.items():
-    globals()[_name] = since(1.6)(_create_window_function(_name, _doc))
-for _name, _doc in _functions_1_6_over_column.items():
-    globals()[_name] = since(1.6)(_create_function_over_column(_name, _doc))
-for _name, _doc in _functions_2_1_over_column.items():
-    globals()[_name] = since(2.1)(_create_function_over_column(_name, _doc))
-for _name, _message in _functions_deprecated.items():
-    globals()[_name] = _wrap_deprecated_function(globals()[_name], _message)
-for _name, _doc in _functions_2_4.items():
-    globals()[_name] = since(2.4)(_create_function(_name, _doc))
-del _name, _doc
+
+@since(1.4)
+def pow(col1, col2):
+    """
+    Returns the value of the first argument raised to the power of the second argument.
+    """
+    return _invoke_binary_math_function("pow", col1, col2)
+
+
+@since(1.6)
+def row_number():
+    """
+    Window function: returns a sequential number starting at 1 within a window partition.
+    """
+    return _invoke_function("row_number")
+
+
+@since(1.6)
+def dense_rank():
+    """
+    Window function: returns the rank of rows within a window partition, without any gaps.
+
+    The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
+    sequence when there are ties. That is, if you were ranking a competition using dense_rank
+    and had three people tie for second place, you would say that all three were in second
+    place and that the next person came in third. Rank would give me sequential numbers, making
+    the person that came in third place (after the ties) would register as coming in fifth.
+
+    This is equivalent to the DENSE_RANK function in SQL.
+    """
+    return _invoke_function("dense_rank")
+
+
+@since(1.6)
+def rank():
+    """
+    Window function: returns the rank of rows within a window partition.
+
+    The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
+    sequence when there are ties. That is, if you were ranking a competition using dense_rank
+    and had three people tie for second place, you would say that all three were in second
+    place and that the next person came in third. Rank would give me sequential numbers, making
+    the person that came in third place (after the ties) would register as coming in fifth.
+
+    This is equivalent to the RANK function in SQL.
+    """
+    return _invoke_function("rank")
+
+
+@since(1.6)
+def cume_dist():
+    """
+    Window function: returns the cumulative distribution of values within a window partition,
+    i.e. the fraction of rows that are below the current row.
+    """
+    return _invoke_function("cume_dist")
+
+
+@since(1.6)
+def percent_rank():
+    """
+    Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
+    """
+    return _invoke_function("percent_rank")
 
 
 @since(1.3)
@@ -1645,21 +1959,68 @@ def raise_error(errMsg):
 
 # ---------------------- String/Binary functions ------------------------------
 
-_string_functions = {
-    'upper': 'Converts a string expression to upper case.',
-    'lower': 'Converts a string expression to lower case.',
-    'ascii': 'Computes the numeric value of the first character of the string column.',
-    'base64': 'Computes the BASE64 encoding of a binary column and returns it as a string column.',
-    'unbase64': 'Decodes a BASE64 encoded string column and returns it as a binary column.',
-    'ltrim': 'Trim the spaces from left end for the specified string value.',
-    'rtrim': 'Trim the spaces from right end for the specified string value.',
-    'trim': 'Trim the spaces from both ends for the specified string column.',
-}
+@since(1.5)
+def upper(col):
+    """
+    Converts a string expression to upper case.
+    """
+    return _invoke_function_over_column("upper", col)
 
 
-for _name, _doc in _string_functions.items():
-    globals()[_name] = since(1.5)(_create_function_over_column(_name, _doc))
-del _name, _doc
+@since(1.5)
+def lower(col):
+    """
+    Converts a string expression to lower case.
+    """
+    return _invoke_function_over_column("lower", col)
+
+
+@since(1.5)
+def ascii(col):
+    """
+    Computes the numeric value of the first character of the string column.
+    """
+    return _invoke_function_over_column("ascii", col)
+
+
+@since(1.5)
+def base64(col):
+    """
+    Computes the BASE64 encoding of a binary column and returns it as a string column.
+    """
+    return _invoke_function_over_column("base64", col)
+
+
+@since(1.5)
+def unbase64(col):
+    """
+    Decodes a BASE64 encoded string column and returns it as a binary column.
+    """
+    return _invoke_function_over_column("unbase64", col)
+
+
+@since(1.5)
+def ltrim(col):
+    """
+    Trim the spaces from left end for the specified string value.
+    """
+    return _invoke_function_over_column("ltrim", col)
+
+
+@since(1.5)
+def rtrim(col):
+    """
+    Trim the spaces from right end for the specified string value.
+    """
+    return _invoke_function_over_column("rtrim", col)
+
+
+@since(1.5)
+def trim(col):
+    """
+    Trim the spaces from both ends for the specified string column.
+    """
+    return _invoke_function_over_column("trim", col)
 
 
 @since(1.5)
@@ -2231,7 +2592,7 @@ def element_at(col, extraction):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.element_at(
-        _to_java_column(col), lit(extraction)._jc))  # noqa: F821 'lit' is dynamically defined.
+        _to_java_column(col), lit(extraction)._jc))
 
 
 @since(2.4)
@@ -3605,13 +3966,6 @@ def udf(f=None, returnType=StringType()):
     else:
         return _create_udf(f=f, returnType=returnType,
                            evalType=PythonEvalType.SQL_BATCHED_UDF)
-
-
-ignored_fns = ['map', 'since']
-__all__ = [k for k, v in globals().items()
-           if not k.startswith('_') and k[0].islower() and callable(v) and k not in ignored_fns]
-__all__ += ["PandasUDFType"]
-__all__.sort()
 
 
 def _test():

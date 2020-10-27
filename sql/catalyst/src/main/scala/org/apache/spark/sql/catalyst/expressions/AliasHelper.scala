@@ -53,8 +53,8 @@ trait AliasHelper {
    * Replace all attributes, that reference an alias, with the aliased expression
    */
   protected def replaceAlias(
-    expr: Expression,
-    aliasMap: AttributeMap[Alias]): Expression = {
+      expr: Expression,
+      aliasMap: AttributeMap[Alias]): Expression = {
     // Use transformUp to prevent infinite recursion when the replacement expression
     // redefines the same ExprId,
     trimAliases(expr.transformUp {
@@ -83,18 +83,18 @@ trait AliasHelper {
     }
   }
 
-  protected def trimNonTopLevelAliases(e: Expression): Expression = e match {
-    case a: Alias =>
-      a.copy(child = trimAliases(a.child))(
-        exprId = a.exprId,
-        qualifier = a.qualifier,
-        explicitMetadata = Some(a.metadata))
-    case a: MultiAlias =>
-      a.copy(child = trimAliases(a.child))
-    case other => trimAliases(other)
-  }
+  protected def trimNonTopLevelAliases[T <: Expression](e: T): T = {
+    val res = e match {
+      case a: Alias =>
+        a.copy(child = trimAliases(a.child))(
+          exprId = a.exprId,
+          qualifier = a.qualifier,
+          explicitMetadata = Some(a.metadata))
+      case a: MultiAlias =>
+        a.copy(child = trimAliases(a.child))
+      case other => trimAliases(other)
+    }
 
-  protected def trimNonTopLevelAliases(e: NamedExpression): NamedExpression = {
-    trimNonTopLevelAliases(e.asInstanceOf[Expression]).asInstanceOf[NamedExpression]
+    res.asInstanceOf[T]
   }
 }

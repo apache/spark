@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
+import org.apache.spark.sql.catalyst.optimizer.OptimizeUpdateFields
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -131,8 +132,7 @@ object AnalysisContext {
  */
 class Analyzer(
     override val catalogManager: CatalogManager,
-    conf: SQLConf,
-    maxIterations: Int)
+    conf: SQLConf)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
@@ -147,12 +147,7 @@ class Analyzer(
   def this(catalog: SessionCatalog, conf: SQLConf) = {
     this(
       new CatalogManager(conf, FakeV2SessionCatalog, catalog),
-      conf,
-      conf.analyzerMaxIterations)
-  }
-
-  def this(catalogManager: CatalogManager, conf: SQLConf) = {
-    this(catalogManager, conf, conf.analyzerMaxIterations)
+      conf)
   }
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
@@ -187,9 +182,9 @@ class Analyzer(
    * If the plan cannot be resolved within maxIterations, analyzer will throw exception to inform
    * user to increase the value of SQLConf.ANALYZER_MAX_ITERATIONS.
    */
-  protected val fixedPoint =
+  protected def fixedPoint =
     FixedPoint(
-      maxIterations,
+      conf.analyzerMaxIterations,
       errorOnExceed = true,
       maxIterationsSetting = SQLConf.ANALYZER_MAX_ITERATIONS.key)
 
@@ -205,17 +200,22 @@ class Analyzer(
    */
   val postHocResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
-  lazy val batches: Seq[Batch] = Seq(
+  override def batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
+      // This rule optimizes `UpdateFields` expression chains so looks more like optimization rule.
+      // However, when manipulating deeply nested schema, `UpdateFields` expression tree could be
+      // very complex and make analysis impossible. Thus we need to optimize `UpdateFields` early
+      // at the beginning of analysis.
+      OptimizeUpdateFields,
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      new SubstituteUnresolvedOrdinals(conf)),
+      SubstituteUnresolvedOrdinals),
     Batch("Disable Hints", Once,
-      new ResolveHints.DisableHints(conf)),
+      new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
-      new ResolveHints.ResolveJoinStrategyHints(conf),
-      new ResolveHints.ResolveCoalesceHints(conf)),
+      ResolveHints.ResolveJoinStrategyHints,
+      ResolveHints.ResolveCoalesceHints),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
     Batch("Resolution", fixedPoint,
@@ -249,19 +249,19 @@ class Analyzer(
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       TimeWindowing ::
-      ResolveInlineTables(conf) ::
+      ResolveInlineTables ::
       ResolveHigherOrderFunctions(v1SessionCatalog) ::
-      ResolveLambdaVariables(conf) ::
-      ResolveTimeZone(conf) ::
+      ResolveLambdaVariables ::
+      ResolveTimeZone ::
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
       ResolveUnion ::
-      TypeCoercion.typeCoercionRules(conf) ++
+      TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
     Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,
-      new ResolveHints.RemoveAllHints(conf)),
+      new ResolveHints.RemoveAllHints),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,

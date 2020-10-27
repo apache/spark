@@ -42,8 +42,6 @@ jobs:
             streaming, sql-kafka-0-10, streaming-kafka-0-10,
             mllib-local, mllib,
             yarn, mesos, kubernetes, hadoop-cloud, spark-ganglia-lgpl
-          - >-
-            sparkr
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [""]
         excluded-tags: [""]
@@ -136,22 +134,8 @@ jobs:
     - name: Install Python packages (Python 3.8)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
       run: |
-        python3.8 -m pip install numpy pyarrow pandas scipy xmlrunner
+        python3.8 -m pip install numpy 'pyarrow<3.0.0' pandas scipy xmlrunner
         python3.8 -m pip list
-    # SparkR
-    - name: Install R 4.0
-      uses: r-lib/actions/setup-r@v1
-      if: contains(matrix.modules, 'sparkr')
-      with:
-        r-version: 4.0
-    - name: Install R packages
-      if: contains(matrix.modules, 'sparkr')
-      run: |
-        # qpdf is required to reduce the size of PDFs to make CRAN check pass. See SPARK-32497.
-        sudo apt-get install -y libcurl4-openssl-dev qpdf
-        sudo Rscript -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'devtools', 'e1071', 'survival', 'arrow', 'roxygen2'), repos='https://cloud.r-project.org/')"
-        # Show installed packages in R.
-        sudo Rscript -e 'pkg_list <- as.data.frame(installed.packages()[, c(1,3:4)]); pkg_list[is.na(pkg_list$Priority), 1:2, drop = FALSE]'
     # Run the tests.
     - name: Run tests
       run: |
@@ -239,7 +223,7 @@ jobs:
     # Ubuntu 20.04. See also SPARK-33162.
     - name: Install Python packages (Python 3.6)
       run: |
-        python3.6 -m pip install numpy pyarrow pandas scipy xmlrunner
+        python3.6 -m pip install numpy 'pyarrow<3.0.0' pandas scipy xmlrunner
         python3.6 -m pip list
     # Run the tests.
     - name: Run tests
@@ -259,6 +243,67 @@ jobs:
       with:
         name: unit-tests-log-${{ matrix.modules }}--1.8-hadoop3.2-hive2.3
         path: "**/target/unit-tests.log"
+
+  sparkr:
+    name: Build modules - sparkr
+    runs-on: ubuntu-20.04
+    container:
+      image: dongjoon/apache-spark-github-action-image:20201025
+    env:
+      HADOOP_PROFILE: hadoop3.2
+      HIVE_PROFILE: hive2.3
+      GITHUB_PREV_SHA: ${{ github.event.before }}
+      GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
+      # In order to fetch changed files
+      with:
+        fetch-depth: 0
+    - name: Merge dispatched input branch
+      if: ${{ github.event.inputs.target != '' }}
+      run: git merge --progress --ff-only origin/${{ github.event.inputs.target }}
+    # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+    - name: Cache Scala, SBT, Maven and Zinc
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/zinc-*
+          build/scala-*
+          build/*.jar
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
+    - name: Cache Maven local repository
+      uses: actions/cache@v2
+      with:
+        path: ~/.m2/repository
+        key: sparkr-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          sparkr-maven-
+    - name: Cache Ivy local repository
+      uses: actions/cache@v2
+      with:
+        path: ~/.ivy2/cache
+        key: sparkr-ivy-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        restore-keys: |
+          sparkr-ivy-
+    - name: Run tests
+      run: |
+        mkdir -p ~/.m2
+        # The followings are also used by `r-lib/actions/setup-r` to avoid
+        # R issues at docker environment
+        export TZ=UTC
+        export _R_CHECK_SYSTEM_CLOCK_=FALSE
+        ./dev/run-tests --parallelism 2 --modules sparkr
+        rm -rf ~/.m2/repository/org/apache/spark
+    - name: Upload test results to report
+      if: always()
+      uses: actions/upload-artifact@v2
+      with:
+        name: test-results-sparkr--1.8-hadoop3.2-hive2.3
+        path: "**/target/test-reports/*.xml"
 
   # Static analysis, and documentation build
   lint:
@@ -287,7 +332,7 @@ jobs:
       run: |
         # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
-        pip3 install flake8 'sphinx<3.1.0' numpy pydata_sphinx_theme ipython nbsphinx
+        pip3 install flake8 'sphinx<3.1.0' numpy pydata_sphinx_theme ipython nbsphinx mypy numpydoc
     - name: Install R 4.0
       uses: r-lib/actions/setup-r@v1
       with:
@@ -308,7 +353,7 @@ jobs:
         sudo apt-get install -y libcurl4-openssl-dev pandoc
         # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
-        pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx
+        pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc
         gem install jekyll jekyll-redirect-from rouge
         sudo Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2'), repos='https://cloud.r-project.org/')"
     - name: Scala linter

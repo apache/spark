@@ -161,14 +161,20 @@ class FunctionsTests(ReusedSQLTestCase):
 
     def test_string_functions(self):
         from pyspark.sql import functions
-        from pyspark.sql.functions import col, lit, _string_functions
+        from pyspark.sql.functions import col, lit
+        string_functions = [
+            "upper", "lower", "ascii",
+            "base64", "unbase64",
+            "ltrim", "rtrim", "trim"
+        ]
+
         df = self.spark.createDataFrame([['nick']], schema=['name'])
         self.assertRaisesRegexp(
             TypeError,
             "must be the same type",
             lambda: df.select(col('name').substr(0, lit(1))))
 
-        for name in _string_functions.keys():
+        for name in string_functions:
             self.assertEqual(
                 df.select(getattr(functions, name)("name")).first()[0],
                 df.select(getattr(functions, name)(col("name"))).first()[0])
