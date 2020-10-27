@@ -38,7 +38,6 @@ import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBui
  */
 class ResolveSessionCatalog(
     val catalogManager: CatalogManager,
-    conf: SQLConf,
     isTempView: Seq[String] => Boolean,
     isTempFunction: String => Boolean)
   extends Rule[LogicalPlan] with LookupCatalog {

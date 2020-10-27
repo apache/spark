@@ -91,7 +91,7 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
     } else {
       df1.join(df2, joinExpression, joinType)
     }
-    val plan = EnsureRequirements(spark.sessionState.conf).apply(df3.queryExecution.sparkPlan)
+    val plan = EnsureRequirements.apply(df3.queryExecution.sparkPlan)
     assert(plan.collect { case p: T => p }.size === 1)
     plan
   }
@@ -171,7 +171,7 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
       val df4 = Seq((1, "5"), (2, "5")).toDF("key", "value")
       val df5 = df4.join(df3, Seq("key"), "inner")
 
-      val plan = EnsureRequirements(spark.sessionState.conf).apply(df5.queryExecution.sparkPlan)
+      val plan = EnsureRequirements.apply(df5.queryExecution.sparkPlan)
 
       assert(plan.collect { case p: BroadcastHashJoinExec => p }.size === 1)
       assert(plan.collect { case p: SortMergeJoinExec => p }.size === 1)
@@ -182,7 +182,7 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
     val df1 = Seq((1, "4"), (2, "2")).toDF("key", "value")
     val joined = df1.join(df, Seq("key"), "inner")
 
-    val plan = EnsureRequirements(spark.sessionState.conf).apply(joined.queryExecution.sparkPlan)
+    val plan = EnsureRequirements.apply(joined.queryExecution.sparkPlan)
 
     assert(plan.collect { case p: BroadcastHashJoinExec => p }.size === 1)
   }

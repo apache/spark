@@ -47,16 +47,16 @@ import org.apache.spark.sql.types._
  */
 object TypeCoercion {
 
-  def typeCoercionRules(conf: SQLConf): List[Rule[LogicalPlan]] =
-    InConversion(conf) ::
+  def typeCoercionRules: List[Rule[LogicalPlan]] =
+    InConversion ::
       WidenSetOperationTypes ::
-      PromoteStrings(conf) ::
+      PromoteStrings ::
       DecimalPrecision ::
       BooleanEquality ::
       FunctionArgumentConversion ::
-      ConcatCoercion(conf) ::
+      ConcatCoercion ::
       MapZipWithCoercion ::
-      EltCoercion(conf) ::
+      EltCoercion ::
       CaseWhenCoercion ::
       IfCoercion ::
       StackCoercion ::
@@ -414,7 +414,7 @@ object TypeCoercion {
   /**
    * Promotes strings that appear in arithmetic expressions.
    */
-  case class PromoteStrings(conf: SQLConf) extends TypeCoercionRule {
+  object PromoteStrings extends TypeCoercionRule {
     private def castExpr(expr: Expression, targetType: DataType): Expression = {
       (expr.dataType, targetType) match {
         case (NullType, dt) => Literal.create(null, targetType)
@@ -481,7 +481,7 @@ object TypeCoercion {
    *    operator type is found the original expression will be returned and an
    *    Analysis Exception will be raised at the type checking phase.
    */
-  case class InConversion(conf: SQLConf) extends TypeCoercionRule {
+  object InConversion extends TypeCoercionRule {
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
@@ -786,7 +786,7 @@ object TypeCoercion {
    * If `spark.sql.function.concatBinaryAsString` is false and all children types are binary,
    * the expected types are binary. Otherwise, the expected ones are strings.
    */
-  case class ConcatCoercion(conf: SQLConf) extends TypeCoercionRule {
+  object ConcatCoercion extends TypeCoercionRule {
 
     override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = {
       plan resolveOperators { case p =>
@@ -834,7 +834,7 @@ object TypeCoercion {
    * If `spark.sql.function.eltOutputAsString` is false and all children types are binary,
    * the expected types are binary. Otherwise, the expected ones are strings.
    */
-  case class EltCoercion(conf: SQLConf) extends TypeCoercionRule {
+  object EltCoercion extends TypeCoercionRule {
 
     override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = {
       plan resolveOperators { case p =>

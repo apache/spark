@@ -342,7 +342,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       requiredChildDistribution = Seq(distribution, distribution),
       requiredChildOrdering = Seq(Seq.empty, Seq.empty)
     )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = EnsureRequirements.apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
   }
 
@@ -360,7 +360,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       requiredChildDistribution = Seq(distribution, distribution),
       requiredChildOrdering = Seq(Seq.empty, Seq.empty)
     )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = EnsureRequirements.apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.isEmpty) {
       fail(s"Exchange should have been added:\n$outputPlan")
@@ -380,7 +380,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       requiredChildDistribution = Seq(distribution, distribution),
       requiredChildOrdering = Seq(Seq.empty, Seq.empty)
     )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = EnsureRequirements.apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.nonEmpty) {
       fail(s"Exchange should not have been added:\n$outputPlan")
@@ -403,7 +403,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       requiredChildDistribution = Seq(distribution, distribution),
       requiredChildOrdering = Seq(outputOrdering, outputOrdering)
     )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = EnsureRequirements.apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.nonEmpty) {
       fail(s"No Exchanges should have been added:\n$outputPlan")
@@ -418,7 +418,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     val inputPlan = ShuffleExchangeExec(
       partitioning,
       DummySparkPlan(outputPartitioning = partitioning))
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = EnsureRequirements.apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size == 2) {
       fail(s"Topmost Exchange should have been eliminated:\n$outputPlan")
@@ -433,7 +433,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     val inputPlan = ShuffleExchangeExec(
       partitioning,
       DummySparkPlan(outputPartitioning = partitioning))
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = EnsureRequirements.apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size == 1) {
       fail(s"Topmost Exchange should not have been eliminated:\n$outputPlan")
@@ -451,7 +451,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         requiredChildDistribution = Seq(distribution),
         requiredChildOrdering = Seq(Seq.empty))
 
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = EnsureRequirements.apply(inputPlan)
     val shuffle = outputPlan.collect { case e: ShuffleExchangeExec => e }
     assert(shuffle.size === 1)
     assert(shuffle.head.outputPartitioning === finalPartitioning)
@@ -476,7 +476,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       shuffle,
       shuffle)
 
-    val outputPlan = ReuseExchange(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = ReuseExchange.apply(inputPlan)
     if (outputPlan.collect { case e: ReusedExchangeExec => true }.size != 1) {
       fail(s"Should re-use the shuffle:\n$outputPlan")
     }
@@ -493,7 +493,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       ShuffleExchangeExec(finalPartitioning, inputPlan),
       ShuffleExchangeExec(finalPartitioning, inputPlan))
 
-    val outputPlan2 = ReuseExchange(spark.sessionState.conf).apply(inputPlan2)
+    val outputPlan2 = ReuseExchange.apply(inputPlan2)
     if (outputPlan2.collect { case e: ReusedExchangeExec => true }.size != 2) {
       fail(s"Should re-use the two shuffles:\n$outputPlan2")
     }
@@ -530,7 +530,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       requiredChildOrdering = Seq(requiredOrdering),
       requiredChildDistribution = Seq(UnspecifiedDistribution)
     )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    val outputPlan = EnsureRequirements.apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (shouldHaveSort) {
       if (outputPlan.collect { case s: SortExec => true }.isEmpty) {
@@ -691,7 +691,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     val smjExec = SortMergeJoinExec(
       exprA :: exprA :: Nil, exprB :: exprC :: Nil, Inner, None, plan1, plan2)
 
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(smjExec)
+    val outputPlan = EnsureRequirements.apply(smjExec)
     outputPlan match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _, _, _, _) =>
         assert(leftKeys == Seq(exprA, exprA))
@@ -711,7 +711,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       condition = None,
       left = plan1,
       right = plan2)
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(smjExec)
+    val outputPlan = EnsureRequirements.apply(smjExec)
     outputPlan match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
              SortExec(_, _,

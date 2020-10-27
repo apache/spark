@@ -26,7 +26,7 @@ import org.apache.spark.sql.types.DataType
  * Replace [[TimeZoneAwareExpression]] without timezone id by its copy with session local
  * time zone.
  */
-case class ResolveTimeZone(conf: SQLConf) extends Rule[LogicalPlan] {
+object ResolveTimeZone extends Rule[LogicalPlan] {
   private val transformTimeZoneExprs: PartialFunction[Expression, Expression] = {
     case e: TimeZoneAwareExpression if e.timeZoneId.isEmpty =>
       e.withTimeZone(conf.sessionLocalTimeZone)
