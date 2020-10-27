@@ -181,7 +181,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
         @Override
         public void onSuccess(ByteBuffer response) {
           listener.onShuffleMergeSuccess(
-                  (MergeStatuses) BlockTransferMessage.Decoder.fromByteBuffer(response));
+            (MergeStatuses) BlockTransferMessage.Decoder.fromByteBuffer(response));
         }
 
         @Override
