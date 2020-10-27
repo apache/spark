@@ -70,7 +70,7 @@ case class ResolveHigherOrderFunctions(catalog: SessionCatalog) extends Rule[Log
  *      be a lambda function defined in an outer scope, or a attribute in produced by the plan's
  *      child. If names are duplicate, the name defined in the most inner scope is used.
  */
-case class ResolveLambdaVariables(conf: SQLConf) extends Rule[LogicalPlan] {
+object ResolveLambdaVariables extends Rule[LogicalPlan] {
 
   type LambdaVariableMap = Map[String, NamedExpression]
 

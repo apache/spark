@@ -359,15 +359,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     val conf = this.conf.clone()
-    val secManager = new SecurityManager(conf)
-
-    secManager.setAcls(historyUiAclsEnable)
-    // make sure to set admin acls before view acls so they are properly picked up
-    secManager.setAdminAcls(historyUiAdminAcls ++ stringToSeq(attempt.adminAcls.getOrElse("")))
-    secManager.setViewAcls(attempt.info.sparkUser, stringToSeq(attempt.viewAcls.getOrElse("")))
-    secManager.setAdminAclsGroups(historyUiAdminAclsGroups ++
-      stringToSeq(attempt.adminAclsGroups.getOrElse("")))
-    secManager.setViewAclsGroups(stringToSeq(attempt.viewAclsGroups.getOrElse("")))
+    val secManager = createSecurityManager(conf, attempt)
 
     val kvstore = try {
       diskManager match {
@@ -459,6 +451,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         dm.release(appId, attemptId, delete = !loadedUI.valid)
       }
     }
+  }
+
+  override def checkUIViewPermissions(appId: String, attemptId: Option[String],
+      user: String): Boolean = {
+    val app = load(appId)
+    val attempt = app.attempts.find(_.info.attemptId == attemptId).orNull
+    if (attempt == null) {
+      throw new NoSuchElementException()
+    }
+    val secManager = createSecurityManager(this.conf.clone(), attempt)
+    secManager.checkUIViewPermissions(user)
   }
 
   /**
@@ -1375,6 +1378,19 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         logError(s"Exception while submitting task", e)
         endProcessing(rootPath)
     }
+  }
+
+  private def createSecurityManager(conf: SparkConf,
+      attempt: AttemptInfoWrapper): SecurityManager = {
+    val secManager = new SecurityManager(conf)
+    secManager.setAcls(historyUiAclsEnable)
+    // make sure to set admin acls before view acls so they are properly picked up
+    secManager.setAdminAcls(historyUiAdminAcls ++ stringToSeq(attempt.adminAcls.getOrElse("")))
+    secManager.setViewAcls(attempt.info.sparkUser, stringToSeq(attempt.viewAcls.getOrElse("")))
+    secManager.setAdminAclsGroups(historyUiAdminAclsGroups ++
+      stringToSeq(attempt.adminAclsGroups.getOrElse("")))
+    secManager.setViewAclsGroups(stringToSeq(attempt.viewAclsGroups.getOrElse("")))
+    secManager
   }
 }
 

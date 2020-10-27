@@ -1399,7 +1399,23 @@
             <groupId>com.sun.jersey.contribs</groupId>
             <artifactId>*</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
+          </exclusion>
         </exclusions>
+      </dependency>
+      <!--
+        Hack to exclude org.apache.hadoop:hadoop-yarn-server-resourcemanager:jar:tests.
+        For some reasons, SBT starts to pull the dependencies of 'hadoop-yarn-server-tests' above
+        with 'tests' classifier after upgrading SBT 1.3 (SPARK-21708). Otherwise, some tests might
+        fail, see also SPARK-33104.
+      -->
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
+        <version>${yarn.version}</version>
+        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>

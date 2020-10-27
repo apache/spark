@@ -34,7 +34,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = {
-    Seq(PreprocessTableCreation(spark))
+    Seq(PreprocessTableCreation)
   }
 
   test("CreateTableAsSelect: using top level field for partitioning") {
