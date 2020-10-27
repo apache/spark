@@ -149,7 +149,7 @@ abstract class OffsetWindowFunctionFrameBase(
 /**
  * The frameless offset window frame is an internal window frame just used to optimize the
  * performance for the window function that returns the value of the input column offset
- * by a number of rows within the partition. The internal window frame is not a popular
+ * by a number of rows according to the current row. The internal window frame is not a popular
  * window frame cannot be specified and used directly by the users. This window frame
  * calculates frames containing LEAD/LAG statements.
  */
@@ -190,12 +190,19 @@ class UnboundedOffsetWindowFunctionFrame(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    super.prepare(rows)
-    if (inputIndex >= 0 && inputIndex < input.length) {
+    input = rows
+    if (offset >= input.length) {
+      fillDefaultValue(EmptyRow)
+    } else {
+      inputIterator = input.generateIterator()
+      // drain the first few rows if offset is larger than zero
+      inputIndex = 0
+      while (inputIndex < offset) {
+        if (inputIterator.hasNext) inputIterator.next()
+        inputIndex += 1
+      }
       val r = WindowFunctionFrame.getNextOrNull(inputIterator)
       projection(r)
-    } else {
-      fillDefaultValue(EmptyRow)
     }
   }
 
