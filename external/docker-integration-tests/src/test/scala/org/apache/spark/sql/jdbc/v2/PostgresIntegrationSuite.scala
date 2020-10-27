@@ -27,35 +27,28 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.4.0):
+ * To run this test suite for a specific version (e.g., postgres:13.0):
  * {{{
- *   DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.4.0
- *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.DB2IntegrationSuite"
+ *   POSTGRES_DOCKER_IMAGE_NAME=postgres:13.0
+ *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.PostgresIntegrationSuite"
  * }}}
  */
 @DockerTest
-class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
-  override val catalogName: String = "db2"
+class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
+  override val catalogName: String = "postgresql"
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("DB2_DOCKER_IMAGE_NAME", "ibmcom/db2:11.5.4.0")
+    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:13.0-alpine")
     override val env = Map(
-      "DB2INST1_PASSWORD" -> "rootpass",
-      "LICENSE" -> "accept",
-      "DBNAME" -> "foo",
-      "ARCHIVE_LOGS" -> "false",
-      "AUTOCONFIG" -> "false"
+      "POSTGRES_PASSWORD" -> "rootpass"
     )
     override val usesIpc = false
-    override val jdbcPort: Int = 50000
-    override val privileged = true
+    override val jdbcPort = 5432
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:db2://$ip:$port/foo:user=db2inst1;password=rootpass;retrieveMessagesFromServerOnGetMessage=true;" //scalastyle:ignore
+      s"jdbc:postgresql://$ip:$port/postgres?user=postgres&password=rootpass"
   }
-
   override def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.catalog.db2", classOf[JDBCTableCatalog].getName)
-    .set("spark.sql.catalog.db2.url", db.getJdbcUrl(dockerIp, externalPort))
-
+    .set("spark.sql.catalog.postgresql", classOf[JDBCTableCatalog].getName)
+    .set("spark.sql.catalog.postgresql.url", db.getJdbcUrl(dockerIp, externalPort))
   override def dataPreparation(conn: Connection): Unit = {}
 
   override def testUpdateColumnType(tbl: String): Unit = {
@@ -63,14 +56,14 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     var t = spark.table(tbl)
     var expectedSchema = new StructType().add("ID", IntegerType)
     assert(t.schema === expectedSchema)
-    sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE DOUBLE")
+    sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", DoubleType)
+    expectedSchema = new StructType().add("ID", StringType)
     assert(t.schema === expectedSchema)
-    // Update column type from DOUBLE to STRING
-    val msg1 = intercept[AnalysisException] {
-      sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE VARCHAR(10)")
+    // Update column type from STRING to INTEGER
+    val msg = intercept[AnalysisException] {
+      sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
     }.getMessage
-    assert(msg1.contains("Cannot update alt_table field ID: double cannot be cast to varchar"))
+    assert(msg.contains("Cannot update alt_table field ID: string cannot be cast to int"))
   }
 }
