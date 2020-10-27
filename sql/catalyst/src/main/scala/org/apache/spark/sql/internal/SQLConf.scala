@@ -2753,7 +2753,7 @@ object SQLConf {
       .internal()
       .doc("Whether pad null value when transformation output value size less then schema size." +
         "When true, we pad NULL value to keep same behavior with hive." +
-        "When false, we keep origin behavior")
+        "When false, we keep original behavior to throw `ArrayIndexOutOfBoundsException`")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
