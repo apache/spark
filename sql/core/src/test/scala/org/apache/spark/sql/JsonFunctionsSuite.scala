@@ -748,7 +748,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df4.select(from_json($"c0", MapType(StringType, st))), Row(null))
   }
 
-  test("SPARK-XXXXX: infers schema for JSON field with spaces and pass them to from_json") {
+  test("SPARK-33270: infers schema for JSON field with spaces and pass them to from_json") {
     val in = Seq("""{"a b": 1}""").toDS()
     val out = in.select(from_json('value, schema_of_json("""{"a b": 100}""")) as "parsed")
     val expected = new StructType().add("parsed", new StructType().add("a b", LongType))
