@@ -297,6 +297,7 @@ object QueryExecution {
     Seq(
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
+      RemoveRedundantSorts(sparkSession.sessionState.conf),
       EnsureRequirements(sparkSession.sessionState.conf),
       ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
         sparkSession.sessionState.columnarRules),
