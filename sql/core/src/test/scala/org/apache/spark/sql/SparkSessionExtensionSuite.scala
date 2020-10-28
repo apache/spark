@@ -646,8 +646,8 @@ class ColumnarProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 class BrokenColumnarAdd(
     left: ColumnarExpression,
     right: ColumnarExpression,
-    checkOverflow: Boolean = false)
-  extends Add(left, right, checkOverflow) with ColumnarExpression {
+    failOnError: Boolean = false)
+  extends Add(left, right, failOnError) with ColumnarExpression {
 
   override def supportsColumnar(): Boolean = left.supportsColumnar && right.supportsColumnar
 

@@ -36,7 +36,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
   since = "1.0.0")
 case class UnaryMinus(
     child: Expression,
-    checkOverflow: Boolean = SQLConf.get.ansiEnabled)
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
   def this(child: Expression) = this(child, SQLConf.get.ansiEnabled)
@@ -47,11 +47,11 @@ case class UnaryMinus(
 
   override def toString: String = s"-$child"
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
-    case ByteType | ShortType if checkOverflow =>
+    case ByteType | ShortType if failOnError =>
       nullSafeCodeGen(ctx, ev, eval => {
         val javaBoxedType = CodeGenerator.boxedType(dataType)
         val javaType = CodeGenerator.javaType(dataType)
@@ -64,7 +64,7 @@ case class UnaryMinus(
            |${ev.value} = ($javaType)(-($originValue));
            """.stripMargin
       })
-    case IntegerType | LongType if checkOverflow =>
+    case IntegerType | LongType if failOnError =>
       nullSafeCodeGen(ctx, ev, eval => {
         val mathClass = classOf[Math].getName
         s"${ev.value} = $mathClass.negateExact($eval);"
@@ -79,12 +79,12 @@ case class UnaryMinus(
       """})
     case _: CalendarIntervalType =>
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
-      val method = if (checkOverflow) "negateExact" else "negate"
+      val method = if (failOnError) "negateExact" else "negate"
       defineCodeGen(ctx, ev, c => s"$iu.$method($c)")
   }
 
   protected override def nullSafeEval(input: Any): Any = dataType match {
-    case CalendarIntervalType if checkOverflow =>
+    case CalendarIntervalType if failOnError =>
       IntervalUtils.negateExact(input.asInstanceOf[CalendarInterval])
     case CalendarIntervalType => IntervalUtils.negate(input.asInstanceOf[CalendarInterval])
     case _ => numeric.negate(input)
@@ -153,8 +153,9 @@ case class Abs(child: Expression)
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 }
 
-abstract class BinaryArithmetic(failOnError: Boolean)
-  extends BinaryOperator with NullIntolerant with Serializable {
+abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant with Serializable {
+
+  protected val failOnError: Boolean
 
   override def dataType: DataType = left.dataType
 
@@ -239,7 +240,7 @@ object BinaryArithmetic {
 case class Add(
     left: Expression,
     right: Expression,
-    checkOverflow: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic(checkOverflow) {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
@@ -249,12 +250,12 @@ case class Add(
 
   override def decimalMethod: String = "$plus"
 
-  override def calendarIntervalMethod: String = if (checkOverflow) "addExact" else "add"
+  override def calendarIntervalMethod: String = if (failOnError) "addExact" else "add"
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
-    case CalendarIntervalType if checkOverflow =>
+    case CalendarIntervalType if failOnError =>
       IntervalUtils.addExact(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
     case CalendarIntervalType =>
@@ -277,7 +278,7 @@ case class Add(
 case class Subtract(
     left: Expression,
     right: Expression,
-    checkOverflow: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic(checkOverflow) {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
@@ -287,12 +288,12 @@ case class Subtract(
 
   override def decimalMethod: String = "$minus"
 
-  override def calendarIntervalMethod: String = if (checkOverflow) "subtractExact" else "subtract"
+  override def calendarIntervalMethod: String = if (failOnError) "subtractExact" else "subtract"
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
-    case CalendarIntervalType if checkOverflow =>
+    case CalendarIntervalType if failOnError =>
       IntervalUtils.subtractExact(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
     case CalendarIntervalType =>
@@ -315,7 +316,7 @@ case class Subtract(
 case class Multiply(
     left: Expression,
     right: Expression,
-    checkOverflow: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic(checkOverflow) {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
@@ -324,15 +325,15 @@ case class Multiply(
   override def symbol: String = "*"
   override def decimalMethod: String = "$times"
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 
   override def exactMathMethod: Option[String] = Some("multiplyExact")
 }
 
-// Common base class for Divide and Remainder, since these two classes are almost identical
-abstract class DivModLike(failOnError: Boolean) extends BinaryArithmetic(failOnError) {
+// Common base trait for Divide and Remainder, since these two classes are almost identical
+trait DivModLike extends BinaryArithmetic {
 
   protected def decimalToDataTypeCodeGen(decimalResult: String): String = decimalResult
 
@@ -352,11 +353,8 @@ abstract class DivModLike(failOnError: Boolean) extends BinaryArithmetic(failOnE
       val input1 = left.eval(input)
       if (input1 == null) {
         null
-      } else if (isZero(input2)) {
-        // `failOnError` is always true here
-        throw new ArithmeticException("divide by zero")
-        null
       } else {
+        if (isZero(input2)) throw new ArithmeticException("divide by zero")
         evalOperation(input1, input2)
       }
     }
@@ -381,16 +379,9 @@ abstract class DivModLike(failOnError: Boolean) extends BinaryArithmetic(failOnE
     } else {
       s"${ev.isNull} = true;"
     }
-    val nullOnErrorCondition = if (failOnError) {
-      ""
-    } else {
-      s" || $isZero"
-    }
+    val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
     val failOnErrorBranch = if (failOnError) {
-      s"""
-        } else if ($isZero) {
-          throw new ArithmeticException("divide by zero");
-      """
+      s"""if ($isZero) throw new ArithmeticException("divide by zero");"""
     } else {
       ""
     }
@@ -423,8 +414,8 @@ abstract class DivModLike(failOnError: Boolean) extends BinaryArithmetic(failOnE
           ${eval1.code}
           if (${eval1.isNull}) {
             ${ev.isNull} = true;
-          $failOnErrorBranch
           } else {
+            $failOnErrorBranch
             ${ev.value} = $operation;
           }
         }""")
@@ -447,7 +438,7 @@ abstract class DivModLike(failOnError: Boolean) extends BinaryArithmetic(failOnE
 case class Divide(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike(failOnError) {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
@@ -476,7 +467,7 @@ case class Divide(
 case class IntegralDivide(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike(failOnError) {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
@@ -522,7 +513,7 @@ case class IntegralDivide(
 case class Remainder(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike(failOnError) {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
@@ -575,7 +566,7 @@ case class Remainder(
 case class Pmod(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic(failOnError) {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
@@ -604,10 +595,8 @@ case class Pmod(
       val input1 = left.eval(input)
       if (input1 == null) {
         null
-      } else if (isZero(input2)) {
-        // `failOnError` is always true here
-        throw new ArithmeticException("divide by zero")
       } else {
+        if (isZero(input2)) throw new ArithmeticException("divide by zero")
         input1 match {
           case i: Integer => pmod(i, input2.asInstanceOf[java.lang.Integer])
           case l: Long => pmod(l, input2.asInstanceOf[java.lang.Long])
@@ -634,16 +623,9 @@ case class Pmod(
     } else {
       s"${ev.isNull} = true;"
     }
-    val nullOnErrorCondition = if (failOnError) {
-      ""
-    } else {
-      s" || $isZero"
-    }
+    val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
     val failOnErrorBranch = if (failOnError) {
-      s"""
-        } else if ($isZero) {
-          throw new ArithmeticException("divide by zero");
-      """
+      s"""if ($isZero) throw new ArithmeticException("divide by zero");"""
     } else {
       ""
     }
@@ -705,8 +687,8 @@ case class Pmod(
           ${eval1.code}
           if (${eval1.isNull}) {
             ${ev.isNull} = true;
-          $failOnErrorBranch
           } else {
+            $failOnErrorBranch
             $result
           }
         }""")
