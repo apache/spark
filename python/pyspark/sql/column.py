@@ -19,7 +19,7 @@ import sys
 import json
 import warnings
 
-from pyspark import copy_func, since
+from pyspark import copy_func
 from pyspark.context import SparkContext
 from pyspark.sql.types import DataType, StructField, StructType, IntegerType, StringType
 
@@ -174,7 +174,7 @@ class Column(object):
 
     _eqNullSafe_doc = """
     Equality test that is safe for null values.
-    
+
     .. versionadded:: 2.3.0
 
     Parameters
@@ -600,7 +600,7 @@ class Column(object):
     Returns a sort expression based on ascending order of the column.
 
     Examples
-    --------    
+    --------
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), ('Alice', None)], ["name", "height"])
     >>> df.select(df.name).orderBy(df.name.asc()).collect()
@@ -638,7 +638,7 @@ class Column(object):
     Returns a sort expression based on the descending order of the column.
 
     .. versionadded:: 2.4
-    
+
     Examples
     --------
     >>> from pyspark.sql import Row
