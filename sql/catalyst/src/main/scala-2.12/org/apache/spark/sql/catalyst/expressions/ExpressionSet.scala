@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.GenTraversableOnce
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -64,18 +65,20 @@ object ExpressionSet {
  *    accessed.
  */
 class ExpressionSet protected(
-    private val baseSet: mutable.Set[Expression] = new mutable.HashSet,
-    private var originals: mutable.Buffer[Expression] = new ArrayBuffer)
+
+    protected val baseSet: mutable.Set[Expression] = new mutable.HashSet,
+    protected var originals: mutable.Buffer[Expression] = new ArrayBuffer)
   extends scala.collection.Set[Expression]
     with scala.collection.SetLike[Expression, ExpressionSet]  {
 
   //  Note: this class supports Scala 2.12. A parallel source tree has a 2.13 implementation.
   override def empty: ExpressionSet = new ExpressionSet()
 
+
   protected def add(e: Expression): Unit = {
     if (!e.deterministic) {
       originals += e
-    } else if (!baseSet.contains(e.canonicalized)) {
+    } else if (!this.contains(e)) {
       baseSet.add(e.canonicalized)
       originals += e
     }
@@ -93,36 +96,56 @@ class ExpressionSet protected(
   override def filter(p: Expression => Boolean): ExpressionSet = {
     val newBaseSet = baseSet.filter(e => p(e))
     val newOriginals = originals.filter(e => p(e.canonicalized))
-    new ExpressionSet(newBaseSet, newOriginals)
+    this.constructNew(newBaseSet, newOriginals)
   }
 
   override def filterNot(p: Expression => Boolean): ExpressionSet = {
     val newBaseSet = baseSet.filterNot(e => p(e))
+
     val newOriginals = originals.filterNot(e => p(e.canonicalized))
+    this.constructNew(newBaseSet, newOriginals)
+  }
+
+  def constructNew(newBaseSet: mutable.Set[Expression] = new mutable.HashSet,
+    newOriginals: mutable.Buffer[Expression] = new ArrayBuffer): ExpressionSet = {
     new ExpressionSet(newBaseSet, newOriginals)
   }
 
   override def +(elem: Expression): ExpressionSet = {
     val newSet = clone()
-    newSet.add(elem)
+    newSet.add(this.convertToCanonicalizedIfRequired(elem))
     newSet
   }
 
-  override def -(elem: Expression): ExpressionSet = {
+
+  override def ++(elems: GenTraversableOnce[Expression]): ExpressionSet = {
     val newSet = clone()
-    newSet.remove(elem)
+    elems.foreach(ele => newSet.add(this.convertToCanonicalizedIfRequired(ele)))
+    newSet
+  }
+
+  def -(elem: Expression): ExpressionSet = {
+    val newSet = clone()
+    newSet.remove(this.convertToCanonicalizedIfRequired(elem))
+    newSet
+  }
+
+  override def --(elems: GenTraversableOnce[Expression]): ExpressionSet = {
+    val newSet = clone()
+    elems.foreach(ele => newSet.remove(this.convertToCanonicalizedIfRequired(ele)))
     newSet
   }
 
   def map(f: Expression => Expression): ExpressionSet = {
-    val newSet = new ExpressionSet()
-    this.iterator.foreach(elem => newSet.add(f(elem)))
+    val newSet = this.constructNew()
+    this.iterator.foreach(elem => newSet.add(this.convertToCanonicalizedIfRequired(f(elem))))
     newSet
   }
 
+
   def flatMap(f: Expression => Iterable[Expression]): ExpressionSet = {
-    val newSet = new ExpressionSet()
-    this.iterator.foreach(f(_).foreach(newSet.add))
+    val newSet = this.constructNew()
+    this.iterator.foreach(f(_).foreach(e => newSet.add(this.convertToCanonicalizedIfRequired(e))))
     newSet
   }
 
@@ -138,6 +161,28 @@ class ExpressionSet protected(
   override def hashCode(): Int = baseSet.hashCode()
 
   override def clone(): ExpressionSet = new ExpressionSet(baseSet.clone(), originals.clone())
+
+  def convertToCanonicalizedIfRequired(ele: Expression): Expression = ele
+
+  def getConstraintsSubsetOfAttributes(expressionsOfInterest: Iterable[Expression]):
+  Seq[Expression] = Seq.empty
+
+  def updateConstraints(outputAttribs: Seq[Attribute],
+    inputAttribs: Seq[Attribute], projectList: Seq[NamedExpression],
+    oldAliasedConstraintsCreator: Option[Seq[NamedExpression] => ExpressionSet]):
+  ExpressionSet = oldAliasedConstraintsCreator.map(aliasCreator =>
+      this.union(aliasCreator(projectList))).getOrElse(this)
+
+  def attributesRewrite(mapping: AttributeMap[Attribute]): ExpressionSet =
+    ExpressionSet(this.map(_ transform {
+      case a: Attribute => mapping(a)
+    }))
+
+  def withNewConstraints(filters: ExpressionSet): ExpressionSet = ExpressionSet(filters)
+
+  def rewriteUsingAlias(expr: Expression): Expression = expr
+
+  def getConstraintsWithDecanonicalizedNullIntolerant: ExpressionSet = this
 
   /**
    * Returns a string containing both the post [[Canonicalize]] expressions and the original
