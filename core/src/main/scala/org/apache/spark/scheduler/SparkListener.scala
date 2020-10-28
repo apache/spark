@@ -25,7 +25,7 @@ import scala.collection.Map
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 
 import org.apache.spark.TaskEndReason
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.ExecutorInfo

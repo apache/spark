@@ -629,12 +629,14 @@ private[spark] object SparkConf extends Logging {
         "Please use spark.excludeOnFailure.stage.maxFailedExecutorsPerNode"),
       DeprecatedConfig("spark.blacklist.timeout", "3.1.0",
         "Please use spark.excludeOnFailure.timeout"),
-      DeprecatedConfig("spark.scheduler.executorTaskBlacklistTime", "3.1.0",
-        "Please use spark.scheduler.executorTaskExcludeOnFailureTime"),
       DeprecatedConfig("spark.blacklist.application.fetchFailure.enabled", "3.1.0",
         "Please use spark.excludeOnFailure.application.fetchFailure.enabled"),
       DeprecatedConfig("spark.scheduler.blacklist.unschedulableTaskSetTimeout", "3.1.0",
-        "Please use spark.scheduler.excludeOnFailure.unschedulableTaskSetTimeout")
+        "Please use spark.scheduler.excludeOnFailure.unschedulableTaskSetTimeout"),
+      DeprecatedConfig("spark.blacklist.killBlacklistedExecutors", "3.1.0",
+        "Please use spark.excludeOnFailure.killExcludedExecutors"),
+      DeprecatedConfig("spark.yarn.blacklist.executor.launch.blacklisting.enabled", "3.1.0",
+        "Please use spark.yarn.executor.launch.excludeOnFailure.enabled")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)

@@ -382,7 +382,7 @@ package object config extends Logging {
   /* YARN allocator-level excludeOnFailure related config entries. */
   private[spark] val YARN_EXECUTOR_LAUNCH_EXCLUDE_ON_FAILURE_ENABLED =
     ConfigBuilder("spark.yarn.executor.launch.excludeOnFailure.enabled")
-      .version("2.4.0")
+      .version("3.1.0")
       .withAlternative("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
       .booleanConf
       .createWithDefault(false)
