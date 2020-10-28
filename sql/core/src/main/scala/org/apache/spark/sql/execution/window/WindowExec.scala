@@ -62,7 +62,7 @@ import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, 
  *     1. [[FrameLessOffsetWindowFunction]] returns the value of the input column offset by a number
  *        of rows according to the current row.
  *     2. [[UnboundedOffsetWindowFunctionFrame]] and [[UnboundedPrecedingOffsetWindowFunctionFrame]]
- *       returns the value of the input column offset by a number of rows within the partition.
+ *       returns the value of the input column offset by a number of rows within the frame.
  *
  * Different frame boundaries can be used in Growing, Shrinking and Moving frames. A frame
  * boundary can be either Row or Range based:
