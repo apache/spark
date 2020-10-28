@@ -153,7 +153,7 @@ case class Abs(child: Expression)
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 }
 
-abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant with Serializable {
+abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
   protected val failOnError: Boolean
 
