@@ -32,7 +32,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{Decimal, StringType}
 
 
-abstract class ShufflePruningSuiteBase
+abstract class DynamicDataPruningSuiteBase
   extends QueryTest
     with SharedSparkSession
     with GivenWhenThen
@@ -541,7 +541,6 @@ abstract class ShufflePruningSuiteBase
           |         ON t11.a = t3.a AND t3.b < 2
           |""".stripMargin)
 
-      df.explain()
       checkDataPruningPredicate(df, false, false)
       checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
     }
@@ -608,10 +607,10 @@ abstract class ShufflePruningSuiteBase
 
 }
 
-class ShufflePruningSuiteAEOff extends ShufflePruningSuiteBase {
+class DynamicDataPruningSuiteAEOff extends DynamicDataPruningSuiteBase {
   override val adaptiveExecutionOn: Boolean = false
 }
 
-class ShufflePruningSuiteAEOn extends ShufflePruningSuiteBase {
+class DynamicDataPruningSuiteAEOn extends DynamicDataPruningSuiteBase {
   override val adaptiveExecutionOn: Boolean = true
 }

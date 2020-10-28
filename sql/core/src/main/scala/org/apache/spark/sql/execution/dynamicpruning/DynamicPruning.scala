@@ -27,10 +27,11 @@ import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRela
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Dynamic partition pruning optimization is performed based on the type and
- * selectivity of the join operation. During query optimization, we insert a
- * predicate on the partitioned table using the filter from the other side of
- * the join and a custom wrapper called DynamicPruning.
+ * Dynamic pruning optimization is performed based on the type and selectivity of the join
+ * operation. During query optimization, we insert a predicate using the filter from the other
+ * side of the join and a custom wrapper called DynamicPruning.
+ *
+ * DynamicPruning contains dynamic partition pruning (DPP) and dynamic data column pruning.
  *
  * The basic mechanism for DPP inserts a duplicated subquery with the filter from the other side,
  * when the following conditions are met:
@@ -46,8 +47,11 @@ import org.apache.spark.sql.internal.SQLConf
  *    (2) else if the estimated benefit of partition pruning outweighs the overhead of running the
  *    subquery query twice, we keep the duplicated subquery
  *    (3) otherwise, we drop the subquery.
+ *
+ * The basic mechanism for dynamic data column pruning is same to DPP, The difference is that
+ * it improves performance by reducing shuffle data.
  */
-object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
+object DynamicPruning extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
 
   case class TableScanType(logicalRelation: LogicalRelation, isPartitionCol: Boolean)
 
@@ -187,7 +191,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       case a: Aggregate => a
     }
 
-    shuffleStages.nonEmpty &&
+    shuffleStages.exists(_.collectLeaves().exists(_.equals(prunRelation))) &&
       prunRelation.stats.sizeInBytes >= SQLConf.get.dynamicDataPruningSideThreshold &&
       canBroadcastBySize(otherPlan, SQLConf.get)
   }

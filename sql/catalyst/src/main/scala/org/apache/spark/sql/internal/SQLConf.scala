@@ -247,7 +247,7 @@ object SQLConf {
 
   val DYNAMIC_FILTER_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicFilterPruning.enabled")
-      .doc("When true, we will generate predicate for partition column when it's used as join key")
+      .doc("When true, we will generate predicate when it's used as join key and has benefit.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
@@ -291,7 +291,7 @@ object SQLConf {
 
   val DYNAMIC_DATA_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicDataPruning.enabled")
-      .doc("When true, we will generate predicate for column when it's used as join key " +
+      .doc("When true, we will generate predicate for data column when it's used as join key " +
         "and has shuffle.")
       .version("3.1.0")
       .booleanConf
