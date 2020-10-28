@@ -2751,9 +2751,11 @@ object SQLConf {
   val LEGACY_SCRIPT_TRANSFORM_PAD_NULL =
     buildConf("spark.sql.legacy.transformationPadNullWhenValueLessThenSchema")
       .internal()
-      .doc("Whether pad null value when transformation output value size less then schema size." +
-        "When true, we pad NULL value to keep same behavior with hive." +
-        "When false, we keep original behavior to throw `ArrayIndexOutOfBoundsException`")
+      .doc("Whether pad null value when transformation output's value size less then " +
+        "schema size in default-serde mode (script transformation with row format of " +
+        "`ROW FORMAT DELIMITED` or wrong serde class name)." +
+        "When true, Spark will pad NULL value to keep same behavior with hive." +
+        "When false, Spark keep original behavior to throw `ArrayIndexOutOfBoundsException`")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
