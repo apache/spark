@@ -51,7 +51,8 @@ import org.apache.spark.sql.internal.SQLConf
  * The basic mechanism for dynamic data column pruning is same to DPP, The difference is that
  * it improves performance by reducing shuffle data.
  */
-object DynamicPruning extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
+object DynamicFilterPruning extends Rule[LogicalPlan]
+  with PredicateHelper with JoinSelectionHelper {
 
   case class TableScanType(logicalRelation: LogicalRelation, isPartitionCol: Boolean)
 
