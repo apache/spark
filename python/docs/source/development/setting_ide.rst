@@ -50,7 +50,7 @@ Let's go to the path ``python/pyspark/tests`` in PyCharm and try to run the any 
 You might can see the ``KeyError: 'SPARK_HOME'`` because the environment variable has not been set yet.
 
 Go **Run -> Edit Configurations**, and set the environment variables as below.
-Please make sure to specify your own path for ``SPARK_HOME`` rather than ``/.../spark``. After completing the variable, click **Okay** to apply the changes.
+Please make sure to specify your own path for ``SPARK_HOME`` rather than ``/.../spark``. After completing the variable, click **OK** to apply the changes.
 
 .. image:: ../../../../docs/img/pycharm-with-pyspark2.png
     :alt: Setting up SPARK_HOME

@@ -161,6 +161,20 @@ class HiveUDAFSuite extends QueryTest
       checkAnswer(sql("select histogram_numeric(a,2) from abc where a=3"), Row(null))
     }
   }
+
+  test("SPARK-32243: Spark UDAF Invalid arguments number error should throw earlier") {
+    // func need two arguments
+    val functionName = "longProductSum"
+    val functionClass = "org.apache.spark.sql.hive.execution.LongProductSum"
+    withUserDefinedFunction(functionName -> true) {
+      sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$functionClass'")
+      val e = intercept[AnalysisException] {
+        sql(s"SELECT $functionName(100)")
+      }.getMessage
+      assert(e.contains(
+        s"Invalid number of arguments for function $functionName. Expected: 2; Found: 1;"))
+    }
+  }
 }
 
 /**

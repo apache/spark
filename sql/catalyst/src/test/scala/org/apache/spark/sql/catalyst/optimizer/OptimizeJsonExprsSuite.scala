@@ -29,6 +29,15 @@ import org.apache.spark.sql.types._
 
 class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
+  private var jsonExpressionOptimizeEnabled: Boolean = _
+  protected override def beforeAll(): Unit = {
+    jsonExpressionOptimizeEnabled = SQLConf.get.jsonExpressionOptimization
+  }
+
+  protected override def afterAll(): Unit = {
+    SQLConf.get.setConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION, jsonExpressionOptimizeEnabled)
+  }
+
   object Optimizer extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Json optimization", FixedPoint(10), OptimizeJsonExprs) :: Nil
   }
@@ -198,5 +207,84 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
       .select(GetArrayStructFields(
         JsonToStructs(prunedSchema2, options, 'json), field2, 0, 1, false).as("b")).analyze
     comparePlans(optimized2, expected2)
+  }
+
+  test("SPARK-33007: simplify named_struct + from_json") {
+    val options = Map.empty[String, String]
+    val schema = StructType.fromDDL("a int, b int, c long, d string")
+
+    val prunedSchema1 = StructType.fromDDL("a int, b int")
+    val nullStruct = namedStruct("a", Literal(null, IntegerType), "b", Literal(null, IntegerType))
+
+    val UTC_OPT = Option("UTC")
+    val json: BoundReference = 'json.string.canBeNull.at(0)
+
+    assertEquivalent(
+      testRelation2,
+      namedStruct(
+        "a", GetStructField(JsonToStructs(schema, options, json, UTC_OPT), 0),
+        "b", GetStructField(JsonToStructs(schema, options, json, UTC_OPT), 1)).as("struct"),
+      If(IsNull(json),
+        nullStruct,
+        KnownNotNull(JsonToStructs(prunedSchema1, options, json, UTC_OPT))).as("struct"))
+
+    val field1 = StructType.fromDDL("a int")
+    val field2 = StructType.fromDDL("b int")
+
+    // Skip optimization if `namedStruct` aliases field name.
+    assertEquivalent(
+      testRelation2,
+      namedStruct(
+        "a1", GetStructField(JsonToStructs(schema, options, json, UTC_OPT), 0),
+        "b", GetStructField(JsonToStructs(schema, options, json, UTC_OPT), 1)).as("struct"),
+      namedStruct(
+        "a1", GetStructField(JsonToStructs(field1, options, json, UTC_OPT), 0),
+        "b", GetStructField(JsonToStructs(field2, options, json, UTC_OPT), 0)).as("struct"))
+
+    assertEquivalent(
+      testRelation2,
+      namedStruct(
+        "a", GetStructField(JsonToStructs(schema, options, json, UTC_OPT), 0),
+        "a", GetStructField(JsonToStructs(schema, options, json, UTC_OPT), 0)).as("struct"),
+      namedStruct(
+        "a", GetStructField(JsonToStructs(field1, options, json, UTC_OPT), 0),
+        "a", GetStructField(JsonToStructs(field1, options, json, UTC_OPT), 0)).as("struct"))
+
+    val PST = getZoneId("-08:00")
+    // Skip optimization if `JsonToStructs`s are not the same.
+    assertEquivalent(
+      testRelation2,
+      namedStruct(
+        "a", GetStructField(JsonToStructs(schema, options, json, UTC_OPT), 0),
+        "b", GetStructField(JsonToStructs(schema, options, json, Option(PST.getId)), 1))
+        .as("struct"),
+      namedStruct(
+        "a", GetStructField(JsonToStructs(field1, options, json, UTC_OPT), 0),
+        "b", GetStructField(JsonToStructs(field2, options, json, Option(PST.getId)), 0))
+        .as("struct"))
+  }
+
+  private def assertEquivalent(relation: LocalRelation, e1: Expression, e2: Expression): Unit = {
+    val plan = relation.select(e1).analyze
+    val actual = Optimizer.execute(plan)
+    val expected = relation.select(e2).analyze
+    comparePlans(actual, expected)
+
+    Seq("""{"a":1, "b":2, "c": 123, "d": "test"}""", null).foreach(v => {
+      val row = create_row(v)
+      checkEvaluation(e1, e2.eval(row), row)
+    })
+  }
+
+  test("SPARK-33078: disable json optimization") {
+    withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "false") {
+      val options = Map.empty[String, String]
+
+      val query = testRelation
+        .select(JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct"))
+      val optimized = Optimizer.execute(query.analyze)
+
+      comparePlans(optimized, query.analyze)
+    }
   }
 }

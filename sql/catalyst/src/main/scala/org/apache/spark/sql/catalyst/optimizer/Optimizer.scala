@@ -79,7 +79,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PushLeftSemiLeftAntiThroughJoin,
         LimitPushDown,
         ColumnPruning,
-        InferFiltersFromConstraints,
         // Operator combine
         CollapseRepartition,
         CollapseProject,
@@ -110,21 +109,20 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RemoveRedundantAliases,
         UnwrapCastInBinaryComparison,
         RemoveNoopOperators,
-        CombineWithFields,
+        OptimizeUpdateFields,
         SimplifyExtractValueOps,
         OptimizeJsonExprs,
         CombineConcats) ++
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {
-      val rulesWithoutInferFiltersFromConstraints =
-        operatorOptimizationRuleSet.filterNot(_ == InferFiltersFromConstraints)
       Batch("Operator Optimization before Inferring Filters", fixedPoint,
-        rulesWithoutInferFiltersFromConstraints: _*) ::
+        operatorOptimizationRuleSet: _*) ::
       Batch("Infer Filters", Once,
+        InferFiltersFromGenerate,
         InferFiltersFromConstraints) ::
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
-        rulesWithoutInferFiltersFromConstraints: _*) ::
+        operatorOptimizationRuleSet: _*) ::
       // Set strategy to Once to avoid pushing filter every time because we do not change the
       // join condition.
       Batch("Push extra predicate through join", fixedPoint,
@@ -223,7 +221,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
-    Batch("ReplaceWithFieldsExpression", Once, ReplaceWithFieldsExpression)
+    Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)
 
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
     batches.filter(_.rules.nonEmpty)
@@ -257,7 +255,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
-      ReplaceWithFieldsExpression.ruleName :: Nil
+      ReplaceUpdateFieldsExpression.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
@@ -731,7 +729,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
  *    and the upper project consists of the same number of columns which is equal or aliasing.
  *    `GlobalLimit(LocalLimit)` pattern is also considered.
  */
-object CollapseProject extends Rule[LogicalPlan] {
+object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p1 @ Project(_, p2: Project) =>
@@ -760,17 +758,9 @@ object CollapseProject extends Rule[LogicalPlan] {
       s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
   }
 
-  private def collectAliases(projectList: Seq[NamedExpression]): AttributeMap[Alias] = {
-    AttributeMap(projectList.collect {
-      case a: Alias => a.toAttribute -> a
-    })
-  }
-
   private def haveCommonNonDeterministicOutput(
       upper: Seq[NamedExpression], lower: Seq[NamedExpression]): Boolean = {
-    // Create a map of Aliases to their values from the lower projection.
-    // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
-    val aliases = collectAliases(lower)
+    val aliases = getAliasMap(lower)
 
     // Collapse upper and lower Projects if and only if their overlapped expressions are all
     // deterministic.
@@ -782,21 +772,8 @@ object CollapseProject extends Rule[LogicalPlan] {
   private def buildCleanedProjectList(
       upper: Seq[NamedExpression],
       lower: Seq[NamedExpression]): Seq[NamedExpression] = {
-    // Create a map of Aliases to their values from the lower projection.
-    // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
-    val aliases = collectAliases(lower)
-
-    // Substitute any attributes that are produced by the lower projection, so that we safely
-    // eliminate it.
-    // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...'
-    // Use transformUp to prevent infinite recursion.
-    val rewrittenUpper = upper.map(_.transformUp {
-      case a: Attribute => aliases.getOrElse(a, a)
-    })
-    // collapse upper and lower Projects may introduce unnecessary Aliases, trim them here.
-    rewrittenUpper.map { p =>
-      CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression]
-    }
+    val aliases = getAliasMap(lower)
+    upper.map(replaceAliasButKeepName(_, aliases))
   }
 
   private def isRenaming(list1: Seq[NamedExpression], list2: Seq[NamedExpression]): Boolean = {
@@ -865,6 +842,41 @@ object TransposeWindow extends Rule[LogicalPlan] {
            w2.expressions.forall(_.deterministic) &&
            compatibleParititions(ps1, ps2) =>
       Project(w1.output, Window(we2, ps2, os2, Window(we1, ps1, os1, grandChild)))
+  }
+}
+
+/**
+ * Infers filters from [[Generate]], such that rows that would have been removed
+ * by this [[Generate]] can be removed earlier - before joins and in data sources.
+ */
+object InferFiltersFromGenerate extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    // This rule does not infer filters from foldable expressions to avoid constant filters
+    // like 'size([1, 2, 3]) > 0'. These do not show up in child's constraints and
+    // then the idempotence will break.
+    case generate @ Generate(e, _, _, _, _, _)
+      if !e.deterministic || e.children.forall(_.foldable) => generate
+
+    case generate @ Generate(g, _, false, _, _, _) if canInferFilters(g) =>
+      // Exclude child's constraints to guarantee idempotency
+      val inferredFilters = ExpressionSet(
+        Seq(
+          GreaterThan(Size(g.children.head), Literal(0)),
+          IsNotNull(g.children.head)
+        )
+      ) -- generate.child.constraints
+
+      if (inferredFilters.nonEmpty) {
+        generate.copy(child = Filter(inferredFilters.reduce(And), generate.child))
+      } else {
+        generate
+      }
+  }
+
+  private def canInferFilters(g: Generator): Boolean = g match {
+    case _: ExplodeBase => true
+    case _: Inline => true
+    case _ => false
   }
 }
 
@@ -1236,23 +1248,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       pushDownPredicate(filter, u.child) { predicate =>
         u.withNewChildren(Seq(Filter(predicate, u.child)))
       }
-  }
-
-  def getAliasMap(plan: Project): AttributeMap[Expression] = {
-    // Create a map of Aliases to their values from the child projection.
-    // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
-    AttributeMap(plan.projectList.collect { case a: Alias => (a.toAttribute, a.child) })
-  }
-
-  def getAliasMap(plan: Aggregate): AttributeMap[Expression] = {
-    // Find all the aliased expressions in the aggregate list that don't include any actual
-    // AggregateExpression or PythonUDF, and create a map from the alias to the expression
-    val aliasMap = plan.aggregateExpressions.collect {
-      case a: Alias if a.child.find(e => e.isInstanceOf[AggregateExpression] ||
-          PythonUDF.isGroupedAggPandasUDF(e)).isEmpty =>
-        (a.toAttribute, a.child)
-    }
-    AttributeMap(aliasMap)
   }
 
   def canPushThrough(p: UnaryNode): Boolean = p match {

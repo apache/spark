@@ -156,6 +156,28 @@ class ColumnTests(ReusedSQLTestCase):
                                'fieldName should be a string',
                                lambda: df['a'].withField(col('b'), lit(3)))
 
+    def test_drop_fields(self):
+        df = self.spark.createDataFrame([Row(a=Row(b=1, c=2, d=Row(e=3, f=4)))])
+        self.assertIsInstance(df["a"].dropFields("b"), Column)
+        self.assertIsInstance(df["a"].dropFields("b", "c"), Column)
+        self.assertIsInstance(df["a"].dropFields("d.e"), Column)
+
+        result = df.select(
+            df["a"].dropFields("b").alias("a1"),
+            df["a"].dropFields("d.e").alias("a2"),
+        ).first().asDict(True)
+
+        self.assertTrue(
+            "b" not in result["a1"] and
+            "c" in result["a1"] and
+            "d" in result["a1"]
+        )
+
+        self.assertTrue(
+            "e" not in result["a2"]["d"] and
+            "f" in result["a2"]["d"]
+        )
+
 if __name__ == "__main__":
     import unittest
     from pyspark.sql.tests.test_column import *  # noqa: F401

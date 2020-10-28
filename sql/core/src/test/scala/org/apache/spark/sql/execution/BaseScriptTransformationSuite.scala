@@ -63,16 +63,6 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     uncaughtExceptionHandler.cleanStatus()
   }
 
-  def isHive23OrSpark: Boolean
-
-  // In Hive 1.2, the string representation of a decimal omits trailing zeroes.
-  // But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
-  val decimalToString: Column => Column = if (isHive23OrSpark) {
-    c => c.cast("string")
-  } else {
-    c => c.cast("decimal(1, 0)").cast("string")
-  }
-
   def createScriptTransformationExec(
       input: Seq[Expression],
       script: String,
@@ -142,15 +132,12 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         'a.cast("string"),
         'b.cast("string"),
         'c.cast("string"),
-        decimalToString('d),
+        'd.cast("string"),
         'e.cast("string")).collect())
     }
   }
 
-  test("SPARK-25990: TRANSFORM should handle schema less correctly (no serde)") {
-    assume(TestUtils.testCommandAvailable("python"))
-    val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
-
+  test("SPARK-32388: TRANSFORM should handle schema less correctly (no serde)") {
     withTempView("v") {
       val df = Seq(
         (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
@@ -167,7 +154,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             df.col("c").expr,
             df.col("d").expr,
             df.col("e").expr),
-          script = s"python $scriptFilePath",
+          script = "cat",
           output = Seq(
             AttributeReference("key", StringType)(),
             AttributeReference("value", StringType)()),
@@ -177,6 +164,39 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         df.select(
           'a.cast("string").as("key"),
           'b.cast("string").as("value")).collect())
+
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("a").expr,
+            df.col("b").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("key", StringType)(),
+            AttributeReference("value", StringType)()),
+          child = child,
+          ioschema = defaultIOSchema.copy(schemaLess = true)
+        ),
+        df.select(
+          'a.cast("string").as("key"),
+          'b.cast("string").as("value")).collect())
+
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("a").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("key", StringType)(),
+            AttributeReference("value", StringType)()),
+          child = child,
+          ioschema = defaultIOSchema.copy(schemaLess = true)
+        ),
+        df.select(
+          'a.cast("string").as("key"),
+          lit(null)).collect())
     }
   }
 

@@ -339,18 +339,17 @@ object QueryExecution {
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
     Seq(
-      CoalesceBucketsInJoin(sparkSession.sessionState.conf),
-      PlanDynamicPruningFilters(sparkSession),
-      PlanSubqueries(sparkSession),
-      RemoveRedundantProjects(sparkSession.sessionState.conf),
-      EnsureRequirements(sparkSession.sessionState.conf),
+      CoalesceBucketsInJoin,
+      PlanDynamicPruningFilters,
+      PlanSubqueries,
+      RemoveRedundantProjects,
+      EnsureRequirements,
       PruneShuffle(),
-      DisableUnnecessaryBucketedScan(sparkSession.sessionState.conf),
-      ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
-        sparkSession.sessionState.columnarRules),
-      CollapseCodegenStages(sparkSession.sessionState.conf),
-      ReuseExchange(sparkSession.sessionState.conf),
-      ReuseSubquery(sparkSession.sessionState.conf)
+      DisableUnnecessaryBucketedScan,
+      ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.columnarRules),
+      CollapseCodegenStages(),
+      ReuseExchange,
+      ReuseSubquery
     )
   }
 

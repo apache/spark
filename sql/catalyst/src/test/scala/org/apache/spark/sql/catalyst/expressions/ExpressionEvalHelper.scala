@@ -74,7 +74,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
 
   private def prepareEvaluation(expression: Expression): Expression = {
     val serializer = new JavaSerializer(new SparkConf()).newInstance
-    val resolver = ResolveTimeZone(new SQLConf)
+    val resolver = ResolveTimeZone
     val expr = resolver.resolveTimeZones(expression)
     assert(expr.resolved)
     serializer.deserialize(serializer.serialize(expr))
@@ -164,7 +164,11 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
         val errMsg = intercept[T] {
           eval
         }.getMessage
-        if (!errMsg.contains(expectedErrMsg)) {
+        if (errMsg == null) {
+          if (expectedErrMsg != null) {
+            fail(s"Expected null error message, but `$errMsg` found")
+          }
+        } else if (!errMsg.contains(expectedErrMsg)) {
           fail(s"Expected error message is `$expectedErrMsg`, but `$errMsg` found")
         }
       }
