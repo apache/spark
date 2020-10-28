@@ -18,8 +18,8 @@
 package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.ml.feature._
 import org.apache.spark.ml.linalg._
-import org.apache.spark.ml.regression.AFTPoint
 
 /**
  * AFTAggregator computes the gradient and loss for a AFT loss function,
@@ -108,7 +108,7 @@ import org.apache.spark.ml.regression.AFTPoint
 private[ml] class AFTAggregator(
     bcFeaturesStd: Broadcast[Array[Double]],
     fitIntercept: Boolean)(bcCoefficients: Broadcast[Vector])
-  extends DifferentiableLossAggregator[AFTPoint, AFTAggregator] {
+  extends DifferentiableLossAggregator[Instance, AFTAggregator] {
 
   protected override val dim: Int = bcCoefficients.value.size
 
@@ -116,10 +116,10 @@ private[ml] class AFTAggregator(
    * Add a new training data to this AFTAggregator, and update the loss and gradient
    * of the objective function.
    *
-   * @param data The AFTPoint representation for one data point to be added into this aggregator.
+   * @param data The Instance representation for one data point to be added into this aggregator.
    * @return This AFTAggregator object.
    */
-  def add(data: AFTPoint): this.type = {
+  def add(data: Instance): this.type = {
     val coefficients = bcCoefficients.value.toArray
     val intercept = coefficients(dim - 2)
     // sigma is the scale parameter of the AFT model
@@ -127,7 +127,7 @@ private[ml] class AFTAggregator(
 
     val xi = data.features
     val ti = data.label
-    val delta = data.censor
+    val delta = data.weight
 
     require(ti > 0.0, "The lifetime or label should be  greater than 0.")
 
@@ -176,7 +176,7 @@ private[ml] class AFTAggregator(
  */
 private[ml] class BlockAFTAggregator(
     fitIntercept: Boolean)(bcCoefficients: Broadcast[Vector])
-  extends DifferentiableLossAggregator[(Matrix, Array[Double], Array[Double]),
+  extends DifferentiableLossAggregator[InstanceBlock,
     BlockAFTAggregator] {
 
   protected override val dim: Int = bcCoefficients.value.size
@@ -196,8 +196,9 @@ private[ml] class BlockAFTAggregator(
    *
    * @return This BlockAFTAggregator object.
    */
-  def add(block: (Matrix, Array[Double], Array[Double])): this.type = {
-    val (matrix, labels, censors) = block
+  def add(block: InstanceBlock): this.type = {
+    // here use Instance.weight to store censor for convenience
+    val (matrix, labels, censors) = (block.matrix, block.labels, block.weightIter.toArray)
     require(matrix.isTransposed)
     require(numFeatures == matrix.numCols, s"Dimensions mismatch when adding new " +
       s"instance. Expecting $numFeatures but got ${matrix.numCols}.")
