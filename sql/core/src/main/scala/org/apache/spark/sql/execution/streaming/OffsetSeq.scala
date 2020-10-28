@@ -116,7 +116,9 @@ object OffsetSeqMetadata extends Logging {
     STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key ->
       StreamingAggregationStateManager.legacyVersion.toString,
     STREAMING_JOIN_STATE_FORMAT_VERSION.key ->
-      SymmetricHashJoinStateManager.legacyVersion.toString
+      SymmetricHashJoinStateManager.legacyVersion.toString,
+    STATE_STORE_COMPRESSION_CODEC.key -> "lz4"
+
   )
 
   def apply(json: String): OffsetSeqMetadata = Serialization.read[OffsetSeqMetadata](json)
