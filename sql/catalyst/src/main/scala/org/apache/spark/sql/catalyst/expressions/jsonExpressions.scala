@@ -801,7 +801,7 @@ case class SchemaOfJson(
       }
     }
 
-    UTF8String.fromString(dt.catalogString)
+    UTF8String.fromString(dt.sql)
   }
 
   override def prettyName: String = "schema_of_json"
