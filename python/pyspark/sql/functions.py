@@ -202,9 +202,10 @@ def sumDistinct(col):
     return _invoke_function_over_column("sumDistinct", col)
 
 
-@since(1.4)
 def acos(col):
     """
+    .. versionadded:: 1.4.0
+
     Returns
     -------
     :class:`Column`
@@ -213,9 +214,11 @@ def acos(col):
     return _invoke_function_over_column("acos", col)
 
 
-@since(1.4)
 def asin(col):
     """
+    .. versionadded:: 1.3.0
+
+
     Returns
     -------
     :class:`Column`
@@ -224,9 +227,10 @@ def asin(col):
     return _invoke_function_over_column("asin", col)
 
 
-@since(1.4)
 def atan(col):
     """
+    .. versionadded:: 1.4.0
+
     Returns
     -------
     :class:`Column`
@@ -251,9 +255,10 @@ def ceil(col):
     return _invoke_function_over_column("ceil", col)
 
 
-@since(1.4)
 def cos(col):
     """
+    .. versionadded:: 1.4.0
+
     Parameters
     ----------
     col : :class:`Column` or str
@@ -267,9 +272,10 @@ def cos(col):
     return _invoke_function_over_column("cos", col)
 
 
-@since(1.4)
 def cosh(col):
     """
+    .. versionadded:: 1.4.0
+
     Parameters
     ----------
     col : :class:`Column` or str
@@ -348,9 +354,10 @@ def signum(col):
     return _invoke_function_over_column("signum", col)
 
 
-@since(1.4)
 def sin(col):
     """
+    .. versionadded:: 1.4.0
+
     Parameters
     ----------
     col : :class:`Column` or str
@@ -363,9 +370,10 @@ def sin(col):
     return _invoke_function_over_column("sin", col)
 
 
-@since(1.4)
 def sinh(col):
     """
+    .. versionadded:: 1.4.0
+
     Parameters
     ----------
     col : :class:`Column` or str
@@ -380,9 +388,10 @@ def sinh(col):
     return _invoke_function_over_column("sinh", col)
 
 
-@since(1.4)
 def tan(col):
     """
+    .. versionadded:: 1.4.0
+
     Parameters
     ----------
     col : :class:`Column` or str
@@ -396,9 +405,10 @@ def tan(col):
     return _invoke_function_over_column("tan", col)
 
 
-@since(1.4)
 def tanh(col):
     """
+    .. versionadded:: 1.4.0
+
     Parameters
     ----------
     col : :class:`Column` or str
@@ -544,10 +554,11 @@ def kurtosis(col):
     return _invoke_function_over_column("kurtosis", col)
 
 
-@since(1.6)
 def collect_list(col):
     """
     Aggregate function: returns a list of objects with duplicates.
+
+    .. versionadded:: 1.6.0
 
     Notes
     -----
@@ -563,10 +574,11 @@ def collect_list(col):
     return _invoke_function_over_column("collect_list", col)
 
 
-@since(1.6)
 def collect_set(col):
     """
     Aggregate function: returns a set of objects with duplicate elements eliminated.
+
+    .. versionadded:: 1.6.0
 
     Notes
     -----
@@ -582,11 +594,12 @@ def collect_set(col):
     return _invoke_function_over_column("collect_set", col)
 
 
-@since(2.1)
 def degrees(col):
     """
     Converts an angle measured in radians to an approximately equivalent angle
     measured in degrees.
+
+    .. versionadded:: 2.1.0
 
     Parameters
     ----------
@@ -601,11 +614,12 @@ def degrees(col):
     return _invoke_function_over_column("degrees", col)
 
 
-@since(2.1)
 def radians(col):
     """
     Converts an angle measured in degrees to an approximately equivalent angle
     measured in radians.
+
+    .. versionadded:: 2.1.0
 
     Parameters
     ----------
@@ -620,9 +634,10 @@ def radians(col):
     return _invoke_function_over_column("radians", col)
 
 
-@since(1.4)
 def atan2(col1, col2):
     """
+    .. versionadded:: 1.4.0
+
     Parameters
     ----------
     col1 : str, :class:`Column` or float
@@ -725,10 +740,11 @@ def approxCountDistinct(col, rsd=None):
     return approx_count_distinct(col, rsd)
 
 
-@since(2.1)
 def approx_count_distinct(col, rsd=None):
     """Aggregate function: returns a new :class:`Column` for approximate distinct count of
     column `col`.
+
+    .. versionadded:: 2.1.0
 
     Parameters
     ----------
@@ -758,9 +774,10 @@ def broadcast(df):
     return DataFrame(sc._jvm.functions.broadcast(df._jdf), df.sql_ctx)
 
 
-@since(1.4)
 def coalesce(*cols):
     """Returns the first column that is not null.
+
+    .. versionadded:: 1.4.0
 
     Examples
     --------
@@ -797,10 +814,11 @@ def coalesce(*cols):
     return Column(jc)
 
 
-@since(1.6)
 def corr(col1, col2):
     """Returns a new :class:`Column` for the Pearson Correlation Coefficient for ``col1``
     and ``col2``.
+
+    .. versionadded:: 1.6.0
 
     Examples
     --------
@@ -814,9 +832,10 @@ def corr(col1, col2):
     return Column(sc._jvm.functions.corr(_to_java_column(col1), _to_java_column(col2)))
 
 
-@since(2.0)
 def covar_pop(col1, col2):
     """Returns a new :class:`Column` for the population covariance of ``col1`` and ``col2``.
+
+    .. versionadded:: 2.0.0
 
     Examples
     --------
@@ -830,9 +849,10 @@ def covar_pop(col1, col2):
     return Column(sc._jvm.functions.covar_pop(_to_java_column(col1), _to_java_column(col2)))
 
 
-@since(2.0)
 def covar_samp(col1, col2):
     """Returns a new :class:`Column` for the sample covariance of ``col1`` and ``col2``.
+
+    .. versionadded:: 2.0.0
 
     Examples
     --------
@@ -846,9 +866,10 @@ def covar_samp(col1, col2):
     return Column(sc._jvm.functions.covar_samp(_to_java_column(col1), _to_java_column(col2)))
 
 
-@since(1.3)
 def countDistinct(col, *cols):
     """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
+
+    .. versionadded:: 1.3.0
 
     Examples
     --------
@@ -863,12 +884,13 @@ def countDistinct(col, *cols):
     return Column(jc)
 
 
-@since(1.3)
 def first(col, ignorenulls=False):
     """Aggregate function: returns the first value in a group.
 
     The function by default returns the first values it sees. It will return the first non-null
     value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+
+    .. versionadded:: 1.3.0
 
     Notes
     -----
@@ -880,11 +902,12 @@ def first(col, ignorenulls=False):
     return Column(jc)
 
 
-@since(2.0)
 def grouping(col):
     """
     Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
     or not, returns 1 for aggregated or 0 for not aggregated in the result set.
+
+    .. versionadded:: 2.0.0
 
     Examples
     --------
@@ -902,12 +925,13 @@ def grouping(col):
     return Column(jc)
 
 
-@since(2.0)
 def grouping_id(*cols):
     """
     Aggregate function: returns the level of grouping, equals to
 
        (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
+
+    .. versionadded:: 2.0.0
 
     Notes
     -----
@@ -938,9 +962,10 @@ def input_file_name():
     return Column(sc._jvm.functions.input_file_name())
 
 
-@since(1.6)
 def isnan(col):
     """An expression that returns true iff the column is NaN.
+
+    .. versionadded:: 1.6.0
 
     Examples
     --------
@@ -952,9 +977,10 @@ def isnan(col):
     return Column(sc._jvm.functions.isnan(_to_java_column(col)))
 
 
-@since(1.6)
 def isnull(col):
     """An expression that returns true iff the column is null.
+
+    .. versionadded:: 1.6.0
 
     Examples
     --------
@@ -966,12 +992,13 @@ def isnull(col):
     return Column(sc._jvm.functions.isnull(_to_java_column(col)))
 
 
-@since(1.3)
 def last(col, ignorenulls=False):
     """Aggregate function: returns the last value in a group.
 
     The function by default returns the last values it sees. It will return the last non-null
     value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+
+    .. versionadded:: 1.3.0
 
     Notes
     -----
@@ -983,7 +1010,6 @@ def last(col, ignorenulls=False):
     return Column(jc)
 
 
-@since(1.6)
 def monotonically_increasing_id():
     """A column that generates monotonically increasing 64-bit integers.
 
@@ -991,6 +1017,8 @@ def monotonically_increasing_id():
     The current implementation puts the partition ID in the upper 31 bits, and the record number
     within each partition in the lower 33 bits. The assumption is that the data frame has
     less than 1 billion partitions, and each partition has less than 8 billion records.
+
+    .. versionadded:: 1.6.0
 
     Notes
     -----
@@ -1008,11 +1036,12 @@ def monotonically_increasing_id():
     return Column(sc._jvm.functions.monotonically_increasing_id())
 
 
-@since(1.6)
 def nanvl(col1, col2):
     """Returns col1 if it is not NaN, or col2 if col1 is NaN.
 
     Both inputs should be floating point columns (:class:`DoubleType` or :class:`FloatType`).
+
+    .. versionadded:: 1.6.0
 
     Examples
     --------
@@ -1024,7 +1053,6 @@ def nanvl(col1, col2):
     return Column(sc._jvm.functions.nanvl(_to_java_column(col1), _to_java_column(col2)))
 
 
-@since(3.1)
 def percentile_approx(col, percentage, accuracy=10000):
     """Returns the approximate `percentile` of the numeric column `col` which is the smallest value
     in the ordered `col` values (sorted from least to greatest) such that no more than `percentage`
@@ -1039,6 +1067,8 @@ def percentile_approx(col, percentage, accuracy=10000):
     When percentage is an array, each value of the percentage array must be between 0.0 and 1.0.
     In this case, returns the approximate percentile array of column col
     at the given percentage array.
+
+    .. versionadded:: 3.1.0
 
     Examples
     --------
@@ -1081,10 +1111,11 @@ def percentile_approx(col, percentage, accuracy=10000):
     return Column(sc._jvm.functions.percentile_approx(_to_java_column(col), percentage, accuracy))
 
 
-@since(1.4)
 def rand(seed=None):
     """Generates a random column with independent and identically distributed (i.i.d.) samples
     uniformly distributed in [0.0, 1.0).
+
+    .. versionadded:: 1.4.0
 
     Notes
     -----
@@ -1104,10 +1135,11 @@ def rand(seed=None):
     return Column(jc)
 
 
-@since(1.4)
 def randn(seed=None):
     """Generates a column with independent and identically distributed (i.i.d.) samples from
     the standard normal distribution.
+
+    .. versionadded:: 1.4.0
 
     Notes
     -----
@@ -1127,11 +1159,12 @@ def randn(seed=None):
     return Column(jc)
 
 
-@since(1.5)
 def round(col, scale=0):
     """
     Round the given value to `scale` decimal places using HALF_UP rounding mode if `scale` >= 0
     or at integral part when `scale` < 0.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1142,11 +1175,12 @@ def round(col, scale=0):
     return Column(sc._jvm.functions.round(_to_java_column(col), scale))
 
 
-@since(2.0)
 def bround(col, scale=0):
     """
     Round the given value to `scale` decimal places using HALF_EVEN rounding mode if `scale` >= 0
     or at integral part when `scale` < 0.
+
+    .. versionadded:: 2.0.0
 
     Examples
     --------
@@ -1157,9 +1191,10 @@ def bround(col, scale=0):
     return Column(sc._jvm.functions.bround(_to_java_column(col), scale))
 
 
-@since(1.5)
 def shiftLeft(col, numBits):
     """Shift the given value numBits left.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1170,9 +1205,10 @@ def shiftLeft(col, numBits):
     return Column(sc._jvm.functions.shiftLeft(_to_java_column(col), numBits))
 
 
-@since(1.5)
 def shiftRight(col, numBits):
     """(Signed) shift the given value numBits right.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1184,9 +1220,10 @@ def shiftRight(col, numBits):
     return Column(jc)
 
 
-@since(1.5)
 def shiftRightUnsigned(col, numBits):
     """Unsigned shift the given value numBits right.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1199,9 +1236,10 @@ def shiftRightUnsigned(col, numBits):
     return Column(jc)
 
 
-@since(1.6)
 def spark_partition_id():
     """A column for partition ID.
+
+    .. versionadded:: 1.6.0
 
     Notes
     -----
@@ -1216,9 +1254,10 @@ def spark_partition_id():
     return Column(sc._jvm.functions.spark_partition_id())
 
 
-@since(1.5)
 def expr(str):
     """Parses the expression string into the column that it represents
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1229,9 +1268,10 @@ def expr(str):
     return Column(sc._jvm.functions.expr(str))
 
 
-@since(1.4)
 def struct(*cols):
     """Creates a new struct column.
+
+    .. versionadded:: 1.4.0
 
     Parameters
     ----------
@@ -1252,11 +1292,12 @@ def struct(*cols):
     return Column(jc)
 
 
-@since(1.5)
 def greatest(*cols):
     """
     Returns the greatest value of the list of column names, skipping null values.
     This function takes at least 2 parameters. It will return null iff all parameters are null.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1270,11 +1311,12 @@ def greatest(*cols):
     return Column(sc._jvm.functions.greatest(_to_seq(sc, cols, _to_java_column)))
 
 
-@since(1.5)
 def least(*cols):
     """
     Returns the least value of the list of column names, skipping null values.
     This function takes at least 2 parameters. It will return null iff all parameters are null.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1288,10 +1330,11 @@ def least(*cols):
     return Column(sc._jvm.functions.least(_to_seq(sc, cols, _to_java_column)))
 
 
-@since(1.4)
 def when(condition, value):
     """Evaluates a list of conditions and returns one of multiple possible result expressions.
     If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
+
+    .. versionadded:: 1.4.0
 
     Parameters
     ----------
@@ -1314,11 +1357,12 @@ def when(condition, value):
     return Column(jc)
 
 
-@since(1.5)
 def log(arg1, arg2=None):
     """Returns the first argument-based logarithm of the second argument.
 
     If there is only one argument, then this takes the natural logarithm of the argument.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1336,9 +1380,10 @@ def log(arg1, arg2=None):
     return Column(jc)
 
 
-@since(1.5)
 def log2(col):
     """Returns the base-2 logarithm of the argument.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1349,10 +1394,11 @@ def log2(col):
     return Column(sc._jvm.functions.log2(_to_java_column(col)))
 
 
-@since(1.5)
 def conv(col, fromBase, toBase):
     """
     Convert a number in a string column from one base to another.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1364,10 +1410,11 @@ def conv(col, fromBase, toBase):
     return Column(sc._jvm.functions.conv(_to_java_column(col), fromBase, toBase))
 
 
-@since(1.5)
 def factorial(col):
     """
     Computes the factorial of the given value.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1381,7 +1428,6 @@ def factorial(col):
 
 # ---------------  Window functions ------------------------
 
-@since(1.4)
 def lag(col, offset=1, default=None):
     """
     Window function: returns the value that is `offset` rows before the current row, and
@@ -1389,6 +1435,8 @@ def lag(col, offset=1, default=None):
     an `offset` of one will return the previous row at any given point in the window partition.
 
     This is equivalent to the LAG function in SQL.
+
+    .. versionadded:: 1.4.0
 
     Parameters
     ----------
@@ -1403,7 +1451,6 @@ def lag(col, offset=1, default=None):
     return Column(sc._jvm.functions.lag(_to_java_column(col), offset, default))
 
 
-@since(1.4)
 def lead(col, offset=1, default=None):
     """
     Window function: returns the value that is `offset` rows after the current row, and
@@ -1411,6 +1458,8 @@ def lead(col, offset=1, default=None):
     an `offset` of one will return the next row at any given point in the window partition.
 
     This is equivalent to the LEAD function in SQL.
+
+    .. versionadded:: 1.4.0
 
     Parameters
     ----------
@@ -1425,7 +1474,6 @@ def lead(col, offset=1, default=None):
     return Column(sc._jvm.functions.lead(_to_java_column(col), offset, default))
 
 
-@since(3.1)
 def nth_value(col, offset, ignoreNulls=False):
     """
     Window function: returns the value that is the `offset`\\th row of the window frame
@@ -1435,6 +1483,8 @@ def nth_value(col, offset, ignoreNulls=False):
     true. If all values are null, then null is returned.
 
     This is equivalent to the nth_value function in SQL.
+
+    .. versionadded:: 3.1.0
 
     Parameters
     ----------
@@ -1450,7 +1500,6 @@ def nth_value(col, offset, ignoreNulls=False):
     return Column(sc._jvm.functions.nth_value(_to_java_column(col), offset, ignoreNulls))
 
 
-@since(1.4)
 def ntile(n):
     """
     Window function: returns the ntile group id (from 1 to `n` inclusive)
@@ -1459,6 +1508,8 @@ def ntile(n):
     the third quarter will get 3, and the last quarter will get 4.
 
     This is equivalent to the NTILE function in SQL.
+
+    .. versionadded:: 1.4.0
 
     Parameters
     ----------
@@ -1490,7 +1541,6 @@ def current_timestamp():
     return Column(sc._jvm.functions.current_timestamp())
 
 
-@since(1.5)
 def date_format(date, format):
     """
     Converts a date/timestamp/string to a value of string in the format specified by the date
@@ -1500,6 +1550,8 @@ def date_format(date, format):
     pattern letters of `datetime pattern`_. can be used.
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+
+    .. versionadded:: 1.5.0
 
     Notes
     -----
@@ -1516,10 +1568,11 @@ def date_format(date, format):
     return Column(sc._jvm.functions.date_format(_to_java_column(date), format))
 
 
-@since(1.5)
 def year(col):
     """
     Extract the year of a given date as integer.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1531,10 +1584,11 @@ def year(col):
     return Column(sc._jvm.functions.year(_to_java_column(col)))
 
 
-@since(1.5)
 def quarter(col):
     """
     Extract the quarter of a given date as integer.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1546,10 +1600,11 @@ def quarter(col):
     return Column(sc._jvm.functions.quarter(_to_java_column(col)))
 
 
-@since(1.5)
 def month(col):
     """
     Extract the month of a given date as integer.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1561,10 +1616,11 @@ def month(col):
     return Column(sc._jvm.functions.month(_to_java_column(col)))
 
 
-@since(2.3)
 def dayofweek(col):
     """
     Extract the day of the week of a given date as integer.
+
+    .. versionadded:: 2.3.0
 
     Examples
     --------
@@ -1576,10 +1632,11 @@ def dayofweek(col):
     return Column(sc._jvm.functions.dayofweek(_to_java_column(col)))
 
 
-@since(1.5)
 def dayofmonth(col):
     """
     Extract the day of the month of a given date as integer.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1591,10 +1648,11 @@ def dayofmonth(col):
     return Column(sc._jvm.functions.dayofmonth(_to_java_column(col)))
 
 
-@since(1.5)
 def dayofyear(col):
     """
     Extract the day of the year of a given date as integer.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1606,10 +1664,11 @@ def dayofyear(col):
     return Column(sc._jvm.functions.dayofyear(_to_java_column(col)))
 
 
-@since(1.5)
 def hour(col):
     """
     Extract the hours of a given date as integer.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1621,10 +1680,11 @@ def hour(col):
     return Column(sc._jvm.functions.hour(_to_java_column(col)))
 
 
-@since(1.5)
 def minute(col):
     """
     Extract the minutes of a given date as integer.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1636,10 +1696,11 @@ def minute(col):
     return Column(sc._jvm.functions.minute(_to_java_column(col)))
 
 
-@since(1.5)
 def second(col):
     """
     Extract the seconds of a given date as integer.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1651,10 +1712,11 @@ def second(col):
     return Column(sc._jvm.functions.second(_to_java_column(col)))
 
 
-@since(1.5)
 def weekofyear(col):
     """
     Extract the week number of a given date as integer.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1666,10 +1728,11 @@ def weekofyear(col):
     return Column(sc._jvm.functions.weekofyear(_to_java_column(col)))
 
 
-@since(1.5)
 def date_add(start, days):
     """
     Returns the date that is `days` days after `start`
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1681,10 +1744,11 @@ def date_add(start, days):
     return Column(sc._jvm.functions.date_add(_to_java_column(start), days))
 
 
-@since(1.5)
 def date_sub(start, days):
     """
     Returns the date that is `days` days before `start`
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1696,10 +1760,11 @@ def date_sub(start, days):
     return Column(sc._jvm.functions.date_sub(_to_java_column(start), days))
 
 
-@since(1.5)
 def datediff(end, start):
     """
     Returns the number of days from `start` to `end`.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1711,10 +1776,11 @@ def datediff(end, start):
     return Column(sc._jvm.functions.datediff(_to_java_column(end), _to_java_column(start)))
 
 
-@since(1.5)
 def add_months(start, months):
     """
     Returns the date that is `months` months after `start`
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1726,7 +1792,6 @@ def add_months(start, months):
     return Column(sc._jvm.functions.add_months(_to_java_column(start), months))
 
 
-@since(1.5)
 def months_between(date1, date2, roundOff=True):
     """
     Returns number of months between dates date1 and date2.
@@ -1734,6 +1799,8 @@ def months_between(date1, date2, roundOff=True):
     If date1 and date2 are on the same day of month, or both are the last day of month,
     returns an integer (time of day will be ignored).
     The result is rounded off to 8 digits unless `roundOff` is set to `False`.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1748,7 +1815,6 @@ def months_between(date1, date2, roundOff=True):
         _to_java_column(date1), _to_java_column(date2), roundOff))
 
 
-@since(2.2)
 def to_date(col, format=None):
     """Converts a :class:`Column` into :class:`pyspark.sql.types.DateType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
@@ -1756,6 +1822,8 @@ def to_date(col, format=None):
     is omitted. Equivalent to ``col.cast("date")``.
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+
+    .. versionadded:: 2.2.0
 
     Examples
     --------
@@ -1775,7 +1843,6 @@ def to_date(col, format=None):
     return Column(jc)
 
 
-@since(2.2)
 def to_timestamp(col, format=None):
     """Converts a :class:`Column` into :class:`pyspark.sql.types.TimestampType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
@@ -1783,6 +1850,8 @@ def to_timestamp(col, format=None):
     is omitted. Equivalent to ``col.cast("timestamp")``.
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+
+    .. versionadded:: 2.2.0
 
     Examples
     --------
@@ -1802,10 +1871,11 @@ def to_timestamp(col, format=None):
     return Column(jc)
 
 
-@since(1.5)
 def trunc(date, format):
     """
     Returns date truncated to the unit specified by the format.
+
+    .. versionadded:: 1.5.0
 
     Parameters
     ----------
@@ -1825,10 +1895,11 @@ def trunc(date, format):
     return Column(sc._jvm.functions.trunc(_to_java_column(date), format))
 
 
-@since(2.3)
 def date_trunc(format, timestamp):
     """
     Returns timestamp truncated to the unit specified by the format.
+
+    .. versionadded:: 2.3.0
 
     Parameters
     ----------
@@ -1849,13 +1920,14 @@ def date_trunc(format, timestamp):
     return Column(sc._jvm.functions.date_trunc(format, _to_java_column(timestamp)))
 
 
-@since(1.5)
 def next_day(date, dayOfWeek):
     """
     Returns the first date which is later than the value of the date column.
 
     Day of the week parameter is case insensitive, and accepts:
         "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1867,10 +1939,11 @@ def next_day(date, dayOfWeek):
     return Column(sc._jvm.functions.next_day(_to_java_column(date), dayOfWeek))
 
 
-@since(1.5)
 def last_day(date):
     """
     Returns the last day of the month which the given date belongs to.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1882,12 +1955,13 @@ def last_day(date):
     return Column(sc._jvm.functions.last_day(_to_java_column(date)))
 
 
-@since(1.5)
 def from_unixtime(timestamp, format="yyyy-MM-dd HH:mm:ss"):
     """
     Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
     representing the timestamp of that moment in the current system time zone in the given
     format.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1901,7 +1975,6 @@ def from_unixtime(timestamp, format="yyyy-MM-dd HH:mm:ss"):
     return Column(sc._jvm.functions.from_unixtime(_to_java_column(timestamp), format))
 
 
-@since(1.5)
 def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
     """
     Convert time string with given pattern ('yyyy-MM-dd HH:mm:ss', by default)
@@ -1909,6 +1982,8 @@ def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
     locale, return null if fail.
 
     if `timestamp` is None, then it returns current timestamp.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -1924,7 +1999,6 @@ def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
     return Column(sc._jvm.functions.unix_timestamp(_to_java_column(timestamp), format))
 
 
-@since(1.5)
 def from_utc_timestamp(timestamp, tz):
     """
     This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
@@ -1939,6 +2013,8 @@ def from_utc_timestamp(timestamp, tz):
     '2018-03-13T06:18:23+00:00'. The reason is that, Spark firstly cast the string to timestamp
     according to the timezone in the string, and finally display the result by converting the
     timestamp to string according to the session local timezone.
+
+    .. versionadded:: 1.5.0
 
     Parameters
     ----------
@@ -1969,7 +2045,6 @@ def from_utc_timestamp(timestamp, tz):
     return Column(sc._jvm.functions.from_utc_timestamp(_to_java_column(timestamp), tz))
 
 
-@since(1.5)
 def to_utc_timestamp(timestamp, tz):
     """
     This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
@@ -1984,6 +2059,8 @@ def to_utc_timestamp(timestamp, tz):
     '2018-03-13T06:18:23+00:00'. The reason is that, Spark firstly cast the string to timestamp
     according to the timezone in the string, and finally display the result by converting the
     timestamp to string according to the session local timezone.
+
+    .. versionadded:: 1.5.0
 
     Parameters
     ----------
@@ -2014,9 +2091,10 @@ def to_utc_timestamp(timestamp, tz):
     return Column(sc._jvm.functions.to_utc_timestamp(_to_java_column(timestamp), tz))
 
 
-@since(3.1)
 def timestamp_seconds(col):
     """
+    .. versionadded:: 3.1.0
+
     Examples
     --------
     >>> from pyspark.sql.functions import timestamp_seconds
@@ -2035,7 +2113,6 @@ def timestamp_seconds(col):
     return Column(sc._jvm.functions.timestamp_seconds(_to_java_column(col)))
 
 
-@since(2.0)
 def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
     """Bucketize rows into one or more time windows given a timestamp specifying column. Window
     starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
@@ -2054,6 +2131,8 @@ def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
 
     The output column will be a struct called 'window' by default with the nested columns 'start'
     and 'end', where 'start' and 'end' will be of :class:`pyspark.sql.types.TimestampType`.
+
+    .. versionadded:: 2.0.0
 
     Examples
     --------
@@ -2087,11 +2166,12 @@ def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
 
 # ---------------------------- misc functions ----------------------------------
 
-@since(1.5)
 def crc32(col):
     """
     Calculates the cyclic redundancy check value  (CRC32) of a binary column and
     returns the value as a bigint.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2102,9 +2182,10 @@ def crc32(col):
     return Column(sc._jvm.functions.crc32(_to_java_column(col)))
 
 
-@since(1.5)
 def md5(col):
     """Calculates the MD5 digest and returns the value as a 32 character hex string.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2116,9 +2197,10 @@ def md5(col):
     return Column(jc)
 
 
-@since(1.5)
 def sha1(col):
     """Returns the hex string result of SHA-1.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2130,11 +2212,12 @@ def sha1(col):
     return Column(jc)
 
 
-@since(1.5)
 def sha2(col, numBits):
     """Returns the hex string result of SHA-2 family of hash functions (SHA-224, SHA-256, SHA-384,
     and SHA-512). The numBits indicates the desired bit length of the result, which must have a
     value of 224, 256, 384, 512, or 0 (which is equivalent to 256).
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2149,9 +2232,10 @@ def sha2(col, numBits):
     return Column(jc)
 
 
-@since(2.0)
 def hash(*cols):
     """Calculates the hash code of given columns, and returns the result as an int column.
+
+    .. versionadded:: 2.0.0
 
     Examples
     --------
@@ -2163,10 +2247,11 @@ def hash(*cols):
     return Column(jc)
 
 
-@since(3.0)
 def xxhash64(*cols):
     """Calculates the hash code of given columns using the 64-bit variant of the xxHash algorithm,
     and returns the result as a long column.
+
+    .. versionadded:: 3.0.0
 
     Examples
     --------
@@ -2178,11 +2263,12 @@ def xxhash64(*cols):
     return Column(jc)
 
 
-@since(3.1)
 def assert_true(col, errMsg=None):
     """
     Returns null if the input column is true; throws an exception with the provided error message
     otherwise.
+
+    .. versionadded:: 3.1.0
 
     Examples
     --------
@@ -2297,11 +2383,12 @@ def trim(col):
     return _invoke_function_over_column("trim", col)
 
 
-@since(1.5)
 def concat_ws(sep, *cols):
     """
     Concatenates multiple input string columns together into a single string column,
     using the given separator.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2333,11 +2420,12 @@ def encode(col, charset):
     return Column(sc._jvm.functions.encode(_to_java_column(col), charset))
 
 
-@since(1.5)
 def format_number(col, d):
     """
     Formats the number X to a format like '#,--#,--#.--', rounded to d decimal places
     with HALF_EVEN round mode, and returns the result as a string.
+
+    .. versionadded:: 1.5.0
 
     Parameters
     ----------
@@ -2353,10 +2441,11 @@ def format_number(col, d):
     return Column(sc._jvm.functions.format_number(_to_java_column(col), d))
 
 
-@since(1.5)
 def format_string(format, *cols):
     """
     Formats the arguments in printf-style and returns the result as a string column.
+
+    .. versionadded:: 1.5.0
 
     Parameters
     ----------
@@ -2376,11 +2465,12 @@ def format_string(format, *cols):
     return Column(sc._jvm.functions.format_string(format, _to_seq(sc, cols, _to_java_column)))
 
 
-@since(1.5)
 def instr(str, substr):
     """
     Locate the position of the first occurrence of substr column in the given string.
     Returns null if either of the arguments are null.
+
+    .. versionadded:: 1.5.0
 
     Notes
     -----
@@ -2395,11 +2485,12 @@ def instr(str, substr):
     return Column(sc._jvm.functions.instr(_to_java_column(str), substr))
 
 
-@since(3.0)
 def overlay(src, replace, pos, len=-1):
     """
     Overlay the specified portion of `src` with `replace`,
     starting from byte position `pos` of `src` and proceeding for `len` bytes.
+
+    .. versionadded:: 3.0.0
 
     Examples
     --------
@@ -2431,12 +2522,13 @@ def overlay(src, replace, pos, len=-1):
     ))
 
 
-@since(1.5)
 def substring(str, pos, len):
     """
     Substring starts at `pos` and is of length `len` when str is String type or
     returns the slice of byte array that starts at `pos` in byte and is of length `len`
     when str is Binary type.
+
+    .. versionadded:: 1.5.0
 
     Notes
     -----
@@ -2452,13 +2544,14 @@ def substring(str, pos, len):
     return Column(sc._jvm.functions.substring(_to_java_column(str), pos, len))
 
 
-@since(1.5)
 def substring_index(str, delim, count):
     """
     Returns the substring from string str before count occurrences of the delimiter delim.
     If count is positive, everything the left of the final delimiter (counting from left) is
     returned. If count is negative, every to the right of the final delimiter (counting from the
     right) is returned. substring_index performs a case-sensitive match when searching for delim.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2472,9 +2565,10 @@ def substring_index(str, delim, count):
     return Column(sc._jvm.functions.substring_index(_to_java_column(str), delim, count))
 
 
-@since(1.5)
 def levenshtein(left, right):
     """Computes the Levenshtein distance of the two given strings.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2487,10 +2581,11 @@ def levenshtein(left, right):
     return Column(jc)
 
 
-@since(1.5)
 def locate(substr, str, pos=1):
     """
     Locate the position of the first occurrence of substr in a string column, after position pos.
+
+    .. versionadded:: 1.5.0
 
     Parameters
     ----------
@@ -2516,10 +2611,11 @@ def locate(substr, str, pos=1):
     return Column(sc._jvm.functions.locate(substr, _to_java_column(str), pos))
 
 
-@since(1.5)
 def lpad(col, len, pad):
     """
     Left-pad the string column to width `len` with `pad`.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2531,10 +2627,11 @@ def lpad(col, len, pad):
     return Column(sc._jvm.functions.lpad(_to_java_column(col), len, pad))
 
 
-@since(1.5)
 def rpad(col, len, pad):
     """
     Right-pad the string column to width `len` with `pad`.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2546,10 +2643,11 @@ def rpad(col, len, pad):
     return Column(sc._jvm.functions.rpad(_to_java_column(col), len, pad))
 
 
-@since(1.5)
 def repeat(col, n):
     """
     Repeats a string column n times, and returns it as a new string column.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2561,10 +2659,11 @@ def repeat(col, n):
     return Column(sc._jvm.functions.repeat(_to_java_column(col), n))
 
 
-@since(1.5)
 def split(str, pattern, limit=-1):
     """
     Splits str around matches of the given pattern.
+
+    .. versionadded:: 1.5.0
 
     Parameters
     ----------
@@ -2597,10 +2696,11 @@ def split(str, pattern, limit=-1):
     return Column(sc._jvm.functions.split(_to_java_column(str), pattern, limit))
 
 
-@since(1.5)
 def regexp_extract(str, pattern, idx):
     r"""Extract a specific group matched by a Java regex, from the specified string column.
     If the regex did not match, or the specified group did not match, an empty string is returned.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2619,9 +2719,10 @@ def regexp_extract(str, pattern, idx):
     return Column(jc)
 
 
-@since(1.5)
 def regexp_replace(str, pattern, replacement):
     r"""Replace all substrings of the specified string value that match regexp with rep.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2634,9 +2735,10 @@ def regexp_replace(str, pattern, replacement):
     return Column(jc)
 
 
-@since(1.5)
 def initcap(col):
     """Translate the first letter of each word to upper case in the sentence.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2647,10 +2749,11 @@ def initcap(col):
     return Column(sc._jvm.functions.initcap(_to_java_column(col)))
 
 
-@since(1.5)
 def soundex(col):
     """
     Returns the SoundEx encoding for a string
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2662,9 +2765,10 @@ def soundex(col):
     return Column(sc._jvm.functions.soundex(_to_java_column(col)))
 
 
-@since(1.5)
 def bin(col):
     """Returns the string representation of the binary value of the given column.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2676,11 +2780,12 @@ def bin(col):
     return Column(jc)
 
 
-@since(1.5)
 def hex(col):
     """Computes hex value of the given column, which could be :class:`pyspark.sql.types.StringType`,
     :class:`pyspark.sql.types.BinaryType`, :class:`pyspark.sql.types.IntegerType` or
     :class:`pyspark.sql.types.LongType`.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2692,10 +2797,11 @@ def hex(col):
     return Column(jc)
 
 
-@since(1.5)
 def unhex(col):
     """Inverse of hex. Interprets each pair of characters as a hexadecimal number
     and converts to the byte representation of number.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2706,11 +2812,12 @@ def unhex(col):
     return Column(sc._jvm.functions.unhex(_to_java_column(col)))
 
 
-@since(1.5)
 def length(col):
     """Computes the character length of string data or number of bytes of binary data.
     The length of character data includes the trailing spaces. The length of binary data
     includes binary zeros.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2721,12 +2828,13 @@ def length(col):
     return Column(sc._jvm.functions.length(_to_java_column(col)))
 
 
-@since(1.5)
 def translate(srcCol, matching, replace):
     """A function translate any character in the `srcCol` by a character in `matching`.
     The characters in `replace` is corresponding to the characters in `matching`.
     The translate will happen when any character in the string matching with the character
     in the `matching`.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2740,9 +2848,10 @@ def translate(srcCol, matching, replace):
 
 # ---------------------- Collection functions ------------------------------
 
-@since(2.0)
 def create_map(*cols):
     """Creates a new map column.
+
+    .. versionadded:: 2.0.0
 
     Parameters
     ----------
@@ -2764,9 +2873,10 @@ def create_map(*cols):
     return Column(jc)
 
 
-@since(2.4)
 def map_from_arrays(col1, col2):
     """Creates a new map from two arrays.
+
+    .. versionadded:: 2.4.0
 
     Parameters
     ----------
@@ -2789,9 +2899,10 @@ def map_from_arrays(col1, col2):
     return Column(sc._jvm.functions.map_from_arrays(_to_java_column(col1), _to_java_column(col2)))
 
 
-@since(1.4)
 def array(*cols):
     """Creates a new array column.
+
+    .. versionadded:: 1.4.0
 
     Parameters
     ----------
@@ -2813,11 +2924,12 @@ def array(*cols):
     return Column(jc)
 
 
-@since(1.5)
 def array_contains(col, value):
     """
     Collection function: returns null if the array is null, true if the array contains the
     given value, and false otherwise.
+
+    .. versionadded:: 1.5.0
 
     Parameters
     ----------
@@ -2839,12 +2951,13 @@ def array_contains(col, value):
     return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
 
 
-@since(2.4)
 def arrays_overlap(a1, a2):
     """
     Collection function: returns true if the arrays contain any common non-null element; if not,
     returns null if both the arrays are non-empty and any of them contains a null element; returns
     false otherwise.
+
+    .. versionadded:: 2.4.0
 
     Examples
     --------
@@ -2856,11 +2969,12 @@ def arrays_overlap(a1, a2):
     return Column(sc._jvm.functions.arrays_overlap(_to_java_column(a1), _to_java_column(a2)))
 
 
-@since(2.4)
 def slice(x, start, length):
     """
     Collection function: returns an array containing  all the elements in `x` from index `start`
     (array indices start at 1, or from the end if `start` is negative) with the specified `length`.
+
+    .. versionadded:: 2.4.0
 
     Parameters
     ----------
@@ -2885,11 +2999,12 @@ def slice(x, start, length):
     ))
 
 
-@since(2.4)
 def array_join(col, delimiter, null_replacement=None):
     """
     Concatenates the elements of `column` using the `delimiter`. Null values are replaced with
     `null_replacement` if set, otherwise they are ignored.
+
+    .. versionadded:: 2.4.0
 
     Examples
     --------
@@ -2907,11 +3022,12 @@ def array_join(col, delimiter, null_replacement=None):
             _to_java_column(col), delimiter, null_replacement))
 
 
-@since(1.5)
 def concat(*cols):
     """
     Concatenates multiple input columns together into a single column.
     The function works with strings, binary and compatible array columns.
+
+    .. versionadded:: 1.5.0
 
     Examples
     --------
@@ -2927,11 +3043,12 @@ def concat(*cols):
     return Column(sc._jvm.functions.concat(_to_seq(sc, cols, _to_java_column)))
 
 
-@since(2.4)
 def array_position(col, value):
     """
     Collection function: Locates the position of the first occurrence of the given value
     in the given array. Returns null if either of the arguments are null.
+
+    .. versionadded:: 2.4.0
 
     Notes
     -----
@@ -2948,11 +3065,12 @@ def array_position(col, value):
     return Column(sc._jvm.functions.array_position(_to_java_column(col), value))
 
 
-@since(2.4)
 def element_at(col, extraction):
     """
     Collection function: Returns element of array at given index in extraction if col is array.
     Returns value for the given key in extraction if col is map.
+
+    .. versionadded:: 2.4.0
 
     Parameters
     ----------
@@ -2980,10 +3098,11 @@ def element_at(col, extraction):
         _to_java_column(col), lit(extraction)._jc))
 
 
-@since(2.4)
 def array_remove(col, element):
     """
     Collection function: Remove all elements that equal to element from the given array.
+
+    .. versionadded:: 2.4.0
 
     Parameters
     ----------
@@ -3002,10 +3121,11 @@ def array_remove(col, element):
     return Column(sc._jvm.functions.array_remove(_to_java_column(col), element))
 
 
-@since(2.4)
 def array_distinct(col):
     """
     Collection function: removes duplicate values from the array.
+
+    .. versionadded:: 2.4.0
 
     Parameters
     ----------
@@ -3022,11 +3142,12 @@ def array_distinct(col):
     return Column(sc._jvm.functions.array_distinct(_to_java_column(col)))
 
 
-@since(2.4)
 def array_intersect(col1, col2):
     """
     Collection function: returns an array of the elements in the intersection of col1 and col2,
     without duplicates.
+
+    .. versionadded:: 2.4.0
 
     Parameters
     ----------
@@ -3046,11 +3167,12 @@ def array_intersect(col1, col2):
     return Column(sc._jvm.functions.array_intersect(_to_java_column(col1), _to_java_column(col2)))
 
 
-@since(2.4)
 def array_union(col1, col2):
     """
     Collection function: returns an array of the elements in the union of col1 and col2,
     without duplicates.
+
+    .. versionadded:: 2.4.0
 
     Parameters
     ----------
@@ -3070,11 +3192,12 @@ def array_union(col1, col2):
     return Column(sc._jvm.functions.array_union(_to_java_column(col1), _to_java_column(col2)))
 
 
-@since(2.4)
 def array_except(col1, col2):
     """
     Collection function: returns an array of the elements in col1 but not in col2,
     without duplicates.
+
+    .. versionadded:: 2.4.0
 
     Parameters
     ----------
@@ -3094,12 +3217,13 @@ def array_except(col1, col2):
     return Column(sc._jvm.functions.array_except(_to_java_column(col1), _to_java_column(col2)))
 
 
-@since(1.4)
 def explode(col):
     """
     Returns a new row for each element in the given array or map.
     Uses the default column name `col` for elements in the array and
     `key` and `value` for elements in the map unless specified otherwise.
+
+    .. versionadded:: 1.4.0
 
     Examples
     --------
@@ -3120,12 +3244,13 @@ def explode(col):
     return Column(jc)
 
 
-@since(2.1)
 def posexplode(col):
     """
     Returns a new row for each element with position in the given array or map.
     Uses the default column name `pos` for position, and `col` for elements in the
     array and `key` and `value` for elements in the map unless specified otherwise.
+
+    .. versionadded:: 2.1.0
 
     Examples
     --------
@@ -3146,13 +3271,14 @@ def posexplode(col):
     return Column(jc)
 
 
-@since(2.3)
 def explode_outer(col):
     """
     Returns a new row for each element in the given array or map.
     Unlike explode, if the array/map is null or empty then null is produced.
     Uses the default column name `col` for elements in the array and
     `key` and `value` for elements in the map unless specified otherwise.
+
+    .. versionadded:: 2.3.0
 
     Examples
     --------
@@ -3184,13 +3310,14 @@ def explode_outer(col):
     return Column(jc)
 
 
-@since(2.3)
 def posexplode_outer(col):
     """
     Returns a new row for each element with position in the given array or map.
     Unlike posexplode, if the array/map is null or empty then the row (null, null) is produced.
     Uses the default column name `pos` for position, and `col` for elements in the
     array and `key` and `value` for elements in the map unless specified otherwise.
+
+    .. versionadded:: 2.3.0
 
     Examples
     --------
@@ -3221,11 +3348,12 @@ def posexplode_outer(col):
     return Column(jc)
 
 
-@since(1.6)
 def get_json_object(col, path):
     """
     Extracts json object from a json string based on json path specified, and returns json string
     of the extracted json object. It will return null if the input json string is invalid.
+
+    .. versionadded:: 1.6.0
 
     Parameters
     ----------
@@ -3247,9 +3375,10 @@ def get_json_object(col, path):
     return Column(jc)
 
 
-@since(1.6)
 def json_tuple(col, *fields):
     """Creates a new row for a json column according to the given field names.
+
+    .. versionadded:: 1.6.0
 
     Parameters
     ----------
@@ -3270,12 +3399,13 @@ def json_tuple(col, *fields):
     return Column(jc)
 
 
-@since(2.1)
 def from_json(col, schema, options={}):
     """
     Parses a column containing a JSON string into a :class:`MapType` with :class:`StringType`
     as keys type, :class:`StructType` or :class:`ArrayType` with
     the specified schema. Returns `null`, in the case of an unparseable string.
+
+    .. versionadded:: 2.1.0
 
     Parameters
     ----------
@@ -3325,11 +3455,12 @@ def from_json(col, schema, options={}):
     return Column(jc)
 
 
-@since(2.1)
 def to_json(col, options={}):
     """
     Converts a column containing a :class:`StructType`, :class:`ArrayType` or a :class:`MapType`
     into a JSON string. Throws an exception, in the case of an unsupported type.
+
+    .. versionadded:: 2.1.0
 
     Parameters
     ----------
@@ -3371,10 +3502,11 @@ def to_json(col, options={}):
     return Column(jc)
 
 
-@since(2.4)
 def schema_of_json(json, options={}):
     """
     Parses a JSON string and infers its schema in DDL format.
+
+    .. versionadded:: 2.4.0
 
     Parameters
     ----------
@@ -3407,10 +3539,11 @@ def schema_of_json(json, options={}):
     return Column(jc)
 
 
-@since(3.0)
 def schema_of_csv(csv, options={}):
     """
     Parses a CSV string and infers its schema in DDL format.
+
+    .. versionadded:: 3.0.0
 
     Parameters
     ----------
@@ -3439,11 +3572,12 @@ def schema_of_csv(csv, options={}):
     return Column(jc)
 
 
-@since(3.0)
 def to_csv(col, options={}):
     """
     Converts a column containing a :class:`StructType` into a CSV string.
     Throws an exception, in the case of an unsupported type.
+
+    .. versionadded:: 3.0.0
 
     Parameters
     ----------
@@ -3466,10 +3600,11 @@ def to_csv(col, options={}):
     return Column(jc)
 
 
-@since(1.5)
 def size(col):
     """
     Collection function: returns the length of the array or map stored in the column.
+
+    .. versionadded:: 1.5.0
 
     Parameters
     ----------
@@ -3486,10 +3621,11 @@ def size(col):
     return Column(sc._jvm.functions.size(_to_java_column(col)))
 
 
-@since(2.4)
 def array_min(col):
     """
     Collection function: returns the minimum value of the array.
+
+    .. versionadded:: 2.4.0
 
     Parameters
     ----------
@@ -3506,10 +3642,11 @@ def array_min(col):
     return Column(sc._jvm.functions.array_min(_to_java_column(col)))
 
 
-@since(2.4)
 def array_max(col):
     """
     Collection function: returns the maximum value of the array.
+
+    .. versionadded:: 2.4.0
 
     Parameters
     ----------
@@ -3526,13 +3663,14 @@ def array_max(col):
     return Column(sc._jvm.functions.array_max(_to_java_column(col)))
 
 
-@since(1.5)
 def sort_array(col, asc=True):
     """
     Collection function: sorts the input array in ascending or descending order according
     to the natural ordering of the array elements. Null elements will be placed at the beginning
     of the returned array in ascending order or at the end of the returned array in descending
     order.
+
+    .. versionadded:: 1.5.0
 
     Parameters
     ----------
@@ -3551,11 +3689,12 @@ def sort_array(col, asc=True):
     return Column(sc._jvm.functions.sort_array(_to_java_column(col), asc))
 
 
-@since(2.4)
 def array_sort(col):
     """
     Collection function: sorts the input array in ascending order. The elements of the input array
     must be orderable. Null elements will be placed at the end of the returned array.
+
+    .. versionadded:: 2.4.0
 
     Parameters
     ----------
@@ -3572,10 +3711,11 @@ def array_sort(col):
     return Column(sc._jvm.functions.array_sort(_to_java_column(col)))
 
 
-@since(2.4)
 def shuffle(col):
     """
     Collection function: Generates a random permutation of the given array.
+
+    .. versionadded:: 2.4.0
 
     Parameters
     ----------
@@ -3596,10 +3736,11 @@ def shuffle(col):
     return Column(sc._jvm.functions.shuffle(_to_java_column(col)))
 
 
-@since(1.5)
 def reverse(col):
     """
     Collection function: returns a reversed string or an array with reverse order of elements.
+
+    .. versionadded:: 1.5.0
 
     Parameters
     ----------
@@ -3619,12 +3760,13 @@ def reverse(col):
     return Column(sc._jvm.functions.reverse(_to_java_column(col)))
 
 
-@since(2.4)
 def flatten(col):
     """
     Collection function: creates a single array from an array of arrays.
     If a structure of nested arrays is deeper than two levels,
     only one level of nesting is removed.
+
+    .. versionadded:: 2.4.0
 
     Parameters
     ----------
@@ -3641,10 +3783,11 @@ def flatten(col):
     return Column(sc._jvm.functions.flatten(_to_java_column(col)))
 
 
-@since(2.3)
 def map_keys(col):
     """
     Collection function: Returns an unordered array containing the keys of the map.
+
+    .. versionadded:: 2.3.0
 
     Parameters
     ----------
@@ -3666,10 +3809,11 @@ def map_keys(col):
     return Column(sc._jvm.functions.map_keys(_to_java_column(col)))
 
 
-@since(2.3)
 def map_values(col):
     """
     Collection function: Returns an unordered array containing the values of the map.
+
+    .. versionadded:: 2.3.0
 
     Parameters
     ----------
@@ -3691,10 +3835,11 @@ def map_values(col):
     return Column(sc._jvm.functions.map_values(_to_java_column(col)))
 
 
-@since(3.0)
 def map_entries(col):
     """
     Collection function: Returns an unordered array of all entries in the given map.
+
+    .. versionadded:: 3.0.0
 
     Parameters
     ----------
@@ -3716,10 +3861,11 @@ def map_entries(col):
     return Column(sc._jvm.functions.map_entries(_to_java_column(col)))
 
 
-@since(2.4)
 def map_from_entries(col):
     """
     Collection function: Returns a map created from the given array of entries.
+
+    .. versionadded:: 2.4.0
 
     Parameters
     ----------
@@ -3741,10 +3887,11 @@ def map_from_entries(col):
     return Column(sc._jvm.functions.map_from_entries(_to_java_column(col)))
 
 
-@since(2.4)
 def array_repeat(col, count):
     """
     Collection function: creates an array containing a column repeated count times.
+
+    .. versionadded:: 2.4.0
 
     Examples
     --------
@@ -3759,11 +3906,12 @@ def array_repeat(col, count):
     ))
 
 
-@since(2.4)
 def arrays_zip(*cols):
     """
     Collection function: Returns a merged array of structs in which the N-th struct contains all
     N-th values of input arrays.
+
+    .. versionadded:: 2.4.0
 
     Parameters
     ----------
@@ -3781,9 +3929,10 @@ def arrays_zip(*cols):
     return Column(sc._jvm.functions.arrays_zip(_to_seq(sc, cols, _to_java_column)))
 
 
-@since(2.4)
 def map_concat(*cols):
     """Returns the union of all the given maps.
+
+    .. versionadded:: 2.4.0
 
     Parameters
     ----------
@@ -3808,12 +3957,13 @@ def map_concat(*cols):
     return Column(jc)
 
 
-@since(2.4)
 def sequence(start, stop, step=None):
     """
     Generate a sequence of integers from `start` to `stop`, incrementing by `step`.
     If `step` is not set, incrementing by 1 if `start` is less than or equal to `stop`,
     otherwise -1.
+
+    .. versionadded:: 2.4.0
 
     Examples
     --------
@@ -3832,11 +3982,12 @@ def sequence(start, stop, step=None):
             _to_java_column(start), _to_java_column(stop), _to_java_column(step)))
 
 
-@since(3.0)
 def from_csv(col, schema, options={}):
     """
     Parses a column containing a CSV string to a row with the specified schema.
     Returns `null`, in the case of an unparseable string.
+
+    .. versionadded:: 3.0.0
 
     Parameters
     ----------
@@ -3979,10 +4130,11 @@ def _invoke_higher_order_function(name, cols, funs):
     return Column(sc._jvm.Column(expr(*jcols + jfuns)))
 
 
-@since(3.1)
 def transform(col, f):
     """
     Returns an array of elements after applying a transformation to each element in the input array.
+
+    .. versionadded:: 3.1.0
 
     Parameters
     ----------
@@ -4027,10 +4179,11 @@ def transform(col, f):
     return _invoke_higher_order_function("ArrayTransform", [col], [f])
 
 
-@since(3.1)
 def exists(col, f):
     """
     Returns whether a predicate holds for one or more elements in the array.
+
+    .. versionadded:: 3.1.0
 
     Parameters
     ----------
@@ -4058,10 +4211,11 @@ def exists(col, f):
     return _invoke_higher_order_function("ArrayExists", [col], [f])
 
 
-@since(3.1)
 def forall(col, f):
     """
     Returns whether a predicate holds for every element in the array.
+
+    .. versionadded:: 3.1.0
 
     Parameters
     ----------
@@ -4096,10 +4250,11 @@ def forall(col, f):
     return _invoke_higher_order_function("ArrayForAll", [col], [f])
 
 
-@since(3.1)
 def filter(col, f):
     """
     Returns an array of elements for which a predicate holds in a given array.
+
+    .. versionadded:: 3.1.0
 
     Parameters
     ----------
@@ -4142,7 +4297,6 @@ def filter(col, f):
     return _invoke_higher_order_function("ArrayFilter", [col], [f])
 
 
-@since(3.1)
 def aggregate(col, zero, merge, finish=None):
     """
     Applies a binary operator to an initial state and all elements in the array,
@@ -4153,6 +4307,8 @@ def aggregate(col, zero, merge, finish=None):
     :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
     Python ``UserDefinedFunctions`` are not supported
     (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+
+    .. versionadded:: 3.1.0
 
     Parameters
     ----------
@@ -4214,12 +4370,13 @@ def aggregate(col, zero, merge, finish=None):
         )
 
 
-@since(3.1)
 def zip_with(col1, col2, f):
     """
     Merge two given arrays, element-wise, into a single array using a function.
     If one array is shorter, nulls are appended at the end to match the length of the longer
     array, before applying the function.
+
+    .. versionadded:: 3.1.0
 
     Parameters
     ----------
@@ -4259,11 +4416,12 @@ def zip_with(col1, col2, f):
     return _invoke_higher_order_function("ZipWith", [col1, col2], [f])
 
 
-@since(3.1)
 def transform_keys(col, f):
     """
     Applies a function to every key-value pair in a map and returns
     a map with the results of those applications as the new keys for the pairs.
+
+    .. versionadded:: 3.1.0
 
     Parameters
     ----------
@@ -4295,11 +4453,12 @@ def transform_keys(col, f):
     return _invoke_higher_order_function("TransformKeys", [col], [f])
 
 
-@since(3.1)
 def transform_values(col, f):
     """
     Applies a function to every key-value pair in a map and returns
     a map with the results of those applications as the new values for the pairs.
+
+    .. versionadded:: 3.1.0
 
     Parameters
     ----------
@@ -4331,10 +4490,11 @@ def transform_values(col, f):
     return _invoke_higher_order_function("TransformValues", [col], [f])
 
 
-@since(3.1)
 def map_filter(col, f):
     """
     Returns a map whose key-value pairs satisfy a predicate.
+
+    .. versionadded:: 3.1.0
 
     Parameters
     ----------
@@ -4366,10 +4526,11 @@ def map_filter(col, f):
     return _invoke_higher_order_function("MapFilter", [col], [f])
 
 
-@since(3.1)
 def map_zip_with(col1, col2, f):
     """
     Merge two given maps, key-wise into a single map using a function.
+
+    .. versionadded:: 3.1.0
 
     Parameters
     ----------
@@ -4408,11 +4569,12 @@ def map_zip_with(col1, col2, f):
 
 # ---------------------- Partition transform functions --------------------------------
 
-@since(3.1)
 def years(col):
     """
     Partition transform function: A transform for timestamps and dates
     to partition data into years.
+
+    .. versionadded:: 3.1.0
 
     Examples
     --------
@@ -4420,21 +4582,23 @@ def years(col):
     ...     years("ts")
     ... ).createOrReplace()
 
-    .. warning::
-        This function can be used only in combinatiion with
-        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
-        method of the `DataFrameWriterV2`.
+    Notes
+    -----
+    This function can be used only in combinatiion with
+    :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+    method of the `DataFrameWriterV2`.
 
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.years(_to_java_column(col)))
 
 
-@since(3.1)
 def months(col):
     """
     Partition transform function: A transform for timestamps and dates
     to partition data into months.
+
+    .. versionadded:: 3.1.0
 
     Examples
     --------
@@ -4442,21 +4606,23 @@ def months(col):
     ...     months("ts")
     ... ).createOrReplace()  # doctest: +SKIP
 
-    .. warning::
-        This function can be used only in combinatiion with
-        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
-        method of the `DataFrameWriterV2`.
+    Notes
+    -----
+    This function can be used only in combinatiion with
+    :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+    method of the `DataFrameWriterV2`.
 
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.months(_to_java_column(col)))
 
 
-@since(3.1)
 def days(col):
     """
     Partition transform function: A transform for timestamps and dates
     to partition data into days.
+
+    .. versionadded:: 3.1.0
 
     Examples
     --------
@@ -4464,21 +4630,23 @@ def days(col):
     ...     days("ts")
     ... ).createOrReplace()
 
-    .. warning::
-        This function can be used only in combinatiion with
-        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
-        method of the `DataFrameWriterV2`.
+    Notes
+    -----
+    This function can be used only in combinatiion with
+    :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+    method of the `DataFrameWriterV2`.
 
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.days(_to_java_column(col)))
 
 
-@since(3.1)
 def hours(col):
     """
     Partition transform function: A transform for timestamps
     to partition data into hours.
+
+    .. versionadded:: 3.1.0
 
     Examples
     --------
@@ -4486,21 +4654,23 @@ def hours(col):
     ...     hours("ts")
     ... ).createOrReplace()
 
-    .. warning::
-        This function can be used only in combinatiion with
-        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
-        method of the `DataFrameWriterV2`.
+    Notes
+    -----
+    This function can be used only in combinatiion with
+    :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+    method of the `DataFrameWriterV2`.
 
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.hours(_to_java_column(col)))
 
 
-@since(3.1)
 def bucket(numBuckets, col):
     """
     Partition transform function: A transform for any type that partitions
     by a hash of the input column.
+
+    .. versionadded:: 3.1.0
 
     Examples
     --------
@@ -4508,10 +4678,11 @@ def bucket(numBuckets, col):
     ...     bucket(42, "ts")
     ... ).createOrReplace()
 
-    .. warning::
-        This function can be used only in combination with
-        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
-        method of the `DataFrameWriterV2`.
+    Notes
+    -----
+    This function can be used only in combination with
+    :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+    method of the `DataFrameWriterV2`.
 
     """
     if not isinstance(numBuckets, (int, Column)):
@@ -4530,31 +4701,21 @@ def bucket(numBuckets, col):
 
 # ---------------------------- User Defined Function ----------------------------------
 
-@since(1.3)
 def udf(f=None, returnType=StringType()):
     """Creates a user defined function (UDF).
 
-    Examples
-    --------
-    .. note:: The user-defined functions are considered deterministic by default. Due to
-        optimization, duplicate invocations may be eliminated or the function may even be invoked
-        more times than it is present in the query. If your function is not deterministic, call
-        `asNondeterministic` on the user defined function. E.g.:
+    .. versionadded:: 1.3.0
 
-    >>> from pyspark.sql.types import IntegerType
-    >>> import random
-    >>> random_udf = udf(lambda: int(random.random() * 100), IntegerType()).asNondeterministic()
-
-    .. note:: The user-defined functions do not support conditional expressions or short circuiting
-        in boolean expressions and it ends up with being executed all internally. If the functions
-        can fail on special rows, the workaround is to incorporate the condition into the functions.
-
-    .. note:: The user-defined functions do not take keyword arguments on the calling side.
-
-    :param f: python function if used as a standalone function
-    :param returnType: the return type of the user-defined function. The value can be either a
+    Parameters
+    ----------
+    f : function
+        python function if used as a standalone function
+    returnType : :class:`pyspark.sql.types.DataType` or str
+        the return type of the user-defined function. The value can be either a
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
+    Examples
+    --------
     >>> from pyspark.sql.types import IntegerType
     >>> slen = udf(lambda s: len(s), IntegerType())
     >>> @udf
@@ -4574,6 +4735,23 @@ def udf(f=None, returnType=StringType()):
     +----------+--------------+------------+
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
+
+    Notes
+    -----
+    The user-defined functions are considered deterministic by default. Due to
+    optimization, duplicate invocations may be eliminated or the function may even be invoked
+    more times than it is present in the query. If your function is not deterministic, call
+    `asNondeterministic` on the user defined function. E.g.:
+
+    >>> from pyspark.sql.types import IntegerType
+    >>> import random
+    >>> random_udf = udf(lambda: int(random.random() * 100), IntegerType()).asNondeterministic()
+
+    The user-defined functions do not support conditional expressions or short circuiting
+    in boolean expressions and it ends up with being executed all internally. If the functions
+    can fail on special rows, the workaround is to incorporate the condition into the functions.
+
+    The user-defined functions do not take keyword arguments on the calling side.
     """
 
     # The following table shows most of Python data and SQL type conversions in normal UDFs that
