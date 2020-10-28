@@ -256,7 +256,6 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
   }
 
   test("SPARK-33240: fail the query when instantiation on session catalog fails") {
-    val oldCatalogImpl = spark.conf.getOption(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     try {
       spark.sessionState.catalogManager.reset()
       spark.conf.set(
@@ -269,7 +268,6 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
       assert(e.getMessage.contains("InvalidCatalogClass"))
     } finally {
       spark.sessionState.catalogManager.reset()
-      oldCatalogImpl.foreach { cat => spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION.key, cat) }
     }
   }
 
