@@ -227,6 +227,14 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Allocation batch delay must be a positive time value.")
       .createWithDefaultString("1s")
 
+  val KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.allocation.executor.timeout")
+      .doc("Time to wait before considering a pending executor timedout.")
+      .version("3.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(value => value > 0, "Allocation executor timeout must be a positive time value.")
+      .createWithDefaultString("600s")
+
   val KUBERNETES_EXECUTOR_LOST_REASON_CHECK_MAX_ATTEMPTS =
     ConfigBuilder("spark.kubernetes.executor.lostCheck.maxAttempts")
       .doc("Maximum number of attempts allowed for checking the reason of an executor loss " +
@@ -416,6 +424,14 @@ private[spark] object Config extends Logging {
       .version("3.0.0")
       .stringConf
       .createOptional
+
+  val KUBERNETES_EXECUTOR_CHECK_ALL_CONTAINERS =
+    ConfigBuilder("spark.kubernetes.executor.checkAllContainers")
+      .doc("If set to true, all containers in the executor pod will be checked when reporting" +
+        "executor status.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."

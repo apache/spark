@@ -291,17 +291,17 @@ object UnsupportedOperationChecker extends Logging {
                 throwError("Full outer joins with streaming DataFrames/Datasets are not supported")
               }
 
-            case LeftSemi | LeftAnti =>
+            case LeftAnti =>
               if (right.isStreaming) {
-                throwError("Left semi/anti joins with a streaming DataFrame/Dataset " +
+                throwError("Left anti joins with a streaming DataFrame/Dataset " +
                     "on the right are not supported")
               }
 
-            // We support streaming left outer joins with static on the right always, and with
-            // stream on both sides under the appropriate conditions.
-            case LeftOuter =>
+            // We support streaming left outer and left semi joins with static on the right always,
+            // and with stream on both sides under the appropriate conditions.
+            case LeftOuter | LeftSemi =>
               if (!left.isStreaming && right.isStreaming) {
-                throwError("Left outer join with a streaming DataFrame/Dataset " +
+                throwError(s"$joinType join with a streaming DataFrame/Dataset " +
                   "on the right and a static DataFrame/Dataset on the left is not supported")
               } else if (left.isStreaming && right.isStreaming) {
                 val watermarkInJoinKeys = StreamingJoinHelper.isWatermarkInJoinKeys(subPlan)
@@ -311,7 +311,8 @@ object UnsupportedOperationChecker extends Logging {
                     left.outputSet, right.outputSet, condition, Some(1000000)).isDefined
 
                 if (!watermarkInJoinKeys && !hasValidWatermarkRange) {
-                  throwError("Stream-stream outer join between two streaming DataFrame/Datasets " +
+                  throwError(
+                    s"Stream-stream $joinType join between two streaming DataFrame/Datasets " +
                     "is not supported without a watermark in the join keys, or a watermark on " +
                     "the nullable side and an appropriate range condition")
                 }

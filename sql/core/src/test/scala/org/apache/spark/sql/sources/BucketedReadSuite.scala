@@ -81,22 +81,24 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         .bucketBy(8, "j", "k")
         .saveAsTable("bucketed_table")
 
-      val bucketValue = Random.nextInt(maxI)
-      val table = spark.table("bucketed_table").filter($"i" === bucketValue)
-      val query = table.queryExecution
-      val output = query.analyzed.output
-      val rdd = query.toRdd
+      withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "false") {
+        val bucketValue = Random.nextInt(maxI)
+        val table = spark.table("bucketed_table").filter($"i" === bucketValue)
+        val query = table.queryExecution
+        val output = query.analyzed.output
+        val rdd = query.toRdd
 
-      assert(rdd.partitions.length == 8)
+        assert(rdd.partitions.length == 8)
 
-      val attrs = table.select("j", "k").queryExecution.analyzed.output
-      val checkBucketId = rdd.mapPartitionsWithIndex((index, rows) => {
-        val getBucketId = UnsafeProjection.create(
-          HashPartitioning(attrs, 8).partitionIdExpression :: Nil,
-          output)
-        rows.map(row => getBucketId(row).getInt(0) -> index)
-      })
-      checkBucketId.collect().foreach(r => assert(r._1 == r._2))
+        val attrs = table.select("j", "k").queryExecution.analyzed.output
+        val checkBucketId = rdd.mapPartitionsWithIndex((index, rows) => {
+          val getBucketId = UnsafeProjection.create(
+            HashPartitioning(attrs, 8).partitionIdExpression :: Nil,
+            output)
+          rows.map(row => getBucketId(row).getInt(0) -> index)
+        })
+        checkBucketId.collect().foreach(r => assert(r._1 == r._2))
+      }
     }
   }
 

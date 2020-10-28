@@ -34,8 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
  * results of broadcast. For joins that are not planned as broadcast hash joins we keep
  * the fallback mechanism with subquery duplicate.
 */
-case class PlanDynamicPruningFilters(sparkSession: SparkSession)
-    extends Rule[SparkPlan] with PredicateHelper {
+object PlanDynamicPruningFilters extends Rule[SparkPlan] with PredicateHelper {
 
   /**
    * Identify the shape in which keys of a given plan are broadcasted.
@@ -54,7 +53,7 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
       case DynamicPruningSubquery(
           value, buildPlan, buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId) =>
         val sparkPlan = QueryExecution.createSparkPlan(
-          sparkSession, sparkSession.sessionState.planner, buildPlan)
+          SparkSession.active, SparkSession.active.sessionState.planner, buildPlan)
         // Using `sparkPlan` is a little hacky as it is based on the assumption that this rule is
         // the first to be applied (apart from `InsertAdaptiveSparkPlan`).
         val canReuseExchange = SQLConf.get.exchangeReuseEnabled && buildKeys.nonEmpty &&
@@ -67,7 +66,7 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
           }.isDefined
 
         if (canReuseExchange) {
-          val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, sparkPlan)
+          val executedPlan = QueryExecution.prepareExecutedPlan(SparkSession.active, sparkPlan)
           val mode = broadcastMode(buildKeys, executedPlan.output)
           // plan a broadcast exchange of the build side of the join
           val exchange = BroadcastExchangeExec(mode, executedPlan)

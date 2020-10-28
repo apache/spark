@@ -81,7 +81,7 @@ case class ResolvedTable(catalog: TableCatalog, identifier: Identifier, table: T
  */
 // TODO: create a generic representation for temp view, v1 view and v2 view, after we add view
 //       support to v2 catalog. For now we only need the identifier to fallback to v1 command.
-case class ResolvedView(identifier: Identifier) extends LeafNode {
+case class ResolvedView(identifier: Identifier, isTemp: Boolean) extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }
 

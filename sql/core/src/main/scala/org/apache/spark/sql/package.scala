@@ -63,7 +63,7 @@ package object sql {
 
   /**
    * Parquet file metadata key to indicate that the file with INT96 column type was written
-   * without rebasing.
+   * with rebasing.
    */
-  private[sql] val SPARK_INT96_NO_REBASE = "org.apache.spark.int96NoRebase"
+  private[sql] val SPARK_LEGACY_INT96 = "org.apache.spark.legacyINT96"
 }

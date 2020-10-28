@@ -1182,6 +1182,14 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.executor.checkAllContainers</code></td>
+  <td>false</td>
+  <td>
+  Specify whether executor pods should be check all containers (including sidecars) or only the executor container when determining the pod status.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.submission.connectionTimeout</code></td>
   <td>10000</td>
   <td>

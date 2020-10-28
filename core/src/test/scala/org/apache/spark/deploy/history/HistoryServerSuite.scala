@@ -584,6 +584,24 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     }
   }
 
+  test("SPARK-33215: speed up event log download by skipping UI rebuild") {
+    val appId = "local-1430917381535"
+
+    stop()
+    init()
+
+    val port = server.boundPort
+    val testUrls = Seq(
+      s"http://localhost:$port/api/v1/applications/$appId/logs",
+      s"http://localhost:$port/api/v1/applications/$appId/1/logs",
+      s"http://localhost:$port/api/v1/applications/$appId/2/logs")
+
+    testUrls.foreach { url =>
+      TestUtils.httpResponseCode(new URL(url))
+    }
+    assert(server.cacheMetrics.loadCount.getCount === 0, "downloading event log shouldn't load ui")
+  }
+
   test("access history application defaults to the last attempt id") {
 
     def getRedirectUrl(url: URL): (Int, String) = {

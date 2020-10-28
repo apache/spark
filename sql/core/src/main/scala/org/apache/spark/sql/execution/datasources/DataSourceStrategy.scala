@@ -58,7 +58,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Note that, this rule must be run after `PreprocessTableCreation` and
  * `PreprocessTableInsertion`.
  */
-case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport {
+object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
 
   def resolver: Resolver = conf.resolver
 
@@ -243,16 +243,16 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
  * TODO: we should remove the special handling for hive tables after completely making hive as a
  * data source.
  */
-class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+object FindDataSourceTable extends Rule[LogicalPlan] {
   private def readDataSourceTable(
       table: CatalogTable, extraOptions: CaseInsensitiveStringMap): LogicalPlan = {
     val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
-    val catalog = sparkSession.sessionState.catalog
+    val catalog = SparkSession.active.sessionState.catalog
     val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
     catalog.getCachedPlan(qualifiedTableName, () => {
       val dataSource =
         DataSource(
-          sparkSession,
+          SparkSession.active,
           // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
           // inferred at runtime. We should still support it.
           userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
@@ -270,7 +270,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       extraOptions: CaseInsensitiveStringMap): StreamingRelation = {
     val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
     val dataSource = DataSource(
-      sparkSession,
+      SparkSession.active,
       className = table.provider.get,
       userSpecifiedSchema = Some(table.schema),
       options = dsOptions)
