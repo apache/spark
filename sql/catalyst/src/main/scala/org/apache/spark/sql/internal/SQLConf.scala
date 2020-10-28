@@ -2752,8 +2752,8 @@ object SQLConf {
     buildConf("spark.sql.legacy.transformationPadNullWhenValueLessThenSchema")
       .internal()
       .doc("Whether pad null value when transformation output's value size less then " +
-        "schema size in default-serde mode (script transformation with row format of " +
-        "`ROW FORMAT DELIMITED` or wrong serde class name)." +
+        "schema size in default-serde mode(script transformation with row format of " +
+        "`ROW FORMAT DELIMITED`)." +
         "When true, Spark will pad NULL value to keep same behavior with hive." +
         "When false, Spark keep original behavior to throw `ArrayIndexOutOfBoundsException`")
       .version("3.1.0")
