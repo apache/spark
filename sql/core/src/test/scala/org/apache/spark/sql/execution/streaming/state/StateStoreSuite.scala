@@ -40,10 +40,12 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Update
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -816,10 +818,34 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   }
 }
 
-abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
-  extends SparkFunSuite with PlanTestBase {
-  import StateStoreTestsHelper._
+class StateStoreCompatibleSuite extends StreamTest with StateStoreCodecsTest {
+  testWithAllCodec("SPARK-33263: Recovery from checkpoint before codec config introduced") {
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-3.0.0-streaming-statestore-codec/").toURI
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
 
+    import testImplicits._
+
+    val inputData = MemoryStream[Int]
+    val aggregated = inputData.toDF().groupBy("value").agg(count("*"))
+    inputData.addData(1, 2, 3)
+
+    /*
+      Note: The checkpoint was generated using the following input in Spark version 3.0.0:
+      AddData(inputData, 1, 2, 3)
+    */
+    testStream(aggregated, Update)(
+      StartStream(
+        checkpointLocation = checkpointDir.getAbsolutePath,
+        additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "1")),
+      AddData(inputData, 1, 2),
+      CheckNewAnswer((1, 2), (2, 2))
+    )
+  }
+}
+
+trait StateStoreCodecsTest extends SparkFunSuite with PlanTestBase {
   private val allCodecs =
     CompressionCodec.ALL_COMPRESSION_CODECS.map { c => CompressionCodec.getShortName(c) }
 
@@ -832,6 +858,11 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       }
     }
   }
+}
+
+abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
+  extends StateStoreCodecsTest {
+  import StateStoreTestsHelper._
 
   testWithAllCodec("get, put, remove, commit, and all data iterator") {
     val provider = newStoreProvider()
