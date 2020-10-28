@@ -343,6 +343,7 @@ object QueryExecution {
       PlanDynamicPruningFilters,
       PlanSubqueries,
       RemoveRedundantProjects,
+      RemoveRedundantSorts,
       EnsureRequirements,
       DisableUnnecessaryBucketedScan,
       ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.columnarRules),
