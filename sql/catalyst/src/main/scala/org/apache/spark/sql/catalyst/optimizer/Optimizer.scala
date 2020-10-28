@@ -1023,7 +1023,7 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
         Seq(
           GreaterThan(Size(g.children.head), Literal(0)),
           IsNotNull(g.children.head)
-        )
+        ).map(generate.child.constraints.convertToCanonicalizedIfRequired)
       ) -- generate.child.constraints
 
       if (inferredFilters.nonEmpty) {
@@ -1063,35 +1063,46 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
   private def inferFilters(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, child) =>
       val newFilters = filter.constraints --
-        (child.constraints ++ splitConjunctivePredicates(condition))
-      if (newFilters.nonEmpty) {
-        Filter(And(newFilters.reduce(And), condition), child)
+        (child.constraints ++ splitConjunctivePredicates(condition).
+          map(filter.constraints.convertToCanonicalizedIfRequired).toSet)
+      val decanonicalzedNewFilters = newFilters.map(filter.constraints.rewriteUsingAlias(_))
+      if (decanonicalzedNewFilters.nonEmpty) {
+        Filter(And(decanonicalzedNewFilters.reduce(And), condition), child)
       } else {
         filter
       }
-
     case join @ Join(left, right, joinType, conditionOpt, _) =>
       joinType match {
         // For inner join, we can infer additional filters for both sides. LeftSemi is kind of an
-        // inner join, it just drops the right side in the final output.
+        // inner join, it just dr   ops the right side in the final output.
         case _: InnerLike | LeftSemi =>
-          val allConstraints = getAllConstraints(left, right, conditionOpt)
-          val newLeft = inferNewFilter(left, allConstraints)
-          val newRight = inferNewFilter(right, allConstraints)
+          val (newLeft, newRight) = if (SQLConf.get.useOptimizedConstraintPropagation) {
+            inferAdditionalNewFilter(left, right.constraints, conditionOpt) ->
+            inferAdditionalNewFilter(right, left.constraints, conditionOpt)
+          } else {
+            val allConstraints = getAllConstraints(left, right, conditionOpt)
+            inferNewFilter(left, allConstraints) -> inferNewFilter(right, allConstraints)
+          }
           join.copy(left = newLeft, right = newRight)
 
         // For right outer join, we can only infer additional filters for left side.
         case RightOuter =>
-          val allConstraints = getAllConstraints(left, right, conditionOpt)
-          val newLeft = inferNewFilter(left, allConstraints)
+          val newLeft = if (SQLConf.get.useOptimizedConstraintPropagation) {
+            inferAdditionalNewFilter(left, right.constraints, conditionOpt)
+          } else {
+            val allConstraints = getAllConstraints(left, right, conditionOpt)
+            inferNewFilter(left, allConstraints)
+          }
           join.copy(left = newLeft)
-
         // For left join, we can only infer additional filters for right side.
         case LeftOuter | LeftAnti =>
-          val allConstraints = getAllConstraints(left, right, conditionOpt)
-          val newRight = inferNewFilter(right, allConstraints)
+          val newRight = if (SQLConf.get.useOptimizedConstraintPropagation) {
+            inferAdditionalNewFilter(right, left.constraints, conditionOpt)
+          } else {
+            val allConstraints = getAllConstraints(left, right, conditionOpt)
+            inferNewFilter(right, allConstraints)
+          }
           join.copy(right = newRight)
-
         case _ => join
       }
   }
@@ -1100,8 +1111,8 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       left: LogicalPlan,
       right: LogicalPlan,
       conditionOpt: Option[Expression]): ExpressionSet = {
-    val baseConstraints = left.constraints.union(right.constraints)
-      .union(ExpressionSet(conditionOpt.map(splitConjunctivePredicates).getOrElse(Nil)))
+    val baseConstraints = left.constraints.union(right.constraints).
+        union(ExpressionSet(conditionOpt.map(splitConjunctivePredicates).getOrElse(Nil)))
     baseConstraints.union(inferAdditionalConstraints(baseConstraints))
   }
 
@@ -1116,6 +1127,159 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
     } else {
       Filter(newPredicates.reduce(And), plan)
     }
+  }
+
+  /**
+   * This function is similar to [[inferNewFilter()]] but it is used to create
+   * new filter of compound predicates for push down on the joining table.
+   * The issue is that when stock spark generates all the combination of
+   * constraints, (i.e with aliases as well as replacing the attribute of say
+   * LHS table with the joining RHS table's join condition), it replaces only one
+   * attribute in a constraint. As a result the constraints of the form of compound
+   * types ( i.e containing more than 1 attributes)are not created for push down.
+   * To elaborate:
+   * if LHS table is ( a, b, c) with projection (a1, a2, b, c) and RHS (x, y, z)
+   * with join condition a1 = x and b = y
+   * and say a constraint of the form a + b > 10 is present on LHS
+   * now stock spark will generate following constraints in expanded form
+   * a + b > 10, a1 +b > 10, a2 + b > 10
+   * since a1 = x , it will also generate
+   * x + b > 10
+   * and since b = y , it will generate
+   * a + y > 10, a1 + y > 10, a2 + y > 10
+   * so the problem is that since it is replacing one join variable at a time,
+   * a compound constraint never gets created. (i.e x + y > 10).
+   * The below code explicitly asks the [[ConstraintSet.getConstraintsSubsetOfAttributes]]
+   * to return the substituted compound constraints if available, for push down.
+   * For stock spark the function is sort of no-op
+   * This function now completely replaces the stock spark's inferNewFilter
+   * for Join cases.
+   * The source of new filters can be grouped in 3 categories
+   * 1) New filters inferred from the conditions present in the join clause
+   * 2) New Filters inferred from the constraints of the other side of
+   * the join node
+   * 3) Not Null filters formed from #1 and #2
+   * case 1 : consider a join condition of type
+   * a == x and b == y and c == z and d == a and d > 13
+   * In the above case d and a are attributes of the same table.
+   * since d == a and a == x and since d > 13, it means x > 13
+   * to get this new filer of type x > 13. the way it it is achieved is
+   1) First using the base equalTo constraints, generate extra equalTo
+   * constraints which means using a == x, b == y,  c == z and d == a,
+   * the [[inferAdditionalConstraints]], will yield a new equality
+   * constraint d == x
+   * 2) Using total equality constraints a == x, b == y,  c == z
+   * and d == a and d ==x [[inferAdditionalConstraints]] , will then be able
+   * to generate  x > 13
+   * 3) Then using total equality constraints, use the otherSide's
+   * constraint to get new filters of single & compound type
+   * (including isnotnull)
+   * 4) Remove the trivial constraints which may come out of above,
+   * that is of the form P == P, but these need to be used to generate
+   * isNotNull constraints.
+   * 5) Using all the constraints available from above #4,
+   * generate any IsNotNull constraints.
+   * 6) For NotNull constraints, if the expression is not of
+   * type attribute, decanonicalize if possible.
+   * 7) All these constraints are checked and pruned if they are
+   * already contained in the thisSide constraint.
+   *
+   * @param plan                Logical Plan on which pushdown filters are needed
+   * @param otherSideConstraint the constraints present on the other side of the join
+   * @param conditionOpt        the conditions in the join clause
+   * @return
+   */
+  private def inferAdditionalNewFilter(plan: LogicalPlan, otherSideConstraint: ExpressionSet,
+    conditionOpt: Option[Expression]): LogicalPlan = {
+    conditionOpt.map(condition => {
+      val predicates = splitConjunctivePredicates(condition)
+      val baseEqualityConstraints = predicates.filter(_.isInstanceOf[EqualTo])
+      val extraEqualityConstraints = inferAdditionalConstraints(
+        ExpressionSet(baseEqualityConstraints))
+      val totalEqualityConstraints = baseEqualityConstraints ++ extraEqualityConstraints
+      val extraOtherConstraints = inferAdditionalConstraints(
+        ExpressionSet(totalEqualityConstraints ++ predicates))
+
+      val allEqualityMappings = totalEqualityConstraints.map { case EqualTo(l, r) => (l, r) }
+      val planOutput = plan.outputSet
+      val validConstraintsFilter = (constraints: Iterable[Expression]) => constraints.filter(x =>
+        x.references.subsetOf(planOutput) && !plan.constraints.contains(x))
+      val isAttributeContainedInAttributeSet = (expr: Expression, superSet: AttributeSet) =>
+        expr.references.subsetOf(superSet)
+
+      val exprsOfOtherSide = allEqualityMappings.flatMap { case (l, r) =>
+        if (!isAttributeContainedInAttributeSet(l, planOutput)) {
+          if (!isAttributeContainedInAttributeSet(r, planOutput)) {
+            Seq(l, r)
+          } else {
+            Seq(l)
+          }
+        } else if (!isAttributeContainedInAttributeSet(r, planOutput)) {
+          Seq(r)
+        } else {
+          Seq.empty[Expression]
+        }
+      }.toSet
+      val mappingsForThisSide = allEqualityMappings.filter{case (lhsExpr, rhsExpr) =>
+        isAttributeContainedInAttributeSet(lhsExpr, planOutput) ||
+          isAttributeContainedInAttributeSet(rhsExpr, planOutput)}
+      val totalNewFilters = if (exprsOfOtherSide.nonEmpty) {
+        val inferredFromOtherConstraint = inferNewConstraintsForThisSideFromOtherSideConstraints(
+          otherSideConstraint, exprsOfOtherSide, mappingsForThisSide)
+        // To generate non trivial constraints which are not of type isNotNull,
+        // the trivial constraints need to be removed. But for generating notnull
+        // constraints , even trivial constraints are needed. for eg
+        // if we have x = x as a condition, then the constraint is trivial,
+        // but it will still generate IsNotNull(x) constraint.
+        // this will be used to generate not null constraints
+        val (trivialConstraints, constraintsPart1) = inferredFromOtherConstraint.partition(expr =>
+          expr match {
+          case EqualNullSafe(x, y) if x.canonicalized == y.canonicalized => true
+          case EqualTo(x, y) if x.canonicalized == y.canonicalized => true
+          case _ => false
+        })
+        val constraintsOfInterest = validConstraintsFilter(ExpressionSet(extraOtherConstraints ++
+          predicates ++ constraintsPart1 ++ extraEqualityConstraints)).flatMap(x => x match {
+          case IsNotNull(_: Attribute) => Seq(x)
+          case IsNotNull(exp: Expression) => validConstraintsFilter(inferIsNotNullConstraints(
+            plan.constraints.rewriteUsingAlias(exp)))
+          case _ => Seq(x)
+        })
+        val newNotNulls = validConstraintsFilter(constructIsNotNullConstraints(ExpressionSet(
+          constraintsOfInterest ++ predicates ++ extraEqualityConstraints ++
+            extraOtherConstraints ++ trivialConstraints), plan.output))
+        constraintsOfInterest ++ newNotNulls
+      } else {
+        val constraintsOfInterest = validConstraintsFilter(ExpressionSet(extraOtherConstraints ++
+          predicates ++ extraEqualityConstraints))
+        constraintsOfInterest ++ validConstraintsFilter(constructIsNotNullConstraints(
+          ExpressionSet(constraintsOfInterest ++ predicates ++ extraEqualityConstraints ++
+            extraOtherConstraints), plan.output))
+      }
+
+      if (totalNewFilters.isEmpty) {
+        plan
+      } else {
+        Filter(totalNewFilters.reduce(And), plan)
+      }
+
+    }).getOrElse(plan)
+  }
+
+  private def inferNewConstraintsForThisSideFromOtherSideConstraints(
+    otherSideConstraint: ExpressionSet, exprsOfOtherSide: Set[Expression],
+    mappingsForThisSide: Seq[(Expression, Expression)]): Seq[Expression] = {
+    otherSideConstraint.getConstraintsSubsetOfAttributes(exprsOfOtherSide).map(
+      expr => expr.transformUp {
+        case _expr: Expression => mappingsForThisSide.find { case (lhsExpr, rhsExpr) =>
+          lhsExpr.canonicalized == _expr.canonicalized ||
+            rhsExpr.canonicalized == _expr.canonicalized
+        }.map { case (lhsExpr, rhsExpr) => if (lhsExpr.canonicalized == _expr.canonicalized) {
+          rhsExpr
+        } else {
+          lhsExpr
+        }}.getOrElse(_expr)
+      })
   }
 }
 

@@ -88,7 +88,6 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
       case udf: PythonUDF =>
         udf.copy(resultId = ExprId(0))
     }
-  }
 
   protected def rewriteNameFromAttrNullability(plan: LogicalPlan): LogicalPlan = {
     plan.transformAllExpressions {
@@ -108,8 +107,8 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
   protected def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     plan transform {
       case Filter(condition: Expression, child: LogicalPlan) =>
-        Filter(splitConjunctivePredicates(condition).map(rewriteBinaryComparison)
-          .sortBy(_.hashCode()).reduce(And), child)
+        Filter(splitConjunctivePredicates(condition).map(rewriteEqualAndComparisons).
+          sortBy(_.hashCode()).reduce(And), child)
       case sample: Sample =>
         sample.copy(seed = 0L)
       case Join(left, right, joinType, condition, hint) if condition.isDefined =>
@@ -121,8 +120,8 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
         }
 
         val newCondition =
-          splitConjunctivePredicates(condition.get).map(rewriteBinaryComparison)
-            .sortBy(_.hashCode()).reduce(And)
+          splitConjunctivePredicates(condition.get).map(rewriteEqualAndComparisons).
+            sortBy(_.hashCode()).reduce(And)
         Join(left, right, newJoinType, Some(newCondition), hint)
     }
   }
@@ -134,13 +133,14 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
    * 2. (a <=> b), (b <=> a).
    * 3. (a > b), (b < a)
    */
-  private def rewriteBinaryComparison(condition: Expression): Expression = condition match {
+  private def rewriteEqualAndComparisons(condition: Expression): Expression = condition match {
     case EqualTo(l, r) => Seq(l, r).sortBy(_.hashCode()).reduce(EqualTo)
     case EqualNullSafe(l, r) => Seq(l, r).sortBy(_.hashCode()).reduce(EqualNullSafe)
     case GreaterThan(l, r) if l.hashCode() > r.hashCode() => LessThan(r, l)
     case LessThan(l, r) if l.hashCode() > r.hashCode() => GreaterThan(r, l)
     case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
     case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
+    case br@BinaryComparison(lhs: Literal, rhs: Expression) => br.reverseOperands()
     case _ => condition // Don't reorder.
   }
 

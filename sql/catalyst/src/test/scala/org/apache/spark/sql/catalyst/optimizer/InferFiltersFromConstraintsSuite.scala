@@ -197,8 +197,16 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
 
   test("constraints should be inferred from aliased literals") {
     val originalLeft = testRelation.subquery('left).as("left")
-    val optimizedLeft = testRelation.subquery('left).where(IsNotNull('a) && 'a <=> 2).as("left")
-
+    val optimizedLeft = if (SQLConf.get.useOptimizedConstraintPropagation) {
+      // The original commented code is slighly inefficient because if IsNotNull(a) is present
+      // then it should not form  'a <=> 2, but 'a === 2 ( i.e use EqualTo rather than
+      // EqualNullsafe
+      // val optimizedLeft = testRelation.subquery('left).where(IsNotNull('a) && 'a <=> 2).
+      // as("left")
+      testRelation.subquery('left).where(IsNotNull('a) && 'a === 2).as("left")
+    } else {
+      testRelation.subquery('left).where(IsNotNull('a) && 'a <=> 2).as("left")
+    }
     val right = Project(Seq(Literal(2).as("two")), testRelation.subquery('right)).as("right")
     val condition = Some("left.a".attr === "right.two".attr)
 

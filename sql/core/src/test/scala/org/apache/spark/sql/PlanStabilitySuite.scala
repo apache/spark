@@ -98,11 +98,20 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
     new File(goldenFilePath, name)
   }
 
-  private def isApproved(
-      dir: File, actualSimplifiedPlan: String, actualExplain: String): Boolean = {
-    val simplifiedFile = new File(dir, "simplified.txt")
-    val expectedSimplified = FileUtils.readFileToString(simplifiedFile, StandardCharsets.UTF_8)
-    lazy val explainFile = new File(dir, "explain.txt")
+  private def isApproved(dir: File, actualSimplifiedPlan: String): Boolean = {
+    val baseFileName = "simplified.txt"
+    val prefix = if (SQLConf.get.useOptimizedConstraintPropagation) {
+      "SPARK-33152_"
+    } else ""
+    val goldenFileName = if (SQLConf.get.useOptimizedConstraintPropagation) {
+       if (new File(dir, prefix + baseFileName).exists()) {
+         prefix + baseFileName
+       } else baseFileName
+    } else baseFileName
+    val file = new File(dir, goldenFileName)
+    val expectedSimplified = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
+    expected == actualSimplifiedPlan
+    val explainFile = new File(dir, "explain.txt")
     lazy val expectedExplain = FileUtils.readFileToString(explainFile, StandardCharsets.UTF_8)
     expectedSimplified == actualSimplifiedPlan && expectedExplain == actualExplain
   }

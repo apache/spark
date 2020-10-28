@@ -19,6 +19,10 @@ package org.apache.spark.sql.catalyst.plans
 
 import java.util.TimeZone
 
+import scala.collection.mutable
+
+import org.scalatest.Ignore
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -28,15 +32,23 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, StringType}
 
+
+/**
+ * This class is extended by OptimizedConstraintSuite and when it runs,  all the tests
+ * of this class also be executed. The ignore is to prevent the tests from running twice
+ * unnecessarily
+ */
+
+@Ignore
 class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
 
-  private def resolveColumn(tr: LocalRelation, columnName: String): Expression =
+  def resolveColumn(tr: LocalRelation, columnName: String): Expression =
     resolveColumn(tr.analyze, columnName)
 
-  private def resolveColumn(plan: LogicalPlan, columnName: String): Expression =
+  def resolveColumn(plan: LogicalPlan, columnName: String): Expression =
     plan.resolveQuoted(columnName, caseInsensitiveResolution).get
 
-  private def verifyConstraints(found: ExpressionSet, expected: ExpressionSet): Unit = {
+  def verifyConstraints(found: ExpressionSet, expected: ExpressionSet): Unit = {
     val missing = expected -- found
     val extra = found -- expected
     if (missing.nonEmpty || extra.nonEmpty) {
@@ -130,14 +142,21 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
     assert(tr.where('c.attr > 10).select('a.as('x), 'b.as('y)).analyze.constraints.isEmpty)
 
     val aliasedRelation = tr.where('a.attr > 10).select('a.as('x), 'b, 'b.as('y), 'a.as('z))
-
-    verifyConstraints(aliasedRelation.analyze.constraints,
-      ExpressionSet(Seq(resolveColumn(aliasedRelation.analyze, "x") > 10,
-        IsNotNull(resolveColumn(aliasedRelation.analyze, "x")),
-        resolveColumn(aliasedRelation.analyze, "b") <=> resolveColumn(aliasedRelation.analyze, "y"),
-        resolveColumn(aliasedRelation.analyze, "z") <=> resolveColumn(aliasedRelation.analyze, "x"),
-        resolveColumn(aliasedRelation.analyze, "z") > 10,
-        IsNotNull(resolveColumn(aliasedRelation.analyze, "z")))))
+    if(SQLConf.get.useOptimizedConstraintPropagation) {
+      verifyConstraints(ExpressionSet(aliasedRelation.analyze.constraints),
+        ExpressionSet(Seq(resolveColumn(aliasedRelation.analyze, "x") > 10,
+          IsNotNull(resolveColumn(aliasedRelation.analyze, "x")))))
+    } else {
+      verifyConstraints(ExpressionSet(aliasedRelation.analyze.constraints),
+        ExpressionSet(Seq(resolveColumn(aliasedRelation.analyze, "x") > 10,
+          IsNotNull(resolveColumn(aliasedRelation.analyze, "x")),
+          resolveColumn(aliasedRelation.analyze, "b") <=>
+            resolveColumn(aliasedRelation.analyze, "y"),
+          resolveColumn(aliasedRelation.analyze, "z") <=>
+            resolveColumn(aliasedRelation.analyze, "x"),
+          resolveColumn(aliasedRelation.analyze, "z") > 10,
+          IsNotNull(resolveColumn(aliasedRelation.analyze, "z")))))
+    }
 
     val multiAlias = tr.where('a === 'c + 10).select('a.as('x), 'c.as('y))
     verifyConstraints(multiAlias.analyze.constraints,
@@ -171,14 +190,21 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
       .where('a.attr > 10)
       .union(tr2.where('d.attr > 11))
       .analyze.constraints,
-      ExpressionSet(Seq(a > 10 || a > 11, IsNotNull(a))))
+      new ConstraintSet(mutable.Buffer((a > 10 || a > 11), IsNotNull(a))))
 
     val b = resolveColumn(tr1, "b")
+
+    val cond1 = a > 10 || a > 11
+    val cond2 = b < 10 || b < 11
+
+    cond1.canonicalized.deterministic
+    cond2.canonicalized.deterministic
     verifyConstraints(tr1
       .where('a.attr > 10 && 'b.attr < 10)
       .union(tr2.where('d.attr > 11 && 'e.attr < 11))
       .analyze.constraints,
-      ExpressionSet(Seq(a > 10 || a > 11, b < 10 || b < 11, IsNotNull(a), IsNotNull(b))))
+      new ConstraintSet(mutable.Buffer(cond1, cond2,
+        IsNotNull(a), IsNotNull(b))))
   }
 
   test("propagating constraints in intersect") {

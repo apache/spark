@@ -252,6 +252,13 @@ object SQLConf {
         "for using switch statements in InSet must be non-negative and less than or equal to 600")
       .createWithDefault(400)
 
+  val OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED =
+    buildConf("spark.sql.optimizer.optimizedConstraintPropagation.enabled")
+    .internal()
+    .doc("use optimized algorithm for constraint propagation")
+    .booleanConf
+    .createWithDefault(true)
+
   val PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
@@ -3301,6 +3308,14 @@ class SQLConf extends Serializable with Logging {
 
   def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
 
+<<<<<<< HEAD
+=======
+  def optimizerLikeAllConversionThreshold: Int = getConf(OPTIMIZER_LIKE_ALL_CONVERSION_THRESHOLD)
+
+  def useOptimizedConstraintPropagation: Boolean =
+    getConf(OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED)
+
+>>>>>>> 862d57aefe... Changes to fix SPARK-33152
   def planChangeLogLevel: String = getConf(PLAN_CHANGE_LOG_LEVEL)
 
   def planChangeRules: Option[String] = getConf(PLAN_CHANGE_LOG_RULES)
