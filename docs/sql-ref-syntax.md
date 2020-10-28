@@ -56,6 +56,7 @@ Spark SQL is Apache Spark's module for working with structured data. The SQL Syn
    * [HAVING Clause](sql-ref-syntax-qry-select-having.html)
    * [Hints](sql-ref-syntax-qry-select-hints.html)
    * [Inline Table](sql-ref-syntax-qry-select-inline-table.html)
+   * [File](sql-ref-syntax-qry-select-file.html)
    * [JOIN](sql-ref-syntax-qry-select-join.html)
    * [LIKE Predicate](sql-ref-syntax-qry-select-like.html)
    * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
