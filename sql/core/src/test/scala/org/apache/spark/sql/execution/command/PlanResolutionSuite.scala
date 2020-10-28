@@ -630,10 +630,10 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   test("drop table") {
-    val tableName1 = "db.tab"
-    val tableIdent1 = TableIdentifier("tab", Option("db"))
-    val tableName2 = "tab"
-    val tableIdent2 = TableIdentifier("tab", Some("default"))
+    val tableName1 = "db.v1Table"
+    val tableIdent1 = TableIdentifier("v1Table", Option("db"))
+    val tableName2 = "v1Table"
+    val tableIdent2 = TableIdentifier("v1Table", Some("default"))
 
     parseResolveCompare(s"DROP TABLE $tableName1",
       DropTableCommand(tableIdent1, ifExists = false, isView = false, purge = false))
@@ -656,13 +656,13 @@ class PlanResolutionSuite extends AnalysisTest {
     val tableIdent2 = Identifier.of(Array.empty, "tab")
 
     parseResolveCompare(s"DROP TABLE $tableName1",
-      DropTable(testCat, tableIdent1, ifExists = false))
+      DropTable(ResolvedTable(testCat, tableIdent1, table), ifExists = false, purge = false))
     parseResolveCompare(s"DROP TABLE IF EXISTS $tableName1",
-      DropTable(testCat, tableIdent1, ifExists = true))
+      DropTable(ResolvedTable(testCat, tableIdent1, table), ifExists = true, purge = false))
     parseResolveCompare(s"DROP TABLE $tableName2",
-      DropTable(testCat, tableIdent2, ifExists = false))
+      DropTable(ResolvedTable(testCat, tableIdent2, table), ifExists = false, purge = false))
     parseResolveCompare(s"DROP TABLE IF EXISTS $tableName2",
-      DropTable(testCat, tableIdent2, ifExists = true))
+      DropTable(ResolvedTable(testCat, tableIdent2, table), ifExists = true, purge = false))
   }
 
   test("drop view") {

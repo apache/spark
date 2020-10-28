@@ -198,9 +198,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         writeOptions = c.writeOptions,
         orCreate = c.orCreate)
 
-    case DropTableStatement(NonSessionCatalogAndTable(catalog, tbl), ifExists, _) =>
-      DropTable(catalog.asTableCatalog, tbl.asIdentifier, ifExists)
-
     case DropViewStatement(NonSessionCatalogAndTable(catalog, viewName), _) =>
       throw new AnalysisException(
         s"Can not specify catalog `${catalog.name}` for view ${viewName.quoted} " +
