@@ -36,8 +36,10 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.internal.config.Network.RPC_NUM_RETRIES
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.count
@@ -815,159 +817,183 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 }
 
 abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
-  extends SparkFunSuite {
+  extends SparkFunSuite with PlanTestBase {
   import StateStoreTestsHelper._
 
-  test("get, put, remove, commit, and all data iterator") {
-    val provider = newStoreProvider()
+  val allCodecs =
+    CompressionCodec.ALL_COMPRESSION_CODECS.map { c => CompressionCodec.getShortName(c) }
 
-    // Verify state before starting a new set of updates
-    assert(getLatestData(provider).isEmpty)
+  allCodecs.foreach { codecShortName =>
+    withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
+      test(s"get, put, remove, commit, and all data iterator - with codec $codecShortName") {
+        val provider = newStoreProvider()
 
-    val store = provider.getStore(0)
-    assert(!store.hasCommitted)
-    assert(get(store, "a") === None)
-    assert(store.iterator().isEmpty)
-    assert(store.metrics.numKeys === 0)
+        // Verify state before starting a new set of updates
+        assert(getLatestData(provider).isEmpty)
 
-    // Verify state after updating
-    put(store, "a", 1)
-    assert(get(store, "a") === Some(1))
-    assert(store.metrics.numKeys === 1)
+        val store = provider.getStore(0)
+        assert(!store.hasCommitted)
+        assert(get(store, "a") === None)
+        assert(store.iterator().isEmpty)
+        assert(store.metrics.numKeys === 0)
 
-    assert(store.iterator().nonEmpty)
-    assert(getLatestData(provider).isEmpty)
+        // Verify state after updating
+        put(store, "a", 1)
+        assert(get(store, "a") === Some(1))
+        assert(store.metrics.numKeys === 1)
 
-    // Make updates, commit and then verify state
-    put(store, "b", 2)
-    put(store, "aa", 3)
-    assert(store.metrics.numKeys === 3)
-    remove(store, _.startsWith("a"))
-    assert(store.metrics.numKeys === 1)
-    assert(store.commit() === 1)
+        assert(store.iterator().nonEmpty)
+        assert(getLatestData(provider).isEmpty)
 
-    assert(store.hasCommitted)
-    assert(rowsToSet(store.iterator()) === Set("b" -> 2))
-    assert(getLatestData(provider) === Set("b" -> 2))
+        // Make updates, commit and then verify state
+        put(store, "b", 2)
+        put(store, "aa", 3)
+        assert(store.metrics.numKeys === 3)
+        remove(store, _.startsWith("a"))
+        assert(store.metrics.numKeys === 1)
+        assert(store.commit() === 1)
 
-    // Trying to get newer versions should fail
-    intercept[Exception] {
-      provider.getStore(2)
-    }
-    intercept[Exception] {
-      getData(provider, 2)
-    }
+        assert(store.hasCommitted)
+        assert(rowsToSet(store.iterator()) === Set("b" -> 2))
+        assert(getLatestData(provider) === Set("b" -> 2))
 
-    // New updates to the reloaded store with new version, and does not change old version
-    val reloadedProvider = newStoreProvider(store.id)
-    val reloadedStore = reloadedProvider.getStore(1)
-    assert(reloadedStore.metrics.numKeys === 1)
-    put(reloadedStore, "c", 4)
-    assert(reloadedStore.metrics.numKeys === 2)
-    assert(reloadedStore.commit() === 2)
-    assert(rowsToSet(reloadedStore.iterator()) === Set("b" -> 2, "c" -> 4))
-    assert(getLatestData(provider) === Set("b" -> 2, "c" -> 4))
-    assert(getData(provider, version = 1) === Set("b" -> 2))
-  }
+        // Trying to get newer versions should fail
+        intercept[Exception] {
+          provider.getStore(2)
+        }
+        intercept[Exception] {
+          getData(provider, 2)
+        }
 
-  test("removing while iterating") {
-    val provider = newStoreProvider()
-
-    // Verify state before starting a new set of updates
-    assert(getLatestData(provider).isEmpty)
-    val store = provider.getStore(0)
-    put(store, "a", 1)
-    put(store, "b", 2)
-
-    // Updates should work while iterating of filtered entries
-    val filtered = store.iterator.filter { tuple => rowToString(tuple.key) == "a" }
-    filtered.foreach { tuple =>
-      store.put(tuple.key, intToRow(rowToInt(tuple.value) + 1))
-    }
-    assert(get(store, "a") === Some(2))
-
-    // Removes should work while iterating of filtered entries
-    val filtered2 = store.iterator.filter { tuple => rowToString(tuple.key) == "b" }
-    filtered2.foreach { tuple => store.remove(tuple.key) }
-    assert(get(store, "b") === None)
-  }
-
-  test("abort") {
-    val provider = newStoreProvider()
-    val store = provider.getStore(0)
-    put(store, "a", 1)
-    store.commit()
-    assert(rowsToSet(store.iterator()) === Set("a" -> 1))
-
-    // cancelUpdates should not change the data in the files
-    val store1 = provider.getStore(1)
-    put(store1, "b", 1)
-    store1.abort()
-  }
-
-  test("getStore with invalid versions") {
-    val provider = newStoreProvider()
-
-    def checkInvalidVersion(version: Int): Unit = {
-      intercept[Exception] {
-        provider.getStore(version)
+        // New updates to the reloaded store with new version, and does not change old version
+        val reloadedProvider = newStoreProvider(store.id)
+        val reloadedStore = reloadedProvider.getStore(1)
+        assert(reloadedStore.metrics.numKeys === 1)
+        put(reloadedStore, "c", 4)
+        assert(reloadedStore.metrics.numKeys === 2)
+        assert(reloadedStore.commit() === 2)
+        assert(rowsToSet(reloadedStore.iterator()) === Set("b" -> 2, "c" -> 4))
+        assert(getLatestData(provider) === Set("b" -> 2, "c" -> 4))
+        assert(getData(provider, version = 1) === Set("b" -> 2))
       }
     }
-
-    checkInvalidVersion(-1)
-    checkInvalidVersion(1)
-
-    val store = provider.getStore(0)
-    put(store, "a", 1)
-    assert(store.commit() === 1)
-    assert(rowsToSet(store.iterator()) === Set("a" -> 1))
-
-    val store1_ = provider.getStore(1)
-    assert(rowsToSet(store1_.iterator()) === Set("a" -> 1))
-
-    checkInvalidVersion(-1)
-    checkInvalidVersion(2)
-
-    // Update store version with some data
-    val store1 = provider.getStore(1)
-    assert(rowsToSet(store1.iterator()) === Set("a" -> 1))
-    put(store1, "b", 1)
-    assert(store1.commit() === 2)
-    assert(rowsToSet(store1.iterator()) === Set("a" -> 1, "b" -> 1))
-
-    checkInvalidVersion(-1)
-    checkInvalidVersion(3)
   }
 
-  test("two concurrent StateStores - one for read-only and one for read-write") {
-    // During Streaming Aggregation, we have two StateStores per task, one used as read-only in
-    // `StateStoreRestoreExec`, and one read-write used in `StateStoreSaveExec`. `StateStore.abort`
-    // will be called for these StateStores if they haven't committed their results. We need to
-    // make sure that `abort` in read-only store after a `commit` in the read-write store doesn't
-    // accidentally lead to the deletion of state.
-    val dir = newDir()
-    val storeId = StateStoreId(dir, 0L, 1)
-    val provider0 = newStoreProvider(storeId)
-    // prime state
-    val store = provider0.getStore(0)
-    val key = "a"
-    put(store, key, 1)
-    store.commit()
-    assert(rowsToSet(store.iterator()) === Set(key -> 1))
+  allCodecs.foreach { codecShortName =>
+    withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
+      test(s"removing while iterating - with codec $codecShortName") {
+        val provider = newStoreProvider()
 
-    // two state stores
-    val provider1 = newStoreProvider(storeId)
-    val restoreStore = provider1.getStore(1)
-    val saveStore = provider1.getStore(1)
+        // Verify state before starting a new set of updates
+        assert(getLatestData(provider).isEmpty)
+        val store = provider.getStore(0)
+        put(store, "a", 1)
+        put(store, "b", 2)
 
-    put(saveStore, key, get(restoreStore, key).get + 1)
-    saveStore.commit()
-    restoreStore.abort()
+        // Updates should work while iterating of filtered entries
+        val filtered = store.iterator.filter { tuple => rowToString(tuple.key) == "a" }
+        filtered.foreach { tuple =>
+          store.put(tuple.key, intToRow(rowToInt(tuple.value) + 1))
+        }
+        assert(get(store, "a") === Some(2))
 
-    // check that state is correct for next batch
-    val provider2 = newStoreProvider(storeId)
-    val finalStore = provider2.getStore(2)
-    assert(rowsToSet(finalStore.iterator()) === Set(key -> 2))
+        // Removes should work while iterating of filtered entries
+        val filtered2 = store.iterator.filter { tuple => rowToString(tuple.key) == "b" }
+        filtered2.foreach { tuple => store.remove(tuple.key) }
+        assert(get(store, "b") === None)
+      }
+    }
+  }
+
+  allCodecs.foreach { codecShortName =>
+    withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
+      test(s"abort - with codec $codecShortName") {
+        val provider = newStoreProvider()
+        val store = provider.getStore(0)
+        put(store, "a", 1)
+        store.commit()
+        assert(rowsToSet(store.iterator()) === Set("a" -> 1))
+
+        // cancelUpdates should not change the data in the files
+        val store1 = provider.getStore(1)
+        put(store1, "b", 1)
+        store1.abort()
+      }
+    }
+  }
+
+  allCodecs.foreach { codecShortName =>
+    withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
+      test(s"getStore with invalid versions - with codec $codecShortName") {
+        val provider = newStoreProvider()
+
+        def checkInvalidVersion(version: Int): Unit = {
+          intercept[Exception] {
+            provider.getStore(version)
+          }
+        }
+
+        checkInvalidVersion(-1)
+        checkInvalidVersion(1)
+
+        val store = provider.getStore(0)
+        put(store, "a", 1)
+        assert(store.commit() === 1)
+        assert(rowsToSet(store.iterator()) === Set("a" -> 1))
+
+        val store1_ = provider.getStore(1)
+        assert(rowsToSet(store1_.iterator()) === Set("a" -> 1))
+
+        checkInvalidVersion(-1)
+        checkInvalidVersion(2)
+
+        // Update store version with some data
+        val store1 = provider.getStore(1)
+        assert(rowsToSet(store1.iterator()) === Set("a" -> 1))
+        put(store1, "b", 1)
+        assert(store1.commit() === 2)
+        assert(rowsToSet(store1.iterator()) === Set("a" -> 1, "b" -> 1))
+
+        checkInvalidVersion(-1)
+        checkInvalidVersion(3)
+      }
+    }
+  }
+
+  allCodecs.foreach { codecShortName =>
+    withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
+      test("two concurrent StateStores - one for read-only and one for read-write " +
+        s"- with codec $codecShortName") {
+        // During Streaming Aggregation, we have two StateStores per task, one used as read-only in
+        // `StateStoreRestoreExec`, and one read-write used in `StateStoreSaveExec`.
+        // `StateStore.abort` will be called for these StateStores if they haven't committed their
+        // results. We need to make sure that `abort` in read-only store after a `commit` in the
+        // read-write store doesn't accidentally lead to the deletion of state.
+        val dir = newDir()
+        val storeId = StateStoreId(dir, 0L, 1)
+        val provider0 = newStoreProvider(storeId)
+        // prime state
+        val store = provider0.getStore(0)
+        val key = "a"
+        put(store, key, 1)
+        store.commit()
+        assert(rowsToSet(store.iterator()) === Set(key -> 1))
+
+        // two state stores
+        val provider1 = newStoreProvider(storeId)
+        val restoreStore = provider1.getStore(1)
+        val saveStore = provider1.getStore(1)
+
+        put(saveStore, key, get(restoreStore, key).get + 1)
+        saveStore.commit()
+        restoreStore.abort()
+
+        // check that state is correct for next batch
+        val provider2 = newStoreProvider(storeId)
+        val finalStore = provider2.getStore(2)
+        assert(rowsToSet(finalStore.iterator()) === Set(key -> 2))
+      }
+    }
   }
 
   /** Return a new provider with a random id */
