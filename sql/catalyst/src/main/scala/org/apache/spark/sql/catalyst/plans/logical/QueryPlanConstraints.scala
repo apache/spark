@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.internal.SQLConf
 
 
 trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
@@ -29,12 +30,14 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
    */
   lazy val constraints: ExpressionSet = {
     if (conf.constraintPropagationEnabled) {
-      validConstraints
-        .union(inferAdditionalConstraints(validConstraints))
-        .union(constructIsNotNullConstraints(validConstraints, output))
-        .filter { c =>
-          c.references.nonEmpty && c.references.subsetOf(outputSet) && c.deterministic
-        }
+      val newConstraints = validConstraints.union(
+        inferAdditionalConstraints(validConstraints)).union(constructIsNotNullConstraints(
+          validConstraints.getConstraintsWithDecanonicalizedNullIntolerant, output))
+      // Removed the criteria  c.references.nonEmpty as it was causing a constraint of the
+      // of the form literal true or false being eliminated, causing idempotency check failure
+      newConstraints.filter(c => c.references.subsetOf(outputSet) && c.deterministic
+      && (c.references.nonEmpty || conf.useOptimizedConstraintPropagation))
+
     } else {
       ExpressionSet()
     }
@@ -48,7 +51,9 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
    *
    * See [[Canonicalize]] for more details.
    */
-  protected lazy val validConstraints: ExpressionSet = ExpressionSet()
+  protected lazy val validConstraints: ExpressionSet =
+       if (SQLConf.get.useOptimizedConstraintPropagation) new ConstraintSet()
+       else ExpressionSet(Set.empty[Expression])
 }
 
 trait ConstraintHelper {
@@ -67,15 +72,17 @@ trait ConstraintHelper {
         val candidateConstraints = predicates - eq
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
+
       case eq @ EqualTo(l @ Cast(_: Attribute, _, _), r: Attribute) =>
         inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
+
       case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _)) =>
         inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
+
       case _ => // No inference
     }
     inferredConstraints -- constraints
   }
-
   private def replaceConstraints(
       constraints: ExpressionSet,
       source: Expression,
@@ -106,7 +113,7 @@ trait ConstraintHelper {
    * Infer the Attribute-specific IsNotNull constraints from the null intolerant child expressions
    * of constraints.
    */
-  private def inferIsNotNullConstraints(constraint: Expression): Seq[Expression] =
+  def inferIsNotNullConstraints(constraint: Expression): Seq[Expression] =
     constraint match {
       // When the root is IsNotNull, we can push IsNotNull through the child null intolerant
       // expressions

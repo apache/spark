@@ -102,7 +102,16 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   }
 
   private def isApproved(dir: File, actualSimplifiedPlan: String): Boolean = {
-    val file = new File(dir, "simplified.txt")
+    val baseFileName = "simplified.txt"
+    val prefix = if (SQLConf.get.useOptimizedConstraintPropagation) {
+      "SPARK-33152_"
+    } else ""
+    val goldenFileName = if (SQLConf.get.useOptimizedConstraintPropagation) {
+       if (new File(dir, prefix + baseFileName).exists()) {
+         prefix + baseFileName
+       } else baseFileName
+    } else baseFileName
+    val file = new File(dir, goldenFileName)
     val expected = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
     expected == actualSimplifiedPlan
   }

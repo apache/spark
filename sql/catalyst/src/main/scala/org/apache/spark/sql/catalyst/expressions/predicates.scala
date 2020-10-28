@@ -772,6 +772,8 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
   }
 
   protected lazy val ordering: Ordering[Any] = TypeUtils.getInterpretedOrdering(left.dataType)
+
+  def reverseOperands(): BinaryComparison
 }
 
 
@@ -828,6 +830,7 @@ case class EqualTo(left: Expression, right: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => ctx.genEqual(left.dataType, c1, c2))
   }
+  def reverseOperands(): BinaryComparison = this
 }
 
 // TODO: although map type is not orderable, technically map type should be able to be used
@@ -888,6 +891,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
         boolean ${ev.value} = (${eval1.isNull} && ${eval2.isNull}) ||
            (!${eval1.isNull} && !${eval2.isNull} && $equalCode);""", isNull = FalseLiteral)
   }
+  def reverseOperands(): BinaryComparison = this
 }
 
 @ExpressionDescription(
@@ -919,6 +923,7 @@ case class LessThan(left: Expression, right: Expression)
   override def symbol: String = "<"
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
+  def reverseOperands(): BinaryComparison = GreaterThan(right, left)
 }
 
 @ExpressionDescription(
@@ -950,6 +955,7 @@ case class LessThanOrEqual(left: Expression, right: Expression)
   override def symbol: String = "<="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
+  def reverseOperands(): BinaryComparison = GreaterThanOrEqual(right, left)
 }
 
 @ExpressionDescription(
@@ -981,6 +987,8 @@ case class GreaterThan(left: Expression, right: Expression)
   override def symbol: String = ">"
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
+
+  def reverseOperands(): BinaryComparison = LessThan(right, left)
 }
 
 @ExpressionDescription(
@@ -1012,6 +1020,7 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
   override def symbol: String = ">="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
+  def reverseOperands(): BinaryComparison = LessThanOrEqual(right, left)
 }
 
 /**
