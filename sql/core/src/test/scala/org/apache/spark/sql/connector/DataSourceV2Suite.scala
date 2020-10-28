@@ -419,7 +419,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       withClue(cls.getName) {
         val df = spark.read.format(cls.getName).load()
         // before SPARK-33267 below query just threw NPE
-        df.select('i).where("i in (1, null)").show()
+        df.select('i).where("i in (1, null)").collect()
       }
     }
   }
