@@ -95,9 +95,6 @@ public class YarnShuffleService extends AuxiliaryService {
   static final String STOP_ON_FAILURE_KEY = "spark.yarn.shuffle.stopOnFailure";
   private static final boolean DEFAULT_STOP_ON_FAILURE = false;
 
-  // Used by shuffle merge manager to create merged shuffle files.
-  protected static final String APP_BASE_RELATIVE_PATH = "usercache/%s/appcache/%s/";
-
   // just for testing when you want to find an open port
   @VisibleForTesting
   static int boundPort = -1;
@@ -130,8 +127,6 @@ public class YarnShuffleService extends AuxiliaryService {
   // Handles registering executors and opening shuffle blocks
   @VisibleForTesting
   ExternalBlockHandler blockHandler;
-  @VisibleForTesting
-  RemoteBlockPushResolver shuffleMergeManager;
 
   // Where to store & reload executor info for recovering state after an NM restart
   @VisibleForTesting
@@ -178,7 +173,7 @@ public class YarnShuffleService extends AuxiliaryService {
       }
 
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
-      shuffleMergeManager = new RemoteBlockPushResolver(transportConf, APP_BASE_RELATIVE_PATH);
+      RemoteBlockPushResolver shuffleMergeManager = new RemoteBlockPushResolver(transportConf);
       blockHandler = new ExternalBlockHandler(
         transportConf, registeredExecutorFile, shuffleMergeManager);
 
@@ -287,7 +282,6 @@ public class YarnShuffleService extends AuxiliaryService {
     } catch (Exception e) {
       logger.error("Exception when initializing application {}", appId, e);
     }
-    shuffleMergeManager.registerApplication(appId, context.getUser());
   }
 
   @Override
@@ -306,7 +300,6 @@ public class YarnShuffleService extends AuxiliaryService {
         secretManager.unregisterApp(appId);
       }
       blockHandler.applicationRemoved(appId, false /* clean up local dirs */);
-      shuffleMergeManager.applicationRemoved(appId, false);
     } catch (Exception e) {
       logger.error("Exception when stopping application {}", appId, e);
     }

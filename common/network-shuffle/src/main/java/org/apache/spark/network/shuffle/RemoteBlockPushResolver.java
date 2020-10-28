@@ -37,6 +37,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.cache.CacheBuilder;
@@ -56,6 +57,7 @@ import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.protocol.Encoders;
+import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
@@ -70,7 +72,8 @@ import org.apache.spark.network.util.TransportConf;
 public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   private static final Logger logger = LoggerFactory.getLogger(RemoteBlockPushResolver.class);
-  private static final String MERGE_MANAGER_DIR = "merge_manager";
+  @VisibleForTesting
+  static final String MERGE_MANAGER_DIR = "merge_manager";
 
   private final ConcurrentMap<String, AppPathsInfo> appsPathInfo;
   private final ConcurrentMap<AppShuffleId, Map<Integer, AppShufflePartitionInfo>> partitions;
@@ -78,14 +81,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   private final Executor directoryCleaner;
   private final TransportConf conf;
   private final int minChunkSize;
-  private final String relativeMergeDirPathPattern;
   private final ErrorHandler.BlockPushErrorHandler errorHandler;
 
   @SuppressWarnings("UnstableApiUsage")
   private final LoadingCache<File, ShuffleIndexInformation> indexCache;
 
   @SuppressWarnings("UnstableApiUsage")
-  public RemoteBlockPushResolver(TransportConf conf, String relativeMergeDirPathPattern) {
+  public RemoteBlockPushResolver(TransportConf conf) {
     this.conf = conf;
     this.partitions = Maps.newConcurrentMap();
     this.appsPathInfo = Maps.newConcurrentMap();
@@ -103,7 +105,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       .maximumWeight(conf.mergedIndexCacheSize())
       .weigher((Weigher<File, ShuffleIndexInformation>) (file, indexInfo) -> indexInfo.getSize())
       .build(indexCacheLoader);
-    this.relativeMergeDirPathPattern = relativeMergeDirPathPattern;
     this.errorHandler = new ErrorHandler.BlockPushErrorHandler();
   }
 
@@ -133,11 +134,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         }
       } catch (IOException e) {
         logger.error(
-          "Cannot create merged shuffle partition {} with shuffle file {}, index file {}, and "
-            + "meta file {}", key, indexFile.getAbsolutePath(),
+          "Cannot create merged shuffle partition with data file {}, index file {}, and "
+            + "meta file {}", dataFile.getAbsolutePath(),
             indexFile.getAbsolutePath(), metaFile.getAbsolutePath());
         throw new RuntimeException(
-          String.format("Cannot initialize merged shuffle partition %s", key.toString()), e);
+          String.format("Cannot initialize merged shuffle partition for appId %s shuffleId %s "
+          + "reduceId %s", appShuffleId.appId, appShuffleId.shuffleId, reduceId), e);
       }
     });
   }
@@ -192,29 +194,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    * The logic here is consistent with
    * org.apache.spark.storage.DiskBlockManager#getMergedShuffleFile
    */
-  // TODO should we use subDirsPerLocalDir to potentially reduce inode size?
   private File getFile(String appId, String filename) {
-    int hash = JavaUtils.nonNegativeHash(filename);
     // TODO: Change the message when this service is able to handle NM restart
     AppPathsInfo appPathsInfo = Preconditions.checkNotNull(appsPathInfo.get(appId),
       "application " + appId + " is not registered or NM was restarted.");
-    Path[] activeLocalDirs = getActiveLocalDirs(appPathsInfo.activeLocalDirs);
-    Path localDir = activeLocalDirs[hash % activeLocalDirs.length];
-    String relativePath = getRelativePath(appPathsInfo.user, appId);
-    Path filePath = localDir.resolve(relativePath);
-    File targetFile = new File(filePath.toFile(), filename);
+    File targetFile = ExecutorDiskUtils.getFile(appPathsInfo.activeLocalDirs,
+      appPathsInfo.subDirsPerLocalDir, filename);
     logger.debug("Get merged file {}", targetFile.getAbsolutePath());
     return targetFile;
-  }
-
-  private Path[] getActiveLocalDirs(String[] activeLocalDirs) {
-    Preconditions.checkNotNull(activeLocalDirs,
-      "Active local dirs list has not been updated by any executor registration");
-    return Arrays.stream(activeLocalDirs).map(localDir -> Paths.get(localDir)).toArray(Path[]::new);
-  }
-
-  private String getRelativePath(String user, String appId) {
-    return String.format(relativeMergeDirPathPattern + MERGE_MANAGER_DIR, user, appId);
   }
 
   private File getMergedShuffleDataFile(AppShuffleId appShuffleId, int reduceId) {
@@ -236,12 +223,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   public String[] getMergedBlockDirs(String appId) {
     AppPathsInfo appPathsInfo = Preconditions.checkNotNull(appsPathInfo.get(appId),
       "application " + appId + " is not registered or NM was restarted.");
-    String[] activeLocalDirs = Preconditions.checkNotNull(appsPathInfo.get(appId).activeLocalDirs,
+    String[] activeLocalDirs = Preconditions.checkNotNull(appPathsInfo.activeLocalDirs,
       "application " + appId
       + " active local dirs list has not been updated by any executor registration");
-    return Arrays.stream(activeLocalDirs)
-      .map(dir -> dir + getRelativePath(appPathsInfo.user, appId))
-      .toArray(String[]::new);
+    return activeLocalDirs;
   }
 
   @Override
@@ -268,17 +253,17 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       }
     }
     if (cleanupLocalDirs) {
-      Path[] dirs = Arrays.stream(getActiveLocalDirs(appPathsInfo.activeLocalDirs))
-        .map(dir -> dir.resolve(getRelativePath(appPathsInfo.user, appId)))
-        .toArray(Path[]::new);
+      Path[] dirs = Arrays.stream(appPathsInfo.activeLocalDirs)
+        .map(dir -> Paths.get(dir)).toArray(Path[]::new);
       directoryCleaner.execute(() -> deleteExecutorDirs(dirs));
     }
   }
 
   /**
-   * Synchronously delete local dirs, executed in a separate thread.
+   * Serially delete local dirs, executed in a separate thread.
    */
-  private void deleteExecutorDirs(Path[] dirs) {
+  @VisibleForTesting
+  void deleteExecutorDirs(Path[] dirs) {
     for (Path localDir : dirs) {
       try {
         if (Files.exists(localDir)) {
@@ -655,23 +640,17 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   }
 
   @Override
-  public void registerApplication(String appId, String user) {
-    logger.debug("register application with RemoteBlockPushResolver {} {}", appId, user);
-    appsPathInfo.putIfAbsent(appId, new AppPathsInfo(user));
-  }
-
-  @Override
-  public void registerExecutor(String appId, String[] localDirs) {
+  public void registerExecutor(String appId, ExecutorShuffleInfo executorInfo) {
     if (logger.isDebugEnabled()) {
-      logger.debug("register executor with RemoteBlockPushResolver {} {}",
-        appId, Arrays.toString(localDirs));
+      logger.debug("register executor with RemoteBlockPushResolver {} local-dirs {} "
+        + "num sub-dirs {}", appId, Arrays.toString(executorInfo.localDirs),
+          executorInfo.subDirsPerLocalDir);
     }
-    Preconditions.checkNotNull(appsPathInfo.get(appId),
-      "application " + appId + " is not registered or NM was restarted.");
+    appsPathInfo.putIfAbsent(appId, new AppPathsInfo());
     appsPathInfo.compute(appId, (targetAppId, appPathsInfo) -> {
       assert appPathsInfo != null;
-      return appPathsInfo.updateActiveLocalDirs(
-        targetAppId, relativeMergeDirPathPattern, localDirs);
+      return appPathsInfo.updateActiveLocalDirs(targetAppId, executorInfo.localDirs,
+        executorInfo.subDirsPerLocalDir);
     });
   }
 
@@ -882,20 +861,19 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    */
   private static class AppPathsInfo {
 
-    private final String user;
     private String[] activeLocalDirs;
-
-    AppPathsInfo(String user) {
-      this.user = Preconditions.checkNotNull(user, "user cannot be null");
-    }
+    private int subDirsPerLocalDir;
 
     private AppPathsInfo updateActiveLocalDirs(
-        String appId, String relativePathPattern, String[] localDirs) {
+        String appId,
+        String[] localDirs,
+        int subDirsPerLocalDir) {
       if (activeLocalDirs == null) {
-        String relativePath = String.format(relativePathPattern, user, appId);
         activeLocalDirs = Arrays.stream(localDirs)
-          .map(localDir -> localDir.substring(0, localDir.indexOf(relativePath)))
+          .map(localDir ->
+            Paths.get(localDir).getParent().resolve(MERGE_MANAGER_DIR).toFile().getPath())
           .toArray(String[]::new);
+        this.subDirsPerLocalDir = subDirsPerLocalDir;
         logger.info("Updated the active local dirs {} for application {}",
           Arrays.toString(activeLocalDirs), appId);
       }

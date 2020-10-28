@@ -21,8 +21,10 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.concurrent.Semaphore;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
@@ -30,6 +32,7 @@ import com.google.common.collect.ImmutableMap;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.roaringbitmap.RoaringBitmap;
@@ -40,6 +43,7 @@ import static org.junit.Assert.*;
 
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.client.StreamCallbackWithID;
+import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
 import org.apache.spark.network.util.MapConfigProvider;
@@ -51,42 +55,33 @@ import org.apache.spark.network.util.TransportConf;
 public class RemoteBlockPushResolverSuite {
 
   private static final Logger log = LoggerFactory.getLogger(RemoteBlockPushResolverSuite.class);
-  private final String MERGE_DIR_RELATIVE_PATH = "usercache/%s/appcache/%s/";
-  private final String TEST_USER = "testUser";
   private final String TEST_APP = "testApp";
   private final String BLOCK_MANAGER_DIR = "blockmgr-193d8401";
 
   private TransportConf conf;
   private RemoteBlockPushResolver pushResolver;
-  private String[] localDirs;
+  private Path[] localDirs;
 
   @Before
   public void before() throws IOException {
-    localDirs = new String[]{Paths.get("target/l1").toAbsolutePath().toString(),
-      Paths.get("target/l2").toAbsolutePath().toString()};
-    cleanupLocalDirs();
+    localDirs = createLocalDirs(2);
     MapConfigProvider provider = new MapConfigProvider(
       ImmutableMap.of("spark.shuffle.server.minChunkSizeInMergedShuffleFile", "4"));
     conf = new TransportConf("shuffle", provider);
-    pushResolver = new RemoteBlockPushResolver(conf, MERGE_DIR_RELATIVE_PATH);
-    registerApplication(TEST_APP, TEST_USER);
-    registerExecutor(TEST_APP, prepareBlockManagerLocalDirs(TEST_APP, TEST_USER, localDirs));
+    pushResolver = new RemoteBlockPushResolver(conf);
+    registerExecutor(TEST_APP, prepareLocalDirs(localDirs));
   }
 
   @After
   public void after() {
     try {
-      cleanupLocalDirs();
+      for (Path local : localDirs) {
+        FileUtils.deleteDirectory(local.toFile());
+      }
       removeApplication(TEST_APP);
     } catch (Exception e) {
       // don't fail if clean up doesn't succeed.
       log.debug("Error while tearing down", e);
-    }
-  }
-
-  private void cleanupLocalDirs() throws IOException {
-    for (String local : localDirs) {
-      FileUtils.deleteDirectory(new File(local));
     }
   }
 
@@ -102,34 +97,27 @@ public class RemoteBlockPushResolverSuite {
 
   @Test
   public void testBasicBlockMerge() throws IOException {
-    PushBlockStream[] pushBlocks = new PushBlockStream[] {
-      new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0),
-      new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0),
-    };
+    String[] pushBlockIds = new String[] {"shuffle_0_0_0", "shuffle_0_1_0"};
     ByteBuffer[] blocks = new ByteBuffer[]{
       ByteBuffer.wrap(new byte[4]),
       ByteBuffer.wrap(new byte[5])
     };
-    pushBlockHelper(TEST_APP, pushBlocks, blocks);
+    pushBlockHelper(TEST_APP, pushBlockIds, blocks);
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0);
     validateChunks(TEST_APP, 0, 0, blockMeta, new int[]{4, 5}, new int[][]{{0}, {1}});
   }
 
   @Test
   public void testDividingMergedBlocksIntoChunks() throws IOException {
-    PushBlockStream[] pushBlocks = new PushBlockStream[] {
-      new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0),
-      new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0),
-      new PushBlockStream(TEST_APP, "shuffle_0_2_0", 0),
-      new PushBlockStream(TEST_APP, "shuffle_0_3_0", 0),
-    };
+    String[] pushBlockIds =
+        new String[] {"shuffle_0_0_0", "shuffle_0_1_0", "shuffle_0_2_0", "shuffle_0_3_0"};
     ByteBuffer[] buffers = new ByteBuffer[]{
       ByteBuffer.wrap(new byte[2]),
       ByteBuffer.wrap(new byte[3]),
       ByteBuffer.wrap(new byte[5]),
       ByteBuffer.wrap(new byte[3])
     };
-    pushBlockHelper(TEST_APP, pushBlocks, buffers);
+    pushBlockHelper(TEST_APP, pushBlockIds, buffers);
     MergedBlockMeta meta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0);
     validateChunks(TEST_APP, 0, 0, meta, new int[]{5, 5, 3}, new int[][]{{0, 1}, {2}, {3}});
   }
@@ -310,7 +298,7 @@ public class RemoteBlockPushResolverSuite {
 
   @Test
   public void testIncompleteStreamsAreOverwritten() throws IOException {
-    registerExecutor(TEST_APP, prepareBlockManagerLocalDirs(TEST_APP, TEST_USER, localDirs));
+    registerExecutor(TEST_APP, prepareLocalDirs(localDirs));
     PushBlockStream pbStream1 = new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0);
     StreamCallbackWithID stream1 =
       pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, pbStream1.blockId, 0));
@@ -371,23 +359,18 @@ public class RemoteBlockPushResolverSuite {
   @Test(expected = NullPointerException.class)
   public void testUpdateLocalDirsOnlyOnce() throws IOException {
     String testApp = "updateLocalDirsOnlyOnceTest";
-    registerApplication(testApp, TEST_USER);
-    String[] activeLocalDirs = Arrays.stream(localDirs).skip(1).toArray(String[]::new);
-    registerExecutor(testApp, prepareBlockManagerLocalDirs(testApp, TEST_USER, activeLocalDirs));
+    Path[] activeLocalDirs = createLocalDirs(1);
+    registerExecutor(testApp, prepareLocalDirs(activeLocalDirs));
     assertEquals(pushResolver.getMergedBlockDirs(testApp).length, 1);
     assertTrue(pushResolver.getMergedBlockDirs(testApp)[0].contains(
-      "l2/usercache/" + TEST_USER + "/appcache/" + testApp + "/merge_manager"));
-    // Any later app init or executor register from the same application
-    // won't change the active local dirs list
-    registerApplication(testApp, TEST_USER);
+      activeLocalDirs[0].toFile().getPath()));
+    // Any later executor register from the same application should not change the active local
+    // dirs list
+    Path[] updatedLocalDirs = localDirs;
+    registerExecutor(testApp, prepareLocalDirs(updatedLocalDirs));
     assertEquals(pushResolver.getMergedBlockDirs(testApp).length, 1);
     assertTrue(pushResolver.getMergedBlockDirs(testApp)[0].contains(
-      "l2/usercache/" + TEST_USER + "/appcache/" + testApp + "/merge_manager"));
-    activeLocalDirs = Arrays.stream(localDirs).toArray(String[]::new);
-    registerExecutor(testApp, prepareBlockManagerLocalDirs(testApp, TEST_USER, activeLocalDirs));
-    assertEquals(pushResolver.getMergedBlockDirs(testApp).length, 1);
-    assertTrue(pushResolver.getMergedBlockDirs(testApp)[0].contains(
-      "l2/usercache/" + TEST_USER + "/appcache/" + testApp + "/merge_manager"));
+      activeLocalDirs[0].toFile().getPath()));
     removeApplication(testApp);
     try {
       pushResolver.getMergedBlockDirs(testApp);
@@ -398,25 +381,56 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  /**
-   * Registers the app with RemoteBlockPushResolver.
-   */
-  private void registerApplication(String appId, String user) throws IOException {
-    pushResolver.registerApplication(appId, user);
-  }
-
-  private void registerExecutor(String appId, String[] localDirs) throws IOException {
-    pushResolver.registerExecutor(appId, localDirs);
-    for (String localDir : pushResolver.getMergedBlockDirs(appId)) {
-      Files.createDirectories(Paths.get(localDir));
+  @Test
+  public void testCleanUpDirectory() throws IOException, InterruptedException {
+    String testApp = "cleanUpDirectory";
+    Semaphore deleted = new Semaphore(0);
+    pushResolver = new RemoteBlockPushResolver(conf) {
+      @Override
+      void deleteExecutorDirs(Path[] dirs) {
+        super.deleteExecutorDirs(dirs);
+        deleted.release();
+      }
+    };
+    Path[] activeDirs = createLocalDirs(1);
+    registerExecutor(testApp, prepareLocalDirs(activeDirs));
+    String[] pushBlockIds = new String[] {"shuffle_0_0_0"};
+    ByteBuffer[] blocks = new ByteBuffer[] {ByteBuffer.wrap(new byte[4])};
+    pushBlockHelper(testApp, pushBlockIds, blocks);
+    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(testApp, 0, 0);
+    validateChunks(testApp, 0, 0, blockMeta, new int[]{4}, new int[][]{{0}});
+    String[] mergeDirs = pushResolver.getMergedBlockDirs(testApp);
+    pushResolver.applicationRemoved(testApp,  true);
+    // Since the cleanup happen in a different thread, check few times to see if the merge dirs gets
+    // deleted.
+    deleted.acquire();
+    for (String mergeDir : mergeDirs) {
+      Assert.assertFalse(Files.exists(Paths.get(mergeDir)));
     }
   }
 
-  private String[] prepareBlockManagerLocalDirs(String appId, String user, String[] localDirs){
-    return Arrays.stream(localDirs)
-      .map(localDir ->
-        localDir + "/" + String.format(MERGE_DIR_RELATIVE_PATH + BLOCK_MANAGER_DIR, user, appId))
-      .toArray(String[]::new);
+  private Path[] createLocalDirs(int numLocalDirs) throws IOException {
+    Path[] localDirs = new Path[numLocalDirs];
+    for (int i = 0; i < localDirs.length; i++) {
+      localDirs[i] = Files.createTempDirectory("shuffleMerge");
+      localDirs[i].toFile().deleteOnExit();
+    }
+    return localDirs;
+  }
+
+  private void registerExecutor(String appId, String[] localDirs) throws IOException {
+    ExecutorShuffleInfo shuffleInfo = new ExecutorShuffleInfo(localDirs, 1, "mergedShuffle");
+    pushResolver.registerExecutor(appId, shuffleInfo);
+  }
+
+  private String[] prepareLocalDirs(Path[] localDirs) throws IOException {
+    String[] blockMgrDirs = new String[localDirs.length];
+    for (int i = 0; i< localDirs.length; i++) {
+      Files.createDirectories(localDirs[i].resolve(
+        RemoteBlockPushResolver.MERGE_MANAGER_DIR + File.separator + "00"));
+      blockMgrDirs[i] = localDirs[i].toFile().getPath() + File.separator + BLOCK_MANAGER_DIR;
+    }
+    return blockMgrDirs;
   }
 
   private void removeApplication(String appId) {
@@ -448,12 +462,12 @@ public class RemoteBlockPushResolverSuite {
 
   private void pushBlockHelper(
       String appId,
-      PushBlockStream[] pushBlocks,
+      String[] blockIds,
       ByteBuffer[] blocks) throws IOException {
-    Preconditions.checkArgument(pushBlocks.length == blocks.length);
-    for (int i = 0; i < pushBlocks.length; i++) {
+    Preconditions.checkArgument(blockIds.length == blocks.length);
+    for (int i = 0; i < blockIds.length; i++) {
       StreamCallbackWithID stream = pushResolver.receiveBlockDataAsStream(
-        new PushBlockStream(appId, pushBlocks[i].blockId, 0));
+        new PushBlockStream(appId, blockIds[i], 0));
       stream.onData(stream.getID(), blocks[i]);
       stream.onComplete(stream.getID());
     }

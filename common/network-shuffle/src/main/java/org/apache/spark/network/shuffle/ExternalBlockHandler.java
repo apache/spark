@@ -175,7 +175,7 @@ public class ExternalBlockHandler extends RpcHandler {
         RegisterExecutor msg = (RegisterExecutor) msgObj;
         checkAuth(client, msg.appId);
         blockManager.registerExecutor(msg.appId, msg.execId, msg.executorInfo);
-        mergeManager.registerExecutor(msg.appId, msg.executorInfo.localDirs);
+        mergeManager.registerExecutor(msg.appId, msg.executorInfo);
         callback.onSuccess(ByteBuffer.wrap(new byte[0]));
       } finally {
         responseDelayContext.stop();
@@ -232,6 +232,7 @@ public class ExternalBlockHandler extends RpcHandler {
    */
   public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
     blockManager.applicationRemoved(appId, cleanupLocalDirs);
+    mergeManager.applicationRemoved(appId, cleanupLocalDirs);
   }
 
   /**
@@ -444,12 +445,7 @@ public class ExternalBlockHandler extends RpcHandler {
     }
 
     @Override
-    public void registerApplication(String appId, String user) {
-      // No-op. Do nothing.
-    }
-
-    @Override
-    public void registerExecutor(String appId, String[] localDirs) {
+    public void registerExecutor(String appId, ExecutorShuffleInfo executorInfo) {
       // No-Op. Do nothing.
     }
 
