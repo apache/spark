@@ -308,10 +308,12 @@ class DataFrameReader(OptionUtils):
         pathGlobFilter : str or bool, optional
             an optional glob pattern to only include files with paths matching
             the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-            It does not change the behavior of `partition discovery`_.
+            It does not change the behavior of
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
         recursiveFileLookup : str or bool, optional
             recursively scan a directory for files. Using this option
-            disables `partition discovery`_.
+            disables
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
         allowNonNumericNumbers : str or bool
             allows JSON parser to recognize set of "Not-a-Number" (NaN)
             tokens as legal floating number values. If None is set,
