@@ -133,7 +133,7 @@ class DataFrameReader(OptionUtils):
         column: str,
         lowerBound: Union[int, str],
         upperBound: Union[int, str],
-        numPartitions: Union[int, str],
+        numPartitions: int,
         *,
         properties: Optional[Dict[str, str]] = ...
     ) -> DataFrame: ...
