@@ -54,11 +54,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
         s"mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true&useSSL=false"
   }
 
-  override def sparkConf: SparkConf = {
-    super.sparkConf
+  override def sparkConf: SparkConf = super.sparkConf
       .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
       .set("spark.sql.catalog.mysql.url", db.getJdbcUrl(dockerIp, externalPort))
-  }
 
   override val connectionTimeout = timeout(7.minutes)
 
@@ -85,7 +83,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   }
 
   override def testRenameColumn(tbl: String): Unit = {
-    assert( mySQLVersion > 0)
+    assert(mySQLVersion > 0)
     if (mySQLVersion < 8) {
       sql(s"CREATE TABLE $tbl (ID STRING NOT NULL) USING _")
       // Rename is unsupported for mysql versions < 8.0.
