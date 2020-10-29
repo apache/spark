@@ -80,6 +80,18 @@ class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
     }
   }
 
+  test("SPARK-33098: Don't push partition filter with mismatched datatypes to metastore") {
+    withTable("t") {
+      sql("create table t (a int) partitioned by (b int) stored as parquet")
+
+      // There's only one test case because TestHiveSparkSession sets
+      // hive.metastore.integral.jdo.pushdown=true, which, as a side effect, prevents
+      // the Metaexception for most of the problem cases. Only the case below still throws
+      // a MetaException when Hive is configured this way
+      sql("select * from t where cast(b as string) > '1'").show(false)
+    }
+  }
+
   override def getScanExecPartitionSize(plan: SparkPlan): Long = {
     plan.collectFirst {
       case p: HiveTableScanExec => p
