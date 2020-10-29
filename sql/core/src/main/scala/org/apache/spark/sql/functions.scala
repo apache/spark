@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.DataType.withFallback
+import org.apache.spark.sql.types.DataType.parseTypeWithFallback
 import org.apache.spark.util.Utils
 
 /**
@@ -4101,11 +4101,11 @@ object functions {
    * @since 2.3.0
    */
   def from_json(e: Column, schema: String, options: Map[String, String]): Column = {
-    val dataType = withFallback(
+    val dataType = parseTypeWithFallback(
       schema,
       DataType.fromJson,
       "Cannot parse the schema in JSON format:",
-      fallback = DataType.fromDDL)
+      fallbackParser = DataType.fromDDL)
     from_json(e, dataType, options)
   }
 

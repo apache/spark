@@ -126,40 +126,39 @@ object DataType {
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
 
   def fromDDL(ddl: String): DataType = {
-    withFallback(
+    parseTypeWithFallback(
       ddl,
       CatalystSqlParser.parseDataType,
       "Cannot parse the data type:",
-      fallback = CatalystSqlParser.parseTableSchema)
+      fallbackParser = CatalystSqlParser.parseTableSchema)
   }
 
   /**
-   * Parses data type from a string with schema. It calls `f` for `input`.
-   * If it fails, calls `fallback`. If the fallback function fails too, combines error message
-   * from `f` and `fallback`.
+   * Parses data type from a string with schema. It calls `parser` for `schema`.
+   * If it fails, calls `fallbackParser`. If the fallback function fails too, combines error message
+   * from `parser` and `fallbackParser`.
    *
-   * @param input The input for `f` and `fallback`. For example, `input` can contain a schema
-   *              string to parse.
-   * @param f The function that should be invoke firstly.
-   * @param msg The error message for `f`.
-   * @param fallback The function that is called when `f` fails.
-   * @return The data type parsed from the `input` schema.
+   * @param schema The schema string to parse by `parser` or `fallbackParser`.
+   * @param parser The function that should be invoke firstly.
+   * @param errorMsg The error message for `parser`.
+   * @param fallbackParser The function that is called when `parser` fails.
+   * @return The data type parsed from the `schema` schema.
    */
-  def withFallback(
-      input: String,
-      f: String => DataType,
-      msg: String,
-      fallback: String => DataType): DataType = {
+  def parseTypeWithFallback(
+      schema: String,
+      parser: String => DataType,
+      errorMsg: String,
+      fallbackParser: String => DataType): DataType = {
     try {
-      f(input)
+      parser(schema)
     } catch {
       case NonFatal(e1) =>
         try {
-          fallback(input)
+          fallbackParser(schema)
         } catch {
           case NonFatal(e2) =>
             throw new AnalysisException(
-              message = s"$msg\n${e1.getMessage}\n${e2.getMessage}",
+              message = s"$errorMsg\n${e1.getMessage}\n${e2.getMessage}",
               cause = Some(e1.getCause))
         }
     }
