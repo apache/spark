@@ -33,13 +33,20 @@ select from_csv('1', 'a InvalidType')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
+Cannot parse the data type: 
+extraneous input 'InvalidType' expecting <EOF>(line 1, pos 2)
 
+== SQL ==
+a InvalidType
+--^^^
+
+Failed fallback parsing: 
 DataType invalidtype is not supported.(line 1, pos 2)
 
 == SQL ==
 a InvalidType
 --^^^
-; line 1 pos 7
+;; line 1 pos 7
 
 
 -- !query
