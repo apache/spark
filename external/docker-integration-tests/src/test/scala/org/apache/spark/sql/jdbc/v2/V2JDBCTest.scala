@@ -47,17 +47,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
   }
 
   def testRenameColumn(tbl: String): Unit = {
-    sql(s"CREATE TABLE $tbl (ID STRING NOT NULL, ID1 STRING NOT NULL) USING _")
-    sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO ID2")
+    sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO RENAMED")
     val t = spark.table(s"$tbl")
-    val expectedSchema = new StructType().add("ID2", StringType, nullable = true)
-      .add("ID1", StringType, nullable = true)
+    val expectedSchema = new StructType().add("RENAMED", StringType, nullable = true)
+      .add("ID1", StringType, nullable = true).add("ID2", StringType, nullable = true)
     assert(t.schema === expectedSchema)
-    // Rename to already existing column
-    val msg = intercept[AnalysisException] {
-      sql(s"ALTER TABLE $tbl RENAME COLUMN ID1 TO ID2")
-    }.getMessage
-    assert(msg.contains("Cannot rename column, because ID2 already exists"))
   }
 
   test("SPARK-33034: ALTER TABLE ... add new columns") {
@@ -126,7 +120,24 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
 
   test("SPARK-33034: ALTER TABLE ... rename column") {
     withTable(s"$catalogName.alt_table") {
+      sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL," +
+        s" ID1 STRING NOT NULL, ID2 STRING NOT NULL) USING _")
       testRenameColumn(s"$catalogName.alt_table")
+      // Rename to already existing column
+      val msg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $catalogName.alt_table RENAME COLUMN ID1 TO ID2")
+      }.getMessage
+      assert(msg.contains("Cannot rename column, because ID2 already exists"))
+      // Rename to a missing column
+      val msg2 = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $catalogName.alt_table RENAME COLUMN ID2 TO MISSING")
+      }.getMessage
+      assert(msg.contains("Cannot rename column, because ID2 already exists"))
+      // Rename a missing column
+      val msg3 = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $catalogName.alt_table RENAME COLUMN MISSING TO ID2")
+      }.getMessage
+      assert(msg.contains("Cannot rename column, because ID2 already exists"))
     }
     // Rename a column in a not existing table
     val msg = intercept[AnalysisException] {

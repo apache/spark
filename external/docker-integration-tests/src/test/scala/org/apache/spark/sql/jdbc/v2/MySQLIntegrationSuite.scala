@@ -85,11 +85,12 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override def testRenameColumn(tbl: String): Unit = {
     assert(mySQLVersion > 0)
     if (mySQLVersion < 8) {
-      sql(s"CREATE TABLE $tbl (ID STRING NOT NULL) USING _")
       // Rename is unsupported for mysql versions < 8.0.
-      val msg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO ID2")
-      }.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
+      val exception = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO RENAMED")
+      }
+      assert(exception.getCause != null, s"Unexcpected exception: $exception")
+      val msg = exception.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
       assert(msg.contains("Rename column is only supported for MySQL version 8.0 and above."))
     } else {
       super.testRenameColumn(tbl)
