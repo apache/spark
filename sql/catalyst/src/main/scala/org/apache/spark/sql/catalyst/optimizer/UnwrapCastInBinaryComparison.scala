@@ -35,17 +35,31 @@ import org.apache.spark.sql.types._
  * to be optimized away later and pushed down to data sources.
  *
  * Currently this only handles cases where:
- *   1). `fromType` (of `fromExp`) and `toType` are of integral types (i.e., byte, short, int and
- *     long)
+ *   1). `fromType` (of `fromExp`) and `toType` are of numeric types (i.e., short, int, float,
+ *     decimal, etc)
  *   2). `fromType` can be safely coerced to `toType` without precision loss (e.g., short to int,
  *     int to long, but not long to int)
  *
  * If the above conditions are satisfied, the rule checks to see if the literal `value` is within
  * range `(min, max)`, where `min` and `max` are the minimum and maximum value of `fromType`,
- * respectively. If this is true then it means we can safely cast `value` to `fromType` and thus
+ * respectively. If this is true then it means we may safely cast `value` to `fromType` and thus
  * able to move the cast to the literal side. That is:
  *
  *   `cast(fromExp, toType) op value` ==> `fromExp op cast(value, fromType)`
+ *
+ * Note there are some exceptions to the above: if casting from `value` to `fromType` causes
+ * rounding up or down, the above conversion will no longer be valid. Instead, the rule does the
+ * following:
+ *
+ * if casting `value` to `fromType` causes rounding up:
+ *  - `cast(fromExp, toType) > value` ==> `fromExp >= cast(value, fromType)`
+ *  - `cast(fromExp, toType) >= value` ==> `fromExp >= cast(value, fromType)`
+ *  - `cast(fromExp, toType) === value` ==> if(isnull(fromExp), null, false)
+ *  - `cast(fromExp, toType) <=> value` ==> false (if `fromExp` is deterministic)
+ *  - `cast(fromExp, toType) <= value` ==> `fromExp < cast(value, fromType)`
+ *  - `cast(fromExp, toType) < value` ==> `fromExp < cast(value, fromType)`
+ *
+ * Similarly for the case when casting `value` to `fromType` causes rounding down.
  *
  * If the `value` is not within range `(min, max)`, the rule breaks the scenario into different
  * cases and try to replace each with simpler constructs.
@@ -55,8 +69,6 @@ import org.apache.spark.sql.types._
  *  - `cast(fromExp, toType) >= value` ==> if(isnull(fromExp), null, false)
  *  - `cast(fromExp, toType) === value` ==> if(isnull(fromExp), null, false)
  *  - `cast(fromExp, toType) <=> value` ==> false (if `fromExp` is deterministic)
- *  - `cast(fromExp, toType) <=> value` ==> cast(fromExp, toType) <=> value (if `fromExp` is
- *       non-deterministic)
  *  - `cast(fromExp, toType) <= value` ==> if(isnull(fromExp), null, true)
  *  - `cast(fromExp, toType) < value` ==> if(isnull(fromExp), null, true)
  *
@@ -100,12 +112,12 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
 
       swap(unwrapCast(swap(exp)))
 
-    // In case both sides have integral type, optimize the comparison by removing casts or
+    // In case both sides have numeric type, optimize the comparison by removing casts or
     // moving cast to the literal side.
     case be @ BinaryComparison(
-      Cast(fromExp, toType: IntegralType, _), Literal(value, literalType))
+      Cast(fromExp, toType: NumericType, _), Literal(value, literalType))
         if canImplicitlyCast(fromExp, toType, literalType) =>
-      simplifyIntegralComparison(be, fromExp, toType, value)
+      simplifyNumericComparison(be, fromExp, toType, value)
 
     case _ => exp
   }
@@ -116,75 +128,93 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
    * optimizes the expression by moving the cast to the literal side. Otherwise if result is not
    * true, this replaces the input binary comparison `exp` with simpler expressions.
    */
-  private def simplifyIntegralComparison(
+  private def simplifyNumericComparison(
       exp: BinaryComparison,
       fromExp: Expression,
-      toType: IntegralType,
+      toType: NumericType,
       value: Any): Expression = {
 
     val fromType = fromExp.dataType
-    val (min, max) = getRange(fromType)
-    val (minInToType, maxInToType) = {
-      (Cast(Literal(min), toType).eval(), Cast(Literal(max), toType).eval())
-    }
     val ordering = toType.ordering.asInstanceOf[Ordering[Any]]
-    val minCmp = ordering.compare(value, minInToType)
-    val maxCmp = ordering.compare(value, maxInToType)
+    val range = getRange(fromType)
 
-    if (maxCmp > 0) {
-      exp match {
-        case EqualTo(_, _) | GreaterThan(_, _) | GreaterThanOrEqual(_, _) =>
-          falseIfNotNull(fromExp)
-        case LessThan(_, _) | LessThanOrEqual(_, _) =>
-          trueIfNotNull(fromExp)
-        // make sure the expression is evaluated if it is non-deterministic
-        case EqualNullSafe(_, _) if exp.deterministic =>
-          FalseLiteral
-        case _ => exp
+    if (range.isDefined) {
+      val (min, max) = range.get
+      val (minInToType, maxInToType) = {
+        (Cast(Literal(min), toType).eval(), Cast(Literal(max), toType).eval())
       }
-    } else if (maxCmp == 0) {
-      exp match {
-        case GreaterThan(_, _) =>
-          falseIfNotNull(fromExp)
-        case LessThanOrEqual(_, _) =>
-          trueIfNotNull(fromExp)
-        case LessThan(_, _) =>
-          Not(EqualTo(fromExp, Literal(max, fromType)))
-        case GreaterThanOrEqual(_, _) | EqualTo(_, _) =>
-          EqualTo(fromExp, Literal(max, fromType))
-        case EqualNullSafe(_, _) =>
-          EqualNullSafe(fromExp, Literal(max, fromType))
-        case _ => exp
+      val minCmp = ordering.compare(value, minInToType)
+      val maxCmp = ordering.compare(value, maxInToType)
+
+      if (maxCmp >= 0 || minCmp <= 0) {
+        return if (maxCmp > 0) {
+          exp match {
+            case EqualTo(_, _) | GreaterThan(_, _) | GreaterThanOrEqual(_, _) =>
+              falseIfNotNull(fromExp)
+            case LessThan(_, _) | LessThanOrEqual(_, _) =>
+              trueIfNotNull(fromExp)
+            // make sure the expression is evaluated if it is non-deterministic
+            case EqualNullSafe(_, _) if exp.deterministic =>
+              FalseLiteral
+            case _ => exp
+          }
+        } else if (maxCmp == 0) {
+          exp match {
+            case GreaterThan(_, _) =>
+              falseIfNotNull(fromExp)
+            case LessThanOrEqual(_, _) =>
+              trueIfNotNull(fromExp)
+            case LessThan(_, _) =>
+              Not(EqualTo(fromExp, Literal(max, fromType)))
+            case GreaterThanOrEqual(_, _) | EqualTo(_, _) =>
+              EqualTo(fromExp, Literal(max, fromType))
+            case EqualNullSafe(_, _) =>
+              EqualNullSafe(fromExp, Literal(max, fromType))
+            case _ => exp
+          }
+        } else if (minCmp < 0) {
+          exp match {
+            case GreaterThan(_, _) | GreaterThanOrEqual(_, _) =>
+              trueIfNotNull(fromExp)
+            case LessThan(_, _) | LessThanOrEqual(_, _) | EqualTo(_, _) =>
+              falseIfNotNull(fromExp)
+            // make sure the expression is evaluated if it is non-deterministic
+            case EqualNullSafe(_, _) if exp.deterministic =>
+              FalseLiteral
+            case _ => exp
+          }
+        } else { // minCmp == 0
+          exp match {
+            case LessThan(_, _) =>
+              falseIfNotNull(fromExp)
+            case GreaterThanOrEqual(_, _) =>
+              trueIfNotNull(fromExp)
+            case GreaterThan(_, _) =>
+              Not(EqualTo(fromExp, Literal(min, fromType)))
+            case LessThanOrEqual(_, _) | EqualTo(_, _) =>
+              EqualTo(fromExp, Literal(min, fromType))
+            case EqualNullSafe(_, _) =>
+              EqualNullSafe(fromExp, Literal(min, fromType))
+            case _ => exp
+          }
+        }
       }
-    } else if (minCmp < 0) {
-      exp match {
-        case GreaterThan(_, _) | GreaterThanOrEqual(_, _) =>
-          trueIfNotNull(fromExp)
-        case LessThan(_, _) | LessThanOrEqual(_, _) | EqualTo(_, _) =>
-          falseIfNotNull(fromExp)
-        // make sure the expression is evaluated if it is non-deterministic
-        case EqualNullSafe(_, _) if exp.deterministic =>
-          FalseLiteral
-        case _ => exp
-      }
-    } else if (minCmp == 0) {
-      exp match {
-        case LessThan(_, _) =>
-          falseIfNotNull(fromExp)
-        case GreaterThanOrEqual(_, _) =>
-          trueIfNotNull(fromExp)
-        case GreaterThan(_, _) =>
-          Not(EqualTo(fromExp, Literal(min, fromType)))
-        case LessThanOrEqual(_, _) | EqualTo(_, _) =>
-          EqualTo(fromExp, Literal(min, fromType))
-        case EqualNullSafe(_, _) =>
-          EqualNullSafe(fromExp, Literal(min, fromType))
-        case _ => exp
-      }
-    } else {
-      // This means `value` is within range `(min, max)`. Optimize this by moving the cast to the
-      // literal side.
-      val lit = Literal(Cast(Literal(value), fromType).eval(), fromType)
+    }
+
+    // When we reach to this point, it means either there is no min/max for the `fromType` (e.g.,
+    // decimal type), or that the literal `value` is within range `(min, max)`. For these, we
+    // optimize by moving the cast to the literal side.
+
+    val newValue = Cast(Literal(value), fromType).eval()
+    if (newValue == null) {
+      // This means the cast failed, for instance, due to the value is not representable in the
+      // narrower type. In this case we simply return the original expression.
+      return exp
+    }
+    val valueRoundTrip = Cast(Literal(newValue, fromType), toType).eval()
+    val lit = Literal(newValue, fromType)
+    val cmp = ordering.compare(value, valueRoundTrip)
+    if (cmp == 0) {
       exp match {
         case GreaterThan(_, _) => GreaterThan(fromExp, lit)
         case GreaterThanOrEqual(_, _) => GreaterThanOrEqual(fromExp, lit)
@@ -194,13 +224,31 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case LessThanOrEqual(_, _) => LessThanOrEqual(fromExp, lit)
         case _ => exp
       }
+    } else if (cmp < 0) {
+      // This means the literal value is rounded up after casting to `fromType`
+      exp match {
+        case EqualTo(_, _) => falseIfNotNull(fromExp)
+        case EqualNullSafe(_, _) if fromExp.deterministic => FalseLiteral
+        case GreaterThan(_, _) | GreaterThanOrEqual(_, _) => GreaterThanOrEqual(fromExp, lit)
+        case LessThan(_, _) | LessThanOrEqual(_, _) => LessThan(fromExp, lit)
+        case _ => exp
+      }
+    } else {
+      // This means the literal value is rounded down after casting to `fromType`
+      exp match {
+        case EqualTo(_, _) => falseIfNotNull(fromExp)
+        case EqualNullSafe(_, _) => FalseLiteral
+        case GreaterThan(_, _) | GreaterThanOrEqual(_, _) => GreaterThan(fromExp, lit)
+        case LessThan(_, _) | LessThanOrEqual(_, _) => LessThanOrEqual(fromExp, lit)
+        case _ => exp
+      }
     }
   }
 
   /**
    * Check if the input `fromExp` can be safely cast to `toType` without any loss of precision,
    * i.e., the conversion is injective. Note this only handles the case when both sides are of
-   * integral type.
+   * numeric type.
    */
   private def canImplicitlyCast(
       fromExp: Expression,
@@ -208,17 +256,19 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       literalType: DataType): Boolean = {
     toType.sameType(literalType) &&
       !fromExp.foldable &&
-      fromExp.dataType.isInstanceOf[IntegralType] &&
-      toType.isInstanceOf[IntegralType] &&
+      fromExp.dataType.isInstanceOf[NumericType] &&
+      toType.isInstanceOf[NumericType] &&
       Cast.canUpCast(fromExp.dataType, toType)
   }
 
-  private def getRange(dt: DataType): (Any, Any) = dt match {
-    case ByteType => (Byte.MinValue, Byte.MaxValue)
-    case ShortType => (Short.MinValue, Short.MaxValue)
-    case IntegerType => (Int.MinValue, Int.MaxValue)
-    case LongType => (Long.MinValue, Long.MaxValue)
-    case other => throw new IllegalArgumentException(s"Unsupported type: ${other.catalogString}")
+  private[optimizer] def getRange(dt: DataType): Option[(Any, Any)] = dt match {
+    case ByteType => Some((Byte.MinValue, Byte.MaxValue))
+    case ShortType => Some((Short.MinValue, Short.MaxValue))
+    case IntegerType => Some((Int.MinValue, Int.MaxValue))
+    case LongType => Some((Long.MinValue, Long.MaxValue))
+    case FloatType => Some((Float.NegativeInfinity, Float.NaN))
+    case DoubleType => Some((Double.NegativeInfinity, Double.NaN))
+    case _ => None
   }
 
   /**

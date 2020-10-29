@@ -1428,6 +1428,8 @@ test_that("column functions", {
     vector_to_array(c, "float32") + vector_to_array(c, "float64")
   c27 <- nth_value("x", 1L) + nth_value("y", 2, TRUE) +
     nth_value(column("v"), 3) + nth_value(column("z"), 4L, FALSE)
+  c28 <- asc_nulls_first(c1) + asc_nulls_last(c1) +
+    desc_nulls_first(c1) + desc_nulls_last(c1)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1715,9 +1717,9 @@ test_that("column functions", {
 
   df <- as.DataFrame(list(list("col" = "1")))
   c <- collect(select(df, schema_of_json('{"name":"Bob"}')))
-  expect_equal(c[[1]], "struct<name:string>")
+  expect_equal(c[[1]], "STRUCT<`name`: STRING>")
   c <- collect(select(df, schema_of_json(lit('{"name":"Bob"}'))))
-  expect_equal(c[[1]], "struct<name:string>")
+  expect_equal(c[[1]], "STRUCT<`name`: STRING>")
 
   # Test to_json() supports arrays of primitive types and arrays
   df <- sql("SELECT array(19, 42, 70) as age")
@@ -2147,7 +2149,7 @@ test_that("group by, agg functions", {
   df3 <- agg(gd, age = "stddev")
   expect_is(df3, "SparkDataFrame")
   df3_local <- collect(df3)
-  expect_true(is.nan(df3_local[df3_local$name == "Andy", ][1, 2]))
+  expect_true(is.na(df3_local[df3_local$name == "Andy", ][1, 2]))
 
   df4 <- agg(gd, sumAge = sum(df$age))
   expect_is(df4, "SparkDataFrame")
@@ -2178,7 +2180,7 @@ test_that("group by, agg functions", {
   df7 <- agg(gd2, value = "stddev")
   df7_local <- collect(df7)
   expect_true(abs(df7_local[df7_local$name == "ID1", ][1, 2] - 6.928203) < 1e-6)
-  expect_true(is.nan(df7_local[df7_local$name == "ID2", ][1, 2]))
+  expect_true(is.na(df7_local[df7_local$name == "ID2", ][1, 2]))
 
   mockLines3 <- c("{\"name\":\"Andy\", \"age\":30}",
                   "{\"name\":\"Andy\", \"age\":30}",

@@ -56,8 +56,10 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
   private val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)
   private val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
-  private val podCreationTimeout = math.max(podAllocationDelay * 5, 60000L)
   private val executorIdleTimeout = conf.get(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT) * 1000
+  private val podCreationTimeout = math.max(podAllocationDelay * 5,
+    conf.get(KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT))
+
   private val secMgr = new SecurityManager(conf)
 
   private var waitForExecutorPodsClock: ManualClock = _

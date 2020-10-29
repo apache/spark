@@ -842,22 +842,6 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
-  test("SPARK-31935: Hadoop file system config should be effective in data source options") {
-    Seq("parquet", "").foreach { format =>
-      withSQLConf(
-        SQLConf.USE_V1_SOURCE_LIST.key -> format,
-        "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
-        "fs.file.impl.disable.cache" -> "true") {
-        withTempDir { dir =>
-          val path = "file:" + dir.getCanonicalPath.stripPrefix("file:")
-          spark.range(10).write.option("ds_option", "value").mode("overwrite").parquet(path)
-          checkAnswer(
-            spark.read.option("ds_option", "value").parquet(path), spark.range(10).toDF())
-        }
-      }
-    }
-  }
-
   test("SPARK-31116: Select nested schema with case insensitive mode") {
     // This test case failed at only Parquet. ORC is added for test coverage parity.
     Seq("orc", "parquet").foreach { format =>

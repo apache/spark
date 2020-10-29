@@ -213,7 +213,7 @@ select schema_of_json('{"c1":0, "c2":[1]}')
 -- !query schema
 struct<schema_of_json({"c1":0, "c2":[1]}):string>
 -- !query output
-struct<c1:bigint,c2:array<bigint>>
+STRUCT<`c1`: BIGINT, `c2`: ARRAY<BIGINT>>
 
 
 -- !query
@@ -352,7 +352,7 @@ select schema_of_json('{"c1":1}', map('primitivesAsString', 'true'))
 -- !query schema
 struct<schema_of_json({"c1":1}):string>
 -- !query output
-struct<c1:string>
+STRUCT<`c1`: STRING>
 
 
 -- !query
@@ -360,7 +360,7 @@ select schema_of_json('{"c1":01, "c2":0.1}', map('allowNumericLeadingZeros', 'tr
 -- !query schema
 struct<schema_of_json({"c1":01, "c2":0.1}):string>
 -- !query output
-struct<c1:bigint,c2:decimal(1,1)>
+STRUCT<`c1`: BIGINT, `c2`: DECIMAL(1,1)>
 
 
 -- !query

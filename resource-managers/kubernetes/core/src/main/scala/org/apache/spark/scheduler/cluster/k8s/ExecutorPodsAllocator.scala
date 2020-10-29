@@ -51,7 +51,9 @@ private[spark] class ExecutorPodsAllocator(
 
   private val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
 
-  private val podCreationTimeout = math.max(podAllocationDelay * 5, 60000)
+  private val podCreationTimeout = math.max(
+    podAllocationDelay * 5,
+    conf.get(KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT))
 
   private val executorIdleTimeout = conf.get(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT) * 1000
 
@@ -214,10 +216,9 @@ private[spark] class ExecutorPodsAllocator(
     }
 
     if (newlyCreatedExecutors.isEmpty
-        && currentPendingExecutors.isEmpty
-        && currentRunningCount < currentTotalExpectedExecutors) {
+        && knownPodCount < currentTotalExpectedExecutors) {
       val numExecutorsToAllocate = math.min(
-        currentTotalExpectedExecutors - currentRunningCount, podAllocationSize)
+        currentTotalExpectedExecutors - knownPodCount, podAllocationSize)
       logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes.")
       for ( _ <- 0 until numExecutorsToAllocate) {
         val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()

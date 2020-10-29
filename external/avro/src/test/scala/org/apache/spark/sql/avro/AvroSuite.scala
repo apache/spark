@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
 import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
-import org.apache.spark.sql.execution.datasources.{DataSource, FilePartition}
+import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
@@ -50,9 +50,15 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
 import org.apache.spark.util.Utils
 
-abstract class AvroSuite extends QueryTest with SharedSparkSession with NestedDataSourceSuiteBase {
+abstract class AvroSuite
+  extends QueryTest
+  with SharedSparkSession
+  with CommonFileDataSourceSuite
+  with NestedDataSourceSuiteBase {
+
   import testImplicits._
 
+  override protected def dataSourceFormat = "avro"
   override val nestedDataSources = Seq("avro")
   val episodesAvro = testFile("episodes.avro")
   val testAvro = testFile("test.avro")
@@ -1791,25 +1797,43 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession with NestedDa
     }
   }
 
+  private def checkMetaData(path: java.io.File, key: String, expectedValue: String): Unit = {
+    val avroFiles = path.listFiles()
+      .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+    assert(avroFiles.length === 1)
+    val reader = DataFileReader.openReader(avroFiles(0), new GenericDatumReader[GenericRecord]())
+    val value = reader.asInstanceOf[DataFileReader[_]].getMetaString(key)
+    assert(value === expectedValue)
+  }
+
   test("SPARK-31327: Write Spark version into Avro file metadata") {
     withTempPath { path =>
       spark.range(1).repartition(1).write.format("avro").save(path.getCanonicalPath)
-      val avroFiles = path.listFiles()
-        .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
-      assert(avroFiles.length === 1)
-      val reader = DataFileReader.openReader(avroFiles(0), new GenericDatumReader[GenericRecord]())
-      val version = reader.asInstanceOf[DataFileReader[_]].getMetaString(SPARK_VERSION_METADATA_KEY)
-      assert(version === SPARK_VERSION_SHORT)
+      checkMetaData(path, SPARK_VERSION_METADATA_KEY, SPARK_VERSION_SHORT)
     }
   }
 
-  test("SPARK-33089: should propagate Hadoop config from DS options to underlying file system") {
-    withSQLConf(
-      "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
-      "fs.file.impl.disable.cache" -> "true") {
-      val conf = Map("ds_option" -> "value")
-      val path = "file:" + testAvro.stripPrefix("file:")
-      spark.read.format("avro").options(conf).load(path)
+  test("SPARK-33163: write the metadata key 'org.apache.spark.legacyDateTime'") {
+    def saveTs(dir: java.io.File): Unit = {
+      Seq(Timestamp.valueOf("2020-10-15 01:02:03")).toDF()
+        .repartition(1)
+        .write
+        .format("avro")
+        .save(dir.getAbsolutePath)
+    }
+    withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+      withTempPath { dir =>
+        saveTs(dir)
+        checkMetaData(dir, SPARK_LEGACY_DATETIME, "")
+      }
+    }
+    Seq(CORRECTED, EXCEPTION).foreach { mode =>
+      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> mode.toString) {
+        withTempPath { dir =>
+          saveTs(dir)
+          checkMetaData(dir, SPARK_LEGACY_DATETIME, null)
+        }
+      }
     }
   }
 }

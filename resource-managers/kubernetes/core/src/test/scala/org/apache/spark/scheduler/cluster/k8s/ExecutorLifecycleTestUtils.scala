@@ -76,6 +76,33 @@ object ExecutorLifecycleTestUtils {
       .build()
   }
 
+  /**
+   * [SPARK-30821]
+   * This creates a pod with one container in running state and one container in failed
+   * state (terminated with non-zero exit code). This pod is used for unit-testing the
+   * spark.kubernetes.executor.checkAllContainers Spark Conf.
+   */
+  def runningExecutorWithFailedContainer(executorId: Long): Pod = {
+    new PodBuilder(podWithAttachedContainerForId(executorId))
+      .editOrNewStatus()
+        .withPhase("running")
+        .addNewContainerStatus()
+          .withNewState()
+            .withNewTerminated()
+              .withExitCode(1)
+            .endTerminated()
+          .endState()
+        .endContainerStatus()
+        .addNewContainerStatus()
+          .withNewState()
+            .withNewRunning()
+            .endRunning()
+          .endState()
+        .endContainerStatus()
+      .endStatus()
+      .build()
+  }
+
   def succeededExecutor(executorId: Long): Pod = {
     new PodBuilder(podWithAttachedContainerForId(executorId))
       .editOrNewStatus()
@@ -117,7 +144,10 @@ object ExecutorLifecycleTestUtils {
         .addToLabels(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)
         .addToLabels(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
         .addToLabels(SPARK_EXECUTOR_ID_LABEL, executorId.toString)
-        .endMetadata()
+      .endMetadata()
+      .editOrNewSpec()
+        .withRestartPolicy("Never")
+      .endSpec()
       .build()
     val container = new ContainerBuilder()
       .withName("spark-executor")
