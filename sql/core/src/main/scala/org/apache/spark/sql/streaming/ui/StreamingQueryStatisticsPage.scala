@@ -22,7 +22,6 @@ import java.lang.{Long => JLong}
 import java.util.UUID
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
 import scala.xml.{Node, NodeBuffer, Unparsed}
 
 import org.apache.spark.internal.Logging
@@ -242,54 +241,9 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         </tr>
         // scalastyle:on
 
-      result ++= generateCustomMetrics(query, opId, minBatchTime, maxBatchTime, jsCollector)
       opId += 1
       result
     }
-  }
-
-  def generateCustomMetrics(
-      query: StreamingQueryUIData,
-      opId: Int,
-      minBatchTime: Long,
-      maxBatchTime: Long,
-      jsCollector: JsCollector
-    ): NodeBuffer = {
-    require(query.lastProgress != null)
-    require(query.lastProgress.stateOperators(opId) != null)
-    val result: NodeBuffer = new NodeBuffer
-    query.lastProgress.stateOperators(opId).customMetrics.asScala.foreach { case(name, _) =>
-      val data = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
-        p.stateOperators(opId).customMetrics.get(name).toDouble))
-      val max = query.recentProgress
-        .map(_.stateOperators(opId).customMetrics.get(name).toDouble).max
-
-      val graphUIData =
-        new GraphUIData(
-          s"op$opId-$name-timeline",
-          s"op$opId-$name-histogram",
-          data,
-          minBatchTime,
-          maxBatchTime,
-          0,
-          max,
-          "")
-      graphUIData.generateDataJs(jsCollector)
-
-      result ++=
-        // scalastyle:off
-        <tr>
-          <td style="vertical-align: middle;">
-            <div style="width: 240px;">
-              <div><strong>Operator #{s"$opId"} Custom Metric {s"$name"} {SparkUIUtils.tooltip("Custom metric.", "right")}</strong></div>
-            </div>
-          </td>
-          <td class={s"op$opId-$name-timeline"}>{graphUIData.generateTimelineHtml(jsCollector)}</td>
-          <td class={s"op$opId-$name-histogram"}>{graphUIData.generateHistogramHtml(jsCollector)}</td>
-        </tr>
-        // scalastyle:on
-    }
-    result
   }
 
   def generateStatTable(query: StreamingQueryUIData): Seq[Node] = {
