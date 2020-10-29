@@ -116,16 +116,16 @@ trait StateStore extends ReadStateStore {
   def commit(): Long
 
   /**
-   * Return an iterator containing all the key-value pairs in the StateStore. Implementations must
-   * ensure that updates (puts, removes) can be made while iterating over this iterator.
-   */
-  override def iterator(): Iterator[UnsafeRowPair]
-
-  /**
    * Abort all the updates that have been made to the store. Implementations should ensure that
    * no more updates (puts, removes) can be after an abort in order to avoid incorrect usage.
    */
   override def abort(): Unit
+
+  /**
+   * Return an iterator containing all the key-value pairs in the StateStore. Implementations must
+   * ensure that updates (puts, removes) can be made while iterating over this iterator.
+   */
+  override def iterator(): Iterator[UnsafeRowPair]
 
   /** Current metrics of the state store */
   def metrics: StateStoreMetrics
