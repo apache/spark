@@ -60,8 +60,8 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Add(positiveIntLit, negativeIntLit), -1)
     checkEvaluation(Add(positiveLongLit, negativeLongLit), -1L)
 
-    Seq("true", "false").foreach { checkOverflow =>
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> checkOverflow) {
+    Seq("true", "false").foreach { failOnError =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
         DataTypeTestUtils.numericAndInterval.foreach { tpe =>
           checkConsistencyBetweenInterpretedAndCodegenAllowingException(Add(_, _), tpe, tpe)
         }
@@ -103,8 +103,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(UnaryMinus(positiveLongLit), - positiveLong)
     checkEvaluation(UnaryMinus(negativeLongLit), - negativeLong)
 
-    DataTypeTestUtils.numericAndInterval.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(UnaryMinus(_: Expression), tpe)
+    Seq("true", "false").foreach { failOnError =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
+        DataTypeTestUtils.numericAndInterval.foreach { tpe =>
+          checkConsistencyBetweenInterpretedAndCodegenAllowingException(UnaryMinus(_), tpe)
+        }
+      }
     }
   }
 
@@ -121,8 +125,8 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Subtract(positiveIntLit, negativeIntLit), positiveInt - negativeInt)
     checkEvaluation(Subtract(positiveLongLit, negativeLongLit), positiveLong - negativeLong)
 
-    Seq("true", "false").foreach { checkOverflow =>
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> checkOverflow) {
+    Seq("true", "false").foreach { failOnError =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
         DataTypeTestUtils.numericAndInterval.foreach { tpe =>
           checkConsistencyBetweenInterpretedAndCodegenAllowingException(Subtract(_, _), tpe, tpe)
         }
@@ -143,8 +147,8 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Multiply(positiveIntLit, negativeIntLit), positiveInt * negativeInt)
     checkEvaluation(Multiply(positiveLongLit, negativeLongLit), positiveLong * negativeLong)
 
-    Seq("true", "false").foreach { checkOverflow =>
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> checkOverflow) {
+    Seq("true", "false").foreach { failOnError =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
         DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
           checkConsistencyBetweenInterpretedAndCodegenAllowingException(Multiply(_, _), tpe, tpe)
         }
@@ -161,21 +165,45 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     testDecimalAndDoubleType { convert =>
       val left = Literal(convert(2))
       val right = Literal(convert(1))
-      val dataType = left.dataType
       checkEvaluation(Divide(left, right), convert(2))
-      checkEvaluation(Divide(Literal.create(null, dataType), right), null)
+      checkEvaluation(Divide(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Divide(left, Literal.create(null, right.dataType)), null)
       checkEvaluation(Divide(left, Literal(convert(0))), null)  // divide by zero
     }
 
-    Seq(DoubleType, DecimalType.SYSTEM_DEFAULT).foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(Divide(_, _), tpe, tpe)
+    Seq("true", "false").foreach { failOnError =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
+        Seq(DoubleType, DecimalType.SYSTEM_DEFAULT).foreach { tpe =>
+          checkConsistencyBetweenInterpretedAndCodegenAllowingException(Divide(_, _), tpe, tpe)
+        }
+      }
     }
   }
 
-  test("/ (Divide) for Long type") {
-    checkEvaluation(IntegralDivide(Literal(1.toLong), Literal(2.toLong)), 0L)
+  private def testDecimalAndLongType(testFunc: (Int => Any) => Unit): Unit = {
+    testFunc(_.toLong)
+    testFunc(Decimal(_))
+  }
+
+  test("/ (Divide) for Long and Decimal type") {
+    testDecimalAndLongType { convert =>
+      val left = Literal(convert(1))
+      val right = Literal(convert(2))
+      checkEvaluation(IntegralDivide(left, right), 0L)
+      checkEvaluation(IntegralDivide(Literal.create(null, left.dataType), right), null)
+      checkEvaluation(IntegralDivide(left, Literal.create(null, right.dataType)), null)
+      checkEvaluation(IntegralDivide(left, Literal(convert(0))), null)  // divide by zero
+    }
     checkEvaluation(IntegralDivide(positiveLongLit, negativeLongLit), 0L)
+
+    Seq("true", "false").foreach { failOnError =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
+        Seq(LongType, DecimalType.SYSTEM_DEFAULT).foreach { tpe =>
+          checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+            IntegralDivide(_, _), tpe, tpe)
+        }
+      }
+    }
   }
 
   test("% (Remainder)") {
@@ -194,8 +222,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Remainder(positiveLongLit, positiveLongLit), 0L)
     checkEvaluation(Remainder(negativeLongLit, negativeLongLit), 0L)
 
-    DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(Remainder(_, _), tpe, tpe)
+    Seq("true", "false").foreach { failOnError =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
+        DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
+          checkConsistencyBetweenInterpretedAndCodegenAllowingException(Remainder(_, _), tpe, tpe)
+        }
+      }
     }
   }
 
@@ -248,12 +280,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Pmod(positiveInt, negativeInt), positiveInt)
     checkEvaluation(Pmod(positiveLong, negativeLong), positiveLong)
 
-    // mod by 0
-    checkEvaluation(Pmod(Literal(-7), Literal(0)), null)
-    checkEvaluation(Pmod(Literal(7.2D), Literal(0D)), null)
-    checkEvaluation(Pmod(Literal(7.2F), Literal(0F)), null)
-    checkEvaluation(Pmod(Literal(2.toByte), Literal(0.toByte)), null)
-    checkEvaluation(Pmod(positiveShort, 0.toShort), null)
+    Seq("true", "false").foreach { failOnError =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
+        DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
+          checkConsistencyBetweenInterpretedAndCodegenAllowingException(Pmod(_, _), tpe, tpe)
+        }
+      }
+    }
   }
 
   test("function least") {
@@ -525,52 +558,22 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
-  private def testDecimalAndLongType(testFunc: (Int => Any) => Unit): Unit = {
-    testFunc(_.toLong)
-    testFunc(Decimal(_))
-  }
-
   test("SPARK-33008: division by zero on divide-like operations returns incorrect result") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      testDecimalAndDoubleType { convert =>
-        val one = Literal(convert(1))
-        val zero = Literal(convert(0))
-        checkEvaluation(Divide(Literal.create(null, one.dataType), zero), null)
-        checkEvaluation(Divide(one, Literal.create(null, zero.dataType)), null)
-        checkExceptionInExpression[ArithmeticException](Divide(one, zero), "divide by zero")
+      val operators: Seq[((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)] =
+        Seq((Divide(_, _), testDecimalAndDoubleType),
+          (IntegralDivide(_, _), testDecimalAndLongType),
+          (Remainder(_, _), testNumericDataTypes),
+          (Pmod(_, _), testNumericDataTypes))
+      operators.foreach { case (operator, testTypesFn) =>
+        testTypesFn { convert =>
+          val one = Literal(convert(1))
+          val zero = Literal(convert(0))
+          checkEvaluation(operator(Literal.create(null, one.dataType), zero), null)
+          checkEvaluation(operator(one, Literal.create(null, zero.dataType)), null)
+          checkExceptionInExpression[ArithmeticException](operator(one, zero), "divide by zero")
+        }
       }
-
-      testDecimalAndLongType { convert =>
-        val one = Literal(convert(1))
-        val zero = Literal(convert(0))
-        checkEvaluation(IntegralDivide(Literal.create(null, one.dataType), zero), null)
-        checkEvaluation(IntegralDivide(one, Literal.create(null, zero.dataType)), null)
-        checkExceptionInExpression[ArithmeticException](
-          IntegralDivide(one, zero), "divide by zero")
-      }
-
-      testNumericDataTypes { convert =>
-        val one = Literal(convert(1))
-        val zero = Literal(convert(0))
-        checkEvaluation(Remainder(Literal.create(null, one.dataType), zero), null)
-        checkEvaluation(Remainder(one, Literal.create(null, zero.dataType)), null)
-        checkExceptionInExpression[ArithmeticException](Remainder(one, zero), "divide by zero")
-
-        checkEvaluation(Pmod(Literal.create(null, one.dataType), zero), null)
-        checkEvaluation(Pmod(one, Literal.create(null, zero.dataType)), null)
-        checkExceptionInExpression[ArithmeticException](Pmod(one, zero), "divide by zero")
-      }
-
-      checkExceptionInExpression[ArithmeticException](
-        Pmod(Literal(-7), Literal(0)), "divide by zero")
-      checkExceptionInExpression[ArithmeticException](
-        Pmod(Literal(7.2D), Literal(0D)), "divide by zero")
-      checkExceptionInExpression[ArithmeticException](
-        Pmod(Literal(7.2F), Literal(0F)), "divide by zero")
-      checkExceptionInExpression[ArithmeticException](
-        Pmod(Literal(2.toByte), Literal(0.toByte)), "divide by zero")
-      checkExceptionInExpression[ArithmeticException](
-        Pmod(positiveShort, 0.toShort), "divide by zero")
     }
   }
 }

@@ -354,7 +354,10 @@ trait DivModLike extends BinaryArithmetic {
       if (input1 == null) {
         null
       } else {
-        if (isZero(input2)) throw new ArithmeticException("divide by zero")
+        if (isZero(input2)) {
+          // when we reach here, failOnError must bet true.
+          throw new ArithmeticException("divide by zero")
+        }
         evalOperation(input1, input2)
       }
     }
@@ -374,17 +377,6 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       s"${eval2.value} == 0"
     }
-    val divByZero = if (failOnError) {
-      "throw new ArithmeticException(\"divide by zero\");"
-    } else {
-      s"${ev.isNull} = true;"
-    }
-    val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
-    val failOnErrorBranch = if (failOnError) {
-      s"""if ($isZero) throw new ArithmeticException("divide by zero");"""
-    } else {
-      ""
-    }
     val javaType = CodeGenerator.javaType(dataType)
     val operation = if (operandsDataType.isInstanceOf[DecimalType]) {
       decimalToDataTypeCodeGen(s"${eval1.value}.$decimalMethod(${eval2.value})")
@@ -393,6 +385,11 @@ trait DivModLike extends BinaryArithmetic {
     }
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
+      val divByZero = if (failOnError) {
+        "throw new ArithmeticException(\"divide by zero\");"
+      } else {
+        s"${ev.isNull} = true;"
+      }
       ev.copy(code = code"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
@@ -404,6 +401,12 @@ trait DivModLike extends BinaryArithmetic {
           ${ev.value} = $operation;
         }""")
     } else {
+      val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
+      val failOnErrorBranch = if (failOnError) {
+        s"""if ($isZero) throw new ArithmeticException("divide by zero");"""
+      } else {
+        ""
+      }
       ev.copy(code = code"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
@@ -596,7 +599,10 @@ case class Pmod(
       if (input1 == null) {
         null
       } else {
-        if (isZero(input2)) throw new ArithmeticException("divide by zero")
+        if (isZero(input2)) {
+          // when we reach here, failOnError must bet true.
+          throw new ArithmeticException("divide by zero")
+        }
         input1 match {
           case i: Integer => pmod(i, input2.asInstanceOf[java.lang.Integer])
           case l: Long => pmod(l, input2.asInstanceOf[java.lang.Long])
@@ -617,17 +623,6 @@ case class Pmod(
       s"${eval2.value}.isZero()"
     } else {
       s"${eval2.value} == 0"
-    }
-    val divByZero = if (failOnError) {
-      "throw new ArithmeticException(\"divide by zero\");"
-    } else {
-      s"${ev.isNull} = true;"
-    }
-    val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
-    val failOnErrorBranch = if (failOnError) {
-      s"""if ($isZero) throw new ArithmeticException("divide by zero");"""
-    } else {
-      ""
     }
     val remainder = ctx.freshName("remainder")
     val javaType = CodeGenerator.javaType(dataType)
@@ -666,6 +661,11 @@ case class Pmod(
 
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
+      val divByZero = if (failOnError) {
+        "throw new ArithmeticException(\"divide by zero\");"
+      } else {
+        s"${ev.isNull} = true;"
+      }
       ev.copy(code = code"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
@@ -677,6 +677,12 @@ case class Pmod(
           $result
         }""")
     } else {
+      val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
+      val failOnErrorBranch = if (failOnError) {
+        s"""if ($isZero) throw new ArithmeticException("divide by zero");"""
+      } else {
+        ""
+      }
       ev.copy(code = code"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
