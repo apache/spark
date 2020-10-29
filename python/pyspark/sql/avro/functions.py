@@ -20,7 +20,7 @@ A collections of builtin avro functions
 """
 
 
-from pyspark import since, SparkContext
+from pyspark import SparkContext
 from pyspark.sql.column import Column, _to_java_column
 from pyspark.util import _print_missing_jar
 

@@ -913,7 +913,7 @@ class DataFrameWriter(OptionUtils):
         ----------
         numBuckets : int
             the number of buckets to save
-        col : str
+        col : str, list or tuple
             a name of a column, or a list of names.
         cols : str
             additional names (optional). If `col` is a list it should be empty.
@@ -952,7 +952,7 @@ class DataFrameWriter(OptionUtils):
 
         Parameters
         ----------
-        col : str or list
+        col : str, tuple or list
             a name of a column, or a list of names.
         cols : str
             additional names (optional). If `col` is a list it should be empty.

@@ -887,7 +887,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             can be an int to specify the target number of partitions or a Column.
             If it is a Column, it will be used as the first partitioning column. If not specified,
             the default number of partitions is used.
-        cols : str or :class:`Column`, optional
+        cols : str or :class:`Column`
             partitioning columns.
 
             .. versionchanged:: 1.6
@@ -959,7 +959,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             can be an int to specify the target number of partitions or a Column.
             If it is a Column, it will be used as the first partitioning column. If not specified,
             the default number of partitions is used.
-        cols : str or :class:`Column`, optional
+        cols : str or :class:`Column`
             partitioning columns.
 
         Notes
@@ -1235,7 +1235,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         alias : str
-            string, an alias name to be set for the :class:`DataFrame`.
+            an alias name to be set for the :class:`DataFrame`.
 
         Examples
         --------
@@ -1652,7 +1652,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         cols : str, :class:`Column`, or list
-            list of column names (string) or expressions (:class:`Column`).
+            column names (string) or expressions (:class:`Column`).
             If one of the column names is '*', that column is expanded to include all columns
             in the current :class:`DataFrame`.
 
@@ -2482,8 +2482,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         cols: str or :class:`Column`
-            a string name of the column to drop, or a
-            :class:`Column` to drop, or a list of string name of the columns to drop.
+            a name of the column, or the :class:`Column` to drop
 
         Examples
         --------
@@ -2524,7 +2523,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         cols : str
-            list of new column names (string)
+            new column names
 
         Examples
         --------

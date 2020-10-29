@@ -1276,7 +1276,7 @@ def struct(*cols):
     Parameters
     ----------
     cols : list, set, str or :class:`Column`
-        list of column names (string) or list of :class:`Column` expressions
+        column names or :class:`Column`\\s to contain in the output struct.
 
     Examples
     --------
@@ -2452,8 +2452,7 @@ def format_string(format, *cols):
     format : str
         string that can contain embedded format tags and used as result column's value
     cols : :class:`Column` or str
-        list of column names (string) or list of :class:`Column` expressions to
-        be used in formatting
+        column names or :class:`Column`\\s to be used in formatting
 
     Examples
     --------
@@ -2856,7 +2855,7 @@ def create_map(*cols):
     Parameters
     ----------
     cols : :class:`Column` or str
-        list of column names (string) or list of :class:`Column` expressions that are
+        column names or :class:`Column`\\s that are
         grouped as key-value pairs, e.g. (key1, value1, key2, value2, ...).
 
     Examples
@@ -2907,7 +2906,7 @@ def array(*cols):
     Parameters
     ----------
     cols : :class:`Column` or str
-        list of column names (string) or list of :class:`Column` expressions that have
+        column names or :class:`Column`\\s that have
         the same data type.
 
     Examples
@@ -3385,7 +3384,7 @@ def json_tuple(col, *fields):
     col : :class:`Column` or str
         string column in json format
     fields : str
-        list of fields to extract
+        fields to extract
 
     Examples
     --------
@@ -3938,7 +3937,7 @@ def map_concat(*cols):
     Parameters
     ----------
     cols : :class:`Column` or str
-        list of column names (string) or list of :class:`Column` expressions
+        column names or :class:`Column`\\s
 
     Examples
     --------

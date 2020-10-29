@@ -47,7 +47,7 @@ class SQLContext(object):
         The :class:`SparkContext` backing this SQLContext.
     sparkSession : :class:`SparkSession`
         The :class:`SparkSession` around which this SQLContext wraps.
-    jsqlContext :
+    jsqlContext : optional
         An optional JVM Scala SQLContext. If set, we do not instantiate a new
         SQLContext in the JVM, instead we make all calls to this object.
         This is only for internal.

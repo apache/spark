@@ -34,9 +34,11 @@ class StreamingQuery(object):
     A handle to a query that is executing continuously in the background as new data arrives.
     All these methods are thread-safe.
 
-    .. note:: Evolving
-
     .. versionadded:: 2.0
+
+    Notes
+    -----
+    This API is evolving.
     """
 
     def __init__(self, jsq):
@@ -899,6 +901,8 @@ class DataStreamReader(OptionUtils):
             recursively scan a directory for files. Using this option disables
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
 
+        .. versionadded:: 2.0
+
         Notes
         -----
         This API is evolving.
@@ -936,9 +940,11 @@ class DataStreamWriter(object):
     Use :attr:`DataFrame.writeStream <pyspark.sql.DataFrame.writeStream>`
     to access this.
 
-    .. note:: Evolving.
-
     .. versionadded:: 2.0
+
+    Notes
+    -----
+    This API is evolving.
     """
 
     def __init__(self, df):

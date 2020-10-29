@@ -179,7 +179,7 @@ class Column(object):
 
     Parameters
     ----------
-    other :
+    other
         a value or :class:`Column`
 
     Examples
@@ -253,7 +253,7 @@ class Column(object):
 
     Parameters
     ----------
-    other :
+    other
         a value or :class:`Column` to calculate bitwise or(|) against
         this :class:`Column`.
 
@@ -269,7 +269,7 @@ class Column(object):
 
     Parameters
     ----------
-    other :
+    other
         a value or :class:`Column` to calculate bitwise and(&) against
         this :class:`Column`.
 
@@ -285,7 +285,7 @@ class Column(object):
 
     Parameters
     ----------
-    other :
+    other
         a value or :class:`Column` to calculate bitwise xor(^) against
         this :class:`Column`.
 
@@ -330,7 +330,7 @@ class Column(object):
         """
         An expression that gets a field by name in a StructField.
 
-        .. versionadded:: 2.3.0
+        .. versionadded:: 1.3.0
 
         Examples
         --------
@@ -465,7 +465,7 @@ class Column(object):
 
     Parameters
     ----------
-    other :
+    other
         string in line. A value as a literal or a :class:`Column`.
 
     Examples
@@ -716,7 +716,7 @@ class Column(object):
         Parameters
         ----------
         alias : str
-            strings of desired column names (collects all positional arguments passed)
+            desired column names (collects all positional arguments passed)
 
         Other Parameters
         ----------------
@@ -809,7 +809,7 @@ class Column(object):
         ----------
         condition : :class:`Column`
             a boolean :class:`Column` expression.
-        value :
+        value
             a literal value, or a :class:`Column` expression.
 
         Examples
@@ -842,7 +842,7 @@ class Column(object):
 
         Parameters
         ----------
-        value :
+        value
             a literal value, or a :class:`Column` expression.
 
         Examples
