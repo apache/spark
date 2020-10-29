@@ -186,7 +186,7 @@ case class SchemaOfCsv(
     val inferSchema = new CSVInferSchema(parsedOptions)
     val fieldTypes = inferSchema.inferRowType(startType, row)
     val st = StructType(inferSchema.toStructFields(fieldTypes, header))
-    UTF8String.fromString(st.catalogString)
+    UTF8String.fromString(st.sql)
   }
 
   override def prettyName: String = "schema_of_csv"
