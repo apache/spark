@@ -693,8 +693,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ret2, "[ab, cde, f]")
     Seq(false, true).foreach { omitNull =>
       withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> omitNull.toString) {
-        val ret3 = cast(Literal.create(Array("ab", null, "c")), StringType)
-        checkEvaluation(ret3, s"[ab,${if (omitNull) "" else " null"}, c]")
+        val ret3 = cast(Literal.create(Array(null, "ab", null, "c")), StringType)
+        checkEvaluation(
+          ret3,
+          s"[${if (omitNull) "" else "null"}, ab,${if (omitNull) "" else " null"}, c]")
       }
     }
     val ret4 =
@@ -758,8 +760,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> legacyCast.toString) {
         val ret1 = cast(Literal.create((1, "a", 0.1)), StringType)
         checkEvaluation(ret1, s"${lb}1, a, 0.1$rb")
-        val ret2 = cast(Literal.create(Tuple3[Int, String, String](1, null, "a")), StringType)
-        checkEvaluation(ret2, s"${lb}1,${if (legacyCast) "" else " null"}, a$rb")
+        val ret2 = cast(
+          Literal.create(Tuple4[String, Int, String, String](null, 1, null, "a")),
+          StringType)
+        checkEvaluation(
+          ret2,
+          s"$lb${if (legacyCast) "" else "null"}, 1,${if (legacyCast) "" else " null"}, a$rb")
         val ret3 = cast(Literal.create(
           (Date.valueOf("2014-12-03"), Timestamp.valueOf("2014-12-03 15:05:00"))), StringType)
         checkEvaluation(ret3, s"${lb}2014-12-03, 2014-12-03 15:05:00$rb")
