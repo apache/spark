@@ -126,124 +126,117 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     <br />
   }
 
-  def generateStateOperators(
+  def generateAggregatedStateOperators(
       query: StreamingQueryUIData,
       minBatchTime: Long,
       maxBatchTime: Long,
       jsCollector: JsCollector
-    ): Array[NodeBuffer] = {
-    var opId = 0
+    ): NodeBuffer = {
+    // This is made sure on caller side but put it here to be defensive
     require(query.lastProgress != null)
-    query.lastProgress.stateOperators.map { _ =>
-      val numRowsTotalData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
-        p.stateOperators(opId).numRowsTotal.toDouble))
-      val maxNumRowsTotal = query.recentProgress.map(_.stateOperators(opId).numRowsTotal).max
+    val numRowsTotalData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+      p.stateOperators.map(_.numRowsTotal).sum.toDouble))
+    val maxNumRowsTotal = numRowsTotalData.maxBy(_._2)._2
 
-      val numRowsUpdatedData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
-        p.stateOperators(opId).numRowsUpdated.toDouble))
-      val maxNumRowsUpdated = query.recentProgress.map(_.stateOperators(opId).numRowsUpdated).max
+    val numRowsUpdatedData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+      p.stateOperators.map(_.numRowsUpdated).sum.toDouble))
+    val maxNumRowsUpdated = numRowsUpdatedData.maxBy(_._2)._2
 
-      val memoryUsedBytesData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
-        p.stateOperators(opId).memoryUsedBytes.toDouble))
-      val maxMemoryUsedBytes = query.recentProgress.map(_.stateOperators(opId).memoryUsedBytes).max
+    val memoryUsedBytesData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+      p.stateOperators.map(_.memoryUsedBytes).sum.toDouble))
+    val maxMemoryUsedBytes = memoryUsedBytesData.maxBy(_._2)._2
 
-      val numRowsDroppedByWatermarkData = query.recentProgress
-        .map(p => (parseProgressTimestamp(p.timestamp),
-          p.stateOperators(opId).numRowsDroppedByWatermark.toDouble))
-      val maxNumRowsDroppedByWatermark = query.recentProgress
-        .map(_.stateOperators(opId).numRowsDroppedByWatermark).max
+    val numRowsDroppedByWatermarkData = query.recentProgress
+      .map(p => (parseProgressTimestamp(p.timestamp),
+        p.stateOperators.map(_.numRowsDroppedByWatermark).sum.toDouble))
+    val maxNumRowsDroppedByWatermark = numRowsDroppedByWatermarkData.maxBy(_._2)._2
 
-      val graphUIDataForNumberTotalRows =
-        new GraphUIData(
-          s"op$opId-num-total-rows-timeline",
-          s"op$opId-num-total-rows-histogram",
-          numRowsTotalData,
-          minBatchTime,
-          maxBatchTime,
-          0,
-          maxNumRowsTotal,
-          "records")
-      graphUIDataForNumberTotalRows.generateDataJs(jsCollector)
+    val graphUIDataForNumberTotalRows =
+      new GraphUIData(
+        "aggregated-num-total-rows-timeline",
+        "aggregated-num-total-rows-histogram",
+        numRowsTotalData,
+        minBatchTime,
+        maxBatchTime,
+        0,
+        maxNumRowsTotal,
+        "records")
+    graphUIDataForNumberTotalRows.generateDataJs(jsCollector)
 
-      val graphUIDataForNumberUpdatedRows =
-        new GraphUIData(
-          s"op$opId-num-updated-rows-timeline",
-          s"op$opId-num-updated-rows-histogram",
-          numRowsUpdatedData,
-          minBatchTime,
-          maxBatchTime,
-          0,
-          maxNumRowsUpdated,
-          "records")
-      graphUIDataForNumberUpdatedRows.generateDataJs(jsCollector)
+    val graphUIDataForNumberUpdatedRows =
+      new GraphUIData(
+        "aggregated-num-updated-rows-timeline",
+        "aggregated-num-updated-rows-histogram",
+        numRowsUpdatedData,
+        minBatchTime,
+        maxBatchTime,
+        0,
+        maxNumRowsUpdated,
+        "records")
+    graphUIDataForNumberUpdatedRows.generateDataJs(jsCollector)
 
-      val graphUIDataForMemoryUsedBytes =
-        new GraphUIData(
-          s"op$opId-memory-used-bytes-timeline",
-          s"op$opId-memory-used-bytes-histogram",
-          memoryUsedBytesData,
-          minBatchTime,
-          maxBatchTime,
-          0,
-          maxMemoryUsedBytes,
-          "bytes")
-      graphUIDataForMemoryUsedBytes.generateDataJs(jsCollector)
+    val graphUIDataForMemoryUsedBytes =
+      new GraphUIData(
+        "aggregated-memory-used-bytes-timeline",
+        "aggregated-memory-used-bytes-histogram",
+        memoryUsedBytesData,
+        minBatchTime,
+        maxBatchTime,
+        0,
+        maxMemoryUsedBytes,
+        "bytes")
+    graphUIDataForMemoryUsedBytes.generateDataJs(jsCollector)
 
-      val graphUIDataForNumRowsDroppedByWatermark =
-        new GraphUIData(
-          s"op$opId-num-rows-dropped-by-watermark-timeline",
-          s"op$opId-num-rows-dropped-by-watermark-histogram",
-          numRowsDroppedByWatermarkData,
-          minBatchTime,
-          maxBatchTime,
-          0,
-          maxNumRowsDroppedByWatermark,
-          "records")
-      graphUIDataForNumRowsDroppedByWatermark.generateDataJs(jsCollector)
+    val graphUIDataForNumRowsDroppedByWatermark =
+      new GraphUIData(
+        "aggregated-num-rows-dropped-by-watermark-timeline",
+        "aggregated-num-rows-dropped-by-watermark-histogram",
+        numRowsDroppedByWatermarkData,
+        minBatchTime,
+        maxBatchTime,
+        0,
+        maxNumRowsDroppedByWatermark,
+        "records")
+    graphUIDataForNumRowsDroppedByWatermark.generateDataJs(jsCollector)
 
-      val result =
-        // scalastyle:off
-        <tr>
-          <td style="vertical-align: middle;">
-            <div style="width: 160px;">
-              <div><strong>Operator #{s"$opId"} Number Of Total Rows {SparkUIUtils.tooltip("Number of total rows.", "right")}</strong></div>
-            </div>
-          </td>
-          <td class={s"op$opId-num-total-rows-timeline"}>{graphUIDataForNumberTotalRows.generateTimelineHtml(jsCollector)}</td>
-          <td class={s"op$opId-num-total-rows-histogram"}>{graphUIDataForNumberTotalRows.generateHistogramHtml(jsCollector)}</td>
-        </tr>
-        <tr>
-          <td style="vertical-align: middle;">
-            <div style="width: 160px;">
-              <div><strong>Operator #{s"$opId"} Number Of Updated Rows {SparkUIUtils.tooltip("Number of updated rows.", "right")}</strong></div>
-            </div>
-          </td>
-          <td class={s"op$opId-num-updated-rows-timeline"}>{graphUIDataForNumberUpdatedRows.generateTimelineHtml(jsCollector)}</td>
-          <td class={s"op$opId-num-updated-rows-histogram"}>{graphUIDataForNumberUpdatedRows.generateHistogramHtml(jsCollector)}</td>
-        </tr>
-        <tr>
-          <td style="vertical-align: middle;">
-            <div style="width: 160px;">
-              <div><strong>Operator #{s"$opId"} Memory Used In Bytes {SparkUIUtils.tooltip("Memory USed In Bytes.", "right")}</strong></div>
-            </div>
-          </td>
-          <td class={s"op$opId-memory-used-bytes-timeline"}>{graphUIDataForMemoryUsedBytes.generateTimelineHtml(jsCollector)}</td>
-          <td class={s"op$opId-memory-used-bytes-histogram"}>{graphUIDataForMemoryUsedBytes.generateHistogramHtml(jsCollector)}</td>
-        </tr>
-        <tr>
-          <td style="vertical-align: middle;">
-            <div style="width: 160px;">
-              <div><strong>Operator #{s"$opId"} Number Of Rows Dropped By Watermark {SparkUIUtils.tooltip("Number Of Rows Dropped By Watermark.", "right")}</strong></div>
-            </div>
-          </td>
-          <td class={s"op$opId-num-rows-dropped-by-watermark-timeline"}>{graphUIDataForNumRowsDroppedByWatermark.generateTimelineHtml(jsCollector)}</td>
-          <td class={s"op$opId-num-rows-dropped-by-watermark-histogram"}>{graphUIDataForNumRowsDroppedByWatermark.generateHistogramHtml(jsCollector)}</td>
-        </tr>
-        // scalastyle:on
-
-      opId += 1
-      result
-    }
+    // scalastyle:off
+    <tr>
+      <td style="vertical-align: middle;">
+        <div style="width: 160px;">
+          <div><strong>Aggregated Number Of Total Rows {SparkUIUtils.tooltip("Number of total rows.", "right")}</strong></div>
+        </div>
+      </td>
+      <td class={"aggregated-num-total-rows-timeline"}>{graphUIDataForNumberTotalRows.generateTimelineHtml(jsCollector)}</td>
+      <td class={"aggregated-num-total-rows-histogram"}>{graphUIDataForNumberTotalRows.generateHistogramHtml(jsCollector)}</td>
+    </tr>
+    <tr>
+      <td style="vertical-align: middle;">
+        <div style="width: 160px;">
+          <div><strong>Aggregated Number Of Updated Rows {SparkUIUtils.tooltip("Number of updated rows.", "right")}</strong></div>
+        </div>
+      </td>
+      <td class={"aggregated-num-updated-rows-timeline"}>{graphUIDataForNumberUpdatedRows.generateTimelineHtml(jsCollector)}</td>
+      <td class={"aggregated-num-updated-rows-histogram"}>{graphUIDataForNumberUpdatedRows.generateHistogramHtml(jsCollector)}</td>
+    </tr>
+    <tr>
+      <td style="vertical-align: middle;">
+        <div style="width: 160px;">
+          <div><strong>Aggregated Memory Used In Bytes {SparkUIUtils.tooltip("Memory Used In Bytes.", "right")}</strong></div>
+        </div>
+      </td>
+      <td class={"aggregated-memory-used-bytes-timeline"}>{graphUIDataForMemoryUsedBytes.generateTimelineHtml(jsCollector)}</td>
+      <td class={"aggregated-memory-used-bytes-histogram"}>{graphUIDataForMemoryUsedBytes.generateHistogramHtml(jsCollector)}</td>
+    </tr>
+    <tr>
+      <td style="vertical-align: middle;">
+        <div style="width: 160px;">
+          <div><strong>Aggregated Number Of Rows Dropped By Watermark {SparkUIUtils.tooltip("Number Of Rows Dropped By Watermark.", "right")}</strong></div>
+        </div>
+      </td>
+      <td class={"aggregated-num-rows-dropped-by-watermark-timeline"}>{graphUIDataForNumRowsDroppedByWatermark.generateTimelineHtml(jsCollector)}</td>
+      <td class={"aggregated-num-rows-dropped-by-watermark-histogram"}>{graphUIDataForNumRowsDroppedByWatermark.generateHistogramHtml(jsCollector)}</td>
+    </tr>
+    // scalastyle:on
   }
 
   def generateStatTable(query: StreamingQueryUIData): Seq[Node] = {
@@ -404,7 +397,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
             </td>
             <td class="duration-area-stack" colspan="2">{graphUIDataForDuration.generateAreaStackHtmlWithData(jsCollector, operationDurationData)}</td>
           </tr>
-          {generateStateOperators(query, minBatchTime, maxBatchTime, jsCollector)}
+          {generateAggregatedStateOperators(query, minBatchTime, maxBatchTime, jsCollector)}
         </tbody>
       </table>
     } else {
