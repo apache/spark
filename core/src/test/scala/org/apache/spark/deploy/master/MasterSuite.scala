@@ -72,6 +72,7 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
     })
   }
 
+  var decommissioned = false
   var appDesc = DeployTestUtils.createAppDesc()
   val drivers = mutable.HashSet[String]()
   val driverResources = new mutable.HashMap[String, Map[String, Set[String]]]
@@ -96,6 +97,8 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
         case None =>
       }
       driverIdToAppId.remove(driverId)
+    case DecommissionWorker =>
+      decommissioned = true
   }
 }
 
@@ -687,12 +690,20 @@ class MasterSuite extends SparkFunSuite
     }
   }
 
-  // TODO(SPARK-32250): Enable the test back. It is flaky in GitHub Actions.
-  ignore("SPARK-27510: Master should avoid dead loop while launching executor failed in Worker") {
+  test("SPARK-27510: Master should avoid dead loop while launching executor failed in Worker") {
     val master = makeAliveMaster()
     var worker: MockExecutorLaunchFailWorker = null
     try {
-      worker = new MockExecutorLaunchFailWorker(master)
+      val conf = new SparkConf()
+      // SPARK-32250: When running test on Github Action machine, the available processors in JVM
+      // is only 2, while on Jenkins it's 32. For this specific test, 2 available processors, which
+      // also decides number of threads in Dispatcher, is not enough to consume the messages. In
+      // the worst situation, MockExecutorLaunchFailWorker would occupy these 2 threads for
+      // handling messages LaunchDriver, LaunchExecutor at the same time but leave no thread for
+      // the driver to handle the message RegisteredApplication. At the end, it results in the dead
+      // lock situation. Therefore, we need to set more threads to avoid the dead lock.
+      conf.set(Network.RPC_NETTY_DISPATCHER_NUM_THREADS, 6)
+      worker = new MockExecutorLaunchFailWorker(master, conf)
       worker.rpcEnv.setupEndpoint("worker", worker)
       val workerRegMsg = RegisterWorker(
         worker.id,
@@ -734,9 +745,9 @@ class MasterSuite extends SparkFunSuite
       hostnames: Seq[String]): Unit = {
     val conf = new SparkConf()
     val master = makeAliveMaster(conf)
-    val workerRegs = (1 to numWorkers).map{idx =>
+    val workers = (1 to numWorkers).map { idx =>
       val worker = new MockWorker(master.self, conf)
-      worker.rpcEnv.setupEndpoint("worker", worker)
+      worker.rpcEnv.setupEndpoint(s"worker-$idx", worker)
       val workerReg = RegisterWorker(
         worker.id,
         "localhost",
@@ -747,14 +758,14 @@ class MasterSuite extends SparkFunSuite
         "http://localhost:8080",
         RpcAddress("localhost", 10000))
       master.self.send(workerReg)
-      workerReg
+      worker
     }
 
     eventually(timeout(10.seconds)) {
       val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
       assert(masterState.workers.length === numWorkers)
       assert(masterState.workers.forall(_.state == WorkerState.ALIVE))
-      assert(masterState.workers.map(_.id).toSet == workerRegs.map(_.id).toSet)
+      assert(masterState.workers.map(_.id).toSet == workers.map(_.id).toSet)
     }
 
     val decomWorkersCount = master.self.askSync[Integer](DecommissionWorkersOnHosts(hostnames))
@@ -765,8 +776,11 @@ class MasterSuite extends SparkFunSuite
     eventually(timeout(30.seconds)) {
       val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
       assert(masterState.workers.length === numWorkers)
-      val workersActuallyDecomed = masterState.workers.count(_.state == WorkerState.DECOMMISSIONED)
-      assert(workersActuallyDecomed === numWorkersExpectedToDecom)
+      val workersActuallyDecomed = masterState.workers
+        .filter(_.state == WorkerState.DECOMMISSIONED).map(_.id)
+      val decommissionedWorkers = workers.filter(w => workersActuallyDecomed.contains(w.id))
+      assert(workersActuallyDecomed.length === numWorkersExpectedToDecom)
+      assert(decommissionedWorkers.forall(_.decommissioned))
     }
 
     // Decommissioning a worker again should return the same answer since we want this call to be

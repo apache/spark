@@ -100,7 +100,7 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
  * Find out duplicated exchanges in the spark plan, then use the same exchange for all the
  * references.
  */
-case class ReuseExchange(conf: SQLConf) extends Rule[SparkPlan] {
+object ReuseExchange extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.exchangeReuseEnabled) {

@@ -19,18 +19,22 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.Path
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.SparkUpgradeException
-import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 
@@ -107,13 +111,32 @@ object DataSourceUtils {
     }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
   }
 
+  def int96RebaseMode(
+      lookupFileMeta: String => String,
+      modeByConfig: String): LegacyBehaviorPolicy.Value = {
+    if (Utils.isTesting && SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
+      return LegacyBehaviorPolicy.CORRECTED
+    }
+    // If there is no version, we return the mode specified by the config.
+    Option(lookupFileMeta(SPARK_VERSION_METADATA_KEY)).map { version =>
+      // Files written by Spark 3.0 and earlier follow the legacy hybrid calendar and we need to
+      // rebase the INT96 timestamp values.
+      // Files written by Spark 3.1 and latter may also need the rebase if they were written with
+      // the "LEGACY" rebase mode.
+      if (version < "3.1.0" || lookupFileMeta(SPARK_LEGACY_INT96) != null) {
+        LegacyBehaviorPolicy.LEGACY
+      } else {
+        LegacyBehaviorPolicy.CORRECTED
+      }
+    }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
+  }
+
   def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
-    val config = if (format == "Parquet") {
-      SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key
-    } else if (format == "Avro") {
-      SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key
-    } else {
-      throw new IllegalStateException("unrecognized format " + format)
+    val config = format match {
+      case "Parquet INT96" => SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key
+      case "Parquet" => SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key
+      case "Avro" => SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key
+      case _ => throw new IllegalStateException("unrecognized format " + format)
     }
     new SparkUpgradeException("3.0", "reading dates before 1582-10-15 or timestamps before " +
       s"1900-01-01T00:00:00Z from $format files can be ambiguous, as the files may be written by " +
@@ -125,12 +148,11 @@ object DataSourceUtils {
   }
 
   def newRebaseExceptionInWrite(format: String): SparkUpgradeException = {
-    val config = if (format == "Parquet") {
-      SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key
-    } else if (format == "Avro") {
-      SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key
-    } else {
-      throw new IllegalStateException("unrecognized format " + format)
+    val config = format match {
+      case "Parquet INT96" => SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key
+      case "Parquet" => SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key
+      case "Avro" => SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key
+      case _ => throw new IllegalStateException("unrecognized format " + format)
     }
     new SparkUpgradeException("3.0", "writing dates before 1582-10-15 or timestamps before " +
       s"1900-01-01T00:00:00Z into $format files can be dangerous, as the files may be read by " +
@@ -189,5 +211,35 @@ object DataSourceUtils {
       micros
     case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseGregorianToJulianMicros
     case LegacyBehaviorPolicy.CORRECTED => identity[Long]
+  }
+
+  def generateDatasourceOptions(
+      extraOptions: CaseInsensitiveStringMap, table: CatalogTable): Map[String, String] = {
+    val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+    val options = table.storage.properties ++ pathOption
+    if (!SQLConf.get.getConf(SQLConf.LEGACY_EXTRA_OPTIONS_BEHAVIOR)) {
+      // Check the same key with different values
+      table.storage.properties.foreach { case (k, v) =>
+        if (extraOptions.containsKey(k) && extraOptions.get(k) != v) {
+          throw new AnalysisException(
+            s"Fail to resolve data source for the table ${table.identifier} since the table " +
+              s"serde property has the duplicated key $k with extra options specified for this " +
+              "scan operation. To fix this, you can rollback to the legacy behavior of ignoring " +
+              "the extra options by setting the config " +
+              s"${SQLConf.LEGACY_EXTRA_OPTIONS_BEHAVIOR.key} to `false`, or address the " +
+              s"conflicts of the same config.")
+        }
+      }
+      // To keep the original key from table properties, here we filter all case insensitive
+      // duplicate keys out from extra options.
+      val lowerCasedDuplicatedKeys =
+        table.storage.properties.keySet.map(_.toLowerCase(Locale.ROOT))
+          .intersect(extraOptions.keySet.asScala)
+      extraOptions.asCaseSensitiveMap().asScala.filterNot {
+        case (k, _) => lowerCasedDuplicatedKeys.contains(k.toLowerCase(Locale.ROOT))
+      }.toMap ++ options
+    } else {
+      options
+    }
   }
 }

@@ -89,7 +89,8 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
        2
       > SELECT _FUNC_(NULL);
        -1
-  """)
+  """,
+  since = "1.5.0")
 case class Size(child: Expression, legacySizeOfNull: Boolean)
   extends UnaryExpression with ExpectsInputTypes {
 
@@ -139,7 +140,8 @@ object Size {
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
        [1,2]
   """,
-  group = "map_funcs")
+  group = "map_funcs",
+  since = "2.0.0")
 case class MapKeys(child: Expression)
   extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
@@ -330,7 +332,8 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
        ["a","b"]
   """,
-  group = "map_funcs")
+  group = "map_funcs",
+  since = "2.0.0")
 case class MapValues(child: Expression)
   extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
@@ -368,7 +371,7 @@ case class MapEntries(child: Expression)
 
   @transient private lazy val childDataType: MapType = child.dataType.asInstanceOf[MapType]
 
-  override def dataType: DataType = {
+  private lazy val internalDataType: DataType = {
     ArrayType(
       StructType(
         StructField("key", childDataType.keyType, false) ::
@@ -376,6 +379,8 @@ case class MapEntries(child: Expression)
         Nil),
       false)
   }
+
+  override def dataType: DataType = internalDataType
 
   override protected def nullSafeEval(input: Any): Any = {
     val childMap = input.asInstanceOf[MapData]
@@ -871,7 +876,8 @@ object ArraySortLike {
       > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'), true);
        [null,"a","b","c","d"]
   """,
-  group = "array_funcs")
+  group = "array_funcs",
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class SortArray(base: Expression, ascendingOrder: Expression)
   extends BinaryExpression with ArraySortLike with NullIntolerant {
@@ -1086,7 +1092,8 @@ case class Reverse(child: Expression)
       > SELECT _FUNC_(array(1, 2, 3), 2);
        true
   """,
-  group = "array_funcs")
+  group = "array_funcs",
+  since = "1.5.0")
 case class ArrayContains(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -2048,7 +2055,8 @@ case class ElementAt(left: Expression, right: Expression)
   note = """
     Concat logic for arrays is available since 2.4.0.
   """,
-  group = "array_funcs")
+  group = "array_funcs",
+  since = "1.5.0")
 case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   private def allowedTypes: Seq[AbstractDataType] = Seq(StringType, BinaryType, ArrayType)
@@ -3050,6 +3058,7 @@ trait ArraySetLike {
   @transient protected lazy val nullValueHolder = et match {
     case ByteType => "(byte) 0"
     case ShortType => "(short) 0"
+    case LongType => "(long) 0"
     case _ => "0"
   }
 
@@ -3155,7 +3164,7 @@ case class ArrayDistinct(child: Expression)
           }
         }
       }
-      new GenericArrayData(arrayBuffer)
+      new GenericArrayData(arrayBuffer.toSeq)
     }
   }
 
@@ -3313,7 +3322,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
             i += 1
           }
         }
-        new GenericArrayData(arrayBuffer)
+        new GenericArrayData(arrayBuffer.toSeq)
     } else {
       (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
@@ -3344,7 +3353,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
             arrayBuffer += elem
           }
         }))
-        new GenericArrayData(arrayBuffer)
+        new GenericArrayData(arrayBuffer.toSeq)
     }
   }
 
@@ -3476,7 +3485,7 @@ object ArrayUnion {
         arrayBuffer += elem
       }
     }))
-    new GenericArrayData(arrayBuffer)
+    new GenericArrayData(arrayBuffer.toSeq)
   }
 }
 
@@ -3497,12 +3506,15 @@ object ArrayUnion {
   since = "2.4.0")
 case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
-  override def dataType: DataType = {
+
+  private lazy val internalDataType: DataType = {
     dataTypeCheck
     ArrayType(elementType,
       left.dataType.asInstanceOf[ArrayType].containsNull &&
         right.dataType.asInstanceOf[ArrayType].containsNull)
   }
+
+  override def dataType: DataType = internalDataType
 
   @transient lazy val evalIntersect: (ArrayData, ArrayData) => ArrayData = {
     if (TypeUtils.typeWithProperEquals(elementType)) {
@@ -3538,7 +3550,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
             }
             i += 1
           }
-          new GenericArrayData(arrayBuffer)
+          new GenericArrayData(arrayBuffer.toSeq)
         } else {
           new GenericArrayData(Array.emptyObjectArray)
         }
@@ -3586,7 +3598,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
             }
             i += 1
           }
-          new GenericArrayData(arrayBuffer)
+          new GenericArrayData(arrayBuffer.toSeq)
         } else {
           new GenericArrayData(Array.emptyObjectArray)
         }
@@ -3740,10 +3752,12 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
 case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
 
-  override def dataType: DataType = {
+  private lazy val internalDataType: DataType = {
     dataTypeCheck
     left.dataType
   }
+
+  override def dataType: DataType = internalDataType
 
   @transient lazy val evalExcept: (ArrayData, ArrayData) => ArrayData = {
     if (TypeUtils.typeWithProperEquals(elementType)) {
@@ -3777,7 +3791,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
           }
           i += 1
         }
-        new GenericArrayData(arrayBuffer)
+        new GenericArrayData(arrayBuffer.toSeq)
     } else {
       (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
@@ -3822,7 +3836,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
           }
           i += 1
         }
-        new GenericArrayData(arrayBuffer)
+        new GenericArrayData(arrayBuffer.toSeq)
     }
   }
 

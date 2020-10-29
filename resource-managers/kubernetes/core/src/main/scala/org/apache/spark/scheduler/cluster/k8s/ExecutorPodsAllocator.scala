@@ -16,17 +16,23 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.time.Instant
+import java.time.format.DateTimeParseException
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
 
-import io.fabric8.kubernetes.api.model.PodBuilder
-import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.mutable
+import scala.util.control.NonFatal
+
+import io.fabric8.kubernetes.api.model.{HasMetadata, PersistentVolumeClaim, PodBuilder}
+import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
+import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT
 import org.apache.spark.util.{Clock, Utils}
 
 private[spark] class ExecutorPodsAllocator(
@@ -45,7 +51,11 @@ private[spark] class ExecutorPodsAllocator(
 
   private val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
 
-  private val podCreationTimeout = math.max(podAllocationDelay * 5, 60000)
+  private val podCreationTimeout = math.max(
+    podAllocationDelay * 5,
+    conf.get(KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT))
+
+  private val executorIdleTimeout = conf.get(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT) * 1000
 
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
 
@@ -64,7 +74,7 @@ private[spark] class ExecutorPodsAllocator(
 
   // Executor IDs that have been requested from Kubernetes but have not been detected in any
   // snapshot yet. Mapped to the timestamp when they were created.
-  private val newlyCreatedExecutors = mutable.Map.empty[Long, Long]
+  private val newlyCreatedExecutors = mutable.LinkedHashMap.empty[Long, Long]
 
   private val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(conf)
 
@@ -84,6 +94,7 @@ private[spark] class ExecutorPodsAllocator(
   }
 
   def setTotalExpectedExecutors(total: Int): Unit = {
+    logDebug(s"Set totalExpectedExecutors to $total")
     totalExpectedExecutors.set(total)
     if (!hasPendingPods.get()) {
       snapshotsStore.notifySubscribers()
@@ -146,7 +157,6 @@ private[spark] class ExecutorPodsAllocator(
         case (_, PodPending(_)) => true
         case _ => false
       }
-      .map { case (id, _) => id }
 
     // Make a local, non-volatile copy of the reference since it's used multiple times. This
     // is the only method that modifies the list, so this is safe.
@@ -170,7 +180,8 @@ private[spark] class ExecutorPodsAllocator(
     // It's possible that we have outstanding pods that are outdated when dynamic allocation
     // decides to downscale the application. So check if we can release any pending pods early
     // instead of waiting for them to time out. Drop them first from the unacknowledged list,
-    // then from the pending.
+    // then from the pending. However, in order to prevent too frequent frunctuation, newly
+    // requested pods are protected during executorIdleTimeout period.
     //
     // TODO: with dynamic allocation off, handle edge cases if we end up with more running
     // executors than expected.
@@ -178,8 +189,13 @@ private[spark] class ExecutorPodsAllocator(
       newlyCreatedExecutors.size
     if (knownPodCount > currentTotalExpectedExecutors) {
       val excess = knownPodCount - currentTotalExpectedExecutors
-      val knownPendingToDelete = currentPendingExecutors.take(excess - newlyCreatedExecutors.size)
-      val toDelete = newlyCreatedExecutors.keys.take(excess).toList ++ knownPendingToDelete
+      val knownPendingToDelete = currentPendingExecutors
+        .filter(x => isExecutorIdleTimedOut(x._2, currentTime))
+        .map { case (id, _) => id }
+        .take(excess - newlyCreatedExecutors.size)
+      val toDelete = newlyCreatedExecutors
+        .filter(x => currentTime - x._2 > executorIdleTimeout)
+        .keys.take(excess).toList ++ knownPendingToDelete
 
       if (toDelete.nonEmpty) {
         logInfo(s"Deleting ${toDelete.size} excess pod requests (${toDelete.mkString(",")}).")
@@ -200,10 +216,9 @@ private[spark] class ExecutorPodsAllocator(
     }
 
     if (newlyCreatedExecutors.isEmpty
-        && currentPendingExecutors.isEmpty
-        && currentRunningCount < currentTotalExpectedExecutors) {
+        && knownPodCount < currentTotalExpectedExecutors) {
       val numExecutorsToAllocate = math.min(
-        currentTotalExpectedExecutors - currentRunningCount, podAllocationSize)
+        currentTotalExpectedExecutors - knownPodCount, podAllocationSize)
       logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes.")
       for ( _ <- 0 until numExecutorsToAllocate) {
         val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
@@ -212,16 +227,33 @@ private[spark] class ExecutorPodsAllocator(
           newExecutorId.toString,
           applicationId,
           driverPod)
-        val executorPod = executorBuilder.buildFromFeatures(executorConf, secMgr,
+        val resolvedExecutorSpec = executorBuilder.buildFromFeatures(executorConf, secMgr,
           kubernetesClient)
+        val executorPod = resolvedExecutorSpec.pod
         val podWithAttachedContainer = new PodBuilder(executorPod.pod)
           .editOrNewSpec()
           .addToContainers(executorPod.container)
           .endSpec()
           .build()
-        kubernetesClient.pods().create(podWithAttachedContainer)
-        newlyCreatedExecutors(newExecutorId) = clock.getTimeMillis()
-        logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
+        val createdExecutorPod = kubernetesClient.pods().create(podWithAttachedContainer)
+        try {
+          val resources = resolvedExecutorSpec.executorKubernetesResources
+          addOwnerReference(createdExecutorPod, resources)
+          resources
+            .filter(_.getKind == "PersistentVolumeClaim")
+            .foreach { resource =>
+              val pvc = resource.asInstanceOf[PersistentVolumeClaim]
+              logInfo(s"Trying to create PersistentVolumeClaim ${pvc.getMetadata.getName} with " +
+                s"StorageClass ${pvc.getSpec.getStorageClassName}")
+              kubernetesClient.persistentVolumeClaims().create(pvc)
+            }
+          newlyCreatedExecutors(newExecutorId) = clock.getTimeMillis()
+          logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
+        } catch {
+          case NonFatal(e) =>
+            kubernetesClient.pods().delete(createdExecutorPod)
+            throw e
+        }
       }
     }
 
@@ -246,6 +278,17 @@ private[spark] class ExecutorPodsAllocator(
       if (outstanding > 0) {
         logDebug(s"Still waiting for $outstanding executors before requesting more.")
       }
+    }
+  }
+
+  private def isExecutorIdleTimedOut(state: ExecutorPodState, currentTime: Long): Boolean = {
+    try {
+      val startTime = Instant.parse(state.pod.getStatus.getStartTime).toEpochMilli()
+      currentTime - startTime > executorIdleTimeout
+    } catch {
+      case _: Exception =>
+        logDebug(s"Cannot get startTime of pod ${state.pod}")
+        true
     }
   }
 }

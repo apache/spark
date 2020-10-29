@@ -118,8 +118,8 @@ class NettyBlockTransferServiceSuite
       .thenAnswer(_ => {hitExecutorDeadException = true})
 
     service0 = createService(port, driverEndpointRef)
-    val clientFactoryField = service0.getClass.getField(
-      "org$apache$spark$network$netty$NettyBlockTransferService$$clientFactory")
+    val clientFactoryField = service0.getClass
+      .getSuperclass.getSuperclass.getDeclaredField("clientFactory")
     clientFactoryField.setAccessible(true)
     clientFactoryField.set(service0, clientFactory)
 

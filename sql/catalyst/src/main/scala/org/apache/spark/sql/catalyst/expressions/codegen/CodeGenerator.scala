@@ -27,9 +27,8 @@ import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
-import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
-import org.codehaus.commons.compiler.util.reflect.ByteArrayClassLoader
-import org.codehaus.janino.{ClassBodyEvaluator, SimpleCompiler}
+import org.codehaus.commons.compiler.CompileException
+import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, InternalCompilerException, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
 
 import org.apache.spark.{TaskContext, TaskKilledException}
@@ -39,7 +38,7 @@ import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
@@ -91,8 +90,13 @@ case class SubExprEliminationState(isNull: ExprValue, value: ExprValue)
  * @param codes Strings representing the codes that evaluate common subexpressions.
  * @param states Foreach expression that is participating in subexpression elimination,
  *               the state to use.
+ * @param exprCodesNeedEvaluate Some expression codes that need to be evaluated before
+ *                              calling common subexpressions.
  */
-case class SubExprCodes(codes: Seq[String], states: Map[Expression, SubExprEliminationState])
+case class SubExprCodes(
+  codes: Seq[String],
+  states: Map[Expression, SubExprEliminationState],
+  exprCodesNeedEvaluate: Seq[ExprCode])
 
 /**
  * The main information about a new added function.
@@ -134,7 +138,7 @@ class CodegenContext extends Logging {
   def addReferenceObj(objName: String, obj: Any, className: String = null): String = {
     val idx = references.length
     references += obj
-    val clsName = Option(className).getOrElse(obj.getClass.getName)
+    val clsName = Option(className).getOrElse(CodeGenerator.typeName(obj.getClass))
     s"(($clsName) references[$idx] /* $objName */)"
   }
 
@@ -625,8 +629,12 @@ class CodegenContext extends Logging {
   def genComp(dataType: DataType, c1: String, c2: String): String = dataType match {
     // java boolean doesn't support > or < operator
     case BooleanType => s"($c1 == $c2 ? 0 : ($c1 ? 1 : -1))"
-    case DoubleType => s"java.lang.Double.compare($c1, $c2)"
-    case FloatType => s"java.lang.Float.compare($c1, $c2)"
+    case DoubleType =>
+      val clsName = SQLOrderingUtil.getClass.getName.stripSuffix("$")
+      s"$clsName.compareDoubles($c1, $c2)"
+    case FloatType =>
+      val clsName = SQLOrderingUtil.getClass.getName.stripSuffix("$")
+      s"$clsName.compareFloats($c1, $c2)"
     // use c1 - c2 may overflow
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
@@ -1041,7 +1049,7 @@ class CodegenContext extends Logging {
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
-    val commonExprVals = commonExprs.map(_.head.genCode(this))
+    lazy val commonExprVals = commonExprs.map(_.head.genCode(this))
 
     lazy val nonSplitExprCode = {
       commonExprs.zip(commonExprVals).map { case (exprs, eval) =>
@@ -1052,10 +1060,17 @@ class CodegenContext extends Logging {
       }
     }
 
-    val codes = if (commonExprVals.map(_.code.length).sum > SQLConf.get.methodSplitThreshold) {
-      val inputVarsForAllFuncs = commonExprs.map { expr =>
-        getLocalInputVariableValues(this, expr.head).toSeq
-      }
+    // For some operators, they do not require all its child's outputs to be evaluated in advance.
+    // Instead it only early evaluates part of outputs, for example, `ProjectExec` only early
+    // evaluate the outputs used more than twice. So we need to extract these variables used by
+    // subexpressions and evaluate them before subexpressions.
+    val (inputVarsForAllFuncs, exprCodesNeedEvaluate) = commonExprs.map { expr =>
+      val (inputVars, exprCodes) = getLocalInputVariableValues(this, expr.head)
+      (inputVars.toSeq, exprCodes.toSeq)
+    }.unzip
+
+    val splitThreshold = SQLConf.get.methodSplitThreshold
+    val codes = if (commonExprVals.map(_.code.length).sum > splitThreshold) {
       if (inputVarsForAllFuncs.map(calculateParamLengthFromExprValues).forall(isValidParamLength)) {
         commonExprs.zipWithIndex.map { case (exprs, i) =>
           val expr = exprs.head
@@ -1106,7 +1121,7 @@ class CodegenContext extends Logging {
     } else {
       nonSplitExprCode
     }
-    SubExprCodes(codes, localSubExprEliminationExprs.toMap)
+    SubExprCodes(codes, localSubExprEliminationExprs.toMap, exprCodesNeedEvaluate.flatten)
   }
 
   /**
@@ -1421,10 +1436,9 @@ object CodeGenerator extends Logging {
   private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): ByteCodeStats = {
     // First retrieve the generated classes.
     val classes = {
-      val scField = classOf[ClassBodyEvaluator].getDeclaredField("sc")
-      scField.setAccessible(true)
-      val compiler = scField.get(evaluator).asInstanceOf[SimpleCompiler]
-      val loader = compiler.getClassLoader.asInstanceOf[ByteArrayClassLoader]
+      val resultField = classOf[SimpleCompiler].getDeclaredField("result")
+      resultField.setAccessible(true)
+      val loader = resultField.get(evaluator).asInstanceOf[ByteArrayClassLoader]
       val classesField = loader.getClass.getDeclaredField("classes")
       classesField.setAccessible(true)
       classesField.get(loader).asInstanceOf[JavaMap[String, Array[Byte]]].asScala
@@ -1730,15 +1744,23 @@ object CodeGenerator extends Logging {
   }
 
   /**
-   * Extracts all the input variables from references and subexpression elimination states
-   * for a given `expr`. This result will be used to split the generated code of
-   * expressions into multiple functions.
+   * This methods returns two values in a Tuple.
+   *
+   * First value: Extracts all the input variables from references and subexpression
+   * elimination states for a given `expr`. This result will be used to split the
+   * generated code of expressions into multiple functions.
+   *
+   * Second value: Returns the set of `ExprCodes`s which are necessary codes before
+   * evaluating subexpressions.
    */
   def getLocalInputVariableValues(
       ctx: CodegenContext,
       expr: Expression,
-      subExprs: Map[Expression, SubExprEliminationState] = Map.empty): Set[VariableValue] = {
+      subExprs: Map[Expression, SubExprEliminationState] = Map.empty)
+      : (Set[VariableValue], Set[ExprCode]) = {
     val argSet = mutable.Set[VariableValue]()
+    val exprCodesNeedEvaluate = mutable.Set[ExprCode]()
+
     if (ctx.INPUT_ROW != null) {
       argSet += JavaCode.variable(ctx.INPUT_ROW, classOf[InternalRow])
     }
@@ -1759,16 +1781,21 @@ object CodeGenerator extends Logging {
 
         case ref: BoundReference if ctx.currentVars != null &&
             ctx.currentVars(ref.ordinal) != null =>
-          val ExprCode(_, isNull, value) = ctx.currentVars(ref.ordinal)
-          collectLocalVariable(value)
-          collectLocalVariable(isNull)
+          val exprCode = ctx.currentVars(ref.ordinal)
+          // If the referred variable is not evaluated yet.
+          if (exprCode.code != EmptyBlock) {
+            exprCodesNeedEvaluate += exprCode.copy()
+            exprCode.code = EmptyBlock
+          }
+          collectLocalVariable(exprCode.value)
+          collectLocalVariable(exprCode.isNull)
 
         case e =>
           stack.pushAll(e.children)
       }
     }
 
-    argSet.toSet
+    (argSet.toSet, exprCodesNeedEvaluate.toSet)
   }
 
   /**

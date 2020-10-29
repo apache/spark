@@ -26,7 +26,7 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
-import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.{DataFrame, Encoder}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsWithState
@@ -1018,6 +1018,56 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         .mapGroupsWithState(EventTimeTimeout)(stateFunc)
         .toDF,
       spark.createDataset(Seq(("a", 2), ("b", 1))).toDF)
+  }
+
+  testWithAllStateVersions("SPARK-29438: ensure UNION doesn't lead (flat)MapGroupsWithState" +
+    " to use shifted partition IDs") {
+    val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
+      val count = state.getOption.map(_.count).getOrElse(0L) + values.size
+      state.update(RunningCount(count))
+      (key, count.toString)
+    }
+
+    def constructUnionDf(desiredPartitionsForInput1: Int)
+      : (MemoryStream[String], MemoryStream[String], DataFrame) = {
+      val input1 = MemoryStream[String](desiredPartitionsForInput1)
+      val input2 = MemoryStream[String]
+      val df1 = input1.toDF()
+        .select($"value", $"value")
+      val df2 = input2.toDS()
+        .groupByKey(x => x)
+        .mapGroupsWithState(stateFunc) // Types = State: MyState, Out: (Str, Str)
+        .toDF()
+
+      // Unioned DF would have columns as (String, String)
+      (input1, input2, df1.union(df2))
+    }
+
+    withTempDir { checkpointDir =>
+      val (input1, input2, unionDf) = constructUnionDf(2)
+      testStream(unionDf, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        MultiAddData(input1, "input1-a")(input2, "input2-a"),
+        CheckNewAnswer(("input1-a", "input1-a"), ("input2-a", "1")),
+        StopStream
+      )
+
+      // We're restoring the query with different number of partitions in left side of UNION,
+      // which may lead right side of union to have mismatched partition IDs (e.g. if it relies on
+      // TaskContext.partitionId()). This test will verify (flat)MapGroupsWithState doesn't have
+      // such issue.
+
+      val (newInput1, newInput2, newUnionDf) = constructUnionDf(3)
+
+      newInput1.addData("input1-a")
+      newInput2.addData("input2-a")
+
+      testStream(newUnionDf, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        MultiAddData(newInput1, "input1-a")(newInput2, "input2-a", "input2-b"),
+        CheckNewAnswer(("input1-a", "input1-a"), ("input2-a", "2"), ("input2-b", "1"))
+      )
+    }
   }
 
   testQuietly("StateStore.abort on task failure handling") {

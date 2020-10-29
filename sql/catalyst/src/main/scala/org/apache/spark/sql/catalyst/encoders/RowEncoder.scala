@@ -291,9 +291,11 @@ object RowEncoder {
           MapObjects(deserializerFor(_), input, et),
           "array",
           ObjectType(classOf[Array[_]]), returnNullable = false)
+      // TODO should use `scala.collection.immutable.ArrayDeq.unsafeMake` method to create
+      //  `immutable.Seq` in Scala 2.13 when Scala version compatibility is no longer required.
       StaticInvoke(
         scala.collection.mutable.WrappedArray.getClass,
-        ObjectType(classOf[Seq[_]]),
+        ObjectType(classOf[scala.collection.Seq[_]]),
         "make",
         arrayData :: Nil,
         returnNullable = false)

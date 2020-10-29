@@ -43,9 +43,11 @@ class BlockManagerMaster(
     logInfo("Removed " + execId + " successfully in removeExecutor")
   }
 
-  /** Decommission block managers corresponding to given set of executors */
+  /** Decommission block managers corresponding to given set of executors
+   * Non-blocking.
+   */
   def decommissionBlockManagers(executorIds: Seq[String]): Unit = {
-    driverEndpoint.ask[Unit](DecommissionBlockManagers(executorIds))
+    driverEndpoint.ask[Boolean](DecommissionBlockManagers(executorIds))
   }
 
   /** Get Replication Info for all the RDD blocks stored in given blockManagerId */

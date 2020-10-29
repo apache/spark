@@ -20,13 +20,14 @@ package org.apache.spark
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
 import java.net.{HttpURLConnection, URI, URL}
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files => JavaFiles}
+import java.nio.file.{Files => JavaFiles, Paths}
 import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, OWNER_WRITE}
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.util.{Arrays, EnumSet, Locale, Properties}
 import java.util.concurrent.{TimeoutException, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream, Manifest}
+import java.util.regex.Pattern
 import javax.net.ssl._
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
@@ -37,6 +38,7 @@ import scala.sys.process.{Process, ProcessLogger}
 import scala.util.Try
 
 import com.google.common.io.{ByteStreams, Files}
+import org.apache.commons.lang3.StringUtils
 import org.apache.log4j.PropertyConfigurator
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods.{compact, render}
@@ -253,6 +255,37 @@ private[spark] object TestUtils {
         "sh", "-c", s"command -v $command")).run(ProcessLogger(_ => ())).exitValue())
     }
     attempt.isSuccess && attempt.get == 0
+  }
+
+  def isPythonVersionAtLeast38(): Boolean = {
+    val attempt = if (Utils.isWindows) {
+      Try(Process(Seq("cmd.exe", "/C", "python3 --version"))
+        .run(ProcessLogger(s => s.startsWith("Python 3.8") || s.startsWith("Python 3.9")))
+        .exitValue())
+    } else {
+      Try(Process(Seq("sh", "-c", "python3 --version"))
+        .run(ProcessLogger(s => s.startsWith("Python 3.8") || s.startsWith("Python 3.9")))
+        .exitValue())
+    }
+    attempt.isSuccess && attempt.get == 0
+  }
+
+  /**
+   * Get the absolute path from the executable. This implementation was borrowed from
+   * `spark/dev/sparktestsupport/shellutils.py`.
+   */
+  def getAbsolutePathFromExecutable(executable: String): Option[String] = {
+    val command = if (Utils.isWindows) s"$executable.exe" else executable
+    if (command.split(File.separator, 2).length == 1 &&
+        JavaFiles.isRegularFile(Paths.get(command)) &&
+        JavaFiles.isExecutable(Paths.get(command))) {
+      Some(Paths.get(command).toAbsolutePath.toString)
+    } else {
+      sys.env("PATH").split(Pattern.quote(File.pathSeparator))
+        .map(path => Paths.get(s"${StringUtils.strip(path, "\"")}${File.separator}$command"))
+        .find(p => JavaFiles.isRegularFile(p) && JavaFiles.isExecutable(p))
+        .map(_.toString)
+    }
   }
 
   /**

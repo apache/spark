@@ -91,7 +91,13 @@ object UnsupportedOperationChecker extends Logging {
 
     /** Collect all the streaming aggregates in a sub plan */
     def collectStreamingAggregates(subplan: LogicalPlan): Seq[Aggregate] = {
-      subplan.collect { case a: Aggregate if a.isStreaming => a }
+      subplan.collect {
+        case a: Aggregate if a.isStreaming => a
+        // Since the Distinct node will be replaced to Aggregate in the optimizer rule
+        // [[ReplaceDistinctWithAggregate]], here we also need to check all Distinct node by
+        // assuming it as Aggregate.
+        case d @ Distinct(c: LogicalPlan) if d.isStreaming => Aggregate(c.output, c.output, c)
+      }
     }
 
     val mapGroupsWithStates = plan.collect {
@@ -206,11 +212,11 @@ object UnsupportedOperationChecker extends Logging {
         case m: FlatMapGroupsWithState if m.isStreaming =>
 
           // Check compatibility with output modes and aggregations in query
-          val aggsAfterFlatMapGroups = collectStreamingAggregates(plan)
+          val aggsInQuery = collectStreamingAggregates(plan)
 
           if (m.isMapGroupsWithState) {                       // check mapGroupsWithState
             // allowed only in update query output mode and without aggregation
-            if (aggsAfterFlatMapGroups.nonEmpty) {
+            if (aggsInQuery.nonEmpty) {
               throwError(
                 "mapGroupsWithState is not supported with aggregation " +
                   "on a streaming DataFrame/Dataset")
@@ -219,8 +225,8 @@ object UnsupportedOperationChecker extends Logging {
                 "mapGroupsWithState is not supported with " +
                   s"$outputMode output mode on a streaming DataFrame/Dataset")
             }
-          } else {                                           // check latMapGroupsWithState
-            if (aggsAfterFlatMapGroups.isEmpty) {
+          } else {                                           // check flatMapGroupsWithState
+            if (aggsInQuery.isEmpty) {
               // flatMapGroupsWithState without aggregation: operation's output mode must
               // match query output mode
               m.outputMode match {
@@ -246,7 +252,7 @@ object UnsupportedOperationChecker extends Logging {
               } else if (collectStreamingAggregates(m).nonEmpty) {
                 throwError(
                   "flatMapGroupsWithState in append mode is not supported after " +
-                    s"aggregation on a streaming DataFrame/Dataset")
+                    "aggregation on a streaming DataFrame/Dataset")
               }
             }
           }
@@ -285,17 +291,17 @@ object UnsupportedOperationChecker extends Logging {
                 throwError("Full outer joins with streaming DataFrames/Datasets are not supported")
               }
 
-            case LeftSemi | LeftAnti =>
+            case LeftAnti =>
               if (right.isStreaming) {
-                throwError("Left semi/anti joins with a streaming DataFrame/Dataset " +
+                throwError("Left anti joins with a streaming DataFrame/Dataset " +
                     "on the right are not supported")
               }
 
-            // We support streaming left outer joins with static on the right always, and with
-            // stream on both sides under the appropriate conditions.
-            case LeftOuter =>
+            // We support streaming left outer and left semi joins with static on the right always,
+            // and with stream on both sides under the appropriate conditions.
+            case LeftOuter | LeftSemi =>
               if (!left.isStreaming && right.isStreaming) {
-                throwError("Left outer join with a streaming DataFrame/Dataset " +
+                throwError(s"$joinType join with a streaming DataFrame/Dataset " +
                   "on the right and a static DataFrame/Dataset on the left is not supported")
               } else if (left.isStreaming && right.isStreaming) {
                 val watermarkInJoinKeys = StreamingJoinHelper.isWatermarkInJoinKeys(subPlan)
@@ -305,7 +311,8 @@ object UnsupportedOperationChecker extends Logging {
                     left.outputSet, right.outputSet, condition, Some(1000000)).isDefined
 
                 if (!watermarkInJoinKeys && !hasValidWatermarkRange) {
-                  throwError("Stream-stream outer join between two streaming DataFrame/Datasets " +
+                  throwError(
+                    s"Stream-stream $joinType join between two streaming DataFrame/Datasets " +
                     "is not supported without a watermark in the join keys, or a watermark on " +
                     "the nullable side and an appropriate range condition")
                 }

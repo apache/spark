@@ -36,7 +36,7 @@ case class ShowTablePropertiesExec(
     import scala.collection.JavaConverters._
     val toRow = RowEncoder(schema).resolveAndBind().createSerializer()
 
-    // The reservered properties are accessible through DESCRIBE
+    // The reserved properties are accessible through DESCRIBE
     val properties = catalogTable.properties.asScala
       .filter { case (k, v) => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(k) }
     propertyKey match {

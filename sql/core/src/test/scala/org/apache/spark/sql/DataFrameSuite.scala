@@ -2541,6 +2541,32 @@ class DataFrameSuite extends QueryTest
       assert(df.schema === new StructType().add(StructField("d", DecimalType(38, 0))))
     }
   }
+
+  test("SPARK-32640: ln(NaN) should return NaN") {
+    val df = Seq(Double.NaN).toDF("d")
+    checkAnswer(df.selectExpr("ln(d)"), Row(Double.NaN))
+  }
+
+  test("SPARK-32761: aggregating multiple distinct CONSTANT columns") {
+     checkAnswer(sql("select count(distinct 2), count(distinct 2,3)"), Row(1, 1))
+  }
+
+  test("SPARK-32764: -0.0 and 0.0 should be equal") {
+    val df = Seq(0.0 -> -0.0).toDF("pos", "neg")
+    checkAnswer(df.select($"pos" > $"neg"), Row(false))
+  }
+
+  test("SPARK-32635: Replace references with foldables coming only from the node's children") {
+    val a = Seq("1").toDF("col1").withColumn("col2", lit("1"))
+    val b = Seq("2").toDF("col1").withColumn("col2", lit("2"))
+    val aub = a.union(b)
+    val c = aub.filter($"col1" === "2").cache()
+    val d = Seq("2").toDF("col4")
+    val r = d.join(aub, $"col2" === $"col4").select("col4")
+    val l = c.select("col2")
+    val df = l.join(r, $"col2" === $"col4", "LeftOuter")
+    checkAnswer(df, Row("2", "2"))
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)

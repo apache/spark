@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import sys
 import unittest
 
 from pyspark.ml.classification import BinaryLogisticRegressionSummary, \
@@ -443,10 +442,10 @@ class TrainingSummaryTest(SparkSessionTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_training_summary import *
+    from pyspark.ml.tests.test_training_summary import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

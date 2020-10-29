@@ -95,6 +95,8 @@ private[spark] trait UIRoot {
       .build()
   }
   def securityManager: SecurityManager
+
+  def checkUIViewPermissions(appId: String, attemptId: Option[String], user: String): Boolean
 }
 
 private[v1] object UIRootFromServletContext {
@@ -138,6 +140,19 @@ private[v1] trait BaseAppResource extends ApiRequestContext {
           throw new ForbiddenException(raw"""user "$user" is not authorized""")
         }
         fn(ui)
+      }
+    } catch {
+      case _: NoSuchElementException =>
+        val appKey = Option(attemptId).map(appId + "/" + _).getOrElse(appId)
+        throw new NotFoundException(s"no such app: $appKey")
+    }
+  }
+
+  protected def checkUIViewPermissions(): Unit = {
+    try {
+      val user = httpRequest.getRemoteUser()
+      if (!uiRoot.checkUIViewPermissions(appId, Option(attemptId), user)) {
+        throw new ForbiddenException(raw"""user "$user" is not authorized""")
       }
     } catch {
       case _: NoSuchElementException =>

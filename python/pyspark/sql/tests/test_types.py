@@ -25,10 +25,16 @@ import sys
 import unittest
 
 from pyspark.sql import Row
-from pyspark.sql.functions import col, UserDefinedFunction
-from pyspark.sql.types import *
-from pyspark.sql.types import _array_signed_int_typecode_ctype_mappings, _array_type_mappings, \
+from pyspark.sql.functions import col
+from pyspark.sql.udf import UserDefinedFunction
+from pyspark.sql.utils import AnalysisException
+from pyspark.sql.types import ByteType, ShortType, IntegerType, FloatType, DateType, \
+    TimestampType, MapType, StringType, StructType, StructField, ArrayType, DoubleType, LongType, \
+    DecimalType, BinaryType, BooleanType, NullType
+from pyspark.sql.types import (  # type: ignore
+    _array_signed_int_typecode_ctype_mappings, _array_type_mappings,
     _array_unsigned_int_typecode_ctype_mappings, _infer_type, _make_type_verifier, _merge_type
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase, ExamplePointUDT, PythonOnlyUDT, \
     ExamplePoint, PythonOnlyPoint, MyObject
 
@@ -436,6 +442,14 @@ class TypesTests(ReusedSQLTestCase):
         result = df.select(col('point').cast('string'), col('pypoint').cast('string')).head()
         self.assertEqual(result, Row(point=u'(1.0, 2.0)', pypoint=u'[3.0, 4.0]'))
 
+    def test_cast_to_udt_with_udt(self):
+        from pyspark.sql.functions import col
+        row = Row(point=ExamplePoint(1.0, 2.0), python_only_point=PythonOnlyPoint(1.0, 2.0))
+        df = self.spark.createDataFrame([row])
+        self.assertRaises(AnalysisException, lambda: df.select(col("point").cast(PythonOnlyUDT())))
+        self.assertRaises(AnalysisException,
+                          lambda: df.select(col("python_only_point").cast(ExamplePointUDT())))
+
     def test_struct_type(self):
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         struct2 = StructType([StructField("f1", StringType(), True),
@@ -720,7 +734,7 @@ class TypesTests(ReusedSQLTestCase):
         unsupported_types = all_types - set(supported_types)
         # test unsupported types
         for t in unsupported_types:
-            with self.assertRaises(TypeError):
+            with self.assertRaisesRegexp(TypeError, "infer the type of the field myarray"):
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
 
@@ -969,10 +983,10 @@ class DataTypeVerificationTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_types import *
+    from pyspark.sql.tests.test_types import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

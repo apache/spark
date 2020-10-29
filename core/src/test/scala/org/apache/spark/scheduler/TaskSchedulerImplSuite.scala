@@ -34,7 +34,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
-import org.apache.spark.util.ManualClock
+import org.apache.spark.util.{Clock, ManualClock, SystemClock}
 
 class FakeSchedulerBackend extends SchedulerBackend {
   def start(): Unit = {}
@@ -91,7 +91,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val conf = new SparkConf().setMaster(master).setAppName("TaskSchedulerImplSuite")
     confs.foreach { case (k, v) => conf.set(k, v) }
     sc = new SparkContext(conf)
-    taskScheduler = new TaskSchedulerImpl(sc)
+    taskScheduler = new TaskSchedulerImpl(sc, sc.conf.get(config.TASK_MAX_FAILURES))
     setupHelper()
   }
 
@@ -138,6 +138,33 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       }
     }
     taskScheduler
+  }
+
+  test("SPARK-32653: Decommissioned host/executor should be considered as inactive") {
+    val scheduler = setupScheduler()
+    val exec0 = "exec0"
+    val exec1 = "exec1"
+    val exec2 = "exec2"
+    val host0 = "host0"
+    val host1 = "host1"
+    val workerOffers = IndexedSeq(
+      WorkerOffer(exec0, host0, 1),
+      WorkerOffer(exec1, host0, 1),
+      WorkerOffer(exec2, host1, 1))
+    scheduler.resourceOffers(workerOffers)
+    assert(Seq(exec0, exec1, exec2).forall(scheduler.isExecutorAlive))
+    assert(Seq(host0, host1).forall(scheduler.hasExecutorsAliveOnHost))
+    assert(scheduler.getExecutorsAliveOnHost(host0)
+      .exists(s => s.contains(exec0) && s.contains(exec1)))
+    assert(scheduler.getExecutorsAliveOnHost(host1).exists(_.contains(exec2)))
+
+    scheduler.executorDecommission(exec1, ExecutorDecommissionInfo("test", None))
+    scheduler.executorDecommission(exec2, ExecutorDecommissionInfo("test", Some(host1)))
+
+    assert(scheduler.isExecutorAlive(exec0))
+    assert(!Seq(exec1, exec2).exists(scheduler.isExecutorAlive))
+    assert(scheduler.hasExecutorsAliveOnHost(host0))
+    assert(!scheduler.hasExecutorsAliveOnHost(host1))
   }
 
   test("Scheduler does not always schedule tasks on the same workers") {
@@ -1802,51 +1829,93 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(2 == taskDescriptions.head.resources(GPU).addresses.size)
   }
 
-  private def setupSchedulerForDecommissionTests(): TaskSchedulerImpl = {
-    val taskScheduler = setupSchedulerWithMaster(
-      s"local[2]",
-      config.CPUS_PER_TASK.key -> 1.toString)
-    taskScheduler.submitTasks(FakeTask.createTaskSet(2))
-    val multiCoreWorkerOffers = IndexedSeq(WorkerOffer("executor0", "host0", 1),
-      WorkerOffer("executor1", "host1", 1))
-    val taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
-    assert(taskDescriptions.map(_.executorId).sorted === Seq("executor0", "executor1"))
+  private def setupSchedulerForDecommissionTests(clock: Clock, numTasks: Int): TaskSchedulerImpl = {
+    // one task per host
+    val numHosts = numTasks
+    val conf = new SparkConf()
+      .setMaster(s"local[$numHosts]")
+      .setAppName("TaskSchedulerImplSuite")
+      .set(config.CPUS_PER_TASK.key, "1")
+    sc = new SparkContext(conf)
+    val maxTaskFailures = sc.conf.get(config.TASK_MAX_FAILURES)
+    taskScheduler = new TaskSchedulerImpl(sc, maxTaskFailures, clock = clock) {
+      override def createTaskSetManager(taskSet: TaskSet, maxFailures: Int): TaskSetManager = {
+        val tsm = super.createTaskSetManager(taskSet, maxFailures)
+        // we need to create a spied tsm so that we can see the copies running
+        val tsmSpy = spy(tsm)
+        stageToMockTaskSetManager(taskSet.stageId) = tsmSpy
+        tsmSpy
+      }
+    }
+    setupHelper()
+    // Spawn the tasks on different executors/hosts
+    taskScheduler.submitTasks(FakeTask.createTaskSet(numTasks))
+    for (i <- 0 until numTasks) {
+      val executorId = s"executor$i"
+      val taskDescriptions = taskScheduler.resourceOffers(IndexedSeq(WorkerOffer(
+         executorId, s"host$i", 1))).flatten
+      assert(taskDescriptions.size === 1)
+      assert(taskDescriptions(0).executorId == executorId)
+      assert(taskDescriptions(0).index === i)
+    }
     taskScheduler
   }
 
-  test("scheduler should keep the decommission info where host was decommissioned") {
-    val scheduler = setupSchedulerForDecommissionTests()
+  test("scheduler should keep the decommission state where host was decommissioned") {
+    val clock = new ManualClock(10000L)
+    val scheduler = setupSchedulerForDecommissionTests(clock, 2)
+    val decomTime = clock.getTimeMillis()
+    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("0", None))
+    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1", Some("host1")))
 
-    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("0", false))
-    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1", true))
-    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("0 new", false))
-    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1 new", false))
-
-    assert(scheduler.getExecutorDecommissionInfo("executor0")
-      === Some(ExecutorDecommissionInfo("0 new", false)))
-    assert(scheduler.getExecutorDecommissionInfo("executor1")
-      === Some(ExecutorDecommissionInfo("1", true)))
-    assert(scheduler.getExecutorDecommissionInfo("executor2").isEmpty)
+    assert(scheduler.getExecutorDecommissionState("executor0")
+      === Some(ExecutorDecommissionState(decomTime, None)))
+    assert(scheduler.getExecutorDecommissionState("executor1")
+      === Some(ExecutorDecommissionState(decomTime, Some("host1"))))
+    assert(scheduler.getExecutorDecommissionState("executor2").isEmpty)
   }
 
-  test("scheduler should ignore decommissioning of removed executors") {
-    val scheduler = setupSchedulerForDecommissionTests()
+  test("test full decommissioning flow") {
+    val clock = new ManualClock(10000L)
+    val scheduler = setupSchedulerForDecommissionTests(clock, 2)
+    val manager = stageToMockTaskSetManager(0)
+    // The task started should be running.
+    assert(manager.copiesRunning.take(2) === Array(1, 1))
 
     // executor 0 is decommissioned after loosing
-    assert(scheduler.getExecutorDecommissionInfo("executor0").isEmpty)
+    assert(scheduler.getExecutorDecommissionState("executor0").isEmpty)
     scheduler.executorLost("executor0", ExecutorExited(0, false, "normal"))
-    assert(scheduler.getExecutorDecommissionInfo("executor0").isEmpty)
-    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("", false))
-    assert(scheduler.getExecutorDecommissionInfo("executor0").isEmpty)
+    assert(scheduler.getExecutorDecommissionState("executor0").isEmpty)
+    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("", None))
+    assert(scheduler.getExecutorDecommissionState("executor0").isEmpty)
+
+    // 0th task just died above
+    assert(manager.copiesRunning.take(2) === Array(0, 1))
+
+    assert(scheduler.executorsPendingDecommission.isEmpty)
+    clock.advance(5000)
+
+    // executor1 hasn't been decommissioned yet
+    assert(scheduler.getExecutorDecommissionState("executor1").isEmpty)
 
     // executor 1 is decommissioned before loosing
-    assert(scheduler.getExecutorDecommissionInfo("executor1").isEmpty)
-    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("", false))
-    assert(scheduler.getExecutorDecommissionInfo("executor1").isDefined)
+    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("", None))
+    assert(scheduler.getExecutorDecommissionState("executor1").isDefined)
+    clock.advance(2000)
+
+    // executor1 is eventually lost
     scheduler.executorLost("executor1", ExecutorExited(0, false, "normal"))
-    assert(scheduler.getExecutorDecommissionInfo("executor1").isEmpty)
-    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("", false))
-    assert(scheduler.getExecutorDecommissionInfo("executor1").isEmpty)
+    assert(scheduler.executorsPendingDecommission.isEmpty)
+    // So now both the tasks are no longer running
+    assert(manager.copiesRunning.take(2) === Array(0, 0))
+    clock.advance(2000)
+
+    // Now give it some resources and both tasks should be rerun
+    val taskDescriptions = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor2", "host2", 1), WorkerOffer("executor3", "host3", 1))).flatten
+    assert(taskDescriptions.size === 2)
+    assert(taskDescriptions.map(_.index).sorted == Seq(0, 1))
+    assert(manager.copiesRunning.take(2) === Array(1, 1))
   }
 
   /**

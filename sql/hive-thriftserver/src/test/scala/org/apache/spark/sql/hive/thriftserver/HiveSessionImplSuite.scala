@@ -25,6 +25,7 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.cli.OperationHandle
 import org.apache.hive.service.cli.operation.{GetCatalogsOperation, Operation, OperationManager}
 import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl, SessionManager}
+import org.apache.hive.service.rpc.thrift.TProtocolVersion
 
 import org.apache.spark.SparkFunSuite
 
@@ -39,7 +40,7 @@ class HiveSessionImplSuite extends SparkFunSuite {
     operationManager = new OperationManagerMock()
 
     session = new HiveSessionImpl(
-      ThriftserverShimUtils.testedProtocolVersions.head,
+      TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V1,
       "",
       "",
       new HiveConf(),

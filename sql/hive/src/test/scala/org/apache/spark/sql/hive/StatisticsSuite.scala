@@ -101,14 +101,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             .asInstanceOf[HiveTableRelation]
 
           val properties = relation.tableMeta.ignoredProperties
-          if (HiveUtils.isHive23) {
-            // Since HIVE-6727, Hive fixes table-level stats for external tables are incorrect.
-            assert(properties("totalSize").toLong == 6)
-            assert(properties.get("rawDataSize").isEmpty)
-          } else {
-            assert(properties("totalSize").toLong <= 0, "external table totalSize must be <= 0")
-            assert(properties("rawDataSize").toLong <= 0, "external table rawDataSize must be <= 0")
-          }
+          // Since HIVE-6727, Hive fixes table-level stats for external tables are incorrect.
+          assert(properties("totalSize").toLong == 6)
+          assert(properties.get("rawDataSize").isEmpty)
 
           val sizeInBytes = relation.stats.sizeInBytes
           assert(sizeInBytes === BigInt(file1.length() + file2.length()))
@@ -872,25 +867,10 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         assert(totalSize.isDefined && totalSize.get > 0, "totalSize is lost")
 
         val numRows = extractStatsPropValues(describeResult, "numRows")
-        if (HiveUtils.isHive23) {
-          // Since HIVE-15653(Hive 2.3.0), Hive fixs some ALTER TABLE commands drop table stats.
-          assert(numRows.isDefined && numRows.get == 500)
-          val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
-          assert(rawDataSize.isDefined && rawDataSize.get == 5312)
-          checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
-        } else {
-          // ALTER TABLE SET/UNSET TBLPROPERTIES invalidates some Hive specific statistics, but not
-          // Spark specific statistics. This is triggered by the Hive alterTable API.
-          assert(numRows.isDefined && numRows.get == -1, "numRows is lost")
-          val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
-          assert(rawDataSize.isDefined && rawDataSize.get == -1, "rawDataSize is lost")
-
-          if (analyzedBySpark) {
-            checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
-          } else {
-            checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = None)
-          }
-        }
+        assert(numRows.isDefined && numRows.get == 500)
+        val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
+        assert(rawDataSize.isDefined && rawDataSize.get == 5312)
+        checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
       }
     }
   }
@@ -1128,7 +1108,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     def checkColStatsProps(expected: Map[String, String]): Unit = {
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS " + stats.keys.mkString(", "))
       val table = hiveClient.getTable("default", tableName)
-      val props = table.properties.filterKeys(_.startsWith("spark.sql.statistics.colStats"))
+      val props = table.properties.filterKeys(_.startsWith("spark.sql.statistics.colStats")).toMap
       assert(props == expected)
     }
 
@@ -1533,26 +1513,27 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         Seq(tbl, ext_tbl).foreach { tblName =>
           sql(s"INSERT INTO $tblName VALUES (1, 'a', '2019-12-13')")
 
+          val expectedSize = 601
           // analyze table
           sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS NOSCAN")
           var tableStats = getTableStats(tblName)
-          assert(tableStats.sizeInBytes == 601)
+          assert(tableStats.sizeInBytes == expectedSize)
           assert(tableStats.rowCount.isEmpty)
 
           sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS")
           tableStats = getTableStats(tblName)
-          assert(tableStats.sizeInBytes == 601)
+          assert(tableStats.sizeInBytes == expectedSize)
           assert(tableStats.rowCount.get == 1)
 
           // analyze a single partition
           sql(s"ANALYZE TABLE $tblName PARTITION (ds='2019-12-13') COMPUTE STATISTICS NOSCAN")
           var partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
-          assert(partStats.sizeInBytes == 601)
+          assert(partStats.sizeInBytes == expectedSize)
           assert(partStats.rowCount.isEmpty)
 
           sql(s"ANALYZE TABLE $tblName PARTITION (ds='2019-12-13') COMPUTE STATISTICS")
           partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
-          assert(partStats.sizeInBytes == 601)
+          assert(partStats.sizeInBytes == expectedSize)
           assert(partStats.rowCount.get == 1)
         }
       }

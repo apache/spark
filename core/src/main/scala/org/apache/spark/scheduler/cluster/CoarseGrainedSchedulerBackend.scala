@@ -92,8 +92,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Executors that have been lost, but for which we don't yet know the real exit reason.
   private val executorsPendingLossReason = new HashSet[String]
 
-  // Executors which are being decommissioned
-  protected val executorsPendingDecommission = new HashSet[String]
+  // Executors which are being decommissioned. Maps from executorId to workerHost.
+  protected val executorsPendingDecommission = new HashMap[String, Option[String]]
 
   // A map of ResourceProfile id to map of hostname with its possible task number running on it
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
@@ -191,10 +191,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         executorDataMap.get(executorId).foreach(_.executorEndpoint.send(StopExecutor))
         removeExecutor(executorId, reason)
 
-      case DecommissionExecutor(executorId, decommissionInfo) =>
-        logError(s"Received decommission executor message ${executorId}: $decommissionInfo")
-        decommissionExecutor(executorId, decommissionInfo)
-
       case RemoveWorker(workerId, host, message) =>
         removeWorker(workerId, host, message)
 
@@ -272,10 +268,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         removeWorker(workerId, host, message)
         context.reply(true)
 
-      case DecommissionExecutor(executorId, decommissionInfo) =>
-        logError(s"Received decommission executor message ${executorId}: ${decommissionInfo}.")
-        decommissionExecutor(executorId, decommissionInfo)
-        context.reply(true)
+      // Do not change this code without running the K8s integration suites
+      case ExecutorDecommissioning(executorId) =>
+        logWarning(s"Received executor $executorId decommissioned message")
+        context.reply(
+          decommissionExecutor(
+            executorId,
+            ExecutorDecommissionInfo(s"Executor $executorId is decommissioned."),
+            adjustTargetNumExecutors = false,
+            triggeredByExecutor = true))
 
       case RetrieveSparkAppConfig(resourceProfileId) =>
         val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(resourceProfileId)
@@ -390,16 +391,23 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         case Some(executorInfo) =>
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
-          val killed = CoarseGrainedSchedulerBackend.this.synchronized {
+          val lossReason = CoarseGrainedSchedulerBackend.this.synchronized {
             addressToExecutorId -= executorInfo.executorAddress
             executorDataMap -= executorId
             executorsPendingLossReason -= executorId
-            executorsPendingDecommission -= executorId
-            executorsPendingToRemove.remove(executorId).getOrElse(false)
+            val killedByDriver = executorsPendingToRemove.remove(executorId).getOrElse(false)
+            val workerHostOpt = executorsPendingDecommission.remove(executorId)
+            if (killedByDriver) {
+              ExecutorKilled
+            } else if (workerHostOpt.isDefined) {
+              ExecutorDecommission(workerHostOpt.get)
+            } else {
+              reason
+            }
           }
           totalCoreCount.addAndGet(-executorInfo.totalCores)
           totalRegisteredExecutors.addAndGet(-1)
-          scheduler.executorLost(executorId, if (killed) ExecutorKilled else reason)
+          scheduler.executorLost(executorId, lossReason)
           listenerBus.post(
             SparkListenerExecutorRemoved(System.currentTimeMillis(), executorId, reason.toString))
         case None =>
@@ -417,49 +425,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     private def removeWorker(workerId: String, host: String, message: String): Unit = {
       logDebug(s"Asked to remove worker $workerId with reason $message")
       scheduler.workerRemoved(workerId, host, message)
-    }
-
-    /**
-     * Mark a given executor as decommissioned and stop making resource offers for it.
-     */
-    private def decommissionExecutor(
-        executorId: String, decommissionInfo: ExecutorDecommissionInfo): Boolean = {
-      val shouldDisable = CoarseGrainedSchedulerBackend.this.synchronized {
-        // Only bother decommissioning executors which are alive.
-        if (isExecutorActive(executorId)) {
-          executorsPendingDecommission += executorId
-          true
-        } else {
-          false
-        }
-      }
-
-      if (shouldDisable) {
-        logInfo(s"Starting decommissioning executor $executorId.")
-        try {
-          scheduler.executorDecommission(executorId, decommissionInfo)
-        } catch {
-          case e: Exception =>
-            logError(s"Unexpected error during decommissioning ${e.toString}", e)
-        }
-        logInfo(s"Finished decommissioning executor $executorId.")
-
-        if (conf.get(STORAGE_DECOMMISSION_ENABLED)) {
-          try {
-            logInfo("Starting decommissioning block manager corresponding to " +
-              s"executor $executorId.")
-            scheduler.sc.env.blockManager.master.decommissionBlockManagers(Seq(executorId))
-          } catch {
-            case e: Exception =>
-              logError("Unexpected error during block manager " +
-                s"decommissioning for executor $executorId: ${e.toString}", e)
-          }
-          logInfo(s"Acknowledged decommissioning block manager corresponding to $executorId.")
-        }
-      } else {
-        logInfo(s"Skipping decommissioning of executor $executorId.")
-      }
-      shouldDisable
     }
 
     /**
@@ -492,6 +457,56 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   val driverEndpoint = rpcEnv.setupEndpoint(ENDPOINT_NAME, createDriverEndpoint())
 
   protected def minRegisteredRatio: Double = _minRegisteredRatio
+
+  /**
+   * Request that the cluster manager decommission the specified executors.
+   *
+   * @param executorsAndDecomInfo Identifiers of executors & decommission info.
+   * @param adjustTargetNumExecutors whether the target number of executors will be adjusted down
+   *                                 after these executors have been decommissioned.
+   * @param triggeredByExecutor whether the decommission is triggered at executor.
+   * @return the ids of the executors acknowledged by the cluster manager to be removed.
+   */
+  override def decommissionExecutors(
+      executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
+      adjustTargetNumExecutors: Boolean,
+      triggeredByExecutor: Boolean): Seq[String] = withLock {
+    // Do not change this code without running the K8s integration suites
+    val executorsToDecommission = executorsAndDecomInfo.flatMap { case (executorId, decomInfo) =>
+      // Only bother decommissioning executors which are alive.
+      if (isExecutorActive(executorId)) {
+        scheduler.executorDecommission(executorId, decomInfo)
+        executorsPendingDecommission(executorId) = decomInfo.workerHost
+        Some(executorId)
+      } else {
+        None
+      }
+    }
+    logInfo(s"Decommission executors: ${executorsToDecommission.mkString(", ")}")
+
+    // If we don't want to replace the executors we are decommissioning
+    if (adjustTargetNumExecutors) {
+      adjustExecutors(executorsToDecommission)
+    }
+
+    // Mark those corresponding BlockManagers as decommissioned first before we sending
+    // decommission notification to executors. So, it's less likely to lead to the race
+    // condition where `getPeer` request from the decommissioned executor comes first
+    // before the BlockManagers are marked as decommissioned.
+    // Note that marking BlockManager as decommissioned doesn't need depend on
+    // `spark.storage.decommission.enabled`. Because it's meaningless to save more blocks
+    // for the BlockManager since the executor will be shutdown soon.
+    scheduler.sc.env.blockManager.master.decommissionBlockManagers(executorsToDecommission)
+
+    if (!triggeredByExecutor) {
+      executorsToDecommission.foreach { executorId =>
+        logInfo(s"Notify executor $executorId to decommissioning.")
+        executorDataMap(executorId).executorEndpoint.send(DecommissionExecutor)
+      }
+    }
+
+    executorsToDecommission
+  }
 
   override def start(): Unit = {
     if (UserGroupInformation.isSecurityEnabled()) {
@@ -588,17 +603,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     driverEndpoint.send(RemoveWorker(workerId, host, message))
   }
 
-  /**
-   * Called by subclasses when notified of a decommissioning executor.
-   */
-  private[spark] def decommissionExecutor(
-      executorId: String, decommissionInfo: ExecutorDecommissionInfo): Unit = {
-    if (driverEndpoint != null) {
-      logInfo("Propagating executor decommission to driver.")
-      driverEndpoint.send(DecommissionExecutor(executorId, decommissionInfo))
-    }
-  }
-
   def sufficientResourcesRegistered(): Boolean = true
 
   override def isReady(): Boolean = {
@@ -629,13 +633,30 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       !executorsPendingToRemove.contains(id) &&
       !executorsPendingLossReason.contains(id) &&
       !executorsPendingDecommission.contains(id)
-
   }
 
+  /**
+   * Get the max number of tasks that can be concurrent launched based on the ResourceProfile
+   * could be used, even if some of them are being used at the moment.
+   * Note that please don't cache the value returned by this method, because the number can change
+   * due to add/remove executors.
+   *
+   * @param rp ResourceProfile which to use to calculate max concurrent tasks.
+   * @return The max number of tasks that can be concurrent launched currently.
+   */
   override def maxNumConcurrentTasks(rp: ResourceProfile): Int = synchronized {
-    val cpusPerTask = ResourceProfile.getTaskCpusOrDefaultForProfile(rp, conf)
-    val executorsWithResourceProfile = executorDataMap.values.filter(_.resourceProfileId == rp.id)
-    executorsWithResourceProfile.map(_.totalCores / cpusPerTask).sum
+    val (rpIds, cpus, resources) = {
+      executorDataMap
+        .filter { case (id, _) => isExecutorActive(id) }
+        .values.toArray.map { executor =>
+          (
+            executor.resourceProfileId,
+            executor.totalCores,
+            executor.resourcesInfo.map { case (name, rInfo) => (name, rInfo.totalAddressAmount) }
+          )
+        }.unzip3
+    }
+    TaskSchedulerImpl.calculateAvailableSlots(scheduler, conf, rp.id, rpIds, cpus, resources)
   }
 
   // this function is for testing only
@@ -733,6 +754,31 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     Future.successful(false)
 
   /**
+   * Adjust the number of executors being requested to no longer include the provided executors.
+   */
+  private def adjustExecutors(executorIds: Seq[String]) = {
+    if (executorIds.nonEmpty) {
+      executorIds.foreach { exec =>
+        withLock {
+          val rpId = executorDataMap(exec).resourceProfileId
+          val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
+          if (requestedTotalExecutorsPerResourceProfile.isEmpty) {
+            // Assume that we are killing an executor that was started by default and
+            // not through the request api
+            requestedTotalExecutorsPerResourceProfile(rp) = 0
+          } else {
+            val requestedTotalForRp = requestedTotalExecutorsPerResourceProfile(rp)
+            requestedTotalExecutorsPerResourceProfile(rp) = math.max(requestedTotalForRp - 1, 0)
+          }
+        }
+      }
+      doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
+    } else {
+      Future.successful(true)
+    }
+  }
+
+  /**
    * Request that the cluster manager kill the specified executors.
    *
    * @param executorIds identifiers of executors to kill
@@ -770,19 +816,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // take into account executors that are pending to be added or removed.
       val adjustTotalExecutors =
         if (adjustTargetNumExecutors) {
-          executorsToKill.foreach { exec =>
-            val rpId = executorDataMap(exec).resourceProfileId
-            val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
-            if (requestedTotalExecutorsPerResourceProfile.isEmpty) {
-              // Assume that we are killing an executor that was started by default and
-              // not through the request api
-              requestedTotalExecutorsPerResourceProfile(rp) = 0
-            } else {
-              val requestedTotalForRp = requestedTotalExecutorsPerResourceProfile(rp)
-              requestedTotalExecutorsPerResourceProfile(rp) = math.max(requestedTotalForRp - 1, 0)
-            }
-          }
-          doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
+          adjustExecutors(executorsToKill)
         } else {
           Future.successful(true)
         }

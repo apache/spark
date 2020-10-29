@@ -1,0 +1,48 @@
+WholeStageCodegen (6)
+  HashAggregate [sum] [sum(cast(ss_quantity as bigint)),sum(ss_quantity),sum]
+    InputAdapter
+      Exchange #1
+        WholeStageCodegen (5)
+          HashAggregate [ss_quantity] [sum,sum]
+            Project [ss_quantity]
+              BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                Project [ss_sold_date_sk,ss_quantity]
+                  BroadcastHashJoin [ss_addr_sk,ca_address_sk,ca_state,ss_net_profit]
+                    Project [ss_sold_date_sk,ss_addr_sk,ss_quantity,ss_net_profit]
+                      BroadcastHashJoin [ss_cdemo_sk,cd_demo_sk,cd_marital_status,cd_education_status,ss_sales_price]
+                        Project [ss_sold_date_sk,ss_cdemo_sk,ss_addr_sk,ss_quantity,ss_sales_price,ss_net_profit]
+                          BroadcastHashJoin [ss_store_sk,s_store_sk]
+                            Filter [ss_store_sk,ss_cdemo_sk,ss_addr_sk,ss_sold_date_sk,ss_sales_price,ss_net_profit]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.store_sales [ss_sold_date_sk,ss_cdemo_sk,ss_addr_sk,ss_store_sk,ss_quantity,ss_sales_price,ss_net_profit]
+                            InputAdapter
+                              BroadcastExchange #2
+                                WholeStageCodegen (1)
+                                  Filter [s_store_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.store [s_store_sk]
+                        InputAdapter
+                          BroadcastExchange #3
+                            WholeStageCodegen (2)
+                              Filter [cd_demo_sk,cd_marital_status,cd_education_status]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
+                    InputAdapter
+                      BroadcastExchange #4
+                        WholeStageCodegen (3)
+                          Project [ca_address_sk,ca_state]
+                            Filter [ca_country,ca_address_sk,ca_state]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.customer_address [ca_address_sk,ca_state,ca_country]
+                InputAdapter
+                  BroadcastExchange #5
+                    WholeStageCodegen (4)
+                      Project [d_date_sk]
+                        Filter [d_year,d_date_sk]
+                          ColumnarToRow
+                            InputAdapter
+                              Scan parquet default.date_dim [d_date_sk,d_year]

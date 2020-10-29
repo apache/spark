@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import java.util.Locale
+
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.sources.{And, Filter}
-import org.apache.spark.sql.types.{AtomicType, BinaryType, DataType}
+import org.apache.spark.sql.types.{AtomicType, BinaryType, DataType, StructField, StructType}
 
 /**
  * Methods that can be shared when upgrading the built-in Hive.
@@ -36,13 +39,50 @@ trait OrcFiltersBase {
     }
   }
 
+  case class OrcPrimitiveField(fieldName: String, fieldType: DataType)
+
   /**
-   * Return true if this is a searchable type in ORC.
-   * Both CharType and VarcharType are cleaned at AstBuilder.
+   * This method returns a map which contains ORC field name and data type. Each key
+   * represents a column; `dots` are used as separators for nested columns. If any part
+   * of the names contains `dots`, it is quoted to avoid confusion. See
+   * `org.apache.spark.sql.connector.catalog.quoted` for implementation details.
+   *
+   * BinaryType, UserDefinedType, ArrayType and MapType are ignored.
    */
-  protected[sql] def isSearchableType(dataType: DataType) = dataType match {
-    case BinaryType => false
-    case _: AtomicType => true
-    case _ => false
+  protected[sql] def getSearchableTypeMap(
+      schema: StructType,
+      caseSensitive: Boolean): Map[String, OrcPrimitiveField] = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+
+    def getPrimitiveFields(
+        fields: Seq[StructField],
+        parentFieldNames: Seq[String] = Seq.empty): Seq[(String, OrcPrimitiveField)] = {
+      fields.flatMap { f =>
+        f.dataType match {
+          case st: StructType =>
+            getPrimitiveFields(st.fields, parentFieldNames :+ f.name)
+          case BinaryType => None
+          case _: AtomicType =>
+            val fieldName = (parentFieldNames :+ f.name).quoted
+            val orcField = OrcPrimitiveField(fieldName, f.dataType)
+            Some((fieldName, orcField))
+          case _ => None
+        }
+      }
+    }
+
+    val primitiveFields = getPrimitiveFields(schema.fields)
+    if (caseSensitive) {
+      primitiveFields.toMap
+    } else {
+      // Don't consider ambiguity here, i.e. more than one field are matched in case insensitive
+      // mode, just skip pushdown for these fields, they will trigger Exception when reading,
+      // See: SPARK-25175.
+      val dedupPrimitiveFields = primitiveFields
+        .groupBy(_._1.toLowerCase(Locale.ROOT))
+        .filter(_._2.size == 1)
+        .mapValues(_.head._2)
+      CaseInsensitiveMap(dedupPrimitiveFields.toMap)
+    }
   }
 }

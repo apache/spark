@@ -27,7 +27,7 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.conversion import SparkConversionMixin
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.types import Row, DataType, StringType, StructType, \
+from pyspark.sql.types import DataType, StructType, \
     _make_type_verifier, _infer_schema, _has_nulltype, _merge_type, _create_converter, \
     _parse_datatype_string
 from pyspark.sql.utils import install_exception_handler
@@ -43,7 +43,7 @@ def _monkey_patch_RDD(sparkSession):
         This is a shorthand for ``spark.createDataFrame(rdd, schema, sampleRatio)``
 
         :param schema: a :class:`pyspark.sql.types.StructType` or list of names of columns
-        :param samplingRatio: the sample ratio of rows used for inferring
+        :param sampleRatio: the sample ratio of rows used for inferring
         :return: a DataFrame
 
         >>> rdd.toDF().collect()
@@ -192,6 +192,7 @@ class SparkSession(SparkConversionMixin):
         """Creates a new SparkSession.
 
         >>> from datetime import datetime
+        >>> from pyspark.sql import Row
         >>> spark = SparkSession(sc)
         >>> allTypes = sc.parallelize([Row(i=1, s="string", d=1.0, l=1,
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
@@ -229,7 +230,8 @@ class SparkSession(SparkConversionMixin):
             SparkSession._instantiatedSession = self
             SparkSession._activeSession = self
             self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
-            self._jvm.SparkSession.setActiveSession(self._jsparkSession)
+            getattr(getattr(self._jvm, "SparkSession$"), "MODULE$")\
+                .setActiveSessionInternal(self._jsparkSession)
 
     def _repr_html_(self):
         return """
@@ -358,18 +360,14 @@ class SparkSession(SparkConversionMixin):
 
     def _inferSchemaFromList(self, data, names=None):
         """
-        Infer schema from list of Row or tuple.
+        Infer schema from list of Row, dict, or tuple.
 
-        :param data: list of Row or tuple
+        :param data: list of Row, dict, or tuple
         :param names: list of column names
         :return: :class:`pyspark.sql.types.StructType`
         """
         if not data:
             raise ValueError("can not infer schema from empty dataset")
-        first = data[0]
-        if type(first) is dict:
-            warnings.warn("inferring schema from dict is deprecated,"
-                          "please use pyspark.sql.Row instead")
         schema = reduce(_merge_type, (_infer_schema(row, names) for row in data))
         if _has_nulltype(schema):
             raise ValueError("Some of types cannot be determined after inferring")
@@ -377,9 +375,9 @@ class SparkSession(SparkConversionMixin):
 
     def _inferSchema(self, rdd, samplingRatio=None, names=None):
         """
-        Infer schema from an RDD of Row or tuple.
+        Infer schema from an RDD of Row, dict, or tuple.
 
-        :param rdd: an RDD of Row or tuple
+        :param rdd: an RDD of Row, dict, or tuple
         :param samplingRatio: sampling ratio, or no sampling (default)
         :return: :class:`pyspark.sql.types.StructType`
         """
@@ -387,9 +385,6 @@ class SparkSession(SparkConversionMixin):
         if not first:
             raise ValueError("The first row in RDD is empty, "
                              "can not infer schema")
-        if type(first) is dict:
-            warnings.warn("Using RDD of dict to inferSchema is deprecated. "
-                          "Use pyspark.sql.Row instead")
 
         if samplingRatio is None:
             schema = _infer_schema(first, names=names)
@@ -567,7 +562,8 @@ class SparkSession(SparkConversionMixin):
         Py4JJavaError: ...
         """
         SparkSession._activeSession = self
-        self._jvm.SparkSession.setActiveSession(self._jsparkSession)
+        getattr(getattr(self._jvm, "SparkSession$"), "MODULE$")\
+            .setActiveSessionInternal(self._jsparkSession)
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
 
@@ -689,7 +685,7 @@ class SparkSession(SparkConversionMixin):
         self._sc.stop()
         # We should clean the default session up. See SPARK-23228.
         self._jvm.SparkSession.clearDefaultSession()
-        self._jvm.SparkSession.clearActiveSession()
+        getattr(getattr(self._jvm, "SparkSession$"), "MODULE$").clearActiveSessionInternal()
         SparkSession._instantiatedSession = None
         SparkSession._activeSession = None
         SQLContext._instantiatedContext = None
