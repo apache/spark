@@ -51,13 +51,21 @@ import org.apache.spark.sql.types._
   group = "agg_funcs",
   since = "2.0.0")
 case class First(child: Expression, ignoreNulls: Boolean)
-  extends DeclarativeAggregate with ExpectsInputTypes {
+  extends DeclarativeAggregate with OffsetWindowSpec with ExpectsInputTypes {
 
   def this(child: Expression) = this(child, false)
 
   def this(child: Expression, ignoreNullsExpr: Expression) = {
     this(child, FirstLast.validateIgnoreNullExpr(ignoreNullsExpr, "first"))
   }
+
+  override val input = child
+
+  override val offset = Literal.create(1, IntegerType)
+
+  override lazy val default = Literal.create(null, input.dataType)
+
+  override val isRelative = false
 
   override def children: Seq[Expression] = child :: Nil
 
