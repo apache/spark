@@ -747,4 +747,13 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val df4 = Seq("""{"c2": [19]}""").toDF("c0")
     checkAnswer(df4.select(from_json($"c0", MapType(StringType, st))), Row(null))
   }
+
+  test("SPARK-33286: from_json - combined error messages") {
+    val df = Seq("""{"a":1}""").toDF("json")
+    val invalidJsonSchema = """{"fields": [{"a":123}], "type": "struct"}"""
+    val errMsg = intercept[AnalysisException] {
+      df.select(from_json($"json", invalidJsonSchema, Map.empty[String, String])).collect()
+    }.getMessage
+    assert(errMsg.contains("""Failed to convert the JSON string '{"a":123}' to a field"""))
+  }
 }
