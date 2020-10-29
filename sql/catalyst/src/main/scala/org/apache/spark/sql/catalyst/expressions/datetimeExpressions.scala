@@ -937,16 +937,19 @@ abstract class UnixTime extends ToTimestamp {
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(unix_time, format) - Returns `unix_time` in the specified `format`.",
+  usage = "_FUNC_(unix_time[, format]) - Returns `unix_time` in the specified `format`.",
   arguments = """
     Arguments:
       * unix_time - UNIX Timestamp to be converted to the provided format.
       * format - Date/time format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>
-                 for valid date and time format patterns.
+                 for valid date and time format patterns. The 'yyyy-MM-dd HH:mm:ss' pattern is used if omitted.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_(0, 'yyyy-MM-dd HH:mm:ss');
+       1969-12-31 16:00:00
+
+      > SELECT _FUNC_(0);
        1969-12-31 16:00:00
   """,
   group = "datetime_funcs",
