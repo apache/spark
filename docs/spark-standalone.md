@@ -413,9 +413,9 @@ exited with non-zero exit code. To use this feature, you may pass in the `--supe
 `spark-submit` when launching your application. Then, if you wish to kill an application that is
 failing repeatedly, you may do so through:
 
-    ./bin/spark-class org.apache.spark.deploy.Client kill <master url> <driver ID>
+    ./bin/spark-class org.apache.spark.deploy.Client kill <master url> <app ID>
 
-You can find the driver ID through the standalone Master web UI at `http://<master url>:8080`.
+You can find the app ID through the standalone Master web UI at `http://<master url>:8080`.
 
 # Resource Scheduling
 
