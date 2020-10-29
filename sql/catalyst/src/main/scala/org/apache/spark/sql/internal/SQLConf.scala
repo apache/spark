@@ -2865,14 +2865,6 @@ object SQLConf {
     .stringConf
     .createWithDefault("")
 
-  val JDBC_MYSQL_VERSION =
-    buildConf("spark.sql.jdbc.mysql.version")
-      .internal()
-      .doc("Mysql version for jdbc connection.")
-      .version("3.1.0")
-      .stringConf
-      .createWithDefault("5.7")
-
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3507,8 +3499,6 @@ class SQLConf extends Serializable with Logging {
   def truncateTrashEnabled: Boolean = getConf(SQLConf.TRUNCATE_TRASH_ENABLED)
 
   def disabledJdbcConnectionProviders: String = getConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
-
-  def jdbcMySQLVersion: String = getConf(SQLConf.JDBC_MYSQL_VERSION)
 
   /** ********************** SQLConf functionality methods ************ */
 
