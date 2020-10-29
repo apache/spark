@@ -47,11 +47,17 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
   }
 
   def testRenameColumn(tbl: String): Unit = {
-    sql(s"CREATE TABLE $tbl (ID STRING NOT NULL) USING _")
+    sql(s"CREATE TABLE $tbl (ID STRING NOT NULL, ID1 STRING NOT NULL) USING _")
     sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO ID2")
     val t = spark.table(s"$tbl")
     val expectedSchema = new StructType().add("ID2", StringType, nullable = true)
+      .add("ID1", StringType, nullable = true)
     assert(t.schema === expectedSchema)
+    // Rename to already existing column
+    val msg = intercept[AnalysisException] {
+      sql(s"ALTER TABLE $tbl RENAME COLUMN ID1 TO ID2")
+    }.getMessage
+    assert(msg.contains("Cannot rename column, because ID2 already exists"))
   }
 
   test("SPARK-33034: ALTER TABLE ... add new columns") {
@@ -118,10 +124,15 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
     assert(msg.contains("Table not found"))
   }
 
-  test("ALTER TABLE - rename column") {
+  test("SPARK-33034: ALTER TABLE ... rename column") {
     withTable(s"$catalogName.alt_table") {
       testRenameColumn(s"$catalogName.alt_table")
     }
+    // Rename a column in a not existing table
+    val msg = intercept[AnalysisException] {
+      sql(s"ALTER TABLE $catalogName.not_existing_table RENAME COLUMN ID TO C")
+    }.getMessage
+    assert(msg.contains("Table not found"))
   }
 
   test("SPARK-33034: ALTER TABLE ... update column nullability") {

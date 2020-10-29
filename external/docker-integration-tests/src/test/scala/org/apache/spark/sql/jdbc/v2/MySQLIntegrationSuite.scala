@@ -56,19 +56,18 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   }
 
   override def sparkConf: SparkConf = {
-    val sparkConf = if (db.imageName.matches(".*mysql.8\\.[0-9].*")) {
-      super.sparkConf.set(SQLConf.JDBC_MYSQL_VERSION.key, "8.0")
-    } else {
-      super.sparkConf
-    }
-    sparkConf
+    super.sparkConf
       .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
       .set("spark.sql.catalog.mysql.url", db.getJdbcUrl(dockerIp, externalPort))
   }
 
   override val connectionTimeout = timeout(7.minutes)
 
-  override def dataPreparation(conn: Connection): Unit = {}
+  private var mySQLVersion = -1
+
+  override def dataPreparation(conn: Connection): Unit = {
+    mySQLVersion = conn.getMetaData.getDatabaseMajorVersion
+  }
 
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER) USING _")
@@ -87,15 +86,14 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   }
 
   override def testRenameColumn(tbl: String): Unit = {
-    if (db.imageName.matches(".*mysql.5\\.[0-9].*")) {
+    assert( mySQLVersion > 0)
+    if (mySQLVersion < 8) {
       sql(s"CREATE TABLE $tbl (ID STRING NOT NULL) USING _")
-      // Update nullability is unsupported for mysql db.
+      // Rename is unsupported for mysql versions < 8.0.
       val msg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO ID2")
       }.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
-      assert(msg.contains("Rename column is only supported for Mysql version 8.0 and above. " +
-        s"To fix this error, please configure the mysql version, " +
-        s"${SQLConf.JDBC_MYSQL_VERSION.key}"))
+      assert(msg.contains("Rename column is only supported for MySQL version 8.0 and above."))
     } else {
       super.testRenameColumn(tbl)
     }

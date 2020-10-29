@@ -895,11 +895,12 @@ object JdbcUtils extends Logging {
       changes: Seq[TableChange],
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
+    val metaData = conn.getMetaData
     if (changes.length == 1) {
-      executeStatement(conn, options, dialect.alterTable(tableName, changes)(0))
+      executeStatement(conn, options, dialect.alterTable(tableName, changes,
+        metaData.getDatabaseMajorVersion)(0))
     } else {
-      val metadata = conn.getMetaData
-      if (!metadata.supportsTransactions) {
+      if (!metaData.supportsTransactions) {
         throw new SQLFeatureNotSupportedException("The target JDBC server does not support " +
           "transaction and can only support ALTER TABLE with a single action.")
       } else {
@@ -907,7 +908,7 @@ object JdbcUtils extends Logging {
         val statement = conn.createStatement
         try {
           statement.setQueryTimeout(options.queryTimeout)
-          for (sql <- dialect.alterTable(tableName, changes)) {
+          for (sql <- dialect.alterTable(tableName, changes, metaData.getDatabaseMajorVersion)) {
             statement.executeUpdate(sql)
           }
           conn.commit()
