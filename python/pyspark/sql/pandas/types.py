@@ -315,3 +315,13 @@ def _check_series_convert_timestamps_tz_local(s, timezone):
         `pandas.Series` where if it is a timestamp, has been converted to tz-naive
     """
     return _check_series_convert_timestamps_localize(s, timezone, None)
+
+
+def _convert_map_items_to_dict(s):
+    """
+    Convert a series with items as list of (key, value), as made from an Arrow column of map type,
+    to dict for compatibility with non-arrow MapType columns.
+    :param s: a pandas.Series
+    :return: pandas.Series with each record as a dict
+    """
+    return s.apply(lambda m: None if m is None else {k: v for k, v in m})

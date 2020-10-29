@@ -117,7 +117,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         self._assign_cols_by_name = assign_cols_by_name
 
     def arrow_to_pandas(self, arrow_column):
-        from pyspark.sql.pandas.types import _check_series_localize_timestamps
+        from pyspark.sql.pandas.types import _check_series_localize_timestamps, \
+            _convert_map_items_to_dict
         import pyarrow
 
         # If the given column is a date type column, creates a series of datetime.date directly
@@ -127,6 +128,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 
         if pyarrow.types.is_timestamp(arrow_column.type):
             return _check_series_localize_timestamps(s, self._timezone)
+        elif pyarrow.types.is_map(arrow_column.type):
+            return _convert_map_items_to_dict(s)
         else:
             return s
 

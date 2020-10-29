@@ -363,6 +363,16 @@ class ArrowTests(ReusedSQLTestCase):
             self.assertEqual(m_arrow, map_data[i])
 
     def test_toPandas_with_map_type(self):
+        pdf = pd.DataFrame({"id": [0, 1, 2, 3],
+                            "m": [{}, {"a": 1}, {"a": 1, "b": 2}, {"a": 1, "b": 2, "c": 3}]})
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+            df = self.spark.createDataFrame(pdf, schema="id long, m map<string, long>")
+
+        pdf_non, pdf_arrow = self._toPandas_arrow_toggle(df)
+        assert_frame_equal(pdf_arrow, pdf_non)
+
+    def test_toPandas_with_map_type_nulls(self):
         pdf = pd.DataFrame({"id": [0, 1, 2, 3, 4],
                             "m": [{"a": 1}, {"b": 2, "c": 3}, {}, None, {"d": None}]})
 
