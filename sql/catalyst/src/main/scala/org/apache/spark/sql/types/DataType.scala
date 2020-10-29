@@ -28,9 +28,10 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.internal.SQLConf
@@ -125,10 +126,42 @@ object DataType {
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
 
   def fromDDL(ddl: String): DataType = {
+    withFallback(
+      ddl,
+      CatalystSqlParser.parseDataType,
+      "Cannot parse the data type:",
+      fallback = CatalystSqlParser.parseTableSchema)
+  }
+
+  /**
+   * Parses data type from a string with schema. It calls `f` for `input`.
+   * If it fails, calls `fallback`. If the fallback function fails too, combines error message
+   * from `f` and `fallback`.
+   *
+   * @param input The input for `f` and `fallback`. For example, `input` can contain a schema
+   *              string to parse.
+   * @param f The function that should be invoke firstly.
+   * @param msg The error message for `f`.
+   * @param fallback The function that is called when `f` fails.
+   * @return The data type parsed from the `input` schema.
+   */
+  def withFallback(
+      input: String,
+      f: String => DataType,
+      msg: String,
+      fallback: String => DataType): DataType = {
     try {
-      CatalystSqlParser.parseDataType(ddl)
+      f(input)
     } catch {
-      case NonFatal(_) => CatalystSqlParser.parseTableSchema(ddl)
+      case NonFatal(e1) =>
+        try {
+          fallback(input)
+        } catch {
+          case NonFatal(e2) =>
+            throw new AnalysisException(
+              message = s"$msg\n${e1.getMessage}\n${e2.getMessage}",
+              cause = Some(e1.getCause))
+        }
     }
   }
 
