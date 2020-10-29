@@ -4104,7 +4104,7 @@ object functions {
     val dataType = parseTypeWithFallback(
       schema,
       DataType.fromJson,
-      "Cannot parse the schema in JSON format:",
+      "Cannot parse the schema in JSON format: ",
       fallbackParser = DataType.fromDDL)
     from_json(e, dataType, options)
   }

@@ -129,7 +129,7 @@ object DataType {
     parseTypeWithFallback(
       ddl,
       CatalystSqlParser.parseDataType,
-      "Cannot parse the data type:",
+      "Cannot parse the data type: ",
       fallbackParser = CatalystSqlParser.parseTableSchema)
   }
 
@@ -158,7 +158,7 @@ object DataType {
         } catch {
           case NonFatal(e2) =>
             throw new AnalysisException(
-              message = s"$errorMsg\n${e1.getMessage}\n${e2.getMessage}",
+              message = s"$errorMsg${e1.getMessage}\nFailed fallback parsing: ${e2.getMessage}",
               cause = Some(e1.getCause))
         }
     }
