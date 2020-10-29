@@ -251,15 +251,15 @@ class DataFrameReader(OptionUtils):
             allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
-                  into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
-                  fields to ``null``. To keep corrupt records, an user can set a string type \
-                  field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
-                  schema does not have the field, it drops corrupt records during parsing. \
-                  When inferring a schema, it implicitly adds a ``columnNameOfCorruptRecord`` \
-                  field in an output schema.
-                *  ``DROPMALFORMED``: ignores the whole corrupted records.
-                *  ``FAILFAST``: throws an exception when it meets corrupted records.
+            * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
+              into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
+              fields to ``null``. To keep corrupt records, an user can set a string type \
+              field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
+              schema does not have the field, it drops corrupt records during parsing. \
+              When inferring a schema, it implicitly adds a ``columnNameOfCorruptRecord`` \
+              field in an output schema.
+            *  ``DROPMALFORMED``: ignores the whole corrupted records.
+            *  ``FAILFAST``: throws an exception when it meets corrupted records.
 
         columnNameOfCorruptRecord: str, optional
             allows renaming the new field having malformed string
@@ -449,10 +449,10 @@ class DataFrameReader(OptionUtils):
             an optional glob pattern to only include files with paths matching
             the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
             It does not change the behavior of
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_  `partition discovery`_.  # noqa
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
         recursiveFileLookup : str or bool, optional
             recursively scan a directory for files. Using this option disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_  `partition discovery`_.  # noqa
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
 
         Examples
         --------
@@ -583,17 +583,17 @@ class DataFrameReader(OptionUtils):
             be controlled by ``spark.sql.csv.parser.columnPruning.enabled``
             (enabled by default).
 
-                * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
-                  into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
-                  fields to ``null``. To keep corrupt records, an user can set a string type \
-                  field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
-                  schema does not have the field, it drops corrupt records during parsing. \
-                  A record with less/more tokens than schema is not a corrupted record to CSV. \
-                  When it meets a record having fewer tokens than the length of the schema, \
-                  sets ``null`` to extra fields. When the record has more tokens than the \
-                  length of the schema, it drops extra tokens.
-                * ``DROPMALFORMED``: ignores the whole corrupted records.
-                * ``FAILFAST``: throws an exception when it meets corrupted records.
+            * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
+              into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
+              fields to ``null``. To keep corrupt records, an user can set a string type \
+              field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
+              schema does not have the field, it drops corrupt records during parsing. \
+              A record with less/more tokens than schema is not a corrupted record to CSV. \
+              When it meets a record having fewer tokens than the length of the schema, \
+              sets ``null`` to extra fields. When the record has more tokens than the \
+              length of the schema, it drops extra tokens.
+            * ``DROPMALFORMED``: ignores the whole corrupted records.
+            * ``FAILFAST``: throws an exception when it meets corrupted records.
 
         columnNameOfCorruptRecord : str, optional
             allows renaming the new field having malformed string
@@ -627,10 +627,10 @@ class DataFrameReader(OptionUtils):
             an optional glob pattern to only include files with paths matching
             the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
             It does not change the behavior of
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_  `partition discovery`_.  # noqa
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
         recursiveFileLookup : str or bool, optional
             recursively scan a directory for files. Using this option disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_  `partition discovery`_.  # noqa
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
 
         Examples
         --------
@@ -696,11 +696,11 @@ class DataFrameReader(OptionUtils):
             an optional glob pattern to only include files with paths matching
             the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
             It does not change the behavior of
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_  `partition discovery`_.  # noqa
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
         recursiveFileLookup : str or bool
             recursively scan a directory for files. Using this option
             disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_  `partition discovery`_.  # noqa
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
 
         Examples
         --------
@@ -721,7 +721,7 @@ class DataFrameReader(OptionUtils):
         accessible via JDBC URL ``url`` and connection ``properties``.
 
         Partitions of the table will be retrieved in parallel if either ``column`` or
-        ``predicates`` is specified. ``lowerBound`, ``upperBound`` and ``numPartitions``
+        ``predicates`` is specified. ``lowerBound``, ``upperBound`` and ``numPartitions``
         is needed when ``column`` is specified.
 
         If both ``column`` and ``predicates`` are specified, ``column`` will be used.
