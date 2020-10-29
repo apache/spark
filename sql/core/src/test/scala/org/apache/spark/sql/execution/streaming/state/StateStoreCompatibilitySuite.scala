@@ -31,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.util.Utils
 
-class StateStoreCompatibleSuite extends StreamTest with StateStoreCodecsTest {
+class StateStoreCompatibilitySuite extends StreamTest with StateStoreCodecsTest {
    testWithAllCodec(
       "SPARK-33263: Recovery from checkpoint before codec config introduced") {
      val resourceUri = this.getClass.getResource(
