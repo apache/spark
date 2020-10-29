@@ -111,7 +111,7 @@ class Catalog(object):
 
         If no database is specified, the current database is used.
 
-       .. versionadded:: 2.0
+       .. versionadded:: 2.0.0
 
         Notes
         -----
@@ -145,7 +145,7 @@ class Catalog(object):
         Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
         created external table.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Returns
         -------
@@ -170,7 +170,7 @@ class Catalog(object):
         Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
         created table.
 
-        .. versionadded:: 2.2
+        .. versionadded:: 2.2.0
 
         Returns
         -------
@@ -200,7 +200,7 @@ class Catalog(object):
         If the view has been cached before, then it will also be uncached.
         Returns true if this view is dropped successfully, false otherwise.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Notes
         -----
@@ -225,11 +225,10 @@ class Catalog(object):
         If the view has been cached before, then it will also be uncached.
         Returns true if this view is dropped successfully, false otherwise.
 
-        .. versionadded:: 2.1
+        .. versionadded:: 2.1.0
 
         Examples
         --------
-
         >>> spark.createDataFrame([(1, 1)]).createGlobalTempView("my_table")
         >>> spark.table("global_temp.my_table").collect()
         [Row(_1=1, _2=1)]
@@ -245,7 +244,7 @@ class Catalog(object):
         """An alias for :func:`spark.udf.register`.
         See :meth:`pyspark.sql.UDFRegistration.register`.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         .. deprecated:: 2.3.0
             Use :func:`spark.udf.register` instead.

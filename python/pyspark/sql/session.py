@@ -280,12 +280,12 @@ class SparkSession(SparkConversionMixin):
         """
         Returns the active SparkSession for the current thread, returned by the builder
 
-        .. versionadded:: 2.0.0
+        .. versionadded:: 3.0.0
 
         Returns
         -------
         :class:`SparkSession`
-            if an active session exists for the current thread
+            Spark session if an active session exists for the current thread
 
         Examples
         --------
@@ -410,7 +410,7 @@ class SparkSession(SparkConversionMixin):
 
         Parameters
         ----------
-        data :
+        data : iterable
             list of Row, dict, or tuple
         names : list, optional
             list of column names
@@ -564,11 +564,11 @@ class SparkSession(SparkConversionMixin):
 
         Parameters
         ----------
-        data :
+        data : :class:`RDD` or iterable
             an RDD of any kind of SQL data representation(e.g. :class:`Row`,
             :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`, or
             :class:`pandas.DataFrame`.
-        schema : optional
+        schema : :class:`pyspark.sql.types.DataType`, str or list, optional
             a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is None.  The data type string format equals to
             :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can

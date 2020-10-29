@@ -83,7 +83,6 @@ class Window(object):
         return WindowSpec(jspec)
 
     @staticmethod
-    @since(2.1)
     def rowsBetween(start, end):
         """
         Creates a :class:`WindowSpec` with the frame boundaries defined,
@@ -148,7 +147,6 @@ class Window(object):
         return WindowSpec(jspec)
 
     @staticmethod
-    @since(2.1)
     def rangeBetween(start, end):
         """
         Creates a :class:`WindowSpec` with the frame boundaries defined,
@@ -229,31 +227,32 @@ class WindowSpec(object):
     def __init__(self, jspec):
         self._jspec = jspec
 
-    @since(1.4)
     def partitionBy(self, *cols):
         """
         Defines the partitioning columns in a :class:`WindowSpec`.
 
+        .. versionadded:: 1.4.0
+
         Parameters
         ----------
-        cols : list
+        cols : str, :class:`Column` or list
             names of columns or expressions
         """
         return WindowSpec(self._jspec.partitionBy(_to_java_cols(cols)))
 
-    @since(1.4)
     def orderBy(self, *cols):
         """
         Defines the ordering columns in a :class:`WindowSpec`.
 
+        .. versionadded:: 1.4.0
+
         Parameters
         ----------
-        cols : list
+        cols : str, :class:`Column` or list
             names of columns or expressions
         """
         return WindowSpec(self._jspec.orderBy(_to_java_cols(cols)))
 
-    @since(1.4)
     def rowsBetween(self, start, end):
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
@@ -265,6 +264,8 @@ class WindowSpec(object):
         We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
         and ``Window.currentRow`` to specify special boundary values, rather than using integral
         values directly.
+
+        .. versionadded:: 1.4.0
 
         Parameters
         ----------
@@ -283,7 +284,6 @@ class WindowSpec(object):
             end = Window.unboundedFollowing
         return WindowSpec(self._jspec.rowsBetween(start, end))
 
-    @since(1.4)
     def rangeBetween(self, start, end):
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
@@ -295,6 +295,8 @@ class WindowSpec(object):
         We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
         and ``Window.currentRow`` to specify special boundary values, rather than using integral
         values directly.
+
+        .. versionadded:: 1.4.0
 
         Parameters
         ----------

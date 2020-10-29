@@ -141,7 +141,7 @@ class Column(object):
         df.colName + 1
         1 / df.colName
 
-    .. versionadded:: 1.3
+    .. versionadded:: 1.3.0
     """
 
     def __init__(self, jc):
@@ -524,7 +524,8 @@ class Column(object):
 
     Parameters
     ----------
-    other : :class:`Column` or str string at end of line (do not use a regex `$`)
+    other : :class:`Column` or str
+        string at end of line (do not use a regex `$`)
 
     Examples
     --------
@@ -610,7 +611,7 @@ class Column(object):
     Returns a sort expression based on ascending order of the column, and null values
     return before non-null values.
 
-    .. versionadded:: 2.4
+    .. versionadded:: 2.4.0
 
     Examples
     --------
@@ -624,7 +625,7 @@ class Column(object):
     Returns a sort expression based on ascending order of the column, and null values
     appear after non-null values.
 
-    .. versionadded:: 2.4
+    .. versionadded:: 2.4.0
 
     Examples
     --------
@@ -637,7 +638,7 @@ class Column(object):
     _desc_doc = """
     Returns a sort expression based on the descending order of the column.
 
-    .. versionadded:: 2.4
+    .. versionadded:: 2.4.0
 
     Examples
     --------
@@ -650,7 +651,7 @@ class Column(object):
     Returns a sort expression based on the descending order of the column, and null values
     appear before non-null values.
 
-    .. versionadded:: 2.4
+    .. versionadded:: 2.4.0
 
     Examples
     --------
@@ -664,7 +665,7 @@ class Column(object):
     Returns a sort expression based on the descending order of the column, and null values
     appear after non-null values.
 
-    .. versionadded:: 2.4
+    .. versionadded:: 2.4.0
 
     Examples
     --------
@@ -710,19 +711,22 @@ class Column(object):
         Returns this column aliased with a new name or names (in the case of expressions that
         return more than one column, such as explode).
 
-        .. versionadded:: 1.3
+        .. versionadded:: 1.3.0
 
         Parameters
         ----------
         alias : str
             strings of desired column names (collects all positional arguments passed)
+
+        Other Parameters
+        ----------------
         metadata: dict
             a dict of information to be stored in ``metadata`` attribute of the
             corresponding :class:`StructField <pyspark.sql.types.StructField>` (optional, keyword
             only argument)
 
-        .. versionchanged:: 2.2
-           Added optional ``metadata`` argument.
+            .. versionchanged:: 2.2.0
+               Added optional ``metadata`` argument.
 
         Examples
         --------
@@ -753,7 +757,7 @@ class Column(object):
     def cast(self, dataType):
         """ Convert the column into type ``dataType``.
 
-        .. versionadded:: 1.3
+        .. versionadded:: 1.3.0
 
         Examples
         --------
@@ -780,7 +784,7 @@ class Column(object):
         A boolean expression that is evaluated to true if the value of this
         expression is between the given columns.
 
-        .. versionadded:: 1.3
+        .. versionadded:: 1.3.0
 
         Examples
         --------
@@ -799,7 +803,7 @@ class Column(object):
         Evaluates a list of conditions and returns one of multiple possible result expressions.
         If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
 
-        .. versionadded:: 1.4
+        .. versionadded:: 1.4.0
 
         Parameters
         ----------
@@ -834,7 +838,7 @@ class Column(object):
         Evaluates a list of conditions and returns one of multiple possible result expressions.
         If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
 
-        .. versionadded:: 1.4
+        .. versionadded:: 1.4.0
 
         Parameters
         ----------
@@ -864,7 +868,7 @@ class Column(object):
         """
         Define a windowing column.
 
-        .. versionadded:: 1.4
+        .. versionadded:: 1.4.0
 
         Parameters
         ----------

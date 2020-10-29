@@ -112,7 +112,7 @@ class SQLContext(object):
         """
         Get the existing SQLContext or create a new one with given SparkContext.
 
-        .. versionadded:: 1.6
+        .. versionadded:: 1.6.0
 
         .. deprecated:: 3.0.0
             Use :func:`SparkSession.builder.getOrCreate()` instead.
@@ -139,14 +139,14 @@ class SQLContext(object):
         registered temporary views and UDFs, but shared SparkContext and
         table cache.
 
-        .. versionadded:: 1.6
+        .. versionadded:: 1.6.0
         """
         return self.__class__(self._sc, self.sparkSession.newSession())
 
     def setConf(self, key, value):
         """Sets the given Spark SQL configuration property.
 
-        .. versionadded:: 1.3
+        .. versionadded:: 1.3.0
         """
         self.sparkSession.conf.set(key, value)
 
@@ -157,7 +157,7 @@ class SQLContext(object):
         defaultValue. If the key is not set and defaultValue is not set, return
         the system default value.
 
-        .. versionadded:: 1.3
+        .. versionadded:: 1.3.0
 
         Examples
         --------
@@ -189,7 +189,7 @@ class SQLContext(object):
         ``id``, containing elements in a range from ``start`` to ``end`` (exclusive) with
         step value ``step``.
 
-        .. versionadded:: 1.4
+        .. versionadded:: 1.4.0
 
         Parameters
         ----------
@@ -222,7 +222,7 @@ class SQLContext(object):
         """An alias for :func:`spark.udf.register`.
         See :meth:`pyspark.sql.UDFRegistration.register`.
 
-        .. versionadded:: 1.2
+        .. versionadded:: 1.2.0
 
         .. deprecated:: 2.3.0
             Use :func:`spark.udf.register` instead.
@@ -236,7 +236,7 @@ class SQLContext(object):
         """An alias for :func:`spark.udf.registerJavaFunction`.
         See :meth:`pyspark.sql.UDFRegistration.registerJavaFunction`.
 
-        .. versionadded:: 2.1
+        .. versionadded:: 2.1.0
 
         .. deprecated:: 2.3.0
             Use :func:`spark.udf.registerJavaFunction` instead.
@@ -284,24 +284,24 @@ class SQLContext(object):
         If schema inference is needed, ``samplingRatio`` is used to determined the ratio of
         rows used for schema inference. The first row will be used if ``samplingRatio`` is ``None``.
 
-        .. versionadded:: 1.3
+        .. versionadded:: 1.3.0
 
-        .. versionchanged:: 2.0
+        .. versionchanged:: 2.0.0
            The ``schema`` parameter can be a :class:`pyspark.sql.types.DataType` or a
            datatype string after 2.0.
            If it's not a :class:`pyspark.sql.types.StructType`, it will be wrapped into a
            :class:`pyspark.sql.types.StructType` and each record will also be wrapped into a tuple.
 
-        .. versionchanged:: 2.1
+        .. versionchanged:: 2.1.0
            Added verifySchema.
 
         Parameters
         ----------
-        data :
+        data : :class:`RDD` or iterable
             an RDD of any kind of SQL data representation(e.g. :class:`Row`,
             :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`, or
             :class:`pandas.DataFrame`.
-        schema : optional
+        schema : :class:`pyspark.sql.types.DataType`, str or list, optional
             a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is None.  The data type string format equals to
             :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
@@ -373,7 +373,7 @@ class SQLContext(object):
 
         Temporary tables exist only during the lifetime of this instance of :class:`SQLContext`.
 
-        .. versionadded:: 1.3
+        .. versionadded:: 1.3.0
 
         Examples
         --------
@@ -384,7 +384,7 @@ class SQLContext(object):
     def dropTempTable(self, tableName):
         """ Remove the temporary table from catalog.
 
-        .. versionadded:: 1.6
+        .. versionadded:: 1.6.0
 
         Examples
         --------
@@ -405,7 +405,7 @@ class SQLContext(object):
         Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
         created external table.
 
-        .. versionadded:: 1.3
+        .. versionadded:: 1.3.0
 
         Returns
         -------
@@ -417,7 +417,7 @@ class SQLContext(object):
     def sql(self, sqlQuery):
         """Returns a :class:`DataFrame` representing the result of the given query.
 
-        .. versionadded:: 1.0
+        .. versionadded:: 1.0.0
 
         Returns
         -------
@@ -435,7 +435,7 @@ class SQLContext(object):
     def table(self, tableName):
         """Returns the specified table or view as a :class:`DataFrame`.
 
-        .. versionadded:: 1.0
+        .. versionadded:: 1.0.0
 
         Returns
         -------
@@ -458,12 +458,12 @@ class SQLContext(object):
         The returned DataFrame has two columns: ``tableName`` and ``isTemporary``
         (a column with :class:`BooleanType` indicating if a table is a temporary one or not).
 
-        .. versionadded:: 1.3
+        .. versionadded:: 1.3.0
 
         Parameters
         ----------
         dbName: str, optional
-            string, name of the database to use.
+            name of the database to use.
 
         Returns
         -------
@@ -484,11 +484,12 @@ class SQLContext(object):
     def tableNames(self, dbName=None):
         """Returns a list of names of tables in the database ``dbName``.
 
-        .. versionadded:: 1.3
+        .. versionadded:: 1.3.0
 
         Parameters
         ----------
-        dbName: string, name of the database to use. Default to the current database.
+        dbName: str
+            name of the database to use. Default to the current database.
 
         Returns
         -------
@@ -527,7 +528,7 @@ class SQLContext(object):
         Returns a :class:`DataFrameReader` that can be used to read data
         in as a :class:`DataFrame`.
 
-        .. versionadded:: 1.4
+        .. versionadded:: 1.4.0
 
         Returns
         -------
@@ -541,7 +542,7 @@ class SQLContext(object):
         Returns a :class:`DataStreamReader` that can be used to read data streams
         as a streaming :class:`DataFrame`.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Notes
         -----
@@ -562,7 +563,7 @@ class SQLContext(object):
         """Returns a :class:`StreamingQueryManager` that allows managing all the
         :class:`StreamingQuery` StreamingQueries active on `this` context.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Notes
         -----

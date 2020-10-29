@@ -375,7 +375,7 @@ class UDFRegistration(object):
             name of the user-defined function
         javaClassName : str
             fully qualified name of java class
-        returnType : :class:`pyspark.sql.types.DataType` or str
+        returnType : :class:`pyspark.sql.types.DataType` or str, optional
             the return type of the registered Java function. The value can be either
             a :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
 

@@ -34,7 +34,7 @@ class PandasGroupedOpsMixin(object):
         :meth:`pyspark.sql.functions.pandas_udf` whereas
         :meth:`pyspark.sql.GroupedData.applyInPandas` takes a Python native function.
 
-        .. versionadded:: 2.3
+        .. versionadded:: 2.3.0
 
         Parameters
         ----------
@@ -101,7 +101,7 @@ class PandasGroupedOpsMixin(object):
         field data types by position if not strings, e.g. integer indices.
         The length of the returned `pandas.DataFrame` can be arbitrary.
 
-        .. versionadded:: 3.0
+        .. versionadded:: 3.0.0
 
         Parameters
         ----------
@@ -202,13 +202,12 @@ class PandasGroupedOpsMixin(object):
         jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
         return DataFrame(jdf, self.sql_ctx)
 
+    @since(3.0)
     def cogroup(self, other):
         """
         Cogroups this group with another group so that we can run cogrouped operations.
 
         See :class:`PandasCogroupedOps` for the operations that can be run.
-
-        .. versionadded:: 3.0
         """
         from pyspark.sql import GroupedData
 
@@ -222,11 +221,11 @@ class PandasCogroupedOps(object):
     A logical grouping of two :class:`GroupedData`,
     created by :func:`GroupedData.cogroup`.
 
+    .. versionadded:: 3.0.0
+
     Notes
     -----
     This API is experimental.
-
-    .. versionadded:: 3.0
     """
 
     def __init__(self, gd1, gd2):
@@ -250,7 +249,7 @@ class PandasCogroupedOps(object):
         field data types by position if not strings, e.g. integer indices.
         The length of the returned `pandas.DataFrame` can be arbitrary.
 
-        .. versionadded:: 3.0
+        .. versionadded:: 3.0.0
 
         Parameters
         ----------

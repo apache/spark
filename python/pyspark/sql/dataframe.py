@@ -62,7 +62,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         people.filter(people.age > 30).join(department, people.deptId == department.id) \\
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
 
-    .. versionadded:: 1.3
+    .. versionadded:: 1.3.0
     """
 
     def __init__(self, jdf, sql_ctx):
@@ -105,7 +105,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Each row is turned into a JSON document as one element in the returned RDD.
 
-        .. versionadded:: 1.3
+        .. versionadded:: 1.3.0
 
         Examples
         --------
@@ -121,7 +121,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
 
-        .. versionadded:: 1.3
+        .. versionadded:: 1.3.0
 
         .. deprecated:: 2.0.0
             Use :meth:`DataFrame.createOrReplaceTempView` instead.
@@ -299,10 +299,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
-        Paramters
-        ---------
+        parameters
+        ----------
         extended : bool, optional
-            boolean, default ``False``. If ``False``, prints only the physical plan.
+            default ``False``. If ``False``, prints only the physical plan.
             When this is a string without specifying the ``mode``, it works as the mode is
             specified.
         mode : str, optional
@@ -586,7 +586,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        eventTime : str, :class:`Column`
+        eventTime : str or :class:`Column`
             the name of the column that contains the event time of the row.
         delayThreshold : str
             the minimum delay to wait to data to arrive late, relative to the
@@ -619,7 +619,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         name : str
             A name of the hint.
-        parameters :
+        parameters : str, list, float or int
             Optional parameters.
 
         Returns
@@ -887,7 +887,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             can be an int to specify the target number of partitions or a Column.
             If it is a Column, it will be used as the first partitioning column. If not specified,
             the default number of partitions is used.
-        cols : optional
+        cols : str or :class:`Column`, optional
             partitioning columns.
 
             .. versionchanged:: 1.6
@@ -959,7 +959,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             can be an int to specify the target number of partitions or a Column.
             If it is a Column, it will be used as the first partitioning column. If not specified,
             the default number of partitions is used.
-        cols : optional
+        cols : str or :class:`Column`, optional
             partitioning columns.
 
         Notes
@@ -1207,7 +1207,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        colName : str,
+        colName : str
             string, column name specified as a regex.
 
         Examples
@@ -1347,6 +1347,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         cols : str, list or :class:`Column`, optional
             list of :class:`Column` or column names to sort by.
+
+        Other Parameters
+        ----------------
         ascending : bool or list, optional
             boolean or list of boolean (default ``True``).
             Sort ascending vs. descending. Specify list for multiple sort orders.
@@ -1374,7 +1377,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         cols : str, list, or :class:`Column`, optional
              list of :class:`Column` or column names to sort by.
-        ascending: boolean or list of boolean (default ``True``).
+
+        Other Parameters
+        ----------------
+        ascending : bool or list, optional
             boolean or list of boolean (default ``True``).
             Sort ascending vs. descending. Specify list for multiple sort orders.
             If a list is specified, length of the list must equal length of the `cols`.
@@ -1561,7 +1567,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        n : int
+        n : int, optional
             default 1. Number of rows to return.
 
         Returns
@@ -1723,7 +1729,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        cols : tuple
+        cols : list, str or :class:`Column`
             columns to group by.
             Each element should be a column name (string) or an expression (:class:`Column`).
 
@@ -1909,7 +1915,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  b|  3|
         +---+---+
 
-
         """
         return DataFrame(self._jdf.intersectAll(other._jdf), self.sql_ctx)
 
@@ -1981,7 +1986,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             default None
             If specified, drop rows that have less than `thresh` non-null values.
             This overwrites the `how` parameter.
-        subset : list, optional
+        subset : str, tuple or list, optional
             optional list of column names to consider.
 
         Examples
@@ -2021,7 +2026,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             If the value is a dict, then `subset` is ignored and `value` must be a mapping
             from column name (string) to replacement value. The replacement value must be
             an int, float, boolean, or string.
-        param subset : list, optional
+        subset : str, tuple or list, optional
             optional list of column names to consider.
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
@@ -2098,7 +2103,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             Value to be replaced.
             If the value is a dict, then `value` is ignored or can be omitted, and `to_replace`
             must be a mapping between a value and a replacement.
-        value : bool, int, float, string, list or None, optional
+        value : bool, int, float, string or None, optional
             The replacement value must be a bool, int, float, string or None. If `value` is a
             list, `value` should be of the same length and type as `to_replace`.
             If `value` is a scalar and `to_replace` is a sequence, then `value` is
@@ -2394,7 +2399,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        cols : list
+        cols : list or tuple
             Names of the columns to calculate frequent items for as a list or tuple of
             strings.
         support : float, optional
@@ -2476,7 +2481,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        cols: tuple
+        cols: str or :class:`Column`
             a string name of the column to drop, or a
             :class:`Column` to drop, or a list of string name of the columns to drop.
 
@@ -2518,7 +2523,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        cols : tuple
+        cols : str
             list of new column names (string)
 
         Examples

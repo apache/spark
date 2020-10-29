@@ -48,16 +48,16 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     additional configuration is required. A Pandas UDF behaves as a regular PySpark function
     API in general.
 
-    .. versionadded:: 2.3
+    .. versionadded:: 2.3.0
 
     Parameters
     ----------
     f : function, optional
         user-defined function. A python function if used as a standalone function
-    returnType : :class:`pyspark.sql.types.DataType`, optional
+    returnType : :class:`pyspark.sql.types.DataType` or str, optional
         the return type of the user-defined function. The value can be either a
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
-    functionType : enum value in :class:`pyspark.sql.functions.PandasUDFType`, optional
+    functionType : int, optional
         an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
         Default: SCALAR. This parameter exists for compatibility.
         Using Python type hints is encouraged.

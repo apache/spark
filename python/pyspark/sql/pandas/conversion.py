@@ -38,7 +38,7 @@ class PandasConversionMixin(object):
 
         This is only available if Pandas is installed and available.
 
-        .. versionadded:: 1.3
+        .. versionadded:: 1.3.0
 
         Notes
         -----
@@ -225,10 +225,7 @@ class PandasConversionMixin(object):
         """
         Returns all records as a list of ArrowRecordBatches, pyarrow must be installed
         and available on driver and worker Python environments.
-
-        Notes
-        -----
-        Experimental.
+        This is an experimental feature.
         """
         from pyspark.sql.dataframe import DataFrame
 

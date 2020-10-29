@@ -271,7 +271,7 @@ class ArrayType(DataType):
     ----------
     elementType : :class:`DataType`
         :class:`DataType` of each element in the array.
-    containsNull : bool
+    containsNull : bool, optional
         whether the array can contain null (None) values.
 
     Examples
@@ -328,7 +328,7 @@ class MapType(DataType):
         :class:`DataType` of the keys in the map.
     valueType : :class:`DataType`
         :class:`DataType` of the values in the map.
-    valueContainsNull : bool
+    valueContainsNull : bool, optional
         indicates whether values can contain null (None) values.
 
     Notes

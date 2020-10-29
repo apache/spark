@@ -161,7 +161,7 @@ class StreamingQuery(object):
 
         Parameters
         ----------
-        extended : bool
+        extended : bool, optional
             default ``False``. If ``False``, prints only the physical plan.
 
         Examples
@@ -302,7 +302,7 @@ class DataStreamReader(OptionUtils):
     storage systems (e.g. file systems, key-value stores, etc).
     Use :attr:`SparkSession.readStream <pyspark.sql.SparkSession.readStream>` to access this.
 
-    .. versionadded:: 2.0
+    .. versionadded:: 2.0.0
 
     Notes
     -----
@@ -446,10 +446,10 @@ class DataStreamReader(OptionUtils):
             optional string for file-system backed data sources.
         format : str, optional
             optional string for format of the data source. Default to 'parquet'.
-        schema : :class:`pyspark.sql.types.StructType` or str
+        schema : :class:`pyspark.sql.types.StructType` or str, optional
             optional :class:`pyspark.sql.types.StructType` for the input schema
             or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        options : dict
+        **options : dict
             all other string options
 
         Notes
@@ -985,7 +985,7 @@ class DataStreamWriter(object):
 
         Parameters
         ----------
-        source : str, optional
+        source : str
             string, name of the data source, which for now can be 'parquet'.
 
         Notes
@@ -1062,7 +1062,7 @@ class DataStreamWriter(object):
 
         Parameters
         ----------
-        cols : str
+        cols : str or list
             name of columns
 
         Notes
@@ -1393,7 +1393,7 @@ class DataStreamWriter(object):
             * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
               written to the sink every time there are some updates. If the query doesn't contain
               aggregations, it will be equivalent to `append` mode.
-        partitionBy : list, optional
+        partitionBy : str or list, optional
             names of partitioning columns
         queryName : str, optional
             unique name for the query

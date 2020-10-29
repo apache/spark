@@ -46,7 +46,7 @@ class DataFrameReader(OptionUtils):
     (e.g. file systems, key-value stores, etc). Use :attr:`SparkSession.read`
     to access this.
 
-    .. versionadded:: 1.4.0
+    .. versionadded:: 1.4
     """
 
     def __init__(self, spark):
@@ -154,7 +154,6 @@ class DataFrameReader(OptionUtils):
             self._jreader = self._jreader.option(k, to_str(options[k]))
         return self
 
-    @since(1.4)
     def load(self, path=None, format=None, schema=None, **options):
         """Loads data from a data source and returns it as a :class:`DataFrame`.
 
@@ -164,7 +163,7 @@ class DataFrameReader(OptionUtils):
         ----------
         path : str or list, optional
             optional string or a list of string for file-system backed data sources.
-        format : str
+        format : str, optional
             optional string for format of the data source. Default to 'parquet'.
         schema : :class:`pyspark.sql.types.StructType` or str, optional
             optional :class:`pyspark.sql.types.StructType` for the input schema
@@ -401,12 +400,12 @@ class DataFrameReader(OptionUtils):
             Parquet part-files. This will override
             ``spark.sql.parquet.mergeSchema``. The default value is specified in
             ``spark.sql.parquet.mergeSchema``.
-        pathGlobFilter : str or bool
+        pathGlobFilter : str or bool, optional
             an optional glob pattern to only include files with paths matching
             the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
             It does not change the behavior of
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        recursiveFileLookup : str or bool
+        recursiveFileLookup : str or bool, optional
             recursively scan a directory for files. Using this option
             disables
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
@@ -892,7 +891,7 @@ class DataFrameWriter(OptionUtils):
 
         Parameters
         ----------
-        cols : list
+        cols : str or list
             name of columns
 
         Examples
@@ -916,7 +915,7 @@ class DataFrameWriter(OptionUtils):
             the number of buckets to save
         col : str
             a name of a column, or a list of names.
-        cols : str, optional
+        cols : str
             additional names (optional). If `col` is a list it should be empty.
 
         Notes
@@ -1003,7 +1002,7 @@ class DataFrameWriter(OptionUtils):
                 exists.
         partitionBy : list, optional
             names of partitioning columns
-        options : dict
+        **options : dict
             all other string options
 
         Examples
@@ -1057,9 +1056,9 @@ class DataFrameWriter(OptionUtils):
         mode : str, optional
             one of `append`, `overwrite`, `error`, `errorifexists`, `ignore` \
             (default: error)
-        partitionBy : list
+        partitionBy : str or list
             names of partitioning columns
-        options : dict
+        **options : dict
             all other string options
         """
         self.mode(mode).options(**options)
@@ -1141,7 +1140,7 @@ class DataFrameWriter(OptionUtils):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
                 exists.
-        partitionBy : list, optional
+        partitionBy : str or list, optional
             names of partitioning columns
         compression : str, optional
             compression codec to use when saving to file. This can be one of the
@@ -1299,7 +1298,7 @@ class DataFrameWriter(OptionUtils):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
                 exists.
-        partitionBy : list, optional
+        partitionBy : str or list, optional
             names of partitioning columns
         compression : str, optional
             compression codec to use when saving to file. This can be one of the

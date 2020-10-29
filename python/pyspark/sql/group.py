@@ -141,7 +141,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Parameters
         ----------
-        cols : list
+        cols : str
             list of column names (string). Non-numeric columns are ignored.
 
         Examples
@@ -162,7 +162,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Parameters
         ----------
-        cols : list
+        cols : str
             list of column names (string). Non-numeric columns are ignored.
 
         Examples
@@ -195,7 +195,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Parameters
         ----------
-        cols : list
+        cols : str
             list of column names (string). Non-numeric columns are ignored.
 
         Examples
@@ -214,7 +214,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Parameters
         ----------
-        cols : list
+        cols : str
             list of column names (string). Non-numeric columns are ignored.
 
         Examples

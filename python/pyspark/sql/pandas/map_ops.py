@@ -38,7 +38,7 @@ class PandasMapOpsMixin(object):
         Each `pandas.DataFrame` size can be controlled by
         `spark.sql.execution.arrow.maxRecordsPerBatch`.
 
-        .. versionadded:: 3.0
+        .. versionadded:: 3.0.0
 
         Parameters
         ----------

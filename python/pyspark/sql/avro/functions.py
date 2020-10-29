@@ -25,7 +25,6 @@ from pyspark.sql.column import Column, _to_java_column
 from pyspark.util import _print_missing_jar
 
 
-@since(3.0)
 def from_avro(data, jsonFormatSchema, options={}):
     """
     Converts a binary column of Avro format into its corresponding catalyst value.
@@ -33,6 +32,8 @@ def from_avro(data, jsonFormatSchema, options={}):
     it may fail or return arbitrary result.
     To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
     set via the option avroSchema.
+
+    .. versionadded:: 3.0.0
 
     Parameters
     ----------
@@ -77,7 +78,6 @@ def from_avro(data, jsonFormatSchema, options={}):
     return Column(jc)
 
 
-@since(3.0)
 def to_avro(data, jsonFormatSchema=""):
     """
     Converts a column into binary of avro format.
@@ -88,6 +88,8 @@ def to_avro(data, jsonFormatSchema=""):
         the data column.
     jsonFormatSchema : str, optional
         user-specified output avro schema in JSON string format.
+
+    .. versionadded:: 3.0.0
 
     Notes
     -----
