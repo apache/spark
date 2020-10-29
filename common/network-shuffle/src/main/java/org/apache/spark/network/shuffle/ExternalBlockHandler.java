@@ -451,7 +451,7 @@ public class ExternalBlockHandler extends RpcHandler {
 
     @Override
     public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
-      throw new UnsupportedOperationException("Cannot handle shuffle block merge");
+      // No-Op. Do nothing.
     }
 
     @Override
