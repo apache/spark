@@ -263,7 +263,7 @@ Data Types
 .. currentmodule:: pyspark.sql.types
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     ArrayType

@@ -38,16 +38,16 @@ import org.apache.spark.sql.util.SchemaUtils
 /**
  * Replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
  */
-class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+object ResolveSQLOnFile extends Rule[LogicalPlan] {
   private def maybeSQLFile(u: UnresolvedRelation): Boolean = {
-    sparkSession.sessionState.conf.runSQLonFile && u.multipartIdentifier.size == 2
+    conf.runSQLonFile && u.multipartIdentifier.size == 2
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedRelation if maybeSQLFile(u) =>
       try {
         val dataSource = DataSource(
-          sparkSession,
+          SparkSession.active,
           paths = u.multipartIdentifier.last :: Nil,
           className = u.multipartIdentifier.head)
 
@@ -73,9 +73,9 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 /**
  * Preprocess [[CreateTable]], to do some normalization and checking.
  */
-case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+object PreprocessTableCreation extends Rule[LogicalPlan] {
   // catalog is a def and not a val/lazy val as the latter would introduce a circular reference
-  private def catalog = sparkSession.sessionState.catalog
+  private def catalog = SparkSession.active.sessionState.catalog
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // When we CREATE TABLE without specifying the table schema, we should fail the query if
@@ -112,7 +112,6 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       }
 
       // Check if the specified data source match the data source of the existing table.
-      val conf = sparkSession.sessionState.conf
       val existingProvider = DataSource.lookupDataSource(existingTable.provider.get, conf)
       val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get, conf)
       // TODO: Check that options from the resolved relation match the relation that we are
@@ -140,7 +139,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
             s"(${query.schema.catalogString})")
       }
 
-      val resolver = sparkSession.sessionState.conf.resolver
+      val resolver = conf.resolver
       val tableCols = existingTable.schema.map(_.name)
 
       // As we are inserting into an existing table, we should respect the existing schema and
@@ -245,7 +244,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       val schema = create.tableSchema
       val partitioning = create.partitioning
       val identifier = create.tableName
-      val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+      val isCaseSensitive = conf.caseSensitiveAnalysis
       // Check that columns are not duplicated in the schema
       val flattenedSchema = SchemaUtils.explodeNestedFieldNames(schema)
       SchemaUtils.checkColumnNameDuplication(
@@ -266,7 +265,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
         create
       } else {
         // Resolve and normalize partition columns as necessary
-        val resolver = sparkSession.sessionState.conf.resolver
+        val resolver = conf.resolver
         val normalizedPartitions = partitioning.map {
           case transform: RewritableTransform =>
             val rewritten = transform.references().map { ref =>
@@ -291,7 +290,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
     SchemaUtils.checkSchemaColumnNameDuplication(
       schema,
       "in the table definition of " + table.identifier,
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+      conf.caseSensitiveAnalysis)
 
     assertNoNullTypeInSchema(schema)
 
@@ -317,12 +316,12 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       tableName = table.identifier.unquotedString,
       tableCols = schema.map(_.name),
       partCols = table.partitionColumnNames,
-      resolver = sparkSession.sessionState.conf.resolver)
+      resolver = conf.resolver)
 
     SchemaUtils.checkColumnNameDuplication(
       normalizedPartitionCols,
       "in the partition schema",
-      sparkSession.sessionState.conf.resolver)
+      conf.resolver)
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
       if (DDLUtils.isHiveTable(table)) {
@@ -351,16 +350,16 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
           tableName = table.identifier.unquotedString,
           tableCols = schema.map(_.name),
           bucketSpec = bucketSpec,
-          resolver = sparkSession.sessionState.conf.resolver)
+          resolver = conf.resolver)
 
         SchemaUtils.checkColumnNameDuplication(
           normalizedBucketSpec.bucketColumnNames,
           "in the bucket definition",
-          sparkSession.sessionState.conf.resolver)
+          conf.resolver)
         SchemaUtils.checkColumnNameDuplication(
           normalizedBucketSpec.sortColumnNames,
           "in the sort definition",
-          sparkSession.sessionState.conf.resolver)
+          conf.resolver)
 
         normalizedBucketSpec.sortColumnNames.map(schema(_)).map(_.dataType).foreach {
           case dt if RowOrdering.isOrderable(dt) => // OK
@@ -382,7 +381,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
  * table. It also does data type casting and field renaming, to make sure that the columns to be
  * inserted have the correct data type and fields have the correct names.
  */
-case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
+object PreprocessTableInsertion extends Rule[LogicalPlan] {
   private def preprocess(
       insert: InsertIntoStatement,
       tblName: String,

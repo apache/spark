@@ -180,10 +180,14 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    *             rewrite attribute references in the parent nodes.
    * @param skipCond a boolean condition to indicate if we can skip transforming a plan node to save
    *                 time.
+   * @param canGetOutput a boolean condition to indicate if we can get the output of a plan node
+   *                     to prune the attributes mapping to be propagated. The default value is true
+   *                     as only unresolved logical plan can't get output.
    */
   def transformUpWithNewOutput(
       rule: PartialFunction[PlanType, (PlanType, Seq[(Attribute, Attribute)])],
-      skipCond: PlanType => Boolean = _ => false): PlanType = {
+      skipCond: PlanType => Boolean = _ => false,
+      canGetOutput: PlanType => Boolean = _ => true): PlanType = {
     def rewrite(plan: PlanType): (PlanType, Seq[(Attribute, Attribute)]) = {
       if (skipCond(plan)) {
         plan -> Nil
@@ -237,7 +241,16 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
           val existingAttrMappingSet = transferAttrMapping.map(_._2).toSet
           newValidAttrMapping.filterNot { case (_, a) => existingAttrMappingSet.contains(a) }
         }
-        planAfterRule -> (transferAttrMapping ++ newOtherAttrMapping).toSeq
+        val resultAttrMapping = if (canGetOutput(plan)) {
+          // We propagate the attributes mapping to the parent plan node to update attributes, so
+          // the `newAttr` must be part of this plan's output.
+          (transferAttrMapping ++ newOtherAttrMapping).filter {
+            case (_, newAttr) => planAfterRule.outputSet.contains(newAttr)
+          }
+        } else {
+          transferAttrMapping ++ newOtherAttrMapping
+        }
+        planAfterRule -> resultAttrMapping.toSeq
       }
     }
     rewrite(this)._1

@@ -197,7 +197,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("divide should be casted into fractional types") {
-    val plan = caseInsensitiveAnalyzer.execute(
+    val plan = getAnalyzer.execute(
       testRelation2.select(
         $"a" / Literal(2) as "div1",
         $"a" / $"b" as "div2",
@@ -258,13 +258,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       CreateStruct(Seq(att1, ((att1.as("aa")) + 1).as("a_plus_1"))).as("col"),
       att1
     )
-    val prevPlan = getAnalyzer(true).execute(plan)
+    val prevPlan = getAnalyzer.execute(plan)
     plan = prevPlan.select(CreateArray(Seq(
       CreateStruct(Seq(att1, (att1 + 1).as("a_plus_1"))).as("col1"),
       /** alias should be eliminated by [[CleanupAliases]] */
       "col".attr.as("col2")
     )).as("arr"))
-    plan = getAnalyzer(true).execute(plan)
+    plan = getAnalyzer.execute(plan)
 
     val expectedPlan = prevPlan.select(
       CreateArray(Seq(

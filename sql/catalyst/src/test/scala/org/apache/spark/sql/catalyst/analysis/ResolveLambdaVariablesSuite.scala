@@ -32,7 +32,7 @@ class ResolveLambdaVariablesSuite extends PlanTest {
   import org.apache.spark.sql.catalyst.dsl.plans._
 
   object Analyzer extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("Resolution", FixedPoint(4), ResolveLambdaVariables(conf)) :: Nil
+    val batches = Batch("Resolution", FixedPoint(4), ResolveLambdaVariables) :: Nil
   }
 
   private val key = 'key.int
