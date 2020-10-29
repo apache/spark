@@ -84,7 +84,7 @@ package object state {
     }
 
     /** Map each partition of an RDD along with data in a [[ReadStateStore]]. */
-    private[streaming] def mapPartitionsWithReadOnlyStateStore[U: ClassTag](
+    private[streaming] def mapPartitionsWithReadStateStore[U: ClassTag](
         stateInfo: StatefulOperatorStateInfo,
         keySchema: StructType,
         valueSchema: StructType,
@@ -93,7 +93,7 @@ package object state {
         storeCoordinator: Option[StateStoreCoordinatorRef],
         extraOptions: Map[String, String] = Map.empty)(
         storeReadFn: (ReadStateStore, Iterator[T]) => Iterator[U])
-      : ReadOnlyStateStoreRDD[T, U] = {
+      : ReadStateStoreRDD[T, U] = {
 
       val cleanedF = dataRDD.sparkContext.clean(storeReadFn)
       val wrappedF = (store: ReadStateStore, iter: Iterator[T]) => {
@@ -103,7 +103,7 @@ package object state {
         })
         cleanedF(store, iter)
       }
-      new ReadOnlyStateStoreRDD(
+      new ReadStateStoreRDD(
         dataRDD,
         wrappedF,
         stateInfo.checkpointLocation,

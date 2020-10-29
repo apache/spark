@@ -71,7 +71,7 @@ abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
  * uses the [[StateStoreCoordinator]] to get the locations of loaded state stores
  * and use that as the preferred locations.
  */
-class ReadOnlyStateStoreRDD[T: ClassTag, U: ClassTag](
+class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     dataRDD: RDD[T],
     storeReadFunction: (ReadStateStore, Iterator[T]) => Iterator[U],
     checkpointLocation: String,
