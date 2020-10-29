@@ -202,10 +202,11 @@ class PandasGroupedOpsMixin(object):
         jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
         return DataFrame(jdf, self.sql_ctx)
 
-    @since(3.0)
     def cogroup(self, other):
         """
         Cogroups this group with another group so that we can run cogrouped operations.
+
+        .. versionadded:: 3.0.0
 
         See :class:`PandasCogroupedOps` for the operations that can be run.
         """
