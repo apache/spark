@@ -66,16 +66,16 @@ trait StateStoreCodecsTest extends SparkFunSuite with PlanTestBase {
 
   protected def testWithAllCodec(name: String)(func: => Any): Unit = {
     codecsInShortName.foreach { codecShortName =>
-      withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
-        test(s"$name - with codec $codecShortName") {
+      test(s"$name - with codec $codecShortName") {
+        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
           func
         }
       }
     }
 
     CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codecShortName =>
-      withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
-        test(s"$name - with codec $codecShortName") {
+      test(s"$name - with codec $codecShortName") {
+        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
           func
         }
       }
