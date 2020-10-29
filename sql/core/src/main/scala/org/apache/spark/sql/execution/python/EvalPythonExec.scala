@@ -146,8 +146,7 @@ trait EvalPythonExec extends UnaryExecNode {
  * it could consume more data from the parent even after the task ends and the parent is closed.
  * Thus, we should use ContextAwareIterator to stop consuming after the task ends.
  */
-private[spark] class ContextAwareIterator[IN](iter: Iterator[IN], context: TaskContext)
-  extends Iterator[IN] {
+class ContextAwareIterator[IN](iter: Iterator[IN], context: TaskContext) extends Iterator[IN] {
 
   override def hasNext: Boolean =
     !context.isCompleted() && !context.isInterrupted() && iter.hasNext
