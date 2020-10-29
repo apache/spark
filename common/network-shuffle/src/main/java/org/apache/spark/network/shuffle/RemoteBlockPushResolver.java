@@ -374,7 +374,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     RoaringBitmap[] bitmaps = new RoaringBitmap[totalPartitions];
     int[] reduceIds = new int[totalPartitions];
     long[] sizes = new long[totalPartitions];
-    Iterator<AppShufflePartitionInfo> partitionsIter = shufflePartitions.values().iterator();
+    Iterator<AppShufflePartitionInfo> partitionsIter = partitions.iterator();
     int idx = 0;
     while (partitionsIter.hasNext()) {
       AppShufflePartitionInfo partition = partitionsIter.next();
