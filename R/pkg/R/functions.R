@@ -222,8 +222,10 @@ NULL
 #'          \item \code{from_json}: a structType object to use as the schema to use
 #'              when parsing the JSON string. Since Spark 2.3, the DDL-formatted string is
 #'              also supported for the schema. Since Spark 3.0, \code{schema_of_json} or
-#'              the DDL-formatted string literal can also be accepted.
-#'          \item \code{from_csv}: a structType object, DDL-formatted string or \code{schema_of_csv}
+#'              the DDL-formatted string literal can also be accepted. Since Spark 3.1, the schema
+#'              can be specified in the JSON format.
+#'          \item \code{from_csv}: a structType object, DDL-formatted string or \code{schema_of_csv}.
+#'              Since Spark 3.1, the schema can be specified in the JSON format.
 #'          }
 #'
 #' @param f a \code{function} mapping from \code{Column(s)} to \code{Column}.
