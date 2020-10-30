@@ -70,8 +70,11 @@ object Canonicalize {
 
   /** Rearrange expressions that are commutative or associative. */
   private def expressionReorder(e: Expression): Expression = e match {
-    case a: Add => orderCommutative(a, { case Add(l, r) => Seq(l, r) }).reduce(Add)
-    case m: Multiply => orderCommutative(m, { case Multiply(l, r) => Seq(l, r) }).reduce(Multiply)
+    // TODO: do not reorder consecutive `Add`s or `Multiply`s with different `failOnError` flags
+    case a @ Add(_, _, f) =>
+      orderCommutative(a, { case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, f))
+    case m @ Multiply(_, _, f) =>
+      orderCommutative(m, { case Multiply(l, r, _) => Seq(l, r) }).reduce(Multiply(_, _, f))
 
     case o: Or =>
       orderCommutative(o, { case Or(l, r) if l.deterministic && r.deterministic => Seq(l, r) })

@@ -754,4 +754,25 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val expected = new StructType().add("parsed", new StructType().add("a b", LongType))
     assert(out.schema == expected)
   }
+
+  test("SPARK-33286: from_json - combined error messages") {
+    val df = Seq("""{"a":1}""").toDF("json")
+    val invalidJsonSchema = """{"fields": [{"a":123}], "type": "struct"}"""
+    val errMsg1 = intercept[AnalysisException] {
+      df.select(from_json($"json", invalidJsonSchema, Map.empty[String, String])).collect()
+    }.getMessage
+    assert(errMsg1.contains("""Failed to convert the JSON string '{"a":123}' to a field"""))
+
+    val invalidDataType = "MAP<INT, cow>"
+    val errMsg2 = intercept[AnalysisException] {
+      df.select(from_json($"json", invalidDataType, Map.empty[String, String])).collect()
+    }.getMessage
+    assert(errMsg2.contains("DataType cow is not supported"))
+
+    val invalidTableSchema = "x INT, a cow"
+    val errMsg3 = intercept[AnalysisException] {
+      df.select(from_json($"json", invalidTableSchema, Map.empty[String, String])).collect()
+    }.getMessage
+    assert(errMsg3.contains("DataType cow is not supported"))
+  }
 }
