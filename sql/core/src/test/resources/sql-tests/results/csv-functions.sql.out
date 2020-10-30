@@ -33,7 +33,9 @@ select from_csv('1', 'a InvalidType')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot parse the data type: 
+Cannot parse the schema in JSON format: Unrecognized token 'a': was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')
+ at [Source: (String)"a InvalidType"; line: 1, column: 2]
+Failed fallback parsing: Cannot parse the data type: 
 extraneous input 'InvalidType' expecting <EOF>(line 1, pos 2)
 
 == SQL ==
@@ -46,7 +48,7 @@ DataType invalidtype is not supported.(line 1, pos 2)
 == SQL ==
 a InvalidType
 --^^^
-;; line 1 pos 7
+;;; line 1 pos 7
 
 
 -- !query
