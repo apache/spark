@@ -60,11 +60,17 @@ select a, b, count(1) from data group by cube(1, 2);
 -- mixed cases: can use ordinal in CUBE
 select a, b, count(1) from data group by cube(1, b);
 
+-- can use ordinal with cube
+select a, b, count(1) from data group by 1, 2 with cube;
+
 -- can use ordinal in ROLLUP
 select a, b, count(1) from data group by rollup(1, 2);
 
 -- mixed cases: can use ordinal in ROLLUP
 select a, b, count(1) from data group by rollup(1, b);
+
+-- can use ordinal with rollup
+select a, b, count(1) from data group by 1, 2 with rollup;
 
 -- can use ordinal in GROUPING SETS
 select a, b, count(1) from data group by grouping sets((1), (2), (1, 2));
