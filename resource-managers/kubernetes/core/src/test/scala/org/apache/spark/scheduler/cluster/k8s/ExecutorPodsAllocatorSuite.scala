@@ -353,7 +353,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabelIn(SPARK_EXECUTOR_ID_LABEL, "2", "3", "4", "5", "6"))
       .thenReturn(podOperations)
 
-    podsAllocatorUnderTest.setTotalExpectedExecutors(6)
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 6))
     // Initial request of pods
     verify(podOperations).create(podWithAttachedContainerForId(1))
     verify(podOperations).create(podWithAttachedContainerForId(2))
