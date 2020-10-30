@@ -505,13 +505,15 @@ case class JsonTuple(children: Seq[Expression])
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(jsonStr, schema[, options]) - Returns a struct value with the given `jsonStr` and `schema`.",
+  usage = "_FUNC_(jsonStr, schema[, options]) - Returns a struct value with the given `jsonStr` and `schema`. The schema can be in the table schema format, data type or in the JSON format.",
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":0.8}', 'a INT, b DOUBLE');
        {"a":1,"b":0.8}
       > SELECT _FUNC_('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
        {"time":2015-08-26 00:00:00}
+      > SELECT _FUNC_('{"a":1}', '{"type" : "map", "keyType" : "string", "valueType" : "integer", "valueContainsNull" : true}');
+       {"a":1}
   """,
   group = "json_funcs",
   since = "2.2.0")
