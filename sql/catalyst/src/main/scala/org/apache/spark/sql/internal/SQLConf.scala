@@ -2768,8 +2768,8 @@ object SQLConf {
   val LEGACY_SCRIPT_TRANSFORM_NOT_PAD_NULL =
     buildConf("spark.sql.legacy.transformationNotPadNullToSupplementData.enabled")
       .internal()
-      .doc("Whether pad null value when script transformation output's value size less then " +
-        "schema size in default-serde mode(script transformation with row format of " +
+      .doc("Whether pad null value when script transformation output's value size is less " +
+        "then schema size in default-serde mode(script transformation with row format of " +
         "`ROW FORMAT DELIMITED`)." +
         "When false, Spark will pad NULL value to keep same behavior with hive." +
         "When true, Spark keep original behavior to throw `ArrayIndexOutOfBoundsException`")
