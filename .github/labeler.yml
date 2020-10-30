@@ -19,7 +19,7 @@
 # Pull Request Labeler Github Action Configuration: https://github.com/marketplace/actions/labeler
 
 ### FOLLOWING IS THE OLD probot autolabeler config that needs to be updated
-# Infra has been updated
+# INFRA has been updated
 INFRA:
   - ".github/**/*"
   - "appveyor.yml"
@@ -31,25 +31,28 @@ INFRA:
   - "/dev/github_jira_sync.py"
   - "/dev/merge_spark_pr.py"
   - "/dev/run-tests-jenkins*"
+# BUILD has been updated with some lingering questions
 BUILD:
-  - "/dev/"
+  - "/dev/**/*"
   - "!/dev/github_jira_sync.py"
   - "!/dev/merge_spark_pr.py"
   - "!/dev/run-tests-jenkins*"
   - "!/dev/.rat-excludes"
-  - "/build/"
-  - "/project/"
-  - "/assembly/"
-  - "*pom.xml"
+  - "/build/*"  # TODO - This currently has no nested structures, should we account for potential nested folders in the future?
+  - "/project/*"  # TODO - Same note as above
+  - "/assembly/*"  # TODO - Same note as above
+  - "**/*pom.xml"
   - "/bin/docker-image-tool.sh"
   - "/bin/find-spark-home*"
   - "scalastyle-config.xml"
+# DOCS has been updated but with some needed tests
 DOCS:
-  - "docs/"
-  - "/README.md"
-  - "/CONTRIBUTING.md"
+  - "docs/**/*"
+  - "**/README.md"  # TODO - Verify this matches on a nested README
+  - "**/CONTRIBUTING.md"  # TODO - Same as above
+# EXAMPLES has been updated
 EXAMPLES:
-  - "examples/"
+  - "examples/**/*"
   - "/bin/run-example*"
 CORE:
   - "/core/"
