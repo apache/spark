@@ -60,42 +60,6 @@ abstract class RemoveRedundantSortsSuiteBase
     }
   }
 
-  test("remove redundant sorts with broadcast hash join") {
-    withTempView("t1", "t2") {
-      spark.range(1000).select('id as "key").createOrReplaceTempView("t1")
-      spark.range(1000).select('id as "key").createOrReplaceTempView("t2")
-
-      val queryTemplate = """
-        |SELECT /*+ BROADCAST(%s) */ t1.key FROM
-        | (SELECT key FROM t1 WHERE key > 10 ORDER BY key DESC LIMIT 10) t1
-        |JOIN
-        | (SELECT key FROM t2 WHERE key > 50 ORDER BY key DESC LIMIT 100) t2
-        |ON t1.key = t2.key
-        |ORDER BY %s
-      """.stripMargin
-
-      // No sort should be removed since the stream side (t2) order DESC
-      // does not satisfy the required sort order ASC.
-      val buildLeftOrderByRightAsc = queryTemplate.format("t1", "t2.key ASC")
-      checkSorts(buildLeftOrderByRightAsc, 1, 1)
-
-      // The top sort node should be removed since the stream side (t2) order DESC already
-      // satisfies the required sort order DESC.
-      val buildLeftOrderByRightDesc = queryTemplate.format("t1", "t2.key DESC")
-      checkSorts(buildLeftOrderByRightDesc, 0, 1)
-
-      // No sort should be removed since the sort ordering from broadcast-hash join is based
-      // on the stream side (t2) and the required sort order is from t1.
-      val buildLeftOrderByLeftDesc = queryTemplate.format("t1", "t1.key DESC")
-      checkSorts(buildLeftOrderByLeftDesc, 1, 1)
-
-      // The top sort node should be removed since the stream side (t1) order DESC already
-      // satisfies the required sort order DESC.
-      val buildRightOrderByLeftDesc = queryTemplate.format("t2", "t1.key DESC")
-      checkSorts(buildRightOrderByLeftDesc, 0, 1)
-    }
-  }
-
   test("remove redundant sorts with sort merge join") {
     withTempView("t1", "t2") {
       spark.range(1000).select('id as "key").createOrReplaceTempView("t1")
