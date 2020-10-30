@@ -36,13 +36,15 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(csvStr, schema[, options]) - Returns a struct value with the given `csvStr` and `schema`.",
+  usage = "_FUNC_(csvStr, schema[, options]) - Returns a struct value with the given `csvStr` and `schema`. The schema can be in the table schema format, data type or in the JSON format.",
   examples = """
     Examples:
       > SELECT _FUNC_('1, 0.8', 'a INT, b DOUBLE');
        {"a":1,"b":0.8}
       > SELECT _FUNC_('26/08/2015', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
        {"time":2015-08-26 00:00:00}
+      > SELECT _FUNC_('1', '{"type":"struct", "fields":[{"name":"a", "type":"integer", "nullable":false, "metadata":{}}]}');
+       {"a":1}
   """,
   since = "3.0.0")
 // scalastyle:on line.size.limit
