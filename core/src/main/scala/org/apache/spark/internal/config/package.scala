@@ -423,7 +423,7 @@ package object config {
   private[spark] val STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED =
     ConfigBuilder("spark.storage.decommission.shuffleBlocks.enabled")
       .doc("Whether to transfer shuffle blocks during block manager decommissioning. Requires " +
-        "a migratable shuffle resolver (like sort based shuffe)")
+        "a migratable shuffle resolver (like sort based shuffle)")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
