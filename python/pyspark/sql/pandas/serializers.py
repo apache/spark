@@ -137,8 +137,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 
         Parameters
         ----------
-        series : pandas.Series
-            A single pandas.Series, list of Series, or list of (series, arrow_type)
+        series : pandas.Series or list
+            A single series, list of series, or list of (series, arrow_type)
 
         Returns
         -------

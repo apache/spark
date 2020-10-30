@@ -34,7 +34,7 @@ class StreamingQuery(object):
     A handle to a query that is executing continuously in the background as new data arrives.
     All these methods are thread-safe.
 
-    .. versionadded:: 2.0
+    .. versionadded:: 2.0.0
 
     Notes
     -----
@@ -209,7 +209,7 @@ class StreamingQuery(object):
 class StreamingQueryManager(object):
     """A class to manage all the :class:`StreamingQuery` StreamingQueries active.
 
-    .. versionadded:: 2.0
+    .. versionadded:: 2.0.0
 
     Notes
     -----
@@ -901,7 +901,7 @@ class DataStreamReader(OptionUtils):
             recursively scan a directory for files. Using this option disables
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Notes
         -----
@@ -940,7 +940,7 @@ class DataStreamWriter(object):
     Use :attr:`DataFrame.writeStream <pyspark.sql.DataFrame.writeStream>`
     to access this.
 
-    .. versionadded:: 2.0
+    .. versionadded:: 2.0.0
 
     Notes
     -----
@@ -959,7 +959,7 @@ class DataStreamWriter(object):
     def outputMode(self, outputMode):
         """Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Options include:
 
@@ -987,7 +987,7 @@ class DataStreamWriter(object):
     def format(self, source):
         """Specifies the underlying output data source.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Parameters
         ----------
@@ -1022,7 +1022,7 @@ class DataStreamWriter(object):
                 ambiguous. If it isn't set, the current value of the SQL config
                 ``spark.sql.session.timeZone`` is used by default.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Notes
         -----
@@ -1048,7 +1048,7 @@ class DataStreamWriter(object):
                 ambiguous. If it isn't set, the current value of the SQL config
                 ``spark.sql.session.timeZone`` is used by default.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Notes
         -----
@@ -1064,7 +1064,7 @@ class DataStreamWriter(object):
         If specified, the output is laid out on the file system similar
         to Hive's partitioning scheme.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Parameters
         ----------
@@ -1085,7 +1085,7 @@ class DataStreamWriter(object):
         :func:`start`. This name must be unique among all the currently active queries
         in the associated SparkSession.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Parameters
         ----------
@@ -1110,7 +1110,7 @@ class DataStreamWriter(object):
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Parameters
         ----------
@@ -1238,7 +1238,7 @@ class DataStreamWriter(object):
                 returns successfully (irrespective of the return value), except if the Python
                 crashes in the middle.
 
-        .. versionadded:: 2.4
+        .. versionadded:: 2.4.0
 
         Notes
         -----
@@ -1349,7 +1349,7 @@ class DataStreamWriter(object):
         to exactly same for the same batchId (assuming all operations are deterministic in the
         query).
 
-        .. versionadded:: 2.4
+        .. versionadded:: 2.4.0
 
         Notes
         -----
@@ -1380,7 +1380,7 @@ class DataStreamWriter(object):
         If ``format`` is not specified, the default data source configured by
         ``spark.sql.sources.default`` will be used.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Parameters
         ----------

@@ -42,6 +42,18 @@ def _monkey_patch_RDD(sparkSession):
 
         This is a shorthand for ``spark.createDataFrame(rdd, schema, sampleRatio)``
 
+        Parameters
+        ----------
+        schema : :class:`pyspark.sql.types.DataType`, str or list, optional
+            a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
+            column names, default is None.  The data type string format equals to
+            :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
+            omit the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use
+            ``byte`` instead of ``tinyint`` for :class:`pyspark.sql.types.ByteType`.
+            We can also use ``int`` as a short name for :class:`pyspark.sql.types.IntegerType`.
+        sampleRatio : float, optional
+            the sample ratio of rows used for inferring
+
         Returns
         -------
         :class:`DataFrame`
@@ -557,9 +569,9 @@ class SparkSession(SparkConversionMixin):
         If schema inference is needed, ``samplingRatio`` is used to determined the ratio of
         rows used for schema inference. The first row will be used if ``samplingRatio`` is ``None``.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
-        .. versionchanged:: 2.1
+        .. versionchanged:: 2.1.0
            Added verifySchema.
 
         Parameters
@@ -693,7 +705,7 @@ class SparkSession(SparkConversionMixin):
     def sql(self, sqlQuery):
         """Returns a :class:`DataFrame` representing the result of the given query.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Returns
         -------
@@ -711,7 +723,7 @@ class SparkSession(SparkConversionMixin):
     def table(self, tableName):
         """Returns the specified table as a :class:`DataFrame`.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Returns
         -------
@@ -732,7 +744,7 @@ class SparkSession(SparkConversionMixin):
         Returns a :class:`DataFrameReader` that can be used to read data
         in as a :class:`DataFrame`.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Returns
         -------
@@ -746,7 +758,7 @@ class SparkSession(SparkConversionMixin):
         Returns a :class:`DataStreamReader` that can be used to read data streams
         as a streaming :class:`DataFrame`.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Notes
         -----
@@ -763,7 +775,7 @@ class SparkSession(SparkConversionMixin):
         """Returns a :class:`StreamingQueryManager` that allows managing all the
         :class:`StreamingQuery` instances active on `this` context.
 
-        .. versionadded:: 2.0
+        .. versionadded:: 2.0.0
 
         Notes
         -----

@@ -744,7 +744,7 @@ class DataFrameReader(OptionUtils):
             the minimum value of ``column`` used to decide partition stride
         upperBound : str or int, optional
             the maximum value of ``column`` used to decide partition stride
-        numPartitions : str or int, optional
+        numPartitions : int, optional
             the number of partitions
         predicates : list, optional
             a list of expressions suitable for inclusion in WHERE clauses;

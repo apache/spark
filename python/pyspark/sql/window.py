@@ -221,7 +221,7 @@ class WindowSpec(object):
 
     Use the static methods in :class:`Window` to create a :class:`WindowSpec`.
 
-    .. versionadded:: 1.4
+    .. versionadded:: 1.4.0
     """
 
     def __init__(self, jspec):
