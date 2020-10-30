@@ -766,7 +766,6 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       case op @ SpecialBinaryComparison(
           ExtractAttribute(SupportedAttribute(name), dt1), ExtractableLiteral(value, dt2))
           if !compatibleTypes(dt1, dt2) =>
-        logWarning(s"Not creating filter because $dt1 not same as $dt2")
         None
 
       case op @ SpecialBinaryComparison(
@@ -809,13 +808,12 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       hive: Hive,
       table: Table,
       predicates: Seq[Expression]): Seq[Partition] = {
-    logWarning(s"Filters on entry are ${predicates.toList}")
     // Hive getPartitionsByFilter() takes a string that represents partition
     // predicates like "str_key=\"value\" and int_key=1 ..."
     val filter = convertFilters(table, predicates)
-    logWarning(s"Filters after convert are $filter")
     val partitions =
       if (filter.isEmpty) {
+        logDebug(s"Falling back to getting all partitions")
         getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
       } else {
         logDebug(s"Hive metastore filter is '$filter'.")
