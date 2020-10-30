@@ -21,3 +21,6 @@ select to_csv(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), ma
 -- Check if errors handled
 select to_csv(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'));
 select to_csv(named_struct('a', 1, 'b', 2), map('mode', 1));
+
+-- from_csv - schema in JSON format
+select from_csv('1', '{"type":"struct", "fields":[{"name":"a", "type":"integer", "nullable":false, "metadata":{}}]}');
