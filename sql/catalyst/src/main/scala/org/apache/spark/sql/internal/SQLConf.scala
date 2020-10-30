@@ -1382,6 +1382,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STATEFUL_OPERATOR_CORRECTNESS_CHECK_ENABLED =
+    buildConf("spark.sql.streaming.statefulOperator.correctnessCheck")
+      .internal()
+      .doc("When true, the stateful operators for streaming query will be checked for possible " +
+        "correctness issue. Once the issue is detected, Spark will throw analysis exception. " +
+        "When this config is disabled, Spark will just print warning message for users. " +
+        "Prior to Spark 3.1.0, the behavior is disabling this config.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like `${var}`, `${system:var}`, " +
@@ -3027,6 +3038,9 @@ class SQLConf extends Serializable with Logging {
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
+
+  def statefulOperatorCorrectnessCheckEnabled: Boolean =
+    getConf(STATEFUL_OPERATOR_CORRECTNESS_CHECK_ENABLED)
 
   def streamingFileCommitProtocolClass: String = getConf(STREAMING_FILE_COMMIT_PROTOCOL_CLASS)
 
