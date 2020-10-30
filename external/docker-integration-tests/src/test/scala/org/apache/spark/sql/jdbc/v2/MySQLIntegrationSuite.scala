@@ -55,8 +55,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   }
 
   override def sparkConf: SparkConf = super.sparkConf
-      .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
-      .set("spark.sql.catalog.mysql.url", db.getJdbcUrl(dockerIp, externalPort))
+    .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
+    .set("spark.sql.catalog.mysql.url", db.getJdbcUrl(dockerIp, externalPort))
 
   override val connectionTimeout = timeout(7.minutes)
 
@@ -89,7 +89,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
       val exception = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO RENAMED")
       }
-      assert(exception.getCause != null, s"Unexcpected exception: $exception")
+      assert(exception.getCause != null, s"Wrong exception thrown: $exception")
       val msg = exception.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
       assert(msg.contains("Rename column is only supported for MySQL version 8.0 and above."))
     } else {

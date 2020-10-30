@@ -128,16 +128,6 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
         sql(s"ALTER TABLE $catalogName.alt_table RENAME COLUMN ID1 TO ID2")
       }.getMessage
       assert(msg.contains("Cannot rename column, because ID2 already exists"))
-      // Rename to a missing column
-      val msg2 = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $catalogName.alt_table RENAME COLUMN ID2 TO MISSING")
-      }.getMessage
-      assert(msg.contains("Cannot rename column, because ID2 already exists"))
-      // Rename a missing column
-      val msg3 = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $catalogName.alt_table RENAME COLUMN MISSING TO ID2")
-      }.getMessage
-      assert(msg.contains("Cannot rename column, because ID2 already exists"))
     }
     // Rename a column in a not existing table
     val msg = intercept[AnalysisException] {
