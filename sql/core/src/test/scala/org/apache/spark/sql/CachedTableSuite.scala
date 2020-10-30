@@ -1212,18 +1212,39 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   test("SPARK-33290: REFRESH TABLE should invalidate all caches referencing the table") {
     withTable("t") {
       withTempPath { path =>
-        withTempView("view1", "view2") {
+        withTempView("tempView1", "tempView2") {
           Seq((1 -> "a")).toDF("i", "j").write.parquet(path.getCanonicalPath)
           sql(s"CREATE TABLE t USING parquet LOCATION '${path.toURI}'")
-          sql("CREATE TEMPORARY VIEW view1 AS SELECT * FROM t")
-          sql("CACHE TABLE view2 AS SELECT i FROM view1")
-          checkAnswer(sql("SELECT * FROM view1"), Seq(Row(1, "a")))
-          checkAnswer(sql("SELECT * FROM view2"), Seq(Row(1)))
+          sql("CREATE TEMPORARY VIEW tempView1 AS SELECT * FROM t")
+          sql("CACHE TABLE tempView2 AS SELECT i FROM tempView1")
+          checkAnswer(sql("SELECT * FROM tempView1"), Seq(Row(1, "a")))
+          checkAnswer(sql("SELECT * FROM tempView2"), Seq(Row(1)))
 
           Utils.deleteRecursively(path)
-          sql("REFRESH TABLE view1")
-          checkAnswer(sql("SELECT * FROM view1"), Seq.empty)
-          checkAnswer(sql("SELECT * FROM view2"), Seq.empty)
+          sql("REFRESH TABLE tempView1")
+          checkAnswer(sql("SELECT * FROM tempView1"), Seq.empty)
+          checkAnswer(sql("SELECT * FROM tempView2"), Seq.empty)
+        }
+      }
+    }
+  }
+
+  test("SPARK-33290: querying cached view after REFRESH TABLE fails with FNFE") {
+    withTable("t") {
+      withTempPath { path =>
+        withTempView("tempView1") {
+          Seq((1 -> "a")).toDF("i", "j").write.parquet(path.getCanonicalPath)
+          sql(s"CREATE TABLE t USING parquet LOCATION '${path.toURI}'")
+          sql("CREATE TEMPORARY VIEW tempView1 AS SELECT * FROM t")
+          checkAnswer(sql("SELECT * FROM tempView1"), Seq(Row(1, "a")))
+
+          Utils.deleteRecursively(path)
+          sql("REFRESH TABLE t")
+          val exception = intercept[Exception] {
+            checkAnswer(sql("SELECT * FROM tempView1"), Seq.empty)
+          }
+          assert(exception.getMessage.contains("FileNotFoundException"))
+          assert(exception.getMessage.contains("REFRESH TABLE"))
         }
       }
     }
