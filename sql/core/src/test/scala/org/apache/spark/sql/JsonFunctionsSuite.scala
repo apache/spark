@@ -411,7 +411,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   test("infers schemas using options") {
     val df = spark.range(1)
       .select(schema_of_json(lit("{a:1}"), Map("allowUnquotedFieldNames" -> "true").asJava))
-    checkAnswer(df, Seq(Row("struct<a:bigint>")))
+    checkAnswer(df, Seq(Row("STRUCT<`a`: BIGINT>")))
   }
 
   test("from_json - array of primitive types") {
@@ -684,14 +684,14 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val input = regexp_replace(lit("""{"item_id": 1, "item_price": 0.1}"""), "item_", "")
     checkAnswer(
       spark.range(1).select(schema_of_json(input)),
-      Seq(Row("struct<id:bigint,price:double>")))
+      Seq(Row("STRUCT<`id`: BIGINT, `price`: DOUBLE>")))
   }
 
   test("SPARK-31065: schema_of_json - null and empty strings as strings") {
     Seq("""{"id": null}""", """{"id": ""}""").foreach { input =>
       checkAnswer(
         spark.range(1).select(schema_of_json(input)),
-        Seq(Row("struct<id:string>")))
+        Seq(Row("STRUCT<`id`: STRING>")))
     }
   }
 
@@ -703,7 +703,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         schema_of_json(
           lit("""{"id": "a", "drop": {"drop": null}}"""),
           options.asJava)),
-      Seq(Row("struct<id:string>")))
+      Seq(Row("STRUCT<`id`: STRING>")))
 
     // Array of structs
     checkAnswer(
@@ -711,7 +711,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         schema_of_json(
           lit("""[{"id": "a", "drop": {"drop": null}}]"""),
           options.asJava)),
-      Seq(Row("array<struct<id:string>>")))
+      Seq(Row("ARRAY<STRUCT<`id`: STRING>>")))
 
     // Other types are not affected.
     checkAnswer(
@@ -719,7 +719,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         schema_of_json(
           lit("""null"""),
           options.asJava)),
-      Seq(Row("string")))
+      Seq(Row("STRING")))
   }
 
   test("optional datetime parser does not affect json time formatting") {
@@ -746,5 +746,12 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(null))
     val df4 = Seq("""{"c2": [19]}""").toDF("c0")
     checkAnswer(df4.select(from_json($"c0", MapType(StringType, st))), Row(null))
+  }
+
+  test("SPARK-33270: infers schema for JSON field with spaces and pass them to from_json") {
+    val in = Seq("""{"a b": 1}""").toDS()
+    val out = in.select(from_json('value, schema_of_json("""{"a b": 100}""")) as "parsed")
+    val expected = new StructType().add("parsed", new StructType().add("a b", LongType))
+    assert(out.schema == expected)
   }
 }

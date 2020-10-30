@@ -33,7 +33,7 @@ import org.apache.hadoop.fs._
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
-import org.apache.spark.io.LZ4CompressionCodec
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
@@ -696,12 +696,14 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   }
 
   private def compressStream(outputStream: DataOutputStream): DataOutputStream = {
-    val compressed = new LZ4CompressionCodec(sparkConf).compressedOutputStream(outputStream)
+    val compressed = CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec)
+      .compressedOutputStream(outputStream)
     new DataOutputStream(compressed)
   }
 
   private def decompressStream(inputStream: DataInputStream): DataInputStream = {
-    val compressed = new LZ4CompressionCodec(sparkConf).compressedInputStream(inputStream)
+    val compressed = CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec)
+      .compressedInputStream(inputStream)
     new DataInputStream(compressed)
   }
 

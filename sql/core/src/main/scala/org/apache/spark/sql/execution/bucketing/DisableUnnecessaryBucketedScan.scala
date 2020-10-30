@@ -75,7 +75,7 @@ import org.apache.spark.sql.internal.SQLConf
  * the paper "Access Path Selection in a Relational Database Management System"
  * (https://dl.acm.org/doi/10.1145/582095.582099).
  */
-case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan] {
+object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
 
   /**
    * Disable bucketed table scan with pre-order traversal of plan.

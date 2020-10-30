@@ -35,7 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
  * optimization to prune data. During physical planning, redundant project nodes can be removed
  * to simplify the query plan.
  */
-case class RemoveRedundantProjects(conf: SQLConf) extends Rule[SparkPlan] {
+object RemoveRedundantProjects extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.getConf(SQLConf.REMOVE_REDUNDANT_PROJECTS_ENABLED)) {
       plan

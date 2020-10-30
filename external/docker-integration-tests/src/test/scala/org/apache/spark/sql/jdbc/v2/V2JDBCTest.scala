@@ -73,6 +73,27 @@ trait V2JDBCTest extends SharedSparkSession {
     assert(msg.contains("Table not found"))
   }
 
+  test("SPARK-33034: ALTER TABLE ... drop column") {
+    withTable(s"$catalogName.alt_table") {
+      sql(s"CREATE TABLE $catalogName.alt_table (C1 INTEGER, C2 STRING, c3 INTEGER) USING _")
+      sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN C1")
+      sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN c3")
+      val t = spark.table(s"$catalogName.alt_table")
+      val expectedSchema = new StructType().add("C2", StringType)
+      assert(t.schema === expectedSchema)
+      // Drop not existing column
+      val msg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN bad_column")
+      }.getMessage
+      assert(msg.contains("Cannot delete missing field bad_column in alt_table schema"))
+    }
+    // Drop a column from a not existing table
+    val msg = intercept[AnalysisException] {
+      sql(s"ALTER TABLE $catalogName.not_existing_table DROP COLUMN C1")
+    }.getMessage
+    assert(msg.contains("Table not found"))
+  }
+
   test("SPARK-33034: ALTER TABLE ... update column type") {
     withTable(s"$catalogName.alt_table") {
       testUpdateColumnType(s"$catalogName.alt_table")

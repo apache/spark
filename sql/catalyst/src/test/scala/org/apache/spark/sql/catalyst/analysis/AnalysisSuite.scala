@@ -197,7 +197,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("divide should be casted into fractional types") {
-    val plan = caseInsensitiveAnalyzer.execute(
+    val plan = getAnalyzer.execute(
       testRelation2.select(
         $"a" / Literal(2) as "div1",
         $"a" / $"b" as "div2",
@@ -258,13 +258,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       CreateStruct(Seq(att1, ((att1.as("aa")) + 1).as("a_plus_1"))).as("col"),
       att1
     )
-    val prevPlan = getAnalyzer(true).execute(plan)
+    val prevPlan = getAnalyzer.execute(plan)
     plan = prevPlan.select(CreateArray(Seq(
       CreateStruct(Seq(att1, (att1 + 1).as("a_plus_1"))).as("col1"),
       /** alias should be eliminated by [[CleanupAliases]] */
       "col".attr.as("col2")
     )).as("arr"))
-    plan = getAnalyzer(true).execute(plan)
+    plan = getAnalyzer.execute(plan)
 
     val expectedPlan = prevPlan.select(
       CreateArray(Seq(
@@ -925,5 +925,46 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       )
     )
     assertAnalysisSuccess(plan)
+  }
+
+  test("SPARK-33197: Make sure changes to ANALYZER_MAX_ITERATIONS take effect at runtime") {
+    // RuleExecutor only throw exception or log warning when the rule is supposed to run
+    // more than once.
+    val maxIterations = 2
+    val maxIterationsEnough = 5
+    withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> maxIterations.toString) {
+      val conf = SQLConf.get
+      val testAnalyzer = new Analyzer(
+        new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+
+      val plan = testRelation2.select(
+        $"a" / Literal(2) as "div1",
+        $"a" / $"b" as "div2",
+        $"a" / $"c" as "div3",
+        $"a" / $"d" as "div4",
+        $"e" / $"e" as "div5")
+
+      val message1 = intercept[TreeNodeException[LogicalPlan]] {
+        testAnalyzer.execute(plan)
+      }.getMessage
+      assert(message1.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+        s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+
+      withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> maxIterationsEnough.toString) {
+        try {
+          testAnalyzer.execute(plan)
+        } catch {
+          case ex: TreeNodeException[_]
+            if ex.getMessage.contains(SQLConf.ANALYZER_MAX_ITERATIONS.key) =>
+              fail("analyzer.execute should not reach max iterations.")
+        }
+      }
+
+      val message2 = intercept[TreeNodeException[LogicalPlan]] {
+        testAnalyzer.execute(plan)
+      }.getMessage
+      assert(message2.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+        s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+    }
   }
 }

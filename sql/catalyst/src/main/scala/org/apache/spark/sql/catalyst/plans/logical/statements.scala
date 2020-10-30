@@ -284,14 +284,6 @@ case class RenameTableStatement(
     isView: Boolean) extends ParsedStatement
 
 /**
- * A DROP TABLE statement, as parsed from SQL.
- */
-case class DropTableStatement(
-    tableName: Seq[String],
-    ifExists: Boolean,
-    purge: Boolean) extends ParsedStatement
-
-/**
  * A DROP VIEW statement, as parsed from SQL.
  */
 case class DropViewStatement(

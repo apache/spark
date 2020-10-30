@@ -38,7 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
  *   - The ratio of the number of buckets is less than the value set in
  *     COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.
  */
-case class CoalesceBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
+object CoalesceBucketsInJoin extends Rule[SparkPlan] {
   private def updateNumCoalescedBucketsInScan(
       plan: SparkPlan,
       numCoalescedBuckets: Int): SparkPlan = {

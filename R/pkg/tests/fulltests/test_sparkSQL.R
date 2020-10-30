@@ -1428,6 +1428,8 @@ test_that("column functions", {
     vector_to_array(c, "float32") + vector_to_array(c, "float64")
   c27 <- nth_value("x", 1L) + nth_value("y", 2, TRUE) +
     nth_value(column("v"), 3) + nth_value(column("z"), 4L, FALSE)
+  c28 <- asc_nulls_first(c1) + asc_nulls_last(c1) +
+    desc_nulls_first(c1) + desc_nulls_last(c1)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1680,9 +1682,9 @@ test_that("column functions", {
 
   df <- as.DataFrame(list(list("col" = "1")))
   c <- collect(select(df, schema_of_csv("Amsterdam,2018")))
-  expect_equal(c[[1]], "struct<_c0:string,_c1:int>")
+  expect_equal(c[[1]], "STRUCT<`_c0`: STRING, `_c1`: INT>")
   c <- collect(select(df, schema_of_csv(lit("Amsterdam,2018"))))
-  expect_equal(c[[1]], "struct<_c0:string,_c1:int>")
+  expect_equal(c[[1]], "STRUCT<`_c0`: STRING, `_c1`: INT>")
 
   # Test to_json(), from_json(), schema_of_json()
   df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
@@ -1715,9 +1717,9 @@ test_that("column functions", {
 
   df <- as.DataFrame(list(list("col" = "1")))
   c <- collect(select(df, schema_of_json('{"name":"Bob"}')))
-  expect_equal(c[[1]], "struct<name:string>")
+  expect_equal(c[[1]], "STRUCT<`name`: STRING>")
   c <- collect(select(df, schema_of_json(lit('{"name":"Bob"}'))))
-  expect_equal(c[[1]], "struct<name:string>")
+  expect_equal(c[[1]], "STRUCT<`name`: STRING>")
 
   # Test to_json() supports arrays of primitive types and arrays
   df <- sql("SELECT array(19, 42, 70) as age")

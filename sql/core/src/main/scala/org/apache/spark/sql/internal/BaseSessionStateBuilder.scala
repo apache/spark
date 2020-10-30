@@ -177,19 +177,19 @@ abstract class BaseSessionStateBuilder(
    */
   protected def analyzer: Analyzer = new Analyzer(catalogManager, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
-      new FindDataSourceTable(session) +:
-        new ResolveSQLOnFile(session) +:
-        new FallBackFileSourceV2(session) +:
+      FindDataSourceTable +:
+        ResolveSQLOnFile +:
+        FallBackFileSourceV2 +:
         ResolveEncodersInScalaAgg +:
         new ResolveSessionCatalog(
-          catalogManager, conf, catalog.isTempView, catalog.isTempFunction) +:
+          catalogManager, catalog.isTempView, catalog.isTempFunction) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
-      new DetectAmbiguousSelfJoin(conf) +:
-        PreprocessTableCreation(session) +:
-        PreprocessTableInsertion(conf) +:
-        DataSourceAnalysis(conf) +:
+      DetectAmbiguousSelfJoin +:
+        PreprocessTableCreation +:
+        PreprocessTableInsertion +:
+        DataSourceAnalysis +:
         customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
