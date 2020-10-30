@@ -1240,6 +1240,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
           Utils.deleteRecursively(path)
           sql("REFRESH TABLE t")
+          checkAnswer(sql("SELECT * FROM t"), Seq.empty)
           val exception = intercept[Exception] {
             checkAnswer(sql("SELECT * FROM tempView1"), Seq.empty)
           }
