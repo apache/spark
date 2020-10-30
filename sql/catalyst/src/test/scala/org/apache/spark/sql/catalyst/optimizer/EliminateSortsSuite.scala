@@ -92,4 +92,11 @@ class EliminateSortsSuite extends PlanTest {
     val correctAnswer = distributedPlan.analyze
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-33183: remove consecutive no-op sorts") {
+    val plan = testRelation.orderBy().orderBy().orderBy()
+    val optimized = Optimize.execute(plan.analyze)
+    val correctAnswer = testRelation.analyze
+    comparePlans(optimized, correctAnswer)
+  }
 }

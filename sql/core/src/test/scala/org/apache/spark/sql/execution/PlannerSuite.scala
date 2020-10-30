@@ -230,19 +230,6 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
-  test("SPARK-23375: Cached sorted data doesn't need to be re-sorted") {
-    val query = testData.select('key, 'value).sort('key.desc).cache()
-    assert(query.queryExecution.optimizedPlan.isInstanceOf[InMemoryRelation])
-    val resorted = query.sort('key.desc)
-    assert(resorted.queryExecution.optimizedPlan.collect { case s: Sort => s}.isEmpty)
-    assert(resorted.select('key).collect().map(_.getInt(0)).toSeq ==
-      (1 to 100).reverse)
-    // with a different order, the sort is needed
-    val sortedAsc = query.sort('key)
-    assert(sortedAsc.queryExecution.optimizedPlan.collect { case s: Sort => s}.size == 1)
-    assert(sortedAsc.select('key).collect().map(_.getInt(0)).toSeq == (1 to 100))
-  }
-
   test("PartitioningCollection") {
     withTempView("normal", "small", "tiny") {
       testData.createOrReplaceTempView("normal")
