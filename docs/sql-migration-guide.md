@@ -52,7 +52,7 @@ license: |
   
   - In Spark 3.1, the `schema_of_json` and `schema_of_csv` functions return the schema in the SQL format in which field names are quoted. In Spark 3.0, the function returns a catalog string without field quoting and in lower case. 
  
-  - In Spark 3.1, when `spark.sql.legacy.transformationPadNullWhenValueLessThenSchema` is true, Spark will pad NULL value when script transformation's output value size less then schema size in default-serde mode(script transformation with row format of `ROW FORMAT DELIMITED`). If false, Spark will keep original behavior to throw `ArrayIndexOutOfBoundsException`.
+  - In Spark 3.1, when script transformation output's value size less then schema size in default-serde mode(script transformation with row format of `ROW FORMAT DELIMITED`), Spark will pad NUll value to supplement data. In Spark 3.0 or earlier, Spark will do nothing and throw `ArrayIndexOutOfBoundsException`. To restore the behavior before Spark 3.1, you can set `spark.sql.legacy.transformationNotPadNullToSupplementData.enabled` to `true`.
 
 ## Upgrading from Spark SQL 3.0 to 3.0.1
 
