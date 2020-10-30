@@ -248,9 +248,9 @@ abstract class DisableUnnecessaryBucketedScanSuite
         assertCached(spark.table("t1"))
 
         // Verify cached bucketed table scan not disabled
-        val inMemoryScan = find(spark.table("t1").queryExecution.executedPlan)(
-          _.isInstanceOf[InMemoryTableScanExec])
-        assert(inMemoryScan.get.outputPartitioning match {
+        val partitioning = stripAQEPlan(spark.table("t1").queryExecution.executedPlan)
+          .outputPartitioning
+        assert(partitioning match {
           case HashPartitioning(Seq(column: AttributeReference), 8) if column.name == "i" => true
           case _ => false
         })

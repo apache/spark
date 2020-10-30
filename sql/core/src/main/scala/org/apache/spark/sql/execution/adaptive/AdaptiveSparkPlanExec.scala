@@ -83,19 +83,14 @@ case class AdaptiveSparkPlanExec(
   // The logical plan optimizer for re-optimizing the current logical plan.
   @transient private val optimizer = new AQEOptimizer(conf)
 
-  @transient private val removeRedundantProjects = RemoveRedundantProjects
-  @transient private val removeRedundantSorts = RemoveRedundantSorts
-  @transient private val ensureRequirements = EnsureRequirements
-  @transient private val disableUnnecessaryBucketedScan = DisableUnnecessaryBucketedScan
-
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
-    removeRedundantProjects,
-    removeRedundantSorts,
-    ensureRequirements,
-    disableUnnecessaryBucketedScan
+    RemoveRedundantProjects,
+    RemoveRedundantSorts,
+    EnsureRequirements,
+    DisableUnnecessaryBucketedScan
   ) ++ context.session.sessionState.queryStagePrepRules
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
