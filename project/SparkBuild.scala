@@ -79,6 +79,8 @@ object BuildCommons {
   val testTempDir = s"$sparkHome/target/tmp"
 
   val javaVersion = settingKey[String]("source and target JVM version for javac and scalac")
+
+  Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat
 }
 
 object SparkBuild extends PomBuild {
