@@ -40,7 +40,7 @@ import org.json4s.JsonAST._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 
@@ -240,6 +240,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def toString: String = value match {
     case null => "null"
     case binary: Array[Byte] => s"0x" + DatatypeConverter.printHexBinary(binary)
+    case d: ArrayBasedMapData => s"map(${d.toString})"
     case other => other.toString
   }
 
