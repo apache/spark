@@ -60,7 +60,7 @@
 
   <mailingLists>
     <mailingList>
-      <name>Dev Mailing List</name>
+      <name>Dev Mailing List!</name>
       <post>dev@spark.apache.org</post>
       <subscribe>dev-subscribe@spark.apache.org</subscribe>
       <unsubscribe>dev-unsubscribe@spark.apache.org</unsubscribe>
