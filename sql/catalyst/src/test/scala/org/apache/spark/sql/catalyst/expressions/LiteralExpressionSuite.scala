@@ -198,6 +198,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     checkMapLiteral(Map("a" -> 1, "b" -> 2, "c" -> 3))
     checkMapLiteral(Map("1" -> 1.0, "2" -> 2.0, "3" -> 3.0))
+    assert(Literal.create(Map("a" -> 1)).toString === "map(keys: [a], values: [1])")
   }
 
   test("struct") {
