@@ -83,4 +83,20 @@ class EliminateSortsSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-32318: should not remove orderBy in distribute statement") {
+    val projectPlan = testRelation.select('a, 'b)
+    val orderByPlan = projectPlan.orderBy('b.desc)
+    val distributedPlan = orderByPlan.distribute('a)(1)
+    val optimized = Optimize.execute(distributedPlan.analyze)
+    val correctAnswer = distributedPlan.analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-33183: remove consecutive no-op sorts") {
+    val plan = testRelation.orderBy().orderBy().orderBy()
+    val optimized = Optimize.execute(plan.analyze)
+    val correctAnswer = testRelation.analyze
+    comparePlans(optimized, correctAnswer)
+  }
 }
