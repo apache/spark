@@ -116,7 +116,7 @@ private[spark] class PipedRDD[T: ClassTag](
       override def run(): Unit = {
         val err = proc.getErrorStream
         try {
-          for (line <- Source.fromInputStream(err)(encoding).getLines) {
+          for (line <- Source.fromInputStream(err)(encoding).getLines()) {
             // scalastyle:off println
             System.err.println(line)
             // scalastyle:on println
@@ -180,7 +180,7 @@ private[spark] class PipedRDD[T: ClassTag](
     }
 
     // Return an iterator that read lines from the process's stdout
-    val lines = Source.fromInputStream(proc.getInputStream)(encoding).getLines
+    val lines = Source.fromInputStream(proc.getInputStream)(encoding).getLines()
     new Iterator[String] {
       def next(): String = {
         if (!hasNext()) {

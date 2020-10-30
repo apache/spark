@@ -73,7 +73,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             } else if (eventLogsUnderProcessCount > 0) {
               <h4>No completed applications found!</h4>
             } else {
-              <h4>No completed applications found!</h4> ++ parent.emptyListingHtml
+              <h4>No completed applications found!</h4> ++ parent.emptyListingHtml()
             }
             }
 

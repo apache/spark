@@ -293,7 +293,7 @@ private[spark] class ExternalSorter[K, V, C](
 
     var success = false
     try {
-      while (inMemoryIterator.hasNext) {
+      while (inMemoryIterator.hasNext()) {
         val partitionId = inMemoryIterator.nextPartition()
         require(partitionId >= 0 && partitionId < numPartitions,
           s"partition Id: ${partitionId} should be in the range [0, ${numPartitions})")
@@ -690,9 +690,9 @@ private[spark] class ExternalSorter[K, V, C](
       // Case where we only have in-memory data
       val collection = if (aggregator.isDefined) map else buffer
       val it = collection.destructiveSortedWritablePartitionedIterator(comparator)
-      while (it.hasNext) {
+      while (it.hasNext()) {
         val partitionId = it.nextPartition()
-        while (it.hasNext && it.nextPartition() == partitionId) {
+        while (it.hasNext() && it.nextPartition() == partitionId) {
           it.writeNext(writer)
         }
         val segment = writer.commitAndGet()
@@ -747,7 +747,7 @@ private[spark] class ExternalSorter[K, V, C](
             serInstance,
             blockId,
             context.taskMetrics().shuffleWriteMetrics)
-          while (it.hasNext && it.nextPartition() == partitionId) {
+          while (it.hasNext() && it.nextPartition() == partitionId) {
             it.writeNext(partitionPairsWriter)
           }
         } {
@@ -862,7 +862,7 @@ private[spark] class ExternalSorter[K, V, C](
 
           def nextPartition(): Int = cur._1._1
         }
-        logInfo(s"Task ${TaskContext.get().taskAttemptId} force spilling in-memory map to disk " +
+        logInfo(s"Task ${TaskContext.get().taskAttemptId()} force spilling in-memory map to disk " +
           s"and it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
         val spillFile = spillMemoryIteratorToDisk(inMemoryIterator)
         forceSpillFiles += spillFile

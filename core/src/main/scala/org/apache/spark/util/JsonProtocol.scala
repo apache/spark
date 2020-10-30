@@ -299,7 +299,7 @@ private[spark] object JsonProtocol {
     val completionTime = stageInfo.completionTime.map(JInt(_)).getOrElse(JNothing)
     val failureReason = stageInfo.failureReason.map(JString(_)).getOrElse(JNothing)
     ("Stage ID" -> stageInfo.stageId) ~
-    ("Stage Attempt ID" -> stageInfo.attemptNumber) ~
+    ("Stage Attempt ID" -> stageInfo.attemptNumber()) ~
     ("Stage Name" -> stageInfo.name) ~
     ("Number of Tasks" -> stageInfo.numTasks) ~
     ("RDD Info" -> rddInfo) ~
@@ -529,7 +529,7 @@ private[spark] object JsonProtocol {
 
   def resourcesMapToJson(m: Map[String, ResourceInformation]): JValue = {
     val jsonFields = m.map {
-      case (k, v) => JField(k, v.toJson)
+      case (k, v) => JField(k, v.toJson())
     }
     JObject(jsonFields.toList)
   }

@@ -1491,7 +1491,7 @@ class SparkContext(config: SparkConf) extends Logging {
     require(!classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass),
       "Can not directly broadcast RDDs; instead, call collect() and broadcast the result.")
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
-    val callSite = getCallSite
+    val callSite = getCallSite()
     logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
     cleaner.foreach(_.registerBroadcastForCleanup(bc))
     bc
@@ -2121,7 +2121,7 @@ class SparkContext(config: SparkConf) extends Logging {
     if (stopped.get()) {
       throw new IllegalStateException("SparkContext has been shutdown")
     }
-    val callSite = getCallSite
+    val callSite = getCallSite()
     val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite.shortForm)
     if (conf.getBoolean("spark.logLineage", false)) {
@@ -2243,7 +2243,7 @@ class SparkContext(config: SparkConf) extends Logging {
       evaluator: ApproximateEvaluator[U, R],
       timeout: Long): PartialResult[R] = {
     assertNotStopped()
-    val callSite = getCallSite
+    val callSite = getCallSite()
     logInfo("Starting job: " + callSite.shortForm)
     val start = System.nanoTime
     val cleanedFunc = clean(func)
@@ -2273,7 +2273,7 @@ class SparkContext(config: SparkConf) extends Logging {
   {
     assertNotStopped()
     val cleanF = clean(processPartition)
-    val callSite = getCallSite
+    val callSite = getCallSite()
     val waiter = dagScheduler.submitJob(
       rdd,
       (context: TaskContext, iter: Iterator[T]) => cleanF(iter),
@@ -2424,7 +2424,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
   def defaultParallelism: Int = {
     assertNotStopped()
-    taskScheduler.defaultParallelism
+    taskScheduler.defaultParallelism()
   }
 
   /**
@@ -2582,7 +2582,7 @@ object SparkContext extends Logging {
    * Throws an exception if a SparkContext is about to be created in executors.
    */
   private def assertOnDriver(): Unit = {
-    if (TaskContext.get != null) {
+    if (TaskContext.get() != null) {
       // we're accessing it during task execution, fail.
       throw new IllegalStateException(
         "SparkContext should only be created and accessed on the driver.")

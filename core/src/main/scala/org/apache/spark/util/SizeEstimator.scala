@@ -199,7 +199,7 @@ object SizeEstimator extends Logging {
   private def estimate(obj: AnyRef, visited: IdentityHashMap[AnyRef, AnyRef]): Long = {
     val state = new SearchState(visited)
     state.enqueue(obj)
-    while (!state.isFinished) {
+    while (!state.isFinished()) {
       visitSingleObject(state.dequeue(), state)
     }
     state.size

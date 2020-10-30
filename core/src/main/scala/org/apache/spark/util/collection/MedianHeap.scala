@@ -55,7 +55,7 @@ private[spark] class MedianHeap(implicit val ord: Ordering[Double]) {
 
   def insert(x: Double): Unit = {
     // If both heaps are empty, we arbitrarily insert it into a heap, let's say, the largerHalf.
-    if (isEmpty) {
+    if (isEmpty()) {
       largerHalf.enqueue(x)
     } else {
       // If the number is larger than current median, it should be inserted into largerHalf,
@@ -74,12 +74,12 @@ private[spark] class MedianHeap(implicit val ord: Ordering[Double]) {
       smallerHalf.enqueue(largerHalf.dequeue())
     }
     if (smallerHalf.size - largerHalf.size > 1) {
-      largerHalf.enqueue(smallerHalf.dequeue)
+      largerHalf.enqueue(smallerHalf.dequeue())
     }
   }
 
   def median: Double = {
-    if (isEmpty) {
+    if (isEmpty()) {
       throw new NoSuchElementException("MedianHeap is empty.")
     }
     if (largerHalf.size == smallerHalf.size) {

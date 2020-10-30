@@ -279,7 +279,7 @@ class HadoopRDD[K, V](
       private val inputFormat = getInputFormat(jobConf)
       HadoopRDD.addLocalConfiguration(
         new SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(createTime),
-        context.stageId, theSplit.index, context.attemptNumber, jobConf)
+        context.stageId(), theSplit.index, context.attemptNumber(), jobConf)
 
       reader =
         try {

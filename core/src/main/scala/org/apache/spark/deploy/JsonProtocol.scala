@@ -30,7 +30,7 @@ private[deploy] object JsonProtocol {
 
   private def writeResourcesInfo(info: Map[String, ResourceInformation]): JObject = {
     val jsonFields = info.map {
-      case (k, v) => JField(k, v.toJson)
+      case (k, v) => JField(k, v.toJson())
     }
     JObject(jsonFields.toList)
   }

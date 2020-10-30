@@ -213,7 +213,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     /** Terminates the writer thread, ignoring any exceptions that may occur due to cleanup. */
     def shutdownOnTaskCompletion(): Unit = {
-      assert(context.isCompleted)
+      assert(context.isCompleted())
       this.interrupt()
     }
 
@@ -399,7 +399,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         dataOut.flush()
       } catch {
         case t: Throwable if (NonFatal(t) || t.isInstanceOf[Exception]) =>
-          if (context.isCompleted || context.isInterrupted) {
+          if (context.isCompleted() || context.isInterrupted()) {
             logDebug("Exception/NonFatal Error thrown after task completion (likely due to " +
               "cleanup)", t)
             if (!worker.isClosed) {
@@ -503,8 +503,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         init, finish))
       val memoryBytesSpilled = stream.readLong()
       val diskBytesSpilled = stream.readLong()
-      context.taskMetrics.incMemoryBytesSpilled(memoryBytesSpilled)
-      context.taskMetrics.incDiskBytesSpilled(diskBytesSpilled)
+      context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
+      context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
     }
 
     protected def handlePythonException(): PythonException = {
@@ -536,7 +536,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
 
     protected val handleException: PartialFunction[Throwable, OUT] = {
-      case e: Exception if context.isInterrupted =>
+      case e: Exception if context.isInterrupted() =>
         logDebug("Exception thrown after task interruption", e)
         throw new TaskKilledException(context.getKillReason().getOrElse("unknown reason"))
 
@@ -566,16 +566,16 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     override def run(): Unit = {
       // Kill the worker if it is interrupted, checking until task completion.
       // TODO: This has a race condition if interruption occurs, as completed may still become true.
-      while (!context.isInterrupted && !context.isCompleted) {
+      while (!context.isInterrupted() && !context.isCompleted()) {
         Thread.sleep(2000)
       }
-      if (!context.isCompleted) {
+      if (!context.isCompleted()) {
         Thread.sleep(taskKillTimeout)
-        if (!context.isCompleted) {
+        if (!context.isCompleted()) {
           try {
             // Mimic the task name used in `Executor` to help the user find out the task to blame.
-            val taskName = s"${context.partitionId}.${context.attemptNumber} " +
-              s"in stage ${context.stageId} (TID ${context.taskAttemptId})"
+            val taskName = s"${context.partitionId()}.${context.attemptNumber()} " +
+              s"in stage ${context.stageId()} (TID ${context.taskAttemptId()})"
             logWarning(s"Incomplete task $taskName interrupted: Attempting to kill Python Worker")
             env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, worker)
           } catch {

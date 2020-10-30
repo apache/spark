@@ -100,7 +100,7 @@ private[spark] abstract class StreamBasedRecordReader[T](
     if (!processed) {
       val fileIn = new PortableDataStream(split, context, index)
       value = parseStream(fileIn)
-      key = fileIn.getPath
+      key = fileIn.getPath()
       processed = true
       true
     } else {

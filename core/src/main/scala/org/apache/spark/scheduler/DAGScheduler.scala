@@ -628,7 +628,7 @@ private[spark] class DAGScheduler(
       val toVisit = waitingForVisit.remove(0)
       if (!visited(toVisit)) {
         visited += toVisit
-        Option(toVisit.getResourceProfile).foreach(resourceProfiles += _)
+        Option(toVisit.getResourceProfile()).foreach(resourceProfiles += _)
         toVisit.dependencies.foreach {
           case shuffleDep: ShuffleDependency[_, _, _] =>
             parents += shuffleDep
@@ -1049,7 +1049,7 @@ private[spark] class DAGScheduler(
     // Note that there is a chance that this task is launched after the stage is cancelled.
     // In that case, we wouldn't have the stage anymore in stageIdToStage.
     val stageAttemptId =
-      stageIdToStage.get(task.stageId).map(_.latestInfo.attemptNumber).getOrElse(-1)
+      stageIdToStage.get(task.stageId).map(_.latestInfo.attemptNumber()).getOrElse(-1)
     listenerBus.post(SparkListenerTaskStart(task.stageId, stageAttemptId, taskInfo))
   }
 
@@ -1371,7 +1371,7 @@ private[spark] class DAGScheduler(
             val locs = taskIdToLocations(id)
             val part = partitions(id)
             stage.pendingPartitions += id
-            new ShuffleMapTask(stage.id, stage.latestInfo.attemptNumber,
+            new ShuffleMapTask(stage.id, stage.latestInfo.attemptNumber(),
               taskBinary, part, locs, properties, serializedTaskMetrics, Option(jobId),
               Option(sc.applicationId), sc.applicationAttemptId, stage.rdd.isBarrier())
           }
@@ -1381,7 +1381,7 @@ private[spark] class DAGScheduler(
             val p: Int = stage.partitions(id)
             val part = partitions(p)
             val locs = taskIdToLocations(id)
-            new ResultTask(stage.id, stage.latestInfo.attemptNumber,
+            new ResultTask(stage.id, stage.latestInfo.attemptNumber(),
               taskBinary, part, locs, id, properties, serializedTaskMetrics,
               Option(jobId), Option(sc.applicationId), sc.applicationAttemptId,
               stage.rdd.isBarrier())
@@ -1398,7 +1398,7 @@ private[spark] class DAGScheduler(
       logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
       taskScheduler.submitTasks(new TaskSet(
-        tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties,
+        tasks.toArray, stage.id, stage.latestInfo.attemptNumber(), jobId, properties,
         stage.resourceProfileId))
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
@@ -1668,10 +1668,10 @@ private[spark] class DAGScheduler(
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
 
-        if (failedStage.latestInfo.attemptNumber != task.stageAttemptId) {
+        if (failedStage.latestInfo.attemptNumber() != task.stageAttemptId) {
           logInfo(s"Ignoring fetch failure from $task as it's from $failedStage attempt" +
             s" ${task.stageAttemptId} and there is a more recent attempt for that stage " +
-            s"(attempt ${failedStage.latestInfo.attemptNumber}) running")
+            s"(attempt ${failedStage.latestInfo.attemptNumber()}) running")
         } else {
           failedStage.failedAttemptIds.add(task.stageAttemptId)
           val shouldAbortStage =
@@ -1868,10 +1868,10 @@ private[spark] class DAGScheduler(
 
         // Always fail the current stage and retry all the tasks when a barrier task fail.
         val failedStage = stageIdToStage(task.stageId)
-        if (failedStage.latestInfo.attemptNumber != task.stageAttemptId) {
+        if (failedStage.latestInfo.attemptNumber() != task.stageAttemptId) {
           logInfo(s"Ignoring task failure from $task as it's from $failedStage attempt" +
             s" ${task.stageAttemptId} and there is a more recent attempt for that stage " +
-            s"(attempt ${failedStage.latestInfo.attemptNumber}) running")
+            s"(attempt ${failedStage.latestInfo.attemptNumber()}) running")
         } else {
           logInfo(s"Marking $failedStage (${failedStage.name}) as failed due to a barrier task " +
             "failed.")

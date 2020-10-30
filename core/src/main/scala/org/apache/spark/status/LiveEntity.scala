@@ -342,7 +342,7 @@ private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extend
       executorLogs,
       memoryMetrics,
       excludedInStages,
-      Some(peakExecutorMetrics).filter(_.isSet),
+      Some(peakExecutorMetrics).filter(_.isSet()),
       attributes,
       resources,
       resourceProfileId,
@@ -386,7 +386,7 @@ private class LiveExecutorStageSummary(
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled,
       isExcluded,
-      Some(peakExecutorMetrics).filter(_.isSet),
+      Some(peakExecutorMetrics).filter(_.isSet()),
       isExcluded)
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
   }
@@ -434,14 +434,14 @@ private class LiveStage extends LiveEntity {
 
   def executorSummary(executorId: String): LiveExecutorStageSummary = {
     executorSummaries.getOrElseUpdate(executorId,
-      new LiveExecutorStageSummary(info.stageId, info.attemptNumber, executorId))
+      new LiveExecutorStageSummary(info.stageId, info.attemptNumber(), executorId))
   }
 
   def toApi(): v1.StageData = {
     new v1.StageData(
       status = status,
       stageId = info.stageId,
-      attemptId = info.attemptNumber,
+      attemptId = info.attemptNumber(),
       numTasks = info.numTasks,
       numActiveTasks = activeTasks,
       numCompleteTasks = completedTasks,
@@ -493,7 +493,7 @@ private class LiveStage extends LiveEntity {
       executorSummary = None,
       killedTasksSummary = killedSummary,
       resourceProfileId = info.resourceProfileId,
-      Some(peakExecutorMetrics).filter(_.isSet))
+      Some(peakExecutorMetrics).filter(_.isSet()))
   }
 
   override protected def doUpdate(): Any = {

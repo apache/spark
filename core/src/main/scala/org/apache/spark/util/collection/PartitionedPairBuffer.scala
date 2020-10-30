@@ -77,7 +77,7 @@ private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
     : Iterator[((Int, K), V)] = {
     val comparator = keyComparator.map(partitionKeyComparator).getOrElse(partitionComparator)
     new Sorter(new KVArraySortDataFormat[(Int, K), AnyRef]).sort(data, 0, curSize, comparator)
-    iterator
+    iterator()
   }
 
   private def iterator(): Iterator[((Int, K), V)] = new Iterator[((Int, K), V)] {
