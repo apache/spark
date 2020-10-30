@@ -378,7 +378,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     int idx = 0;
     while (partitionsIter.hasNext()) {
       AppShufflePartitionInfo partition = partitionsIter.next();
-      partitionsIter.remove();
       synchronized (partition) {
         // Get rid of any partial block data at the end of the file. This could either
         // be due to failure or a request still being processed when the shuffle
@@ -390,12 +389,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           }
           bitmaps[idx] = partition.mapTracker;
           reduceIds[idx] = partition.reduceId;
-          sizes[idx] = partition.getPosition();
+          sizes[idx++] = partition.getPosition();
         } catch (IOException ioe) {
           logger.warn("Exception while finalizing shuffle partition {} {} {}", msg.appId,
             msg.shuffleId, partition.reduceId, ioe);
         } finally {
           partition.closeAllFiles();
+          // The partition should be removed from shuffle maps after the files are written so that
+          // any new stream for the same reduce partition will see that the data file exists.
+          partitionsIter.remove();
         }
       }
     }
