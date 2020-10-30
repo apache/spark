@@ -106,9 +106,9 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       val outputRowFormat = ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")
 
       val supplementDataWrapper = if (conf.legacyNotPadNullWhenValueLessThenSchema) {
-        (arr: Array[String], size: Int) => arr.padTo(size, null)
-      } else {
         (arr: Array[String], size: Int) => arr
+      } else {
+        (arr: Array[String], size: Int) => arr.padTo(size, null)
       }
       val processRowWithoutSerde = if (!ioschema.schemaLess) {
         prevLine: String =>
