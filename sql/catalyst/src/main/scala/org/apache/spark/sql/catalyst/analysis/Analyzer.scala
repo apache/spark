@@ -661,6 +661,28 @@ class Analyzer(
       }
     }
 
+    // Check unsupported nexted grouping analytics case such as:
+    //  1. GROUP BY cube(a, b) WITH CUBE
+    //  2. GROUP BY rollup(a, b) WITH CUBE
+    def checkAggregateNestedGroupingAnalytics(
+        groupingExpressions: Seq[Expression]): Boolean = {
+      groupingExpressions.exists {
+        case Cube(groupByExprs) => groupByExprs.exists(_.isInstanceOf[GroupingSet])
+        case Rollup(groupByExprs) => groupByExprs.exists(_.isInstanceOf[GroupingSet])
+        case _ => false
+      }
+    }
+
+    // Check unsupported nexted grouping analytics case such as:
+    //  1. GROUP BY a, b GROUPING SETS(a, cube(a, b))
+    //  2. GROUP BY cube(a, b) GROUPING SETS(a, b)
+    def checkGroupingSetsNestedGroupingAnalytics(
+        selectedGroupByExprs: Seq[Seq[Expression]],
+        groupByExprs: Seq[Expression]): Boolean = {
+      groupByExprs.exists(_.isInstanceOf[GroupingSet]) ||
+        selectedGroupByExprs.exists(_.exists(_.isInstanceOf[GroupingSet]))
+    }
+
     // This require transformDown to resolve having condition when generating aggregate node for
     // CUBE/ROLLUP/GROUPING SETS. This also replace grouping()/grouping_id() in resolved
     // Filter/Sort.
@@ -679,6 +701,14 @@ class Analyzer(
 
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
 
+      case Aggregate(groupingExpressions, _, _)
+        if checkAggregateNestedGroupingAnalytics(groupingExpressions) =>
+        throw new AnalysisException("Use grouping analytics function like `cube|rollup` with " +
+          "`WITH CUBE` and `WITH ROLLUP` is not supported.")
+      case GroupingSets(selectedGroupByExprs, groupByExprs, _, _)
+        if checkGroupingSetsNestedGroupingAnalytics(selectedGroupByExprs, groupByExprs) =>
+        throw new AnalysisException("Use grouping analytics function like `cube|rollup` with " +
+          "`GROUPING SETS` in group by expression or grouping set expression is not supported.")
       // Ensure group by expressions and aggregate expressions have been resolved.
       case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child)
         if (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>

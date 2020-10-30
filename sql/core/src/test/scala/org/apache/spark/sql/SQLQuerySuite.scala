@@ -3691,6 +3691,49 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(sql("SELECT id FROM t WHERE (SELECT true)"), Row(0L))
     }
   }
+
+  test("SPARK-33296: Format exception of unsupported nested grouping analytics") {
+    withTable("t") {
+      def checkAnalysisException(query: String, exception: String): Unit = {
+        val e = intercept[AnalysisException] {
+          sql(query)
+        }
+        assert(e.getMessage.startsWith(exception))
+      }
+
+      sql("CREATE TABLE t(a int, b int, c int) USING PARQUET")
+      checkAnalysisException(
+        "SELECT a, b, count(c) FROM t GROUP BY cube(a, b) WITH CUBE",
+        "Use grouping analytics function like `cube|rollup` with " +
+          "`WITH CUBE` and `WITH ROLLUP` is not supported."
+      )
+      checkAnalysisException(
+        "SELECT a, b, count(c) FROM t GROUP BY rollup(a, b) WITH CUBE",
+        "Use grouping analytics function like `cube|rollup` with " +
+          "`WITH CUBE` and `WITH ROLLUP` is not supported."
+      )
+      checkAnalysisException(
+        "SELECT a, b, count(c) FROM t GROUP BY cube(a, b) WITH ROLLUP",
+        "Use grouping analytics function like `cube|rollup` with " +
+          "`WITH CUBE` and `WITH ROLLUP` is not supported."
+      )
+      checkAnalysisException(
+        "SELECT a, b, count(c) FROM t GROUP BY rollup(a, b) WITH ROLLUP",
+        "Use grouping analytics function like `cube|rollup` with " +
+          "`WITH CUBE` and `WITH ROLLUP` is not supported."
+      )
+      checkAnalysisException(
+        "SELECT a, b, count(c) FROM t GROUP BY cube(a, b) GROUPING SETS(a, b)",
+        "Use grouping analytics function like `cube|rollup` with " +
+          "`GROUPING SETS` in group by expression or grouping set expression is not supported."
+      )
+      checkAnalysisException(
+        "SELECT a, b, count(c) FROM t GROUP BY GROUPING SETS(cube(a,b), a, b)",
+        "Use grouping analytics function like `cube|rollup` with " +
+          "`GROUPING SETS` in group by expression or grouping set expression is not supported."
+      )
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
