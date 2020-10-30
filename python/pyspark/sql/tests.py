@@ -1377,6 +1377,14 @@ class SQLTests(ReusedSQLTestCase):
         result = df.select(col('point').cast('string'), col('pypoint').cast('string')).head()
         self.assertEqual(result, Row(point=u'(1.0, 2.0)', pypoint=u'[3.0, 4.0]'))
 
+    def test_cast_to_udt_with_udt(self):
+        from pyspark.sql.functions import col
+        row = Row(point=ExamplePoint(1.0, 2.0), python_only_point=PythonOnlyPoint(1.0, 2.0))
+        df = self.spark.createDataFrame([row])
+        self.assertRaises(AnalysisException, lambda: df.select(col("point").cast(PythonOnlyUDT())))
+        self.assertRaises(AnalysisException,
+                          lambda: df.select(col("python_only_point").cast(ExamplePointUDT())))
+
     def test_column_operators(self):
         ci = self.df.key
         cs = self.df.value
