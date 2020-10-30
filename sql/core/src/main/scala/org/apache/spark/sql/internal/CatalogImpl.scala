@@ -504,6 +504,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * If this table is cached as an InMemoryRelation, drop the original cached version and make the
    * new version cached lazily.
    *
+   * In addition, refreshing a table also invalidate all caches that have reference to the table
+   * in a cascading manner. This is to prevent incorrect result from the otherwise staled caches.
+   *
    * @group cachemgmt
    * @since 2.0.0
    */
