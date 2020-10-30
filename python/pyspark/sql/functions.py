@@ -2860,7 +2860,9 @@ def from_json(col, schema, options={}):
     [Row(json=Row(a=1))]
     >>> df.select(from_json(df.value, "MAP<STRING,INT>").alias("json")).collect()
     [Row(json={'a': 1})]
-    >>> df.select(from_json(df.value, '{"type" : "map", "keyType" : "string", "valueType" : "integer", "valueContainsNull" : true}').alias("json")).collect()
+    >>> df.select(from_json(df.value,\
+     '{"type" : "map", "keyType" : "string", "valueType" : "integer", "valueContainsNull" : true}')\
+     .alias("json")).collect()
     [Row(json={'a': 1})]
     >>> data = [(1, '''[{"a": 1}]''')]
     >>> schema = ArrayType(StructType([StructField("a", IntegerType())]))
