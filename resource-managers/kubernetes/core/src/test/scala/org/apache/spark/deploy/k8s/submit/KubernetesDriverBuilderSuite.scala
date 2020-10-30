@@ -30,7 +30,7 @@ class KubernetesDriverBuilderSuite extends PodBuilderSuite {
   }
 
   override protected def userFeatureStepConf: ConfigEntry[_] = {
-    Config.KUBERNETES_DRIVER_POD_FEATURE_STEP
+    Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS
   }
 
   override protected def buildPod(sparkConf: SparkConf, client: KubernetesClient): SparkPod = {

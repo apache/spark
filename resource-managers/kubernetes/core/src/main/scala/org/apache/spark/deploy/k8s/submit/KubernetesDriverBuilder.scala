@@ -38,7 +38,7 @@ private[spark] class KubernetesDriverBuilder {
       }
       .getOrElse(SparkPod.initialPod())
 
-    val userFeatureOpt = conf.get(Config.KUBERNETES_DRIVER_POD_FEATURE_STEP)
+    val userFeatureOpt = conf.get(Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS)
       .map { className =>
         Utils.classForName(className).newInstance().asInstanceOf[KubernetesFeatureConfigStep]
       }

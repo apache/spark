@@ -219,21 +219,23 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
-  val KUBERNETES_DRIVER_POD_FEATURE_STEP =
-    ConfigBuilder("spark.kubernetes.driver.pod.featureStep")
-      .doc("Class name of an extra driver pod feature step implementing " +
-        "KubernetesFeatureConfigStep. This is a developer API.")
+  val KUBERNETES_DRIVER_POD_FEATURE_STEPS =
+    ConfigBuilder("spark.kubernetes.driver.pod.featureSteps")
+      .doc("Class names of an extra driver pod feature step implementing " +
+        "KubernetesFeatureConfigStep. This is a developer API. Comma separated.")
       .version("3.1.0")
       .stringConf
-      .createOptional
+      .toSequence
+      .createWithDefault(Nil)
 
-  val KUBERNETES_EXECUTOR_POD_FEATURE_STEP =
-    ConfigBuilder("spark.kubernetes.executor.pod.featureStep")
+  val KUBERNETES_EXECUTOR_POD_FEATURE_STEPS =
+    ConfigBuilder("spark.kubernetes.executor.pod.featureSteps")
       .doc("Class name of an extra executor pod feature step implementing " +
-        "KubernetesFeatureConfigStep. This is a developer API.")
+        "KubernetesFeatureConfigStep. This is a developer API. Comma separated")
       .version("3.1.0")
       .stringConf
-      .createOptional
+      .toSequence
+      .createWithDefault(Nil)
 
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
