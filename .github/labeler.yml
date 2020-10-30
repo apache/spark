@@ -54,86 +54,101 @@ DOCS:
 EXAMPLES:
   - "examples/**/*"
   - "/bin/run-example*"
+# Core has been updated with some verification needed.
 CORE:
-  - "/core/"
-  - "!UI.scala"
-  - "!ui/"
-  - "/common/kvstore/"
-  - "/common/network-common/"
-  - "/common/network-shuffle/"
-  - "/python/pyspark/*.py"
-  - "/python/pyspark/tests/*.py"
+  - "/core/**/*"
+  - "!**/UI.scala"  # TODO - Verify this change
+  - "!**/ui/**/*"  # TODO - Verify this change
+  - "/common/kvstore/**/*"
+  - "/common/network-common/**/*"
+  - "/common/network-shuffle/**/*"
+  - "/python/pyspark/**/*.py"  # TODO - Do we ned one more glob for subdirs?
+  - "/python/pyspark/tests/**/*.py"  # TODO - Same as above.
+# Updated
 SPARK SUBMIT:
   - "/bin/spark-submit*"
+# Updated
 SPARK SHELL:
-  - "/repl/"
+  - "/repl/**/*"
   - "/bin/spark-shell*"
+# Updated - Needs testing
 SQL:
-  - "sql/"
-  - "/common/unsafe/"
-  - "!/python/pyspark/sql/avro/"
+  - "**/sql/**/*"  # TODO - Need to verify intermediate directories
+  - "/common/unsafe/**/*"
+  - "!/python/pyspark/sql/avro/**/*"
   - "!/python/pyspark/sql/streaming.py"
   - "!/python/pyspark/sql/tests/test_streaming.py"
   - "/bin/spark-sql*"
   - "/bin/beeline*"
   - "/sbin/*thriftserver*.sh"
-  - "*SQL*.R"
-  - "DataFrame.R"
-  - "WindowSpec.R"
-  - "catalog.R"
-  - "column.R"
-  - "functions.R"
-  - "group.R"
-  - "schema.R"
-  - "types.R"
+  - "**/*SQL*.R"  # TODO - Verify this one
+  - "**/*/DataFrame.R"  # TODO - Verify this one
+  - "**/*/WindowSpec.R"  # TODO - Verify all the rest
+  - "**/*catalog.R"
+  - "**/*column.R"
+  - "**/*functions.R"
+  - "**/*group.R"
+  - "**/*schema.R"
+  - "**/*types.R"
+# Updated
 AVRO:
-  - "/external/avro/"
-  - "/python/pyspark/sql/avro/"
+  - "/external/avro/**/*"
+  - "/python/pyspark/sql/avro/**/*"
+# Updated
 DSTREAM:
-  - "/streaming/"
-  - "/data/streaming/"
-  - "/external/flume*"
-  - "/external/kinesis*"
-  - "/external/kafka*"
-  - "/python/pyspark/streaming/"
+  - "/streaming/**/*"
+  - "/data/streaming/**/*"
+  - "/external/flume*"  # TODO - Does this need to be /external/flume*/**/*?
+  - "/external/kinesis*"  # TODO - Same as above
+  - "/external/kafka*"  # TODO - Same as above
+  - "/python/pyspark/streaming/**/*"
+# Updated
 GRAPHX:
-  - "/graphx/"
-  - "/data/graphx/"
+  - "/graphx/**/*"
+  - "/data/graphx/**/*"
+# Updated
 ML:
-  - "ml/"
-  - "*mllib_*.R"
+  - "**/ml/**/*"
+  - "**/*mllib_*.R"
 MLLIB:
-  - "spark/mllib/"
-  - "/mllib-local/"
-  - "/python/pyspark/mllib/"
+  - "**/spark/mllib/"  # TODO - Is it intentional to not label mllib/benchmarks/* as MLLIB, etc?
+  - "/mllib-local/**/*"
+  - "/python/pyspark/mllib/**/*"
 STRUCTURED STREAMING:
-  - "sql/**/streaming/"
-  - "/external/kafka-0-10-sql/"
+  - "sql/**/streaming/"  # TODO - Does this one need editing?
+  - "/external/kafka-0-10-sql/**/*"
   - "/python/pyspark/sql/streaming.py"
   - "/python/pyspark/sql/tests/test_streaming.py"
-  - "*streaming.R"
+  - "**/*streaming.R"
+# Updated - Needs tests
 PYTHON:
   - "/bin/pyspark*"
-  - "python/"
+  - "**/python/**/*"  # TODO - Check this glob - was "python/"
 R:
   - "r/"
   - "R/"
   - "/bin/sparkR*"
+# Updated - Needs tests
 YARN:
-  - "/resource-managers/yarn/"
+  - "/resource-managers/yarn/**/*"
+# Updated
 MESOS:
-  - "/resource-managers/mesos/"
+  - "/resource-managers/mesos/**/*"
   - "/sbin/*mesos*.sh"
+# Updated
 KUBERNETES:
-  - "/resource-managers/kubernetes/"
+  - "/resource-managers/kubernetes/**/*"
+# Updated - Should test cmd
 WINDOWS:
-  - "*.cmd"
+  - "**/*.cmd"
   - "/R/pkg/tests/fulltests/test_Windows.R"
+# Updated - first glob needs testing
 WEB UI:
-  - "ui/"
-  - "UI.scala"
+  - "**/ui/**/*"
+  - "**/UI.scala"
+# Updated
 DEPLOY:
-  - "/sbin/"
+  - "/sbin/**/*"
 
 
 
