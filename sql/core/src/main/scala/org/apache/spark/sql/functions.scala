@@ -4100,13 +4100,8 @@ object functions {
    * @group collection_funcs
    * @since 2.3.0
    */
-  def from_json(e: Column, schema: String, options: Map[String, String]): Column = {
-    val dataType = parseTypeWithFallback(
-      schema,
-      DataType.fromJson,
-      "Cannot parse the schema in JSON format: ",
-      fallbackParser = DataType.fromDDL)
-    from_json(e, dataType, options)
+  def from_json(e: Column, schema: String, options: Map[String, String]): Column = withExpr {
+    new JsonToStructs(e.expr, lit(schema).expr, options)
   }
 
   /**
