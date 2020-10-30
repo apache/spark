@@ -103,5 +103,8 @@ select json_object_keys('{[1,2]}');
 select json_object_keys('{"key": 45, "random_string"}');
 select json_object_keys('[1, 2, 3]');
 
+-- from_json - schema in JSON format
+select from_json('{"a":1}', '{"type" : "map", "keyType" : "string", "valueType" : "integer", "valueContainsNull" : true}');
+
 -- Clean up
 DROP VIEW IF EXISTS jsonTable;
