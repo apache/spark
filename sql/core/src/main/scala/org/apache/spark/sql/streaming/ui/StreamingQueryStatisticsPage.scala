@@ -134,7 +134,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     ): NodeBuffer = {
     // This is made sure on caller side but put it here to be defensive
     require(query.lastProgress != null)
-    if (query.lastProgress.stateOperators.length > 0) {
+    if (query.lastProgress.stateOperators.nonEmpty) {
       val numRowsTotalData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
         p.stateOperators.map(_.numRowsTotal).sum.toDouble))
       val maxNumRowsTotal = numRowsTotalData.maxBy(_._2)._2
