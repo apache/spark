@@ -67,7 +67,7 @@
     </mailingList>
 
     <mailingList>
-      <name>User Mailing List</name>
+      <name>User Mailing List!</name>
       <post>user@spark.apache.org</post>
       <subscribe>user-subscribe@spark.apache.org</subscribe>
       <unsubscribe>user-unsubscribe@spark.apache.org</unsubscribe>
