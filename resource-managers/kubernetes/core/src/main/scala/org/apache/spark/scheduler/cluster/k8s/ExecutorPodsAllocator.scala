@@ -81,7 +81,7 @@ private[spark] class ExecutorPodsAllocator(
 
   // Executor IDs that have been requested from Kubernetes but have not been detected in any
   // snapshot yet. Mapped to the (ResourceProfile id, timestamp) when they were created.
-  private val newlyCreatedExecutors = mutable.LinkedHashMap[Long, (Int, Long)]()
+  private val newlyCreatedExecutors = mutable.LinkedHashMap.empty[Long, (Int, Long)]
 
   private val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(conf)
 
@@ -100,8 +100,7 @@ private[spark] class ExecutorPodsAllocator(
     }
   }
 
-  def setTotalExpectedExecutors(
-      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit = {
+  def setTotalExpectedExecutors(resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit = {
     resourceProfileToTotalExecs.foreach { case (rp, numExecs) =>
       rpIdToResourceProfile.getOrElseUpdate(rp.id, rp)
       totalExpectedExecutorsPerResourceProfileId.put(rp.id, numExecs)
