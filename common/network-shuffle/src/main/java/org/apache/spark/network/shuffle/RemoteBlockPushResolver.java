@@ -323,7 +323,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     final AppShufflePartitionInfo partitionInfo = partitionInfoBeforeCheck != null
       && partitionInfoBeforeCheck.mapTracker.contains(mapIndex) ? null : partitionInfoBeforeCheck;
     if (partitionInfo != null) {
-      return new StreamCallbackImpl(this, msg, appShuffleId, reduceId, mapIndex, partitionInfo);
+      return new PushBlockStreamCallback(
+        this, msg, appShuffleId, reduceId, mapIndex, partitionInfo);
     } else {
       // For a duplicate block or a block which is late, respond back with a callback that handles
       // them differently.
@@ -428,7 +429,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   /**
    * Callback for push stream that handles blocks which are not already merged.
    */
-  static class StreamCallbackImpl implements StreamCallbackWithID {
+  static class PushBlockStreamCallback implements StreamCallbackWithID {
 
     private final RemoteBlockPushResolver mergeManager;
     private final PushBlockStream msg;
@@ -445,7 +446,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     // Use on-heap instead of direct ByteBuffer since these buffers will be GC'ed very quickly
     private List<ByteBuffer> deferredBufs;
 
-    private StreamCallbackImpl(
+    private PushBlockStreamCallback(
         RemoteBlockPushResolver mergeManager,
         PushBlockStream msg,
         AppShuffleId appShuffleId,

@@ -41,6 +41,8 @@ import org.apache.hadoop.metrics2.impl.MetricsSystemImpl;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.*;
+import org.apache.spark.network.shuffle.MergedShuffleFileManager;
+import org.apache.spark.network.shuffle.RemoteBlockPushResolver;
 import org.apache.spark.network.util.LevelDBProvider;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.DBIterator;
@@ -54,7 +56,6 @@ import org.apache.spark.network.sasl.ShuffleSecretManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.shuffle.ExternalBlockHandler;
-import org.apache.spark.network.shuffle.RemoteBlockPushResolver;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.yarn.util.HadoopConfigProvider;
 
@@ -173,7 +174,8 @@ public class YarnShuffleService extends AuxiliaryService {
       }
 
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
-      RemoteBlockPushResolver shuffleMergeManager = new RemoteBlockPushResolver(transportConf);
+      MergedShuffleFileManager shuffleMergeManager = newMergedShuffleFileManagerInstance(
+        transportConf);
       blockHandler = new ExternalBlockHandler(
         transportConf, registeredExecutorFile, shuffleMergeManager);
 
@@ -219,6 +221,23 @@ public class YarnShuffleService extends AuxiliaryService {
       } else {
         noteFailure(e);
       }
+    }
+  }
+
+  @VisibleForTesting
+  static MergedShuffleFileManager newMergedShuffleFileManagerInstance(TransportConf conf) {
+    String mergeManagerImplClassName = conf.mergeShuffleFileManagerImpl();
+    try {
+      Class<?> mergeManagerImplClazz = Class.forName(
+        mergeManagerImplClassName, true, Thread.currentThread().getContextClassLoader());
+      Class<? extends MergedShuffleFileManager> mergeManagerSubClazz =
+        mergeManagerImplClazz.asSubclass(MergedShuffleFileManager.class);
+      // The assumption is that all the custom implementations just like the RemoteBlockPushResolver
+      // will also need the transport configuration.
+      return mergeManagerSubClazz.getConstructor(TransportConf.class).newInstance(conf);
+    } catch (Exception e) {
+      logger.error("Unable to create an instance of {}", mergeManagerImplClassName);
+      return new RemoteBlockPushResolver(conf);
     }
   }
 

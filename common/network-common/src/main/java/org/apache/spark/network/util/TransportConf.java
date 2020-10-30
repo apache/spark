@@ -364,6 +364,18 @@ public class TransportConf {
   }
 
   /**
+   * Class name of the implementation of MergedShuffleFileManager that merges the blocks
+   * pushed to it when push-based shuffle is enabled. Default implementation for merging the blocks
+   * remotely is 'org.apache.spark.network.shuffle.RemoteBlockPushResolver'.
+   * To turn off push-based shuffle at a cluster level, set the configuration to
+   * 'org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager'.
+   */
+  public String mergeShuffleFileManagerImpl() {
+    return conf.get("spark.shuffle.push.based.mergedShuffleFileManagerImpl",
+      "org.apache.spark.network.shuffle.RemoteBlockPushResolver");
+  }
+
+  /**
    * The minimum size of a chunk when dividing a merged shuffle file into multiple chunks during
    * push-based shuffle.
    * A merged shuffle file consists of multiple small shuffle blocks. Fetching the
