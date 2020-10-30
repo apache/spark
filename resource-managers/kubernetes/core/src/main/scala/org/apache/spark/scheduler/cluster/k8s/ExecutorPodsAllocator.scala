@@ -168,7 +168,8 @@ private[spark] class ExecutorPodsAllocator(
 
     // Map the pods into per ResourceProfile id so we can check per ResourceProfile,
     // add a fast path if not using other ResourceProfiles.
-    val rpIdToExecsAndPodState = mutable.HashMap[Int, mutable.LinkedHashMap[Long, ExecutorPodState]]()
+    val rpIdToExecsAndPodState =
+      mutable.HashMap[Int, mutable.LinkedHashMap[Long, ExecutorPodState]]()
     if (totalExpectedExecutorsPerResourceProfileId.size <= 1) {
       rpIdToExecsAndPodState(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
         mutable.LinkedHashMap.empty ++= lastSnapshot.executorPods
