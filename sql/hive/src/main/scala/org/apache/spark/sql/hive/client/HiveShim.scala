@@ -808,9 +808,11 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       hive: Hive,
       table: Table,
       predicates: Seq[Expression]): Seq[Partition] = {
+
     // Hive getPartitionsByFilter() takes a string that represents partition
     // predicates like "str_key=\"value\" and int_key=1 ..."
     val filter = convertFilters(table, predicates)
+
     val partitions =
       if (filter.isEmpty) {
         logDebug(s"Falling back to getting all partitions")
