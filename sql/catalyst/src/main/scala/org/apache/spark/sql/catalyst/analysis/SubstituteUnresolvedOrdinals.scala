@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.IntegerType
  * Replaces ordinal in 'order by' or 'group by' with UnresolvedOrdinal expression.
  */
 object SubstituteUnresolvedOrdinals extends Rule[LogicalPlan] {
-  private def isIntLiteral(e: Expression) = e match {
+  private def isIntLiteral(e: Expression): Boolean = e match {
     case Literal(_, IntegerType) => true
     case Cube(groupByExprs) => groupByExprs.exists(isIntLiteral)
     case Rollup(groupByExprs) => groupByExprs.exists(isIntLiteral)

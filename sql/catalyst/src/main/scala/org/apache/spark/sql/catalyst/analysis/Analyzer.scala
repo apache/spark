@@ -238,7 +238,7 @@ class Analyzer(
       ExtractGenerator ::
       ResolveGenerate ::
       ResolveFunctions ::
-      new SubstituteUnresolvedOrdinals(conf) ::
+      SubstituteUnresolvedOrdinals ::
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
