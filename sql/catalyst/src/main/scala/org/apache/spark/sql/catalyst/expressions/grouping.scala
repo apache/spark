@@ -79,6 +79,24 @@ case class Cube(groupByExprs: Seq[Expression]) extends GroupingSet {}
 // scalastyle:on line.size.limit line.contains.tab
 case class Rollup(groupByExprs: Seq[Expression]) extends GroupingSet {}
 
+// scalastyle:off line.size.limit line.contains.tab
+@ExpressionDescription(
+  usage = """
+    _FUNC_(([col1[, col2 ..]])*) - create a multi-dimensional grouping sets using the specified columns
+      so that we can run aggregation on them.
+  """,
+  examples = """
+    Examples:
+      > SELECT name, age, count(*) FROM VALUES (2, 'Alice'), (5, 'Bob') people(age, name) GROUP BY _FUNC_(name, age, (name, age));
+        Bob 5 1
+        Alice 2 1
+        Alice NULL	1
+        NULL  2  2
+        Bob NULL  1
+        NULL  5 1
+  """,
+  since = "2.0.0")
+// scalastyle:on line.size.limit line.contains.tab
 case class GroupingSetsV2(selectedGroupByExprs: Seq[Seq[Expression]]) extends GroupingSet {
   override def groupByExprs: Seq[Expression] =
     selectedGroupByExprs.flatMap(_.distinct).distinct
