@@ -1229,7 +1229,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
-  test("SPARK-33290: querying cached view after REFRESH TABLE fails with FNFE") {
+  test("SPARK-33290: querying temporary view after REFRESH TABLE fails with FNFE") {
     withTable("t") {
       withTempPath { path =>
         withTempView("tempView1") {
