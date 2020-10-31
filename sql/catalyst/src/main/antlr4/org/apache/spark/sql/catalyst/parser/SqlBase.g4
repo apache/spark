@@ -602,9 +602,9 @@ groupByClause
     ;
 
 groupingAnalytics
-    : kind = ROLLUP  '(' expression (',' expression)* ')'
-    | kind = CUBE '(' expression (',' expression)* ')'
-    | kind = GROUPING SETS '(' groupingSet (',' groupingSet)* ')'
+    : ROLLUP  '(' expression (',' expression)* ')'
+    | CUBE '(' expression (',' expression)* ')'
+    | GROUPING SETS '(' groupingSet (',' groupingSet)* ')'
     ;
 
 groupingSet
