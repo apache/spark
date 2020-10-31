@@ -473,6 +473,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * If this table is cached as an InMemoryRelation, drop the original cached version and make the
    * new version cached lazily.
    *
+   * In addition, refreshing a table also invalidate all caches that have reference to the table
+   * in a cascading manner. This is to prevent incorrect result from the otherwise staled caches.
+   *
    * @group cachemgmt
    * @since 2.0.0
    */
@@ -492,9 +495,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
     // If this table is cached as an InMemoryRelation, drop the original
     // cached version and make the new version cached lazily.
+
+    // Uncache the logicalPlan. Note this is a no-op for the table itself if it's not cached, but
+    // will invalidate all caches referencing this table.
+    sparkSession.sharedState.cacheManager.uncacheQuery(table, cascade = true)
     if (isCached(table)) {
-      // Uncache the logicalPlan.
-      sparkSession.sharedState.cacheManager.uncacheQuery(table, cascade = true, blocking = true)
       // Cache it again.
       sparkSession.sharedState.cacheManager.cacheQuery(table, Some(tableIdent.table))
     }
