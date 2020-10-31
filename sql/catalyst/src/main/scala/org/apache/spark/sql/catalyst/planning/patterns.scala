@@ -126,7 +126,7 @@ object ScanOperation extends OperationHelper with PredicateHelper {
     }.exists(!_.deterministic))
   }
 
-  def moreThanMaxAllowedCommonOutput(
+  private def moreThanMaxAllowedCommonOutput(
       expr: Seq[NamedExpression],
       aliases: AttributeMap[Expression]): Boolean = {
     val exprMap = mutable.HashMap.empty[Attribute, Int]
