@@ -876,7 +876,7 @@ object JdbcUtils extends Logging {
     if (options.tableComment.nonEmpty) {
       try {
         executeStatement(
-          conn, options, dialect.getTableCommentQuery(tableName, options.tableComment.get))
+          conn, options, dialect.getTableCommentQuery(tableName, options.tableComment))
       } catch {
         case e: Exception =>
           logWarning("Cannot create JDBC table comment. The table comment will be ignored.")

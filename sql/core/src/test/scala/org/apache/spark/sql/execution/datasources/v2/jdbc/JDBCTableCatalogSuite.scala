@@ -407,4 +407,14 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       assert(createCommentWarning === false)
     }
   }
+
+  test("CREATE TABLE with table property") {
+    withTable("h2.test.new_table") {
+      val m = intercept[AnalysisException] {
+        sql("CREATE TABLE h2.test.new_table(i INT, j STRING) USING _" +
+          " TBLPROPERTIES('ENGINE'='tableEngineName')")
+      }.cause.get.getMessage
+      assert(m.contains("Feature not supported: \"TABLEENGINENAME\""))
+    }
+  }
 }

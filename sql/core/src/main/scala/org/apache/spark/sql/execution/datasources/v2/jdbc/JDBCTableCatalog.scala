@@ -117,19 +117,32 @@ class JDBCTableCatalog extends TableCatalog with Logging {
     if (partitions.nonEmpty) {
       throw new UnsupportedOperationException("Cannot create JDBC table with partition")
     }
-    // TODO (SPARK-32405): Apply table options while creating tables in JDBC Table Catalog
+
+    var tableOptions = options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident))
+    var tableComment: String = ""
+    var tableProperties: String = ""
     if (!properties.isEmpty) {
-      logWarning("Cannot create JDBC table with properties, these properties will be " +
-        "ignored: " + properties.asScala.map { case (k, v) => s"$k=$v" }.mkString("[", ", ", "]"))
+      properties.asScala.map {
+        case (k, v) => k match {
+          case "comment" => tableComment = v
+          case "provider" | "owner" | "location" => // ignore provider, owner, and location
+          case _ => tableProperties = tableProperties + " " + s"$k=$v"
+        }
+      }
     }
 
-    val tableComment = properties.get("comment")
-    val tableOptions = if (tableComment != null) {
-      options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)) +
-        (JDBCOptions.JDBC_TABLE_COMMENT -> properties.get("comment"))
-    } else {
-      options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident))
+    if (tableComment != "") {
+      tableOptions = tableOptions + (JDBCOptions.JDBC_TABLE_COMMENT -> tableComment)
     }
+    if (tableProperties != "") {
+      // table property is set in JDBC_CREATE_TABLE_OPTIONS, which will be appended
+      // to CREATE TABLE statement.
+      // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
+      // Spark doesn't check if these table properties are supported by databases. If
+      // table property is invalid, database will fail the table creation.
+      tableOptions = tableOptions + (JDBCOptions.JDBC_CREATE_TABLE_OPTIONS -> tableProperties)
+    }
+
     val writeOptions = new JdbcOptionsInWrite(tableOptions)
     val caseSensitive = SQLConf.get.caseSensitiveAnalysis
     withConnection { conn =>
