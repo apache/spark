@@ -501,8 +501,6 @@ object FunctionRegistry {
     expression[TypeOf]("typeof"),
 
     // grouping sets
-    expression[Cube]("cube"),
-    expression[Rollup]("rollup"),
     expression[Grouping]("grouping"),
     expression[GroupingID]("grouping_id"),
 

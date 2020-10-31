@@ -851,23 +851,45 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       ctx: AggregationClauseContext,
       selectExpressions: Seq[NamedExpression],
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    val groupByExpressions = expressionList(ctx.groupingExpressions)
-
-    if (ctx.GROUPING != null) {
-      // GROUP BY .... GROUPING SETS (...)
-      val selectedGroupByExprs =
-        ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
-      GroupingSets(selectedGroupByExprs.toSeq, groupByExpressions, query, selectExpressions)
-    } else {
-      // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
-      val mappedGroupByExpressions = if (ctx.CUBE != null) {
-        Seq(Cube(groupByExpressions))
-      } else if (ctx.ROLLUP != null) {
-        Seq(Rollup(groupByExpressions))
+    if (ctx.groupingExpressionWithGroupingAnalytics.isEmpty) {
+      val groupByExpressions = expressionList(ctx.groupingExpressions)
+      if (ctx.GROUPING != null) {
+        // GROUP BY .... GROUPING SETS (...)
+        val selectedGroupByExprs =
+          ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
+        GroupingSets(selectedGroupByExprs.toSeq, groupByExpressions, query, selectExpressions)
       } else {
-        groupByExpressions
+        // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
+        val mappedGroupByExpressions = if (ctx.CUBE != null) {
+          Seq(Cube(groupByExpressions))
+        } else if (ctx.ROLLUP != null) {
+          Seq(Rollup(groupByExpressions))
+        } else {
+          groupByExpressions
+        }
+        Aggregate(mappedGroupByExpressions, selectExpressions, query)
       }
-      Aggregate(mappedGroupByExpressions, selectExpressions, query)
+    } else {
+      val groupByExpressions = ctx.groupingExpressionWithGroupingAnalytics.asScala
+      val others = groupByExpressions.filter(_.expression() != null)
+        .map(e => expression(e.expression()))
+      val groupingAnalyticsExpressions =
+        groupByExpressions.filter(_.groupingAnalytics() != null)
+          .map(_.groupingAnalytics()).map(groupingAnalytic => {
+          if (groupingAnalytic.GROUPING() != null) {
+            val selectedGroupByExprs = groupingAnalytic.groupingSet().asScala
+              .map(_.expression.asScala.map(e => expression(e)).toSeq)
+            GroupingSetsV2(selectedGroupByExprs)
+          } else if (groupingAnalytic.CUBE != null) {
+            Cube(groupingAnalytic.expression().asScala.map(expression))
+          } else if (groupingAnalytic.ROLLUP != null) {
+            Rollup(groupingAnalytic.expression().asScala.map(expression))
+          } else {
+            null
+          }
+        }).filter(_ != null)
+
+      Aggregate(others ++ groupingAnalyticsExpressions, selectExpressions, query)
     }
   }
 

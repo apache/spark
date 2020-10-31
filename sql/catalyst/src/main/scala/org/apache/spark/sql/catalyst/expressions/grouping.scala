@@ -79,6 +79,11 @@ case class Cube(groupByExprs: Seq[Expression]) extends GroupingSet {}
 // scalastyle:on line.size.limit line.contains.tab
 case class Rollup(groupByExprs: Seq[Expression]) extends GroupingSet {}
 
+case class GroupingSetsV2(selectedGroupByExprs: Seq[Seq[Expression]]) extends GroupingSet {
+  override def groupByExprs: Seq[Expression] =
+    selectedGroupByExprs.flatMap(_.distinct).distinct
+}
+
 /**
  * Indicates whether a specified column expression in a GROUP BY list is aggregated or not.
  * GROUPING returns 1 for aggregated or 0 for not aggregated in the result set.

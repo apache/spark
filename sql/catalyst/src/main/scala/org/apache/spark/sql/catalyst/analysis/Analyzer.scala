@@ -621,6 +621,8 @@ class Analyzer(
           a.copy(groupingExpressions = groupByExprs)
         case a @ Aggregate(Seq(r @ Rollup(groupByExprs)), _, _) =>
           a.copy(groupingExpressions = groupByExprs)
+        case a @ Aggregate(Seq(gs @ GroupingSetsV2(_)), _, _) =>
+          a.copy(groupingExpressions = gs.groupByExprs)
         case g: GroupingSets =>
           Aggregate(
             getFinalGroupByExpressions(g.selectedGroupByExprs, g.groupByExprs),
@@ -640,6 +642,10 @@ class Analyzer(
           case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child) =>
             constructAggregate(
               rollupExprs(groupByExprs), groupByExprs, aggregateExpressions ++ extraAggExprs, child)
+          case Aggregate(Seq(gs @ GroupingSetsV2(selectedGroupByExprs)),
+          aggregateExpressions, child) =>
+            constructAggregate(
+              selectedGroupByExprs, gs.groupByExprs, aggregateExpressions ++ extraAggExprs, child)
           case x: GroupingSets =>
             constructAggregate(
               x.selectedGroupByExprs, x.groupByExprs, x.aggregations ++ extraAggExprs, x.child)
@@ -673,6 +679,10 @@ class Analyzer(
           _, agg @ Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, _))
           if agg.childrenResolved && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(h)
+      case h @ UnresolvedHaving(
+      _, agg @ Aggregate(Seq(gs @ GroupingSetsV2(_)), aggregateExpressions, _))
+        if agg.childrenResolved && (gs.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
+        tryResolveHavingCondition(h)
       case h @ UnresolvedHaving(_, g: GroupingSets)
           if g.childrenResolved && g.expressions.forall(_.resolved) =>
         tryResolveHavingCondition(h)
@@ -686,6 +696,9 @@ class Analyzer(
       case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child)
         if (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         constructAggregate(rollupExprs(groupByExprs), groupByExprs, aggregateExpressions, child)
+      case Aggregate(Seq(gs @ GroupingSetsV2(selectedGroupByExprs)), aggregateExpressions, child)
+        if (gs.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
+        constructAggregate(selectedGroupByExprs, gs.groupByExprs, aggregateExpressions, child)
       // Ensure all the expressions have been resolved.
       case x: GroupingSets if x.expressions.forall(_.resolved) =>
         constructAggregate(x.selectedGroupByExprs, x.groupByExprs, x.aggregations, x.child)
@@ -1371,6 +1384,9 @@ class Analyzer(
             result
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
             ExtractValue(child, fieldExpr, resolver)
+          case gs @ GroupingSetsV2(selectedGroupByExprs) =>
+            gs.copy(selectedGroupByExprs =
+              selectedGroupByExprs.map(_.map(innerResolve(_, isTopLevel = false))))
           case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
         }
       }
