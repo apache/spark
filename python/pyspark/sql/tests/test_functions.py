@@ -19,6 +19,7 @@ import datetime
 from itertools import chain
 import re
 
+from py4j.protocol import Py4JJavaError
 from pyspark.sql import Row, Window
 from pyspark.sql.functions import udf, input_file_name, col, percentile_approx, lit
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -160,14 +161,20 @@ class FunctionsTests(ReusedSQLTestCase):
 
     def test_string_functions(self):
         from pyspark.sql import functions
-        from pyspark.sql.functions import col, lit, _string_functions
+        from pyspark.sql.functions import col, lit
+        string_functions = [
+            "upper", "lower", "ascii",
+            "base64", "unbase64",
+            "ltrim", "rtrim", "trim"
+        ]
+
         df = self.spark.createDataFrame([['nick']], schema=['name'])
         self.assertRaisesRegexp(
             TypeError,
             "must be the same type",
             lambda: df.select(col('name').substr(0, lit(1))))
 
-        for name in _string_functions.keys():
+        for name in string_functions:
             self.assertEqual(
                 df.select(getattr(functions, name)("name")).first()[0],
                 df.select(getattr(functions, name)(col("name"))).first()[0])
@@ -523,6 +530,55 @@ class FunctionsTests(ReusedSQLTestCase):
         df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
         parse_result = df.select(functions.to_date(functions.col("dateCol"))).first()
         self.assertEquals(date(2017, 1, 22), parse_result['to_date(dateCol)'])
+
+    def test_assert_true(self):
+        from pyspark.sql.functions import assert_true
+
+        df = self.spark.range(3)
+
+        self.assertEquals(
+            df.select(assert_true(df.id < 3)).toDF("val").collect(),
+            [Row(val=None), Row(val=None), Row(val=None)],
+        )
+
+        with self.assertRaises(Py4JJavaError) as cm:
+            df.select(assert_true(df.id < 2, 'too big')).toDF("val").collect()
+        self.assertIn("java.lang.RuntimeException", str(cm.exception))
+        self.assertIn("too big", str(cm.exception))
+
+        with self.assertRaises(Py4JJavaError) as cm:
+            df.select(assert_true(df.id < 2, df.id * 1e6)).toDF("val").collect()
+        self.assertIn("java.lang.RuntimeException", str(cm.exception))
+        self.assertIn("2000000", str(cm.exception))
+
+        with self.assertRaises(TypeError) as cm:
+            df.select(assert_true(df.id < 2, 5))
+        self.assertEquals(
+            "errMsg should be a Column or a str, got <class 'int'>",
+            str(cm.exception)
+        )
+
+    def test_raise_error(self):
+        from pyspark.sql.functions import raise_error
+
+        df = self.spark.createDataFrame([Row(id="foobar")])
+
+        with self.assertRaises(Py4JJavaError) as cm:
+            df.select(raise_error(df.id)).collect()
+        self.assertIn("java.lang.RuntimeException", str(cm.exception))
+        self.assertIn("foobar", str(cm.exception))
+
+        with self.assertRaises(Py4JJavaError) as cm:
+            df.select(raise_error("barfoo")).collect()
+        self.assertIn("java.lang.RuntimeException", str(cm.exception))
+        self.assertIn("barfoo", str(cm.exception))
+
+        with self.assertRaises(TypeError) as cm:
+            df.select(raise_error(None))
+        self.assertEquals(
+            "errMsg should be a Column or a str, got <class 'NoneType'>",
+            str(cm.exception)
+        )
 
 
 if __name__ == "__main__":

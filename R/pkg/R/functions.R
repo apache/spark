@@ -345,6 +345,22 @@ NULL
 #' head(tmp)}
 NULL
 
+#' ML functions for Column operations
+#'
+#' ML functions defined for \code{Column}.
+#'
+#' @param x Column to compute on.
+#' @param ... additional argument(s).
+#' @name column_ml_functions
+#' @rdname column_ml_functions
+#' @family ml functions
+#' @examples
+#' \dontrun{
+#' df <- read.df("data/mllib/sample_libsvm_data.txt", source = "libsvm")
+#' head(select(df, vector_to_array(df$features)))
+#' }
+NULL
+
 #' @details
 #' \code{lit}: A new Column is created to represent the literal value.
 #' If the parameter is a Column, it is returned unchanged.
@@ -807,6 +823,57 @@ setMethod("xxhash64",
               x@jc
             })
             jc <- callJStatic("org.apache.spark.sql.functions", "xxhash64", jcols)
+            column(jc)
+          })
+
+#' @details
+#' \code{assert_true}: Returns null if the input column is true; throws an exception
+#' with the provided error message otherwise.
+#'
+#' @param errMsg (optional) The error message to be thrown.
+#'
+#' @rdname column_misc_functions
+#' @aliases assert_true assert_true,Column-method
+#' @examples
+#' \dontrun{
+#' tmp <- mutate(df, v1 = assert_true(df$vs < 2),
+#'                   v2 = assert_true(df$vs < 2, "custom error message"),
+#'                   v3 = assert_true(df$vs < 2, df$vs))
+#' head(tmp)}
+#' @note assert_true since 3.1.0
+setMethod("assert_true",
+          signature(x = "Column"),
+          function(x, errMsg = NULL) {
+            jc <- if (is.null(errMsg)) {
+              callJStatic("org.apache.spark.sql.functions", "assert_true", x@jc)
+            } else {
+              if (is.character(errMsg)) {
+                stopifnot(length(errMsg) == 1)
+                errMsg <- lit(errMsg)
+              }
+              callJStatic("org.apache.spark.sql.functions", "assert_true", x@jc, errMsg@jc)
+            }
+            column(jc)
+          })
+
+#' @details
+#' \code{raise_error}: Throws an exception with the provided error message.
+#'
+#' @rdname column_misc_functions
+#' @aliases raise_error raise_error,characterOrColumn-method
+#' @examples
+#' \dontrun{
+#' tmp <- mutate(df, v1 = raise_error("error message"))
+#' head(tmp)}
+#' @note raise_error since 3.1.0
+setMethod("raise_error",
+          signature(x = "characterOrColumn"),
+          function(x) {
+            if (is.character(x)) {
+              stopifnot(length(x) == 1)
+              x <- lit(x)
+            }
+            jc <- callJStatic("org.apache.spark.sql.functions", "raise_error", x@jc)
             column(jc)
           })
 
@@ -4455,6 +4522,28 @@ setMethod("timestamp_seconds",
           function(x) {
             jc <- callJStatic(
               "org.apache.spark.sql.functions", "timestamp_seconds", x@jc
+            )
+            column(jc)
+          })
+
+#' @details
+#' \code{vector_to_array} Converts a column of MLlib sparse/dense vectors into
+#' a column of dense arrays.
+#'
+#' @param dtype The data type of the output array. Valid values: "float64" or "float32".
+#'
+#' @rdname column_ml_functions
+#' @aliases vector_to_array vector_to_array,Column-method
+#' @note vector_to_array since 3.1.0
+setMethod("vector_to_array",
+          signature(x = "Column"),
+          function(x, dtype = c("float64", "float32")) {
+            dtype <- match.arg(dtype)
+            jc <- callJStatic(
+              "org.apache.spark.ml.functions",
+              "vector_to_array",
+              x@jc,
+              dtype
             )
             column(jc)
           })

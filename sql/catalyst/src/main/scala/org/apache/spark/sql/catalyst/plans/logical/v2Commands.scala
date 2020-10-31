@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
-import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
+import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -45,7 +45,7 @@ trait V2WriteCommand extends Command {
           case (inAttr, outAttr) =>
             // names and types must match, nullability must be compatible
             inAttr.name == outAttr.name &&
-              DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
+              DataType.equalsIgnoreCompatibleNullability(inAttr.dataType, outAttr.dataType) &&
               (outAttr.nullable || !inAttr.nullable)
         }
     }
@@ -312,7 +312,18 @@ case class DescribeRelation(
     partitionSpec: TablePartitionSpec,
     isExtended: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = Seq(relation)
-  override def output: Seq[Attribute] = DescribeTableSchema.describeTableAttributes()
+  override def output: Seq[Attribute] = DescribeCommandSchema.describeTableAttributes()
+}
+
+/**
+ * The logical plan of the DESCRIBE relation_name col_name command that works for v2 tables.
+ */
+case class DescribeColumn(
+    relation: LogicalPlan,
+    colNameParts: Seq[String],
+    isExtended: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(relation)
+  override def output: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
 }
 
 /**
@@ -377,9 +388,16 @@ case class Assignment(key: Expression, value: Expression) extends Expression wit
  * The logical plan of the DROP TABLE command that works for v2 tables.
  */
 case class DropTable(
-    catalog: TableCatalog,
-    ident: Identifier,
-    ifExists: Boolean) extends Command
+    child: LogicalPlan,
+    ifExists: Boolean,
+    purge: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan for handling non-existing table for DROP TABLE command.
+ */
+case class NoopDropTable(multipartIdentifier: Seq[String]) extends Command
 
 /**
  * The logical plan of the ALTER TABLE command that works for v2 tables.

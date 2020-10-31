@@ -166,7 +166,7 @@ trait CheckAnalysis extends PredicateHelper {
           case w @ WindowExpression(AggregateExpression(_, _, true, _, _), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")
 
-          case w @ WindowExpression(_: OffsetWindowFunction,
+          case w @ WindowExpression(_: FrameLessOffsetWindowFunction,
             WindowSpecDefinition(_, order, frame: SpecifiedWindowFrame))
              if order.isEmpty || !frame.isOffset =>
             failAnalysis("An offset window function can only be evaluated in an ordered " +
@@ -176,7 +176,8 @@ trait CheckAnalysis extends PredicateHelper {
             // Only allow window functions with an aggregate expression or an offset window
             // function or a Pandas window UDF.
             e match {
-              case _: AggregateExpression | _: OffsetWindowFunction | _: AggregateWindowFunction =>
+              case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
+                  _: AggregateWindowFunction =>
                 w
               case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) =>
                 w

@@ -29,7 +29,7 @@ import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.EXECUTOR_ALLOW_SPARK_CONTEXT
+import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalog.Catalog
@@ -600,7 +600,7 @@ class SparkSession private(
 
   /**
    * Executes a SQL query using Spark, returning the result as a `DataFrame`.
-   * The dialect that is used for SQL parsing can be configured with 'spark.sql.dialect'.
+   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
    * @since 2.0.0
    */
@@ -765,9 +765,9 @@ class SparkSession private(
     // set and not the default session. This to prevent that we promote the default session to the
     // active session once we are done.
     val old = SparkSession.activeThreadSession.get()
-    SparkSession.setActiveSession(this)
+    SparkSession.setActiveSessionInternal(this)
     try block finally {
-      SparkSession.setActiveSession(old)
+      SparkSession.setActiveSessionInternal(old)
     }
   }
 }
@@ -946,7 +946,7 @@ object SparkSession extends Logging {
 
         session = new SparkSession(sparkContext, None, None, extensions, options.toMap)
         setDefaultSession(session)
-        setActiveSession(session)
+        setActiveSessionInternal(session)
         registerContextListener(sparkContext)
       }
 
@@ -984,7 +984,16 @@ object SparkSession extends Logging {
    *
    * @since 2.0.0
    */
+  @deprecated("This method is deprecated and will be removed in future versions.", "3.1.0")
   def setActiveSession(session: SparkSession): Unit = {
+    if (SQLConf.get.legacyAllowModifyActiveSession) {
+      setActiveSessionInternal(session)
+    } else {
+      throw new UnsupportedOperationException("Not allowed to modify active Spark session.")
+    }
+  }
+
+  private[sql] def setActiveSessionInternal(session: SparkSession): Unit = {
     activeThreadSession.set(session)
   }
 
@@ -994,7 +1003,16 @@ object SparkSession extends Logging {
    *
    * @since 2.0.0
    */
+  @deprecated("This method is deprecated and will be removed in future versions.", "3.1.0")
   def clearActiveSession(): Unit = {
+    if (SQLConf.get.legacyAllowModifyActiveSession) {
+      clearActiveSessionInternal()
+    } else {
+      throw new UnsupportedOperationException("Not allowed to modify active Spark session.")
+    }
+  }
+
+  private[spark] def clearActiveSessionInternal(): Unit = {
     activeThreadSession.remove()
   }
 
@@ -1057,6 +1075,25 @@ object SparkSession extends Logging {
   def active: SparkSession = {
     getActiveSession.getOrElse(getDefaultSession.getOrElse(
       throw new IllegalStateException("No active or default Spark session found")))
+  }
+
+  /**
+   * Returns a cloned SparkSession with all specified configurations disabled, or
+   * the original SparkSession if all configurations are already disabled.
+   */
+  private[sql] def getOrCloneSessionWithConfigsOff(
+      session: SparkSession,
+      configurations: Seq[ConfigEntry[Boolean]]): SparkSession = {
+    val configsEnabled = configurations.filter(session.sessionState.conf.getConf(_))
+    if (configsEnabled.isEmpty) {
+      session
+    } else {
+      val newSession = session.cloneSession()
+      configsEnabled.foreach(conf => {
+        newSession.sessionState.conf.setConf(conf, false)
+      })
+      newSession
+    }
   }
 
   ////////////////////////////////////////////////////////////////////////////////////////
@@ -1149,7 +1186,7 @@ object SparkSession extends Logging {
            |
          """.stripMargin)
       session.get.stop()
-      SparkSession.clearActiveSession()
+      SparkSession.clearActiveSessionInternal()
       SparkSession.clearDefaultSession()
     }
   }

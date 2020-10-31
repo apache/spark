@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{SQLFeatureNotSupportedException, Types}
 import java.util.Locale
 
 import org.apache.spark.sql.types.{BooleanType, DataType, LongType, MetadataBuilder}
@@ -48,4 +48,26 @@ private case object MySQLDialect extends JdbcDialect {
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
+  override def getUpdateColumnTypeQuery(
+      tableName: String,
+      columnName: String,
+      newDataType: String): String = {
+    s"ALTER TABLE $tableName MODIFY COLUMN ${quoteIdentifier(columnName)} $newDataType"
+  }
+
+  // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
+  // require to have column data type to change the column nullability
+  // ALTER TABLE tbl_name MODIFY [COLUMN] col_name column_definition
+  // column_definition:
+  //    data_type [NOT NULL | NULL]
+  // e.g. ALTER TABLE t1 MODIFY b INT NOT NULL;
+  // We don't have column data type here, so throw Exception for now
+  override def getUpdateColumnNullabilityQuery(
+      tableName: String,
+      columnName: String,
+      isNullable: Boolean): String = {
+    throw new SQLFeatureNotSupportedException(s"UpdateColumnNullability is not supported")
+  }
 }

@@ -1514,7 +1514,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     @since(1.3)
     def agg(self, *exprs):
         """ Aggregate on the entire :class:`DataFrame` without groups
-        (shorthand for ``df.groupBy.agg()``).
+        (shorthand for ``df.groupBy().agg()``).
 
         >>> df.agg({"age": "max"}).collect()
         [Row(max(age)=5)]

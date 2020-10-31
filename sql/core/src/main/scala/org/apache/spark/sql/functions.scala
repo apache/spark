@@ -21,7 +21,6 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
-import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.api.java._
@@ -36,6 +35,7 @@ import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DataType.parseTypeWithFallback
 import org.apache.spark.util.Utils
 
 /**
@@ -1428,6 +1428,22 @@ object functions {
   def acos(columnName: String): Column = acos(Column(columnName))
 
   /**
+   * @return inverse hyperbolic cosine of `e`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def acosh(e: Column): Column = withExpr { Acosh(e.expr) }
+
+  /**
+   * @return inverse hyperbolic cosine of `columnName`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def acosh(columnName: String): Column = acosh(Column(columnName))
+
+  /**
    * @return inverse sine of `e` in radians, as if computed by `java.lang.Math.asin`
    *
    * @group math_funcs
@@ -1444,7 +1460,23 @@ object functions {
   def asin(columnName: String): Column = asin(Column(columnName))
 
   /**
-   * @return inverse tangent of `e`, as if computed by `java.lang.Math.atan`
+   * @return inverse hyperbolic sine of `e`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def asinh(e: Column): Column = withExpr { Asinh(e.expr) }
+
+  /**
+   * @return inverse hyperbolic sine of `columnName`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def asinh(columnName: String): Column = asinh(Column(columnName))
+
+  /**
+   * @return inverse tangent of `e` as if computed by `java.lang.Math.atan`
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1571,6 +1603,22 @@ object functions {
    * @since 1.4.0
    */
   def atan2(yValue: Double, xName: String): Column = atan2(yValue, Column(xName))
+
+  /**
+   * @return inverse hyperbolic tangent of `e`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def atanh(e: Column): Column = withExpr { Atanh(e.expr) }
+
+  /**
+   * @return inverse hyperbolic tangent of `columnName`
+   *
+   * @group math_funcs
+   * @since 3.1.0
+   */
+  def atanh(columnName: String): Column = atanh(Column(columnName))
 
   /**
    * An expression that returns the string representation of the binary value of the given long
@@ -2316,6 +2364,36 @@ object functions {
   @scala.annotation.varargs
   def xxhash64(cols: Column*): Column = withExpr {
     new XxHash64(cols.map(_.expr))
+  }
+
+  /**
+   * Returns null if the condition is true, and throws an exception otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.1.0
+   */
+  def assert_true(c: Column): Column = withExpr {
+    new AssertTrue(c.expr)
+  }
+
+  /**
+   * Returns null if the condition is true; throws an exception with the error message otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.1.0
+   */
+  def assert_true(c: Column, e: Column): Column = withExpr {
+    new AssertTrue(c.expr, e.expr)
+  }
+
+  /**
+   * Throws an exception with the provided error message.
+   *
+   * @group misc_funcs
+   * @since 3.1.0
+   */
+  def raise_error(c: Column): Column = withExpr {
+    RaiseError(c.expr)
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -4023,11 +4101,11 @@ object functions {
    * @since 2.3.0
    */
   def from_json(e: Column, schema: String, options: Map[String, String]): Column = {
-    val dataType = try {
-      DataType.fromJson(schema)
-    } catch {
-      case NonFatal(_) => DataType.fromDDL(schema)
-    }
+    val dataType = parseTypeWithFallback(
+      schema,
+      DataType.fromJson,
+      "Cannot parse the schema in JSON format: ",
+      fallbackParser = DataType.fromDDL)
     from_json(e, dataType, options)
   }
 

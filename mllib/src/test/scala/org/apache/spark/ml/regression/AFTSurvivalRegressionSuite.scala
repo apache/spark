@@ -130,9 +130,9 @@ class AFTSurvivalRegressionSuite extends MLTest with DefaultReadWriteTest {
   test("aft survival regression with univariate") {
     val quantileProbabilities = Array(0.1, 0.5, 0.9)
     val trainer = new AFTSurvivalRegression()
-      .setQuantileProbabilities(quantileProbabilities)
       .setQuantilesCol("quantiles")
     val model = trainer.fit(datasetUnivariate)
+    model.setQuantileProbabilities(quantileProbabilities)
 
     /*
        Using the following R code to load the data and train the model using survival package.

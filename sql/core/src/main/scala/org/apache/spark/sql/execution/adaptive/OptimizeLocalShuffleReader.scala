@@ -33,10 +33,9 @@ import org.apache.spark.sql.internal.SQLConf
  * then run `EnsureRequirements` to check whether additional shuffle introduced.
  * If introduced, we will revert all the local readers.
  */
-case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
-  import OptimizeLocalShuffleReader._
+object OptimizeLocalShuffleReader extends Rule[SparkPlan] {
 
-  private val ensureRequirements = EnsureRequirements(conf)
+  private val ensureRequirements = EnsureRequirements
 
   // The build side is a broadcast query stage which should have been optimized using local reader
   // already. So we only need to deal with probe side here.
@@ -118,9 +117,6 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
         createProbeSideLocalReader(s)
     }
   }
-}
-
-object OptimizeLocalShuffleReader {
 
   object BroadcastJoinWithShuffleLeft {
     def unapply(plan: SparkPlan): Option[(SparkPlan, BuildSide)] = plan match {

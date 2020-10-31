@@ -168,7 +168,31 @@ class DataSourceV2SQLSuite
       Array("Provider", "foo", ""),
       Array(TableCatalog.PROP_OWNER.capitalize, defaultUser, ""),
       Array("Table Properties", "[bar=baz]", "")))
+  }
 
+  test("Describe column is not supported for v2 catalog") {
+    withTable("testcat.tbl") {
+      spark.sql("CREATE TABLE testcat.tbl (id bigint) USING foo")
+      val ex = intercept[AnalysisException] {
+        spark.sql("DESCRIBE testcat.tbl id")
+      }
+      assert(ex.message.contains("Describing columns is not supported for v2 tables"))
+    }
+  }
+
+  test("SPARK-33004: Describe column should resolve to a temporary view first") {
+    withTable("testcat.ns.t") {
+      withTempView("t") {
+        sql("CREATE TABLE testcat.ns.t (id bigint) USING foo")
+        sql("CREATE TEMPORARY VIEW t AS SELECT 2 as i")
+        sql("USE testcat.ns")
+        checkAnswer(
+          sql("DESCRIBE t i"),
+          Seq(Row("col_name", "i"),
+            Row("data_type", "int"),
+            Row("comment", "NULL")))
+      }
+    }
   }
 
   test("CreateTable: use v2 plan and session catalog when provider is v2") {
@@ -720,10 +744,33 @@ class DataSourceV2SQLSuite
   }
 
   test("DropTable: if exists") {
-    intercept[NoSuchTableException] {
-      sql(s"DROP TABLE testcat.db.notbl")
+    val ex = intercept[AnalysisException] {
+      sql("DROP TABLE testcat.db.notbl")
     }
-    sql(s"DROP TABLE IF EXISTS testcat.db.notbl")
+    assert(ex.getMessage.contains("Table or view not found: testcat.db.notbl"))
+    sql("DROP TABLE IF EXISTS testcat.db.notbl")
+  }
+
+  test("SPARK-33174: DROP TABLE should resolve to a temporary view first") {
+    withTable("testcat.ns.t") {
+      withTempView("t") {
+        sql("CREATE TABLE testcat.ns.t (id bigint) USING foo")
+        sql("CREATE TEMPORARY VIEW t AS SELECT 2")
+        sql("USE testcat.ns")
+
+        // Check the temporary view 't' exists.
+        runShowTablesSql(
+          "SHOW TABLES FROM spark_catalog.default LIKE 't'",
+          Seq(Row("", "t", true)),
+          expectV2Catalog = false)
+        sql("DROP TABLE t")
+        // Verify that the temporary view 't' is resolved first and dropped.
+        runShowTablesSql(
+          "SHOW TABLES FROM spark_catalog.default LIKE 't'",
+          Nil,
+          expectV2Catalog = false)
+      }
+    }
   }
 
   test("Relation: basic") {

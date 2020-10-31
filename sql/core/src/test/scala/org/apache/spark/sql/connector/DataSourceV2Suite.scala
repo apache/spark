@@ -268,7 +268,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           }
         }
         // this input data will fail to read middle way.
-        val input = spark.range(10).select(failingUdf('id).as('i)).select('i, -'i as 'j)
+        val input = spark.range(15).select(failingUdf('id).as('i)).select('i, -'i as 'j)
         val e3 = intercept[SparkException] {
           input.write.format(cls.getName).option("path", path).mode("overwrite").save()
         }
@@ -410,6 +410,16 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         val scan1 = getScanExec(q1)
         val scan2 = getScanExec(q2)
         assert(!scan1.equals(scan2))
+      }
+    }
+  }
+
+  test("SPARK-33267: push down with condition 'in (..., null)' should not throw NPE") {
+    Seq(classOf[AdvancedDataSourceV2], classOf[JavaAdvancedDataSourceV2]).foreach { cls =>
+      withClue(cls.getName) {
+        val df = spark.read.format(cls.getName).load()
+        // before SPARK-33267 below query just threw NPE
+        df.select('i).where("i in (1, null)").collect()
       }
     }
   }

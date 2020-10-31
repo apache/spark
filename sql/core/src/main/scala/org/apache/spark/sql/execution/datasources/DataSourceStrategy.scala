@@ -42,6 +42,7 @@ import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.FileSourceStrategy.{extractPredicatesWithinOutputSet, logInfo}
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
@@ -57,7 +58,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Note that, this rule must be run after `PreprocessTableCreation` and
  * `PreprocessTableInsertion`.
  */
-case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport {
+object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
 
   def resolver: Resolver = conf.resolver
 
@@ -162,8 +163,8 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
       InsertIntoDataSourceCommand(l, query, overwrite)
 
     case InsertIntoDir(_, storage, provider, query, overwrite)
-      if provider.isDefined && provider.get.toLowerCase(Locale.ROOT) != DDLUtils.HIVE_PROVIDER =>
-
+      if query.resolved && provider.isDefined &&
+        provider.get.toLowerCase(Locale.ROOT) != DDLUtils.HIVE_PROVIDER =>
       val outputPath = new Path(storage.locationUri.get)
       if (overwrite) DDLUtils.verifyNotReadPath(query, outputPath)
 
@@ -242,16 +243,16 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
  * TODO: we should remove the special handling for hive tables after completely making hive as a
  * data source.
  */
-class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+object FindDataSourceTable extends Rule[LogicalPlan] {
   private def readDataSourceTable(
       table: CatalogTable, extraOptions: CaseInsensitiveStringMap): LogicalPlan = {
     val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
-    val catalog = sparkSession.sessionState.catalog
+    val catalog = SparkSession.active.sessionState.catalog
     val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
     catalog.getCachedPlan(qualifiedTableName, () => {
       val dataSource =
         DataSource(
-          sparkSession,
+          SparkSession.active,
           // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
           // inferred at runtime. We should still support it.
           userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
@@ -269,7 +270,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       extraOptions: CaseInsensitiveStringMap): StreamingRelation = {
     val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
     val dataSource = DataSource(
-      sparkSession,
+      SparkSession.active,
       className = table.provider.get,
       userSpecifiedSchema = Some(table.schema),
       options = dsOptions)
@@ -467,7 +468,7 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
   }
 }
 
-object DataSourceStrategy {
+object DataSourceStrategy extends PredicateHelper {
   /**
    * The attribute name may differ from the one in the schema if the query analyzer
    * is case insensitive. We should change attribute names to match the ones in the schema,
@@ -481,6 +482,20 @@ object DataSourceStrategy {
         case a: AttributeReference =>
           a.withName(attributes.find(_.semanticEquals(a)).getOrElse(a).name)
       }
+    }
+  }
+
+  def getPushedDownFilters(
+      partitionColumns: Seq[Expression],
+      normalizedFilters: Seq[Expression]): ExpressionSet = {
+    if (partitionColumns.isEmpty) {
+      ExpressionSet(Nil)
+    } else {
+      val partitionSet = AttributeSet(partitionColumns)
+      val predicates = ExpressionSet(normalizedFilters
+        .flatMap(extractPredicatesWithinOutputSet(_, partitionSet)))
+      logInfo(s"Pruning directories with: ${predicates.mkString(",")}")
+      predicates
     }
   }
 

@@ -2878,11 +2878,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[DropTableStatement]] command.
+   * Create a [[DropTable]] command.
    */
   override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
-    DropTableStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier()),
+    // DROP TABLE works with either a table or a temporary view.
+    DropTable(
+      UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier())),
       ctx.EXISTS != null,
       ctx.PURGE != null)
   }
@@ -3183,7 +3184,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[DescribeColumnStatement]] or [[DescribeRelation]] commands.
+   * Create a [[DescribeColumn]] or [[DescribeRelation]] commands.
    */
   override def visitDescribeRelation(ctx: DescribeRelationContext): LogicalPlan = withOrigin(ctx) {
     val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
@@ -3191,8 +3192,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       if (ctx.partitionSpec != null) {
         throw new ParseException("DESC TABLE COLUMN for a specific partition is not supported", ctx)
       } else {
-        DescribeColumnStatement(
-          visitMultipartIdentifier(ctx.multipartIdentifier()),
+        DescribeColumn(
+          UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier())),
           ctx.describeColName.nameParts.asScala.map(_.getText).toSeq,
           isExtended)
       }

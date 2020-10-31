@@ -2146,113 +2146,113 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.1.0</td>
 </tr>
 <tr>
-  <td><code>spark.scheduler.blacklist.unschedulableTaskSetTimeout</code></td>
+  <td><code>spark.scheduler.excludeOnFailure.unschedulableTaskSetTimeout</code></td>
   <td>120s</td>
   <td>
     The timeout in seconds to wait to acquire a new executor and schedule a task before aborting a
-    TaskSet which is unschedulable because of being completely blacklisted.
+    TaskSet which is unschedulable because all executors are exluded due to task failures.
   </td>
   <td>2.4.1</td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.enabled</code></td>
+  <td><code>spark.excludeOnFailure.enabled</code></td>
   <td>
     false
   </td>
   <td>
-    If set to "true", prevent Spark from scheduling tasks on executors that have been blacklisted
-    due to too many task failures. The blacklisting algorithm can be further controlled by the
-    other "spark.blacklist" configuration options.
+    If set to "true", prevent Spark from scheduling tasks on executors that have been excluded
+    due to too many task failures. The algorithm used to exclude executors and nodes can be further
+    controlled by the other "spark.excludeOnFailure" configuration options.
   </td>
   <td>2.1.0</td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.timeout</code></td>
+  <td><code>spark.excludeOnFailure.timeout</code></td>
   <td>1h</td>
   <td>
-    (Experimental) How long a node or executor is blacklisted for the entire application, before it
-    is unconditionally removed from the blacklist to attempt running new tasks.
+    (Experimental) How long a node or executor is excluded for the entire application, before it
+    is unconditionally removed from the excludelist to attempt running new tasks.
   </td>
   <td>2.1.0</td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.task.maxTaskAttemptsPerExecutor</code></td>
+  <td><code>spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor</code></td>
   <td>1</td>
   <td>
     (Experimental) For a given task, how many times it can be retried on one executor before the
-    executor is blacklisted for that task.
+    executor is excluded for that task.
   </td>
   <td>2.1.0</td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.task.maxTaskAttemptsPerNode</code></td>
+  <td><code>spark.excludeOnFailure.task.maxTaskAttemptsPerNode</code></td>
   <td>2</td>
   <td>
     (Experimental) For a given task, how many times it can be retried on one node, before the entire
-    node is blacklisted for that task.
+    node is excluded for that task.
   </td>
   <td>2.1.0</td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.stage.maxFailedTasksPerExecutor</code></td>
+  <td><code>spark.excludeOnFailure.stage.maxFailedTasksPerExecutor</code></td>
   <td>2</td>
   <td>
     (Experimental) How many different tasks must fail on one executor, within one stage, before the
-    executor is blacklisted for that stage.
+    executor is excluded for that stage.
   </td>
   <td>2.1.0</td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.stage.maxFailedExecutorsPerNode</code></td>
+  <td><code>spark.excludeOnFailure.stage.maxFailedExecutorsPerNode</code></td>
   <td>2</td>
   <td>
-    (Experimental) How many different executors are marked as blacklisted for a given stage, before
+    (Experimental) How many different executors are marked as excluded for a given stage, before
     the entire node is marked as failed for the stage.
   </td>
   <td>2.1.0</td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.application.maxFailedTasksPerExecutor</code></td>
+  <td><code>spark.excludeOnFailure.application.maxFailedTasksPerExecutor</code></td>
   <td>2</td>
   <td>
     (Experimental) How many different tasks must fail on one executor, in successful task sets,
-    before the executor is blacklisted for the entire application.  Blacklisted executors will
+    before the executor is excluded for the entire application.  Excluded executors will
     be automatically added back to the pool of available resources after the timeout specified by
-    <code>spark.blacklist.timeout</code>.  Note that with dynamic allocation, though, the executors
+    <code>spark.excludeOnFailure.timeout</code>.  Note that with dynamic allocation, though, the executors
     may get marked as idle and be reclaimed by the cluster manager.
   </td>
   <td>2.2.0</td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.application.maxFailedExecutorsPerNode</code></td>
+  <td><code>spark.excludeOnFailure.application.maxFailedExecutorsPerNode</code></td>
   <td>2</td>
   <td>
-    (Experimental) How many different executors must be blacklisted for the entire application,
-    before the node is blacklisted for the entire application.  Blacklisted nodes will
+    (Experimental) How many different executors must be excluded for the entire application,
+    before the node is excluded for the entire application.  Excluded nodes will
     be automatically added back to the pool of available resources after the timeout specified by
-    <code>spark.blacklist.timeout</code>.  Note that with dynamic allocation, though, the executors
-    on the node may get marked as idle and be reclaimed by the cluster manager.
+    <code>spark.excludeOnFailure.timeout</code>.  Note that with dynamic allocation, though, the
+    executors on the node may get marked as idle and be reclaimed by the cluster manager.
   </td>
   <td>2.2.0</td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.killBlacklistedExecutors</code></td>
+  <td><code>spark.excludeOnFailure.killExcludedExecutors</code></td>
   <td>false</td>
   <td>
     (Experimental) If set to "true", allow Spark to automatically kill the executors 
-    when they are blacklisted on fetch failure or blacklisted for the entire application, 
-    as controlled by spark.blacklist.application.*. Note that, when an entire node is added 
-    to the blacklist, all of the executors on that node will be killed.
+    when they are excluded on fetch failure or excluded for the entire application, 
+    as controlled by spark.killExcludedExecutors.application.*. Note that, when an entire node is added 
+    excluded, all of the executors on that node will be killed.
   </td>
   <td>2.2.0</td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.application.fetchFailure.enabled</code></td>
+  <td><code>spark.excludeOnFailure.application.fetchFailure.enabled</code></td>
   <td>false</td>
   <td>
-    (Experimental) If set to "true", Spark will blacklist the executor immediately when a fetch
+    (Experimental) If set to "true", Spark will exclude the executor immediately when a fetch
     failure happens. If external shuffle service is enabled, then the whole node will be
-    blacklisted.
+    excluded.
   </td>
   <td>2.3.0</td>
 </tr>

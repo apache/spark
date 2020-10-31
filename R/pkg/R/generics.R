@@ -675,6 +675,12 @@ setGeneric("broadcast", function(x) { standardGeneric("broadcast") })
 #' @rdname columnfunctions
 setGeneric("asc", function(x) { standardGeneric("asc") })
 
+#' @rdname columnfunctions
+setGeneric("asc_nulls_first", function(x) { standardGeneric("asc_nulls_first") })
+
+#' @rdname columnfunctions
+setGeneric("asc_nulls_last", function(x) { standardGeneric("asc_nulls_last") })
+
 #' @rdname between
 setGeneric("between", function(x, bounds) { standardGeneric("between") })
 
@@ -688,6 +694,12 @@ setGeneric("contains", function(x, ...) { standardGeneric("contains") })
 
 #' @rdname columnfunctions
 setGeneric("desc", function(x) { standardGeneric("desc") })
+
+#' @rdname columnfunctions
+setGeneric("desc_nulls_first", function(x) { standardGeneric("desc_nulls_first") })
+
+#' @rdname columnfunctions
+setGeneric("desc_nulls_last", function(x) { standardGeneric("desc_nulls_last") })
 
 #' @rdname endsWith
 setGeneric("endsWith", function(x, suffix) { standardGeneric("endsWith") })
@@ -731,6 +743,9 @@ setGeneric("%<=>%", function(x, value) { standardGeneric("%<=>%") })
 
 #' @rdname withField
 setGeneric("withField", function(x, fieldName, col) { standardGeneric("withField") })
+
+#' @rdname dropFields
+setGeneric("dropFields", function(x, ...) { standardGeneric("dropFields") })
 
 ###################### WindowSpec Methods ##########################
 
@@ -846,6 +861,10 @@ setGeneric("arrays_zip_with", function(x, y, f) { standardGeneric("arrays_zip_wi
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("ascii", function(x) { standardGeneric("ascii") })
+
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("assert_true", function(x, errMsg = NULL) { standardGeneric("assert_true") })
 
 #' @param x Column to compute on or a GroupedData object.
 #' @param ... additional argument(s) when \code{x} is a GroupedData object.
@@ -1220,6 +1239,10 @@ setGeneric("posexplode_outer", function(x) { standardGeneric("posexplode_outer")
 #' @name NULL
 setGeneric("quarter", function(x) { standardGeneric("quarter") })
 
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("raise_error", function(x) { standardGeneric("raise_error") })
+
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("rand", function(seed) { standardGeneric("rand") })
@@ -1448,6 +1471,10 @@ setGeneric("var_pop", function(x) { standardGeneric("var_pop") })
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
+
+#' @rdname column_ml_functions
+#' @name NULL
+setGeneric("vector_to_array", function(x, ...) { standardGeneric("vector_to_array") })
 
 #' @rdname column_datetime_functions
 #' @name NULL

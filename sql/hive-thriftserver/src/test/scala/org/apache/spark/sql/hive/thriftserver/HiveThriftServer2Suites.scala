@@ -37,6 +37,7 @@ import org.apache.hive.jdbc.HiveDriver
 import org.apache.hive.service.auth.PlainSaslHelper
 import org.apache.hive.service.cli.{FetchOrientation, FetchType, GetInfoType, RowSet}
 import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient
+import org.apache.hive.service.rpc.thrift.TCLIService.Client
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
@@ -45,6 +46,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.HiveTestJars
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -67,7 +69,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     val user = System.getProperty("user.name")
     val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
     val protocol = new TBinaryProtocol(transport)
-    val client = new ThriftCLIServiceClient(new ThriftserverShimUtils.Client(protocol))
+    val client = new ThriftCLIServiceClient(new Client(protocol))
 
     transport.open()
     try f(client) finally transport.close()
@@ -284,7 +286,6 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("test multiple session") {
-    import org.apache.spark.sql.internal.SQLConf
     var defaultV1: String = null
     var defaultV2: String = null
     var data: ArrayBuffer[Int] = null
@@ -544,11 +545,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         conf += resultSet.getString(1) -> resultSet.getString(2)
       }
 
-      if (HiveUtils.isHive23) {
-        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.7"))
-      } else {
-        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("1.2.1"))
-      }
+      assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.7"))
     }
   }
 
@@ -561,11 +558,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         conf += resultSet.getString(1) -> resultSet.getString(2)
       }
 
-      if (HiveUtils.isHive23) {
-        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.7"))
-      } else {
-        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("1.2.1"))
-      }
+      assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.7"))
     }
   }
 
@@ -643,11 +636,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       val sessionHandle = client.openSession(user, "")
       val sessionID = sessionHandle.getSessionId
 
-      if (HiveUtils.isHive23) {
-        assert(pipeoutFileList(sessionID).length == 2)
-      } else {
-        assert(pipeoutFileList(sessionID).length == 1)
-      }
+      assert(pipeoutFileList(sessionID).length == 2)
 
       client.closeSession(sessionHandle)
 
@@ -889,6 +878,59 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       val expected = java.sql.Date.valueOf(date)
       assert(rs.getDate(1) === expected)
       assert(rs.getString(1) === expected.toString)
+    }
+  }
+
+  test("SPARK-26533: Support query auto timeout cancel on thriftserver - setQueryTimeout") {
+    withJdbcStatement() { statement =>
+      statement.setQueryTimeout(1)
+      val e = intercept[SQLException] {
+        statement.execute("select java_method('java.lang.Thread', 'sleep', 10000L)")
+      }.getMessage
+      assert(e.contains("Query timed out after"))
+
+      statement.setQueryTimeout(0)
+      val rs1 = statement.executeQuery(
+        "select 'test', java_method('java.lang.Thread', 'sleep', 3000L)")
+      rs1.next()
+      assert(rs1.getString(1) == "test")
+
+      statement.setQueryTimeout(-1)
+      val rs2 = statement.executeQuery(
+        "select 'test', java_method('java.lang.Thread', 'sleep', 3000L)")
+      rs2.next()
+      assert(rs2.getString(1) == "test")
+    }
+  }
+
+  test("SPARK-26533: Support query auto timeout cancel on thriftserver - SQLConf") {
+    withJdbcStatement() { statement =>
+      statement.execute(s"SET ${SQLConf.THRIFTSERVER_QUERY_TIMEOUT.key}=1")
+      val e1 = intercept[SQLException] {
+        statement.execute("select java_method('java.lang.Thread', 'sleep', 10000L)")
+      }.getMessage
+      assert(e1.contains("Query timed out after"))
+
+      statement.execute(s"SET ${SQLConf.THRIFTSERVER_QUERY_TIMEOUT.key}=0")
+      val rs = statement.executeQuery(
+        "select 'test', java_method('java.lang.Thread', 'sleep', 3000L)")
+      rs.next()
+      assert(rs.getString(1) == "test")
+
+      // Uses a smaller timeout value of a config value and an a user-specified one
+      statement.execute(s"SET ${SQLConf.THRIFTSERVER_QUERY_TIMEOUT.key}=1")
+      statement.setQueryTimeout(30)
+      val e2 = intercept[SQLException] {
+        statement.execute("select java_method('java.lang.Thread', 'sleep', 10000L)")
+      }.getMessage
+      assert(e2.contains("Query timed out after"))
+
+      statement.execute(s"SET ${SQLConf.THRIFTSERVER_QUERY_TIMEOUT.key}=30")
+      statement.setQueryTimeout(1)
+      val e3 = intercept[SQLException] {
+        statement.execute("select java_method('java.lang.Thread', 'sleep', 10000L)")
+      }.getMessage
+      assert(e3.contains("Query timed out after"))
     }
   }
 }

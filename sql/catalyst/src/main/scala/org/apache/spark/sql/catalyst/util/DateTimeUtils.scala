@@ -169,8 +169,7 @@ object DateTimeUtils {
    */
   def fromJulianDay(days: Int, nanos: Long): Long = {
     // use Long to avoid rounding errors
-    val micros = (days - JULIAN_DAY_OF_EPOCH).toLong * MICROS_PER_DAY + nanos / NANOS_PER_MICROS
-    rebaseJulianToGregorianMicros(micros)
+    (days - JULIAN_DAY_OF_EPOCH).toLong * MICROS_PER_DAY + nanos / NANOS_PER_MICROS
   }
 
   /**
@@ -179,7 +178,7 @@ object DateTimeUtils {
    * Note: support timestamp since 4717 BC (without negative nanoseconds, compatible with Hive).
    */
   def toJulianDay(micros: Long): (Int, Long) = {
-    val julianUs = rebaseGregorianToJulianMicros(micros) + JULIAN_DAY_OF_EPOCH * MICROS_PER_DAY
+    val julianUs = micros + JULIAN_DAY_OF_EPOCH * MICROS_PER_DAY
     val days = julianUs / MICROS_PER_DAY
     val us = julianUs % MICROS_PER_DAY
     (days.toInt, MICROSECONDS.toNanos(us))
