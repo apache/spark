@@ -88,6 +88,7 @@ abstract class EvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute],
 
     inputRDD.mapPartitions { iter =>
       val context = TaskContext.get()
+      val contextAwareIterator = new ContextAwareIterator(iter, context)
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
@@ -119,7 +120,7 @@ abstract class EvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute],
       })
 
       // Add rows to queue to join later with the result.
-      val projectedRowIter = iter.map { inputRow =>
+      val projectedRowIter = contextAwareIterator.map { inputRow =>
         queue.add(inputRow.asInstanceOf[UnsafeRow])
         projection(inputRow)
       }
@@ -135,4 +136,19 @@ abstract class EvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute],
       }
     }
   }
+}
+
+/**
+ * A TaskContext aware iterator.
+ *
+ * As the Python evaluation consumes the parent iterator in a separate thread,
+ * it could consume more data from the parent even after the task ends and the parent is closed.
+ * Thus, we should use ContextAwareIterator to stop consuming after the task ends.
+ */
+class ContextAwareIterator[IN](iter: Iterator[IN], context: TaskContext) extends Iterator[IN] {
+
+  override def hasNext: Boolean =
+    !context.isCompleted() && !context.isInterrupted() && iter.hasNext
+
+  override def next(): IN = iter.next()
 }
