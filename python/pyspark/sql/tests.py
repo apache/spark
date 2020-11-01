@@ -3628,6 +3628,26 @@ class SQLTests(ReusedSQLTestCase):
         finally:
             self.spark.catalog.dropTempView("v")
 
+    # SPARK-33277
+    def test_udf_with_column_vector(self):
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+
+        try:
+            self.spark.range(0, 100000, 1, 1).write.parquet(path)
+
+            def f(x):
+                return 0
+
+            fUdf = udf(f, LongType())
+
+            for offheap in ["true", "false"]:
+                with self.sql_conf({"spark.sql.columnVector.offheap.enabled": offheap}):
+                    self.assertEquals(
+                        self.spark.read.parquet(path).select(fUdf('id')).head(), Row(0))
+        finally:
+            shutil.rmtree(path)
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
@@ -5572,6 +5592,28 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 for f in [f1, f2]:
                     result = df.filter(f)
                     self.assertEquals(0, result.count())
+        finally:
+            shutil.rmtree(path)
+
+    # SPARK-33277
+    def test_pandas_udf_with_column_vector(self):
+        import pandas as pd
+        from pyspark.sql.functions import pandas_udf
+
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+
+        try:
+            self.spark.range(0, 200000, 1, 1).write.parquet(path)
+
+            @pandas_udf(LongType())
+            def udf(x):
+                return pd.Series([0] * len(x))
+
+            for offheap in ["true", "false"]:
+                with self.sql_conf({"spark.sql.columnVector.offheap.enabled": offheap}):
+                    self.assertEquals(
+                        self.spark.read.parquet(path).select(udf('id')).head(), Row(0))
         finally:
             shutil.rmtree(path)
 
