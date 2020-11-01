@@ -747,6 +747,23 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       dts.forall(compatibleTypes(dt1, _))
     }
 
+    def fixValue(quotedValue: String, desiredType: DataType): Option[Any] = try {
+      val value = quotedValue.init.tail // remove leading and trailing quotes
+      desiredType match {
+        case LongType =>
+          Some(value.toLong)
+        case IntegerType =>
+          Some(value.toInt)
+        case ShortType =>
+          Some(value.toShort)
+        case ByteType =>
+          Some(value.toByte)
+      }
+    } catch {
+      case _: NumberFormatException =>
+        None
+    }
+
     def convert(expr: Expression): Option[String] = expr match {
       case In(ExtractAttribute(SupportedAttribute(name), dt1), ExtractableLiterals(valsAndDts))
           if useAdvanced && compatibleTypesIn(dt1, valsAndDts.map(_._2)) =>
@@ -764,9 +781,23 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         Some(s"$name ${op.symbol} $value")
 
       case op @ SpecialBinaryComparison(
+          ExtractAttribute(SupportedAttribute(name), dt1), ExtractableLiteral(rawValue, dt2))
+          if dt1.isInstanceOf[IntegralType] && dt2.isInstanceOf[StringType] =>
+        fixValue(rawValue, dt1).map { value =>
+          s"$name ${op.symbol} $value"
+        }
+
+      case op @ SpecialBinaryComparison(
           ExtractableLiteral(value, dt2), ExtractAttribute(SupportedAttribute(name), dt1))
           if compatibleTypes(dt1, dt2) =>
         Some(s"$value ${op.symbol} $name")
+
+      case op @ SpecialBinaryComparison(
+          ExtractableLiteral(rawValue, dt2), ExtractAttribute(SupportedAttribute(name), dt1))
+          if dt1.isInstanceOf[IntegralType] && dt2.isInstanceOf[StringType] =>
+        fixValue(rawValue, dt1).map { value =>
+          s"$value ${op.symbol} $name"
+        }
 
       case And(expr1, expr2) if useAdvanced =>
         val converted = convert(expr1) ++ convert(expr2)
