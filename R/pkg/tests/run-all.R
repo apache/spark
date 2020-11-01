@@ -63,7 +63,7 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
     if (packageVersion("testthat")$major <= 1) stop("testhat 1.x is not supported")
 
     test_runner <- if (packageVersion("testthat")$major == 2) {
-      # testthat == 2.0.0
+      # testthat >= 2.0.0, < 3.0.0
       function(path, package, reporter, filter) {
         testthat:::test_package_dir(
           test_path = path,
