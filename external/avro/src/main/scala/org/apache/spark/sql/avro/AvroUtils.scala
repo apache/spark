@@ -171,9 +171,15 @@ private[sql] object AvroUtils extends Logging {
     protected val stopPosition: Long
 
     private[this] var completed = false
+    private[this] var interveningNext = true
+    private[this] var prevHasNextRow = false
     private[this] var currentRow: Option[InternalRow] = None
 
     def hasNextRow: Boolean = {
+      if (!interveningNext) {
+        // until a row is consumed, return previous result of hasNextRow
+        return prevHasNextRow
+      }
       do {
         val r = fileReader.hasNext && !fileReader.pastSync(stopPosition)
         if (!r) {
@@ -182,14 +188,19 @@ private[sql] object AvroUtils extends Logging {
           currentRow = None
         } else {
           val record = fileReader.next()
+          // the row must be deserialized in hasNextRow, because AvroDeserializer#deserialize
+          // potentially filters rows
           currentRow = deserializer.deserialize(record).asInstanceOf[Option[InternalRow]]
         }
       } while (!completed && currentRow.isEmpty)
 
-      currentRow.isDefined
+      prevHasNextRow = currentRow.isDefined
+      interveningNext = false
+      prevHasNextRow
     }
 
     def nextRow: InternalRow = {
+      interveningNext = true
       currentRow.getOrElse {
         throw new NoSuchElementException("next on empty iterator")
       }
