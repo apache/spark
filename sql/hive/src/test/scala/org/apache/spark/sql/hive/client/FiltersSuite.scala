@@ -63,7 +63,12 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     (Literal(1) === a("intcol", IntegerType)) :: (Literal("a") === a("strcol", StringType)) :: Nil,
     "1 = intcol and \"a\" = strcol")
 
-  filterTest("int and string/int filter",
+  filterTest("int and int column/string literal filter",
+    (a("intcol1", IntegerType) === Literal(1)) ::
+      (a("intcol2", IntegerType) === (Literal("a"))) :: Nil,
+    "intcol1 = 1")
+
+  filterTest("int and int column/string literal filter backwards",
     (Literal(1) === a("intcol1", IntegerType)) ::
       (Literal("a") === a("intcol2", IntegerType)) :: Nil,
     "1 = intcol1")

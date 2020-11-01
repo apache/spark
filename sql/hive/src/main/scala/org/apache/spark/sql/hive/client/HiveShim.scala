@@ -764,13 +764,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         Some(s"$name ${op.symbol} $value")
 
       case op @ SpecialBinaryComparison(
-          ExtractAttribute(SupportedAttribute(name), dt1), ExtractableLiteral(value, dt2))
-          if !compatibleTypes(dt1, dt2) =>
-        None
-
-      case op @ SpecialBinaryComparison(
           ExtractableLiteral(value, dt2), ExtractAttribute(SupportedAttribute(name), dt1))
-          if (dt1 == dt2) =>
+          if compatibleTypes(dt1, dt2) =>
         Some(s"$value ${op.symbol} $name")
 
       case And(expr1, expr2) if useAdvanced =>
