@@ -82,14 +82,14 @@ def to_avro(data, jsonFormatSchema=""):
     """
     Converts a column into binary of avro format.
 
+    .. versionadded:: 3.0.0
+
     Parameters
     ----------
     data : :class:`Column` or str
         the data column.
     jsonFormatSchema : str, optional
         user-specified output avro schema in JSON string format.
-
-    .. versionadded:: 3.0.0
 
     Notes
     -----
