@@ -64,18 +64,19 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
 
     test_runner <- if (packageVersion("testthat")$major == 2) {
       # testthat == 2.0.0
-      testthat:::test_package_dir
-    } else {
-      # testthat >= 3.0.0
-      function(package, test_path, filter, reporter) {
-        testthat::test_dir(
-          path = test_path,
-          filter = filter,
+      function(path, package, reporter, filter) {
+        testthat:::test_package_dir(
+          test_path = path,
           package = package,
+          filter = filter,
           reporter = reporter
         )
       }
+    } else {
+      # testthat >= 3.0.0
+      testthat::test_dir
     }
+
     dir.create("target/test-reports", showWarnings = FALSE)
     reporter <- MultiReporter$new(list(
       SummaryReporter$new(),
@@ -84,10 +85,12 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
       )
     ))
 
-    test_runner("SparkR",
-                file.path(sparkRDir, "pkg", "tests", "fulltests"),
-                NULL,
-                reporter)
+    test_runner(
+      path = file.path(sparkRDir, "pkg", "tests", "fulltests"),
+      package = "SparkR",
+      reporter = reporter,
+      filter = NULL
+    )
   }
 
   SparkR:::uninstallDownloadedSpark()
