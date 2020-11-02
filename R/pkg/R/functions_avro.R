@@ -26,7 +26,10 @@
 #' @rdname column_avro_functions
 #' @family avro functions
 #' @note Avro is built-in but external data source module since Spark 2.4.
-#'   Please deploy the application as per the deployment section of "Apache Avro Data Source Guide".
+#'   Please deploy the application as per
+#'   \href{https://spark.apache.org/docs/latest/sql-data-sources-avro.html#deploying}{
+#'     the deployment section
+#'   } of "Apache Avro Data Source Guide".
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(iris)
