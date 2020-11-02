@@ -815,6 +815,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val HIVE_METASTORE_PARTITION_LIMIT =
+    buildConf("spark.sql.hive.metastorePartitionLimit")
+      .doc("The maximum number of metastore partitions allowed. Use -1 for unlimited.")
+      .version("3.0.2")
+      .intConf
+      .checkValue(maxNum => maxNum >= -1, "The maximum must be a positive integer, " +
+        "-1 to apply no limit.")
+      .createWithDefault(100000)
+
   val HIVE_MANAGE_FILESOURCE_PARTITIONS =
     buildConf("spark.sql.hive.manageFilesourcePartitions")
       .doc("When true, enable metastore partition management for file source tables as well. " +
@@ -3134,6 +3143,8 @@ class SQLConf extends Serializable with Logging {
   def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
+
+  def metastorePartitionLimit: Int = getConf(HIVE_METASTORE_PARTITION_LIMIT)
 
   def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 

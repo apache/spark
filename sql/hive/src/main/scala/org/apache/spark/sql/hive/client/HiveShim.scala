@@ -493,6 +493,12 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       classOf[Table],
       "setDataLocation",
       classOf[Path])
+  private lazy val getNumPartitionsByFilterMethod =
+    findMethod(
+      classOf[Hive],
+      "getNumPartitionsByFilter",
+      classOf[Table],
+      classOf[String])
   private lazy val getAllPartitionsMethod =
     findMethod(
       classOf[Hive],
@@ -792,6 +798,15 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     // Hive getPartitionsByFilter() takes a string that represents partition
     // predicates like "str_key=\"value\" and int_key=1 ..."
     val filter = convertFilters(table, predicates)
+
+    val limit = SQLConf.get.metastorePartitionLimit
+    if (limit > -1) {
+      val num = getNumPartitionsByFilterMethod.invoke(hive, table, filter).asInstanceOf[Int]
+      if (num > limit) {
+        throw new RuntimeException(s"Queried $num partitions of table $table " +
+          s"by filter '$filter', exceeding the limit of $limit")
+      }
+    }
 
     val partitions =
       if (filter.isEmpty) {
