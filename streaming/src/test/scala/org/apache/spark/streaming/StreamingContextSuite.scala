@@ -600,7 +600,7 @@ class StreamingContextSuite
       newContextCreated = true
       val newSsc = new StreamingContext(sc, batchDuration)
       val input = addInputStream(newSsc)
-      input.foreachRDD { rdd => rdd.count }
+      input.foreachRDD { rdd => rdd.count() }
       newSsc
     }
 
@@ -733,13 +733,13 @@ class StreamingContextSuite
       conf.clone.set("spark.streaming.clock", "org.apache.spark.util.ManualClock"))
     ssc = new StreamingContext(sc, Seconds(1))
     val input = addInputStream(ssc)
-    input.foreachRDD { rdd => rdd.count }
+    input.foreachRDD { rdd => rdd.count() }
     ssc.start()
 
     // Creating another streaming context should not create errors
     val anotherSsc = new StreamingContext(sc, Seconds(10))
     val anotherInput = addInputStream(anotherSsc)
-    anotherInput.foreachRDD { rdd => rdd.count }
+    anotherInput.foreachRDD { rdd => rdd.count() }
 
     val exception = intercept[IllegalStateException] {
       anotherSsc.start()
@@ -760,7 +760,7 @@ class StreamingContextSuite
     require(ssc.getState() === StreamingContextState.INITIALIZED)
     val input = addInputStream(ssc)
     val transformed = input.map { x => x}
-    transformed.foreachRDD { rdd => rdd.count }
+    transformed.foreachRDD { rdd => rdd.count() }
 
     def testForException(clue: String, expectedErrorMsg: String)(body: => Unit): Unit = {
       withClue(clue) {

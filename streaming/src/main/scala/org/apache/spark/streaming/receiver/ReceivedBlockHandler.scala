@@ -82,7 +82,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
         val countIterator = new CountingIterator(iterator)
         val putResult = blockManager.putIterator(blockId, countIterator, storageLevel,
           tellMaster = true)
-        numRecords = countIterator.count
+        numRecords = countIterator.count()
         putResult
       case ByteBufferBlock(byteBuffer) =>
         blockManager.putBytes(
@@ -178,7 +178,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
       case IteratorBlock(iterator) =>
         val countIterator = new CountingIterator(iterator)
         val serializedBlock = serializerManager.dataSerialize(blockId, countIterator)
-        numRecords = countIterator.count
+        numRecords = countIterator.count()
         serializedBlock
       case ByteBufferBlock(byteBuffer) =>
         new ChunkedByteBuffer(byteBuffer.duplicate())

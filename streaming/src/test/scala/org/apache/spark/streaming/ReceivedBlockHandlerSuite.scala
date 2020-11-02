@@ -359,7 +359,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
     }
 
     def dataToByteBuffer(b: Seq[String]) =
-      serializerManager.dataSerialize(generateBlockId, b.iterator)
+      serializerManager.dataSerialize(generateBlockId(), b.iterator)
 
     val blocks = data.grouped(10).toSeq
 
@@ -423,7 +423,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
       handler: ReceivedBlockHandler,
       block: ReceivedBlock
     ): (StreamBlockId, ReceivedBlockStoreResult) = {
-    val blockId = generateBlockId
+    val blockId = generateBlockId()
     val blockStoreResult = handler.storeBlock(blockId, block)
     logDebug("Done inserting")
     (blockId, blockStoreResult)

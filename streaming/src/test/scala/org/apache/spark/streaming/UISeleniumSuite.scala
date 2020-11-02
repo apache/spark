@@ -82,7 +82,7 @@ class UISeleniumSuite
       try {
         rdd.foreach { _ =>
           // Failing the task with id 15 to ensure only one task fails
-          if (TaskContext.get.taskAttemptId() % 15 == 0) {
+          if (TaskContext.get().taskAttemptId() % 15 == 0) {
             throw new RuntimeException("Oops")
           }
         }
@@ -99,7 +99,7 @@ class UISeleniumSuite
 
       val sparkUI = ssc.sparkContext.ui.get
 
-      sparkUI.getDelegatingHandlers.count(_.getContextPath.contains("/streaming")) should be (5)
+      sparkUI.getDelegatingHandlers.count(_.getContextPath().contains("/streaming")) should be (5)
 
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
         go to (sparkUI.webUrl.stripSuffix("/"))
@@ -214,7 +214,7 @@ class UISeleniumSuite
 
       ssc.stop(false)
 
-      sparkUI.getDelegatingHandlers.count(_.getContextPath.contains("/streaming")) should be (0)
+      sparkUI.getDelegatingHandlers.count(_.getContextPath().contains("/streaming")) should be (0)
 
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
         go to (sparkUI.webUrl.stripSuffix("/"))

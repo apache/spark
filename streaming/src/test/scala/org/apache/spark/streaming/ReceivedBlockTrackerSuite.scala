@@ -418,7 +418,7 @@ class ReceivedBlockTrackerSuite
    * Get all the data written in the given write ahead log files. By default, it will read all
    * files in the test log directory.
    */
-  def getWrittenLogData(logFiles: Seq[String] = getWriteAheadLogFiles)
+  def getWrittenLogData(logFiles: Seq[String] = getWriteAheadLogFiles())
     : Seq[ReceivedBlockTrackerLogEvent] = {
     logFiles.flatMap {
       file => new FileBasedWriteAheadLogReader(file, hadoopConf).toSeq

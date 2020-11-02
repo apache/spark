@@ -78,7 +78,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
     // attach rate controllers of input streams to receive batch completion updates
     for {
-      inputDStream <- ssc.graph.getInputStreams
+      inputDStream <- ssc.graph.getInputStreams()
       rateController <- inputDStream.rateController
     } ssc.addStreamingListener(rateController)
 

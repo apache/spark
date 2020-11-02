@@ -115,7 +115,7 @@ class StreamingListenerSuite extends TestSuiteBase with LocalStreamingContext wi
   test("receiver info reporting") {
     ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
-    inputStream.foreachRDD(_.count)
+    inputStream.foreachRDD(_.count())
 
     val collector = new ReceiverInfoCollector
     ssc.addStreamingListener(collector)
@@ -161,7 +161,7 @@ class StreamingListenerSuite extends TestSuiteBase with LocalStreamingContext wi
   test("don't call ssc.stop in listener") {
     ssc = new StreamingContext("local[2]", "ssc", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
-    inputStream.foreachRDD(_.count)
+    inputStream.foreachRDD(_.count())
 
     startStreamingContextAndCallStop(ssc)
   }
@@ -169,7 +169,7 @@ class StreamingListenerSuite extends TestSuiteBase with LocalStreamingContext wi
   test("onBatchCompleted with successful batch") {
     ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
-    inputStream.foreachRDD(_.count)
+    inputStream.foreachRDD(_.count())
 
     val failureReasons = startStreamingContextAndCollectFailureReasons(ssc)
     assert(failureReasons != null && failureReasons.isEmpty,
@@ -218,7 +218,7 @@ class StreamingListenerSuite extends TestSuiteBase with LocalStreamingContext wi
     ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
     ssc.addStreamingListener(streamingListener)
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
-    inputStream.foreachRDD(_.count)
+    inputStream.foreachRDD(_.count())
     ssc.start()
     ssc.stop()
 
