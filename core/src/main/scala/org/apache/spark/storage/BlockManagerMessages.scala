@@ -142,7 +142,7 @@ private[spark] object BlockManagerMessages {
 
   case class IsExecutorAlive(executorId: String) extends ToBlockManagerMaster
 
-  case class GetMergerLocations(numMergersNeeded: Int, hostsToFilter: Set[String])
+  case class GetShufflePushMergerLocations(numMergersNeeded: Int, hostsToFilter: Set[String])
     extends ToBlockManagerMaster
 
 }

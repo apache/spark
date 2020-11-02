@@ -1929,29 +1929,32 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
-    ConfigBuilder("spark.shuffle.push.based.enabled")
+    ConfigBuilder("spark.shuffle.push.enabled")
       .doc("Set to 'true' to enable push based shuffle")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val MAX_MERGER_LOCATIONS_CACHED =
     ConfigBuilder("spark.shuffle.push.retainedMergerLocations")
-      .doc("Max number of shuffle services hosts info cached to determine the locations of" +
-        " shuffle services when pushing the blocks.")
+      .doc("Maximum number of shuffle push mergers locations cached for push based shuffle." +
+        "Currently Shuffle push merger locations are nothing but shuffle services where an" +
+        "executor is launched in the case of Push based shuffle.")
       .intConf
       .createWithDefault(500)
 
   private[spark] val MERGER_LOCATIONS_MIN_THRESHOLD_RATIO =
-    ConfigBuilder("spark.shuffle.push.mergerLocations.minThresholdRatio")
-      .doc("Minimum percentage of shuffle services (merger locations) should be available with" +
-        " respect to numPartitions in order to enable push based shuffle for a stage.")
+    ConfigBuilder("spark.shuffle.push.mergersMinThresholdRatio")
+      .doc("Minimum percentage of shuffle push mergers locations required to enable push based" +
+        "shuffle for the stage with respect to number of partitions of the child stage. This is" +
+        " the number of unique Node Manager locations needed to enable push based shuffle.")
       .doubleConf
       .createWithDefault(0.05)
 
   private[spark] val MERGER_LOCATIONS_MIN_STATIC_THRESHOLD =
-    ConfigBuilder("spark.shuffle.push.mergerLocations.minStaticThreshold")
-      .doc("Minimum number of shuffle services (merger locations) should be available in order" +
-        "to enable push based shuffle for a stage.")
+    ConfigBuilder("spark.shuffle.push.mergersMinStaticThreshold")
+      .doc("Minimum static number of of shuffle push mergers locations should be available in" +
+        " order to enable push based shuffle for a stage. Note this config works in" +
+        " conjunction with spark.shuffle.push.mergersMinThresholdRatio")
       .doubleConf
       .createWithDefault(5)
 }

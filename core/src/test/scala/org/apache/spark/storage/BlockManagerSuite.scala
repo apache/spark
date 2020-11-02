@@ -1976,7 +1976,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   test("mergerLocations should be bounded with in" +
     " spark.shuffle.push.retainedMergerLocations") {
-    assert(master.getMergerLocations(10, Set.empty).isEmpty)
+    assert(master.getShufflePushMergerLocations(10, Set.empty).isEmpty)
     makeBlockManager(100, "execA",
       transferService = Some(new MockBlockTransferService(10, "hostA")))
     makeBlockManager(100, "execB",
@@ -1987,10 +1987,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       transferService = Some(new MockBlockTransferService(10, "hostD")))
     makeBlockManager(100, "execE",
       transferService = Some(new MockBlockTransferService(10, "hostA")))
-    assert(master.getMergerLocations(10, Set.empty).size == 4)
-    assert(master.getMergerLocations(10, Set.empty)
+    assert(master.getShufflePushMergerLocations(10, Set.empty).size == 4)
+    assert(master.getShufflePushMergerLocations(10, Set.empty)
       .exists(x => Seq("hostC", "hostD", "hostA", "hostB").contains(x.host)))
-    assert(master.getMergerLocations(10, Set("hostB")).size == 3)
+    assert(master.getShufflePushMergerLocations(10, Set("hostB")).size == 3)
   }
 
   class MockBlockTransferService(

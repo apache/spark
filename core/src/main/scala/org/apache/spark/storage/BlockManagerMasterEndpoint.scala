@@ -74,8 +74,10 @@ class BlockManagerMasterEndpoint(
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
-  // Mapping from host name to shuffle (mergers) services
-  private val mergerLocations = new mutable.LinkedHashMap[String, BlockManagerId]()
+  // Mapping from host name to shuffle (mergers) services where the current app
+  // registered an executor in the past. Older hosts are removed when the
+  // maxRetainedMergerLocations size is reached in favor of newer locations.
+  private val shuffleMergerLocations = new mutable.LinkedHashMap[String, BlockManagerId]()
 
   // Maximum number of merger locations to cache
   private val maxRetainedMergerLocations = conf.get(config.MAX_MERGER_LOCATIONS_CACHED)
@@ -145,8 +147,8 @@ class BlockManagerMasterEndpoint(
     case GetBlockStatus(blockId, askStorageEndpoints) =>
       context.reply(blockStatus(blockId, askStorageEndpoints))
 
-    case GetMergerLocations(numMergersNeeded, hostsToFilter) =>
-      context.reply(getMergerLocations(numMergersNeeded, hostsToFilter))
+    case GetShufflePushMergerLocations(numMergersNeeded, hostsToFilter) =>
+      context.reply(getShufflePushMergerLocations(numMergersNeeded, hostsToFilter))
 
     case IsExecutorAlive(executorId) =>
       context.reply(blockManagerIdByExecutor.contains(executorId))
@@ -370,13 +372,13 @@ class BlockManagerMasterEndpoint(
   }
 
   private def addMergerLocation(blockManagerId: BlockManagerId): Unit = {
-    if (!mergerLocations.contains(blockManagerId.host) && !blockManagerId.isDriver) {
+    if (!shuffleMergerLocations.contains(blockManagerId.host) && !blockManagerId.isDriver) {
       val shuffleServerId = BlockManagerId(blockManagerId.executorId, blockManagerId.host,
         StorageUtils.externalShuffleServicePort(conf))
-      if (mergerLocations.size >= maxRetainedMergerLocations) {
-        mergerLocations -= mergerLocations.head._1
+      if (shuffleMergerLocations.size >= maxRetainedMergerLocations) {
+        shuffleMergerLocations -= shuffleMergerLocations.head._1
       }
-      mergerLocations(shuffleServerId.host) = shuffleServerId
+      shuffleMergerLocations(shuffleServerId.host) = shuffleServerId
     }
   }
 
@@ -679,11 +681,12 @@ class BlockManagerMasterEndpoint(
     }
   }
 
-  private def getMergerLocations(
+  private def getShufflePushMergerLocations(
       numMergersNeeded: Int,
       hostsToFilter: Set[String]): Seq[BlockManagerId] = {
-    // Copying the merger locations to a list so that the original mergerLocations won't be shuffled
-    val mergers = mergerLocations.values.filterNot(x => hostsToFilter.contains(x.host)).toSeq
+    // Copying the merger locations to a list so that the original
+    // shuffleMergerLocations won't be shuffled
+    val mergers = shuffleMergerLocations.values.filterNot(x => hostsToFilter.contains(x.host)).toSeq
     Utils.randomize(mergers).take(numMergersNeeded)
   }
 

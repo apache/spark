@@ -95,8 +95,14 @@ private[spark] trait SchedulerBackend {
 
   /**
    * Get the list of both active and dead executors host locations for push based shuffle
+   *
+   * Currently push based shuffle is disabled for both stage retry and stage reuse cases
+   * (for eg: in the case where few partitions are lost due to failure). Hence this method
+   * should be invoked only once for a ShuffleDependency.
    * @return List of external shuffle services locations
    */
-  def getMergerLocations(numPartitions: Int, resourceProfileId: Int): Seq[BlockManagerId] = Nil
+  def getShufflePushMergerLocations(
+      numPartitions: Int,
+      resourceProfileId: Int): Seq[BlockManagerId] = Nil
 
 }

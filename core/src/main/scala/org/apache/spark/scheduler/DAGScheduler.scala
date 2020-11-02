@@ -1256,15 +1256,19 @@ private[spark] class DAGScheduler(
 
   /**
    * If push based shuffle is enabled, set the shuffle services to be used for the given
-   * shuffle map stage. The list of shuffle services is determined based on the list of
-   * active executors tracked by block manager master at the start of the stage.
+   * shuffle map stage for block push/merge.
+   *
+   * Even with DRA kicking in and significantly reducing the number of available active
+   * executors, we would still be able to get sufficient shuffle service locations for
+   * block push/merge by getting the historical locations of past executors.
    */
   private def prepareShuffleServicesForShuffleMapStage(stage: ShuffleMapStage) {
     // TODO: Handle stage reuse/retry cases separately as without finalize changes we cannot
     // TODO: disable shuffle merge for the retry/reuse cases
-    val mergerLocs = sc.schedulerBackend.getMergerLocations(
+    val mergerLocs = sc.schedulerBackend.getShufflePushMergerLocations(
       stage.shuffleDep.partitioner.numPartitions, stage.resourceProfileId)
-    logDebug(s"${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
+    logDebug(s"List of shuffle push merger locations " +
+      s"${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
 
     if (mergerLocs.nonEmpty) {
       stage.shuffleDep.setMergerLocs(mergerLocs)
