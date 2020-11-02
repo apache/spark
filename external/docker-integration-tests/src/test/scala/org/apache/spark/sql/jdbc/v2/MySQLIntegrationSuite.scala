@@ -50,7 +50,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     override val jdbcPort: Int = 3306
 
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass"
+      s"jdbc:mysql://$ip:$port/" +
+        s"mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true&useSSL=false"
   }
 
   override def sparkConf: SparkConf = super.sparkConf
@@ -59,7 +60,11 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
 
   override val connectionTimeout = timeout(7.minutes)
 
-  override def dataPreparation(conn: Connection): Unit = {}
+  private var mySQLVersion = -1
+
+  override def dataPreparation(conn: Connection): Unit = {
+    mySQLVersion = conn.getMetaData.getDatabaseMajorVersion
+  }
 
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER) USING _")
@@ -77,11 +82,26 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     assert(msg1.contains("Cannot update alt_table field ID: string cannot be cast to int"))
   }
 
+  override def testRenameColumn(tbl: String): Unit = {
+    assert(mySQLVersion > 0)
+    if (mySQLVersion < 8) {
+      // Rename is unsupported for mysql versions < 8.0.
+      val exception = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO RENAMED")
+      }
+      assert(exception.getCause != null, s"Wrong exception thrown: $exception")
+      val msg = exception.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
+      assert(msg.contains("Rename column is only supported for MySQL version 8.0 and above."))
+    } else {
+      super.testRenameColumn(tbl)
+    }
+  }
+
   override def testUpdateColumnNullability(tbl: String): Unit = {
-    sql("CREATE TABLE mysql.alt_table (ID STRING NOT NULL) USING _")
+    sql(s"CREATE TABLE $tbl (ID STRING NOT NULL) USING _")
     // Update nullability is unsupported for mysql db.
     val msg = intercept[AnalysisException] {
-      sql("ALTER TABLE mysql.alt_table ALTER COLUMN ID DROP NOT NULL")
+      sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
     }.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
 
     assert(msg.contains("UpdateColumnNullability is not supported"))
