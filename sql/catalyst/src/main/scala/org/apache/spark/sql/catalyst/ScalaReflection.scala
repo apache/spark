@@ -547,8 +547,8 @@ object ScalaReflection extends ScalaReflection {
           if (!Character.isJavaIdentifierStart(fieldName.head)) {
             throw new UnsupportedOperationException(s"`$fieldName` is a word that starts with" +
              " a character not allowed in Java and cannot be used as field name. " +
-              "A workaround to this problem is to convert the case class to Json" +
-              " and then read the schema as Json\n" + walkedTypePath)
+              "A workaround to this problem is to convert the case class to JSON" +
+              s" and then read the schema as JSON\n$walkedTypePath")
           }
 
           // SPARK-26730 inputObject won't be null with If's guard below. And KnownNotNul
