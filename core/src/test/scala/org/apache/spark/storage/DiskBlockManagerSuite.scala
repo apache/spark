@@ -76,7 +76,7 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     val ids = (1 to 100).map(i => TestBlockId("test_" + i))
     val files = ids.map(id => diskBlockManager.getFile(id))
     files.foreach(file => writeToFile(file, 10))
-    assert(diskBlockManager.getAllBlocks.toSet === ids.toSet)
+    assert(diskBlockManager.getAllBlocks().toSet === ids.toSet)
   }
 
   test("SPARK-22227: non-block files are skipped") {

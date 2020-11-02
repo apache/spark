@@ -145,13 +145,13 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     sc = new SparkContext("local[1,2]", "test")  // use maxRetries = 2 because we test failed tasks
     // Check that attemptIds are 0 for all tasks' initial attempts
     val attemptIds = sc.parallelize(Seq(1, 2), 2).mapPartitions { iter =>
-      Seq(TaskContext.get().attemptNumber).iterator
+      Seq(TaskContext.get().attemptNumber()).iterator
     }.collect()
     assert(attemptIds.toSet === Set(0))
 
     // Test a job with failed tasks
     val attemptIdsWithFailedTask = sc.parallelize(Seq(1, 2), 2).mapPartitions { iter =>
-      val attemptId = TaskContext.get().attemptNumber
+      val attemptId = TaskContext.get().attemptNumber()
       if (iter.next() == 1 && attemptId == 0) {
         throw new Exception("First execution of task failed")
       }
@@ -194,7 +194,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     sc.parallelize(1 to 10, 10).map { i =>
       acc1.add(1)
       acc2.add(1)
-      if (TaskContext.get.attemptNumber() <= 2) {
+      if (TaskContext.get().attemptNumber() <= 2) {
         throw new Exception("you did something wrong")
       } else {
         0

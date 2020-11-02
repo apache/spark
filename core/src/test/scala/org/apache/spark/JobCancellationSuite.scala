@@ -58,7 +58,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     testCount()
     testTake()
     // Make sure we can still launch tasks.
-    assert(sc.parallelize(1 to 10, 2).count === 10)
+    assert(sc.parallelize(1 to 10, 2).count() === 10)
   }
 
   test("local mode, fair scheduler") {
@@ -69,7 +69,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     testCount()
     testTake()
     // Make sure we can still launch tasks.
-    assert(sc.parallelize(1 to 10, 2).count === 10)
+    assert(sc.parallelize(1 to 10, 2).count() === 10)
   }
 
   test("cluster mode, FIFO scheduler") {
@@ -78,7 +78,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     testCount()
     testTake()
     // Make sure we can still launch tasks.
-    assert(sc.parallelize(1 to 10, 2).count === 10)
+    assert(sc.parallelize(1 to 10, 2).count() === 10)
   }
 
   test("cluster mode, fair scheduler") {
@@ -89,7 +89,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     testCount()
     testTake()
     // Make sure we can still launch tasks.
-    assert(sc.parallelize(1 to 10, 2).count === 10)
+    assert(sc.parallelize(1 to 10, 2).count() === 10)
   }
 
   test("do not put partially executed partitions into cache") {
