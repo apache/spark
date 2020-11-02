@@ -42,7 +42,6 @@ Collate:
     'context.R'
     'deserialize.R'
     'functions.R'
-    'functions_avro.R'
     'install.R'
     'jvm.R'
     'mllib_classification.R'
