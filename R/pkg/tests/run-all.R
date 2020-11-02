@@ -60,25 +60,49 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
     # set random seed for predictable results. mostly for base's sample() in tree and classification
     set.seed(42)
 
-    # TODO (SPARK-30663) To be removed once testthat 1.x is removed from all builds
-    if (packageVersion("testthat")$major <= 1) {
+    test_runner <- if (packageVersion("testthat")$major <= 1) {
       # testthat 1.x
-      test_runner <- testthat:::run_tests
-      reporter <- "summary"
+      function(path, package, reporter, filter) {
+        testthat:::run_tests(
+          test_path = path,
+          package = package,
+          filter = filter,
+          reporter = reporter
+        )
+      }
+    } else if (packageVersion("testthat")$major == 2) {
+      # testthat >= 2.0.0, < 3.0.0
+      function(path, package, reporter, filter) {
+        testthat:::test_package_dir(
+          test_path = path,
+          package = package,
+          filter = filter,
+          reporter = reporter
+        )
+      }
     } else {
-      # testthat >= 2.0.0
-      test_runner <- testthat:::test_package_dir
+      # testthat >= 3.0.0
+      testthat::test_dir
+    }
+
+    reporter <- if (packageVersion("testthat")$major <= 1) {
+      "summary"
+    } else {
       dir.create("target/test-reports", showWarnings = FALSE)
-      reporter <- MultiReporter$new(list(
+      MultiReporter$new(list(
         SummaryReporter$new(),
-        JunitReporter$new(file = "target/test-reports/test-results.xml")
+        JunitReporter$new(
+          file = file.path(getwd(), "target/test-reports/test-results.xml")
+        )
       ))
     }
 
-    test_runner("SparkR",
-                file.path(sparkRDir, "pkg", "tests", "fulltests"),
-                NULL,
-                reporter)
+    test_runner(
+      path = file.path(sparkRDir, "pkg", "tests", "fulltests"),
+      package = "SparkR",
+      reporter = reporter,
+      filter = NULL
+    )
   }
 
   SparkR:::uninstallDownloadedSpark()
