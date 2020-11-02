@@ -64,7 +64,7 @@ public class PushBlockStream extends BlockTransferMessage {
   public String toString() {
     return Objects.toStringHelper(this)
       .add("appId", appId)
-      .add("streamId", shuffleId)
+      .add("shuffleId", shuffleId)
       .add("mapIndex", mapIndex)
       .add("reduceId", reduceId)
       .add("index", index)
@@ -100,10 +100,10 @@ public class PushBlockStream extends BlockTransferMessage {
 
   public static PushBlockStream decode(ByteBuf buf) {
     String appId = Encoders.Strings.decode(buf);
-    int streamId = buf.readInt();
+    int shuffleId = buf.readInt();
     int mapIdx = buf.readInt();
     int reduceId = buf.readInt();
     int index = buf.readInt();
-    return new PushBlockStream(appId, streamId, mapIdx, reduceId, index);
+    return new PushBlockStream(appId, shuffleId, mapIdx, reduceId, index);
   }
 }

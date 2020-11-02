@@ -42,7 +42,6 @@ import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.*;
 import org.apache.spark.network.shuffle.MergedShuffleFileManager;
-import org.apache.spark.network.shuffle.RemoteBlockPushResolver;
 import org.apache.spark.network.util.LevelDBProvider;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.DBIterator;
@@ -226,7 +225,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
   @VisibleForTesting
   static MergedShuffleFileManager newMergedShuffleFileManagerInstance(TransportConf conf) {
-    String mergeManagerImplClassName = conf.mergeShuffleFileManagerImpl();
+    String mergeManagerImplClassName = conf.mergedShuffleFileManagerImpl();
     try {
       Class<?> mergeManagerImplClazz = Class.forName(
         mergeManagerImplClassName, true, Thread.currentThread().getContextClassLoader());
@@ -237,7 +236,7 @@ public class YarnShuffleService extends AuxiliaryService {
       return mergeManagerSubClazz.getConstructor(TransportConf.class).newInstance(conf);
     } catch (Exception e) {
       logger.error("Unable to create an instance of {}", mergeManagerImplClassName);
-      return new RemoteBlockPushResolver(conf);
+      return new ExternalBlockHandler.NoOpMergedShuffleFileManager(conf);
     }
   }
 

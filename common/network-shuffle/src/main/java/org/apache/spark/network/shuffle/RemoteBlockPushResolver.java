@@ -115,6 +115,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   private AppShufflePartitionInfo getOrCreateAppShufflePartitionInfo(
       AppShuffleId appShuffleId,
       int reduceId) {
+    File dataFile = getMergedShuffleDataFile(appShuffleId, reduceId);
+    if (!partitions.containsKey(appShuffleId) && dataFile.exists()) {
+      // If this partition is already finalized then the partitions map will not contain
+      // the appShuffleId but the data file would exist. In that case the block is considered late.
+      return null;
+    }
     Map<Integer, AppShufflePartitionInfo> shufflePartitions =
       partitions.computeIfAbsent(appShuffleId, id -> Maps.newConcurrentMap());
     return shufflePartitions.computeIfAbsent(reduceId, key -> {
@@ -122,7 +128,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       // be the first time the merge manager receives a pushed block for a given application
       // shuffle partition, or after the merged shuffle file is finalized. We handle these
       // two cases accordingly by checking if the file already exists.
-      File dataFile = getMergedShuffleDataFile(appShuffleId, reduceId);
       File indexFile = getMergedShuffleIndexFile(appShuffleId, reduceId);
       File metaFile = getMergedShuffleMetaFile(appShuffleId, reduceId);
       try {
@@ -357,47 +362,50 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @Override
   public MergeStatuses finalizeShuffleMerge(FinalizeShuffleMerge msg) throws IOException {
     logger.info("Finalizing shuffle {} from Application {}.", msg.shuffleId, msg.appId);
-    Map<Integer, AppShufflePartitionInfo> shufflePartitions =
-      partitions.remove(new AppShuffleId(msg.appId, msg.shuffleId));
+    AppShuffleId appShuffleId = new AppShuffleId(msg.appId, msg.shuffleId);
+    Map<Integer, AppShufflePartitionInfo> shufflePartitions = partitions.get(appShuffleId);
+    MergeStatuses mergeStatuses;
     if (shufflePartitions == null || shufflePartitions.isEmpty()) {
-      logger.info("No partitions to finalize for shuffle {} from Application {}.",
-        msg.shuffleId, msg.appId);
-      return new MergeStatuses(msg.shuffleId, new RoaringBitmap[0], new int[0], new long[0]);
-    }
-    Collection<AppShufflePartitionInfo> partitions = shufflePartitions.values();
-    int totalPartitions = partitions.size();
-    RoaringBitmap[] bitmaps = new RoaringBitmap[totalPartitions];
-    int[] reduceIds = new int[totalPartitions];
-    long[] sizes = new long[totalPartitions];
-    Iterator<AppShufflePartitionInfo> partitionsIter = partitions.iterator();
-    int idx = 0;
-    while (partitionsIter.hasNext()) {
-      AppShufflePartitionInfo partition = partitionsIter.next();
-      synchronized (partition) {
-        // Get rid of any partial block data at the end of the file. This could either
-        // be due to failure or a request still being processed when the shuffle
-        // merge gets finalized.
-        try {
-          partition.dataChannel.truncate(partition.getPosition());
-          if (partition.getPosition() != partition.getLastChunkOffset()) {
-            partition.updateChunkInfo(partition.getPosition(), partition.lastMergedMapIndex);
+      mergeStatuses =
+        new MergeStatuses(msg.shuffleId, new RoaringBitmap[0], new int[0], new long[0]);
+    } else {
+      Collection<AppShufflePartitionInfo> partitionsToFinalize = shufflePartitions.values();
+      int totalPartitions = partitionsToFinalize.size();
+      RoaringBitmap[] bitmaps = new RoaringBitmap[totalPartitions];
+      int[] reduceIds = new int[totalPartitions];
+      long[] sizes = new long[totalPartitions];
+      Iterator<AppShufflePartitionInfo> partitionsIter = partitionsToFinalize.iterator();
+      int idx = 0;
+      while (partitionsIter.hasNext()) {
+        AppShufflePartitionInfo partition = partitionsIter.next();
+        synchronized (partition) {
+          // Get rid of any partial block data at the end of the file. This could either
+          // be due to failure or a request still being processed when the shuffle
+          // merge gets finalized.
+          try {
+            partition.dataChannel.truncate(partition.getPosition());
+            if (partition.getPosition() != partition.getLastChunkOffset()) {
+              partition.updateChunkInfo(partition.getPosition(), partition.lastMergedMapIndex);
+            }
+            bitmaps[idx] = partition.mapTracker;
+            reduceIds[idx] = partition.reduceId;
+            sizes[idx++] = partition.getPosition();
+          } catch (IOException ioe) {
+            logger.warn("Exception while finalizing shuffle partition {} {} {}", msg.appId,
+              msg.shuffleId, partition.reduceId, ioe);
+          } finally {
+            partition.closeAllFiles();
+            // The partition should be removed after the files are written so that any new stream
+            // for the same reduce partition will see that the data file exists.
+            partitionsIter.remove();
           }
-          bitmaps[idx] = partition.mapTracker;
-          reduceIds[idx] = partition.reduceId;
-          sizes[idx++] = partition.getPosition();
-        } catch (IOException ioe) {
-          logger.warn("Exception while finalizing shuffle partition {} {} {}", msg.appId,
-            msg.shuffleId, partition.reduceId, ioe);
-        } finally {
-          partition.closeAllFiles();
-          // The partition should be removed from shuffle maps after the files are written so that
-          // any new stream for the same reduce partition will see that the data file exists.
-          partitionsIter.remove();
         }
       }
+      mergeStatuses = new MergeStatuses(msg.shuffleId, bitmaps, reduceIds, sizes);
     }
+    partitions.remove(appShuffleId);
     logger.info("Finalized shuffle {} from Application {}.", msg.shuffleId, msg.appId);
-    return new MergeStatuses(msg.shuffleId, bitmaps, reduceIds, sizes);
+    return mergeStatuses;
   }
 
   @Override

@@ -17,31 +17,22 @@
 
 package org.apache.spark.network.yarn;
 
-import org.apache.spark.network.shuffle.ExternalBlockHandler;
-import org.apache.spark.network.shuffle.MergedShuffleFileManager;
-import org.apache.spark.network.shuffle.RemoteBlockPushResolver;
-import org.apache.spark.network.util.TransportConf;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
+
+import org.apache.spark.network.shuffle.ExternalBlockHandler;
+import org.apache.spark.network.shuffle.MergedShuffleFileManager;
+import org.apache.spark.network.shuffle.RemoteBlockPushResolver;
+import org.apache.spark.network.util.TransportConf;
 
 public class YarnShuffleServiceSuite {
 
   @Test
   public void testCreateDefaultMergedShuffleFileManagerInstance() {
     TransportConf mockConf = mock(TransportConf.class);
-    when(mockConf.mergeShuffleFileManagerImpl()).thenReturn(
-      "org.apache.spark.network.shuffle.RemoteBlockPushResolver");
-    MergedShuffleFileManager mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(
-      mockConf);
-    assertTrue(mergeMgr instanceof RemoteBlockPushResolver);
-  }
-
-  @Test
-  public void testCreateNoOpMergedShuffleFileManagerInstance() {
-    TransportConf mockConf = mock(TransportConf.class);
-    when(mockConf.mergeShuffleFileManagerImpl()).thenReturn(
+    when(mockConf.mergedShuffleFileManagerImpl()).thenReturn(
       "org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager");
     MergedShuffleFileManager mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(
       mockConf);
@@ -49,12 +40,22 @@ public class YarnShuffleServiceSuite {
   }
 
   @Test
-  public void testInvalidClassNameOfMergeManagerWillUseRemoteBlockPushResolverImpl() {
+  public void testCreateRemoteBlockPushResolverInstance() {
     TransportConf mockConf = mock(TransportConf.class);
-    when(mockConf.mergeShuffleFileManagerImpl()).thenReturn(
-      "org.apache.spark.network.shuffle.NotExistent");
+    when(mockConf.mergedShuffleFileManagerImpl()).thenReturn(
+      "org.apache.spark.network.shuffle.RemoteBlockPushResolver");
     MergedShuffleFileManager mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(
       mockConf);
     assertTrue(mergeMgr instanceof RemoteBlockPushResolver);
+  }
+
+  @Test
+  public void testInvalidClassNameOfMergeManagerWillUseNoOpInstance() {
+    TransportConf mockConf = mock(TransportConf.class);
+    when(mockConf.mergedShuffleFileManagerImpl()).thenReturn(
+      "org.apache.spark.network.shuffle.NotExistent");
+    MergedShuffleFileManager mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(
+      mockConf);
+    assertTrue(mergeMgr instanceof ExternalBlockHandler.NoOpMergedShuffleFileManager);
   }
 }
