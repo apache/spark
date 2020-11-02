@@ -1015,6 +1015,69 @@ abstract class AvroSuite
     }
   }
 
+  test("support user provided nullable avro schema " +
+    "for non-nullable catalyst schema without any null record") {
+    withTempPath { tempDir =>
+      val catalystSchema =
+        StructType(Seq(
+          StructField("Age", IntegerType, nullable = false),
+          StructField("Name", StringType, nullable = false)))
+
+      val avroSchema =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [
+          |    {"name": "Age", "type": ["null", "int"]},
+          |    {"name": "Name", "type": ["null", "string"]}
+          |  ]
+          |}
+        """.stripMargin
+
+      val df = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(2, "Aurora"))), catalystSchema)
+
+      val tempSavePath = s"$tempDir/save/${UUID.randomUUID()}"
+
+      df.write.format("avro").option("avroSchema", avroSchema).save(tempSavePath)
+      checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSavePath))
+    }
+  }
+
+  test("invalid nullable avro type") {
+    withTempPath { tempDir =>
+      val catalystSchema =
+        StructType(Seq(
+          StructField("Age", IntegerType, nullable = false),
+          StructField("Name", StringType, nullable = false)))
+
+      for (invalidAvroType <- Seq("""["null", "int", "long"]""", """["int", "long"]""")) {
+        val avroSchema =
+          s"""
+             |{
+             |  "type" : "record",
+             |  "name" : "test_schema",
+             |  "fields" : [
+             |    {"name": "Age", "type": $invalidAvroType},
+             |    {"name": "Name", "type": ["null", "string"]}
+             |  ]
+             |}
+        """.stripMargin
+
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(Row(2, "Aurora"))), catalystSchema)
+
+        val tempSavePath = s"$tempDir/save/${UUID.randomUUID()}"
+
+        val message = intercept[SparkException] {
+          df.write.format("avro").option("avroSchema", avroSchema).save(tempSavePath)
+        }.getCause.getMessage
+        assert(message.contains("Only UNION of a null type and a non-null type is allowed"))
+      }
+    }
+  }
+
   test("error handling for unsupported Interval data types") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath

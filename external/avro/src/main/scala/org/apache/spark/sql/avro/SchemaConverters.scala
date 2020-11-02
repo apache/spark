@@ -208,3 +208,5 @@ object SchemaConverters {
 
 private[avro] class IncompatibleSchemaException(
   msg: String, ex: Throwable = null) extends Exception(msg, ex)
+
+private[avro] class InvalidAvroTypeException(msg: String) extends Exception(msg)
