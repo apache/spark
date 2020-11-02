@@ -292,7 +292,7 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
             withClue(s"zoneId = ${zoneId.getId}") {
               val formatters = LegacyDateFormats.values.toSeq.map { legacyFormat =>
                 TimestampFormatter(
-                  TimestampFormatter.defaultPattern,
+                  TimestampFormatter.defaultPattern(),
                   zoneId,
                   TimestampFormatter.defaultLocale,
                   legacyFormat,

@@ -51,7 +51,7 @@ class EncoderResolutionSuite extends PlanTest {
   }
 
   test("real type doesn't match encoder schema but they are compatible: product") {
-    val encoder = ExpressionEncoder[StringLongClass]
+    val encoder = ExpressionEncoder[StringLongClass]()
 
     // int type can be up cast to long type
     val attrs1 = Seq('a.string, 'b.int)
@@ -63,28 +63,28 @@ class EncoderResolutionSuite extends PlanTest {
   }
 
   test("real type doesn't match encoder schema but they are compatible: nested product") {
-    val encoder = ExpressionEncoder[ComplexClass]
+    val encoder = ExpressionEncoder[ComplexClass]()
     val attrs = Seq('a.int, 'b.struct('a.int, 'b.long))
     testFromRow(encoder, attrs, InternalRow(1, InternalRow(2, 3L)))
   }
 
   test("real type doesn't match encoder schema but they are compatible: tupled encoder") {
     val encoder = ExpressionEncoder.tuple(
-      ExpressionEncoder[StringLongClass],
-      ExpressionEncoder[Long])
+      ExpressionEncoder[StringLongClass](),
+      ExpressionEncoder[Long]())
     val attrs = Seq('a.struct('a.string, 'b.byte), 'b.int)
     testFromRow(encoder, attrs, InternalRow(InternalRow(str, 1.toByte), 2))
   }
 
   test("real type doesn't match encoder schema but they are compatible: primitive array") {
-    val encoder = ExpressionEncoder[PrimitiveArrayClass]
+    val encoder = ExpressionEncoder[PrimitiveArrayClass]()
     val attrs = Seq('arr.array(IntegerType))
     val array = new GenericArrayData(Array(1, 2, 3))
     testFromRow(encoder, attrs, InternalRow(array))
   }
 
   test("the real type is not compatible with encoder schema: primitive array") {
-    val encoder = ExpressionEncoder[PrimitiveArrayClass]
+    val encoder = ExpressionEncoder[PrimitiveArrayClass]()
     val attrs = Seq('arr.array(StringType))
     assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
       s"""
@@ -98,14 +98,14 @@ class EncoderResolutionSuite extends PlanTest {
   }
 
   test("real type doesn't match encoder schema but they are compatible: array") {
-    val encoder = ExpressionEncoder[ArrayClass]
+    val encoder = ExpressionEncoder[ArrayClass]()
     val attrs = Seq('arr.array(new StructType().add("a", "int").add("b", "int").add("c", "int")))
     val array = new GenericArrayData(Array(InternalRow(1, 2, 3)))
     testFromRow(encoder, attrs, InternalRow(array))
   }
 
   test("real type doesn't match encoder schema but they are compatible: nested array") {
-    val encoder = ExpressionEncoder[NestedArrayClass]
+    val encoder = ExpressionEncoder[NestedArrayClass]()
     val et = new StructType().add("arr", ArrayType(
       new StructType().add("a", "int").add("b", "int").add("c", "int")))
     val attrs = Seq('nestedArr.array(et))
@@ -115,21 +115,21 @@ class EncoderResolutionSuite extends PlanTest {
   }
 
   test("the real type is not compatible with encoder schema: non-array field") {
-    val encoder = ExpressionEncoder[ArrayClass]
+    val encoder = ExpressionEncoder[ArrayClass]()
     val attrs = Seq('arr.int)
     assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
       "need an array field but got int")
   }
 
   test("the real type is not compatible with encoder schema: array element type") {
-    val encoder = ExpressionEncoder[ArrayClass]
+    val encoder = ExpressionEncoder[ArrayClass]()
     val attrs = Seq('arr.array(new StructType().add("c", "int")))
     assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
       "No such struct field a in c")
   }
 
   test("the real type is not compatible with encoder schema: nested array element type") {
-    val encoder = ExpressionEncoder[NestedArrayClass]
+    val encoder = ExpressionEncoder[NestedArrayClass]()
 
     withClue("inner element is not array") {
       val attrs = Seq('nestedArr.array(new StructType().add("arr", "int")))
@@ -146,7 +146,7 @@ class EncoderResolutionSuite extends PlanTest {
   }
 
   test("nullability of array type element should not fail analysis") {
-    val encoder = ExpressionEncoder[Seq[Int]]
+    val encoder = ExpressionEncoder[Seq[Int]]()
     val attrs = 'a.array(IntegerType) :: Nil
 
     // It should pass analysis
@@ -163,7 +163,7 @@ class EncoderResolutionSuite extends PlanTest {
   }
 
   test("the real number of fields doesn't match encoder schema: tuple encoder") {
-    val encoder = ExpressionEncoder[(String, Long)]
+    val encoder = ExpressionEncoder[(String, Long)]()
 
     {
       val attrs = Seq('a.string, 'b.long, 'c.int)
@@ -181,7 +181,7 @@ class EncoderResolutionSuite extends PlanTest {
   }
 
   test("the real number of fields doesn't match encoder schema: nested tuple encoder") {
-    val encoder = ExpressionEncoder[(String, (Long, String))]
+    val encoder = ExpressionEncoder[(String, (Long, String))]()
 
     {
       val attrs = Seq('a.string, 'b.struct('x.long, 'y.string, 'z.int))
@@ -199,13 +199,13 @@ class EncoderResolutionSuite extends PlanTest {
   }
 
   test("nested case class can have different number of fields from the real schema") {
-    val encoder = ExpressionEncoder[(String, StringIntClass)]
+    val encoder = ExpressionEncoder[(String, StringIntClass)]()
     val attrs = Seq('a.string, 'b.struct('a.string, 'b.int, 'c.int))
     encoder.resolveAndBind(attrs)
   }
 
   test("SPARK-28497: complex type is not compatible with string encoder schema") {
-    val encoder = ExpressionEncoder[String]
+    val encoder = ExpressionEncoder[String]()
 
     Seq('a.struct('x.long), 'a.array(StringType), 'a.map(StringType, StringType)).foreach { attr =>
       val attrs = Seq(attr)
@@ -221,7 +221,7 @@ class EncoderResolutionSuite extends PlanTest {
 
   test("throw exception if real type is not compatible with encoder schema") {
     val msg1 = intercept[AnalysisException] {
-      ExpressionEncoder[StringIntClass].resolveAndBind(Seq('a.string, 'b.long))
+      ExpressionEncoder[StringIntClass]().resolveAndBind(Seq('a.string, 'b.long))
     }.message
     assert(msg1 ==
       s"""
@@ -234,7 +234,7 @@ class EncoderResolutionSuite extends PlanTest {
 
     val msg2 = intercept[AnalysisException] {
       val structType = new StructType().add("a", StringType).add("b", DecimalType.SYSTEM_DEFAULT)
-      ExpressionEncoder[ComplexClass].resolveAndBind(Seq('a.long, 'b.struct(structType)))
+      ExpressionEncoder[ComplexClass]().resolveAndBind(Seq('a.long, 'b.struct(structType)))
     }.message
     assert(msg2 ==
       s"""
@@ -248,7 +248,7 @@ class EncoderResolutionSuite extends PlanTest {
   }
 
   test("SPARK-31750: eliminate UpCast if child's dataType is DecimalType") {
-    val encoder = ExpressionEncoder[Seq[BigDecimal]]
+    val encoder = ExpressionEncoder[Seq[BigDecimal]]()
     val attr = Seq(AttributeReference("a", ArrayType(DecimalType(38, 0)))())
     // Before SPARK-31750, it will fail because Decimal(38, 0) can not be casted to Decimal(38, 18)
     testFromRow(encoder, attr, InternalRow(ArrayData.toArrayData(Array(Decimal(1.0)))))
@@ -270,8 +270,8 @@ class EncoderResolutionSuite extends PlanTest {
 
 
   private def castSuccess[T: TypeTag, U: TypeTag]: Unit = {
-    val from = ExpressionEncoder[T]
-    val to = ExpressionEncoder[U]
+    val from = ExpressionEncoder[T]()
+    val to = ExpressionEncoder[U]()
     val catalystType = from.schema.head.dataType.simpleString
     test(s"cast from $catalystType to ${implicitly[TypeTag[U]].tpe} should success") {
       to.resolveAndBind(from.schema.toAttributes)
@@ -279,8 +279,8 @@ class EncoderResolutionSuite extends PlanTest {
   }
 
   private def castFail[T: TypeTag, U: TypeTag]: Unit = {
-    val from = ExpressionEncoder[T]
-    val to = ExpressionEncoder[U]
+    val from = ExpressionEncoder[T]()
+    val to = ExpressionEncoder[U]()
     val catalystType = from.schema.head.dataType.simpleString
     test(s"cast from $catalystType to ${implicitly[TypeTag[U]].tpe} should fail") {
       intercept[AnalysisException](to.resolveAndBind(from.schema.toAttributes))

@@ -73,7 +73,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
   }
 
   private def prepareEvaluation(expression: Expression): Expression = {
-    val serializer = new JavaSerializer(new SparkConf()).newInstance
+    val serializer = new JavaSerializer(new SparkConf()).newInstance()
     val resolver = ResolveTimeZone
     val expr = resolver.resolveTimeZones(expression)
     assert(expr.resolved)
@@ -136,8 +136,8 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
         }
       case (result: MapData, expected: MapData) =>
         val MapType(kt, vt, vcn) = dataType.asInstanceOf[MapType]
-        checkResult(result.keyArray, expected.keyArray, ArrayType(kt, false), false) &&
-          checkResult(result.valueArray, expected.valueArray, ArrayType(vt, vcn), false)
+        checkResult(result.keyArray(), expected.keyArray(), ArrayType(kt, false), false) &&
+          checkResult(result.valueArray(), expected.valueArray(), ArrayType(vt, vcn), false)
       case (result: Double, expected: Double) =>
         if (expected.isNaN) result.isNaN else expected == result
       case (result: Float, expected: Float) =>

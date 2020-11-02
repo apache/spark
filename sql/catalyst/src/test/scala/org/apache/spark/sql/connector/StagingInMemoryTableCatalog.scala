@@ -105,7 +105,7 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
       val maybePreCommittedTable = tables.putIfAbsent(ident, delegateTable)
       if (maybePreCommittedTable != null) {
         throw new TableAlreadyExistsException(
-          s"Table with identifier $ident and name $name was already created.")
+          s"Table with identifier $ident and name ${name()} was already created.")
       }
     }
   }
