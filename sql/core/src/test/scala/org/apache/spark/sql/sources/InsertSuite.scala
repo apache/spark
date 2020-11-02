@@ -896,6 +896,23 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("INSERT INTO TABLE insertTable PARTITION(part1='1', part2) SELECT 1 ,'' AS part2")
     }
   }
+
+  test("SPARK-33294: Add query resolved check before analyze InsertIntoDir") {
+    withTempPath { path =>
+      val msg = intercept[AnalysisException] {
+        sql(
+          s"""
+            |INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET
+            |SELECT * FROM (
+            | SELECT c3 FROM (
+            |  SELECT c1, c2 from values(1,2) t(c1, c2)
+            |  )
+            |)
+          """.stripMargin)
+      }.getMessage
+      assert(msg.contains("cannot resolve '`c3`' given input columns"))
+    }
+  }
 }
 
 class FileExistingTestFileSystem extends RawLocalFileSystem {

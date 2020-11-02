@@ -523,9 +523,10 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.getNumUnexpectedContainerRelease should be (2)
   }
 
-  test("blacklisted nodes reflected in amClient requests") {
-    // Internally we track the set of blacklisted nodes, but yarn wants us to send *changes*
-    // to the blacklist.  This makes sure we are sending the right updates.
+  test("excluded nodes reflected in amClient requests") {
+    // Internally we track the set of excluded nodes, but yarn wants us to send *changes*
+    // to it. Note the YARN api uses the term blacklist for excluded nodes.
+    // This makes sure we are sending the right updates.
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
     val (handler, _) = createAllocator(4, mockAmClient)
     val resourceProfileToTotalExecs = mutable.HashMap(defaultRP -> 1)
@@ -534,14 +535,14 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       numLocalityAwareTasksPerResourceProfileId.toMap, Map(), Set("hostA"))
     verify(mockAmClient).updateBlacklist(Seq("hostA").asJava, Seq[String]().asJava)
 
-    val blacklistedNodes = Set(
+    val excludedNodes = Set(
       "hostA",
       "hostB"
     )
 
     resourceProfileToTotalExecs(defaultRP) = 2
     handler.requestTotalExecutorsWithPreferredLocalities(resourceProfileToTotalExecs.toMap,
-      numLocalityAwareTasksPerResourceProfileId.toMap, Map(), blacklistedNodes)
+      numLocalityAwareTasksPerResourceProfileId.toMap, Map(), excludedNodes)
     verify(mockAmClient).updateBlacklist(Seq("hostB").asJava, Seq[String]().asJava)
     resourceProfileToTotalExecs(defaultRP) = 3
     handler.requestTotalExecutorsWithPreferredLocalities(resourceProfileToTotalExecs.toMap,
@@ -592,7 +593,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.getNumExecutorsFailed should be (0)
   }
 
-  test("SPARK-26269: YarnAllocator should have same blacklist behaviour with YARN") {
+  test("SPARK-26269: YarnAllocator should have same excludeOnFailure behaviour with YARN") {
     val rmClientSpy = spy(rmClient)
     val maxExecutors = 11
 
@@ -600,7 +601,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       maxExecutors,
       rmClientSpy,
       Map(
-        YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED.key -> "true",
+        YARN_EXECUTOR_LAUNCH_EXCLUDE_ON_FAILURE_ENABLED.key -> "true",
         MAX_FAILED_EXEC_PER_NODE.key -> "0"))
     handler.updateResourceRequests()
 
@@ -608,7 +609,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val ids = 0 to maxExecutors
     val containers = createContainers(hosts, ids)
 
-    val nonBlacklistedStatuses = Seq(
+    val nonExcludedStatuses = Seq(
       ContainerExitStatus.SUCCESS,
       ContainerExitStatus.PREEMPTED,
       ContainerExitStatus.KILLED_EXCEEDED_VMEM,
@@ -619,24 +620,24 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       ContainerExitStatus.ABORTED,
       ContainerExitStatus.DISKS_FAILED)
 
-    val nonBlacklistedContainerStatuses = nonBlacklistedStatuses.zipWithIndex.map {
+    val nonExcludedContainerStatuses = nonExcludedStatuses.zipWithIndex.map {
       case (exitStatus, idx) => createContainerStatus(containers(idx).getId, exitStatus)
     }
 
-    val BLACKLISTED_EXIT_CODE = 1
-    val blacklistedStatuses = Seq(ContainerExitStatus.INVALID, BLACKLISTED_EXIT_CODE)
+    val EXCLUDED_EXIT_CODE = 1
+    val excludedStatuses = Seq(ContainerExitStatus.INVALID, EXCLUDED_EXIT_CODE)
 
-    val blacklistedContainerStatuses = blacklistedStatuses.zip(9 until maxExecutors).map {
+    val excludedContainerStatuses = excludedStatuses.zip(9 until maxExecutors).map {
       case (exitStatus, idx) => createContainerStatus(containers(idx).getId, exitStatus)
     }
 
     handler.handleAllocatedContainers(containers.slice(0, 9))
-    handler.processCompletedContainers(nonBlacklistedContainerStatuses)
+    handler.processCompletedContainers(nonExcludedContainerStatuses)
     verify(rmClientSpy, never())
       .updateBlacklist(hosts.slice(0, 9).asJava, Collections.emptyList())
 
     handler.handleAllocatedContainers(containers.slice(9, 11))
-    handler.processCompletedContainers(blacklistedContainerStatuses)
+    handler.processCompletedContainers(excludedContainerStatuses)
     verify(rmClientSpy)
       .updateBlacklist(hosts.slice(9, 10).asJava, Collections.emptyList())
     verify(rmClientSpy)

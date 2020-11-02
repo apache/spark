@@ -104,22 +104,27 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       val reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
 
       val outputRowFormat = ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")
+
+      val padNull = if (conf.legacyPadNullWhenValueLessThenSchema) {
+        (arr: Array[String], size: Int) => arr.padTo(size, null)
+      } else {
+        (arr: Array[String], size: Int) => arr
+      }
       val processRowWithoutSerde = if (!ioschema.schemaLess) {
         prevLine: String =>
           new GenericInternalRow(
-            prevLine.split(outputRowFormat).padTo(outputFieldWriters.size, null)
+            padNull(prevLine.split(outputRowFormat), outputFieldWriters.size)
               .zip(outputFieldWriters)
               .map { case (data, writer) => writer(data) })
       } else {
-        // In schema less mode, hive default serde will choose first two output column as output
-        // if output column size less then 2, it will throw ArrayIndexOutOfBoundsException.
-        // Here we change spark's behavior same as hive's default serde.
-        // But in hive, TRANSFORM with schema less behavior like origin spark, we will fix this
-        // to keep spark and hive behavior same in SPARK-32388
+        // In schema less mode, hive will choose first two output column as output.
+        // If output column size less then 2, it will return NULL for columns with missing values.
+        // Here we split row string and choose first 2 values, if values's size less then 2,
+        // we pad NULL value until 2 to make behavior same with hive.
         val kvWriter = CatalystTypeConverters.createToCatalystConverter(StringType)
         prevLine: String =>
           new GenericInternalRow(
-            prevLine.split(outputRowFormat).slice(0, 2)
+            padNull(prevLine.split(outputRowFormat).slice(0, 2), 2)
               .map(kvWriter))
       }
 

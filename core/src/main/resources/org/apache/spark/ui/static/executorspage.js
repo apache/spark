@@ -26,15 +26,15 @@ function getThreadDumpEnabled() {
 }
 
 function formatStatus(status, type, row) {
-    if (row.isBlacklisted) {
-        return "Blacklisted";
+    if (row.isExcluded) {
+        return "Excluded";
     }
 
     if (status) {
-        if (row.blacklistedInStages.length == 0) {
+        if (row.excludedInStages.length == 0) {
             return "Active"
         }
-        return "Active (Blacklisted in Stages: [" + row.blacklistedInStages.join(", ") + "])";
+        return "Active (Excluded in Stages: [" + row.excludedInStages.join(", ") + "])";
     }
     return "Dead"
 }
@@ -168,7 +168,7 @@ $(document).ready(function () {
             var allTotalInputBytes = 0;
             var allTotalShuffleRead = 0;
             var allTotalShuffleWrite = 0;
-            var allTotalBlacklisted = 0;
+            var allTotalExcluded = 0;
 
             var activeExecCnt = 0;
             var activeRDDBlocks = 0;
@@ -190,7 +190,7 @@ $(document).ready(function () {
             var activeTotalInputBytes = 0;
             var activeTotalShuffleRead = 0;
             var activeTotalShuffleWrite = 0;
-            var activeTotalBlacklisted = 0;
+            var activeTotalExcluded = 0;
 
             var deadExecCnt = 0;
             var deadRDDBlocks = 0;
@@ -212,7 +212,7 @@ $(document).ready(function () {
             var deadTotalInputBytes = 0;
             var deadTotalShuffleRead = 0;
             var deadTotalShuffleWrite = 0;
-            var deadTotalBlacklisted = 0;
+            var deadTotalExcluded = 0;
 
             response.forEach(function (exec) {
                 var memoryMetrics = {
@@ -246,7 +246,7 @@ $(document).ready(function () {
                 allTotalInputBytes += exec.totalInputBytes;
                 allTotalShuffleRead += exec.totalShuffleRead;
                 allTotalShuffleWrite += exec.totalShuffleWrite;
-                allTotalBlacklisted += exec.isBlacklisted ? 1 : 0;
+                allTotalExcluded += exec.isExcluded ? 1 : 0;
                 if (exec.isActive) {
                     activeExecCnt += 1;
                     activeRDDBlocks += exec.rddBlocks;
@@ -268,7 +268,7 @@ $(document).ready(function () {
                     activeTotalInputBytes += exec.totalInputBytes;
                     activeTotalShuffleRead += exec.totalShuffleRead;
                     activeTotalShuffleWrite += exec.totalShuffleWrite;
-                    activeTotalBlacklisted += exec.isBlacklisted ? 1 : 0;
+                    activeTotalExcluded += exec.isExcluded ? 1 : 0;
                 } else {
                     deadExecCnt += 1;
                     deadRDDBlocks += exec.rddBlocks;
@@ -290,7 +290,7 @@ $(document).ready(function () {
                     deadTotalInputBytes += exec.totalInputBytes;
                     deadTotalShuffleRead += exec.totalShuffleRead;
                     deadTotalShuffleWrite += exec.totalShuffleWrite;
-                    deadTotalBlacklisted += exec.isBlacklisted ? 1 : 0;
+                    deadTotalExcluded += exec.isExcluded ? 1 : 0; // todo - TEST BACKWARDS compatibility history?
                 }
             });
 
@@ -315,7 +315,7 @@ $(document).ready(function () {
                 "allTotalInputBytes": allTotalInputBytes,
                 "allTotalShuffleRead": allTotalShuffleRead,
                 "allTotalShuffleWrite": allTotalShuffleWrite,
-                "allTotalBlacklisted": allTotalBlacklisted
+                "allTotalExcluded": allTotalExcluded
             };
             var activeSummary = {
                 "execCnt": ( "Active(" + activeExecCnt + ")"),
@@ -338,7 +338,7 @@ $(document).ready(function () {
                 "allTotalInputBytes": activeTotalInputBytes,
                 "allTotalShuffleRead": activeTotalShuffleRead,
                 "allTotalShuffleWrite": activeTotalShuffleWrite,
-                "allTotalBlacklisted": activeTotalBlacklisted
+                "allTotalExcluded": activeTotalExcluded
             };
             var deadSummary = {
                 "execCnt": ( "Dead(" + deadExecCnt + ")" ),
@@ -361,7 +361,7 @@ $(document).ready(function () {
                 "allTotalInputBytes": deadTotalInputBytes,
                 "allTotalShuffleRead": deadTotalShuffleRead,
                 "allTotalShuffleWrite": deadTotalShuffleWrite,
-                "allTotalBlacklisted": deadTotalBlacklisted
+                "allTotalExcluded": deadTotalExcluded
             };
 
             var data = {executors: response, "execSummary": [activeSummary, deadSummary, totalSummary]};
@@ -547,7 +547,7 @@ $(document).ready(function () {
                         {data: 'allTotalInputBytes', render: formatBytes},
                         {data: 'allTotalShuffleRead', render: formatBytes},
                         {data: 'allTotalShuffleWrite', render: formatBytes},
-                        {data: 'allTotalBlacklisted'}
+                        {data: 'allTotalExcluded'}
                     ],
                     "paging": false,
                     "searching": false,

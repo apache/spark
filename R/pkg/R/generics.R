@@ -675,6 +675,12 @@ setGeneric("broadcast", function(x) { standardGeneric("broadcast") })
 #' @rdname columnfunctions
 setGeneric("asc", function(x) { standardGeneric("asc") })
 
+#' @rdname columnfunctions
+setGeneric("asc_nulls_first", function(x) { standardGeneric("asc_nulls_first") })
+
+#' @rdname columnfunctions
+setGeneric("asc_nulls_last", function(x) { standardGeneric("asc_nulls_last") })
+
 #' @rdname between
 setGeneric("between", function(x, bounds) { standardGeneric("between") })
 
@@ -688,6 +694,12 @@ setGeneric("contains", function(x, ...) { standardGeneric("contains") })
 
 #' @rdname columnfunctions
 setGeneric("desc", function(x) { standardGeneric("desc") })
+
+#' @rdname columnfunctions
+setGeneric("desc_nulls_first", function(x) { standardGeneric("desc_nulls_first") })
+
+#' @rdname columnfunctions
+setGeneric("desc_nulls_last", function(x) { standardGeneric("desc_nulls_last") })
 
 #' @rdname endsWith
 setGeneric("endsWith", function(x, suffix) { standardGeneric("endsWith") })

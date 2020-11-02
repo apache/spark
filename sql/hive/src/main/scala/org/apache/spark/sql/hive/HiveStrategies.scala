@@ -41,7 +41,7 @@ import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
  * Determine the database, serde/format and schema of the Hive serde table, according to the storage
  * properties.
  */
-class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
+object ResolveHiveSerdeTable extends Rule[LogicalPlan] {
   private def determineHiveSerde(table: CatalogTable): CatalogTable = {
     if (table.storage.serde.nonEmpty) {
       table
@@ -50,7 +50,7 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
         throw new AnalysisException("Creating bucketed Hive serde table is not supported yet.")
       }
 
-      val defaultStorage = HiveSerDe.getDefaultStorage(session.sessionState.conf)
+      val defaultStorage = HiveSerDe.getDefaultStorage(conf)
       val options = new HiveOptions(table.storage.properties)
 
       val fileStorage = if (options.fileFormat.isDefined) {
@@ -90,7 +90,7 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case c @ CreateTable(t, _, query) if DDLUtils.isHiveTable(t) =>
       // Finds the database name if the name does not exist.
-      val dbName = t.identifier.database.getOrElse(session.catalog.currentDatabase)
+      val dbName = t.identifier.database.getOrElse(SparkSession.active.catalog.currentDatabase)
       val table = t.copy(identifier = t.identifier.copy(database = Some(dbName)))
 
       // Determines the serde/format of Hive tables
@@ -113,16 +113,15 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
   }
 }
 
-class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
+object DetermineTableStats extends Rule[LogicalPlan] {
   private def hiveTableWithStats(relation: HiveTableRelation): HiveTableRelation = {
     val table = relation.tableMeta
     val partitionCols = relation.partitionCols
-    val conf = session.sessionState.conf
     // For partitioned tables, the partition directory may be outside of the table directory.
     // Which is expensive to get table size. Please see how we implemented it in the AnalyzeTable.
     val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
       try {
-        val hadoopConf = session.sessionState.newHadoopConf()
+        val hadoopConf = SparkSession.active.sessionState.newHadoopConf()
         val tablePath = new Path(table.location)
         val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
         fs.getContentSummary(tablePath).getLength
@@ -191,7 +190,6 @@ object HiveAnalysis extends Rule[LogicalPlan] {
  * `PreprocessTableCreation`, `PreprocessTableInsertion`, `DataSourceAnalysis` and `HiveAnalysis`.
  */
 case class RelationConversions(
-    conf: SQLConf,
     sessionCatalog: HiveSessionCatalog) extends Rule[LogicalPlan] {
   private def isConvertible(relation: HiveTableRelation): Boolean = {
     isConvertible(relation.tableMeta)

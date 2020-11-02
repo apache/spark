@@ -3692,29 +3692,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-33229: Support GROUP BY use Separate columns and CUBE/ROLLUP") {
-    withTable("t") {
-      sql("CREATE TABLE t USING PARQUET AS SELECT id AS a, id AS b, id AS c FROM range(1)")
-      checkAnswer(sql("SELECT a, b, c, count(*) FROM t GROUP BY CUBE(a, b, c)"),
-        Row(0, 0, 0, 1) :: Row(0, 0, null, 1) ::
-          Row(0, null, 0, 1) :: Row(0, null, null, 1) ::
-          Row(null, 0, 0, 1) :: Row(null, 0, null, 1) ::
-          Row(null, null, 0, 1) :: Row(null, null, null, 1) :: Nil)
-      checkAnswer(sql("SELECT a, b, c, count(*) FROM t GROUP BY a, CUBE(b, c)"),
-        Row(0, 0, 0, 1) :: Row(0, 0, null, 1) ::
-          Row(0, null, 0, 1) :: Row(0, null, null, 1) :: Nil)
+  test("SPARK-33306: Timezone is needed when cast Date to String") {
+    withTempView("t1", "t2") {
+      spark.sql("select to_date(concat('2000-01-0', id)) as d from range(1, 2)")
+        .createOrReplaceTempView("t1")
+      spark.sql("select concat('2000-01-0', id) as d from range(1, 2)")
+        .createOrReplaceTempView("t2")
+      val result = Date.valueOf("2000-01-01")
 
-      checkAnswer(sql("SELECT a, b, c, count(*) FROM t GROUP BY ROLLUP(a, b, c)"),
-        Row(0, 0, 0, 1) :: Row(0, 0, null, 1) ::
-          Row(0, null, null, 1) :: Row(null, null, null, 1) :: Nil)
-      checkAnswer(sql("SELECT a, b, c, count(*) FROM t GROUP BY a, ROLLUP(b, c)"),
-        Row(0, 0, 0, 1) :: Row(0, 0, null, 1) :: Row(0, null, null, 1) :: Nil)
-
-      checkAnswer(sql("SELECT a, b, c, count(*) FROM t GROUP BY ROLLUP(a, b), CUBE(b, c)"),
-        Row(0, 0, 0, 1) :: Row(0, 0, 0, 1) :: Row(0, 0, 0, 1) ::
-          Row(0, 0, null, 1) :: Row(0, 0, null, 1) :: Row(0, 0, null, 1) ::
-          Row(0, null, 0, 1) :: Row(0, null, null, 1) :: Row(null, 0, 0, 1) ::
-          Row(null, 0, null, 1) :: Row(null, null, 0, 1) :: Row(null, null, null, 1) :: Nil)
+      checkAnswer(sql("select t1.d from t1 join t2 on t1.d = t2.d"), Row(result))
+      withSQLConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> "true") {
+        checkAnswer(sql("select t1.d from t1 join t2 on t1.d = t2.d"), Row(result))
+      }
     }
   }
 }

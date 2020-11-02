@@ -388,9 +388,16 @@ case class Assignment(key: Expression, value: Expression) extends Expression wit
  * The logical plan of the DROP TABLE command that works for v2 tables.
  */
 case class DropTable(
-    catalog: TableCatalog,
-    ident: Identifier,
-    ifExists: Boolean) extends Command
+    child: LogicalPlan,
+    ifExists: Boolean,
+    purge: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan for handling non-existing table for DROP TABLE command.
+ */
+case class NoopDropTable(multipartIdentifier: Seq[String]) extends Command
 
 /**
  * The logical plan of the ALTER TABLE command that works for v2 tables.

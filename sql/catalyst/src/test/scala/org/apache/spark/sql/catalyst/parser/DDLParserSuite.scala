@@ -381,19 +381,28 @@ class DDLParserSuite extends AnalysisTest {
 
   test("drop table") {
     parseCompare("DROP TABLE testcat.ns1.ns2.tbl",
-      DropTableStatement(Seq("testcat", "ns1", "ns2", "tbl"), ifExists = false, purge = false))
+      DropTable(
+        UnresolvedTableOrView(Seq("testcat", "ns1", "ns2", "tbl")),
+        ifExists = false,
+        purge = false))
     parseCompare(s"DROP TABLE db.tab",
-      DropTableStatement(Seq("db", "tab"), ifExists = false, purge = false))
+      DropTable(
+        UnresolvedTableOrView(Seq("db", "tab")), ifExists = false, purge = false))
     parseCompare(s"DROP TABLE IF EXISTS db.tab",
-      DropTableStatement(Seq("db", "tab"), ifExists = true, purge = false))
+      DropTable(
+        UnresolvedTableOrView(Seq("db", "tab")), ifExists = true, purge = false))
     parseCompare(s"DROP TABLE tab",
-      DropTableStatement(Seq("tab"), ifExists = false, purge = false))
+      DropTable(
+        UnresolvedTableOrView(Seq("tab")), ifExists = false, purge = false))
     parseCompare(s"DROP TABLE IF EXISTS tab",
-      DropTableStatement(Seq("tab"), ifExists = true, purge = false))
+      DropTable(
+        UnresolvedTableOrView(Seq("tab")), ifExists = true, purge = false))
     parseCompare(s"DROP TABLE tab PURGE",
-      DropTableStatement(Seq("tab"), ifExists = false, purge = true))
+      DropTable(
+        UnresolvedTableOrView(Seq("tab")), ifExists = false, purge = true))
     parseCompare(s"DROP TABLE IF EXISTS tab PURGE",
-      DropTableStatement(Seq("tab"), ifExists = true, purge = true))
+      DropTable(
+        UnresolvedTableOrView(Seq("tab")), ifExists = true, purge = true))
   }
 
   test("drop view") {

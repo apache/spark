@@ -524,7 +524,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
 
-    // Stage 0 becomes unschedulable due to blacklisting
+    // Stage 0 becomes unschedulable due to excludeOnFailure
     post(SparkListenerUnschedulableTaskSetAdded(0, 0))
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
@@ -580,7 +580,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerTaskEnd(0, 0, null, Success, t2Info, new ExecutorMetrics, null))
     post(SparkListenerStageCompleted(createStageInfo(0, 2)))
 
-    // Stage 1 and 2 becomes unschedulable now due to blacklisting
+    // Stage 1 and 2 becomes unschedulable now due to excludeOnFailure
     post(SparkListenerUnschedulableTaskSetAdded(1, 0))
     post(SparkListenerUnschedulableTaskSetAdded(2, 0))
 
@@ -637,7 +637,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     (0 to 3).foreach { i => assert(removeExecutorDefaultProfile(manager, i.toString)) }
     (0 to 3).foreach { i => onExecutorRemoved(manager, i.toString) }
 
-    // Now due to blacklisting, the task becomes unschedulable
+    // Now due to executor being excluded, the task becomes unschedulable
     post(SparkListenerUnschedulableTaskSetAdded(0, 0))
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())

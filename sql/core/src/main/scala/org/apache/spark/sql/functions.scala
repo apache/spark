@@ -21,7 +21,6 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
-import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.api.java._
@@ -36,6 +35,7 @@ import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DataType.parseTypeWithFallback
 import org.apache.spark.util.Utils
 
 /**
@@ -4101,11 +4101,11 @@ object functions {
    * @since 2.3.0
    */
   def from_json(e: Column, schema: String, options: Map[String, String]): Column = {
-    val dataType = try {
-      DataType.fromJson(schema)
-    } catch {
-      case NonFatal(_) => DataType.fromDDL(schema)
-    }
+    val dataType = parseTypeWithFallback(
+      schema,
+      DataType.fromJson,
+      "Cannot parse the schema in JSON format: ",
+      fallbackParser = DataType.fromDDL)
     from_json(e, dataType, options)
   }
 

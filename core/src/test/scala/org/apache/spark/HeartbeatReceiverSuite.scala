@@ -76,7 +76,7 @@ class HeartbeatReceiverSuite
     sc = spy(new SparkContext(conf))
     scheduler = mock(classOf[TaskSchedulerImpl])
     when(sc.taskScheduler).thenReturn(scheduler)
-    when(scheduler.nodeBlacklist).thenReturn(Predef.Set[String]())
+    when(scheduler.excludedNodes).thenReturn(Predef.Set[String]())
     when(scheduler.sc).thenReturn(sc)
     heartbeatReceiverClock = new ManualClock
     heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)
