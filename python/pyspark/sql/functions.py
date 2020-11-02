@@ -119,7 +119,10 @@ def asc(col):
     """
     Returns a sort expression based on the ascending order of the given column name.
     """
-    return _invoke_function("asc", col)
+    return (
+        col.asc() if isinstance(col, Column)
+        else _invoke_function("asc", col)
+    )
 
 
 @since(1.3)
@@ -127,7 +130,10 @@ def desc(col):
     """
     Returns a sort expression based on the descending order of the given column name.
     """
-    return _invoke_function("desc", col)
+    return (
+        col.desc() if isinstance(col, Column)
+        else _invoke_function("desc", col)
+    )
 
 
 @since(1.3)
@@ -457,7 +463,10 @@ def asc_nulls_first(col):
     Returns a sort expression based on the ascending order of the given
     column name, and null values return before non-null values.
     """
-    return _invoke_function("asc_nulls_first", col)
+    return (
+        col.asc_nulls_first() if isinstance(col, Column)
+        else _invoke_function("asc_nulls_first", col)
+    )
 
 
 @since(2.4)
@@ -466,7 +475,10 @@ def asc_nulls_last(col):
     Returns a sort expression based on the ascending order of the given
     column name, and null values appear after non-null values.
     """
-    return _invoke_function("asc_nulls_last", col)
+    return (
+        col.asc_nulls_last() if isinstance(col, Column)
+        else _invoke_function("asc_nulls_last", col)
+    )
 
 
 @since(2.4)
@@ -475,7 +487,10 @@ def desc_nulls_first(col):
     Returns a sort expression based on the descending order of the given
     column name, and null values appear before non-null values.
     """
-    return _invoke_function("desc_nulls_first", col)
+    return (
+        col.desc_nulls_first() if isinstance(col, Column)
+        else _invoke_function("desc_nulls_first", col)
+    )
 
 
 @since(2.4)
@@ -484,7 +499,10 @@ def desc_nulls_last(col):
     Returns a sort expression based on the descending order of the given
     column name, and null values appear after non-null values.
     """
-    return _invoke_function("desc_nulls_last", col)
+    return (
+        col.desc_nulls_last() if isinstance(col, Column)
+        else _invoke_function("desc_nulls_last", col)
+    )
 
 
 @since(1.6)
