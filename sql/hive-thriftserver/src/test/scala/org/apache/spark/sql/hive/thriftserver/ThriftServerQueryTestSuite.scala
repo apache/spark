@@ -39,12 +39,12 @@ import org.apache.spark.sql.types._
  *
  * To run the entire test suite:
  * {{{
- *   build/sbt "hive-thriftserver/test-only *ThriftServerQueryTestSuite" -Phive-thriftserver
+ *   build/sbt "hive-thriftserver/testOnly *ThriftServerQueryTestSuite" -Phive-thriftserver
  * }}}
  *
  * This test suite won't generate golden files. To re-generate golden files for entire suite, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *SQLQueryTestSuite"
  * }}}
  *
  * TODO:
@@ -58,16 +58,11 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
   override def mode: ServerMode.Value = ServerMode.binary
 
   override protected def testFile(fileName: String): String = {
-    val url = Thread.currentThread().getContextClassLoader.getResource(fileName)
-    // Copy to avoid URISyntaxException during accessing the resources in `sql/core`
-    val file = File.createTempFile("thriftserver-test", ".data")
-    file.deleteOnExit()
-    FileUtils.copyURLToFile(url, file)
-    file.getAbsolutePath
+    copyAndGetResourceFile(fileName, ".data").getAbsolutePath
   }
 
   /** List of test cases to ignore, in lower cases. */
-  override def blackList: Set[String] = super.blackList ++ Set(
+  override def ignoreList: Set[String] = super.ignoreList ++ Set(
     // Missing UDF
     "postgreSQL/boolean.sql",
     "postgreSQL/case.sql",
@@ -208,7 +203,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
   }
 
   override def createScalaTestCase(testCase: TestCase): Unit = {
-    if (blackList.exists(t =>
+    if (ignoreList.exists(t =>
       testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }

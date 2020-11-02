@@ -164,7 +164,7 @@ object CatalystTypeConverters {
       scalaValue match {
         case a: Array[_] =>
           new GenericArrayData(a.map(elementConverter.toCatalyst))
-        case s: Seq[_] =>
+        case s: scala.collection.Seq[_] =>
           new GenericArrayData(s.map(elementConverter.toCatalyst).toArray)
         case i: JavaIterable[_] =>
           val iter = i.iterator

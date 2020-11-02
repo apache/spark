@@ -14,18 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import datetime
 import os
 import random
 import shutil
-import sys
 import tempfile
 import time
 import unittest
-
-if sys.version >= '3':
-    unicode = str
-
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -34,8 +28,9 @@ from pyspark.rdd import PythonEvalType
 from pyspark.sql import Column
 from pyspark.sql.functions import array, col, expr, lit, sum, struct, udf, pandas_udf, \
     PandasUDFType
-from pyspark.sql.types import Row
-from pyspark.sql.types import *
+from pyspark.sql.types import IntegerType, ByteType, StructType, ShortType, BooleanType, \
+    LongType, FloatType, DoubleType, DecimalType, StringType, ArrayType, StructField, \
+    Row, TimestampType, MapType, DateType, BinaryType
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled,\
     test_not_compiled_message, have_pandas, have_pyarrow, pandas_requirement_message, \
@@ -46,12 +41,12 @@ if have_pandas:
     import pandas as pd
 
 if have_pyarrow:
-    import pyarrow as pa
+    import pyarrow as pa  # noqa: F401
 
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore
 class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     @classmethod
@@ -319,7 +314,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             StructField('str', StringType())])
 
         def scalar_func(id):
-            return pd.DataFrame({'id': id, 'str': id.apply(unicode)})
+            return pd.DataFrame({'id': id, 'str': id.apply(str)})
 
         def iter_func(it):
             for id in it:
@@ -486,14 +481,14 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         @pandas_udf(return_type)
         def scalar_f(id):
-            return pd.DataFrame({'id': id, 'str': id.apply(unicode)})
+            return pd.DataFrame({'id': id, 'str': id.apply(str)})
 
         scalar_g = pandas_udf(lambda x: x, return_type)
 
         @pandas_udf(return_type, PandasUDFType.SCALAR_ITER)
         def iter_f(it):
             for id in it:
-                yield pd.DataFrame({'id': id, 'str': id.apply(unicode)})
+                yield pd.DataFrame({'id': id, 'str': id.apply(str)})
 
         iter_g = pandas_udf(lambda x: x, return_type, PandasUDFType.SCALAR_ITER)
 
@@ -915,21 +910,12 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         # Check result of column 'B' must be equal to column 'A' in type and values
         pd.testing.assert_series_equal(result_spark["A"], result_spark["B"], check_names=False)
 
-    @unittest.skipIf(sys.version_info[:2] < (3, 5), "Type hints are supported from Python 3.5.")
     def test_type_annotation(self):
         # Regression test to check if type hints can be used. See SPARK-23569.
-        # Note that it throws an error during compilation in lower Python versions if 'exec'
-        # is not used. Also, note that we explicitly use another dictionary to avoid modifications
-        # in the current 'locals()'.
-        #
-        # Hyukjin: I think it's an ugly way to test issues about syntax specific in
-        # higher versions of Python, which we shouldn't encourage. This was the last resort
-        # I could come up with at that time.
-        _locals = {}
-        exec(
-            "import pandas as pd\ndef noop(col: pd.Series) -> pd.Series: return col",
-            _locals)
-        df = self.spark.range(1).select(pandas_udf(f=_locals['noop'], returnType='bigint')('id'))
+        def noop(col: pd.Series) -> pd.Series:
+            return col
+
+        df = self.spark.range(1).select(pandas_udf(f=noop, returnType='bigint')('id'))
         self.assertEqual(df.first()[0], 0)
 
     def test_mixed_udf(self):
@@ -1109,7 +1095,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             self.assertEquals(expected, df1.collect())
 
     # SPARK-24721
-    @unittest.skipIf(not test_compiled, test_not_compiled_message)
+    @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
     def test_datasource_with_udf(self):
         # Same as SQLTests.test_datasource_with_udf, but with Pandas UDF
         # This needs to a separate test because Arrow dependency is optional
@@ -1151,12 +1137,31 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(path)
 
+    # SPARK-33277
+    def test_pandas_udf_with_column_vector(self):
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+
+        try:
+            self.spark.range(0, 200000, 1, 1).write.parquet(path)
+
+            @pandas_udf(LongType())
+            def udf(x):
+                return pd.Series([0] * len(x))
+
+            for offheap in ["true", "false"]:
+                with self.sql_conf({"spark.sql.columnVector.offheap.enabled": offheap}):
+                    self.assertEquals(
+                        self.spark.read.parquet(path).select(udf('id')).head(), Row(0))
+        finally:
+            shutil.rmtree(path)
+
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_udf_scalar import *
+    from pyspark.sql.tests.test_pandas_udf_scalar import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

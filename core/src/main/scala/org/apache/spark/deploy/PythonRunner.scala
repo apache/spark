@@ -69,7 +69,7 @@ object PythonRunner {
     pathElements ++= formattedPyFiles
     pathElements += PythonUtils.sparkPythonPath
     pathElements += sys.env.getOrElse("PYTHONPATH", "")
-    val pythonPath = PythonUtils.mergePythonPaths(pathElements: _*)
+    val pythonPath = PythonUtils.mergePythonPaths(pathElements.toSeq: _*)
 
     // Launch Python process
     val builder = new ProcessBuilder((Seq(pythonExec, formattedPythonFile) ++ otherArgs).asJava)

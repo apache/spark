@@ -23,16 +23,15 @@ import scala.collection.JavaConverters._
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamedRelation, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, V2WriteCommand}
 import org.apache.spark.sql.connector.{InMemoryTable, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
-import org.apache.spark.sql.types.TimestampType
+import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -99,6 +98,86 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     val v2 = plan.asInstanceOf[DataSourceV2Relation]
     assert(v2.identifier.exists(_.name() == identifier))
     assert(v2.catalog.exists(_ == catalogPlugin))
+  }
+
+  case class FakeV2WriteCommand(table: NamedRelation, query: LogicalPlan) extends V2WriteCommand
+
+  test("SPARK-33136 output resolved on complex types for V2 write commands") {
+    val tableCatalog = catalog("testcat")
+
+    def assertTypeCompatibility(name: String, fromType: DataType, toType: DataType): Unit = {
+      val fromTableName = s"from_table_$name"
+      tableCatalog.createTable(
+        Identifier.of(Array(), fromTableName),
+        StructType(Array(StructField("col", fromType))),
+        Array.empty,
+        new java.util.HashMap[String, String]())
+
+      val toTable = tableCatalog.createTable(
+        Identifier.of(Array(), s"to_table_$name"),
+        StructType(Array(StructField("col", toType))),
+        Array.empty,
+        new java.util.HashMap[String, String]())
+
+      val df = spark.table(s"testcat.$fromTableName")
+
+      val relation = DataSourceV2Relation.create(toTable, Some(tableCatalog), None)
+      val writeCommand = FakeV2WriteCommand(relation, df.queryExecution.analyzed)
+
+      assert(writeCommand.outputResolved, s"Unable to write from type $fromType to type $toType.")
+    }
+
+    // The major difference between `from` and `to` is that `from` is a complex type
+    // with non-nullable, whereas `to` is same data type with flipping nullable.
+
+    // nested struct type
+    val fromStructType = StructType(Array(
+      StructField("s", StringType),
+      StructField("i_nonnull", IntegerType, nullable = false),
+      StructField("st", StructType(Array(
+        StructField("l", LongType),
+        StructField("s_nonnull", StringType, nullable = false))))))
+
+    val toStructType = StructType(Array(
+      StructField("s", StringType),
+      StructField("i_nonnull", IntegerType),
+      StructField("st", StructType(Array(
+        StructField("l", LongType),
+        StructField("s_nonnull", StringType))))))
+
+    assertTypeCompatibility("struct", fromStructType, toStructType)
+
+    // array type
+    assertTypeCompatibility("array", ArrayType(LongType, containsNull = false),
+      ArrayType(LongType, containsNull = true))
+
+    // array type with struct type
+    val fromArrayWithStructType = ArrayType(
+      StructType(Array(StructField("s", StringType, nullable = false))),
+      containsNull = false)
+
+    val toArrayWithStructType = ArrayType(
+      StructType(Array(StructField("s", StringType))),
+      containsNull = true)
+
+    assertTypeCompatibility("array_struct", fromArrayWithStructType, toArrayWithStructType)
+
+    // map type
+    assertTypeCompatibility("map", MapType(IntegerType, StringType, valueContainsNull = false),
+      MapType(IntegerType, StringType, valueContainsNull = true))
+
+    // map type with struct type
+    val fromMapWithStructType = MapType(
+      IntegerType,
+      StructType(Array(StructField("s", StringType, nullable = false))),
+      valueContainsNull = false)
+
+    val toMapWithStructType = MapType(
+      IntegerType,
+      StructType(Array(StructField("s", StringType))),
+      valueContainsNull = true)
+
+    assertTypeCompatibility("map_struct", fromMapWithStructType, toMapWithStructType)
   }
 
   test("Append: basic append") {
@@ -336,7 +415,6 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.table("source")
         .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
         .writeTo("testcat.table_name")
-        .tableProperty("allow-unsupported-transforms", "true")
         .partitionedBy(years($"ts"))
         .create()
 
@@ -350,7 +428,6 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.table("source")
         .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
         .writeTo("testcat.table_name")
-        .tableProperty("allow-unsupported-transforms", "true")
         .partitionedBy(months($"ts"))
         .create()
 
@@ -364,7 +441,6 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.table("source")
         .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
         .writeTo("testcat.table_name")
-        .tableProperty("allow-unsupported-transforms", "true")
         .partitionedBy(days($"ts"))
         .create()
 
@@ -378,7 +454,6 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.table("source")
         .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
         .writeTo("testcat.table_name")
-        .tableProperty("allow-unsupported-transforms", "true")
         .partitionedBy(hours($"ts"))
         .create()
 
@@ -391,7 +466,6 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   test("Create: partitioned by bucket(4, id)") {
     spark.table("source")
         .writeTo("testcat.table_name")
-        .tableProperty("allow-unsupported-transforms", "true")
         .partitionedBy(bucket(4, $"id"))
         .create()
 
@@ -596,7 +670,6 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         lit("2019-09-02 07:00:00.000000").cast("timestamp") as "modified",
         lit("America/Los_Angeles") as "timezone"))
       .writeTo("testcat.table_name")
-      .tableProperty("allow-unsupported-transforms", "true")
       .partitionedBy(
         years($"ts.created"), months($"ts.created"), days($"ts.created"), hours($"ts.created"),
         years($"ts.modified"), months($"ts.modified"), days($"ts.modified"), hours($"ts.modified")
@@ -624,7 +697,6 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         lit("2019-09-02 07:00:00.000000").cast("timestamp") as "modified",
         lit("America/Los_Angeles") as "timezone"))
       .writeTo("testcat.table_name")
-      .tableProperty("allow-unsupported-transforms", "true")
       .partitionedBy(bucket(4, $"ts.timezone"))
       .create()
 

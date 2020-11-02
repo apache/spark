@@ -76,7 +76,7 @@ class HeartbeatReceiverSuite
     sc = spy(new SparkContext(conf))
     scheduler = mock(classOf[TaskSchedulerImpl])
     when(sc.taskScheduler).thenReturn(scheduler)
-    when(scheduler.nodeBlacklist).thenReturn(Predef.Set[String]())
+    when(scheduler.excludedNodes).thenReturn(Predef.Set[String]())
     when(scheduler.sc).thenReturn(sc)
     heartbeatReceiverClock = new ManualClock
     heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)
@@ -261,7 +261,7 @@ class HeartbeatReceiverSuite
     // We may receive undesired SparkListenerExecutorAdded from LocalSchedulerBackend,
     // so exclude it from the map. See SPARK-10800.
     heartbeatReceiver.invokePrivate(_executorLastSeen()).
-      filterKeys(_ != SparkContext.DRIVER_IDENTIFIER)
+      filterKeys(_ != SparkContext.DRIVER_IDENTIFIER).toMap
   }
 }
 
@@ -286,6 +286,8 @@ private class FakeSchedulerBackend(
     clusterManagerEndpoint: RpcEndpointRef,
     resourceProfileManager: ResourceProfileManager)
   extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
+
+  def this() = this(null, null, null, null)
 
   protected override def doRequestTotalExecutors(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {

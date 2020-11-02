@@ -94,12 +94,18 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
-    val executorBlacklisted = SparkListenerExecutorBlacklisted(executorBlacklistedTime, "exec1", 22)
+    val executorBlacklisted = SparkListenerExecutorBlacklisted(executorExcludedTime, "exec1", 22)
     val executorUnblacklisted =
-      SparkListenerExecutorUnblacklisted(executorUnblacklistedTime, "exec1")
-    val nodeBlacklisted = SparkListenerNodeBlacklisted(nodeBlacklistedTime, "node1", 33)
+      SparkListenerExecutorUnblacklisted(executorUnexcludedTime, "exec1")
+    val nodeBlacklisted = SparkListenerNodeBlacklisted(nodeExcludedTime, "node1", 33)
+    val executorExcluded = SparkListenerExecutorExcluded(executorExcludedTime, "exec1", 22)
+    val executorUnexcluded =
+      SparkListenerExecutorUnexcluded(executorUnexcludedTime, "exec1")
+    val nodeExcluded = SparkListenerNodeExcluded(nodeExcludedTime, "node1", 33)
     val nodeUnblacklisted =
-      SparkListenerNodeUnblacklisted(nodeUnblacklistedTime, "node1")
+      SparkListenerNodeUnblacklisted(nodeUnexcludedTime, "node1")
+    val nodeUnexcluded =
+      SparkListenerNodeUnexcluded(nodeUnexcludedTime, "node1")
     val executorMetricsUpdate = {
       // Use custom accum ID for determinism
       val accumUpdates =
@@ -147,8 +153,12 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(executorRemoved, executorRemovedJsonString)
     testEvent(executorBlacklisted, executorBlacklistedJsonString)
     testEvent(executorUnblacklisted, executorUnblacklistedJsonString)
+    testEvent(executorExcluded, executorExcludedJsonString)
+    testEvent(executorUnexcluded, executorUnexcludedJsonString)
     testEvent(nodeBlacklisted, nodeBlacklistedJsonString)
     testEvent(nodeUnblacklisted, nodeUnblacklistedJsonString)
+    testEvent(nodeExcluded, nodeExcludedJsonString)
+    testEvent(nodeUnexcluded, nodeUnexcludedJsonString)
     testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
     testEvent(blockUpdated, blockUpdatedJsonString)
     testEvent(stageExecutorMetrics, stageExecutorMetricsJsonString)
@@ -170,6 +180,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testStorageLevel(StorageLevel.NONE)
     testStorageLevel(StorageLevel.DISK_ONLY)
     testStorageLevel(StorageLevel.DISK_ONLY_2)
+    testStorageLevel(StorageLevel.DISK_ONLY_3)
     testStorageLevel(StorageLevel.MEMORY_ONLY)
     testStorageLevel(StorageLevel.MEMORY_ONLY_2)
     testStorageLevel(StorageLevel.MEMORY_ONLY_SER)
@@ -324,6 +335,17 @@ class JsonProtocolSuite extends SparkFunSuite {
       .removeField({ _._1 == "Message" })
     val expectedFetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 16L,
       18, 19, "Unknown reason")
+    assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
+  }
+
+  test("SPARK-32124: FetchFailed Map Index backwards compatibility") {
+    // FetchFailed in Spark 2.4.0 does not have "Map Index" property.
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 16L, 18, 19,
+      "ignored")
+    val oldEvent = JsonProtocol.taskEndReasonToJson(fetchFailed)
+      .removeField({ _._1 == "Map Index" })
+    val expectedFetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 16L,
+      Int.MinValue, 19, "ignored")
     assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
@@ -586,10 +608,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private val jobCompletionTime = 1421191296660L
   private val executorAddedTime = 1421458410000L
   private val executorRemovedTime = 1421458922000L
-  private val executorBlacklistedTime = 1421458932000L
-  private val executorUnblacklistedTime = 1421458942000L
-  private val nodeBlacklistedTime = 1421458952000L
-  private val nodeUnblacklistedTime = 1421458962000L
+  private val executorExcludedTime = 1421458932000L
+  private val executorUnexcludedTime = 1421458942000L
+  private val nodeExcludedTime = 1421458952000L
+  private val nodeUnexcludedTime = 1421458962000L
 
   private def testEvent(event: SparkListenerEvent, jsonString: String): Unit = {
     val actualJsonString = compact(render(JsonProtocol.sparkEventToJson(event)))
@@ -1100,18 +1122,18 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Details": "details",
       |    "Accumulables": [
       |      {
-      |        "ID": 2,
-      |        "Name": "Accumulable2",
-      |        "Update": "delta2",
-      |        "Value": "val2",
-      |        "Internal": false,
-      |        "Count Failed Values": false
-      |      },
-      |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
+      |        "Internal": false,
+      |        "Count Failed Values": false
+      |      },
+      |      {
+      |        "ID": 2,
+      |        "Name": "Accumulable2",
+      |        "Update": "delta2",
+      |        "Value": "val2",
       |        "Internal": false,
       |        "Count Failed Values": false
       |      }
@@ -1159,18 +1181,18 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Details": "details",
       |    "Accumulables": [
       |      {
-      |        "ID": 2,
-      |        "Name": "Accumulable2",
-      |        "Update": "delta2",
-      |        "Value": "val2",
-      |        "Internal": false,
-      |        "Count Failed Values": false
-      |      },
-      |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
+      |        "Internal": false,
+      |        "Count Failed Values": false
+      |      },
+      |      {
+      |        "ID": 2,
+      |        "Name": "Accumulable2",
+      |        "Update": "delta2",
+      |        "Value": "val2",
       |        "Internal": false,
       |        "Count Failed Values": false
       |      }
@@ -1683,18 +1705,18 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Details": "details",
       |      "Accumulables": [
       |        {
-      |          "ID": 2,
-      |          "Name": "Accumulable2",
-      |          "Update": "delta2",
-      |          "Value": "val2",
-      |          "Internal": false,
-      |          "Count Failed Values": false
-      |        },
-      |        {
       |          "ID": 1,
       |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
+      |          "Internal": false,
+      |          "Count Failed Values": false
+      |        },
+      |        {
+      |          "ID": 2,
+      |          "Name": "Accumulable2",
+      |          "Update": "delta2",
+      |          "Value": "val2",
       |          "Internal": false,
       |          "Count Failed Values": false
       |        }
@@ -1746,18 +1768,18 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Details": "details",
       |      "Accumulables": [
       |        {
-      |          "ID": 2,
-      |          "Name": "Accumulable2",
-      |          "Update": "delta2",
-      |          "Value": "val2",
-      |          "Internal": false,
-      |          "Count Failed Values": false
-      |        },
-      |        {
       |          "ID": 1,
       |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
+      |          "Internal": false,
+      |          "Count Failed Values": false
+      |        },
+      |        {
+      |          "ID": 2,
+      |          "Name": "Accumulable2",
+      |          "Update": "delta2",
+      |          "Value": "val2",
       |          "Internal": false,
       |          "Count Failed Values": false
       |        }
@@ -1826,18 +1848,18 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Details": "details",
       |      "Accumulables": [
       |        {
-      |          "ID": 2,
-      |          "Name": "Accumulable2",
-      |          "Update": "delta2",
-      |          "Value": "val2",
-      |          "Internal": false,
-      |          "Count Failed Values": false
-      |        },
-      |        {
       |          "ID": 1,
       |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
+      |          "Internal": false,
+      |          "Count Failed Values": false
+      |        },
+      |        {
+      |          "ID": 2,
+      |          "Name": "Accumulable2",
+      |          "Update": "delta2",
+      |          "Value": "val2",
       |          "Internal": false,
       |          "Count Failed Values": false
       |        }
@@ -1923,18 +1945,18 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Details": "details",
       |      "Accumulables": [
       |        {
-      |          "ID": 2,
-      |          "Name": "Accumulable2",
-      |          "Update": "delta2",
-      |          "Value": "val2",
-      |          "Internal": false,
-      |          "Count Failed Values": false
-      |        },
-      |        {
       |          "ID": 1,
       |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
+      |          "Internal": false,
+      |          "Count Failed Values": false
+      |        },
+      |        {
+      |          "ID": 2,
+      |          "Name": "Accumulable2",
+      |          "Update": "delta2",
+      |          "Value": "val2",
       |          "Internal": false,
       |          "Count Failed Values": false
       |        }
@@ -2403,35 +2425,69 @@ private[spark] object JsonProtocolSuite extends Assertions {
     s"""
       |{
       |  "Event" : "org.apache.spark.scheduler.SparkListenerExecutorBlacklisted",
-      |  "time" : ${executorBlacklistedTime},
+      |  "time" : ${executorExcludedTime},
       |  "executorId" : "exec1",
       |  "taskFailures" : 22
       |}
+    """.stripMargin
+  private val executorExcludedJsonString =
+    s"""
+       |{
+       |  "Event" : "org.apache.spark.scheduler.SparkListenerExecutorExcluded",
+       |  "time" : ${executorExcludedTime},
+       |  "executorId" : "exec1",
+       |  "taskFailures" : 22
+       |}
     """.stripMargin
   private val executorUnblacklistedJsonString =
     s"""
       |{
       |  "Event" : "org.apache.spark.scheduler.SparkListenerExecutorUnblacklisted",
-      |  "time" : ${executorUnblacklistedTime},
+      |  "time" : ${executorUnexcludedTime},
       |  "executorId" : "exec1"
       |}
+    """.stripMargin
+  private val executorUnexcludedJsonString =
+    s"""
+       |{
+       |  "Event" : "org.apache.spark.scheduler.SparkListenerExecutorUnexcluded",
+       |  "time" : ${executorUnexcludedTime},
+       |  "executorId" : "exec1"
+       |}
     """.stripMargin
   private val nodeBlacklistedJsonString =
     s"""
       |{
       |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeBlacklisted",
-      |  "time" : ${nodeBlacklistedTime},
+      |  "time" : ${nodeExcludedTime},
       |  "hostId" : "node1",
       |  "executorFailures" : 33
       |}
+    """.stripMargin
+  private val nodeExcludedJsonString =
+    s"""
+       |{
+       |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeExcluded",
+       |  "time" : ${nodeExcludedTime},
+       |  "hostId" : "node1",
+       |  "executorFailures" : 33
+       |}
     """.stripMargin
   private val nodeUnblacklistedJsonString =
     s"""
       |{
       |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeUnblacklisted",
-      |  "time" : ${nodeUnblacklistedTime},
+      |  "time" : ${nodeUnexcludedTime},
       |  "hostId" : "node1"
       |}
+    """.stripMargin
+  private val nodeUnexcludedJsonString =
+    s"""
+       |{
+       |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeUnexcluded",
+       |  "time" : ${nodeUnexcludedTime},
+       |  "hostId" : "node1"
+       |}
     """.stripMargin
   private val resourceProfileJsonString =
     """

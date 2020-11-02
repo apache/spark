@@ -39,6 +39,7 @@ import org.apache.spark.sql.hive.test.{HiveTestJars, TestHive}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.tags.SlowHiveTest
 
 case class TestData(a: Int, b: String)
 
@@ -46,6 +47,7 @@ case class TestData(a: Int, b: String)
  * A set of test cases expressed in Hive QL that are not covered by the tests
  * included in the hive distribution.
  */
+@SlowHiveTest
 class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAndAfter {
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
@@ -564,12 +566,18 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     assert(-1 == res.get(0))
   }
 
-  test("timestamp cast #3") {
+  createQueryTest("timestamp cast #3",
+    "SELECT CAST(TIMESTAMP_SECONDS(1.2) AS DOUBLE) FROM src LIMIT 1")
+
+  createQueryTest("timestamp cast #4",
+    "SELECT CAST(TIMESTAMP_SECONDS(-1.2) AS DOUBLE) FROM src LIMIT 1")
+
+  test("timestamp cast #5") {
     val res = sql("SELECT CAST(TIMESTAMP_SECONDS(1200) AS INT) FROM src LIMIT 1").collect().head
     assert(1200 == res.getInt(0))
   }
 
-  test("timestamp cast #4") {
+  test("timestamp cast #6") {
     val res = sql("SELECT CAST(TIMESTAMP_SECONDS(-1200) AS INT) FROM src LIMIT 1").collect().head
     assert(-1200 == res.getInt(0))
   }

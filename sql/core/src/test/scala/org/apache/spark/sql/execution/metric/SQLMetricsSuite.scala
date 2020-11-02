@@ -28,7 +28,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -346,8 +347,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     val rightDf = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key2", "value")
     Seq((0L, "right_outer", leftDf, rightDf, 10L, false),
       (0L, "left_outer", rightDf, leftDf, 10L, false),
-      (0L, "right_outer", leftDf, rightDf, 10L, true),
-      (0L, "left_outer", rightDf, leftDf, 10L, true),
+      (1L, "right_outer", leftDf, rightDf, 10L, true),
+      (1L, "left_outer", rightDf, leftDf, 10L, true),
       (2L, "left_anti", rightDf, leftDf, 8L, true),
       (2L, "left_semi", rightDf, leftDf, 2L, true),
       (1L, "left_anti", rightDf, leftDf, 8L, false),
@@ -361,6 +362,41 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           enableWholeStage
         )
       }
+  }
+
+  test("SPARK-32629: ShuffledHashJoin(full outer) metrics") {
+    val uniqueLeftDf = Seq(("1", "1"), ("11", "11")).toDF("key", "value")
+    val nonUniqueLeftDf = Seq(("1", "1"), ("1", "2"), ("11", "11")).toDF("key", "value")
+    val rightDf = (1 to 10).map(i => (i.toString, i.toString)).toDF("key2", "value")
+    Seq(
+      // Test unique key on build side
+      (uniqueLeftDf, rightDf, 11, 134228048, 10, 134221824),
+      // Test non-unique key on build side
+      (nonUniqueLeftDf, rightDf, 12, 134228552, 11, 134221824)
+    ).foreach { case (leftDf, rightDf, fojRows, fojBuildSize, rojRows, rojBuildSize) =>
+      val fojDf = leftDf.hint("shuffle_hash").join(
+        rightDf, $"key" === $"key2", "full_outer")
+      fojDf.collect()
+      val fojPlan = fojDf.queryExecution.executedPlan.collectFirst {
+        case s: ShuffledHashJoinExec => s
+      }
+      assert(fojPlan.isDefined, "The query plan should have shuffled hash join")
+      testMetricsInSparkPlanOperator(fojPlan.get,
+        Map("numOutputRows" -> fojRows, "buildDataSize" -> fojBuildSize))
+
+      // Test right outer join as well to verify build data size to be different
+      // from full outer join. This makes sure we take extra BitSet/OpenHashSet
+      // for full outer join into account.
+      val rojDf = leftDf.hint("shuffle_hash").join(
+        rightDf, $"key" === $"key2", "right_outer")
+      rojDf.collect()
+      val rojPlan = rojDf.queryExecution.executedPlan.collectFirst {
+        case s: ShuffledHashJoinExec => s
+      }
+      assert(rojPlan.isDefined, "The query plan should have shuffled hash join")
+      testMetricsInSparkPlanOperator(rojPlan.get,
+        Map("numOutputRows" -> rojRows, "buildDataSize" -> rojBuildSize))
+    }
   }
 
   test("BroadcastHashJoin(outer) metrics") {
@@ -686,16 +722,6 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("SPARK-28332: SQLMetric merge should handle -1 properly") {
-    def checkSparkPlanMetrics(plan: SparkPlan, expected: Map[String, Long]): Unit = {
-      expected.foreach { case (metricName: String, metricValue: Long) =>
-        assert(plan.metrics.contains(metricName), s"The query plan should have metric $metricName")
-        val actualMetric = plan.metrics.get(metricName).get
-        assert(actualMetric.value == metricValue,
-          s"The query plan metric $metricName did not match, " +
-            s"expected:$metricValue, actual:${actualMetric.value}")
-      }
-    }
-
     val df = testData.join(testData2.filter('b === 0), $"key" === $"a", "left_outer")
     df.collect()
     val plan = df.queryExecution.executedPlan
@@ -706,7 +732,27 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
     assert(exchanges.size == 2, "The query plan should have two shuffle exchanges")
 
-    checkSparkPlanMetrics(exchanges(0), Map("dataSize" -> 3200, "shuffleRecordsWritten" -> 100))
-    checkSparkPlanMetrics(exchanges(1), Map("dataSize" -> 0, "shuffleRecordsWritten" -> 0))
+    testMetricsInSparkPlanOperator(exchanges.head,
+      Map("dataSize" -> 3200, "shuffleRecordsWritten" -> 100))
+    testMetricsInSparkPlanOperator(exchanges(1), Map("dataSize" -> 0, "shuffleRecordsWritten" -> 0))
+  }
+
+  test("Add numRows to metric of BroadcastExchangeExec") {
+    withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+      withTable("t1", "t2") {
+        spark.range(2).write.saveAsTable("t1")
+        spark.range(2).write.saveAsTable("t2")
+        val df = sql("SELECT t1.* FROM t1 JOIN t2 ON t1.id = t2.id")
+        df.collect()
+        val plan = df.queryExecution.executedPlan
+
+        val exchanges = plan.collect {
+          case s: BroadcastExchangeExec => s
+        }
+
+        assert(exchanges.size === 1)
+        testMetricsInSparkPlanOperator(exchanges.head, Map("numOutputRows" -> 2))
+      }
+    }
   }
 }

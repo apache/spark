@@ -147,7 +147,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
                       e.removeReason.map { reason =>
-                        s"""<br>Reason: ${reason.replace("\n", " ")}"""
+                        s"""<br>Reason: ${StringEscapeUtils.escapeEcmaScript(
+                          reason.replace("\n", " "))}"""
                       }.getOrElse("")
                    }"' +
              |    'data-html="true">Executor ${e.id} removed</div>'
@@ -259,11 +260,11 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     }
 
     val activeJobsTable =
-      jobsTable(request, "active", "activeJob", activeJobs, killEnabled = parent.killEnabled)
+      jobsTable(request, "active", "activeJob", activeJobs.toSeq, killEnabled = parent.killEnabled)
     val completedJobsTable =
-      jobsTable(request, "completed", "completedJob", completedJobs, killEnabled = false)
+      jobsTable(request, "completed", "completedJob", completedJobs.toSeq, killEnabled = false)
     val failedJobsTable =
-      jobsTable(request, "failed", "failedJob", failedJobs, killEnabled = false)
+      jobsTable(request, "failed", "failedJob", failedJobs.toSeq, killEnabled = false)
 
     val shouldShowActiveJobs = activeJobs.nonEmpty
     val shouldShowCompletedJobs = completedJobs.nonEmpty
@@ -330,7 +331,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       </div>
 
     var content = summary
-    content ++= makeTimeline(activeJobs ++ completedJobs ++ failedJobs,
+    content ++= makeTimeline((activeJobs ++ completedJobs ++ failedJobs).toSeq,
       store.executorList(false), startTime)
 
     if (shouldShowActiveJobs) {

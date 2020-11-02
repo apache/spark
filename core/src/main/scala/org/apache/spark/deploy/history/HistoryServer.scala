@@ -76,9 +76,7 @@ class HistoryServer(
       // attempt ID (separated by a slash).
       val parts = Option(req.getPathInfo()).getOrElse("").split("/")
       if (parts.length < 2) {
-        res.sendError(HttpServletResponse.SC_BAD_REQUEST,
-          s"Unexpected path info in request (URI = ${req.getRequestURI()}")
-        return
+        res.sendRedirect("/")
       }
 
       val appId = parts(1)
@@ -128,6 +126,11 @@ class HistoryServer(
 
   override def withSparkUI[T](appId: String, attemptId: Option[String])(fn: SparkUI => T): T = {
     appCache.withSparkUI(appId, attemptId)(fn)
+  }
+
+  override def checkUIViewPermissions(appId: String, attemptId: Option[String],
+      user: String): Boolean = {
+    provider.checkUIViewPermissions(appId, attemptId, user)
   }
 
   initialize()

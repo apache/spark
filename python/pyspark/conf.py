@@ -22,14 +22,14 @@
 >>> conf.setMaster("local").setAppName("My app")
 <pyspark.conf.SparkConf object at ...>
 >>> conf.get("spark.master")
-u'local'
+'local'
 >>> conf.get("spark.app.name")
-u'My app'
+'My app'
 >>> sc = SparkContext(conf=conf)
 >>> sc.master
-u'local'
+'local'
 >>> sc.appName
-u'My app'
+'My app'
 >>> sc.sparkHome is None
 True
 
@@ -37,21 +37,21 @@ True
 >>> conf.setSparkHome("/path")
 <pyspark.conf.SparkConf object at ...>
 >>> conf.get("spark.home")
-u'/path'
+'/path'
 >>> conf.setExecutorEnv("VAR1", "value1")
 <pyspark.conf.SparkConf object at ...>
 >>> conf.setExecutorEnv(pairs = [("VAR3", "value3"), ("VAR4", "value4")])
 <pyspark.conf.SparkConf object at ...>
 >>> conf.get("spark.executorEnv.VAR1")
-u'value1'
+'value1'
 >>> print(conf.toDebugString())
 spark.executorEnv.VAR1=value1
 spark.executorEnv.VAR3=value3
 spark.executorEnv.VAR4=value4
 spark.home=/path
 >>> sorted(conf.getAll(), key=lambda p: p[0])
-[(u'spark.executorEnv.VAR1', u'value1'), (u'spark.executorEnv.VAR3', u'value3'), \
-(u'spark.executorEnv.VAR4', u'value4'), (u'spark.home', u'/path')]
+[('spark.executorEnv.VAR1', 'value1'), ('spark.executorEnv.VAR3', 'value3'), \
+('spark.executorEnv.VAR4', 'value4'), ('spark.home', '/path')]
 >>> conf._jconf.setExecutorEnv("VAR5", "value5")
 JavaObject id...
 >>> print(conf.toDebugString())
@@ -65,11 +65,6 @@ spark.home=/path
 __all__ = ['SparkConf']
 
 import sys
-import re
-
-if sys.version > '3':
-    unicode = str
-    __doc__ = re.sub(r"(\W|^)[uU](['])", r'\1\2', __doc__)
 
 
 class SparkConf(object):
@@ -124,9 +119,9 @@ class SparkConf(object):
         """Set a configuration property."""
         # Try to set self._jconf first if JVM is created, set self._conf if JVM is not created yet.
         if self._jconf is not None:
-            self._jconf.set(key, unicode(value))
+            self._jconf.set(key, str(value))
         else:
-            self._conf[key] = unicode(value)
+            self._conf[key] = str(value)
         return self
 
     def setIfMissing(self, key, value):

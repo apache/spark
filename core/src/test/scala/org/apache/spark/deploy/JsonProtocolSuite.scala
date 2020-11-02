@@ -106,6 +106,9 @@ object JsonConstants {
     """
       |{"id":"id","starttime":3,"name":"name",
       |"cores":0,"user":"%s",
+      |"memoryperexecutor":1234,
+      |"resourcesperexecutor":[{"name":"gpu",
+      |"amount":3},{"name":"fpga","amount":3}],
       |"memoryperslave":1234,
       |"resourcesperslave":[{"name":"gpu",
       |"amount":3},{"name":"fpga","amount":3}],
@@ -125,14 +128,15 @@ object JsonConstants {
       |:["3","4","5"]}},"resourcesused":{"gpu":
       |{"name":"gpu","addresses":[]},"fpga":
       |{"name":"fpga","addresses":[]}},"resourcesfree":
-      |{"gpu":{"name":"gpu","addresses":["2","1","0"]},
-      |"fpga":{"name":"fpga","addresses":["5","4","3"]}},
+      |{"gpu":{"name":"gpu","addresses":["0","1","2"]},
+      |"fpga":{"name":"fpga","addresses":["3","4","5"]}},
       |"state":"ALIVE","lastheartbeat":%d}
     """.format(currTimeInMillis).stripMargin
 
   val appDescJsonStr =
     """
-      |{"name":"name","cores":4,"memoryperslave":1234,"resourcesperslave":[],
+      |{"name":"name","cores":4,"memoryperexecutor":1234,"resourcesperexecutor":[],
+      |"memoryperslave":1234,"resourcesperslave":[],
       |"user":"%s","command":"Command(mainClass,List(arg1, arg2),Map(),List(),List(),List())"}
     """.format(System.getProperty("user.name", "<unknown>")).stripMargin
 

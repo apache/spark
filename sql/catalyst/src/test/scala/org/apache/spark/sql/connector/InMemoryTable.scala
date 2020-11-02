@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector
 
+import java.time.{Instant, ZoneId}
+import java.time.temporal.ChronoUnit
 import java.util
 
 import scala.collection.JavaConverters._
@@ -25,12 +27,14 @@ import scala.collection.mutable
 import org.scalatest.Assertions._
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.{IdentityTransform, NamedReference, Transform}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, HoursTransform, IdentityTransform, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
+import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.sources.{And, EqualTo, Filter, IsNotNull}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, DateType, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -46,10 +50,15 @@ class InMemoryTable(
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
 
-  partitioning.foreach { t =>
-    if (!t.isInstanceOf[IdentityTransform] && !allowUnsupportedTransforms) {
-      throw new IllegalArgumentException(s"Transform $t must be IdentityTransform")
-    }
+  partitioning.foreach {
+    case _: IdentityTransform =>
+    case _: YearsTransform =>
+    case _: MonthsTransform =>
+    case _: DaysTransform =>
+    case _: HoursTransform =>
+    case _: BucketTransform =>
+    case t if !allowUnsupportedTransforms =>
+      throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
 
   // The key `Seq[Any]` is the partition values.
@@ -66,8 +75,14 @@ class InMemoryTable(
     }
   }
 
+  private val UTC = ZoneId.of("UTC")
+  private val EPOCH_LOCAL_DATE = Instant.EPOCH.atZone(UTC).toLocalDate
+
   private def getKey(row: InternalRow): Seq[Any] = {
-    def extractor(fieldNames: Array[String], schema: StructType, row: InternalRow): Any = {
+    def extractor(
+        fieldNames: Array[String],
+        schema: StructType,
+        row: InternalRow): (Any, DataType) = {
       val index = schema.fieldIndex(fieldNames(0))
       val value = row.toSeq(schema).apply(index)
       if (fieldNames.length > 1) {
@@ -78,10 +93,52 @@ class InMemoryTable(
             throw new IllegalArgumentException(s"Unsupported type, ${dataType.simpleString}")
         }
       } else {
-        value
+        (value, schema(index).dataType)
       }
     }
-    partCols.map(fieldNames => extractor(fieldNames, schema, row))
+
+    partitioning.map {
+      case IdentityTransform(ref) =>
+        extractor(ref.fieldNames, schema, row)._1
+      case YearsTransform(ref) =>
+        extractor(ref.fieldNames, schema, row) match {
+          case (days: Int, DateType) =>
+            ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, DateTimeUtils.daysToLocalDate(days))
+          case (micros: Long, TimestampType) =>
+            val localDate = DateTimeUtils.microsToInstant(micros).atZone(UTC).toLocalDate
+            ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, localDate)
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
+        }
+      case MonthsTransform(ref) =>
+        extractor(ref.fieldNames, schema, row) match {
+          case (days: Int, DateType) =>
+            ChronoUnit.MONTHS.between(EPOCH_LOCAL_DATE, DateTimeUtils.daysToLocalDate(days))
+          case (micros: Long, TimestampType) =>
+            val localDate = DateTimeUtils.microsToInstant(micros).atZone(UTC).toLocalDate
+            ChronoUnit.MONTHS.between(EPOCH_LOCAL_DATE, localDate)
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
+        }
+      case DaysTransform(ref) =>
+        extractor(ref.fieldNames, schema, row) match {
+          case (days, DateType) =>
+            days
+          case (micros: Long, TimestampType) =>
+            ChronoUnit.DAYS.between(Instant.EPOCH, DateTimeUtils.microsToInstant(micros))
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
+        }
+      case HoursTransform(ref) =>
+        extractor(ref.fieldNames, schema, row) match {
+          case (micros: Long, TimestampType) =>
+            ChronoUnit.HOURS.between(Instant.EPOCH, DateTimeUtils.microsToInstant(micros))
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
+        }
+      case BucketTransform(numBuckets, ref) =>
+        (extractor(ref.fieldNames, schema, row).hashCode() & Integer.MAX_VALUE) % numBuckets
+    }
   }
 
   def withData(data: Array[BufferedRows]): InMemoryTable = dataMap.synchronized {
@@ -97,6 +154,7 @@ class InMemoryTable(
   override def capabilities: util.Set[TableCapability] = Set(
     TableCapability.BATCH_READ,
     TableCapability.BATCH_WRITE,
+    TableCapability.STREAMING_WRITE,
     TableCapability.OVERWRITE_BY_FILTER,
     TableCapability.OVERWRITE_DYNAMIC,
     TableCapability.TRUNCATE).asJava
@@ -121,26 +179,35 @@ class InMemoryTable(
 
     new WriteBuilder with SupportsTruncate with SupportsOverwrite with SupportsDynamicOverwrite {
       private var writer: BatchWrite = Append
+      private var streamingWriter: StreamingWrite = StreamingAppend
 
       override def truncate(): WriteBuilder = {
         assert(writer == Append)
         writer = TruncateAndAppend
+        streamingWriter = StreamingTruncateAndAppend
         this
       }
 
       override def overwrite(filters: Array[Filter]): WriteBuilder = {
         assert(writer == Append)
         writer = new Overwrite(filters)
+        streamingWriter = new StreamingNotSupportedOperation(s"overwrite ($filters)")
         this
       }
 
       override def overwriteDynamicPartitions(): WriteBuilder = {
         assert(writer == Append)
         writer = DynamicOverwrite
+        streamingWriter = new StreamingNotSupportedOperation("overwriteDynamicPartitions")
         this
       }
 
       override def buildForBatch(): BatchWrite = writer
+
+      override def buildForStreaming(): StreamingWrite = streamingWriter match {
+        case exc: StreamingNotSupportedOperation => exc.throwsException()
+        case s => s
+      }
     }
   }
 
@@ -180,6 +247,45 @@ class InMemoryTable(
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       dataMap.clear
       withData(messages.map(_.asInstanceOf[BufferedRows]))
+    }
+  }
+
+  private abstract class TestStreamingWrite extends StreamingWrite {
+    def createStreamingWriterFactory(info: PhysicalWriteInfo): StreamingDataWriterFactory = {
+      BufferedRowsWriterFactory
+    }
+
+    def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+  }
+
+  private class StreamingNotSupportedOperation(operation: String) extends TestStreamingWrite {
+    override def createStreamingWriterFactory(info: PhysicalWriteInfo): StreamingDataWriterFactory =
+      throwsException()
+
+    override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit =
+      throwsException()
+
+    override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit =
+      throwsException()
+
+    def throwsException[T](): T = throw new IllegalStateException("The operation " +
+      s"${operation} isn't supported for streaming query.")
+  }
+
+  private object StreamingAppend extends TestStreamingWrite {
+    override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+      dataMap.synchronized {
+        withData(messages.map(_.asInstanceOf[BufferedRows]))
+      }
+    }
+  }
+
+  private object StreamingTruncateAndAppend extends TestStreamingWrite {
+    override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+      dataMap.synchronized {
+        dataMap.clear
+        withData(messages.map(_.asInstanceOf[BufferedRows]))
+      }
     }
   }
 
@@ -262,8 +368,15 @@ private class BufferedRowsReader(partition: BufferedRows) extends PartitionReade
   override def close(): Unit = {}
 }
 
-private object BufferedRowsWriterFactory extends DataWriterFactory {
+private object BufferedRowsWriterFactory extends DataWriterFactory with StreamingDataWriterFactory {
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
+    new BufferWriter
+  }
+
+  override def createWriter(
+      partitionId: Int,
+      taskId: Long,
+      epochId: Long): DataWriter[InternalRow] = {
     new BufferWriter
   }
 }

@@ -307,7 +307,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     }
     logInfo(s"Generated an explicit feedback dataset with ${training.size} ratings for training " +
       s"and ${test.size} for test.")
-    (sc.parallelize(training, 2), sc.parallelize(test, 2))
+    (sc.parallelize(training.toSeq, 2), sc.parallelize(test.toSeq, 2))
   }
 
   /**
@@ -810,7 +810,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       val topItems = model.recommendForAllUsers(k)
       assert(topItems.count() == numUsers)
       assert(topItems.columns.contains("user"))
-      checkRecommendations(topItems, expectedUpToN, "item")
+      checkRecommendations(topItems, expectedUpToN.toMap, "item")
     }
   }
 
@@ -831,7 +831,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       val topUsers = getALSModel.recommendForAllItems(k)
       assert(topUsers.count() == numItems)
       assert(topUsers.columns.contains("item"))
-      checkRecommendations(topUsers, expectedUpToN, "user")
+      checkRecommendations(topUsers, expectedUpToN.toMap, "user")
     }
   }
 
@@ -853,7 +853,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       val topItems = model.recommendForUserSubset(userSubset, k)
       assert(topItems.count() == numUsersSubset)
       assert(topItems.columns.contains("user"))
-      checkRecommendations(topItems, expectedUpToN, "item")
+      checkRecommendations(topItems, expectedUpToN.toMap, "item")
     }
   }
 
@@ -875,7 +875,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       val topUsers = model.recommendForItemSubset(itemSubset, k)
       assert(topUsers.count() == numItemsSubset)
       assert(topUsers.columns.contains("item"))
-      checkRecommendations(topUsers, expectedUpToN, "user")
+      checkRecommendations(topUsers, expectedUpToN.toMap, "user")
     }
   }
 
@@ -1211,6 +1211,6 @@ object ALSSuite extends Logging {
     }
     logInfo(s"Generated an implicit feedback dataset with ${training.size} ratings for training " +
       s"and ${test.size} for test.")
-    (sc.parallelize(training, 2), sc.parallelize(test, 2))
+    (sc.parallelize(training.toSeq, 2), sc.parallelize(test.toSeq, 2))
   }
 }

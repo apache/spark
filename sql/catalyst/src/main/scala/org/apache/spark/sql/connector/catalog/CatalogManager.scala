@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.catalog
 
 import scala.collection.mutable
-import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
@@ -42,6 +41,7 @@ class CatalogManager(
     defaultSessionCatalog: CatalogPlugin,
     val v1SessionCatalog: SessionCatalog) extends Logging {
   import CatalogManager.SESSION_CATALOG_NAME
+  import CatalogV2Util._
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
 
@@ -81,15 +81,8 @@ class CatalogManager(
    * in the fallback configuration, spark.sql.sources.write.useV1SourceList
    */
   private[sql] def v2SessionCatalog: CatalogPlugin = {
-    conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { customV2SessionCatalog =>
-      try {
-        catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
-      } catch {
-        case NonFatal(_) =>
-          logError(
-            "Fail to instantiate the custom v2 session catalog: " + customV2SessionCatalog)
-          defaultSessionCatalog
-      }
+    conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { _ =>
+      catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
     }.getOrElse(defaultSessionCatalog)
   }
 
@@ -106,13 +99,15 @@ class CatalogManager(
   }
 
   def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
-    if (currentCatalog.name() == SESSION_CATALOG_NAME) {
-      if (namespace.length != 1) {
+    currentCatalog match {
+      case _ if isSessionCatalog(currentCatalog) && namespace.length == 1 =>
+        v1SessionCatalog.setCurrentDatabase(namespace.head)
+      case _ if isSessionCatalog(currentCatalog) =>
         throw new NoSuchNamespaceException(namespace)
-      }
-      v1SessionCatalog.setCurrentDatabase(namespace.head)
-    } else {
-      _currentNamespace = Some(namespace)
+      case catalog: SupportsNamespaces if !catalog.namespaceExists(namespace) =>
+        throw new NoSuchNamespaceException(namespace)
+      case _ =>
+        _currentNamespace = Some(namespace)
     }
   }
 

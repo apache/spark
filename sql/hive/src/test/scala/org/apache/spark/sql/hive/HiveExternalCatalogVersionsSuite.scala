@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.tags.ExtendedHiveTest
+import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
 import org.apache.spark.util.Utils
 
 /**
@@ -46,6 +46,7 @@ import org.apache.spark.util.Utils
  * expected version under this local directory, e.g. `/tmp/spark-test/spark-2.0.3`, we will skip the
  * downloading for this spark version.
  */
+@SlowHiveTest
 @ExtendedHiveTest
 class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   private val isTestAtLeastJava9 = SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)
@@ -233,7 +234,7 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
   // Tests the latest version of every release line.
   val testingVersions: Seq[String] = {
     import scala.io.Source
-    try {
+    val versions: Seq[String] = try {
       Source.fromURL(s"${releaseMirror}/spark").mkString
         .split("\n")
         .filter(_.contains("""<li><a href="spark-"""))
@@ -242,8 +243,9 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
         .filter(_ < org.apache.spark.SPARK_VERSION)
     } catch {
       // do not throw exception during object initialization.
-      case NonFatal(_) => Seq("2.3.4", "2.4.5") // A temporary fallback to use a specific version
+      case NonFatal(_) => Seq("3.0.1", "2.4.7") // A temporary fallback to use a specific version
     }
+    versions.filter(v => v.startsWith("3") || !TestUtils.isPythonVersionAtLeast38())
   }
 
   protected var spark: SparkSession = _

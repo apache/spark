@@ -33,7 +33,7 @@ private[client] object HiveClientBuilder {
       Some(new File(sys.props("java.io.tmpdir"), "hive-ivy-cache").getAbsolutePath))
   }
 
-  private def buildConf(extraConf: Map[String, String]) = {
+  private[client] def buildConf(extraConf: Map[String, String]): Map[String, String] = {
     lazy val warehousePath = Utils.createTempDir()
     lazy val metastorePath = Utils.createTempDir()
     metastorePath.delete()

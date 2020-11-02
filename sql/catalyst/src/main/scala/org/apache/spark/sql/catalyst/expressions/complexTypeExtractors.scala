@@ -57,7 +57,7 @@ object ExtractValue {
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
         GetArrayStructFields(child, fields(ordinal).copy(name = fieldName),
-          ordinal, fields.length, containsNull)
+          ordinal, fields.length, containsNull || fields(ordinal).nullable)
 
       case (_: ArrayType, _) => GetArrayItem(child, extraction)
 
@@ -116,8 +116,10 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
     s"$child.${name.getOrElse(fieldName)}"
   }
 
+  def extractFieldName: String = name.getOrElse(childSchema(ordinal).name)
+
   override def sql: String =
-    child.sql + s".${quoteIdentifier(name.getOrElse(childSchema(ordinal).name))}"
+    child.sql + s".${quoteIdentifier(extractFieldName)}"
 
   protected override def nullSafeEval(input: Any): Any =
     input.asInstanceOf[InternalRow].get(ordinal, childSchema(ordinal).dataType)

@@ -19,7 +19,7 @@ package org.apache.spark.status.api.v1
 import java.io.OutputStream
 import java.util.{List => JList}
 import java.util.zip.ZipOutputStream
-import javax.ws.rs._
+import javax.ws.rs.{NotFoundException => _, _}
 import javax.ws.rs.core.{MediaType, Response, StreamingOutput}
 
 import scala.util.control.NonFatal
@@ -104,10 +104,10 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
     val resourceProfileInfo = ui.store.resourceProfileInfo()
     new v1.ApplicationEnvironmentInfo(
       envInfo.runtime,
-      Utils.redact(ui.conf, envInfo.sparkProperties),
-      Utils.redact(ui.conf, envInfo.hadoopProperties),
-      Utils.redact(ui.conf, envInfo.systemProperties),
-      envInfo.classpathEntries,
+      Utils.redact(ui.conf, envInfo.sparkProperties).sortBy(_._1),
+      Utils.redact(ui.conf, envInfo.hadoopProperties).sortBy(_._1),
+      Utils.redact(ui.conf, envInfo.systemProperties).sortBy(_._1),
+      envInfo.classpathEntries.sortBy(_._1),
       resourceProfileInfo)
   }
 
@@ -115,15 +115,14 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   @Path("logs")
   @Produces(Array(MediaType.APPLICATION_OCTET_STREAM))
   def getEventLogs(): Response = {
-    // Retrieve the UI for the application just to do access permission checks. For backwards
-    // compatibility, this code also tries with attemptId "1" if the UI without an attempt ID does
-    // not exist.
+    // For backwards compatibility, this code also tries with attemptId "1" if the UI
+    // without an attempt ID does not exist.
     try {
-      withUI { _ => }
+      checkUIViewPermissions()
     } catch {
       case _: NotFoundException if attemptId == null =>
         attemptId = "1"
-        withUI { _ => }
+        checkUIViewPermissions()
         attemptId = null
     }
 

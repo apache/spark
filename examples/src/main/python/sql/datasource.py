@@ -20,8 +20,6 @@ A simple example demonstrating Spark SQL data sources.
 Run with:
   ./bin/spark-submit examples/src/main/python/sql/datasource.py
 """
-from __future__ import print_function
-
 from pyspark.sql import SparkSession
 # $example on:schema_merging$
 from pyspark.sql import Row
@@ -96,7 +94,7 @@ def basic_datasource_example(spark):
 
     # $example on:manual_load_options_csv$
     df = spark.read.load("examples/src/main/resources/people.csv",
-                         format="csv", sep=":", inferSchema="true", header="true")
+                         format="csv", sep=";", inferSchema="true", header="true")
     # $example off:manual_load_options_csv$
 
     # $example on:manual_save_options_orc$

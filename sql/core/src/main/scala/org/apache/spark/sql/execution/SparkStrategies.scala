@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
@@ -116,7 +116,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *
    * - Shuffle hash join:
    *     Only supported for equi-joins, while the join keys do not need to be sortable.
-   *     Supported for all join types except full outer joins.
+   *     Supported for all join types.
+   *     Building hash map from table is a memory-intensive operation and it could cause OOM
+   *     when the build side is big.
    *
    * - Shuffle sort merge join (SMJ):
    *     Only supported for equi-joins and the join keys have to be sortable.
@@ -159,7 +161,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //   4. Pick cartesian product if join type is inner like.
       //   5. Pick broadcast nested loop join as the final solution. It may OOM but we don't have
       //      other choice.
-      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right, hint) =>
+      case j @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, nonEquiCond, left, right, hint) =>
         def createBroadcastHashJoin(onlyLookingAtHint: Boolean) = {
           getBroadcastBuildSide(left, right, joinType, hint, onlyLookingAtHint, conf).map {
             buildSide =>
@@ -168,7 +170,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 rightKeys,
                 joinType,
                 buildSide,
-                condition,
+                nonEquiCond,
                 planLater(left),
                 planLater(right)))
           }
@@ -182,7 +184,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 rightKeys,
                 joinType,
                 buildSide,
-                condition,
+                nonEquiCond,
                 planLater(left),
                 planLater(right)))
           }
@@ -191,7 +193,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         def createSortMergeJoin() = {
           if (RowOrdering.isOrderable(leftKeys)) {
             Some(Seq(joins.SortMergeJoinExec(
-              leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right))))
+              leftKeys, rightKeys, joinType, nonEquiCond, planLater(left), planLater(right))))
           } else {
             None
           }
@@ -199,7 +201,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         def createCartesianProduct() = {
           if (joinType.isInstanceOf[InnerLike]) {
-            Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), condition)))
+            // `CartesianProductExec` can't implicitly evaluate equal join condition, here we should
+            // pass the original condition which includes both equal and non-equal conditions.
+            Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), j.condition)))
           } else {
             None
           }
@@ -220,7 +224,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               // This join could be very slow or OOM
               val buildSide = getSmallerSide(left, right)
               Seq(joins.BroadcastNestedLoopJoinExec(
-                planLater(left), planLater(right), buildSide, joinType, condition))
+                planLater(left), planLater(right), buildSide, joinType, nonEquiCond))
             }
         }
 
@@ -229,6 +233,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           .orElse(createShuffleHashJoin(true))
           .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
           .getOrElse(createJoinWithoutHint())
+
+      case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys) =>
+        Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
+          None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
 
       // If it is not an equi-join, we first look at the join hints w.r.t. the following order:
       //   1. broadcast hint: pick broadcast nested loop join. If both sides have the broadcast
@@ -254,7 +262,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           // it's a right join, and broadcast right side if it's a left join.
           // TODO: revisit it. If left side is much smaller than the right side, it may be better
           // to broadcast the left side even if it's a left join.
-          if (canBuildLeft(joinType)) BuildLeft else BuildRight
+          if (canBuildBroadcastLeft(joinType)) BuildLeft else BuildRight
         }
 
         def createBroadcastNLJoin(buildLeft: Boolean, buildRight: Boolean) = {
@@ -424,7 +432,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         val (functionsWithDistinct, functionsWithoutDistinct) =
           aggregateExpressions.partition(_.isDistinct)
-        if (functionsWithDistinct.map(_.aggregateFunction.children.toSet).distinct.length > 1) {
+        if (functionsWithDistinct.map(
+          _.aggregateFunction.children.filterNot(_.foldable).toSet).distinct.length > 1) {
           // This is a sanity check. We should not reach here when we have multiple distinct
           // column sets. Our `RewriteDistinctAggregates` should take care this case.
           sys.error("You hit a query analyzer bug. Please report your query to " +
@@ -436,6 +445,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val normalizedGroupingExpressions = groupingExpressions.map { e =>
           NormalizeFloatingNumbers.normalize(e) match {
             case n: NamedExpression => n
+            // Keep the name of the original expression.
             case other => Alias(other, e.name)(exprId = e.exprId)
           }
         }
@@ -454,13 +464,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             // to be [COUNT(DISTINCT foo), MAX(DISTINCT foo)], but
             // [COUNT(DISTINCT bar), COUNT(DISTINCT foo)] is disallowed because those two distinct
             // aggregates have different column expressions.
-            val distinctExpressions = functionsWithDistinct.head.aggregateFunction.children
+            val distinctExpressions =
+              functionsWithDistinct.head.aggregateFunction.children.filterNot(_.foldable)
             val normalizedNamedDistinctExpressions = distinctExpressions.map { e =>
               // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here
               // because `distinctExpressions` is not extracted during logical phase.
               NormalizeFloatingNumbers.normalize(e) match {
                 case ne: NamedExpression => ne
-                case other => Alias(other, other.toString)()
+                case other =>
+                  // Keep the name of the original expression.
+                  val name = e match {
+                    case ne: NamedExpression => ne.name
+                    case _ => e.toString
+                  }
+                  Alias(other, name)()
               }
             }
 
@@ -652,7 +669,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
           ShuffleExchangeExec(RoundRobinPartitioning(numPartitions),
-            planLater(child), canChangeNumPartitions = false) :: Nil
+            planLater(child), noUserSpecifiedNumPartition = false) :: Nil
         } else {
           execution.CoalesceExec(numPartitions, planLater(child)) :: Nil
         }
@@ -674,8 +691,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
         execution.GlobalLimitExec(limit, planLater(child)) :: Nil
-      case logical.Union(unionChildren) =>
-        execution.UnionExec(unionChildren.map(planLater)) :: Nil
+      case union: logical.Union =>
+        execution.UnionExec(union.children.map(planLater)) :: Nil
       case g @ logical.Generate(generator, _, outer, _, _, child) =>
         execution.GenerateExec(
           generator, g.requiredChildOutput, outer,
@@ -686,7 +703,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
         exchange.ShuffleExchangeExec(
-          r.partitioning, planLater(r.child), canChangeNumPartitions = false) :: Nil
+          r.partitioning,
+          planLater(r.child),
+          noUserSpecifiedNumPartition = r.optNumPartitions.isEmpty) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil

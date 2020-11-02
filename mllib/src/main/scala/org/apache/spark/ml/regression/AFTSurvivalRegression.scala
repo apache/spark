@@ -62,7 +62,6 @@ private[regression] trait AFTSurvivalRegressionParams extends PredictorParams
   /** @group getParam */
   @Since("1.6.0")
   def getCensorCol: String = $(censorCol)
-  setDefault(censorCol -> "censor")
 
   /**
    * Param for quantile probabilities array.
@@ -78,7 +77,6 @@ private[regression] trait AFTSurvivalRegressionParams extends PredictorParams
   /** @group getParam */
   @Since("1.6.0")
   def getQuantileProbabilities: Array[Double] = $(quantileProbabilities)
-  setDefault(quantileProbabilities -> Array(0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99))
 
   /**
    * Param for quantiles column name.
@@ -91,6 +89,10 @@ private[regression] trait AFTSurvivalRegressionParams extends PredictorParams
   /** @group getParam */
   @Since("1.6.0")
   def getQuantilesCol: String = $(quantilesCol)
+
+  setDefault(censorCol -> "censor",
+    quantileProbabilities -> Array(0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99),
+    fitIntercept -> true, maxIter -> 100, tol -> 1E-6, aggregationDepth -> 2, blockSize -> 1)
 
   /** Checks whether the input has quantiles column name. */
   private[regression] def hasQuantilesCol: Boolean = {
@@ -153,7 +155,6 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
    */
   @Since("1.6.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
-  setDefault(fitIntercept -> true)
 
   /**
    * Set the maximum number of iterations.
@@ -162,7 +163,6 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
    */
   @Since("1.6.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
-  setDefault(maxIter -> 100)
 
   /**
    * Set the convergence tolerance of iterations.
@@ -172,7 +172,6 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
    */
   @Since("1.6.0")
   def setTol(value: Double): this.type = set(tol, value)
-  setDefault(tol -> 1E-6)
 
   /**
    * Suggested depth for treeAggregate (greater than or equal to 2).
@@ -183,7 +182,6 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
    */
   @Since("2.1.0")
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
-  setDefault(aggregationDepth -> 2)
 
   /**
    * Set block size for stacking input data in matrices.
@@ -202,7 +200,6 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
    */
   @Since("3.1.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
-  setDefault(blockSize -> 1)
 
   /**
    * Extract [[featuresCol]], [[labelCol]] and [[censorCol]] from input dataset,
@@ -386,22 +383,32 @@ class AFTSurvivalRegressionModel private[ml] (
 
   /** @group setParam */
   @Since("1.6.0")
-  def setQuantileProbabilities(value: Array[Double]): this.type = set(quantileProbabilities, value)
+  def setQuantileProbabilities(value: Array[Double]): this.type = {
+    set(quantileProbabilities, value)
+    _quantiles(0) = $(quantileProbabilities).map(q => math.exp(math.log(-math.log1p(-q)) * scale))
+    this
+  }
 
   /** @group setParam */
   @Since("1.6.0")
   def setQuantilesCol(value: String): this.type = set(quantilesCol, value)
 
+  private lazy val _quantiles = {
+    Array($(quantileProbabilities).map(q => math.exp(math.log(-math.log1p(-q)) * scale)))
+  }
+
+  private def lambda2Quantiles(lambda: Double): Vector = {
+    val quantiles = _quantiles(0).clone()
+    var i = 0
+    while (i < quantiles.length) { quantiles(i) *= lambda; i += 1 }
+    Vectors.dense(quantiles)
+  }
+
   @Since("2.0.0")
   def predictQuantiles(features: Vector): Vector = {
     // scale parameter for the Weibull distribution of lifetime
-    val lambda = math.exp(BLAS.dot(coefficients, features) + intercept)
-    // shape parameter for the Weibull distribution of lifetime
-    val k = 1 / scale
-    val quantiles = $(quantileProbabilities).map {
-      q => lambda * math.exp(math.log(-math.log1p(-q)) / k)
-    }
-    Vectors.dense(quantiles)
+    val lambda = predict(features)
+    lambda2Quantiles(lambda)
   }
 
   @Since("2.0.0")
@@ -417,16 +424,20 @@ class AFTSurvivalRegressionModel private[ml] (
     var predictionColumns = Seq.empty[Column]
 
     if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { features: Vector => predict(features) }
+      val predCol = udf(predict _).apply(col($(featuresCol)))
       predictionColNames :+= $(predictionCol)
-      predictionColumns :+= predictUDF(col($(featuresCol)))
+      predictionColumns :+= predCol
         .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if (hasQuantilesCol) {
-      val predictQuantilesUDF = udf { features: Vector => predictQuantiles(features)}
+      val quanCol = if ($(predictionCol).nonEmpty) {
+        udf(lambda2Quantiles _).apply(predictionColumns.head)
+      } else {
+        udf(predictQuantiles _).apply(col($(featuresCol)))
+      }
       predictionColNames :+= $(quantilesCol)
-      predictionColumns :+= predictQuantilesUDF(col($(featuresCol)))
+      predictionColumns :+= quanCol
         .as($(quantilesCol), outputSchema($(quantilesCol)).metadata)
     }
 

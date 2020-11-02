@@ -22,12 +22,13 @@ import scala.collection.immutable.IndexedSeq
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.columnar.{DefaultCachedBatchSerializer, InMemoryRelation}
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
@@ -56,6 +57,17 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   @transient @volatile
   private var cachedData = IndexedSeq[CachedData]()
 
+  /**
+   * Configurations needs to be turned off, to avoid regression for cached query, so that the
+   * outputPartitioning of the underlying cached query plan can be leveraged later.
+   * Configurations include:
+   * 1. AQE
+   * 2. Automatic bucketed table scan
+   */
+  private val forceDisableConfigs: Seq[ConfigEntry[Boolean]] = Seq(
+    SQLConf.ADAPTIVE_EXECUTION_ENABLED,
+    SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
+
   /** Clears all cached tables. */
   def clearCache(): Unit = this.synchronized {
     cachedData.foreach(_.cachedRepresentation.cacheBuilder.clearCache())
@@ -80,16 +92,14 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
-      // Turn off AQE so that the outputPartitioning of the underlying plan can be leveraged.
-      val sessionWithAqeOff = getOrCloneSessionWithAqeOff(query.sparkSession)
-      val inMemoryRelation = sessionWithAqeOff.withActive {
-        val qe = sessionWithAqeOff.sessionState.executePlan(planToCache)
+      val sessionWithConfigsOff = SparkSession.getOrCloneSessionWithConfigsOff(
+        query.sparkSession, forceDisableConfigs)
+      val inMemoryRelation = sessionWithConfigsOff.withActive {
+        val qe = sessionWithConfigsOff.sessionState.executePlan(planToCache)
         InMemoryRelation(
-          sessionWithAqeOff.sessionState.conf.useCompression,
-          sessionWithAqeOff.sessionState.conf.columnBatchSize, storageLevel,
-          qe.executedPlan,
-          tableName,
-          optimizedPlan = qe.optimizedPlan)
+          storageLevel,
+          qe,
+          tableName)
       }
 
       this.synchronized {
@@ -191,13 +201,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
     needToRecache.map { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
-      // Turn off AQE so that the outputPartitioning of the underlying plan can be leveraged.
-      val sessionWithAqeOff = getOrCloneSessionWithAqeOff(spark)
-      val newCache = sessionWithAqeOff.withActive {
-        val qe = sessionWithAqeOff.sessionState.executePlan(cd.plan)
-        InMemoryRelation(
-          cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = qe.executedPlan),
-          optimizedPlan = qe.optimizedPlan)
+      val sessionWithConfigsOff = SparkSession.getOrCloneSessionWithConfigsOff(
+        spark, forceDisableConfigs)
+      val newCache = sessionWithConfigsOff.withActive {
+        val qe = sessionWithConfigsOff.sessionState.executePlan(cd.plan)
+        InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
       }
       val recomputedPlan = cd.copy(cachedRepresentation = newCache)
       this.synchronized {
@@ -248,12 +256,17 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * `HadoopFsRelation` node(s) as part of its logical plan.
    */
   def recacheByPath(spark: SparkSession, resourcePath: String): Unit = {
-    val (fs, qualifiedPath) = {
-      val path = new Path(resourcePath)
-      val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
-      (fs, fs.makeQualified(path))
-    }
+    val path = new Path(resourcePath)
+    val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
+    recacheByPath(spark, path, fs)
+  }
 
+  /**
+   * Tries to re-cache all the cache entries that contain `resourcePath` in one or more
+   * `HadoopFsRelation` node(s) as part of its logical plan.
+   */
+  def recacheByPath(spark: SparkSession, resourcePath: Path, fs: FileSystem): Unit = {
+    val qualifiedPath = fs.makeQualified(resourcePath)
     recacheByCondition(spark, _.plan.find(lookupAndRefresh(_, fs, qualifiedPath)).isDefined)
   }
 

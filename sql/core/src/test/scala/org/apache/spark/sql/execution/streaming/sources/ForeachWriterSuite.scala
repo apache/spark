@@ -333,6 +333,6 @@ class TestForeachWriter extends ForeachWriter[Int] {
 
   override def close(errorOrNull: Throwable): Unit = {
     events += ForeachWriterSuite.Close(error = Option(errorOrNull))
-    ForeachWriterSuite.addEvents(events)
+    ForeachWriterSuite.addEvents(events.toSeq)
   }
 }

@@ -23,18 +23,22 @@ import java.net.URI
 import org.apache.log4j.Level
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
-import org.apache.spark.sql.{QueryTest, Row, SparkSession, Strategy}
+import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
+import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
+import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.Utils
 
 class AdaptiveQueryExecSuite
@@ -68,7 +72,7 @@ class AdaptiveQueryExecSuite
     val result = dfAdaptive.collect()
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = sql(query)
-      QueryTest.sameRows(result.toSeq, df.collect().toSeq)
+      checkAnswer(df, result)
     }
     val planAfter = dfAdaptive.queryExecution.executedPlan
     assert(planAfter.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
@@ -100,6 +104,12 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  private def findTopLevelBaseJoin(plan: SparkPlan): Seq[BaseJoinExec] = {
+    collect(plan) {
+      case j: BaseJoinExec => j
+    }
+  }
+
   private def findReusedExchange(plan: SparkPlan): Seq[ReusedExchangeExec] = {
     collectWithSubqueries(plan) {
       case ShuffleQueryStageExec(_, e: ReusedExchangeExec) => e
@@ -128,6 +138,17 @@ class AdaptiveQueryExecSuite
       assert(parts.forall(rdd.preferredLocations(_).nonEmpty))
     }
     assert(numShuffles === (numLocalReaders.length + numShufflesWithoutLocalReader))
+  }
+
+  private def checkInitialPartitionNum(df: Dataset[_], numPartition: Int): Unit = {
+    // repartition obeys initialPartitionNum when adaptiveExecutionEnabled
+    val plan = df.queryExecution.executedPlan
+    assert(plan.isInstanceOf[AdaptiveSparkPlanExec])
+    val shuffle = plan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan.collect {
+      case s: ShuffleExchangeExec => s
+    }
+    assert(shuffle.size == 1)
+    assert(shuffle(0).outputPartitioning.numPartitions == numPartition)
   }
 
   test("Change merge join to broadcast join") {
@@ -202,34 +223,36 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("Empty stage coalesced to 0-partition RDD") {
+  test("Empty stage coalesced to 1-partition RDD") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true") {
       val df1 = spark.range(10).withColumn("a", 'id)
       val df2 = spark.range(10).withColumn("b", 'id)
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-        val testDf = df1.where('a > 10).join(df2.where('b > 10), "id").groupBy('a).count()
+        val testDf = df1.where('a > 10).join(df2.where('b > 10), Seq("id"), "left_outer")
+          .groupBy('a).count()
         checkAnswer(testDf, Seq())
         val plan = testDf.queryExecution.executedPlan
         assert(find(plan)(_.isInstanceOf[SortMergeJoinExec]).isDefined)
         val coalescedReaders = collect(plan) {
           case r: CustomShuffleReaderExec => r
         }
-        assert(coalescedReaders.length == 2)
-        coalescedReaders.foreach(r => assert(r.partitionSpecs.isEmpty))
+        assert(coalescedReaders.length == 3)
+        coalescedReaders.foreach(r => assert(r.partitionSpecs.length == 1))
       }
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
-        val testDf = df1.where('a > 10).join(df2.where('b > 10), "id").groupBy('a).count()
+        val testDf = df1.where('a > 10).join(df2.where('b > 10), Seq("id"), "left_outer")
+          .groupBy('a).count()
         checkAnswer(testDf, Seq())
         val plan = testDf.queryExecution.executedPlan
         assert(find(plan)(_.isInstanceOf[BroadcastHashJoinExec]).isDefined)
         val coalescedReaders = collect(plan) {
           case r: CustomShuffleReaderExec => r
         }
-        assert(coalescedReaders.length == 2, s"$plan")
-        coalescedReaders.foreach(r => assert(r.partitionSpecs.isEmpty))
+        assert(coalescedReaders.length == 3, s"$plan")
+        coalescedReaders.foreach(r => assert(r.isLocalReader || r.partitionSpecs.length == 1))
       }
     }
   }
@@ -546,7 +569,8 @@ class AdaptiveQueryExecSuite
 
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
+      SQLConf.BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT.key -> "0") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData " +
           "join testData2 t2 ON key = t2.a " +
@@ -818,6 +842,19 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("tree string output") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val df = sql("SELECT * FROM testData join testData2 ON key = a where value = '1'")
+      val planBefore = df.queryExecution.executedPlan
+      assert(!planBefore.toString.contains("== Current Plan =="))
+      assert(!planBefore.toString.contains("== Initial Plan =="))
+      df.collect()
+      val planAfter = df.queryExecution.executedPlan
+      assert(planAfter.toString.contains("== Final Plan =="))
+      assert(planAfter.toString.contains("== Initial Plan =="))
+    }
+  }
+
   test("SPARK-31384: avoid NPE in OptimizeSkewedJoin when there's 0 partition plan") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
@@ -962,9 +999,9 @@ class AdaptiveQueryExecSuite
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       val df = spark.range(10).select(sum('id))
       assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
-      SparkSession.setActiveSession(null)
+      SparkSession.setActiveSessionInternal(null)
       checkAnswer(df, Seq(Row(45)))
-      SparkSession.setActiveSession(spark) // recover the active session.
+      SparkSession.setActiveSessionInternal(spark) // recover the active session.
     }
   }
 
@@ -1022,19 +1059,252 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-31220 repartition obeys initialPartitionNum when adaptiveExecutionEnabled") {
+  test("SPARK-31220, SPARK-32056: repartition by expression with AQE") {
     Seq(true, false).foreach { enableAQE =>
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
-        SQLConf.SHUFFLE_PARTITIONS.key -> "6",
-        SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "7") {
-        val partitionsNum = spark.range(10).repartition($"id").rdd.collectPartitions().length
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "10",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+
+        val df1 = spark.range(10).repartition($"id")
+        val df2 = spark.range(10).repartition($"id" + 1)
+
+        val partitionsNum1 = df1.rdd.collectPartitions().length
+        val partitionsNum2 = df2.rdd.collectPartitions().length
+
         if (enableAQE) {
-          assert(partitionsNum === 7)
+          assert(partitionsNum1 < 10)
+          assert(partitionsNum2 < 10)
+
+          checkInitialPartitionNum(df1, 10)
+          checkInitialPartitionNum(df2, 10)
         } else {
-          assert(partitionsNum === 6)
+          assert(partitionsNum1 === 10)
+          assert(partitionsNum2 === 10)
+        }
+
+
+        // Don't coalesce partitions if the number of partitions is specified.
+        val df3 = spark.range(10).repartition(10, $"id")
+        val df4 = spark.range(10).repartition(10)
+        assert(df3.rdd.collectPartitions().length == 10)
+        assert(df4.rdd.collectPartitions().length == 10)
+      }
+    }
+  }
+
+  test("SPARK-31220, SPARK-32056: repartition by range with AQE") {
+    Seq(true, false).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "10",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+
+        val df1 = spark.range(10).toDF.repartitionByRange($"id".asc)
+        val df2 = spark.range(10).toDF.repartitionByRange(($"id" + 1).asc)
+
+        val partitionsNum1 = df1.rdd.collectPartitions().length
+        val partitionsNum2 = df2.rdd.collectPartitions().length
+
+        if (enableAQE) {
+          assert(partitionsNum1 < 10)
+          assert(partitionsNum2 < 10)
+
+          checkInitialPartitionNum(df1, 10)
+          checkInitialPartitionNum(df2, 10)
+        } else {
+          assert(partitionsNum1 === 10)
+          assert(partitionsNum2 === 10)
+        }
+
+        // Don't coalesce partitions if the number of partitions is specified.
+        val df3 = spark.range(10).repartitionByRange(10, $"id".asc)
+        assert(df3.rdd.collectPartitions().length == 10)
+      }
+    }
+  }
+
+  test("SPARK-31220, SPARK-32056: repartition using sql and hint with AQE") {
+    Seq(true, false).foreach { enableAQE =>
+      withTempView("test") {
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+          SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "10",
+          SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+
+          spark.range(10).toDF.createTempView("test")
+
+          val df1 = spark.sql("SELECT /*+ REPARTITION(id) */ * from test")
+          val df2 = spark.sql("SELECT /*+ REPARTITION_BY_RANGE(id) */ * from test")
+          val df3 = spark.sql("SELECT * from test DISTRIBUTE BY id")
+          val df4 = spark.sql("SELECT * from test CLUSTER BY id")
+
+          val partitionsNum1 = df1.rdd.collectPartitions().length
+          val partitionsNum2 = df2.rdd.collectPartitions().length
+          val partitionsNum3 = df3.rdd.collectPartitions().length
+          val partitionsNum4 = df4.rdd.collectPartitions().length
+
+          if (enableAQE) {
+            assert(partitionsNum1 < 10)
+            assert(partitionsNum2 < 10)
+            assert(partitionsNum3 < 10)
+            assert(partitionsNum4 < 10)
+
+            checkInitialPartitionNum(df1, 10)
+            checkInitialPartitionNum(df2, 10)
+            checkInitialPartitionNum(df3, 10)
+            checkInitialPartitionNum(df4, 10)
+          } else {
+            assert(partitionsNum1 === 10)
+            assert(partitionsNum2 === 10)
+            assert(partitionsNum3 === 10)
+            assert(partitionsNum4 === 10)
+          }
+
+          // Don't coalesce partitions if the number of partitions is specified.
+          val df5 = spark.sql("SELECT /*+ REPARTITION(10, id) */ * from test")
+          val df6 = spark.sql("SELECT /*+ REPARTITION_BY_RANGE(10, id) */ * from test")
+          assert(df5.rdd.collectPartitions().length == 10)
+          assert(df6.rdd.collectPartitions().length == 10)
         }
       }
+    }
+  }
+
+  test("SPARK-32573: Eliminate NAAJ when BuildSide is HashedRelationWithAllNullKeys") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData2 t1 WHERE t1.b NOT IN (SELECT b FROM testData3)")
+      val bhj = findTopLevelBroadcastHashJoin(plan)
+      assert(bhj.size == 1)
+      val join = findTopLevelBaseJoin(adaptivePlan)
+      assert(join.isEmpty)
+      checkNumLocalShuffleReaders(adaptivePlan)
+    }
+  }
+
+  test("SPARK-32717: AQEOptimizer should respect excludedRules configuration") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
+      // This test is a copy of test(SPARK-32573), in order to test the configuration
+      // `spark.sql.adaptive.optimizer.excludedRules` works as expect.
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> EliminateJoinToEmptyRelation.ruleName) {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData2 t1 WHERE t1.b NOT IN (SELECT b FROM testData3)")
+      val bhj = findTopLevelBroadcastHashJoin(plan)
+      assert(bhj.size == 1)
+      val join = findTopLevelBaseJoin(adaptivePlan)
+      // this is different compares to test(SPARK-32573) due to the rule
+      // `EliminateJoinToEmptyRelation` has been excluded.
+      assert(join.nonEmpty)
+      checkNumLocalShuffleReaders(adaptivePlan)
+    }
+  }
+
+  test("SPARK-32649: Eliminate inner and semi join to empty relation") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+      Seq(
+        // inner join (small table at right side)
+        "SELECT * FROM testData t1 join testData3 t2 ON t1.key = t2.a WHERE t2.b = 1",
+        // inner join (small table at left side)
+        "SELECT * FROM testData3 t1 join testData t2 ON t1.a = t2.key WHERE t1.b = 1",
+        // left semi join
+        "SELECT * FROM testData t1 left semi join testData3 t2 ON t1.key = t2.a AND t2.b = 1"
+      ).foreach(query => {
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+        val smj = findTopLevelSortMergeJoin(plan)
+        assert(smj.size == 1)
+        val join = findTopLevelBaseJoin(adaptivePlan)
+        assert(join.isEmpty)
+        checkNumLocalShuffleReaders(adaptivePlan)
+      })
+    }
+  }
+
+  test("SPARK-32753: Only copy tags to node with no tags") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withTempView("v1") {
+        spark.range(10).union(spark.range(10)).createOrReplaceTempView("v1")
+
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT id FROM v1 GROUP BY id DISTRIBUTE BY id")
+        assert(collect(adaptivePlan) {
+          case s: ShuffleExchangeExec => s
+        }.length == 1)
+      }
+    }
+  }
+
+  test("Logging plan changes for AQE") {
+    val testAppender = new LogAppender("plan changes")
+    withLogAppender(testAppender) {
+      withSQLConf(
+          SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "INFO",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        sql("SELECT * FROM testData JOIN testData2 ON key = a " +
+          "WHERE value = (SELECT max(a) FROM testData3)").collect()
+      }
+      Seq("=== Result of Batch AQE Preparations ===",
+          "=== Result of Batch AQE Post Stage Creation ===",
+          "=== Result of Batch AQE Replanning ===",
+          "=== Result of Batch AQE Query Stage Optimization ===",
+          "=== Result of Batch AQE Final Query Stage Optimization ===").foreach { expectedMsg =>
+        assert(testAppender.loggingEvents.exists(_.getRenderedMessage.contains(expectedMsg)))
+      }
+    }
+  }
+
+  test("SPARK-32932: Do not use local shuffle reader at final stage on write command") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val data = for (
+        i <- 1L to 10L;
+        j <- 1L to 3L
+      ) yield (i, j)
+
+      val df = data.toDF("i", "j").repartition($"j")
+      var noLocalReader: Boolean = false
+      val listener = new QueryExecutionListener {
+        override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+          qe.executedPlan match {
+            case plan@(_: DataWritingCommandExec | _: V2TableWriteExec) =>
+              assert(plan.asInstanceOf[UnaryExecNode].child.isInstanceOf[AdaptiveSparkPlanExec])
+              noLocalReader = collect(plan) {
+                case exec: CustomShuffleReaderExec if exec.isLocalReader => exec
+              }.isEmpty
+            case _ => // ignore other events
+          }
+        }
+        override def onFailure(funcName: String, qe: QueryExecution,
+          exception: Exception): Unit = {}
+      }
+      spark.listenerManager.register(listener)
+
+      withTable("t") {
+        df.write.partitionBy("j").saveAsTable("t")
+        sparkContext.listenerBus.waitUntilEmpty()
+        assert(noLocalReader)
+        noLocalReader = false
+      }
+
+      // Test DataSource v2
+      val format = classOf[NoopDataSource].getName
+      df.write.format(format).mode("overwrite").save()
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(noLocalReader)
+      noLocalReader = false
+
+      spark.listenerManager.unregister(listener)
     }
   }
 }

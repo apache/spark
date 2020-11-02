@@ -502,6 +502,6 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       DataType.canWrite(writeType, readType, byName, analysis.caseSensitiveResolution, name,
         storeAssignmentPolicy, errMsg => errs += errMsg) === false, desc)
     assert(errs.size === numErrs, s"Should produce $numErrs error messages")
-    checkErrors(errs)
+    checkErrors(errs.toSeq)
   }
 }

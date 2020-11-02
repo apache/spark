@@ -21,13 +21,14 @@ import signal
 import sys
 import threading
 import warnings
+import importlib
 from threading import RLock
 from tempfile import NamedTemporaryFile
 
 from py4j.protocol import Py4JError
 from py4j.java_gateway import is_instance_of
 
-from pyspark import accumulators
+from pyspark import accumulators, since
 from pyspark.accumulators import Accumulator
 from pyspark.broadcast import Broadcast, BroadcastPickleRegistry
 from pyspark.conf import SparkConf
@@ -37,13 +38,11 @@ from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deseria
     PairDeserializer, AutoBatchedSerializer, NoOpSerializer, ChunkedStream
 from pyspark.storagelevel import StorageLevel
 from pyspark.resource.information import ResourceInformation
-from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
+from pyspark.rdd import RDD, _load_from_socket
+from pyspark.taskcontext import TaskContext
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
 from pyspark.profiler import ProfilerCollector, BasicProfiler
-
-if sys.version > '3':
-    xrange = range
 
 
 __all__ = ['SparkContext']
@@ -64,12 +63,59 @@ class SparkContext(object):
     connection to a Spark cluster, and can be used to create :class:`RDD` and
     broadcast variables on that cluster.
 
-    .. note:: Only one :class:`SparkContext` should be active per JVM. You must `stop()`
-        the active :class:`SparkContext` before creating a new one.
+    When you create a new SparkContext, at least the master and app name should
+    be set, either through the named parameters here or through `conf`.
 
-    .. note:: :class:`SparkContext` instance is not supported to share across multiple
-        processes out of the box, and PySpark does not guarantee multi-processing execution.
-        Use threads instead for concurrent processing purpose.
+    Parameters
+    ----------
+    master : str, optional
+        Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+    appName : str, optional
+        A name for your job, to display on the cluster web UI.
+    sparkHome : str, optional
+        Location where Spark is installed on cluster nodes.
+    pyFiles : str, optional
+        Collection of .zip or .py files to send to the cluster
+        and add to PYTHONPATH.  These can be paths on the local file
+        system or HDFS, HTTP, HTTPS, or FTP URLs.
+    environment : dict, optional
+        A dictionary of environment variables to set on
+        worker nodes.
+    batchSize : int, optional
+        The number of Python objects represented as a single
+        Java object. Set 1 to disable batching, 0 to automatically choose
+        the batch size based on object sizes, or -1 to use an unlimited
+        batch size
+    serializer : :class:`pyspark.serializers.Serializer`, optional
+        The serializer for RDDs.
+    conf : dict, optional
+        A :class:`SparkConf` object setting Spark properties.
+    gateway : optional
+        Use an existing gateway and JVM, otherwise a new JVM
+        will be instantiated. This is only used internally.
+    jsc : optional
+        The JavaSparkContext instance. This is only used internally.
+    profiler_cls : :class:`pyspark.profiler.Profiler`, optional
+        A class of custom Profiler used to do profiling
+        (default is :class:`pyspark.profiler.BasicProfiler`).
+
+    Notes
+    -----
+    Only one :class:`SparkContext` should be active per JVM. You must `stop()`
+    the active :class:`SparkContext` before creating a new one.
+
+    :class:`SparkContext` instance is not supported to share across multiple
+    processes out of the box, and PySpark does not guarantee multi-processing execution.
+    Use threads instead for concurrent processing purpose.
+
+    Examples
+    --------
+    >>> from pyspark.context import SparkContext
+    >>> sc = SparkContext('local', 'test')
+    >>> sc2 = SparkContext('local', 'test2') # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
     """
 
     _gateway = None
@@ -84,40 +130,11 @@ class SparkContext(object):
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
                  environment=None, batchSize=0, serializer=PickleSerializer(), conf=None,
                  gateway=None, jsc=None, profiler_cls=BasicProfiler):
-        """
-        Create a new SparkContext. At least the master and app name should be set,
-        either through the named parameters here or through `conf`.
+        if (conf is None or
+                conf.get("spark.executor.allowSparkContext", "false").lower() != "true"):
+            # In order to prevent SparkContext from being created in executors.
+            SparkContext._assert_on_driver()
 
-        :param master: Cluster URL to connect to
-               (e.g. mesos://host:port, spark://host:port, local[4]).
-        :param appName: A name for your job, to display on the cluster web UI.
-        :param sparkHome: Location where Spark is installed on cluster nodes.
-        :param pyFiles: Collection of .zip or .py files to send to the cluster
-               and add to PYTHONPATH.  These can be paths on the local file
-               system or HDFS, HTTP, HTTPS, or FTP URLs.
-        :param environment: A dictionary of environment variables to set on
-               worker nodes.
-        :param batchSize: The number of Python objects represented as a single
-               Java object. Set 1 to disable batching, 0 to automatically choose
-               the batch size based on object sizes, or -1 to use an unlimited
-               batch size
-        :param serializer: The serializer for RDDs.
-        :param conf: A :class:`SparkConf` object setting Spark properties.
-        :param gateway: Use an existing gateway and JVM, otherwise a new JVM
-               will be instantiated.
-        :param jsc: The JavaSparkContext instance (optional).
-        :param profiler_cls: A class of custom Profiler used to do profiling
-               (default is pyspark.profiler.BasicProfiler).
-
-
-        >>> from pyspark.context import SparkContext
-        >>> sc = SparkContext('local', 'test')
-
-        >>> sc2 = SparkContext('local', 'test2') # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        ValueError:...
-        """
         self._callsite = first_spark_call() or CallSite(None, None, None)
         if gateway is not None and gateway.gateway_parameters.auth_token is None:
             raise ValueError(
@@ -208,15 +225,6 @@ class SparkContext(object):
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
-
-        if sys.version_info < (3, 6):
-            with warnings.catch_warnings():
-                warnings.simplefilter("once")
-                warnings.warn(
-                    "Support for Python 2 and Python 3 prior to version 3.6 is deprecated as "
-                    "of Spark 3.0. See also the plan for dropping Python 2 support at "
-                    "https://spark.apache.org/news/plan-for-dropping-python-2-support.html.",
-                    DeprecationWarning)
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
@@ -394,7 +402,6 @@ class SparkContext(object):
         return self._jsc.version()
 
     @property
-    @ignore_unicode_prefix
     def applicationId(self):
         """
         A unique identifier for the Spark application.
@@ -404,7 +411,7 @@ class SparkContext(object):
         * in case of YARN something like 'application_1433865536131_34483'
 
         >>> sc.applicationId  # doctest: +ELLIPSIS
-        u'local-...'
+        'local-...'
         """
         return self._jsc.sc().applicationId()
 
@@ -486,20 +493,20 @@ class SparkContext(object):
             end = start
             start = 0
 
-        return self.parallelize(xrange(start, end, step), numSlices)
+        return self.parallelize(range(start, end, step), numSlices)
 
     def parallelize(self, c, numSlices=None):
         """
-        Distribute a local Python collection to form an RDD. Using xrange
+        Distribute a local Python collection to form an RDD. Using range
         is recommended if the input represents a range for performance.
 
         >>> sc.parallelize([0, 2, 3, 4, 6], 5).glom().collect()
         [[0], [2], [3], [4], [6]]
-        >>> sc.parallelize(xrange(0, 6, 2), 5).glom().collect()
+        >>> sc.parallelize(range(0, 6, 2), 5).glom().collect()
         [[], [0], [], [2], [4]]
         """
         numSlices = int(numSlices) if numSlices is not None else self.defaultParallelism
-        if isinstance(c, xrange):
+        if isinstance(c, range):
             size = len(c)
             if size == 0:
                 return self.parallelize([], numSlices)
@@ -518,7 +525,7 @@ class SparkContext(object):
                 # the empty iterator to a list, thus make sure worker reuse takes effect.
                 # See more details in SPARK-26549.
                 assert len(list(iterator)) == 0
-                return xrange(getStart(split), getStart(split + 1), step)
+                return range(getStart(split), getStart(split + 1), step)
 
             return self.parallelize([], numSlices).mapPartitionsWithIndex(f)
 
@@ -587,7 +594,6 @@ class SparkContext(object):
         minPartitions = minPartitions or self.defaultMinPartitions
         return RDD(self._jsc.objectFile(name, minPartitions), self)
 
-    @ignore_unicode_prefix
     def textFile(self, name, minPartitions=None, use_unicode=True):
         """
         Read a text file from HDFS, a local file system (available on all
@@ -604,13 +610,12 @@ class SparkContext(object):
         ...    _ = testFile.write("Hello world!")
         >>> textFile = sc.textFile(path)
         >>> textFile.collect()
-        [u'Hello world!']
+        ['Hello world!']
         """
         minPartitions = minPartitions or min(self.defaultParallelism, 2)
         return RDD(self._jsc.textFile(name, minPartitions), self,
                    UTF8Deserializer(use_unicode))
 
-    @ignore_unicode_prefix
     def wholeTextFiles(self, path, minPartitions=None, use_unicode=True):
         """
         Read a directory of text files from HDFS, a local file system
@@ -654,7 +659,7 @@ class SparkContext(object):
         ...    _ = file2.write("2")
         >>> textFiles = sc.wholeTextFiles(dirPath)
         >>> sorted(textFiles.collect())
-        [(u'.../1.txt', u'1'), (u'.../2.txt', u'2')]
+        [('.../1.txt', '1'), ('.../2.txt', '2')]
         """
         minPartitions = minPartitions or self.defaultMinPartitions
         return RDD(self._jsc.wholeTextFiles(path, minPartitions), self,
@@ -842,7 +847,6 @@ class SparkContext(object):
         jrdd = self._jsc.checkpointFile(name)
         return RDD(jrdd, self, input_deserializer)
 
-    @ignore_unicode_prefix
     def union(self, rdds):
         """
         Build the union of a list of RDDs.
@@ -856,10 +860,10 @@ class SparkContext(object):
         ...    _ = testFile.write("Hello")
         >>> textFile = sc.textFile(path)
         >>> textFile.collect()
-        [u'Hello']
+        ['Hello']
         >>> parallelized = sc.parallelize(["World!"])
         >>> sorted(sc.union([textFile, parallelized]).collect())
-        [u'Hello', 'World!']
+        ['Hello', 'World!']
         """
         first_jrdd_deserializer = rdds[0]._jrdd_deserializer
         if any(x._jrdd_deserializer != first_jrdd_deserializer for x in rdds):
@@ -955,9 +959,8 @@ class SparkContext(object):
             self._python_includes.append(filename)
             # for tests in local mode
             sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
-        if sys.version > '3':
-            import importlib
-            importlib.invalidate_caches()
+
+        importlib.invalidate_caches()
 
     def setCheckpointDir(self, dirName):
         """
@@ -965,6 +968,16 @@ class SparkContext(object):
         directory must be an HDFS path if running on a cluster.
         """
         self._jsc.sc().setCheckpointDir(dirName)
+
+    @since(3.1)
+    def getCheckpointDir(self):
+        """
+        Return the directory where RDDs are checkpointed. Returns None if no
+        checkpoint directory has been set.
+        """
+        if not self._jsc.sc().getCheckpointDir().isEmpty():
+            return self._jsc.sc().getCheckpointDir().get()
+        return None
 
     def _getJavaStorageLevel(self, storageLevel):
         """
@@ -1025,8 +1038,10 @@ class SparkContext(object):
         .. note:: Currently, setting a group ID (set to local properties) with multiple threads
             does not properly work. Internally threads on PVM and JVM are not synced, and JVM
             thread can be reused for multiple threads on PVM, which fails to isolate local
-            properties for each thread on PVM. To work around this, You can use
-            :meth:`RDD.collectWithJobGroup` for now.
+            properties for each thread on PVM.
+
+            To avoid this, enable the pinned thread mode by setting ``PYSPARK_PIN_THREAD``
+            environment variable to ``true`` and uses :class:`pyspark.InheritableThread`.
         """
         self._jsc.setJobGroup(groupId, description, interruptOnCancel)
 
@@ -1038,8 +1053,10 @@ class SparkContext(object):
         .. note:: Currently, setting a local property with multiple threads does not properly work.
             Internally threads on PVM and JVM are not synced, and JVM thread
             can be reused for multiple threads on PVM, which fails to isolate local properties
-            for each thread on PVM. To work around this, You can use
-            :meth:`RDD.collectWithJobGroup`.
+            for each thread on PVM.
+
+            To avoid this, enable the pinned thread mode by setting ``PYSPARK_PIN_THREAD``
+            environment variable to ``true`` and uses :class:`pyspark.InheritableThread`.
         """
         self._jsc.setLocalProperty(key, value)
 
@@ -1057,8 +1074,10 @@ class SparkContext(object):
         .. note:: Currently, setting a job description (set to local properties) with multiple
             threads does not properly work. Internally threads on PVM and JVM are not synced,
             and JVM thread can be reused for multiple threads on PVM, which fails to isolate
-            local properties for each thread on PVM. To work around this, You can use
-            :meth:`RDD.collectWithJobGroup` for now.
+            local properties for each thread on PVM.
+
+            To avoid this, enable the pinned thread mode by setting ``PYSPARK_PIN_THREAD``
+            environment variable to ``true`` and uses :class:`pyspark.InheritableThread`.
         """
         self._jsc.setJobDescription(value)
 
@@ -1144,6 +1163,16 @@ class SparkContext(object):
             addrs = [addr for addr in jaddresses]
             resources[name] = ResourceInformation(name, addrs)
         return resources
+
+    @staticmethod
+    def _assert_on_driver():
+        """
+        Called to ensure that SparkContext is created only on the Driver.
+
+        Throws an exception if a SparkContext is about to be created in executors.
+        """
+        if TaskContext.get() is not None:
+            raise Exception("SparkContext should only be created and accessed on the driver.")
 
 
 def _test():

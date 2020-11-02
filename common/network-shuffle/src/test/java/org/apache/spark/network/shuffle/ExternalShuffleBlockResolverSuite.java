@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -70,15 +69,6 @@ public class ExternalShuffleBlockResolverSuite {
       fail("Should have failed");
     } catch (RuntimeException e) {
       assertTrue("Bad error message: " + e, e.getMessage().contains("not registered"));
-    }
-
-    // Invalid shuffle manager
-    try {
-      resolver.registerExecutor("app0", "exec2", dataContext.createExecutorInfo("foobar"));
-      resolver.getBlockData("app0", "exec2", 1, 1, 0);
-      fail("Should have failed");
-    } catch (UnsupportedOperationException e) {
-      // pass
     }
 
     // Nonexistent shuffle block
@@ -144,22 +134,4 @@ public class ExternalShuffleBlockResolverSuite {
     assertEquals(shuffleInfo, mapper.readValue(legacyShuffleJson, ExecutorShuffleInfo.class));
   }
 
-  @Test
-  public void testNormalizeAndInternPathname() {
-    assertPathsMatch("/foo", "bar", "baz", "/foo/bar/baz");
-    assertPathsMatch("//foo/", "bar/", "//baz", "/foo/bar/baz");
-    assertPathsMatch("foo", "bar", "baz///", "foo/bar/baz");
-    assertPathsMatch("/foo/", "/bar//", "/baz", "/foo/bar/baz");
-    assertPathsMatch("/", "", "", "/");
-    assertPathsMatch("/", "/", "/", "/");
-  }
-
-  private void assertPathsMatch(String p1, String p2, String p3, String expectedPathname) {
-    String normPathname =
-      ExecutorDiskUtils.createNormalizedInternedPathname(p1, p2, p3);
-    assertEquals(expectedPathname, normPathname);
-    File file = new File(normPathname);
-    String returnedPath = file.getPath();
-    assertTrue(normPathname == returnedPath);
-  }
 }

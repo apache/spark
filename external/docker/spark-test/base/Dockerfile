@@ -15,23 +15,14 @@
 # limitations under the License.
 #
 
-FROM ubuntu:xenial
+FROM ubuntu:20.04
 
 # Upgrade package index
-# install a few other useful packages plus Open Jdk 8
+# install a few other useful packages plus Open Java 11
 # Remove unneeded /var/lib/apt/lists/* after install to reduce the
 # docker image size (by ~30MB)
 RUN apt-get update && \
-    apt-get install -y less openjdk-8-jre-headless iproute2 vim-tiny sudo openssh-server && \
+    apt-get install -y less openjdk-11-jre-headless iproute2 vim-tiny sudo openssh-server && \
     rm -rf /var/lib/apt/lists/*
 
-ENV SCALA_VERSION 2.12.10
-ENV CDH_VERSION cdh4
-ENV SCALA_HOME /opt/scala-$SCALA_VERSION
 ENV SPARK_HOME /opt/spark
-ENV PATH $SPARK_HOME:$SCALA_HOME/bin:$PATH
-
-# Install Scala
-ADD https://www.scala-lang.org/files/archive/scala-$SCALA_VERSION.tgz /
-RUN (cd / && gunzip < scala-$SCALA_VERSION.tgz)|(cd /opt && tar -xvf -)
-RUN rm /scala-$SCALA_VERSION.tgz

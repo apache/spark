@@ -44,12 +44,25 @@ case class SubqueryBroadcastExec(
     buildKeys: Seq[Expression],
     child: SparkPlan) extends BaseSubqueryExec with UnaryExecNode {
 
+  // `SubqueryBroadcastExec` is only used with `InSubqueryExec`. No one would reference this output,
+  // so the exprId doesn't matter here. But it's important to correctly report the output length, so
+  // that `InSubqueryExec` can know it's the single-column execution mode, not multi-column.
+  override def output: Seq[Attribute] = {
+    val key = buildKeys(index)
+    val name = key match {
+      case n: NamedExpression => n.name
+      case Cast(n: NamedExpression, _, _) => n.name
+      case _ => "key"
+    }
+    Seq(AttributeReference(name, key.dataType, key.nullable)())
+  }
+
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
     "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"))
 
   override def doCanonicalize(): SparkPlan = {
-    val keys = buildKeys.map(k => QueryPlan.normalizeExpressions(k, output))
+    val keys = buildKeys.map(k => QueryPlan.normalizeExpressions(k, child.output))
     SubqueryBroadcastExec("dpp", index, keys, child.canonicalized)
   }
 

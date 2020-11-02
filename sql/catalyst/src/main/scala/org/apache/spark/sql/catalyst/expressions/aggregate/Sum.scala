@@ -58,13 +58,11 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
     case _ => DoubleType
   }
 
-  private lazy val sumDataType = resultType
-
-  private lazy val sum = AttributeReference("sum", sumDataType)()
+  private lazy val sum = AttributeReference("sum", resultType)()
 
   private lazy val isEmpty = AttributeReference("isEmpty", BooleanType, nullable = false)()
 
-  private lazy val zero = Literal.default(sumDataType)
+  private lazy val zero = Literal.default(resultType)
 
   override lazy val aggBufferAttributes = resultType match {
     case _: DecimalType => sum :: isEmpty :: Nil
@@ -72,25 +70,38 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
   }
 
   override lazy val initialValues: Seq[Expression] = resultType match {
-    case _: DecimalType => Seq(Literal(null, resultType), Literal(true, BooleanType))
+    case _: DecimalType => Seq(zero, Literal(true, BooleanType))
     case _ => Seq(Literal(null, resultType))
   }
 
   override lazy val updateExpressions: Seq[Expression] = {
-    if (child.nullable) {
-      val updateSumExpr = coalesce(coalesce(sum, zero) + child.cast(sumDataType), sum)
-      resultType match {
-        case _: DecimalType =>
-          Seq(updateSumExpr, isEmpty && child.isNull)
-        case _ => Seq(updateSumExpr)
-      }
-    } else {
-      val updateSumExpr = coalesce(sum, zero) + child.cast(sumDataType)
-      resultType match {
-        case _: DecimalType =>
-          Seq(updateSumExpr, Literal(false, BooleanType))
-        case _ => Seq(updateSumExpr)
-      }
+    resultType match {
+      case _: DecimalType =>
+        // For decimal type, the initial value of `sum` is 0. We need to keep `sum` unchanged if
+        // the input is null, as SUM function ignores null input. The `sum` can only be null if
+        // overflow happens under non-ansi mode.
+        val sumExpr = if (child.nullable) {
+          If(child.isNull, sum, sum + KnownNotNull(child).cast(resultType))
+        } else {
+          sum + child.cast(resultType)
+        }
+        // The buffer becomes non-empty after seeing the first not-null input.
+        val isEmptyExpr = if (child.nullable) {
+          isEmpty && child.isNull
+        } else {
+          Literal(false, BooleanType)
+        }
+        Seq(sumExpr, isEmptyExpr)
+      case _ =>
+        // For non-decimal type, the initial value of `sum` is null, which indicates no value.
+        // We need `coalesce(sum, zero)` to start summing values. And we need an outer `coalesce`
+        // in case the input is nullable. The `sum` can only be null if there is no value, as
+        // non-decimal type can produce overflowed value under non-ansi mode.
+        if (child.nullable) {
+          Seq(coalesce(coalesce(sum, zero) + child.cast(resultType), sum))
+        } else {
+          Seq(coalesce(sum, zero) + child.cast(resultType))
+        }
     }
   }
 
@@ -107,15 +118,20 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
    * means we have seen atleast a value that was not null.
    */
   override lazy val mergeExpressions: Seq[Expression] = {
-    val mergeSumExpr = coalesce(coalesce(sum.left, zero) + sum.right, sum.left)
     resultType match {
       case _: DecimalType =>
-        val inputOverflow = !isEmpty.right && sum.right.isNull
         val bufferOverflow = !isEmpty.left && sum.left.isNull
+        val inputOverflow = !isEmpty.right && sum.right.isNull
         Seq(
-          If(inputOverflow || bufferOverflow, Literal.create(null, sumDataType), mergeSumExpr),
+          If(
+            bufferOverflow || inputOverflow,
+            Literal.create(null, resultType),
+            // If both the buffer and the input do not overflow, just add them, as they can't be
+            // null. See the comments inside `updateExpressions`: `sum` can only be null if
+            // overflow happens.
+            KnownNotNull(sum.left) + KnownNotNull(sum.right)),
           isEmpty.left && isEmpty.right)
-      case _ => Seq(mergeSumExpr)
+      case _ => Seq(coalesce(coalesce(sum.left, zero) + sum.right, sum.left))
     }
   }
 
@@ -128,7 +144,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
    */
   override lazy val evaluateExpression: Expression = resultType match {
     case d: DecimalType =>
-      If(isEmpty, Literal.create(null, sumDataType),
+      If(isEmpty, Literal.create(null, resultType),
         CheckOverflowInSum(sum, d, !SQLConf.get.ansiEnabled))
     case _ => sum
   }

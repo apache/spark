@@ -107,13 +107,13 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+            EnsureRequirements.apply(
               ShuffledHashJoinExec(
                 leftKeys, rightKeys, joinType, BuildRight, boundCondition, left, right)),
             expectedAnswer,
             sortAnswers = true)
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+            EnsureRequirements.apply(
               createLeftSemiPlusJoin(ShuffledHashJoinExec(
                 leftKeys, rightKeys, leftSemiPlus, BuildRight, boundCondition, left, right))),
             expectedAnswer,
@@ -126,13 +126,13 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+            EnsureRequirements.apply(
               BroadcastHashJoinExec(
                 leftKeys, rightKeys, joinType, BuildRight, boundCondition, left, right)),
             expectedAnswer,
             sortAnswers = true)
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+            EnsureRequirements.apply(
               createLeftSemiPlusJoin(BroadcastHashJoinExec(
                 leftKeys, rightKeys, leftSemiPlus, BuildRight, boundCondition, left, right))),
             expectedAnswer,
@@ -145,12 +145,12 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+            EnsureRequirements.apply(
               SortMergeJoinExec(leftKeys, rightKeys, joinType, boundCondition, left, right)),
             expectedAnswer,
             sortAnswers = true)
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+            EnsureRequirements.apply(
               createLeftSemiPlusJoin(SortMergeJoinExec(
                 leftKeys, rightKeys, leftSemiPlus, boundCondition, left, right))),
             expectedAnswer,
@@ -162,12 +162,12 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
     test(s"$testName using BroadcastNestedLoopJoin build left") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+          EnsureRequirements.apply(
             BroadcastNestedLoopJoinExec(left, right, BuildLeft, joinType, Some(condition))),
           expectedAnswer,
           sortAnswers = true)
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+          EnsureRequirements.apply(
             createLeftSemiPlusJoin(BroadcastNestedLoopJoinExec(
               left, right, BuildLeft, leftSemiPlus, Some(condition)))),
           expectedAnswer,
@@ -178,12 +178,12 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
     test(s"$testName using BroadcastNestedLoopJoin build right") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+          EnsureRequirements.apply(
             BroadcastNestedLoopJoinExec(left, right, BuildRight, joinType, Some(condition))),
           expectedAnswer,
           sortAnswers = true)
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+          EnsureRequirements.apply(
             createLeftSemiPlusJoin(BroadcastNestedLoopJoinExec(
               left, right, BuildRight, leftSemiPlus, Some(condition)))),
           expectedAnswer,
@@ -197,6 +197,14 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
     LeftSemi,
     left,
     right,
+    singleConditionEQ,
+    Seq(Row(2, 1.0), Row(2, 1.0), Row(3, 3.0), Row(6, null)))
+
+  testExistenceJoin(
+    "test single unique condition (equal) for left semi join",
+    LeftSemi,
+    left,
+    right.select(right.col("c")).distinct(), /* Trigger BHJs and SHJs unique key code path! */
     singleConditionEQ,
     Seq(Row(2, 1.0), Row(2, 1.0), Row(3, 3.0), Row(6, null)))
 
@@ -229,7 +237,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
     "test single unique condition (equal) for left Anti join",
     LeftAnti,
     left,
-    right.select(right.col("c")).distinct(), /* Trigger BHJs unique key code path! */
+    right.select(right.col("c")).distinct(), /* Trigger BHJs and SHJs unique key code path! */
     singleConditionEQ,
     Seq(Row(1, 2.0), Row(1, 2.0), Row(null, null), Row(null, 5.0)))
 

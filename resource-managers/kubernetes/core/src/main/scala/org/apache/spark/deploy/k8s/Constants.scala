@@ -54,6 +54,7 @@ private[spark] object Constants {
   val ENV_DRIVER_URL = "SPARK_DRIVER_URL"
   val ENV_EXECUTOR_CORES = "SPARK_EXECUTOR_CORES"
   val ENV_EXECUTOR_MEMORY = "SPARK_EXECUTOR_MEMORY"
+  val ENV_EXECUTOR_DIRS = "SPARK_EXECUTOR_DIRS"
   val ENV_APPLICATION_ID = "SPARK_APPLICATION_ID"
   val ENV_EXECUTOR_ID = "SPARK_EXECUTOR_ID"
   val ENV_EXECUTOR_POD_IP = "SPARK_EXECUTOR_POD_IP"
@@ -76,7 +77,7 @@ private[spark] object Constants {
   val EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME = "pod-spec-template.yml"
   val EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH = "/opt/spark/pod-template"
   val POD_TEMPLATE_VOLUME = "pod-template-volume"
-  val POD_TEMPLATE_CONFIGMAP = "podspec-configmap"
+  val POD_TEMPLATE_CONFIGMAP = "driver-podspec-conf-map"
   val POD_TEMPLATE_KEY = "podspec-configmap-key"
 
   // Miscellaneous

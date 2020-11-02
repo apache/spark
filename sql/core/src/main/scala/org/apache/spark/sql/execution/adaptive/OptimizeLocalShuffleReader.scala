@@ -33,10 +33,9 @@ import org.apache.spark.sql.internal.SQLConf
  * then run `EnsureRequirements` to check whether additional shuffle introduced.
  * If introduced, we will revert all the local readers.
  */
-case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
-  import OptimizeLocalShuffleReader._
+object OptimizeLocalShuffleReader extends Rule[SparkPlan] {
 
-  private val ensureRequirements = EnsureRequirements(conf)
+  private val ensureRequirements = EnsureRequirements
 
   // The build side is a broadcast query stage which should have been optimized using local reader
   // already. So we only need to deal with probe side here.
@@ -78,10 +77,9 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
   private def getPartitionSpecs(
       shuffleStage: ShuffleQueryStageExec,
       advisoryParallelism: Option[Int]): Seq[ShufflePartitionSpec] = {
-    val shuffleDep = shuffleStage.shuffle.shuffleDependency
-    val numReducers = shuffleDep.partitioner.numPartitions
+    val numMappers = shuffleStage.shuffle.numMappers
+    val numReducers = shuffleStage.shuffle.numPartitions
     val expectedParallelism = advisoryParallelism.getOrElse(numReducers)
-    val numMappers = shuffleDep.rdd.getNumPartitions
     val splitPoints = if (numMappers == 0) {
       Seq.empty
     } else {
@@ -119,9 +117,6 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
         createProbeSideLocalReader(s)
     }
   }
-}
-
-object OptimizeLocalShuffleReader {
 
   object BroadcastJoinWithShuffleLeft {
     def unapply(plan: SparkPlan): Option[(SparkPlan, BuildSide)] = plan match {
@@ -141,9 +136,9 @@ object OptimizeLocalShuffleReader {
 
   def canUseLocalShuffleReader(plan: SparkPlan): Boolean = plan match {
     case s: ShuffleQueryStageExec =>
-      s.shuffle.canChangeNumPartitions
+      s.shuffle.canChangeNumPartitions && s.mapStats.isDefined
     case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs) =>
-      s.shuffle.canChangeNumPartitions && partitionSpecs.nonEmpty
+      s.shuffle.canChangeNumPartitions && s.mapStats.isDefined && partitionSpecs.nonEmpty
     case _ => false
   }
 }

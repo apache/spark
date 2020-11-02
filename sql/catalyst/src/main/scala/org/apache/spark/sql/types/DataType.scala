@@ -28,9 +28,10 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.internal.SQLConf
@@ -125,10 +126,41 @@ object DataType {
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
 
   def fromDDL(ddl: String): DataType = {
+    parseTypeWithFallback(
+      ddl,
+      CatalystSqlParser.parseDataType,
+      "Cannot parse the data type: ",
+      fallbackParser = CatalystSqlParser.parseTableSchema)
+  }
+
+  /**
+   * Parses data type from a string with schema. It calls `parser` for `schema`.
+   * If it fails, calls `fallbackParser`. If the fallback function fails too, combines error message
+   * from `parser` and `fallbackParser`.
+   *
+   * @param schema The schema string to parse by `parser` or `fallbackParser`.
+   * @param parser The function that should be invoke firstly.
+   * @param errorMsg The error message for `parser`.
+   * @param fallbackParser The function that is called when `parser` fails.
+   * @return The data type parsed from the `schema` schema.
+   */
+  def parseTypeWithFallback(
+      schema: String,
+      parser: String => DataType,
+      errorMsg: String,
+      fallbackParser: String => DataType): DataType = {
     try {
-      CatalystSqlParser.parseDataType(ddl)
+      parser(schema)
     } catch {
-      case NonFatal(_) => CatalystSqlParser.parseTableSchema(ddl)
+      case NonFatal(e1) =>
+        try {
+          fallbackParser(schema)
+        } catch {
+          case NonFatal(e2) =>
+            throw new AnalysisException(
+              message = s"$errorMsg${e1.getMessage}\nFailed fallback parsing: ${e2.getMessage}",
+              cause = Some(e1.getCause))
+        }
     }
   }
 
@@ -328,19 +360,19 @@ object DataType {
       ignoreNullability: Boolean = false): Boolean = {
     (from, to) match {
       case (left: ArrayType, right: ArrayType) =>
-        equalsStructurally(left.elementType, right.elementType) &&
+        equalsStructurally(left.elementType, right.elementType, ignoreNullability) &&
           (ignoreNullability || left.containsNull == right.containsNull)
 
       case (left: MapType, right: MapType) =>
-        equalsStructurally(left.keyType, right.keyType) &&
-          equalsStructurally(left.valueType, right.valueType) &&
+        equalsStructurally(left.keyType, right.keyType, ignoreNullability) &&
+          equalsStructurally(left.valueType, right.valueType, ignoreNullability) &&
           (ignoreNullability || left.valueContainsNull == right.valueContainsNull)
 
       case (StructType(fromFields), StructType(toFields)) =>
         fromFields.length == toFields.length &&
           fromFields.zip(toFields)
             .forall { case (l, r) =>
-              equalsStructurally(l.dataType, r.dataType) &&
+              equalsStructurally(l.dataType, r.dataType, ignoreNullability) &&
                 (ignoreNullability || l.nullable == r.nullable)
             }
 

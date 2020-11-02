@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
 import java.sql.{DriverManager, Statement}
+import java.util
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
@@ -27,7 +28,13 @@ import scala.util.Try
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hive.service.cli.thrift.ThriftCLIService
+import org.apache.hive.jdbc.HttpBasicAuthInterceptor
+import org.apache.hive.service.auth.PlainSaslHelper
+import org.apache.hive.service.cli.thrift.{ThriftCLIService, ThriftCLIServiceClient}
+import org.apache.hive.service.rpc.thrift.TCLIService.Client
+import org.apache.http.impl.client.HttpClientBuilder
+import org.apache.thrift.protocol.TBinaryProtocol
+import org.apache.thrift.transport.{THttpClient, TSocket}
 
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -76,8 +83,9 @@ trait SharedThriftServer extends SharedSparkSession {
     s"jdbc:hive2://localhost:$serverPort/"
   }
 
+  protected def user: String = System.getProperty("user.name")
+
   protected def withJdbcStatement(fs: (Statement => Unit)*): Unit = {
-    val user = System.getProperty("user.name")
     require(serverPort != 0, "Failed to bind an actual port for HiveThriftServer2")
     val connections =
       fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
@@ -89,6 +97,29 @@ trait SharedThriftServer extends SharedSparkSession {
       statements.foreach(_.close())
       connections.foreach(_.close())
     }
+  }
+
+  protected def withCLIServiceClient(f: ThriftCLIServiceClient => Unit): Unit = {
+    require(serverPort != 0, "Failed to bind an actual port for HiveThriftServer2")
+    val transport = mode match {
+      case ServerMode.binary =>
+        val rawTransport = new TSocket("localhost", serverPort)
+        PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
+      case ServerMode.http =>
+        val interceptor = new HttpBasicAuthInterceptor(
+          user,
+          "anonymous",
+          null, null, true, new util.HashMap[String, String]())
+        new THttpClient(
+          s"http://localhost:$serverPort/cliservice",
+          HttpClientBuilder.create.addInterceptorFirst(interceptor).build())
+    }
+
+    val protocol = new TBinaryProtocol(transport)
+    val client = new ThriftCLIServiceClient(new Client(protocol))
+
+    transport.open()
+    try f(client) finally transport.close()
   }
 
   private def startThriftServer(attempt: Int): Unit = {

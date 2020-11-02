@@ -52,6 +52,9 @@ class StateStoreConf(
   val formatValidationCheckValue: Boolean =
     extraOptions.getOrElse(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG, "true") == "true"
 
+  /** The compression codec used to compress delta and snapshot files. */
+  val compressionCodec: String = sqlConf.stateStoreCompressionCodec
+
   /**
    * Additional configurations related to state store. This will capture all configs in
    * SQLConf that start with `spark.sql.streaming.stateStore.` and extraOptions for a specific

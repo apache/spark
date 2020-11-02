@@ -169,9 +169,7 @@ private[hive] class HiveClientImpl(
     // since HIVE-11878, and ADDJarCommand will add jars to clientLoader.classLoader.
     // For this reason we cannot load the jars added by ADDJarCommand because of class loader
     // got changed. We reset it to clientLoader.ClassLoader here.
-    if (HiveUtils.isHive23) {
-      state.getConf.setClassLoader(clientLoader.classLoader)
-    }
+    state.getConf.setClassLoader(clientLoader.classLoader)
     SessionState.start(state)
     state.out = new PrintStream(outputBuffer, true, UTF_8.name())
     state.err = new PrintStream(outputBuffer, true, UTF_8.name())
@@ -179,9 +177,7 @@ private[hive] class HiveClientImpl(
   }
 
   /** Returns the configuration for the current session. */
-  def conf: HiveConf = if (!HiveUtils.isHive23) {
-    state.getConf
-  } else {
+  def conf: HiveConf = {
     val hiveConf = state.getConf
     // Hive changed the default of datanucleus.schema.autoCreateAll from true to false
     // and hive.metastore.schema.verification from false to true since Hive 2.0.
@@ -293,11 +289,9 @@ private[hive] class HiveClientImpl(
     val ret = try {
       f
     } catch {
-      case e: NoClassDefFoundError
-        if HiveUtils.isHive23 && e.getMessage.contains("org/apache/hadoop/hive/serde2/SerDe") =>
+      case e: NoClassDefFoundError if e.getMessage.contains("apache/hadoop/hive/serde2/SerDe") =>
         throw new ClassNotFoundException("The SerDe interface removed since Hive 2.3(HIVE-15167)." +
-          " Please migrate your custom SerDes to Hive 2.3 or build your own Spark with" +
-          " hive-1.2 profile. See HIVE-15167 for more details.", e)
+          " Please migrate your custom SerDes to Hive 2.3. See HIVE-15167 for more details.", e)
     } finally {
       state.getConf.setClassLoader(originalConfLoader)
       Thread.currentThread().setContextClassLoader(original)
@@ -390,7 +384,7 @@ private[hive] class HiveClientImpl(
   }
 
   override def listDatabases(pattern: String): Seq[String] = withHiveState {
-    client.getDatabasesByPattern(pattern).asScala
+    client.getDatabasesByPattern(pattern).asScala.toSeq
   }
 
   private def getRawTableOption(dbName: String, tableName: String): Option[HiveTable] = {
@@ -400,7 +394,7 @@ private[hive] class HiveClientImpl(
   private def getRawTablesByName(dbName: String, tableNames: Seq[String]): Seq[HiveTable] = {
     try {
       msClient.getTableObjectsByName(dbName, tableNames.asJava).asScala
-        .map(extraFixesForNonView).map(new HiveTable(_))
+        .map(extraFixesForNonView).map(new HiveTable(_)).toSeq
     } catch {
       case ex: Exception =>
         throw new HiveException(s"Unable to fetch tables of db $dbName", ex);
@@ -434,7 +428,7 @@ private[hive] class HiveClientImpl(
         throw new SparkException(
           s"${ex.getMessage}, db: ${h.getDbName}, table: ${h.getTableName}", ex)
     }
-    val schema = StructType(cols ++ partCols)
+    val schema = StructType((cols ++ partCols).toSeq)
 
     val bucketSpec = if (h.getNumBuckets > 0) {
       val sortColumnOrders = h.getSortCols.asScala
@@ -450,7 +444,7 @@ private[hive] class HiveClientImpl(
       } else {
         Seq.empty
       }
-      Option(BucketSpec(h.getNumBuckets, h.getBucketCols.asScala, sortColumnNames))
+      Option(BucketSpec(h.getNumBuckets, h.getBucketCols.asScala.toSeq, sortColumnNames.toSeq))
     } else {
       None
     }
@@ -502,7 +496,7 @@ private[hive] class HiveClientImpl(
           throw new AnalysisException(s"Hive $tableTypeStr is not supported.")
       },
       schema = schema,
-      partitionColumnNames = partCols.map(_.name),
+      partitionColumnNames = partCols.map(_.name).toSeq,
       // If the table is written by Spark, we will put bucketing information in table properties,
       // and will always overwrite the bucket spec in hive metastore by the bucketing information
       // in table properties. This means, if we have bucket spec in both hive metastore and
@@ -539,7 +533,7 @@ private[hive] class HiveClientImpl(
       // that created by older versions of Spark.
       viewOriginalText = Option(h.getViewOriginalText),
       viewText = Option(h.getViewExpandedText),
-      unsupportedFeatures = unsupportedFeatures,
+      unsupportedFeatures = unsupportedFeatures.toSeq,
       ignoredProperties = ignoredProperties.toMap)
   }
 
@@ -638,7 +632,7 @@ private[hive] class HiveClientImpl(
         shim.dropPartition(client, db, table, partition, !retainData, purge)
       } catch {
         case e: Exception =>
-          val remainingParts = matchingParts.toBuffer -- droppedParts
+          val remainingParts = matchingParts.toBuffer --= droppedParts
           logError(
             s"""
                |======================
@@ -708,7 +702,7 @@ private[hive] class HiveClientImpl(
           assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
           client.getPartitionNames(table.database, table.identifier.table, s.asJava, -1)
       }
-    hivePartitionNames.asScala.sorted
+    hivePartitionNames.asScala.sorted.toSeq
   }
 
   override def getPartitionOption(
@@ -735,7 +729,7 @@ private[hive] class HiveClientImpl(
     }
     val parts = client.getPartitions(hiveTable, partSpec.asJava).asScala.map(fromHivePartition)
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
-    parts
+    parts.toSeq
   }
 
   override def getPartitionsByFilter(
@@ -748,26 +742,28 @@ private[hive] class HiveClientImpl(
   }
 
   override def listTables(dbName: String): Seq[String] = withHiveState {
-    client.getAllTables(dbName).asScala
+    client.getAllTables(dbName).asScala.toSeq
   }
 
   override def listTables(dbName: String, pattern: String): Seq[String] = withHiveState {
-    client.getTablesByPattern(dbName, pattern).asScala
+    client.getTablesByPattern(dbName, pattern).asScala.toSeq
   }
 
   override def listTablesByType(
       dbName: String,
       pattern: String,
       tableType: CatalogTableType): Seq[String] = withHiveState {
+    val hiveTableType = toHiveTableType(tableType)
     try {
       // Try with Hive API getTablesByType first, it's supported from Hive 2.3+.
-      shim.getTablesByType(client, dbName, pattern, toHiveTableType(tableType))
+      shim.getTablesByType(client, dbName, pattern, hiveTableType)
     } catch {
       case _: UnsupportedOperationException =>
         // Fallback to filter logic if getTablesByType not supported.
         val tableNames = client.getTablesByPattern(dbName, pattern).asScala
-        val tables = getTablesByName(dbName, tableNames).filter(_.tableType == tableType)
-        tables.map(_.identifier.table)
+        getRawTablesByName(dbName, tableNames.toSeq)
+          .filter(_.getTableType == hiveTableType)
+          .map(_.getTableName)
     }
   }
 
@@ -984,7 +980,8 @@ private[hive] object HiveClientImpl extends Logging {
     val typeString = if (c.metadata.contains(HIVE_TYPE_STRING)) {
       c.metadata.getString(HIVE_TYPE_STRING)
     } else {
-      c.dataType.catalogString
+      // replace NullType to HiveVoidType since Hive parse void not null.
+      HiveVoidType.replaceVoidType(c.dataType).catalogString
     }
     new FieldSchema(c.name, typeString, c.getComment().orNull)
   }
@@ -1003,7 +1000,8 @@ private[hive] object HiveClientImpl extends Logging {
   /** Builds the native StructField from Hive's FieldSchema. */
   def fromHiveColumn(hc: FieldSchema): StructField = {
     val columnType = getSparkSQLDataType(hc)
-    val metadata = if (hc.getType != columnType.catalogString) {
+    val replacedVoidType = HiveVoidType.replaceVoidType(columnType)
+    val metadata = if (hc.getType != replacedVoidType.catalogString) {
       new MetadataBuilder().putString(HIVE_TYPE_STRING, hc.getType).build()
     } else {
       Metadata.empty
@@ -1280,5 +1278,24 @@ private[hive] object HiveClientImpl extends Logging {
       hiveConf.set("hive.execution.engine", "mr")
     }
     hiveConf
+  }
+}
+
+case object HiveVoidType extends DataType {
+  override def defaultSize: Int = 1
+  override def asNullable: DataType = HiveVoidType
+  override def simpleString: String = "void"
+
+  def replaceVoidType(dt: DataType): DataType = dt match {
+    case ArrayType(et, nullable) =>
+      ArrayType(replaceVoidType(et), nullable)
+    case MapType(kt, vt, nullable) =>
+      MapType(replaceVoidType(kt), replaceVoidType(vt), nullable)
+    case StructType(fields) =>
+      StructType(fields.map { field =>
+        field.copy(dataType = replaceVoidType(field.dataType))
+      })
+    case _: NullType => HiveVoidType
+    case _ => dt
   }
 }

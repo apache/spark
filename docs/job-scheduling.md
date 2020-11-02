@@ -95,7 +95,7 @@ varies across cluster managers:
 In standalone mode, simply start your workers with `spark.shuffle.service.enabled` set to `true`.
 
 In Mesos coarse-grained mode, run `$SPARK_HOME/sbin/start-mesos-shuffle-service.sh` on all
-slave nodes with `spark.shuffle.service.enabled` set to `true`. For instance, you may do so
+worker nodes with `spark.shuffle.service.enabled` set to `true`. For instance, you may do so
 through Marathon.
 
 In YARN mode, follow the instructions [here](running-on-yarn.html#configuring-the-external-shuffle-service).
@@ -297,11 +297,9 @@ via `sc.setJobGroup` in a separate PVM thread, which also disallows to cancel th
 later.
 
 In order to synchronize PVM threads with JVM threads, you should set `PYSPARK_PIN_THREAD` environment variable
-to `true`. This pinned thread mode allows one PVM thread has one corresponding JVM thread.
-
-However, currently it cannot inherit the local properties from the parent thread although it isolates
-each thread with its own local properties. To work around this, you should manually copy and set the
-local properties from the parent thread to the child thread when you create another thread in PVM.
+to `true`. This pinned thread mode allows one PVM thread has one corresponding JVM thread. With this mode,
+`pyspark.InheritableThread` is recommended to use together for a PVM thread to inherit the inheritable attributes
+ such as local properties in a JVM thread.
 
 Note that `PYSPARK_PIN_THREAD` is currently experimental and not recommended for use in production.
 

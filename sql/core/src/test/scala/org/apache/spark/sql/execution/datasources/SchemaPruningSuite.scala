@@ -460,6 +460,69 @@ abstract class SchemaPruningSuite
     checkAnswer(query4, Row(2, null) :: Row(2, 4) :: Nil)
   }
 
+  testSchemaPruning("select nested field in window function") {
+    val windowSql =
+      """
+        |with contact_rank as (
+        |  select row_number() over (partition by address order by id desc) as rank,
+        |  contacts.*
+        |  from contacts
+        |)
+        |select name.first, rank from contact_rank
+        |where name.first = 'Jane' AND rank = 1
+        |""".stripMargin
+    val query = sql(windowSql)
+    checkScan(query, "struct<id:int,name:struct<first:string>,address:string>")
+    checkAnswer(query, Row("Jane", 1) :: Nil)
+  }
+
+  testSchemaPruning("select nested field in window function and then order by") {
+    val windowSql =
+      """
+        |with contact_rank as (
+        |  select row_number() over (partition by address order by id desc) as rank,
+        |  contacts.*
+        |  from contacts
+        |  order by name.last, name.first
+        |)
+        |select name.first, rank from contact_rank
+        |""".stripMargin
+    val query = sql(windowSql)
+    checkScan(query, "struct<id:int,name:struct<first:string,last:string>,address:string>")
+    checkAnswer(query,
+      Row("Jane", 1) ::
+        Row("John", 1) ::
+        Row("Janet", 1) ::
+        Row("Jim", 1) :: Nil)
+  }
+
+  testSchemaPruning("select nested field in Sort") {
+    val query1 = sql("select name.first, name.last from contacts order by name.first, name.last")
+    checkScan(query1, "struct<name:struct<first:string,last:string>>")
+    checkAnswer(query1,
+      Row("Jane", "Doe") ::
+        Row("Janet", "Jones") ::
+        Row("Jim", "Jones") ::
+        Row("John", "Doe") :: Nil)
+
+    withTempView("tmp_contacts") {
+      // Create a repartitioned view because `SORT BY` is a local sort
+      sql("select * from contacts").repartition(1).createOrReplaceTempView("tmp_contacts")
+      val sortBySql =
+        """
+          |select name.first, name.last from tmp_contacts
+          |sort by name.first, name.last
+          |""".stripMargin
+      val query2 = sql(sortBySql)
+      checkScan(query2, "struct<name:struct<first:string,last:string>>")
+      checkAnswer(query2,
+        Row("Jane", "Doe") ::
+          Row("Janet", "Jones") ::
+          Row("Jim", "Jones") ::
+          Row("John", "Doe") :: Nil)
+    }
+  }
+
   testSchemaPruning("select nested field in Expand") {
     import org.apache.spark.sql.catalyst.dsl.expressions._
 
@@ -495,6 +558,26 @@ abstract class SchemaPruningSuite
         Row(Row("John", "Y.", "Doe"), "Doe") ::
         Row(Row("Jim", null, "Jones"), "Jones") ::
         Row(Row("Janet", null, "Jones"), "Jones") ::Nil)
+  }
+
+  testSchemaPruning("SPARK-32163: nested pruning should work even with cosmetic variations") {
+    withTempView("contact_alias") {
+      sql("select * from contacts")
+        .repartition(100, col("name.first"), col("name.last"))
+        .selectExpr("name").createOrReplaceTempView("contact_alias")
+
+      val query1 = sql("select name.first from contact_alias")
+      checkScan(query1, "struct<name:struct<first:string,last:string>>")
+      checkAnswer(query1, Row("Jane") :: Row("John") :: Row("Jim") :: Row("Janet") ::Nil)
+
+      sql("select * from contacts")
+        .select(explode(col("friends.first")), col("friends"))
+        .createOrReplaceTempView("contact_alias")
+
+      val query2 = sql("select friends.middle, col from contact_alias")
+      checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
+      checkAnswer(query2, Row(Array("Z."), "Susan") :: Nil)
+    }
   }
 
   protected def testSchemaPruning(testName: String)(testThunk: => Unit): Unit = {

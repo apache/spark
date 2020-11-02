@@ -23,10 +23,11 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.log4j.Level
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -46,6 +47,13 @@ import org.apache.spark.sql.types._
 
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
+
+  test("fail for unresolved plan") {
+    intercept[AnalysisException] {
+      // `testRelation` does not have column `b`.
+      testRelation.select('b).analyze
+    }
+  }
 
   test("union project *") {
     val plan = (1 to 120)
@@ -189,7 +197,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("divide should be casted into fractional types") {
-    val plan = caseInsensitiveAnalyzer.execute(
+    val plan = getAnalyzer.execute(
       testRelation2.select(
         $"a" / Literal(2) as "div1",
         $"a" / $"b" as "div2",
@@ -250,13 +258,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       CreateStruct(Seq(att1, ((att1.as("aa")) + 1).as("a_plus_1"))).as("col"),
       att1
     )
-    val prevPlan = getAnalyzer(true).execute(plan)
+    val prevPlan = getAnalyzer.execute(plan)
     plan = prevPlan.select(CreateArray(Seq(
       CreateStruct(Seq(att1, (att1 + 1).as("a_plus_1"))).as("col1"),
       /** alias should be eliminated by [[CleanupAliases]] */
       "col".attr.as("col2")
     )).as("arr"))
-    plan = getAnalyzer(true).execute(plan)
+    plan = getAnalyzer.execute(plan)
 
     val expectedPlan = prevPlan.select(
       CreateArray(Seq(
@@ -829,6 +837,134 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         // There is no change in the log.
         check(2)
       }
+    }
+  }
+
+  test("SPARK-32131: Fix wrong column index when we have more than two columns" +
+    " during union and set operations" ) {
+    val firstTable = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", DoubleType)(),
+      AttributeReference("c", IntegerType)(),
+      AttributeReference("d", FloatType)())
+
+    val secondTable = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", TimestampType)(),
+      AttributeReference("c", IntegerType)(),
+      AttributeReference("d", FloatType)())
+
+    val thirdTable = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", DoubleType)(),
+      AttributeReference("c", TimestampType)(),
+      AttributeReference("d", FloatType)())
+
+    val fourthTable = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", DoubleType)(),
+      AttributeReference("c", IntegerType)(),
+      AttributeReference("d", TimestampType)())
+
+    val r1 = Union(firstTable, secondTable)
+    val r2 = Union(firstTable, thirdTable)
+    val r3 = Union(firstTable, fourthTable)
+    val r4 = Except(firstTable, secondTable, isAll = false)
+    val r5 = Intersect(firstTable, secondTable, isAll = false)
+
+    assertAnalysisError(r1,
+      Seq("Union can only be performed on tables with the compatible column types. " +
+        "timestamp <> double at the second column of the second table"))
+
+    assertAnalysisError(r2,
+      Seq("Union can only be performed on tables with the compatible column types. " +
+        "timestamp <> int at the third column of the second table"))
+
+    assertAnalysisError(r3,
+      Seq("Union can only be performed on tables with the compatible column types. " +
+        "timestamp <> float at the 4th column of the second table"))
+
+    assertAnalysisError(r4,
+      Seq("Except can only be performed on tables with the compatible column types. " +
+        "timestamp <> double at the second column of the second table"))
+
+    assertAnalysisError(r5,
+      Seq("Intersect can only be performed on tables with the compatible column types. " +
+        "timestamp <> double at the second column of the second table"))
+  }
+
+  test("SPARK-31975: Throw user facing error when use WindowFunction directly") {
+    assertAnalysisError(testRelation2.select(RowNumber()),
+      Seq("Window function row_number() requires an OVER clause."))
+
+    assertAnalysisError(testRelation2.select(Sum(RowNumber())),
+      Seq("Window function row_number() requires an OVER clause."))
+
+    assertAnalysisError(testRelation2.select(RowNumber() + 1),
+      Seq("Window function row_number() requires an OVER clause."))
+  }
+
+  test("SPARK-32237: Hint in CTE") {
+    val plan = With(
+      Project(
+        Seq(UnresolvedAttribute("cte.a")),
+        UnresolvedRelation(TableIdentifier("cte"))
+      ),
+      Seq(
+        (
+          "cte",
+          SubqueryAlias(
+            AliasIdentifier("cte"),
+            UnresolvedHint(
+              "REPARTITION",
+              Seq(Literal(3)),
+              Project(testRelation.output, testRelation)
+            )
+          )
+        )
+      )
+    )
+    assertAnalysisSuccess(plan)
+  }
+
+  test("SPARK-33197: Make sure changes to ANALYZER_MAX_ITERATIONS take effect at runtime") {
+    // RuleExecutor only throw exception or log warning when the rule is supposed to run
+    // more than once.
+    val maxIterations = 2
+    val maxIterationsEnough = 5
+    withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> maxIterations.toString) {
+      val conf = SQLConf.get
+      val testAnalyzer = new Analyzer(
+        new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+
+      val plan = testRelation2.select(
+        $"a" / Literal(2) as "div1",
+        $"a" / $"b" as "div2",
+        $"a" / $"c" as "div3",
+        $"a" / $"d" as "div4",
+        $"e" / $"e" as "div5")
+
+      val message1 = intercept[TreeNodeException[LogicalPlan]] {
+        testAnalyzer.execute(plan)
+      }.getMessage
+      assert(message1.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+        s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+
+      withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> maxIterationsEnough.toString) {
+        try {
+          testAnalyzer.execute(plan)
+        } catch {
+          case ex: TreeNodeException[_]
+            if ex.getMessage.contains(SQLConf.ANALYZER_MAX_ITERATIONS.key) =>
+              fail("analyzer.execute should not reach max iterations.")
+        }
+      }
+
+      val message2 = intercept[TreeNodeException[LogicalPlan]] {
+        testAnalyzer.execute(plan)
+      }.getMessage
+      assert(message2.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+        s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
     }
   }
 }

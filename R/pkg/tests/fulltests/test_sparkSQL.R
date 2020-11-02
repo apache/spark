@@ -1424,6 +1424,12 @@ test_that("column functions", {
     date_trunc("quarter", c) + current_date() + current_timestamp()
   c25 <- overlay(c1, c2, c3, c3) + overlay(c1, c2, c3) + overlay(c1, c2, 1) +
     overlay(c1, c2, 3, 4)
+  c26 <- timestamp_seconds(c1) + vector_to_array(c) +
+    vector_to_array(c, "float32") + vector_to_array(c, "float64")
+  c27 <- nth_value("x", 1L) + nth_value("y", 2, TRUE) +
+    nth_value(column("v"), 3) + nth_value(column("z"), 4L, FALSE)
+  c28 <- asc_nulls_first(c1) + asc_nulls_last(c1) +
+    desc_nulls_first(c1) + desc_nulls_last(c1)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1676,9 +1682,9 @@ test_that("column functions", {
 
   df <- as.DataFrame(list(list("col" = "1")))
   c <- collect(select(df, schema_of_csv("Amsterdam,2018")))
-  expect_equal(c[[1]], "struct<_c0:string,_c1:int>")
+  expect_equal(c[[1]], "STRUCT<`_c0`: STRING, `_c1`: INT>")
   c <- collect(select(df, schema_of_csv(lit("Amsterdam,2018"))))
-  expect_equal(c[[1]], "struct<_c0:string,_c1:int>")
+  expect_equal(c[[1]], "STRUCT<`_c0`: STRING, `_c1`: INT>")
 
   # Test to_json(), from_json(), schema_of_json()
   df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
@@ -1711,9 +1717,9 @@ test_that("column functions", {
 
   df <- as.DataFrame(list(list("col" = "1")))
   c <- collect(select(df, schema_of_json('{"name":"Bob"}')))
-  expect_equal(c[[1]], "struct<name:string>")
+  expect_equal(c[[1]], "STRUCT<`name`: STRING>")
   c <- collect(select(df, schema_of_json(lit('{"name":"Bob"}'))))
-  expect_equal(c[[1]], "struct<name:string>")
+  expect_equal(c[[1]], "STRUCT<`name`: STRING>")
 
   # Test to_json() supports arrays of primitive types and arrays
   df <- sql("SELECT array(19, 42, 70) as age")
@@ -1803,6 +1809,36 @@ test_that("column functions", {
   )
 
   expect_equal(actual, expected)
+
+  # Test withField
+  lines <- c("{\"Person\": {\"name\":\"Bob\", \"age\":24, \"height\": 170}}")
+  jsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
+  writeLines(lines, jsonPath)
+  df <- read.df(jsonPath, "json")
+  result <- collect(
+      select(
+          select(df, alias(withField(df$Person, "dummy", lit(42)), "Person")),
+          "Person.dummy"
+      )
+  )
+  expect_equal(result, data.frame(dummy = 42))
+
+  # Test dropFields
+  expect_setequal(
+    colnames(select(
+      withColumn(df, "Person", dropFields(df$Person, "age")),
+      column("Person.*")
+    )),
+    c("name", "height")
+  )
+
+  expect_equal(
+    colnames(select(
+      withColumn(df, "Person", dropFields(df$Person, "height", "name")),
+      column("Person.*")
+    )),
+    "age"
+  )
 })
 
 test_that("column binary mathfunctions", {
@@ -2113,7 +2149,7 @@ test_that("group by, agg functions", {
   df3 <- agg(gd, age = "stddev")
   expect_is(df3, "SparkDataFrame")
   df3_local <- collect(df3)
-  expect_true(is.nan(df3_local[df3_local$name == "Andy", ][1, 2]))
+  expect_true(is.na(df3_local[df3_local$name == "Andy", ][1, 2]))
 
   df4 <- agg(gd, sumAge = sum(df$age))
   expect_is(df4, "SparkDataFrame")
@@ -2144,7 +2180,7 @@ test_that("group by, agg functions", {
   df7 <- agg(gd2, value = "stddev")
   df7_local <- collect(df7)
   expect_true(abs(df7_local[df7_local$name == "ID1", ][1, 2] - 6.928203) < 1e-6)
-  expect_true(is.nan(df7_local[df7_local$name == "ID2", ][1, 2]))
+  expect_true(is.na(df7_local[df7_local$name == "ID2", ][1, 2]))
 
   mockLines3 <- c("{\"name\":\"Andy\", \"age\":30}",
                   "{\"name\":\"Andy\", \"age\":30}",
@@ -2695,6 +2731,19 @@ test_that("union(), unionByName(), rbind(), except(), and intersect() on a DataF
                "Names of input data frames are different.")
   expect_error(rbind(df, df2, df3),
                "Names of input data frames are different.")
+
+
+  df4 <- unionByName(df2, select(df2, "age"), TRUE)
+
+  expect_equal(
+      sum(collect(
+          select(df4, alias(isNull(df4$name), "missing_name")
+      ))$missing_name),
+      3
+  )
+
+  testthat::expect_error(unionByName(df2, select(df2, "age"), FALSE))
+  testthat::expect_error(unionByName(df2, select(df2, "age")))
 
   excepted <- arrange(except(df, df2), desc(df$age))
   expect_is(unioned, "SparkDataFrame")
@@ -3898,6 +3947,24 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   dropTempView("cars")
 })
 
+test_that("assert_true, raise_error", {
+  df <- read.json(jsonPath)
+  filtered <- filter(df, "age < 20")
+
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20)))$age, c(NULL))
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20, "error message")))$age,
+               c(NULL))
+  expect_equal(collect(select(filtered, assert_true(filtered$age < 20, filtered$name)))$age,
+               c(NULL))
+  expect_error(collect(select(df, assert_true(df$age < 20))), "is not true!")
+  expect_error(collect(select(df, assert_true(df$age < 20, "error message"))),
+               "error message")
+  expect_error(collect(select(df, assert_true(df$age < 20, df$name))), "Michael")
+
+  expect_error(collect(select(filtered, raise_error("error message"))), "error message")
+  expect_error(collect(select(filtered, raise_error(filtered$name))), "Justin")
+})
+
 compare_list <- function(list1, list2) {
   # get testthat to show the diff by first making the 2 lists equal in length
   expect_equal(length(list1), length(list2))
@@ -3921,14 +3988,14 @@ test_that("No extra files are created in SPARK_HOME by starting session and maki
   # before creating a SparkSession with enableHiveSupport = T at the top of this test file
   # (filesBefore). The test here is to compare that (filesBefore) against the list of files before
   # any test is run in run-all.R (sparkRFilesBefore).
-  # sparkRWhitelistSQLDirs is also defined in run-all.R, and should contain only 2 whitelisted dirs,
+  # sparkRAllowedSQLDirs is also defined in run-all.R, and should contain only 2 allowed dirs,
   # here allow the first value, spark-warehouse, in the diff, everything else should be exactly the
   # same as before any test is run.
-  compare_list(sparkRFilesBefore, setdiff(filesBefore, sparkRWhitelistSQLDirs[[1]]))
+  compare_list(sparkRFilesBefore, setdiff(filesBefore, sparkRAllowedSQLDirs[[1]]))
   # third, ensure only spark-warehouse and metastore_db are created when enableHiveSupport = T
   # note: as the note above, after running all tests in this file while enableHiveSupport = T, we
-  # check the list of files again. This time we allow both whitelisted dirs to be in the diff.
-  compare_list(sparkRFilesBefore, setdiff(filesAfter, sparkRWhitelistSQLDirs))
+  # check the list of files again. This time we allow both dirs to be in the diff.
+  compare_list(sparkRFilesBefore, setdiff(filesAfter, sparkRAllowedSQLDirs))
 })
 
 unlink(parquetPath)

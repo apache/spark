@@ -16,6 +16,8 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.time.Instant
+
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, Pod, PodBuilder}
 
 import org.apache.spark.deploy.k8s.Constants._
@@ -29,6 +31,7 @@ object ExecutorLifecycleTestUtils {
     new PodBuilder(podWithAttachedContainerForId(executorId))
       .editOrNewStatus()
         .withPhase("failed")
+        .withStartTime(Instant.now.toString)
         .addNewContainerStatus()
           .withName("spark-executor")
           .withImage("k8s-spark")
@@ -59,6 +62,7 @@ object ExecutorLifecycleTestUtils {
     new PodBuilder(podWithAttachedContainerForId(executorId))
       .editOrNewStatus()
         .withPhase("pending")
+        .withStartTime(Instant.now.toString)
         .endStatus()
       .build()
   }
@@ -67,7 +71,35 @@ object ExecutorLifecycleTestUtils {
     new PodBuilder(podWithAttachedContainerForId(executorId))
       .editOrNewStatus()
         .withPhase("running")
+        .withStartTime(Instant.now.toString)
         .endStatus()
+      .build()
+  }
+
+  /**
+   * [SPARK-30821]
+   * This creates a pod with one container in running state and one container in failed
+   * state (terminated with non-zero exit code). This pod is used for unit-testing the
+   * spark.kubernetes.executor.checkAllContainers Spark Conf.
+   */
+  def runningExecutorWithFailedContainer(executorId: Long): Pod = {
+    new PodBuilder(podWithAttachedContainerForId(executorId))
+      .editOrNewStatus()
+        .withPhase("running")
+        .addNewContainerStatus()
+          .withNewState()
+            .withNewTerminated()
+              .withExitCode(1)
+            .endTerminated()
+          .endState()
+        .endContainerStatus()
+        .addNewContainerStatus()
+          .withNewState()
+            .withNewRunning()
+            .endRunning()
+          .endState()
+        .endContainerStatus()
+      .endStatus()
       .build()
   }
 
@@ -112,7 +144,10 @@ object ExecutorLifecycleTestUtils {
         .addToLabels(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)
         .addToLabels(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
         .addToLabels(SPARK_EXECUTOR_ID_LABEL, executorId.toString)
-        .endMetadata()
+      .endMetadata()
+      .editOrNewSpec()
+        .withRestartPolicy("Never")
+      .endSpec()
       .build()
     val container = new ContainerBuilder()
       .withName("spark-executor")

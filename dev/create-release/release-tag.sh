@@ -64,8 +64,12 @@ init_maven_sbt
 
 ASF_SPARK_REPO="gitbox.apache.org/repos/asf/spark.git"
 
+function uriencode { jq -nSRr --arg v "$1" '$v|@uri'; }
+
+declare -r ENCODED_ASF_PASSWORD=$(uriencode "$ASF_PASSWORD")
+
 rm -rf spark
-git clone "https://$ASF_USERNAME:$ASF_PASSWORD@$ASF_SPARK_REPO" -b $GIT_BRANCH
+git clone "https://$ASF_USERNAME:$ENCODED_ASF_PASSWORD@$ASF_SPARK_REPO" -b $GIT_BRANCH
 cd spark
 
 git config user.name "$GIT_NAME"

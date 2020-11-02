@@ -21,8 +21,9 @@ import copy
 import threading
 
 from pyspark import since
-from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
+from pyspark.ml.param.shared import HasInputCol, HasOutputCol, HasLabelCol, HasFeaturesCol, \
+    HasPredictionCol, Params
 from pyspark.sql.functions import udf
 from pyspark.sql.types import StructField, StructType
 
@@ -67,14 +68,13 @@ class _FitMultipleIterator(object):
 
 
 @inherit_doc
-class Estimator(Params):
+class Estimator(Params, metaclass=ABCMeta):
     """
     Abstract class for estimators that fit models to data.
 
     .. versionadded:: 1.3.0
     """
-
-    __metaclass__ = ABCMeta
+    pass
 
     @abstractmethod
     def _fit(self, dataset):
@@ -133,14 +133,13 @@ class Estimator(Params):
 
 
 @inherit_doc
-class Transformer(Params):
+class Transformer(Params, metaclass=ABCMeta):
     """
     Abstract class for transformers that transform one dataset into another.
 
     .. versionadded:: 1.3.0
     """
-
-    __metaclass__ = ABCMeta
+    pass
 
     @abstractmethod
     def _transform(self, dataset):
@@ -173,14 +172,13 @@ class Transformer(Params):
 
 
 @inherit_doc
-class Model(Transformer):
+class Model(Transformer, metaclass=ABCMeta):
     """
     Abstract class for models that are fitted by estimators.
 
     .. versionadded:: 1.4.0
     """
-
-    __metaclass__ = ABCMeta
+    pass
 
 
 @inherit_doc
@@ -257,12 +255,10 @@ class _PredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):
 
 
 @inherit_doc
-class Predictor(Estimator, _PredictorParams):
+class Predictor(Estimator, _PredictorParams, metaclass=ABCMeta):
     """
     Estimator for prediction tasks (regression and classification).
     """
-
-    __metaclass__ = ABCMeta
 
     @since("3.0.0")
     def setLabelCol(self, value):
@@ -287,12 +283,10 @@ class Predictor(Estimator, _PredictorParams):
 
 
 @inherit_doc
-class PredictionModel(Model, _PredictorParams):
+class PredictionModel(Model, _PredictorParams, metaclass=ABCMeta):
     """
     Model for prediction tasks (regression and classification).
     """
-
-    __metaclass__ = ABCMeta
 
     @since("3.0.0")
     def setFeaturesCol(self, value):

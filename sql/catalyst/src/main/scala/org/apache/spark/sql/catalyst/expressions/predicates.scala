@@ -73,7 +73,7 @@ trait Predicate extends Expression {
 object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePredicate] {
 
   override protected def createCodeGeneratedObject(in: Expression): BasePredicate = {
-    GeneratePredicate.generate(in)
+    GeneratePredicate.generate(in, SQLConf.get.subexpressionEliminationEnabled)
   }
 
   override protected def createInterpretedObject(in: Expression): BasePredicate = {
@@ -97,7 +97,7 @@ object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePr
   }
 }
 
-trait PredicateHelper extends Logging {
+trait PredicateHelper extends AliasHelper with Logging {
   protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
     condition match {
       case And(cond1, cond2) =>
@@ -117,18 +117,13 @@ trait PredicateHelper extends Logging {
       plan: LogicalPlan): Option[(Expression, LogicalPlan)] = {
 
     plan match {
-      case Project(projectList, child) =>
-        val aliases = AttributeMap(projectList.collect {
-          case a @ Alias(child, _) => (a.toAttribute, child)
-        })
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliases), child)
+      case p: Project =>
+        val aliases = getAliasMap(p)
+        findExpressionAndTrackLineageDown(replaceAlias(exp, aliases), p.child)
       // we can unwrap only if there are row projections, and no aggregation operation
-      case Aggregate(_, aggregateExpressions, child) =>
-        val aliasMap = AttributeMap(aggregateExpressions.collect {
-          case a: Alias if a.child.find(_.isInstanceOf[AggregateExpression]).isEmpty =>
-            (a.toAttribute, a.child)
-        })
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), child)
+      case a: Aggregate =>
+        val aliasMap = getAliasMap(a)
+        findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), a.child)
       case l: LeafNode if exp.references.subsetOf(l.outputSet) =>
         Some((exp, l))
       case other =>
@@ -147,18 +142,6 @@ trait PredicateHelper extends Logging {
       case Or(cond1, cond2) =>
         splitDisjunctivePredicates(cond1) ++ splitDisjunctivePredicates(cond2)
       case other => other :: Nil
-    }
-  }
-
-  // Substitute any known alias from a map.
-  protected def replaceAlias(
-      condition: Expression,
-      aliases: AttributeMap[Expression]): Expression = {
-    // Use transformUp to prevent infinite recursion when the replacement expression
-    // redefines the same ExprId,
-    condition.transformUp {
-      case a: Attribute =>
-        aliases.getOrElse(a, a)
     }
   }
 
@@ -202,100 +185,65 @@ trait PredicateHelper extends Logging {
   }
 
   /**
-   * Convert an expression into conjunctive normal form.
-   * Definition and algorithm: https://en.wikipedia.org/wiki/Conjunctive_normal_form
-   * CNF can explode exponentially in the size of the input expression when converting [[Or]]
-   * clauses. Use a configuration [[SQLConf.MAX_CNF_NODE_COUNT]] to prevent such cases.
-   *
-   * @param condition to be converted into CNF.
-   * @return the CNF result as sequence of disjunctive expressions. If the number of expressions
-   *         exceeds threshold on converting `Or`, `Seq.empty` is returned.
+   * Returns a filter that its reference is a subset of `outputSet` and it contains the maximum
+   * constraints from `condition`. This is used for predicate pushdown.
+   * When there is no such filter, `None` is returned.
    */
-  protected def conjunctiveNormalForm(condition: Expression): Seq[Expression] = {
-    val postOrderNodes = postOrderTraversal(condition)
-    val resultStack = new mutable.Stack[Seq[Expression]]
-    val maxCnfNodeCount = SQLConf.get.maxCnfNodeCount
-    // Bottom up approach to get CNF of sub-expressions
-    while (postOrderNodes.nonEmpty) {
-      val cnf = postOrderNodes.pop() match {
-        case _: And =>
-          val right = resultStack.pop()
-          val left = resultStack.pop()
-          left ++ right
-        case _: Or =>
-          // For each side, there is no need to expand predicates of the same references.
-          // So here we can aggregate predicates of the same qualifier as one single predicate,
-          // for reducing the size of pushed down predicates and corresponding codegen.
-          val right = groupExpressionsByQualifier(resultStack.pop())
-          val left = groupExpressionsByQualifier(resultStack.pop())
-          // Stop the loop whenever the result exceeds the `maxCnfNodeCount`
-          if (left.size * right.size > maxCnfNodeCount) {
-            logInfo(s"As the result size exceeds the threshold $maxCnfNodeCount. " +
-              "The CNF conversion is skipped and returning Seq.empty now. To avoid this, you can " +
-              s"raise the limit ${SQLConf.MAX_CNF_NODE_COUNT.key}.")
-            return Seq.empty
-          } else {
-            for { x <- left; y <- right } yield Or(x, y)
-          }
-        case other => other :: Nil
+  protected def extractPredicatesWithinOutputSet(
+      condition: Expression,
+      outputSet: AttributeSet): Option[Expression] = condition match {
+    case And(left, right) =>
+      val leftResultOptional = extractPredicatesWithinOutputSet(left, outputSet)
+      val rightResultOptional = extractPredicatesWithinOutputSet(right, outputSet)
+      (leftResultOptional, rightResultOptional) match {
+        case (Some(leftResult), Some(rightResult)) => Some(And(leftResult, rightResult))
+        case (Some(leftResult), None) => Some(leftResult)
+        case (None, Some(rightResult)) => Some(rightResult)
+        case _ => None
       }
-      resultStack.push(cnf)
-    }
-    if (resultStack.length != 1) {
-      logWarning("The length of CNF conversion result stack is supposed to be 1. There might " +
-        "be something wrong with CNF conversion.")
-      return Seq.empty
-    }
-    resultStack.top
-  }
 
-  private def groupExpressionsByQualifier(expressions: Seq[Expression]): Seq[Expression] = {
-    expressions.groupBy(_.references.map(_.qualifier)).map(_._2.reduceLeft(And)).toSeq
-  }
+    // The Or predicate is convertible when both of its children can be pushed down.
+    // That is to say, if one/both of the children can be partially pushed down, the Or
+    // predicate can be partially pushed down as well.
+    //
+    // Here is an example used to explain the reason.
+    // Let's say we have
+    // condition: (a1 AND a2) OR (b1 AND b2),
+    // outputSet: AttributeSet(a1, b1)
+    // a1 and b1 is convertible, while a2 and b2 is not.
+    // The predicate can be converted as
+    // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
+    // As per the logical in And predicate, we can push down (a1 OR b1).
+    case Or(left, right) =>
+      for {
+        lhs <- extractPredicatesWithinOutputSet(left, outputSet)
+        rhs <- extractPredicatesWithinOutputSet(right, outputSet)
+      } yield Or(lhs, rhs)
 
-  /**
-   * Iterative post order traversal over a binary tree built by And/Or clauses with two stacks.
-   * For example, a condition `(a And b) Or c`, the postorder traversal is
-   * (`a`,`b`, `And`, `c`, `Or`).
-   * Following is the complete algorithm. After step 2, we get the postorder traversal in
-   * the second stack.
-   * 1. Push root to first stack.
-   * 2. Loop while first stack is not empty
-   *    2.1 Pop a node from first stack and push it to second stack
-   *    2.2 Push the children of the popped node to first stack
-   *
-   * @param condition to be traversed as binary tree
-   * @return sub-expressions in post order traversal as a stack.
-   *         The first element of result stack is the leftmost node.
-   */
-  private def postOrderTraversal(condition: Expression): mutable.Stack[Expression] = {
-    val stack = new mutable.Stack[Expression]
-    val result = new mutable.Stack[Expression]
-    stack.push(condition)
-    while (stack.nonEmpty) {
-      val node = stack.pop()
-      node match {
-        case Not(a And b) => stack.push(Or(Not(a), Not(b)))
-        case Not(a Or b) => stack.push(And(Not(a), Not(b)))
-        case Not(Not(a)) => stack.push(a)
-        case a And b =>
-          result.push(node)
-          stack.push(a)
-          stack.push(b)
-        case a Or b =>
-          result.push(node)
-          stack.push(a)
-          stack.push(b)
-        case _ =>
-          result.push(node)
+    // Here we assume all the `Not` operators is already below all the `And` and `Or` operators
+    // after the optimization rule `BooleanSimplification`, so that we don't need to handle the
+    // `Not` operators here.
+    case other =>
+      if (other.references.subsetOf(outputSet)) {
+        Some(other)
+      } else {
+        None
       }
-    }
-    result
   }
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_ expr - Logical not.")
+  usage = "_FUNC_ expr - Logical not.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_ true;
+       false
+      > SELECT _FUNC_ false;
+       true
+      > SELECT _FUNC_ NULL;
+       NULL
+  """,
+  since = "1.0.0")
 case class Not(child: Expression)
   extends UnaryExpression with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
@@ -372,7 +320,6 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
 
   override def children: Seq[Expression] = values :+ query
   override def nullable: Boolean = children.exists(_.nullable)
-  override def foldable: Boolean = children.forall(_.foldable)
   override def toString: String = s"$value IN ($query)"
   override def sql: String = s"(${value.sql} IN (${query.sql}))"
 }
@@ -398,7 +345,8 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
        false
       > SELECT named_struct('a', 1, 'b', 2) _FUNC_(named_struct('a', 1, 'b', 2), named_struct('a', 1, 'b', 3));
        true
-  """)
+  """,
+  since = "1.0.0")
 // scalastyle:on line.size.limit
 case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
@@ -622,7 +570,19 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Logical AND.")
+  usage = "expr1 _FUNC_ expr2 - Logical AND.",
+  examples = """
+    Examples:
+      > SELECT true _FUNC_ true;
+       true
+      > SELECT true _FUNC_ false;
+       false
+      > SELECT true _FUNC_ NULL;
+       NULL
+      > SELECT false _FUNC_ NULL;
+       false
+  """,
+  since = "1.0.0")
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -692,7 +652,19 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Logical OR.")
+  usage = "expr1 _FUNC_ expr2 - Logical OR.",
+  examples = """
+    Examples:
+      > SELECT true _FUNC_ false;
+       true
+      > SELECT false _FUNC_ false;
+       false
+      > SELECT true _FUNC_ NULL;
+       true
+      > SELECT false _FUNC_ NULL;
+       NULL
+  """,
+  since = "1.0.0")
 case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -825,7 +797,8 @@ object Equality {
        NULL
       > SELECT NULL _FUNC_ NULL;
        NULL
-  """)
+  """,
+  since = "1.0.0")
 case class EqualTo(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -868,7 +841,8 @@ case class EqualTo(left: Expression, right: Expression)
        false
       > SELECT NULL _FUNC_ NULL;
        true
-  """)
+  """,
+  since = "1.1.0")
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
 
   override def symbol: String = "<=>"
@@ -925,7 +899,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
        true
       > SELECT 1 _FUNC_ NULL;
        NULL
-  """)
+  """,
+  since = "1.0.0")
 case class LessThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -955,7 +930,8 @@ case class LessThan(left: Expression, right: Expression)
        true
       > SELECT 1 _FUNC_ NULL;
        NULL
-  """)
+  """,
+  since = "1.0.0")
 case class LessThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -985,7 +961,8 @@ case class LessThanOrEqual(left: Expression, right: Expression)
        false
       > SELECT 1 _FUNC_ NULL;
        NULL
-  """)
+  """,
+  since = "1.0.0")
 case class GreaterThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -1015,7 +992,8 @@ case class GreaterThan(left: Expression, right: Expression)
        false
       > SELECT 1 _FUNC_ NULL;
        NULL
-  """)
+  """,
+  since = "1.0.0")
 case class GreaterThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 

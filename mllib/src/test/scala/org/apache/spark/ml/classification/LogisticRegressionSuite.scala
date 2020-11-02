@@ -342,7 +342,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       blorModel2.summary.asBinary.weightedPrecision relTol 1e-6)
     assert(blorModel.summary.asBinary.weightedRecall ~==
       blorModel2.summary.asBinary.weightedRecall relTol 1e-6)
-    assert(blorModel.summary.asBinary.asBinary.areaUnderROC ~==
+    assert(blorModel.summary.asBinary.areaUnderROC ~==
       blorModel2.summary.asBinary.areaUnderROC relTol 1e-6)
 
     assert(mlorSummary.accuracy ~== mlorSummary2.accuracy relTol 1e-6)
@@ -400,10 +400,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("thresholds prediction") {
-    val blr = new LogisticRegression().setFamily("binomial")
+    val blr = new LogisticRegression().setFamily("binomial").setThreshold(1.0)
     val binaryModel = blr.fit(smallBinaryDataset)
 
-    binaryModel.setThreshold(1.0)
     testTransformer[(Double, Vector)](smallBinaryDataset.toDF(), binaryModel, "prediction") {
       row => assert(row.getDouble(0) === 0.0)
     }

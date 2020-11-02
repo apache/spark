@@ -131,8 +131,11 @@ private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: Schedul
           try {
             val snapshots = new ArrayList[ExecutorPodsSnapshot]()
             snapshotsBuffer.drainTo(snapshots)
-            onNewSnapshots(snapshots.asScala)
+            onNewSnapshots(snapshots.asScala.toSeq)
           } catch {
+            case e: IllegalArgumentException =>
+              logError("Going to stop due to IllegalArgumentException", e)
+              System.exit(1)
             case NonFatal(e) => logWarning("Exception when notifying snapshot subscriber.", e)
           } finally {
             lock.unlock()

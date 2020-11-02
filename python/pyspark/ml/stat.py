@@ -19,7 +19,6 @@ import sys
 
 from pyspark import since, SparkContext
 from pyspark.ml.common import _java2py, _py2java
-from pyspark.ml.linalg import DenseMatrix, Vectors
 from pyspark.ml.wrapper import JavaWrapper, _jvm
 from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.functions import lit
@@ -121,7 +120,7 @@ class Correlation(object):
           DataFrame contains a single row and a single column of name
           '$METHODNAME($COLUMN)'.
 
-        >>> from pyspark.ml.linalg import Vectors
+        >>> from pyspark.ml.linalg import DenseMatrix, Vectors
         >>> from pyspark.ml.stat import Correlation
         >>> dataset = [[Vectors.dense([1, 0, 0, -2])],
         ...            [Vectors.dense([4, 5, 0, 3])],
@@ -222,14 +221,14 @@ class Summarizer(object):
     +-----------------------------------+
     |aggregate_metrics(features, weight)|
     +-----------------------------------+
-    |[[1.0,1.0,1.0], 1]                 |
+    |{[1.0,1.0,1.0], 1}                 |
     +-----------------------------------+
     <BLANKLINE>
     >>> df.select(summarizer.summary(df.features)).show(truncate=False)
     +--------------------------------+
     |aggregate_metrics(features, 1.0)|
     +--------------------------------+
-    |[[1.0,1.5,2.0], 2]              |
+    |{[1.0,1.5,2.0], 2}              |
     +--------------------------------+
     <BLANKLINE>
     >>> df.select(Summarizer.mean(df.features, df.weight)).show(truncate=False)
@@ -412,6 +411,7 @@ class SummaryBuilder(JavaWrapper):
 class MultivariateGaussian(object):
     """Represents a (mean, cov) tuple
 
+    >>> from pyspark.ml.linalg import DenseMatrix, Vectors
     >>> m = MultivariateGaussian(Vectors.dense([11,12]), DenseMatrix(2, 2, (1.0, 3.0, 5.0, 2.0)))
     >>> (m.mean, m.cov.toArray())
     (DenseVector([11.0, 12.0]), array([[ 1.,  5.],

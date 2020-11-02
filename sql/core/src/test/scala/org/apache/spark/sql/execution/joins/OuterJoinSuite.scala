@@ -47,7 +47,7 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
     sparkContext.parallelize(Seq(
       Row(0, 0.0),
       Row(2, 3.0), // This row is duplicated to ensure that we will have multiple buffered matches
-      Row(2, -1.0),
+      Row(2, -1.0), // This row is duplicated to ensure that we will have multiple buffered matches
       Row(2, -1.0),
       Row(2, 3.0),
       Row(3, 2.0),
@@ -60,6 +60,32 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
   private lazy val condition = {
     And((left.col("a") === right.col("c")).expr,
       LessThan(left.col("b").expr, right.col("d").expr))
+  }
+
+  private lazy val uniqueLeft = spark.createDataFrame(
+    sparkContext.parallelize(Seq(
+      Row(1, 2.0),
+      Row(2, 1.0),
+      Row(3, 3.0),
+      Row(5, 1.0),
+      Row(6, 6.0),
+      Row(null, null)
+    )), new StructType().add("a", IntegerType).add("b", DoubleType))
+
+  private lazy val uniqueRight = spark.createDataFrame(
+    sparkContext.parallelize(Seq(
+      Row(0, 0.0),
+      Row(2, 3.0),
+      Row(3, 2.0),
+      Row(4, 1.0),
+      Row(5, 3.0),
+      Row(7, 7.0),
+      Row(null, null)
+    )), new StructType().add("c", IntegerType).add("d", DoubleType))
+
+  private lazy val uniqueCondition = {
+    And((uniqueLeft.col("a") === uniqueRight.col("c")).expr,
+      LessThan(uniqueLeft.col("b").expr, uniqueRight.col("d").expr))
   }
 
   // Note: the input dataframes and expression must be evaluated lazily because
@@ -84,7 +110,7 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
           withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
             val buildSide = if (joinType == LeftOuter) BuildRight else BuildLeft
             checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-              EnsureRequirements(spark.sessionState.conf).apply(
+              EnsureRequirements.apply(
                 ShuffledHashJoinExec(
                   leftKeys, rightKeys, joinType, buildSide, boundCondition, left, right)),
               expectedAnswer.map(Row.fromTuple),
@@ -117,7 +143,7 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements(spark.sessionState.conf).apply(
+            EnsureRequirements.apply(
               SortMergeJoinExec(leftKeys, rightKeys, joinType, boundCondition, left, right)),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
@@ -242,5 +268,40 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
     FullOuter,
     condition,
     Seq.empty
+  )
+
+  // --- Join keys are unique ---------------------------------------------------------------------
+
+  testOuterJoin(
+    "left outer join with unique keys",
+    uniqueLeft,
+    uniqueRight,
+    LeftOuter,
+    uniqueCondition,
+    Seq(
+      (null, null, null, null),
+      (1, 2.0, null, null),
+      (2, 1.0, 2, 3.0),
+      (3, 3.0, null, null),
+      (5, 1.0, 5, 3.0),
+      (6, 6.0, null, null)
+    )
+  )
+
+  testOuterJoin(
+    "right outer join with unique keys",
+    uniqueLeft,
+    uniqueRight,
+    RightOuter,
+    uniqueCondition,
+    Seq(
+      (null, null, null, null),
+      (null, null, 0, 0.0),
+      (2, 1.0, 2, 3.0),
+      (null, null, 3, 2.0),
+      (null, null, 4, 1.0),
+      (5, 1.0, 5, 3.0),
+      (null, null, 7, 7.0)
+    )
   )
 }

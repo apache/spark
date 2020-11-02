@@ -159,8 +159,8 @@ private[yarn] class YarnAllocator(
 
   private[spark] val failureTracker = new FailureTracker(sparkConf, clock)
 
-  private val allocatorBlacklistTracker =
-    new YarnAllocatorBlacklistTracker(sparkConf, amClient, failureTracker)
+  private val allocatorNodeHealthTracker =
+    new YarnAllocatorNodeHealthTracker(sparkConf, amClient, failureTracker)
 
   // Executor memory in MiB.
   protected val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
@@ -238,7 +238,7 @@ private[yarn] class YarnAllocator(
 
   def getNumExecutorsFailed: Int = failureTracker.numFailedExecutors
 
-  def isAllNodeBlacklisted: Boolean = allocatorBlacklistTracker.isAllNodeBlacklisted
+  def isAllNodeExcluded: Boolean = allocatorNodeHealthTracker.isAllNodeExcluded
 
   /**
    * A sequence of pending container requests that have not yet been fulfilled.
@@ -296,7 +296,7 @@ private[yarn] class YarnAllocator(
       val profResource = rpIdToYarnResource.get(id)
       val result = amClient.getMatchingRequests(getContainerPriority(id), location, profResource)
         .asScala.flatMap(_.asScala)
-      allContainerRequests(id) = result
+      allContainerRequests(id) = result.toSeq
     }
     allContainerRequests.toMap
   }
@@ -308,7 +308,6 @@ private[yarn] class YarnAllocator(
       if (!rpIdToYarnResource.contains(rp.id)) {
         // Start with the application or default settings
         var heapMem = executorMemory.toLong
-        // Note we currently don't support off heap memory in ResourceProfile - SPARK-30794
         var offHeapMem = executorOffHeapMemory.toLong
         var overheadMem = memoryOverhead.toLong
         var pysparkMem = pysparkWorkerMemory.toLong
@@ -326,6 +325,8 @@ private[yarn] class YarnAllocator(
               overheadMem = execReq.amount
             case ResourceProfile.PYSPARK_MEM =>
               pysparkMem = execReq.amount
+            case ResourceProfile.OFFHEAP_MEM =>
+              offHeapMem = YarnSparkHadoopUtil.executorOffHeapMemorySizeAsMb(sparkConf, execReq)
             case ResourceProfile.CORES =>
               cores = execReq.amount.toInt
             case "gpu" =>
@@ -357,15 +358,15 @@ private[yarn] class YarnAllocator(
    *                                                  placement hint.
    * @param hostToLocalTaskCount a map of preferred hostname to possible task counts for each
    *                             ResourceProfile id to be used as container placement hint.
-   * @param nodeBlacklist blacklisted nodes, which is passed in to avoid allocating new containers
-   *                      on them. It will be used to update the application master's blacklist.
+   * @param excludedNodes excluded nodes, which is passed in to avoid allocating new containers
+   *                      on them. It will be used to update the applications excluded node list.
    * @return Whether the new requested total is different than the old value.
    */
   def requestTotalExecutorsWithPreferredLocalities(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int],
       numLocalityAwareTasksPerResourceProfileId: Map[Int, Int],
       hostToLocalTaskCountPerResourceProfileId: Map[Int, Map[String, Int]],
-      nodeBlacklist: Set[String]): Boolean = synchronized {
+      excludedNodes: Set[String]): Boolean = synchronized {
     this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
     this.hostToLocalTaskCountPerResourceProfileId = hostToLocalTaskCountPerResourceProfileId
 
@@ -376,7 +377,7 @@ private[yarn] class YarnAllocator(
         logInfo(s"Driver requested a total number of $numExecs executor(s) " +
           s"for resource profile id: ${rp.id}.")
         targetNumExecutorsPerResourceProfileId(rp.id) = numExecs
-        allocatorBlacklistTracker.setSchedulerBlacklistedNodes(nodeBlacklist)
+        allocatorNodeHealthTracker.setSchedulerExcludedNodes(excludedNodes)
         true
       } else {
         false
@@ -415,7 +416,7 @@ private[yarn] class YarnAllocator(
     val allocateResponse = amClient.allocate(progressIndicator)
 
     val allocatedContainers = allocateResponse.getAllocatedContainers()
-    allocatorBlacklistTracker.setNumClusterNodes(allocateResponse.getNumClusterNodes)
+    allocatorNodeHealthTracker.setNumClusterNodes(allocateResponse.getNumClusterNodes)
 
     if (allocatedContainers.size > 0) {
       logDebug(("Allocated containers: %d. Current executor count: %d. " +
@@ -426,13 +427,13 @@ private[yarn] class YarnAllocator(
           getNumExecutorsStarting,
           allocateResponse.getAvailableResources))
 
-      handleAllocatedContainers(allocatedContainers.asScala)
+      handleAllocatedContainers(allocatedContainers.asScala.toSeq)
     }
 
     val completedContainers = allocateResponse.getCompletedContainersStatuses()
     if (completedContainers.size > 0) {
       logDebug("Completed %d containers".format(completedContainers.size))
-      processCompletedContainers(completedContainers.asScala)
+      processCompletedContainers(completedContainers.asScala.toSeq)
       logDebug("Finished processing %d completed containers. Current running executor count: %d."
         .format(completedContainers.size, getNumExecutorsRunning))
     }
@@ -826,7 +827,7 @@ private[yarn] class YarnAllocator(
               s"$diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key}."
             (true, message)
           case other_exit_status =>
-            // SPARK-26269: follow YARN's blacklisting behaviour(see https://github
+            // SPARK-26269: follow YARN's behaviour(see https://github
             // .com/apache/hadoop/blob/228156cfd1b474988bc4fedfbf7edddc87db41e3/had
             // oop-yarn-project/hadoop-yarn/hadoop-yarn-common/src/main/java/org/ap
             // ache/hadoop/yarn/util/Apps.java#L273 for details)
@@ -836,7 +837,7 @@ private[yarn] class YarnAllocator(
                 s". Diagnostics: ${completedContainer.getDiagnostics}.")
             } else {
               // completed container from a bad node
-              allocatorBlacklistTracker.handleResourceAllocationFailure(hostOpt)
+              allocatorNodeHealthTracker.handleResourceAllocationFailure(hostOpt)
               (true, s"Container from a bad node: $containerId$onHostStr" +
                 s". Exit status: ${completedContainer.getExitStatus}" +
                 s". Diagnostics: ${completedContainer.getDiagnostics}.")
@@ -960,7 +961,7 @@ private[yarn] class YarnAllocator(
       }
     }
 
-    (localityMatched, localityUnMatched, localityFree)
+    (localityMatched.toSeq, localityUnMatched.toSeq, localityFree.toSeq)
   }
 
 }

@@ -24,7 +24,9 @@ import java.util.{Calendar, Date, Locale}
 import java.util.concurrent.TimeUnit._
 
 import org.apache.commons.io.FileUtils
-import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Dataset}

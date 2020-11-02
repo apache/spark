@@ -22,7 +22,7 @@ import time
 
 from pyspark.sql import Row
 from pyspark.sql.functions import lit
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StructField, DecimalType, BinaryType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, UTCOffsetTimezone
 
 
@@ -139,10 +139,10 @@ class SerdeTests(ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_serde import *
+    from pyspark.sql.tests.test_serde import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

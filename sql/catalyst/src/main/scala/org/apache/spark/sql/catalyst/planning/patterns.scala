@@ -21,8 +21,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 
 trait OperationHelper {
   type ReturnType = (Seq[NamedExpression], Seq[Expression], LogicalPlan)
@@ -385,6 +387,40 @@ object PhysicalWindow {
 
       Some((windowFunctionType, windowExpressions, partitionSpec, orderSpec, child))
 
+    case _ => None
+  }
+}
+
+object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with PredicateHelper {
+
+  // TODO support multi column NULL-aware anti join in future.
+  // See. http://www.vldb.org/pvldb/vol2/vldb09-423.pdf Section 6
+  // multi-column null aware anti join is much more complicated than single column ones.
+
+  // streamedSideKeys, buildSideKeys
+  private type ReturnType = (Seq[Expression], Seq[Expression])
+
+  /**
+   * See. [SPARK-32290]
+   * LeftAnti(condition: Or(EqualTo(a=b), IsNull(EqualTo(a=b)))
+   * will almost certainly be planned as a Broadcast Nested Loop join,
+   * which is very time consuming because it's an O(M*N) calculation.
+   * But if it's a single column case O(M*N) calculation could be optimized into O(M)
+   * using hash lookup instead of loop lookup.
+   */
+  def unapply(join: Join): Option[ReturnType] = join match {
+    case Join(left, right, LeftAnti,
+      Some(Or(e @ EqualTo(leftAttr: Expression, rightAttr: Expression),
+        IsNull(e2 @ EqualTo(_, _)))), _)
+        if SQLConf.get.optimizeNullAwareAntiJoin &&
+          e.semanticEquals(e2) =>
+      if (canEvaluate(leftAttr, left) && canEvaluate(rightAttr, right)) {
+        Some(Seq(leftAttr), Seq(rightAttr))
+      } else if (canEvaluate(leftAttr, right) && canEvaluate(rightAttr, left)) {
+        Some(Seq(rightAttr), Seq(leftAttr))
+      } else {
+        None
+      }
     case _ => None
   }
 }

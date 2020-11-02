@@ -44,7 +44,7 @@ private[classification] trait ClassificationSummary extends Serializable {
   @Since("3.1.0")
   def labelCol: String
 
-  /** Field in "predictions" which gives the weight of each instance as a vector. */
+  /** Field in "predictions" which gives the weight of each instance. */
   @Since("3.1.0")
   def weightCol: String
 

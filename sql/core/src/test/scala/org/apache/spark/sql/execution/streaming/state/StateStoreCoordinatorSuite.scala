@@ -121,7 +121,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
     var coordRef: StateStoreCoordinatorRef = null
     try {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
-      SparkSession.setActiveSession(spark)
+      SparkSession.setActiveSessionInternal(spark)
       import spark.implicits._
       coordRef = spark.streams.stateStoreCoordinator
       implicit val sqlContext = spark.sqlContext

@@ -22,6 +22,7 @@ import scala.util.Try
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
@@ -251,6 +252,22 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
       checkV2Identifiers(saveAsTableRelation)
     } finally {
       spark.listenerManager.unregister(listener)
+    }
+  }
+
+  test("SPARK-33240: fail the query when instantiation on session catalog fails") {
+    try {
+      spark.sessionState.catalogManager.reset()
+      spark.conf.set(
+        V2_SESSION_CATALOG_IMPLEMENTATION.key, "InvalidCatalogClass")
+      val e = intercept[SparkException] {
+        sql(s"create table t1 (id bigint) using $format")
+      }
+
+      assert(e.getMessage.contains("Cannot find catalog plugin class"))
+      assert(e.getMessage.contains("InvalidCatalogClass"))
+    } finally {
+      spark.sessionState.catalogManager.reset()
     }
   }
 

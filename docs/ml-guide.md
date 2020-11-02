@@ -62,23 +62,13 @@ The primary Machine Learning API for Spark is now the [DataFrame](sql-programmin
 
 # Dependencies
 
-MLlib uses the linear algebra package [Breeze](http://www.scalanlp.org/), which depends on
-[netlib-java](https://github.com/fommil/netlib-java) for optimised numerical processing.
-If native libraries[^1] are not available at runtime, you will see a warning message and a pure JVM
-implementation will be used instead.
+MLlib uses linear algebra packages [Breeze](http://www.scalanlp.org/) and [netlib-java](https://github.com/fommil/netlib-java) for optimised numerical processing[^1]. Those packages may call native acceleration libraries such as [Intel MKL](https://software.intel.com/content/www/us/en/develop/tools/math-kernel-library.html) or [OpenBLAS](http://www.openblas.net) if they are available as system libraries or in runtime library paths. 
 
-Due to licensing issues with runtime proprietary binaries, we do not include `netlib-java`'s native
-proxies by default.
-To configure `netlib-java` / Breeze to use system optimised binaries, include
-`com.github.fommil.netlib:all:1.1.2` (or build Spark with `-Pnetlib-lgpl`) as a dependency of your
-project and read the [netlib-java](https://github.com/fommil/netlib-java) documentation for your
-platform's additional installation instructions.
-
-The most popular native BLAS such as [Intel MKL](https://software.intel.com/en-us/mkl), [OpenBLAS](http://www.openblas.net), can use multiple threads in a single operation, which can conflict with Spark's execution model.
-
-Configuring these BLAS implementations to use a single thread for operations may actually improve performance (see [SPARK-21305](https://issues.apache.org/jira/browse/SPARK-21305)). It is usually optimal to match this to the number of cores each Spark task is configured to use, which is 1 by default and typically left at 1.
-
-Please refer to resources like the following to understand how to configure the number of threads these BLAS implementations use: [Intel MKL](https://software.intel.com/en-us/articles/recommended-settings-for-calling-intel-mkl-routines-from-multi-threaded-applications) or [Intel oneMKL](https://software.intel.com/en-us/onemkl-linux-developer-guide-improving-performance-with-threading) and [OpenBLAS](https://github.com/xianyi/OpenBLAS/wiki/faq#multi-threaded). Note that if nativeBLAS is not properly configured in system, java implementation(f2jBLAS) will be used as fallback option.
+Due to differing OSS licenses, `netlib-java`'s native proxies can't be distributed with Spark. See [MLlib Linear Algebra Acceleration Guide](ml-linalg-guide.html) for how to enable accelerated linear algebra processing. If accelerated native libraries are not enabled, you will see a warning message like below and a pure JVM implementation will be used instead:
+```
+WARN BLAS: Failed to load implementation from:com.github.fommil.netlib.NativeSystemBLAS
+WARN BLAS: Failed to load implementation from:com.github.fommil.netlib.NativeRefBLAS
+```
 
 To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
 
