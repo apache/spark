@@ -108,9 +108,8 @@ object Cast {
    */
   def needsTimeZone(from: DataType, to: DataType): Boolean = (from, to) match {
     case (StringType, TimestampType | DateType) => true
-    case (DateType, StringType) => true
+    case (TimestampType | DateType, StringType) => true
     case (DateType, TimestampType) => true
-    case (TimestampType, StringType) => true
     case (TimestampType, DateType) => true
     case (ArrayType(fromType, _), ArrayType(toType, _)) => needsTimeZone(fromType, toType)
     case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
