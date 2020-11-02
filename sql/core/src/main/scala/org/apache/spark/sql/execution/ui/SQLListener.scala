@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.execution.ui
 
+import java.util.Properties
+
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.JavaType
 import com.fasterxml.jackson.databind.`type`.TypeFactory
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import com.fasterxml.jackson.databind.util.Converter
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlanInfo}
@@ -50,6 +51,17 @@ case class SparkListenerSQLExecutionStart(
     time: Long,
     modifiedConfigs: Map[String, String] = Map.empty)
   extends SparkListenerEvent
+
+@DeveloperApi
+case class PostQueryExecutionForKylin(
+    localProperties: Properties,
+    executionId: Long,
+    queryExecution: QueryExecution = null)
+  extends SparkListenerEvent {
+
+  protected[spark] override def logEvent: Boolean = false
+
+}
 
 @DeveloperApi
 case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
