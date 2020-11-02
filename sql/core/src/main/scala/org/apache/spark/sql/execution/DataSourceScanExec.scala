@@ -487,6 +487,7 @@ case class FileSourceScanExec(
     if (!static || !partitionFilters.exists(isDynamicPruningFilter)) {
       driverMetrics("numFiles") = filesNum
       driverMetrics("filesSize") = filesSize
+      driverMetrics("readBytes") = filesSize
     } else {
       driverMetrics("staticFilesNum") = filesNum
       driverMetrics("staticFilesSize") = filesSize
@@ -500,6 +501,7 @@ case class FileSourceScanExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files read"),
     "metadataTime" -> SQLMetrics.createTimingMetric(sparkContext, "metadata time"),
+    "readBytes" -> SQLMetrics.createMetric(sparkContext, "number of read bytes"),
     "filesSize" -> SQLMetrics.createSizeMetric(sparkContext, "size of files read")
   ) ++ {
     // Tracking scan time has overhead, we can't afford to do it for each row, and can only do
