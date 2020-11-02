@@ -510,6 +510,10 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
         }
+
+      case EqualTo(CaseWhen(branches, _), right)
+        if branches.count(_._2.semanticEquals(right)) == 1 =>
+        branches.filter(_._2.semanticEquals(right)).head._1
     }
   }
 }

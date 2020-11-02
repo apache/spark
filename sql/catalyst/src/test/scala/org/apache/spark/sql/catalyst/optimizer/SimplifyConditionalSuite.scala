@@ -199,4 +199,26 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
         If(Factorial(5) > 100L, b, nullLiteral).eval(EmptyRow))
     }
   }
+
+  test("simplify CaseWhen with EqualTo") {
+    val e1 = EqualTo(UnresolvedAttribute("a"), Literal(100))
+    val e2 = GreaterThan(UnresolvedAttribute("b"), Literal(1000))
+    val e3 = IsNotNull(UnresolvedAttribute("c"))
+    val caseWhen = CaseWhen(
+      Seq(normalBranch, (e1, Literal(1)), (e2, Literal(2)), (e3, Literal(3))), None)
+    assertEquivalent(EqualTo(caseWhen, Literal(1)), e1)
+    assertEquivalent(EqualTo(caseWhen, Literal(3)), e3)
+
+    assertEquivalent(
+      And(EqualTo(caseWhen, Literal(1)), EqualTo(caseWhen, Literal(2))),
+      And(e1, e2))
+    assertEquivalent(
+      Or(EqualTo(caseWhen, Literal(1)), EqualTo(caseWhen, Literal(2))),
+      Or(e1, e2))
+
+    assertEquivalent(EqualTo(caseWhen, Literal(4)), EqualTo(caseWhen, Literal(4)))
+    assertEquivalent(
+      Or(EqualTo(caseWhen, Literal(3)), EqualTo(caseWhen, Literal(4))),
+      Or(e3, EqualTo(caseWhen, Literal(4))))
+  }
 }
