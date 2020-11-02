@@ -667,6 +667,7 @@ dsn
 dttm
 dtypes
 durations
+dylib
 dynamodb
 dynload
 eRevalue
@@ -785,6 +786,7 @@ hiveconfs
 hivemeta
 hiveserver
 hmsclient
+homebrew
 honoured
 hostPath
 hostname
@@ -1234,6 +1236,7 @@ superclass
 svg
 swp
 symlink
+symlinks
 symlinking
 sync'ed
 sys
