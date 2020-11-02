@@ -1837,23 +1837,21 @@ abstract class AvroSuite
     }
   }
 
-  test("RowReader doesn't over-consume when hasNextRow called twice") {
-    Seq("avro", "").foreach { confValue =>
-      withTempPath { dir =>
-        Seq((1), (2), (3))
-          .toDF("index")
-          .write
-          .format("avro")
-          .save(dir.getCanonicalPath)
-        val df = spark
-          .read
-          .format("avro")
-          .load(dir.getCanonicalPath)
-          .orderBy("index")
+  test("SPARK-33314: RowReader doesn't over-consume when hasNextRow called twice") {
+    withTempPath { dir =>
+      Seq((1), (2), (3))
+        .toDF("index")
+        .write
+        .format("avro")
+        .save(dir.getCanonicalPath)
+      val df = spark
+        .read
+        .format("avro")
+        .load(dir.getCanonicalPath)
+        .orderBy("index")
 
-        checkAnswer(df,
-          Seq(Row(1), Row(2), Row(3)))
-      }
+      checkAnswer(df,
+        Seq(Row(1), Row(2), Row(3)))
     }
   }
 }
