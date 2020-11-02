@@ -62,7 +62,7 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
            """.stripMargin
         }
 
-        logBasedOnLevel(message)
+        logBasedOnLevel(message())
       }
     }
   }
@@ -80,7 +80,7 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
         }
       }
 
-      logBasedOnLevel(message)
+      logBasedOnLevel(message())
     }
   }
 

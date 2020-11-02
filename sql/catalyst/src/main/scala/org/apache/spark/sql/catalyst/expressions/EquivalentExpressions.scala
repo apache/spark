@@ -76,7 +76,7 @@ class EquivalentExpressions {
       expr.find(_.isInstanceOf[LambdaVariable]).isDefined ||
       // `PlanExpression` wraps query plan. To compare query plans of `PlanExpression` on executor,
       // can cause error like NPE.
-      (expr.isInstanceOf[PlanExpression[_]] && TaskContext.get != null)
+      (expr.isInstanceOf[PlanExpression[_]] && TaskContext.get() != null)
 
     // There are some special expressions that we should not recurse into all of its children.
     //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)

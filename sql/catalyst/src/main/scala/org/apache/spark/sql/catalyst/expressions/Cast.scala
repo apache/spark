@@ -313,13 +313,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       buildCast[ArrayData](_, array => {
         val builder = new UTF8StringBuilder
         builder.append("[")
-        if (array.numElements > 0) {
+        if (array.numElements() > 0) {
           val toUTF8String = castToString(et)
           if (!array.isNullAt(0)) {
             builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
           }
           var i = 1
-          while (i < array.numElements) {
+          while (i < array.numElements()) {
             builder.append(",")
             if (array.isNullAt(i)) {
               if (!legacyCastToStr) builder.append(" null")
@@ -337,7 +337,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       buildCast[MapData](_, map => {
         val builder = new UTF8StringBuilder
         builder.append(leftBracket)
-        if (map.numElements > 0) {
+        if (map.numElements() > 0) {
           val keyArray = map.keyArray()
           val valueArray = map.valueArray()
           val keyToUTF8String = castToString(kt)
@@ -351,7 +351,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
             builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
           }
           var i = 1
-          while (i < map.numElements) {
+          while (i < map.numElements()) {
             builder.append(", ")
             builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
             builder.append(" ->")

@@ -488,7 +488,7 @@ class CodegenContext extends Logging {
       inlineToOuterClass: Boolean): NewFunctionSpec = {
     val (className, classInstance) = if (inlineToOuterClass) {
       outerClassName -> ""
-    } else if (currClassSize > GENERATED_CLASS_SIZE_THRESHOLD) {
+    } else if (currClassSize() > GENERATED_CLASS_SIZE_THRESHOLD) {
       val className = freshName("NestedClass")
       val classInstance = freshName("nestedClassInstance")
 

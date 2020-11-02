@@ -177,7 +177,7 @@ object SubExprUtils extends PredicateHelper {
     val outerExpressions = ArrayBuffer.empty[Expression]
     conditions foreach { expr =>
       expr transformDown {
-        case a: AggregateExpression if a.collectLeaves.forall(_.isInstanceOf[OuterReference]) =>
+        case a: AggregateExpression if a.collectLeaves().forall(_.isInstanceOf[OuterReference]) =>
           val newExpr = stripOuterReference(a)
           outerExpressions += newExpr
           newExpr

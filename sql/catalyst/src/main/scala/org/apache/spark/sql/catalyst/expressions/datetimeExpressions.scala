@@ -717,7 +717,7 @@ case class ToUnixTimestamp(
     copy(timeZoneId = Option(timeZoneId))
 
   def this(time: Expression) = {
-    this(time, Literal(TimestampFormatter.defaultPattern))
+    this(time, Literal(TimestampFormatter.defaultPattern()))
   }
 
   override def prettyName: String = "to_unix_timestamp"
@@ -764,7 +764,7 @@ case class UnixTimestamp(timeExp: Expression, format: Expression, timeZoneId: Op
     copy(timeZoneId = Option(timeZoneId))
 
   def this(time: Expression) = {
-    this(time, Literal(TimestampFormatter.defaultPattern))
+    this(time, Literal(TimestampFormatter.defaultPattern()))
   }
 
   def this() = {
@@ -925,7 +925,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   override def prettyName: String = "from_unixtime"
 
   def this(unix: Expression) = {
-    this(unix, Literal(TimestampFormatter.defaultPattern))
+    this(unix, Literal(TimestampFormatter.defaultPattern()))
   }
 
   override def dataType: DataType = StringType

@@ -1177,7 +1177,7 @@ class Analyzer(
               case Some(staticValue) =>
                 Some(Alias(Cast(Literal(staticValue), col.dataType), col.name)())
               case _ if queryColumns.hasNext =>
-                Some(queryColumns.next)
+                Some(queryColumns.next())
               case _ =>
                 None
             }

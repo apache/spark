@@ -139,7 +139,7 @@ object SQLConf {
    * run unit tests (that does not involve SparkSession) in serial order.
    */
   def get: SQLConf = {
-    if (TaskContext.get != null) {
+    if (TaskContext.get() != null) {
       val conf = existingConf.get()
       if (conf != null) {
         conf

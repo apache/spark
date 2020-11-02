@@ -106,7 +106,7 @@ class Iso8601TimestampFormatter(
   override def validatePatternString(): Unit = {
     try {
       formatter
-    } catch checkLegacyFormatter(pattern, legacyFormatter.validatePatternString)
+    } catch checkLegacyFormatter(pattern, legacyFormatter.validatePatternString())
   }
 }
 
@@ -120,7 +120,7 @@ class Iso8601TimestampFormatter(
  */
 class FractionTimestampFormatter(zoneId: ZoneId)
   extends Iso8601TimestampFormatter(
-    TimestampFormatter.defaultPattern,
+    TimestampFormatter.defaultPattern(),
     zoneId,
     TimestampFormatter.defaultLocale,
     LegacyDateFormats.FAST_DATE_FORMAT,
@@ -290,7 +290,7 @@ object TimestampFormatter {
       locale: Locale = defaultLocale,
       legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
       isParsing: Boolean): TimestampFormatter = {
-    val pattern = format.getOrElse(defaultPattern)
+    val pattern = format.getOrElse(defaultPattern())
     val formatter = if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
     } else {

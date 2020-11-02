@@ -49,9 +49,9 @@ object StringUtils extends Logging {
       s"the pattern '$pattern' is invalid, $message")
 
     while (in.hasNext) {
-      in.next match {
+      in.next() match {
         case c1 if c1 == escapeChar && in.hasNext =>
-          val c = in.next
+          val c = in.next()
           c match {
             case '_' | '%' => out ++= Pattern.quote(Character.toString(c))
             case c if c == escapeChar => out ++= Pattern.quote(Character.toString(c))
