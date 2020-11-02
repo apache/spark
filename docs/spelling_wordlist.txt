@@ -196,7 +196,6 @@ JobRunning
 JobTrigger
 Json
 Jupyter
-jupytercmd
 KYLIN
 Kalibrr
 Kamil
@@ -868,6 +867,7 @@ js
 json
 jthomas
 jupyter
+jupytercmd
 kaxilnaik
 keepalive
 keepalives
@@ -999,6 +999,7 @@ os
 ot
 overridable
 oversubscription
+pagerduty
 pageviews
 paginator
 papermill
@@ -1109,8 +1110,8 @@ repos
 reqs
 resetdb
 resourceVersion
-resumable
 resultset
+resumable
 retransmits
 rfc
 ricard
