@@ -273,16 +273,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @Override
   public StreamCallbackWithID receiveBlockDataAsStream(PushBlockStream msg) {
     // Retrieve merged shuffle file metadata
-    String[] blockIdParts = msg.blockId.split("_");
-    if (blockIdParts.length != 4 || !blockIdParts[0].equals("shuffle")) {
-      throw new IllegalArgumentException("Unexpected shuffle block id format: " + msg.blockId);
-    }
-    AppShuffleId appShuffleId = new AppShuffleId(msg.appId, Integer.parseInt(blockIdParts[1]));
-    int mapIndex = Integer.parseInt(blockIdParts[2]);
-    int reduceId = Integer.parseInt(blockIdParts[3]);
+    AppShuffleId appShuffleId = new AppShuffleId(msg.appId, msg.shuffleId);
     AppShufflePartitionInfo partitionInfoBeforeCheck =
-      getOrCreateAppShufflePartitionInfo(appShuffleId, reduceId);
-
+      getOrCreateAppShufflePartitionInfo(appShuffleId, msg.reduceId);
     // Here partitionInfo will be null in 2 cases:
     // 1) The request is received for a block that has already been merged, this is possible due
     // to the retry logic.
@@ -321,17 +314,18 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     final boolean isTooLate = partitionInfoBeforeCheck == null;
     // Check if the given block is already merged by checking the bitmap against the given map index
     final AppShufflePartitionInfo partitionInfo = partitionInfoBeforeCheck != null
-      && partitionInfoBeforeCheck.mapTracker.contains(mapIndex) ? null : partitionInfoBeforeCheck;
+      && partitionInfoBeforeCheck.mapTracker.contains(msg.mapIndex) ? null
+        : partitionInfoBeforeCheck;
     if (partitionInfo != null) {
       return new PushBlockStreamCallback(
-        this, msg, appShuffleId, reduceId, mapIndex, partitionInfo);
+        this, msg, appShuffleId, msg.reduceId, msg.mapIndex, partitionInfo);
     } else {
       // For a duplicate block or a block which is late, respond back with a callback that handles
       // them differently.
       return new StreamCallbackWithID() {
         @Override
         public String getID() {
-          return msg.blockId;
+          return msg.streamId;
         }
 
         @Override
@@ -345,7 +339,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           if (isTooLate) {
             // Throw an exception here so the block data is drained from channel and server
             // responds RpcFailure to the client.
-            throw new RuntimeException(String.format("Block %s %s", msg.blockId,
+            throw new RuntimeException(String.format("Block %s %s", msg.streamId,
               ErrorHandler.BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX));
           }
           // For duplicate block that is received before the shuffle merge finalizes, the
@@ -463,7 +457,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
     @Override
     public String getID() {
-      return msg.blockId;
+      return msg.streamId;
     }
 
     /**
@@ -635,7 +629,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         // however is already finalized. We should thus respond RpcFailure to the client.
         if (shufflePartitions == null || !shufflePartitions.containsKey(reduceId)) {
           deferredBufs = null;
-          throw new RuntimeException(String.format("Block %s %s", msg.blockId,
+          throw new RuntimeException(String.format("Block %s %s", msg.streamId,
             ErrorHandler.BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX));
         }
         // Check if we can commit this block
@@ -668,7 +662,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           deferredBufs = null;
           throw new RuntimeException(String.format("%s %s to merged shuffle",
             ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX,
-            msg.blockId));
+            msg.streamId));
         }
       }
       isWriting = false;
