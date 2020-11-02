@@ -4077,9 +4077,7 @@ object functions {
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
-   * @param schema the schema to use when parsing the json string as a json string. In Spark 2.1,
-   *               the user-provided schema has to be in JSON format. Since Spark 2.2, the DDL
-   *               format is also supported for the schema.
+   * @param schema the schema as a DDL-formatted string.
    *
    * @group collection_funcs
    * @since 2.1.0
@@ -4094,8 +4092,7 @@ object functions {
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
-   * @param schema the schema to use when parsing the json string as a json string, it could be a
-   *               JSON format string or a DDL-formatted string.
+   * @param schema the schema as a DDL-formatted string.
    *
    * @group collection_funcs
    * @since 2.3.0
