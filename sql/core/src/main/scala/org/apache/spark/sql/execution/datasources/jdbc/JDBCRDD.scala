@@ -58,7 +58,7 @@ object JDBCRDD extends Logging {
 
   /**
    * Prune all but the specified columns from the specified Catalyst schema.
-   *
+   * 从指定的Catalyst模式中修剪除指定列之外的所有列。
    * @param schema - The Catalyst schema of the master table
    * @param columns - The list of desired columns
    *
