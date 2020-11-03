@@ -32,20 +32,20 @@ INFRA:
   - "/dev/run-tests-jenkins*"
 # BUILD has been updated with some lingering questions
 BUILD:
-  - any:
-    - "/dev/**/*"
-    - "/build/**/*"
-    - "/project/**/*"
-    - "/assembly/**/*"
-    - "**/*pom.xml"
-    - "/bin/docker-image-tool.sh"
-    - "/bin/find-spark-home*"
-    - "scalastyle-config.xml"
-  - all:
-    - "!/dev/github_jira_sync.py"
-    - "!/dev/merge_spark_pr.py"
-    - "!/dev/run-tests-jenkins*"
-    - "!/dev/.rat-excludes"
+- any:
+  - "/dev/**/*"
+  - "/build/**/*"
+  - "/project/**/*"
+  - "/assembly/**/*"
+  - "**/*pom.xml"
+  - "/bin/docker-image-tool.sh"
+  - "/bin/find-spark-home*"
+  - "scalastyle-config.xml"
+- all:
+  - "!/dev/github_jira_sync.py"
+  - "!/dev/merge_spark_pr.py"
+  - "!/dev/run-tests-jenkins*"
+  - "!/dev/.rat-excludes"
 # DOCS has been updated - Need to test if the repo root README will catch
 DOCS:
   - "docs/**/*"
