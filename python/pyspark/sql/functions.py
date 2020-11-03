@@ -1555,8 +1555,7 @@ def date_format(date, format):
 
     Notes
     -----
-    Use when ever possible specialized functions like `year`. These benefit from a
-    specialized implementation.
+    Whenever possible, use specialized functions like `year`.
 
     Examples
     --------

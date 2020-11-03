@@ -254,7 +254,7 @@ class Column(object):
     Parameters
     ----------
     other
-        a value or :class:`Column` to calculate bitwise or(|) against
+        a value or :class:`Column` to calculate bitwise or(|) with
         this :class:`Column`.
 
     Examples
@@ -270,7 +270,7 @@ class Column(object):
     Parameters
     ----------
     other
-        a value or :class:`Column` to calculate bitwise and(&) against
+        a value or :class:`Column` to calculate bitwise and(&) with
         this :class:`Column`.
 
     Examples
@@ -286,7 +286,7 @@ class Column(object):
     Parameters
     ----------
     other
-        a value or :class:`Column` to calculate bitwise xor(^) against
+        a value or :class:`Column` to calculate bitwise xor(^) with
         this :class:`Column`.
 
     Examples
