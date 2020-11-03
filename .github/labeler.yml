@@ -38,18 +38,18 @@ BUILD:
   - "!/dev/merge_spark_pr.py"
   - "!/dev/run-tests-jenkins*"
   - "!/dev/.rat-excludes"
-  - "/build/*"  # TODO - This currently has no nested structures, should we account for potential nested folders in the future?
-  - "/project/*"  # TODO - Same note as above
-  - "/assembly/*"  # TODO - Same note as above
+  - "/build/**/*"
+  - "/project/**/*"
+  - "/assembly/**/*"
   - "**/*pom.xml"
   - "/bin/docker-image-tool.sh"
   - "/bin/find-spark-home*"
   - "scalastyle-config.xml"
-# DOCS has been updated but with some needed tests
+# DOCS has been updated - Need to test if the repo root README will catch
 DOCS:
   - "docs/**/*"
-  - "**/README.md"  # TODO - Verify this matches on a nested README
-  - "**/CONTRIBUTING.md"  # TODO - Same as above
+  - "**/README.md"
+  - "**/CONTRIBUTING.md"
 # EXAMPLES has been updated
 EXAMPLES:
   - "examples/**/*"
@@ -62,8 +62,8 @@ CORE:
   - "/common/kvstore/**/*"
   - "/common/network-common/**/*"
   - "/common/network-shuffle/**/*"
-  - "/python/pyspark/**/*.py"  # TODO - Do we ned one more glob for subdirs?
-  - "/python/pyspark/tests/**/*.py"  # TODO - Same as above.
+  - "/python/pyspark/**/*.py"
+  - "/python/pyspark/tests/**/*.py"
 # Updated
 SPARK SUBMIT:
   - "/bin/spark-submit*"
@@ -73,7 +73,7 @@ SPARK SHELL:
   - "/bin/spark-shell*"
 # Updated - Needs testing
 SQL:
-  - "**/sql/**/*"  # TODO - Need to verify intermediate directories
+  - "**/sql/**/*"
   - "/common/unsafe/**/*"
   - "!/python/pyspark/sql/avro/**/*"
   - "!/python/pyspark/sql/streaming.py"
@@ -81,9 +81,9 @@ SQL:
   - "/bin/spark-sql*"
   - "/bin/beeline*"
   - "/sbin/*thriftserver*.sh"
-  - "**/*SQL*.R"  # TODO - Verify this one
-  - "**/*/DataFrame.R"  # TODO - Verify this one
-  - "**/*/WindowSpec.R"  # TODO - Verify all the rest
+  - "**/*SQL*.R"
+  - "**/*DataFrame.R"  # TODO - Does ths need a star before DataFrame?
+  - "**/*WindowSpec.R"
   - "**/*catalog.R"
   - "**/*column.R"
   - "**/*functions.R"
@@ -98,7 +98,7 @@ AVRO:
 DSTREAM:
   - "/streaming/**/*"
   - "/data/streaming/**/*"
-  - "/external/flume*"  # TODO - Does this need to be /external/flume*/**/*?
+  - "/external/flume*"  # TODO - Does this need to be /external/flume*/**/*? Need to test this
   - "/external/kinesis*"  # TODO - Same as above
   - "/external/kafka*"  # TODO - Same as above
   - "/python/pyspark/streaming/**/*"
@@ -115,7 +115,7 @@ MLLIB:
   - "/mllib-local/**/*"
   - "/python/pyspark/mllib/**/*"
 STRUCTURED STREAMING:
-  - "sql/**/streaming/"  # TODO - Does this one need editing?
+  - "sql/**/streaming/**/*"  # TODO - Does this one need a leading **/ editing?
   - "/external/kafka-0-10-sql/**/*"
   - "/python/pyspark/sql/streaming.py"
   - "/python/pyspark/sql/tests/test_streaming.py"
@@ -124,9 +124,10 @@ STRUCTURED STREAMING:
 PYTHON:
   - "/bin/pyspark*"
   - "**/python/**/*"  # TODO - Check this glob - was "python/"
+# Updated - Needs tests
 R:
-  - "r/"
-  - "R/"
+  - "**/r/**/*"
+  - "**/R/**/*"  # TODO - Do these need also one for non-nested
   - "/bin/sparkR*"
 # Updated - Needs tests
 YARN:
