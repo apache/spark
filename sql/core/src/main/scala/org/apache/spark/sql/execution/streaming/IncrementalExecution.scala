@@ -135,7 +135,7 @@ class IncrementalExecution(
       case StateStoreSaveExec(keys, None, None, None, stateFormatVersion,
              UnaryExecNode(agg,
                StateStoreRestoreExec(_, None, _, child))) =>
-        val aggStateInfo = nextStatefulOperationStateInfo
+        val aggStateInfo = nextStatefulOperationStateInfo()
         StateStoreSaveExec(
           keys,
           Some(aggStateInfo),
@@ -153,18 +153,18 @@ class IncrementalExecution(
         StreamingDeduplicateExec(
           keys,
           child,
-          Some(nextStatefulOperationStateInfo),
+          Some(nextStatefulOperationStateInfo()),
           Some(offsetSeqMetadata.batchWatermarkMs))
 
       case m: FlatMapGroupsWithStateExec =>
         m.copy(
-          stateInfo = Some(nextStatefulOperationStateInfo),
+          stateInfo = Some(nextStatefulOperationStateInfo()),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
           eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs))
 
       case j: StreamingSymmetricHashJoinExec =>
         j.copy(
-          stateInfo = Some(nextStatefulOperationStateInfo),
+          stateInfo = Some(nextStatefulOperationStateInfo()),
           eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs),
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
@@ -173,7 +173,7 @@ class IncrementalExecution(
 
       case l: StreamingGlobalLimitExec =>
         l.copy(
-          stateInfo = Some(nextStatefulOperationStateInfo),
+          stateInfo = Some(nextStatefulOperationStateInfo()),
           outputMode = Some(outputMode))
 
       case StreamingLocalLimitExec(limit, child) if hasNoStatefulOp(child) =>

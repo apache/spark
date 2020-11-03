@@ -3111,7 +3111,7 @@ object functions {
    * @since 1.5.0
    */
   def from_unixtime(ut: Column): Column = withExpr {
-    FromUnixTime(ut.expr, Literal(TimestampFormatter.defaultPattern))
+    FromUnixTime(ut.expr, Literal(TimestampFormatter.defaultPattern()))
   }
 
   /**
@@ -3145,7 +3145,7 @@ object functions {
    * @since 1.5.0
    */
   def unix_timestamp(): Column = withExpr {
-    UnixTimestamp(CurrentTimestamp(), Literal(TimestampFormatter.defaultPattern))
+    UnixTimestamp(CurrentTimestamp(), Literal(TimestampFormatter.defaultPattern()))
   }
 
   /**
@@ -3159,7 +3159,7 @@ object functions {
    * @since 1.5.0
    */
   def unix_timestamp(s: Column): Column = withExpr {
-    UnixTimestamp(s.expr, Literal(TimestampFormatter.defaultPattern))
+    UnixTimestamp(s.expr, Literal(TimestampFormatter.defaultPattern()))
   }
 
   /**

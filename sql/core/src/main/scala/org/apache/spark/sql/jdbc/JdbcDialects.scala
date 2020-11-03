@@ -129,7 +129,7 @@ abstract class JdbcDialect extends Serializable {
    */
   @Since("2.3.0")
   def getTruncateQuery(table: String): String = {
-    getTruncateQuery(table, isCascadingTruncateTable)
+    getTruncateQuery(table, isCascadingTruncateTable())
   }
 
   /**
@@ -143,7 +143,7 @@ abstract class JdbcDialect extends Serializable {
   @Since("2.4.0")
   def getTruncateQuery(
     table: String,
-    cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+    cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
       s"TRUNCATE TABLE $table"
   }
 

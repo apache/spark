@@ -35,7 +35,9 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
 
   private lazy val context = TaskContext.get()
   private lazy val buffer = new PythonForeachWriter.UnsafeRowBuffer(
-    context.taskMemoryManager, new File(Utils.getLocalDir(SparkEnv.get.conf)), schema.fields.length)
+    context.taskMemoryManager(),
+    new File(Utils.getLocalDir(SparkEnv.get.conf)),
+    schema.fields.length)
   private lazy val inputRowIterator = buffer.iterator
 
   private lazy val inputByteIterator = {
@@ -53,7 +55,7 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
 
   override def open(partitionId: Long, version: Long): Boolean = {
     outputIterator  // initialize everything
-    TaskContext.get.addTaskCompletionListener[Unit] { _ => buffer.close() }
+    TaskContext.get().addTaskCompletionListener[Unit] { _ => buffer.close() }
     true
   }
 
