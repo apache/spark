@@ -124,11 +124,11 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
             result.get(i, f.dataType), expected.get(i, f.dataType), f.dataType, f.nullable)
         }
       case (result: ArrayData, expected: ArrayData) =>
-        result.numElements == expected.numElements && {
+        result.numElements() == expected.numElements() && {
           val ArrayType(et, cn) = dataType.asInstanceOf[ArrayType]
           var isSame = true
           var i = 0
-          while (isSame && i < result.numElements) {
+          while (isSame && i < result.numElements()) {
             isSame = checkResult(result.get(i, et), expected.get(i, et), et, cn)
             i += 1
           }
