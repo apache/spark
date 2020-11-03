@@ -100,15 +100,16 @@ class StreamSuite extends StreamTest {
       case s: StreamingRelationV2 => s
     }
     assert(streamingRelation.nonEmpty, "cannot find StreamingRelationV2")
-    assert(
-      streamingRelation.head.computeStats().sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
+    assert(streamingRelation.head.computeStats().sizeInBytes ==
+      spark.sessionState.conf.defaultSizeInBytes)
   }
 
   test("StreamingExecutionRelation.computeStats") {
     val memoryStream = MemoryStream[Int]
     val executionRelation = StreamingExecutionRelation(
       memoryStream, memoryStream.encoder.schema.toAttributes)(memoryStream.sqlContext.sparkSession)
-    assert(executionRelation.computeStats().sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
+    assert(executionRelation.computeStats().sizeInBytes ==
+      spark.sessionState.conf.defaultSizeInBytes)
   }
 
   test("explain join with a normal source") {

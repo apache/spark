@@ -661,7 +661,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       val json_tuple_result = Seq(s"""{"test":"$str"}""").toDF("json")
         .withColumn("result", json_tuple('json, "test"))
         .select('result)
-        .as[String].head.length
+        .as[String].head().length
       assert(json_tuple_result === len)
     }
   }
