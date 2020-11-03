@@ -896,7 +896,7 @@ class DataFrameAggregateSuite extends QueryTest
         .select($"x", map($"x", $"y").as("y"))
         .createOrReplaceTempView("tempView")
       val error = intercept[AnalysisException] {
-        sql("SELECT max_by(x, y) FROM tempView").show
+        sql("SELECT max_by(x, y) FROM tempView").show()
       }
       assert(
         error.message.contains("function max_by does not support ordering on type map<int,string>"))
@@ -952,7 +952,7 @@ class DataFrameAggregateSuite extends QueryTest
         .select($"x", map($"x", $"y").as("y"))
         .createOrReplaceTempView("tempView")
       val error = intercept[AnalysisException] {
-        sql("SELECT min_by(x, y) FROM tempView").show
+        sql("SELECT min_by(x, y) FROM tempView").show()
       }
       assert(
         error.message.contains("function min_by does not support ordering on type map<int,string>"))
@@ -1058,7 +1058,7 @@ class DataFrameAggregateSuite extends QueryTest
     val df = Seq(
       A(None),
       A(Some(B(None))),
-      A(Some(B(Some(1.0))))).toDF
+      A(Some(B(Some(1.0))))).toDF()
     val groupBy = df.groupBy("b").agg(count("*"))
     checkAnswer(groupBy, Row(null, 1) :: Row(Row(null), 1) :: Row(Row(1.0), 1) :: Nil)
   }

@@ -87,13 +87,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     val df5 = Seq((Seq("a", null), Seq(1, 2))).toDF("k", "v")
     val msg1 = intercept[Exception] {
-      df5.select(map_from_arrays($"k", $"v")).collect
+      df5.select(map_from_arrays($"k", $"v")).collect()
     }.getMessage
     assert(msg1.contains("Cannot use null as map key"))
 
     val df6 = Seq((Seq(1, 2), Seq("a"))).toDF("k", "v")
     val msg2 = intercept[Exception] {
-      df6.select(map_from_arrays($"k", $"v")).collect
+      df6.select(map_from_arrays($"k", $"v")).collect()
     }.getMessage
     assert(msg2.contains("The key array and value array of MapData must have the same length"))
   }
@@ -130,7 +130,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       StructField("col1", IntegerType, nullable = false),
       StructField("b", StringType)
     ))
-    assert(result.first.schema(0).dataType === expectedType)
+    assert(result.first().schema(0).dataType === expectedType)
     checkAnswer(result, Row(Row(2, "str")))
   }
 
@@ -143,7 +143,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       StructField("col2", DoubleType, nullable = false)
     ))
 
-    assert(result.first.schema(0).dataType === expectedType)
+    assert(result.first().schema(0).dataType === expectedType)
     checkAnswer(result, Seq(Row(Row(2, 5.0)), Row(Row(4, 5.0))))
   }
 
@@ -156,7 +156,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       StructField("col2", DoubleType, nullable = false)
     ))
 
-    assert(result.first.schema(0).dataType === expectedType)
+    assert(result.first().schema(0).dataType === expectedType)
     checkAnswer(result, Seq(Row(Row("v", 5.0)), Row(Row("v", 5.0))))
   }
 
@@ -1976,7 +1976,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     ).toDF("a", "b")
     val result10 = df10.select(array_except($"a", $"b"))
     val expectedType10 = ArrayType(IntegerType, containsNull = true)
-    assert(result10.first.schema(0).dataType === expectedType10)
+    assert(result10.first().schema(0).dataType === expectedType10)
   }
 
   test("array_intersect functions") {

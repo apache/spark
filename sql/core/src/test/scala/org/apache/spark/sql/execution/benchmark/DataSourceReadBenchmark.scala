@@ -52,7 +52,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
       .setIfMissing("spark.driver.memory", "3g")
       .setIfMissing("spark.executor.memory", "3g")
 
-    val sparkSession = SparkSession.builder.config(conf).getOrCreate()
+    val sparkSession = SparkSession.builder().config(conf).getOrCreate()
 
     // Set default configs. Individual cases will change them if necessary.
     sparkSession.conf.set(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key, "true")

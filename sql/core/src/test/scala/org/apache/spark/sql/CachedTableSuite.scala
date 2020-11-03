@@ -1017,7 +1017,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         .agg(avg("c1").as("v1"), sum("c2").as("v2"))
     }
     // First, checks if there is no column statistic in cached query
-    val queryStats1 = query().cache.queryExecution.optimizedPlan.stats.attributeStats
+    val queryStats1 = query().cache().queryExecution.optimizedPlan.stats.attributeStats
     assert(queryStats1.map(_._1.name).isEmpty)
 
     val cacheManager = spark.sharedState.cacheManager

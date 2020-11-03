@@ -1214,7 +1214,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       try {
         assert(q.awaitTermination(streamingTimeout.toMillis))
         assert(q.recentProgress.count(_.numInputRows != 0) == 1) // only one trigger was run
-        checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 3).map(_.toString).toDF)
+        checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 3).map(_.toString).toDF())
       } finally {
         q.stop()
       }
@@ -1227,7 +1227,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       try {
         assert(q2.awaitTermination(streamingTimeout.toMillis))
         assert(q2.recentProgress.count(_.numInputRows != 0) == 1) // only one trigger was run
-        checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 5).map(_.toString).toDF)
+        checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 5).map(_.toString).toDF())
       } finally {
         q2.stop()
       }

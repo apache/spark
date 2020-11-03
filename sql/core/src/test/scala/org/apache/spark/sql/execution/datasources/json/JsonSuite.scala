@@ -1238,7 +1238,7 @@ abstract class JsonSuite
 
       val df1 = spark.createDataFrame(rowRDD1, schema1)
       df1.createOrReplaceTempView("applySchema1")
-      val df2 = df1.toDF
+      val df2 = df1.toDF()
       val result = df2.toJSON.collect()
       // scalastyle:off
       assert(result(0) === "{\"f1\":1,\"f2\":\"A1\",\"f3\":true,\"f4\":[\"1\",\" A1\",\" true\",\" null\"]}")
@@ -1261,7 +1261,7 @@ abstract class JsonSuite
 
       val df3 = spark.createDataFrame(rowRDD2, schema2)
       df3.createOrReplaceTempView("applySchema2")
-      val df4 = df3.toDF
+      val df4 = df3.toDF()
       val result2 = df4.toJSON.collect()
 
       assert(result2(1) === "{\"f1\":{\"f11\":2,\"f12\":false},\"f2\":{\"B2\":null}}")
@@ -1572,7 +1572,7 @@ abstract class JsonSuite
         // inferring partitions because the original path in the "path" option will list the
         // partition directory that has been removed.
         assert(
-          spark.read.options(extraOptions).format("json").option("path", path).load.count() === 2)
+          spark.read.options(extraOptions).format("json").option("path", path).load().count() === 2)
       }
     }
   }
@@ -2014,7 +2014,7 @@ abstract class JsonSuite
           .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
           .schema(schema)
           .json(path)
-          .collect
+          .collect()
       }.getMessage
       assert(errMsg.startsWith("The field for corrupt records must be string type and nullable"))
     }
@@ -2168,7 +2168,7 @@ abstract class JsonSuite
         // inferred when sampling ratio is involved.
         val readback2 = spark.read
           .option("samplingRatio", 0.1).option("path", path.getCanonicalPath)
-          .format("json").load
+          .format("json").load()
         assert(readback2.schema == new StructType().add("f1", LongType))
       }
     })
@@ -2560,7 +2560,7 @@ abstract class JsonSuite
 
   private def failedOnEmptyString(dataType: DataType): Unit = {
     val df = spark.read.schema(s"a ${dataType.catalogString}")
-      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS())
     val errMessage = intercept[SparkException] {
       df.collect()
     }.getMessage
@@ -2570,7 +2570,7 @@ abstract class JsonSuite
 
   private def emptyString(dataType: DataType, expected: Any): Unit = {
     val df = spark.read.schema(s"a ${dataType.catalogString}")
-      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS())
     checkAnswer(df, Row(expected) :: Nil)
   }
 
@@ -2596,7 +2596,7 @@ abstract class JsonSuite
   test("SPARK-25040: allowing empty strings when legacy config is enabled") {
     def emptyStringAsNull(dataType: DataType): Unit = {
       val df = spark.read.schema(s"a ${dataType.catalogString}")
-        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS())
       checkAnswer(df, Row(null) :: Nil)
     }
 
@@ -2638,7 +2638,7 @@ abstract class JsonSuite
 
   test("inferring timestamp type") {
     def schemaOf(jsons: String*): StructType = {
-      spark.read.option("inferTimestamp", true).json(jsons.toDS).schema
+      spark.read.option("inferTimestamp", true).json(jsons.toDS()).schema
     }
 
     assert(schemaOf(

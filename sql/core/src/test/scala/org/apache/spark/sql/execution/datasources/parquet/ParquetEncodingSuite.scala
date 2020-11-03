@@ -37,7 +37,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
   test("All Types Dictionary") {
     (1 :: 1000 :: Nil).foreach { n => {
       withTempPath { dir =>
-        List.fill(n)(ROW).toDF.repartition(1).write.parquet(dir.getCanonicalPath)
+        List.fill(n)(ROW).toDF().repartition(1).write.parquet(dir.getCanonicalPath)
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head
 
         val conf = sqlContext.conf
@@ -63,7 +63,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
   test("All Types Null") {
     (1 :: 100 :: Nil).foreach { n => {
       withTempPath { dir =>
-        val data = List.fill(n)(NULL_ROW).toDF
+        val data = List.fill(n)(NULL_ROW).toDF()
         data.repartition(1).write.parquet(dir.getCanonicalPath)
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head
 

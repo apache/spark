@@ -768,10 +768,10 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
   private def dfWithMultipleWatermarks(
       input1: MemoryStream[Int],
       input2: MemoryStream[Int]): Dataset[_] = {
-    val df1 = input1.toDF
+    val df1 = input1.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
-    val df2 = input2.toDF
+    val df2 = input2.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "15 seconds")
     df1.union(df2).select($"eventTime".cast("int"))

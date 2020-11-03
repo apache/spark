@@ -396,7 +396,7 @@ abstract class CSVSuite
       .schema(StructType(List(StructField("column", StringType, false))))
       .load(testFile(emptyFile))
 
-    assert(result.collect.size === 0)
+    assert(result.collect().size === 0)
     assert(result.schema.fieldNames.size === 1)
   }
 
@@ -1219,7 +1219,7 @@ abstract class CSVSuite
           .option("multiLine", multiLine)
           .schema(schema.add(columnNameOfCorruptRecord, IntegerType))
           .csv(testFile(valueMalformedFile))
-          .collect
+          .collect()
       }.getMessage
       assert(errMsg.startsWith("The field for corrupt records must be string type and nullable"))
     }
@@ -1471,7 +1471,7 @@ abstract class CSVSuite
           .option("inferSchema", true).option("samplingRatio", 0.1)
           .option("path", path.getCanonicalPath)
           .format("csv")
-          .load
+          .load()
         assert(readback2.schema == new StructType().add("_c0", IntegerType))
       }
     })
@@ -2076,19 +2076,19 @@ abstract class CSVSuite
 
   test("lineSep restrictions") {
     val errMsg1 = intercept[IllegalArgumentException] {
-      spark.read.option("lineSep", "").csv(testFile(carsFile)).collect
+      spark.read.option("lineSep", "").csv(testFile(carsFile)).collect()
     }.getMessage
     assert(errMsg1.contains("'lineSep' cannot be an empty string"))
 
     val errMsg2 = intercept[IllegalArgumentException] {
-      spark.read.option("lineSep", "123").csv(testFile(carsFile)).collect
+      spark.read.option("lineSep", "123").csv(testFile(carsFile)).collect()
     }.getMessage
     assert(errMsg2.contains("'lineSep' can contain only 1 character"))
   }
 
   test("SPARK-26208: write and read empty data to csv file with headers") {
     withTempPath { path =>
-      val df1 = spark.range(10).repartition(2).filter(_ < 0).map(_.toString).toDF
+      val df1 = spark.range(10).repartition(2).filter(_ < 0).map(_.toString).toDF()
       // we have 2 partitions but they are both empty and will be filtered out upon writing
       // thanks to SPARK-23271 one new empty partition will be inserted
       df1.write.format("csv").option("header", true).save(path.getAbsolutePath)
@@ -2121,7 +2121,7 @@ abstract class CSVSuite
     assert(spark.read
       .option("delimiter", "|")
       .option("inferSchema", "true")
-      .csv(Seq("1,2").toDS).schema.head.dataType === StringType)
+      .csv(Seq("1,2").toDS()).schema.head.dataType === StringType)
   }
 
   test("SPARK-27873: disabling enforceSchema should not fail columnNameOfCorruptRecord") {
@@ -2365,7 +2365,7 @@ abstract class CSVSuite
 
   test("SPARK-32025: infer the schema from mixed-type values") {
     withTempPath { path =>
-      Seq("col_mixed_types", "2012", "1997", "True").toDS.write.text(path.getCanonicalPath)
+      Seq("col_mixed_types", "2012", "1997", "True").toDS().write.text(path.getCanonicalPath)
       val df = spark.read.format("csv")
         .option("header", "true")
         .option("inferSchema", "true")
@@ -2377,7 +2377,7 @@ abstract class CSVSuite
 
   test("SPARK-32614: don't treat rows starting with null char as comment") {
     withTempPath { path =>
-      Seq("\u0000foo", "bar", "baz").toDS.write.text(path.getCanonicalPath)
+      Seq("\u0000foo", "bar", "baz").toDS().write.text(path.getCanonicalPath)
       val df = spark.read.format("csv")
         .option("header", "false")
         .option("inferSchema", "true")

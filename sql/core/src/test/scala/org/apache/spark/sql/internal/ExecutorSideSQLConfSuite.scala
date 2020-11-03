@@ -139,7 +139,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
           Seq(true)
             .toDF()
             .mapPartitions { _ =>
-              TaskContext.get.getLocalProperty(confKey) == confValue match {
+              TaskContext.get().getLocalProperty(confKey) == confValue match {
                 case true => Iterator(true)
                 case false => Iterator.empty
               }
@@ -170,7 +170,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
 
       def generateBroadcastDataFrame(confKey: String, confValue: String): Dataset[Boolean] = {
         val df = spark.range(1).mapPartitions { _ =>
-          Iterator(TaskContext.get.getLocalProperty(confKey) == confValue)
+          Iterator(TaskContext.get().getLocalProperty(confKey) == confValue)
         }
         df.hint("broadcast")
       }

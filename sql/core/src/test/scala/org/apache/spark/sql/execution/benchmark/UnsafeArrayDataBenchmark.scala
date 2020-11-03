@@ -53,7 +53,7 @@ object UnsafeArrayDataBenchmark extends BenchmarkBase {
     val readIntArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        val len = intUnsafeArray.numElements
+        val len = intUnsafeArray.numElements()
         var sum = 0
         var i = 0
         while (i < len) {
@@ -70,7 +70,7 @@ object UnsafeArrayDataBenchmark extends BenchmarkBase {
     val readDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        val len = doubleUnsafeArray.numElements
+        val len = doubleUnsafeArray.numElements()
         var sum = 0.0
         var i = 0
         while (i < len) {
@@ -84,7 +84,7 @@ object UnsafeArrayDataBenchmark extends BenchmarkBase {
     val benchmark = new Benchmark("Read UnsafeArrayData", count * iters, output = output)
     benchmark.addCase("Int")(readIntArray)
     benchmark.addCase("Double")(readDoubleArray)
-    benchmark.run
+    benchmark.run()
   }
 
   def writeUnsafeArray(iters: Int): Unit = {
@@ -120,7 +120,7 @@ object UnsafeArrayDataBenchmark extends BenchmarkBase {
     val benchmark = new Benchmark("Write UnsafeArrayData", count * iters, output = output)
     benchmark.addCase("Int")(writeIntArray)
     benchmark.addCase("Double")(writeDoubleArray)
-    benchmark.run
+    benchmark.run()
   }
 
   def getPrimitiveArray(iters: Int): Unit = {
@@ -135,7 +135,7 @@ object UnsafeArrayDataBenchmark extends BenchmarkBase {
       var len = 0
       var n = 0
       while (n < iters) {
-        len += intUnsafeArray.toIntArray.length
+        len += intUnsafeArray.toIntArray().length
         n += 1
       }
       intTotalLength = len
@@ -149,7 +149,7 @@ object UnsafeArrayDataBenchmark extends BenchmarkBase {
       var len = 0
       var n = 0
       while (n < iters) {
-        len += doubleUnsafeArray.toDoubleArray.length
+        len += doubleUnsafeArray.toDoubleArray().length
         n += 1
       }
       doubleTotalLength = len
@@ -159,7 +159,7 @@ object UnsafeArrayDataBenchmark extends BenchmarkBase {
       new Benchmark("Get primitive array from UnsafeArrayData", count * iters, output = output)
     benchmark.addCase("Int")(readIntArray)
     benchmark.addCase("Double")(readDoubleArray)
-    benchmark.run
+    benchmark.run()
   }
 
   def putPrimitiveArray(iters: Int): Unit = {
@@ -194,7 +194,7 @@ object UnsafeArrayDataBenchmark extends BenchmarkBase {
       new Benchmark("Create UnsafeArrayData from primitive array", count * iters, output = output)
     benchmark.addCase("Int")(createIntArray)
     benchmark.addCase("Double")(createDoubleArray)
-    benchmark.run
+    benchmark.run()
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {

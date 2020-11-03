@@ -67,7 +67,7 @@ object WholeStageCodegenSparkSubmitSuite extends Assertions with Logging {
     // Make sure the test is run where the driver and the executors uses different object layouts
     val driverArrayHeaderSize = Platform.BYTE_ARRAY_OFFSET
     val executorArrayHeaderSize =
-      spark.sparkContext.range(0, 1).map(_ => Platform.BYTE_ARRAY_OFFSET).collect.head.toInt
+      spark.sparkContext.range(0, 1).map(_ => Platform.BYTE_ARRAY_OFFSET).collect().head.toInt
     assert(driverArrayHeaderSize > executorArrayHeaderSize)
 
     val df = spark.range(71773).select((col("id") % lit(10)).cast(IntegerType) as "v")
@@ -86,7 +86,7 @@ object WholeStageCodegenSparkSubmitSuite extends Assertions with Logging {
         Row(Array(7), 7177) ::
         Row(Array(8), 7177) ::
         Row(Array(9), 7177) :: Nil
-    val result = df.collect
+    val result = df.collect()
     QueryTest.sameRows(result.toSeq, expectedAnswer) match {
       case Some(errMsg) => fail(errMsg)
       case _ =>

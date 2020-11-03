@@ -250,7 +250,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
   }
 
   override def getSparkSession: SparkSession = {
-    SparkSession.builder
+    SparkSession.builder()
       .master("local[*]")
       .appName("Dataset benchmark")
       .getOrCreate()

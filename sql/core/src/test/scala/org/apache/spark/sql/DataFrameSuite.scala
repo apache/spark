@@ -1970,7 +1970,7 @@ class DataFrameSuite extends QueryTest
     val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(Seq.range(0, size))))
     val schemas = List.range(0, size).map(a => StructField("name" + a, LongType, true))
     val df = spark.createDataFrame(rdd, StructType(schemas))
-    assert(df.persist.take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
+    assert(df.persist().take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
   }
 
   test("SPARK-17409: Do Not Optimize Query in CTAS (Data source tables) More Than Once") {
@@ -1994,7 +1994,7 @@ class DataFrameSuite extends QueryTest
   test("copy results for sampling with replacement") {
     val df = Seq((1, 0), (2, 0), (3, 0)).toDF("a", "b")
     val sampleDf = df.sample(true, 2.00)
-    val d = sampleDf.withColumn("c", monotonically_increasing_id).select($"c").collect
+    val d = sampleDf.withColumn("c", monotonically_increasing_id()).select($"c").collect()
     assert(d.size == d.distinct.size)
   }
 
@@ -2097,7 +2097,7 @@ class DataFrameSuite extends QueryTest
     df1
       .join(df2, df1("x") === df2("x1"), "left_outer")
       .filter($"x1".isNotNull || !$"y".isin("a!"))
-      .count
+      .count()
   }
 
   // The fix of SPARK-21720 avoid an exception regarding JVM code size limit
@@ -2347,7 +2347,7 @@ class DataFrameSuite extends QueryTest
       Console.withOut(captured) {
         df.explain(extended = true)
       }
-      checkAnswer(df, spark.range(10).toDF)
+      checkAnswer(df, spark.range(10).toDF())
       val output = captured.toString
       assert(output.contains(
         """== Parsed Logical Plan ==
@@ -2390,7 +2390,7 @@ class DataFrameSuite extends QueryTest
         data1.zip(data2).map { p =>
           p._1.getInt(2) + p._2.getInt(2)
         }
-      }.toDF
+      }.toDF()
 
     checkAnswer(df3.sort("value"), Row(7) :: Row(9) :: Nil)
 
@@ -2417,7 +2417,7 @@ class DataFrameSuite extends QueryTest
         data1.zip(data2).map { p =>
           p._1.getInt(2) + p._2.getInt(2)
         }
-      }.toDF
+      }.toDF()
 
     checkAnswer(df3.sort("value"), Row(7) :: Row(9) :: Nil)
   }

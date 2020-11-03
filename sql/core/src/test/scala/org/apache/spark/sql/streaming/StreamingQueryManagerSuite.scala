@@ -399,7 +399,7 @@ class StreamingQueryManagerSuite extends StreamTest {
         datasets.zipWithIndex.map { case (ds, i) =>
           var query: StreamingQuery = null
           try {
-            val df = ds.toDF
+            val df = ds.toDF()
             val metadataRoot =
               Utils.createTempDir(namePrefix = "streaming.checkpoint").getCanonicalPath
             query =
@@ -470,7 +470,7 @@ class StreamingQueryManagerSuite extends StreamTest {
 
   private def makeDataset: (MemoryStream[Int], Dataset[Int]) = {
     val inputData = MemoryStream[Int]
-    val mapped = inputData.toDS.map(6 / _)
+    val mapped = inputData.toDS().map(6 / _)
     (inputData, mapped)
   }
 }

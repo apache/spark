@@ -113,7 +113,7 @@ class CheckpointFileManagerSuite extends SharedSparkSession {
       SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
         classOf[CreateAtomicTestManager].getName) {
       val fileManager =
-        CheckpointFileManager.create(new Path("/"), spark.sessionState.newHadoopConf)
+        CheckpointFileManager.create(new Path("/"), spark.sessionState.newHadoopConf())
       assert(fileManager.isInstanceOf[CreateAtomicTestManager])
     }
   }

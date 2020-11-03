@@ -342,12 +342,12 @@ class JDBCSuite extends QueryTest
     // This is a test to reflect discussion in SPARK-12218.
     // The older versions of spark have this kind of bugs in parquet data source.
     val df1 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2) OR NOT (NAME != 'mary')")
-    assert(df1.collect.toSet === Set(Row("mary", 2)))
+    assert(df1.collect().toSet === Set(Row("mary", 2)))
 
     // SPARK-22548: Incorrect nested AND expression pushed down to JDBC data source
     val df2 = sql("SELECT * FROM foobar " +
       "WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (NAME = 'fred')")
-    assert(df2.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
+    assert(df2.collect().toSet === Set(Row("fred", 1), Row("mary", 2)))
 
     assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).collect().size == 0)
     assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 2) != 4")).collect().size == 2)
@@ -360,7 +360,7 @@ class JDBCSuite extends QueryTest
     // are applied for columns with Filter producing wrong results. On the other hand, JDBCRDD
     // correctly handles this case by assigning `requiredColumns` properly. See PR 10427 for more
     // discussions.
-    assert(sql("SELECT COUNT(1) FROM foobar WHERE NAME = 'mary'").collect.toSet === Set(Row(1)))
+    assert(sql("SELECT COUNT(1) FROM foobar WHERE NAME = 'mary'").collect().toSet === Set(Row(1)))
   }
 
   test("SELECT * WHERE (quoted strings)") {
@@ -1649,7 +1649,7 @@ class JDBCSuite extends QueryTest
         "dbtable" -> "table",
         "driver" -> "org.postgresql.Driver"
       )
-      spark.read.format("jdbc").options(opts).load
+      spark.read.format("jdbc").options(opts).load()
     }.getMessage
     assert(e.contains("The driver could not open a JDBC connection. " +
       "Check the URL: jdbc:mysql://localhost/db"))

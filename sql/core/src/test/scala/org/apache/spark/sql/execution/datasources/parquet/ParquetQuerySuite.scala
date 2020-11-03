@@ -792,7 +792,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     withAllParquetReaders {
       withTempPath { path =>
         // Repeated values for dictionary encoding.
-        Seq(Some("A"), Some("A"), None).toDF.repartition(1)
+        Seq(Some("A"), Some("A"), None).toDF().repartition(1)
           .write.parquet(path.getAbsolutePath)
         val df = spark.read.parquet(path.getAbsolutePath)
         checkAnswer(stripSparkFilter(df.where("NOT (value <=> 'A')")), df)

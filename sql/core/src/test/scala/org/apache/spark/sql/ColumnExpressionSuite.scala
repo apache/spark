@@ -143,7 +143,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("star qualified by data frame object") {
-    val df = testData.toDF
+    val df = testData.toDF()
     val goldAnswer = df.collect().toSeq
     checkAnswer(df.select(df("*")), goldAnswer)
 
@@ -220,7 +220,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("isNull") {
     checkAnswer(
-      nullStrings.toDF.where($"s".isNull),
+      nullStrings.toDF().where($"s".isNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
 
     checkAnswer(
@@ -230,7 +230,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("isNotNull") {
     checkAnswer(
-      nullStrings.toDF.where($"s".isNotNull),
+      nullStrings.toDF().where($"s".isNotNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
 
     checkAnswer(
@@ -493,41 +493,41 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         withSQLConf(
           SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> optThreshold.toString,
           SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD.key -> switchThreshold.toString) {
-          checkAnswer(Seq(0).toDS.select($"value".isInCollection(Seq(null))), Seq(Row(null)))
+          checkAnswer(Seq(0).toDS().select($"value".isInCollection(Seq(null))), Seq(Row(null)))
           checkAnswer(
-            Seq(true).toDS.select($"value".isInCollection(Seq(true, false))),
+            Seq(true).toDS().select($"value".isInCollection(Seq(true, false))),
             Seq(Row(true)))
           checkAnswer(
-            Seq(0.toByte, 1.toByte).toDS.select($"value".isInCollection(Seq(0.toByte, 2.toByte))),
+            Seq(0.toByte, 1.toByte).toDS().select($"value".isInCollection(Seq(0.toByte, 2.toByte))),
             expected)
           checkAnswer(
-            Seq(0.toShort, 1.toShort).toDS
+            Seq(0.toShort, 1.toShort).toDS()
               .select($"value".isInCollection(Seq(0.toShort, 2.toShort))),
             expected)
-          checkAnswer(Seq(0, 1).toDS.select($"value".isInCollection(Seq(0, 2))), expected)
-          checkAnswer(Seq(0L, 1L).toDS.select($"value".isInCollection(Seq(0L, 2L))), expected)
-          checkAnswer(Seq(0.0f, 1.0f).toDS
+          checkAnswer(Seq(0, 1).toDS().select($"value".isInCollection(Seq(0, 2))), expected)
+          checkAnswer(Seq(0L, 1L).toDS().select($"value".isInCollection(Seq(0L, 2L))), expected)
+          checkAnswer(Seq(0.0f, 1.0f).toDS()
             .select($"value".isInCollection(Seq(0.0f, 2.0f))), expected)
-          checkAnswer(Seq(0.0D, 1.0D).toDS
+          checkAnswer(Seq(0.0D, 1.0D).toDS()
             .select($"value".isInCollection(Seq(0.0D, 2.0D))), expected)
           checkAnswer(
-            Seq(BigDecimal(0), BigDecimal(2)).toDS
+            Seq(BigDecimal(0), BigDecimal(2)).toDS()
               .select($"value".isInCollection(Seq(BigDecimal(0), BigDecimal(1)))),
             expected)
           checkAnswer(
-            Seq("abc", "def").toDS.select($"value".isInCollection(Seq("abc", "xyz"))),
+            Seq("abc", "def").toDS().select($"value".isInCollection(Seq("abc", "xyz"))),
             expected)
           checkAnswer(
-            Seq(Date.valueOf("2020-04-29"), Date.valueOf("2020-05-01")).toDS
+            Seq(Date.valueOf("2020-04-29"), Date.valueOf("2020-05-01")).toDS()
               .select($"value".isInCollection(
                 Seq(Date.valueOf("2020-04-29"), Date.valueOf("2020-04-30")))),
             expected)
           checkAnswer(
-            Seq(new Timestamp(0), new Timestamp(2)).toDS
+            Seq(new Timestamp(0), new Timestamp(2)).toDS()
               .select($"value".isInCollection(Seq(new Timestamp(0), new Timestamp(1)))),
             expected)
           checkAnswer(
-            Seq(Array("a", "b"), Array("c", "d")).toDS
+            Seq(Array("a", "b"), Array("c", "d")).toDS()
               .select($"value".isInCollection(Seq(Array("a", "b"), Array("x", "z")))),
             expected)
         }

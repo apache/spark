@@ -34,7 +34,7 @@ class StreamingQueryListenersConfSuite extends StreamTest with BeforeAndAfter {
       "org.apache.spark.sql.streaming.TestListener")
 
   test("test if the configured query listener is loaded") {
-    testStream(MemoryStream[Int].toDS)(
+    testStream(MemoryStream[Int].toDS())(
       StartStream(),
       StopStream
     )

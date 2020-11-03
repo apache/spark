@@ -2895,7 +2895,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTable("fact_stats", "dim_stats") {
       val factData = Seq((1, 1, 99, 1), (2, 2, 99, 2), (3, 1, 99, 3), (4, 2, 99, 4))
       val storeData = Seq((1, "BW", "DE"), (2, "AZ", "US"))
-      spark.udf.register("filterND", udf((value: Int) => value > 2).asNondeterministic)
+      spark.udf.register("filterND", udf((value: Int) => value > 2).asNondeterministic())
       factData.toDF("date_id", "store_id", "product_id", "units_sold")
         .write.mode("overwrite").partitionBy("store_id").format("parquet").saveAsTable("fact_stats")
       storeData.toDF("store_id", "state_province", "country")
@@ -2957,9 +2957,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-25144 'distinct' causes memory leak") {
-    val ds = List(Foo(Some("bar"))).toDS
-    val result = ds.flatMap(_.bar).distinct
-    result.rdd.isEmpty
+    val ds = List(Foo(Some("bar"))).toDS()
+    val result = ds.flatMap(_.bar).distinct()
+    result.rdd.isEmpty()
   }
 
   test("SPARK-25454: decimal division with negative scale") {

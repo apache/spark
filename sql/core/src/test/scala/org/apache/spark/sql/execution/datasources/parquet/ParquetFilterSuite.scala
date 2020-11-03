@@ -615,7 +615,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           ParquetOutputTimestampType.INT96.toString) {
           import testImplicits._
           withTempPath { file =>
-            millisData.map(i => Tuple1(Timestamp.valueOf(i))).toDF
+            millisData.map(i => Tuple1(Timestamp.valueOf(i))).toDF()
               .write.format(dataSourceName).save(file.getCanonicalPath)
             readParquetFile(file.getCanonicalPath) { df =>
               val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)

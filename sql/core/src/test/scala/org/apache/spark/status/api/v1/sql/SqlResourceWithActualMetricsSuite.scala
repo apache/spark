@@ -121,7 +121,7 @@ class SqlResourceWithActualMetricsSuite extends SharedSparkSession with SQLMetri
       .filter(_.getAs[Int]("age") <= 30)
       .sort()
 
-    ds.toDF
+    ds.toDF()
   }
 
 }

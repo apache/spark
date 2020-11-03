@@ -164,11 +164,11 @@ class FileIndexSuite extends SharedSparkSession {
 
       val catalog1 = new InMemoryFileIndex(
         spark, Seq(unqualifiedDirPath), Map.empty, None)
-      assert(catalog1.allFiles.map(_.getPath) === Seq(qualifiedFilePath))
+      assert(catalog1.allFiles().map(_.getPath) === Seq(qualifiedFilePath))
 
       val catalog2 = new InMemoryFileIndex(
         spark, Seq(unqualifiedFilePath), Map.empty, None)
-      assert(catalog2.allFiles.map(_.getPath) === Seq(qualifiedFilePath))
+      assert(catalog2.allFiles().map(_.getPath) === Seq(qualifiedFilePath))
 
     }
   }

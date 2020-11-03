@@ -62,7 +62,7 @@ trait NestedDataSourceSuiteBase extends QueryTest with SharedSparkSession {
                   .schema(caseInsensitiveSchema)
                   .format(format)
                   .load(path)
-                  .show
+                  .show()
               }
               assert(e.getMessage.contains(s"Found duplicate column(s) $colType: `camelcase`"))
             }

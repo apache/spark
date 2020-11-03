@@ -766,9 +766,9 @@ class DatasetSuite extends QueryTest
     ).toDF("id", "stringData")
     val sampleDF = df.sample(false, 0.7, 50)
     // After sampling, sampleDF doesn't contain id=a.
-    assert(!sampleDF.select("id").as[Int].collect.contains(a))
+    assert(!sampleDF.select("id").as[Int].collect().contains(a))
     // simpleUdf should not encounter id=a.
-    checkAnswer(sampleDF.select(simpleUdf($"id")), List.fill(sampleDF.count.toInt)(Row(a)))
+    checkAnswer(sampleDF.select(simpleUdf($"id")), List.fill(sampleDF.count().toInt)(Row(a)))
   }
 
   test("SPARK-11436: we should rebind right encoder when join 2 datasets") {
@@ -1284,7 +1284,7 @@ class DatasetSuite extends QueryTest
       Route("b", "a", 1),
       Route("b", "a", 5),
       Route("b", "c", 6))
-    val ds = sparkContext.parallelize(data).toDF.as[Route]
+    val ds = sparkContext.parallelize(data).toDF().as[Route]
 
     val grped = ds.map(r => GroupedRoutes(r.src, r.dest, Seq(r)))
       .groupByKey(r => (r.src, r.dest))
@@ -1319,15 +1319,15 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-18284: Serializer should have correct nullable value") {
-    val df1 = Seq(1, 2, 3, 4).toDF
+    val df1 = Seq(1, 2, 3, 4).toDF()
     assert(df1.schema(0).nullable == false)
-    val df2 = Seq(Integer.valueOf(1), Integer.valueOf(2)).toDF
+    val df2 = Seq(Integer.valueOf(1), Integer.valueOf(2)).toDF()
     assert(df2.schema(0).nullable)
 
-    val df3 = Seq(Seq(1, 2), Seq(3, 4)).toDF
+    val df3 = Seq(Seq(1, 2), Seq(3, 4)).toDF()
     assert(df3.schema(0).nullable)
     assert(df3.schema(0).dataType.asInstanceOf[ArrayType].containsNull == false)
-    val df4 = Seq(Seq("a", "b"), Seq("c", "d")).toDF
+    val df4 = Seq(Seq("a", "b"), Seq("c", "d")).toDF()
     assert(df4.schema(0).nullable)
     assert(df4.schema(0).dataType.asInstanceOf[ArrayType].containsNull)
 
@@ -1356,7 +1356,7 @@ class DatasetSuite extends QueryTest
     assert(df10.schema(0).dataType.asInstanceOf[MapType].valueContainsNull)
 
     val df11 = Seq(TestDataPoint(1, 2.2, "a", null),
-                   TestDataPoint(3, 4.4, "null", (TestDataPoint2(33, "b")))).toDF
+      TestDataPoint(3, 4.4, "null", (TestDataPoint2(33, "b")))).toDF()
     assert(df11.schema(0).nullable == false)
     assert(df11.schema(1).nullable == false)
     assert(df11.schema(2).nullable)
@@ -1451,11 +1451,11 @@ class DatasetSuite extends QueryTest
     val arrayLong = Array(1.toLong, 2.toLong, 3.toLong)
     val arrayDouble = Array(1.1, 2.2, 3.3)
     val arrayString = Array("a", "b", "c")
-    val dsByte = sparkContext.parallelize(Seq(arrayByte), 1).toDS.map(e => e)
-    val dsInt = sparkContext.parallelize(Seq(arrayInt), 1).toDS.map(e => e)
-    val dsLong = sparkContext.parallelize(Seq(arrayLong), 1).toDS.map(e => e)
-    val dsDouble = sparkContext.parallelize(Seq(arrayDouble), 1).toDS.map(e => e)
-    val dsString = sparkContext.parallelize(Seq(arrayString), 1).toDS.map(e => e)
+    val dsByte = sparkContext.parallelize(Seq(arrayByte), 1).toDS().map(e => e)
+    val dsInt = sparkContext.parallelize(Seq(arrayInt), 1).toDS().map(e => e)
+    val dsLong = sparkContext.parallelize(Seq(arrayLong), 1).toDS().map(e => e)
+    val dsDouble = sparkContext.parallelize(Seq(arrayDouble), 1).toDS().map(e => e)
+    val dsString = sparkContext.parallelize(Seq(arrayString), 1).toDS().map(e => e)
     checkDataset(dsByte, arrayByte)
     checkDataset(dsInt, arrayInt)
     checkDataset(dsLong, arrayLong)
@@ -1475,10 +1475,10 @@ class DatasetSuite extends QueryTest
 
   test("SPARK-18717: code generation works for both scala.collection.Map" +
     " and scala.collection.imutable.Map") {
-    val ds = Seq(WithImmutableMap("hi", Map(42L -> "foo"))).toDS
+    val ds = Seq(WithImmutableMap("hi", Map(42L -> "foo"))).toDS()
     checkDataset(ds.map(t => t), WithImmutableMap("hi", Map(42L -> "foo")))
 
-    val ds2 = Seq(WithMap("hi", Map(42L -> "foo"))).toDS
+    val ds2 = Seq(WithMap("hi", Map(42L -> "foo"))).toDS()
     checkDataset(ds2.map(t => t), WithMap("hi", Map(42L -> "foo")))
   }
 
@@ -1499,17 +1499,17 @@ class DatasetSuite extends QueryTest
 
   test("SPARK-19896: cannot have circular references in case class") {
     val errMsg1 = intercept[UnsupportedOperationException] {
-      Seq(CircularReferenceClassA(null)).toDS
+      Seq(CircularReferenceClassA(null)).toDS()
     }
     assert(errMsg1.getMessage.startsWith("cannot have circular references in class, but got the " +
       "circular reference of class"))
     val errMsg2 = intercept[UnsupportedOperationException] {
-      Seq(CircularReferenceClassC(null)).toDS
+      Seq(CircularReferenceClassC(null)).toDS()
     }
     assert(errMsg2.getMessage.startsWith("cannot have circular references in class, but got the " +
       "circular reference of class"))
     val errMsg3 = intercept[UnsupportedOperationException] {
-      Seq(CircularReferenceClassD(null)).toDS
+      Seq(CircularReferenceClassD(null)).toDS()
     }
     assert(errMsg3.getMessage.startsWith("cannot have circular references in class, but got the " +
       "circular reference of class"))
@@ -1671,12 +1671,12 @@ class DatasetSuite extends QueryTest
 
   test("SPARK-24569: Option of primitive types are mistakenly mapped to struct type") {
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      val a = Seq(Some(1)).toDS
-      val b = Seq(Some(1.2)).toDS
-      val expected = Seq((Some(1), Some(1.2))).toDS
+      val a = Seq(Some(1)).toDS()
+      val b = Seq(Some(1.2)).toDS()
+      val expected = Seq((Some(1), Some(1.2))).toDS()
       val joined = a.joinWith(b, lit(true))
       assert(joined.schema == expected.schema)
-      checkDataset(joined, expected.collect: _*)
+      checkDataset(joined, expected.collect(): _*)
     }
   }
 
@@ -1795,7 +1795,7 @@ class DatasetSuite extends QueryTest
 
   test("SPARK-8288: class with only a companion object constructor") {
     val data = Seq(ScroogeLikeExample(1), ScroogeLikeExample(2))
-    val ds = data.toDS
+    val ds = data.toDS()
     checkDataset(ds, data: _*)
     checkAnswer(ds.select("x"), Seq(Row(1), Row(2)))
   }
@@ -1850,7 +1850,7 @@ class DatasetSuite extends QueryTest
 
   test("SPARK-25153: Improve error messages for columns with dots/periods") {
     forAll(dotColumnTestModes) { (caseSensitive, colName) =>
-      val ds = Seq(SpecialCharClass("1", "2")).toDS
+      val ds = Seq(SpecialCharClass("1", "2")).toDS()
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
         val errorMsg = intercept[AnalysisException] {
           ds(colName)

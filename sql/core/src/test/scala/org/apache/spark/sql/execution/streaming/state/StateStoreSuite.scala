@@ -881,14 +881,14 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     put(store, "b", 2)
 
     // Updates should work while iterating of filtered entries
-    val filtered = store.iterator.filter { tuple => rowToString(tuple.key) == "a" }
+    val filtered = store.iterator().filter { tuple => rowToString(tuple.key) == "a" }
     filtered.foreach { tuple =>
       store.put(tuple.key, intToRow(rowToInt(tuple.value) + 1))
     }
     assert(get(store, "a") === Some(2))
 
     // Removes should work while iterating of filtered entries
-    val filtered2 = store.iterator.filter { tuple => rowToString(tuple.key) == "b" }
+    val filtered2 = store.iterator().filter { tuple => rowToString(tuple.key) == "b" }
     filtered2.foreach { tuple => store.remove(tuple.key) }
     assert(get(store, "b") === None)
   }

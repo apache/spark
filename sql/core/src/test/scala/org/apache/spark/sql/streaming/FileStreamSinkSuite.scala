@@ -208,7 +208,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
     // with aggregations using event time windows and watermark, which allows
     // aggregation + append mode.
     val inputData = MemoryStream[Long]
-    val inputDF = inputData.toDF.toDF("time")
+    val inputDF = inputData.toDF().toDF("time")
     val outputDf = inputDF
       .selectExpr("timestamp_seconds(time) AS timestamp")
       .withWatermark("timestamp", "10 seconds")

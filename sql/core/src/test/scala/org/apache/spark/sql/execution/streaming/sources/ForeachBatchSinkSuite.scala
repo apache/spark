@@ -32,7 +32,7 @@ class ForeachBatchSinkSuite extends StreamTest {
 
   test("foreachBatch with non-stateful query") {
     val mem = MemoryStream[Int]
-    val ds = mem.toDS.map(_ + 1)
+    val ds = mem.toDS().map(_ + 1)
 
     val tester = new ForeachBatchTester[Int](mem)
     val writer = (ds: Dataset[Int], batchId: Long) => tester.record(batchId, ds.map(_ + 1))
@@ -49,7 +49,7 @@ class ForeachBatchSinkSuite extends StreamTest {
       .select($"value" % 2 as "key")
       .groupBy("key")
       .agg(count("*") as "value")
-      .toDF.as[KV]
+      .toDF().as[KV]
 
     val tester = new ForeachBatchTester[KV](mem)
     val writer = (batchDS: Dataset[KV], batchId: Long) => tester.record(batchId, batchDS)
@@ -67,7 +67,7 @@ class ForeachBatchSinkSuite extends StreamTest {
       .select($"value" % 2 as "key")
       .groupBy("key")
       .agg(count("*") as "value")
-      .toDF.as[KV]
+      .toDF().as[KV]
 
     val tester = new ForeachBatchTester[KV](mem)
     val writer = (batchDS: Dataset[KV], batchId: Long) => tester.record(batchId, batchDS)
@@ -81,7 +81,7 @@ class ForeachBatchSinkSuite extends StreamTest {
 
   test("foreachBatchSink does not affect metric generation") {
     val mem = MemoryStream[Int]
-    val ds = mem.toDS.map(_ + 1)
+    val ds = mem.toDS().map(_ + 1)
 
     val tester = new ForeachBatchTester[Int](mem)
     val writer = (ds: Dataset[Int], batchId: Long) => tester.record(batchId, ds.map(_ + 1))
@@ -93,7 +93,7 @@ class ForeachBatchSinkSuite extends StreamTest {
   }
 
   test("throws errors in invalid situations") {
-    val ds = MemoryStream[Int].toDS
+    val ds = MemoryStream[Int].toDS()
     val ex1 = intercept[IllegalArgumentException] {
       ds.writeStream.foreachBatch(null.asInstanceOf[(Dataset[Int], Long) => Unit]).start()
     }

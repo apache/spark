@@ -50,7 +50,7 @@ case class SimpleInsert(userSpecifiedSchema: StructType)(@transient val sparkSes
   override def schema: StructType = userSpecifiedSchema
 
   override def insert(input: DataFrame, overwrite: Boolean): Unit = {
-    input.collect
+    input.collect()
   }
 }
 

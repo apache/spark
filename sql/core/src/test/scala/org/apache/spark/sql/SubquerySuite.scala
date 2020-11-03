@@ -963,7 +963,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-23316: AnalysisException after max iteration reached for IN query") {
     // before the fix this would throw AnalysisException
-    spark.range(10).where("(id,id) in (select id, null from range(3))").count
+    spark.range(10).where("(id,id) in (select id, null from range(3))").count()
   }
 
   test("SPARK-24085 scalar subquery in partitioning expression") {

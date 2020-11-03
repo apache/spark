@@ -26,7 +26,7 @@ import org.scalatest.wordspec.AnyWordSpec
 class GenericWordSpecSuite extends AnyWordSpec with SharedSparkSessionBase {
   import testImplicits._
 
-  private def ds = Seq((1, 1), (2, 1), (3, 2), (4, 2), (5, 3), (6, 3), (7, 4), (8, 4)).toDS
+  private def ds = Seq((1, 1), (2, 1), (3, 2), (4, 2), (5, 3), (6, 3), (7, 4), (8, 4)).toDS()
 
   "A Simple Dataset" when {
     "looked at as complete rows" should {
@@ -34,7 +34,7 @@ class GenericWordSpecSuite extends AnyWordSpec with SharedSparkSessionBase {
         assert(8 === ds.count)
       }
       "have the specified number of unique elements" in {
-        assert(8 === ds.distinct.count)
+        assert(8 === ds.distinct().count)
       }
     }
     "refined to specific columns" should {
@@ -43,8 +43,8 @@ class GenericWordSpecSuite extends AnyWordSpec with SharedSparkSessionBase {
         assert(8 === ds.select("_2").count)
       }
       "have the correct number of distinct elements in each column" in {
-        assert(8 === ds.select("_1").distinct.count)
-        assert(4 === ds.select("_2").distinct.count)
+        assert(8 === ds.select("_1").distinct().count)
+        assert(4 === ds.select("_2").distinct().count)
       }
     }
   }

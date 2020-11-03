@@ -1558,7 +1558,7 @@ class DataSourceV2SQLSuite
         .add("catalog", StringType, nullable = false)
         .add("namespace", StringType, nullable = false)
       val df = sql("SHOW CURRENT NAMESPACE")
-      val rows = df.collect
+      val rows = df.collect()
 
       assert(df.schema === schema)
       assert(rows.length == 1)

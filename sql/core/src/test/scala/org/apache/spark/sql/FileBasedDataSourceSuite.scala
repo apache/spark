@@ -253,17 +253,17 @@ class FileBasedDataSourceSuite extends QueryTest
       // write path
       val textDir = new File(dir, "text").getCanonicalPath
       var msg = intercept[AnalysisException] {
-        Seq(1).toDF.write.text(textDir)
+        Seq(1).toDF().write.text(textDir)
       }.getMessage
       assert(msg.contains("Text data source does not support int data type"))
 
       msg = intercept[AnalysisException] {
-        Seq(1.2).toDF.write.text(textDir)
+        Seq(1.2).toDF().write.text(textDir)
       }.getMessage
       assert(msg.contains("Text data source does not support double data type"))
 
       msg = intercept[AnalysisException] {
-        Seq(true).toDF.write.text(textDir)
+        Seq(true).toDF().write.text(textDir)
       }.getMessage
       assert(msg.contains("Text data source does not support boolean data type"))
 
@@ -284,7 +284,7 @@ class FileBasedDataSourceSuite extends QueryTest
       assert(msg.contains("Text data source does not support array<string> data type"))
 
       // read path
-      Seq("aaa").toDF.write.mode("overwrite").text(textDir)
+      Seq("aaa").toDF().write.mode("overwrite").text(textDir)
       msg = intercept[AnalysisException] {
         val schema = StructType(StructField("a", IntegerType, true) :: Nil)
         spark.read.schema(schema).text(textDir).collect()
@@ -570,7 +570,7 @@ class FileBasedDataSourceSuite extends QueryTest
         withTempPath { dir =>
           val path = dir.getCanonicalPath
           spark.range(10).write.orc(path)
-          val row = spark.read.orc(path).select(input_file_name).first()
+          val row = spark.read.orc(path).select(input_file_name()).first()
           assert(row.getString(0).contains(path))
         }
       }
