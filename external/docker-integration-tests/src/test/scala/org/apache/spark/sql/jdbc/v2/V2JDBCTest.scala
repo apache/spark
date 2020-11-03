@@ -30,6 +30,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
   // dialect specific update column type test
   def testUpdateColumnType(tbl: String): Unit
 
+  def notSupportsTableComment: Boolean = false
+
   def testUpdateColumnNullability(tbl: String): Unit = {
     sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL) USING _")
     var t = spark.table(s"$catalogName.alt_table")
@@ -159,7 +161,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
         .filter(_.getLevel == Level.WARN)
         .map(_.getRenderedMessage)
         .exists(_.contains("Cannot create JDBC table comment"))
-      assert(createCommentWarning === false)
+      assert(createCommentWarning === notSupportsTableComment)
     }
   }
 }
