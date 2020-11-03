@@ -18,7 +18,6 @@
 #
 # Pull Request Labeler Github Action Configuration: https://github.com/marketplace/actions/labeler
 
-### FOLLOWING IS THE OLD probot autolabeler config that needs to be updated
 # INFRA has been updated
 INFRA:
   - ".github/**/*"
