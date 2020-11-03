@@ -341,13 +341,13 @@ The following matrix shows the resulting type to which they are implicitly conve
 **Note 2**: In these cases DecimalType can lose precision, there is no common type for decimal and double because double's range is larger than decimal, and yet decimal is more precise than double so when we cast Decimaltype into DobleType it could lose precision.
 
 **StringType Behavior**  
-* Arithmetic Expressions:
+* Arithmetic Expressions: When we have an arithmetic expression with one operand of type StringType, both operands will be implicitly casted to DoubleType.
 
     |               |ByteType   |ShortType  |IntegerType |LongType   |FloatType    |DoubleType  |
     |---------------|-----------|-----------|------------|-----------|-------------|------------|
     |**StringType** |DoubleType |DoubleType |DoubleType  |DoubleType |DoubleType   |DoubleType  |
 
-* Comparison:
+* Comparison: When we have a comparison expression with an operand of type StringType, the operand StringType will be casted implicitly according to the following table.
 
     |               |ByteType   |ShortType  |IntegerType |LongType   |FloatType    |DoubleType  |DecimalType |DateType             |TimestampType             |
     |---------------|-----------|-----------|------------|-----------|-------------|------------|------------|---------------------|--------------------------|
@@ -355,8 +355,14 @@ The following matrix shows the resulting type to which they are implicitly conve
 
     **Note 1**: If `spark.sql.legacy.typeCoercion.datetimeToString` is true, DateType and TimestampType will be casted to StringType
     
-* IN Expressions: Expressions like `x IN list_values`.  If the list of values has a StringType element, all the elements will be casted to StringType  
+* in, except, intersect, union, array: If the list of values has a StringType element, all the elements will be casted to StringType.
  
+* concat, concat_ws, array_join: All elements will be casted to StringType.
+
+* map_concat: If the list of key has a StringType element, all the keys will be casted to StringType. The same goes for the values.
+
+* if, when: If any of the results has StringType, all the results will be casted to StringType.
+
 **Time Expressions**:
 
 |                  |DateType     |TimestampType |
