@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.jdbc.v2
 
-import java.sql.Connection
-import java.sql.SQLFeatureNotSupportedException
+import java.sql.{Connection, SQLFeatureNotSupportedException}
 
 import org.scalatest.time.SpanSugar._
 
@@ -55,6 +54,14 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBC
       s"jdbc:sqlserver://$ip:$port;user=sa;password=Sapass123;"
   }
 
+  override def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.catalog.mssql", classOf[JDBCTableCatalog].getName)
+    .set("spark.sql.catalog.mssql.url", db.getJdbcUrl(dockerIp, externalPort))
+
+  override val connectionTimeout = timeout(7.minutes)
+
+  override def dataPreparation(conn: Connection): Unit = {}
+
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER) USING _")
     var t = spark.table(tbl)
@@ -71,19 +78,11 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBC
     assert(msg1.contains("Cannot update alt_table field ID: string cannot be cast to int"))
   }
 
-  override def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.catalog.mssql", classOf[JDBCTableCatalog].getName)
-    .set("spark.sql.catalog.mssql.url", db.getJdbcUrl(dockerIp, externalPort))
-
-  override val connectionTimeout = timeout(7.minutes)
-
-  override def dataPreparation(conn: Connection): Unit = {}
-
   override def testUpdateColumnNullability(tbl: String): Unit = {
-    sql("CREATE TABLE mssql.alt_table (ID STRING NOT NULL) USING _")
+    sql(s"CREATE TABLE $tbl (ID STRING NOT NULL) USING _")
     // Update nullability is unsupported for mssql db.
     val msg = intercept[AnalysisException] {
-      sql("ALTER TABLE mssql.alt_table ALTER COLUMN ID DROP NOT NULL")
+      sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
     }.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
 
     assert(msg.contains("UpdateColumnNullability is not supported"))
