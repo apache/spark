@@ -153,9 +153,16 @@ def _check_series_localize_timestamps(s, timezone):
     If the input series is not a timestamp series, then the same series is returned. If the input
     series is a timestamp series, then a converted series is returned.
 
-    :param s: pandas.Series
-    :param timezone: the timezone to convert. if None then use local timezone
-    :return pandas.Series that have been converted to tz-naive
+    Parameters
+    ----------
+    s : pandas.Series
+    timezone : str
+        the timezone to convert. if None then use local timezone
+
+    Returns
+    -------
+    pandas.Series
+        `pandas.Series` that have been converted to tz-naive
     """
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
     require_minimum_pandas_version()
@@ -174,9 +181,16 @@ def _check_series_convert_timestamps_internal(s, timezone):
     Convert a tz-naive timestamp in the specified timezone or local timezone to UTC normalized for
     Spark internal storage
 
-    :param s: a pandas.Series
-    :param timezone: the timezone to convert. if None then use local timezone
-    :return pandas.Series where if it is a timestamp, has been UTC normalized without a time zone
+    Parameters
+    ----------
+    s : pandas.Series
+    timezone : str
+        the timezone to convert. if None then use local timezone
+
+    Returns
+    -------
+    pandas.Series
+        `pandas.Series` where if it is a timestamp, has been UTC normalized without a time zone
     """
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
     require_minimum_pandas_version()
@@ -226,10 +240,18 @@ def _check_series_convert_timestamps_localize(s, from_timezone, to_timezone):
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
 
-    :param s: a pandas.Series
-    :param from_timezone: the timezone to convert from. if None then use local timezone
-    :param to_timezone: the timezone to convert to. if None then use local timezone
-    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
+    Parameters
+    ----------
+    s : pandas.Series
+    from_timezone : str
+        the timezone to convert from. if None then use local timezone
+    to_timezone : str
+        the timezone to convert to. if None then use local timezone
+
+    Returns
+    -------
+    pandas.Series
+        `pandas.Series` where if it is a timestamp, has been converted to tz-naive
     """
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
     require_minimum_pandas_version()
@@ -254,9 +276,16 @@ def _check_series_convert_timestamps_local_tz(s, timezone):
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
 
-    :param s: a pandas.Series
-    :param timezone: the timezone to convert to. if None then use local timezone
-    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
+    Parameters
+    ----------
+    s : pandas.Series
+    timezone : str
+        the timezone to convert to. if None then use local timezone
+
+    Returns
+    -------
+    pandas.Series
+        `pandas.Series` where if it is a timestamp, has been converted to tz-naive
     """
     return _check_series_convert_timestamps_localize(s, None, timezone)
 
@@ -265,8 +294,15 @@ def _check_series_convert_timestamps_tz_local(s, timezone):
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
 
-    :param s: a pandas.Series
-    :param timezone: the timezone to convert from. if None then use local timezone
-    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
+    Parameters
+    ----------
+    s : pandas.Series
+    timezone : str
+        the timezone to convert from. if None then use local timezone
+
+    Returns
+    -------
+    pandas.Series
+        `pandas.Series` where if it is a timestamp, has been converted to tz-naive
     """
     return _check_series_convert_timestamps_localize(s, timezone, None)

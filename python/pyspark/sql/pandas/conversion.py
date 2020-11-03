@@ -18,7 +18,6 @@ import sys
 import warnings
 from collections import Counter
 
-from pyspark import since
 from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.types import IntegralType
@@ -33,18 +32,23 @@ class PandasConversionMixin(object):
     can use this class.
     """
 
-    @since(1.3)
     def toPandas(self):
         """
         Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
 
         This is only available if Pandas is installed and available.
 
-        .. note:: This method should only be used if the resulting Pandas's :class:`DataFrame` is
-            expected to be small, as all the data is loaded into the driver's memory.
+        .. versionadded:: 1.3.0
 
-        .. note:: Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
+        Notes
+        -----
+        This method should only be used if the resulting Pandas's :class:`DataFrame` is
+        expected to be small, as all the data is loaded into the driver's memory.
 
+        Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
+
+        Examples
+        --------
         >>> df.toPandas()  # doctest: +SKIP
            age   name
         0    2  Alice
@@ -221,8 +225,7 @@ class PandasConversionMixin(object):
         """
         Returns all records as a list of ArrowRecordBatches, pyarrow must be installed
         and available on driver and worker Python environments.
-
-        .. note:: Experimental.
+        This is an experimental feature.
         """
         from pyspark.sql.dataframe import DataFrame
 
@@ -295,7 +298,11 @@ class SparkConversionMixin(object):
     def _convert_from_pandas(self, pdf, schema, timezone):
         """
          Convert a pandas.DataFrame to list of records that can be used to make a DataFrame
-         :return list of records
+
+         Returns
+         -------
+         list
+             list of records
         """
         from pyspark.sql import SparkSession
 
@@ -343,8 +350,16 @@ class SparkConversionMixin(object):
         """
         Used when converting a pandas.DataFrame to Spark using to_records(), this will correct
         the dtypes of fields in a record so they can be properly loaded into Spark.
-        :param rec: a numpy record to check field dtypes
-        :return corrected dtype for a numpy.record or None if no correction needed
+
+        Parameters
+        ----------
+        rec : numpy.record
+            a numpy record to check field dtypes
+
+        Returns
+        -------
+        numpy.dtype
+            corrected dtype for a numpy.record or None if no correction needed
         """
         import numpy as np
         cur_dtypes = rec.dtype
