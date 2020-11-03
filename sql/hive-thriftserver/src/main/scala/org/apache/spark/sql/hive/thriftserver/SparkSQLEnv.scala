@@ -49,7 +49,7 @@ private[hive] object SparkSQLEnv extends Logging {
         .set(SQLConf.DATETIME_JAVA8API_ENABLED, true)
 
 
-      val sparkSession = SparkSession.builder.config(sparkConf).enableHiveSupport().getOrCreate()
+      val sparkSession = SparkSession.builder().config(sparkConf).enableHiveSupport().getOrCreate()
       sparkContext = sparkSession.sparkContext
       sqlContext = sparkSession.sqlContext
 

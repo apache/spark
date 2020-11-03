@@ -139,7 +139,7 @@ private[hive] class SparkExecuteStatementOperation(
       // Reset the iterator to the beginning of the query.
       iter = if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
         resultList = None
-        result.toLocalIterator.asScala
+        result.toLocalIterator().asScala
       } else {
         if (resultList.isEmpty) {
           resultList = Some(result.collect())
@@ -315,7 +315,7 @@ private[hive] class SparkExecuteStatementOperation(
       iter = {
         if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
           resultList = None
-          result.toLocalIterator.asScala
+          result.toLocalIterator().asScala
         } else {
           resultList = Some(result.collect())
           resultList.get.iterator
@@ -402,7 +402,7 @@ object SparkExecuteStatementOperation {
         case CalendarIntervalType => StringType.catalogString
         case other => other.catalogString
       }
-      new FieldSchema(field.name, attrTypeString, field.getComment.getOrElse(""))
+      new FieldSchema(field.name, attrTypeString, field.getComment().getOrElse(""))
     }
     new TableSchema(schema.asJava)
   }
