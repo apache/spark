@@ -1,19 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
 package org.apache.spark.sql.execution.datasources
 
@@ -54,26 +38,37 @@ import org.apache.spark.util.Utils
  * acting as the canonical set of parameters that can describe a Data Source, this class is used to
  * resolve a description to a concrete implementation that can be used in a query plan
  * (either batch or streaming) or to write out data using an external library.
+ * 负责在Spark SQL中表示可插拔数据源的主类。除了充当可描述数据源的规范参数集外，
+ * 此类还用于将描述解析为可在查询计划中使用的具体实现（批处理或流式处理）或写出使用外部库的数据。
  *
  * From an end user's perspective a DataSource description can be created explicitly using
  * [[org.apache.spark.sql.DataFrameReader]] or CREATE TABLE USING DDL.  Additionally, this class is
  * used when resolving a description from a metastore to a concrete implementation.
+ * 从最终用户的角度来看，可以使用 [[org.apache.spark.sql.DataFrameReader]]或使用DDL创建表来显式创建数据源描述。
+ * 此外，在将描述从元存储区解析为具体实现时，将使用此类。
  *
  * Many of the arguments to this class are optional, though depending on the specific API being used
  * these optional arguments might be filled in during resolution using either inference or external
  * metadata.  For example, when reading a partitioned table from a file system, partition columns
  * will be inferred from the directory layout even if they are not specified.
+ * 此类的许多参数是可选的，尽管取决于所使用的特定API 这些可选参数可能在解析期间使用推断或外部元数据填充。
+ * 例如，当从文件系统中读取分区表时，即使未指定分区列，也会从目录布局中推断出分区列
  *
  * @param paths A list of file system paths that hold data.  These will be globbed before and
  *              qualified. This option only works when reading from a [[FileFormat]].
+ *              保存数据的文件系统路径的列表。这些将在之前和合格之前进行修改。仅当从[[FileFormat]]读取时，此选项才有效。
  * @param userSpecifiedSchema An optional specification of the schema of the data. When present
  *                            we skip attempting to infer the schema.
+ *                            数据模式的可选规范。如果存在，我们将跳过尝试推断模式的尝试
  * @param partitionColumns A list of column names that the relation is partitioned by. This list is
  *                         generally empty during the read path, unless this DataSource is managed
  *                         by Hive. In these cases, during `resolveRelation`, we will call
  *                         `getOrInferFileFormatSchema` for file based DataSources to infer the
  *                         partitioning. In other cases, if this list is empty, then this table
  *                         is unpartitioned.
+ *                         对该关系进行分区的列名列表。该列表在读取路径中通常为空，除非此数据源由Hive管理。
+ *                         在这些情况下，在`resolveRelation`期间，我们将为基于文件的数据源调用 getOrInferFileFormatSchema`以推断分区。
+ *                         在其他情况下，如果此列表为空，则该表为未分区。
  * @param bucketSpec An optional specification for bucketing (hash-partitioning) of the data.
  * @param catalogTable Optional catalog table reference that can be used to push down operations
  *                     over the datasource to the catalog service.
@@ -195,7 +190,8 @@ case class DataSource(
     (dataSchema, partitionSchema)
   }
 
-  /** Returns the name and schema of the source that can be used to continually read data. */
+  /** Returns the name and schema of the source that can be used to continually read data.
+   * 返回可用于连续读取数据的源的名称和架构。*/
   private def sourceSchema(): SourceInfo = {
     providingClass.getConstructor().newInstance() match {
       case s: StreamSourceProvider =>
@@ -565,7 +561,8 @@ case class DataSource(
 
 object DataSource extends Logging {
 
-  /** A map to maintain backward compatibility in case we move data sources around. */
+  /** A map to maintain backward compatibility in case we move data sources around.
+   * 如果要移动数据源，则该map可保持向后兼容性。 */
   private val backwardCompatibilityMap: Map[String, String] = {
     val jdbc = classOf[JdbcRelationProvider].getCanonicalName
     val json = classOf[JsonFileFormat].getCanonicalName
@@ -610,7 +607,8 @@ object DataSource extends Logging {
     "org.apache.spark.sql.sources.HadoopFsRelationProvider",
     "org.apache.spark.Logging")
 
-  /** Given a provider name, look up the data source class definition. */
+  /** Given a provider name, look up the data source class definition.
+   * 给定提供程序名称，请查找数据源类定义。*/
   def lookupDataSource(provider: String, conf: SQLConf): Class[_] = {
     val provider1 = backwardCompatibilityMap.getOrElse(provider, provider) match {
       case name if name.equalsIgnoreCase("orc") &&
