@@ -130,8 +130,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       query: StreamingQueryUIData,
       minBatchTime: Long,
       maxBatchTime: Long,
-      jsCollector: JsCollector
-    ): NodeBuffer = {
+      jsCollector: JsCollector): NodeBuffer = {
     // This is made sure on caller side but put it here to be defensive
     require(query.lastProgress != null)
     if (query.lastProgress.stateOperators.nonEmpty) {
@@ -154,8 +153,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
 
       val graphUIDataForNumberTotalRows =
         new GraphUIData(
-          "aggregated-num-total-rows-timeline",
-          "aggregated-num-total-rows-histogram",
+          "aggregated-num-total-state-rows-timeline",
+          "aggregated-num-total-state-rows-histogram",
           numRowsTotalData,
           minBatchTime,
           maxBatchTime,
@@ -166,8 +165,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
 
       val graphUIDataForNumberUpdatedRows =
         new GraphUIData(
-          "aggregated-num-updated-rows-timeline",
-          "aggregated-num-updated-rows-histogram",
+          "aggregated-num-updated-state-rows-timeline",
+          "aggregated-num-updated-state-rows-histogram",
           numRowsUpdatedData,
           minBatchTime,
           maxBatchTime,
@@ -178,8 +177,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
 
       val graphUIDataForMemoryUsedBytes =
         new GraphUIData(
-          "aggregated-memory-used-bytes-timeline",
-          "aggregated-memory-used-bytes-histogram",
+          "aggregated-state-memory-used-bytes-timeline",
+          "aggregated-state-memory-used-bytes-histogram",
           memoryUsedBytesData,
           minBatchTime,
           maxBatchTime,
@@ -190,8 +189,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
 
       val graphUIDataForNumRowsDroppedByWatermark =
         new GraphUIData(
-          "aggregated-num-rows-dropped-by-watermark-timeline",
-          "aggregated-num-rows-dropped-by-watermark-histogram",
+          "aggregated-num-state-rows-dropped-by-watermark-timeline",
+          "aggregated-num-state-rows-dropped-by-watermark-histogram",
           numRowsDroppedByWatermarkData,
           minBatchTime,
           maxBatchTime,
@@ -207,8 +206,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
             <div><strong>Aggregated Number Of Total State Rows {SparkUIUtils.tooltip("Aggregated number of total state rows.", "right")}</strong></div>
           </div>
         </td>
-        <td class={"aggregated-num-total-rows-timeline"}>{graphUIDataForNumberTotalRows.generateTimelineHtml(jsCollector)}</td>
-        <td class={"aggregated-num-total-rows-histogram"}>{graphUIDataForNumberTotalRows.generateHistogramHtml(jsCollector)}</td>
+        <td class={"aggregated-num-total-state-rows-timeline"}>{graphUIDataForNumberTotalRows.generateTimelineHtml(jsCollector)}</td>
+        <td class={"aggregated-num-total-state-rows-histogram"}>{graphUIDataForNumberTotalRows.generateHistogramHtml(jsCollector)}</td>
       </tr>
         <tr>
           <td style="vertical-align: middle;">
@@ -216,8 +215,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
               <div><strong>Aggregated Number Of Updated State Rows {SparkUIUtils.tooltip("Aggregated number of updated state rows.", "right")}</strong></div>
             </div>
           </td>
-          <td class={"aggregated-num-updated-rows-timeline"}>{graphUIDataForNumberUpdatedRows.generateTimelineHtml(jsCollector)}</td>
-          <td class={"aggregated-num-updated-rows-histogram"}>{graphUIDataForNumberUpdatedRows.generateHistogramHtml(jsCollector)}</td>
+          <td class={"aggregated-num-updated-state-rows-timeline"}>{graphUIDataForNumberUpdatedRows.generateTimelineHtml(jsCollector)}</td>
+          <td class={"aggregated-num-updated-state-rows-histogram"}>{graphUIDataForNumberUpdatedRows.generateHistogramHtml(jsCollector)}</td>
         </tr>
         <tr>
           <td style="vertical-align: middle;">
@@ -225,8 +224,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
               <div><strong>Aggregated State Memory Used In Bytes {SparkUIUtils.tooltip("Aggregated state memory used in bytes.", "right")}</strong></div>
             </div>
           </td>
-          <td class={"aggregated-memory-used-bytes-timeline"}>{graphUIDataForMemoryUsedBytes.generateTimelineHtml(jsCollector)}</td>
-          <td class={"aggregated-memory-used-bytes-histogram"}>{graphUIDataForMemoryUsedBytes.generateHistogramHtml(jsCollector)}</td>
+          <td class={"aggregated-state-memory-used-bytes-timeline"}>{graphUIDataForMemoryUsedBytes.generateTimelineHtml(jsCollector)}</td>
+          <td class={"aggregated-state-memory-used-bytes-histogram"}>{graphUIDataForMemoryUsedBytes.generateHistogramHtml(jsCollector)}</td>
         </tr>
         <tr>
           <td style="vertical-align: middle;">
@@ -234,8 +233,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
               <div><strong>Aggregated Number Of State Rows Dropped By Watermark {SparkUIUtils.tooltip("Aggregated number of state rows dropped by watermark.", "right")}</strong></div>
             </div>
           </td>
-          <td class={"aggregated-num-rows-dropped-by-watermark-timeline"}>{graphUIDataForNumRowsDroppedByWatermark.generateTimelineHtml(jsCollector)}</td>
-          <td class={"aggregated-num-rows-dropped-by-watermark-histogram"}>{graphUIDataForNumRowsDroppedByWatermark.generateHistogramHtml(jsCollector)}</td>
+          <td class={"aggregated-num-state-rows-dropped-by-watermark-timeline"}>{graphUIDataForNumRowsDroppedByWatermark.generateTimelineHtml(jsCollector)}</td>
+          <td class={"aggregated-num-state-rows-dropped-by-watermark-histogram"}>{graphUIDataForNumRowsDroppedByWatermark.generateHistogramHtml(jsCollector)}</td>
         </tr>
       // scalastyle:on
     } else {
