@@ -12,7 +12,8 @@ jobs:
   # Build: build Spark and run the tests for specified modules.
   build:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }})"
-    runs-on: ubuntu-latest
+    # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
@@ -122,7 +123,6 @@ jobs:
     - name: Install Python 2.7
       uses: actions/setup-python@v2
       # Yarn has a Python specific test too, for example, YarnClusterSuite.
-      if: contains(matrix.modules, 'yarn') || contains(matrix.modules, 'pyspark') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
       with:
         python-version: 2.7
         architecture: x64
@@ -179,7 +179,7 @@ jobs:
   # Static analysis, and documentation build
   lint:
     name: Linters, licenses, dependencies and documentation generation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
