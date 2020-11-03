@@ -30,7 +30,7 @@ import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.internal.config.DYN_ALLOCATION_MAX_EXECUTORS
+import org.apache.spark.internal.config.{DYN_ALLOCATION_MAX_EXECUTORS, EXECUTOR_INSTANCES}
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
@@ -88,6 +88,8 @@ private[spark] abstract class YarnSchedulerBackend(
   private val minMergersStaticThreshold = conf.get(config.MERGER_LOCATIONS_MIN_STATIC_THRESHOLD)
 
   private val maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
+
+  private val numExecutors = conf.get(EXECUTOR_INSTANCES).getOrElse(0)
 
   /**
    * Bind to YARN. This *must* be done before calling [[start()]].
@@ -178,7 +180,7 @@ private[spark] abstract class YarnSchedulerBackend(
     val maxExecutors = if (Utils.isDynamicAllocationEnabled(sc.getConf)) {
       maxNumExecutors
     } else {
-      Int.MaxValue
+      numExecutors
     }
     val tasksPerExecutor = sc.resourceProfileManager
         .resourceProfileFromId(resourceProfileId).maxTasksPerExecutor(sc.conf)
