@@ -21,10 +21,11 @@ import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelat
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsMetadataColumns, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.connector.write.WriteBuilder
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
@@ -50,9 +51,15 @@ case class DataSourceV2Relation(
 
   override lazy val metadataOutput: Seq[AttributeReference] = table match {
     case hasMeta: SupportsMetadataColumns =>
-      val attrs = hasMeta.metadataColumns
-      val outputNames = outputSet.map(_.name).toSet
-      attrs.filterNot(col => outputNames.contains(col.name)).toAttributes
+      val resolve = SQLConf.get.resolver
+      val outputNames = outputSet.map(_.name)
+      def isOutputColumn(col: MetadataColumn): Boolean = {
+        outputNames.exists(name => resolve(col.name, name))
+      }
+      // filter out metadata columns that have names conflicting with output columns. if the table
+      // has a column "line" and the table can produce a metadata column called "line", then the
+      // data column should be returned, not the metadata column.
+      hasMeta.metadataColumns.filterNot(isOutputColumn).toAttributes
     case _ =>
       Nil
   }
