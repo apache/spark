@@ -978,7 +978,7 @@ class LogisticRegression @Since("1.2.0") (
     }
     bcFeaturesStd.destroy()
 
-    (if (state == null) null else state.x.toArray, arrayBuilder.result)
+    (if (state == null) null else state.x.toArray, arrayBuilder.result())
   }
 
   private def trainOnBlocks(
@@ -1022,7 +1022,7 @@ class LogisticRegression @Since("1.2.0") (
     blocks.unpersist()
     bcFeaturesStd.destroy()
 
-    (if (state == null) null else state.x.toArray, arrayBuilder.result)
+    (if (state == null) null else state.x.toArray, arrayBuilder.result())
   }
 
   @Since("1.4.0")

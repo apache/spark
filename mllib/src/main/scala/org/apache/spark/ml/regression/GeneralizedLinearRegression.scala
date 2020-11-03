@@ -1074,7 +1074,7 @@ class GeneralizedLinearRegressionModel private[ml] (
       this.logWarning(s"$uid: GeneralizedLinearRegressionModel.transform() does nothing" +
         " because no output columns were set.")
     }
-    outputData.toDF
+    outputData.toDF()
   }
 
   /**

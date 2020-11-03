@@ -586,7 +586,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     bcFeaturesMean.destroy()
     bcFeaturesStd.destroy()
 
-    (if (state == null) null else state.x.toArray, arrayBuilder.result)
+    (if (state == null) null else state.x.toArray, arrayBuilder.result())
   }
 
   private def trainOnBlocks(
@@ -644,7 +644,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     bcFeaturesMean.destroy()
     bcFeaturesStd.destroy()
 
-    (if (state == null) null else state.x.toArray, arrayBuilder.result)
+    (if (state == null) null else state.x.toArray, arrayBuilder.result())
   }
 
   private def createModel(

@@ -247,7 +247,7 @@ class ImputerModel private[ml] (
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val (inputColumns, outputColumns) = getInOutCols
+    val (inputColumns, outputColumns) = getInOutCols()
     val surrogates = surrogateDF.select(inputColumns.map(col): _*).head().toSeq
 
 

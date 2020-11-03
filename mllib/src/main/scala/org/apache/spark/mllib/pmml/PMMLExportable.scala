@@ -39,7 +39,7 @@ trait PMMLExportable {
    */
   private def toPMML(streamResult: StreamResult): Unit = {
     val pmmlModelExport = PMMLModelExportFactory.createPMMLModelExport(this)
-    JAXBUtil.marshalPMML(pmmlModelExport.getPmml, streamResult)
+    JAXBUtil.marshalPMML(pmmlModelExport.getPmml(), streamResult)
   }
 
   /**

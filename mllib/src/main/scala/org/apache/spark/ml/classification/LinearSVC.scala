@@ -307,7 +307,7 @@ class LinearSVC @Since("2.2.0") (
     blocks.unpersist()
     bcFeaturesStd.destroy()
 
-    (if (state != null) state.x.toArray else null, arrayBuilder.result)
+    (if (state != null) state.x.toArray else null, arrayBuilder.result())
   }
 }
 

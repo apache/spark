@@ -317,7 +317,7 @@ private[spark] object GradientBoostedTrees extends Logging {
     // Prepare periodic checkpointers
     // Note: this is checkpointing the unweighted training error
     val predErrorCheckpointer = new PeriodicRDDCheckpointer[(Double, Double)](
-      treeStrategy.getCheckpointInterval, sc, StorageLevel.MEMORY_AND_DISK)
+      treeStrategy.getCheckpointInterval(), sc, StorageLevel.MEMORY_AND_DISK)
 
     timer.stop("init")
 
@@ -393,7 +393,7 @@ private[spark] object GradientBoostedTrees extends Logging {
       validatePredError = computeInitialPredictionAndError(
         validationTreePoints, firstTreeWeight, firstTreeModel, loss, bcSplits)
       validatePredErrorCheckpointer = new PeriodicRDDCheckpointer[(Double, Double)](
-        treeStrategy.getCheckpointInterval, sc, StorageLevel.MEMORY_AND_DISK)
+        treeStrategy.getCheckpointInterval(), sc, StorageLevel.MEMORY_AND_DISK)
       validatePredErrorCheckpointer.update(validatePredError)
       bestValidateError = computeWeightedError(validationTreePoints, validatePredError)
       timer.stop("init validation")

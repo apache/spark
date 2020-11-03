@@ -310,7 +310,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     }
     bcFeaturesStd.destroy()
 
-    (if (state != null) state.x.toArray else null, arrayBuilder.result)
+    (if (state != null) state.x.toArray else null, arrayBuilder.result())
   }
 
   private def trainOnBlocks(
@@ -347,7 +347,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     blocks.unpersist()
     bcFeaturesStd.destroy()
 
-    (if (state != null) state.x.toArray else null, arrayBuilder.result)
+    (if (state != null) state.x.toArray else null, arrayBuilder.result())
   }
 
   @Since("1.6.0")

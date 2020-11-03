@@ -56,7 +56,7 @@ class RandomRDDsSuite extends SparkFunSuite with MLlibTestSparkContext with Seri
       epsilon: Double = 0.01): Unit = {
     assert(expectedNumPartitions === rdd.partitions.size)
     val values = new ArrayBuffer[Double]()
-    rdd.collect.foreach { vector => {
+    rdd.collect().foreach { vector => {
       assert(vector.size === expectedColumns)
       values ++= vector.toArray
     }}
@@ -144,7 +144,7 @@ class RandomRDDsSuite extends SparkFunSuite with MLlibTestSparkContext with Seri
 
     // mock distribution to check that partitions have unique seeds
     val random = RandomRDDs.randomRDD(sc, new MockDistro(), 1000L, 1000, 0L)
-    assert(random.collect.size === random.collect.distinct.size)
+    assert(random.collect().size === random.collect().distinct.size)
   }
 
   test("randomVectorRDD for different distributions") {

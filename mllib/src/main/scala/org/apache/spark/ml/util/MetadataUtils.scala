@@ -49,7 +49,7 @@ private[spark] object MetadataUtils {
   def getNumFeatures(dataset: Dataset[_], vectorCol: String): Int = {
     getNumFeatures(dataset.schema(vectorCol)).getOrElse {
       dataset.select(DatasetUtils.columnToVector(dataset, vectorCol))
-        .head.getAs[Vector](0).size
+        .head().getAs[Vector](0).size
     }
   }
 

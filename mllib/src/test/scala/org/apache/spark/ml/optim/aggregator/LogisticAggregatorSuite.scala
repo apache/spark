@@ -108,9 +108,9 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val numFeatures = instances.head.features.size
     val numClasses = instances.map(_.label).toSet.size
     val coefWithIntercept = Vectors.dense(
-      Array.fill(numClasses * (numFeatures + 1))(rng.nextDouble))
+      Array.fill(numClasses * (numFeatures + 1))(rng.nextDouble()))
     val coefWithoutIntercept = Vectors.dense(
-      Array.fill(numClasses * numFeatures)(rng.nextDouble))
+      Array.fill(numClasses * numFeatures)(rng.nextDouble()))
     val aggIntercept = getNewAggregator(instances, coefWithIntercept, fitIntercept = true,
       isMultinomial = true)
     val aggNoIntercept = getNewAggregator(instances, coefWithoutIntercept, fitIntercept = false,
@@ -126,8 +126,8 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val rng = new scala.util.Random
     val binaryInstances = instances.filter(_.label < 2.0)
     val numFeatures = binaryInstances.head.features.size
-    val coefWithIntercept = Vectors.dense(Array.fill(numFeatures + 1)(rng.nextDouble))
-    val coefWithoutIntercept = Vectors.dense(Array.fill(numFeatures)(rng.nextDouble))
+    val coefWithIntercept = Vectors.dense(Array.fill(numFeatures + 1)(rng.nextDouble()))
+    val coefWithoutIntercept = Vectors.dense(Array.fill(numFeatures)(rng.nextDouble()))
     val aggIntercept = getNewAggregator(binaryInstances, coefWithIntercept, fitIntercept = true,
       isMultinomial = false)
     val aggNoIntercept = getNewAggregator(binaryInstances, coefWithoutIntercept,

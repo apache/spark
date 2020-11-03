@@ -258,7 +258,7 @@ class LBFGSClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
     val n = 200000
     val examples = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
       val random = new Random(idx)
-      iter.map(i => (1.0, Vectors.dense(Array.fill(n)(random.nextDouble))))
+      iter.map(i => (1.0, Vectors.dense(Array.fill(n)(random.nextDouble()))))
     }.cache()
     val lbfgs = new LBFGS(new LogisticGradient, new SquaredL2Updater)
       .setNumCorrections(1)
@@ -268,6 +268,6 @@ class LBFGSClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
     val random = new Random(0)
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
-    val weights = lbfgs.optimize(examples, Vectors.dense(Array.fill(n)(random.nextDouble)))
+    val weights = lbfgs.optimize(examples, Vectors.dense(Array.fill(n)(random.nextDouble())))
   }
 }

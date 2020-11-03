@@ -101,7 +101,7 @@ private[spark] abstract class DistanceMeasure extends Serializable {
             } else Iterator.empty
           }
         }
-      }.collect.foreach { case (i, j, s) =>
+      }.collect().foreach { case (i, j, s) =>
         val index = indexUpperTriangular(k, i, j)
         packedValues(index) = s
         if (s < diagValues(i)) diagValues(i) = s

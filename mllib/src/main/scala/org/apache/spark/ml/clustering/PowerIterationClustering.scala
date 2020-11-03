@@ -178,7 +178,7 @@ class PowerIterationClustering private[clustering] (
     val model = algorithm.run(rdd)
 
     import dataset.sparkSession.implicits._
-    model.assignments.toDF
+    model.assignments.toDF()
   }
 
   @Since("2.4.0")
