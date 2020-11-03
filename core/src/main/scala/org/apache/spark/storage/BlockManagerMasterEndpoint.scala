@@ -684,10 +684,8 @@ class BlockManagerMasterEndpoint(
   private def getShufflePushMergerLocations(
       numMergersNeeded: Int,
       hostsToFilter: Set[String]): Seq[BlockManagerId] = {
-    // Copying the merger locations to a list so that the original
-    // shuffleMergerLocations won't be shuffled
     val mergers = shuffleMergerLocations.values.filterNot(x => hostsToFilter.contains(x.host)).toSeq
-    Utils.randomize(mergers).take(numMergersNeeded)
+    mergers.take(numMergersNeeded)
   }
 
   /**
