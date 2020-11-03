@@ -1254,10 +1254,17 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
 
     val limit = SQLConf.get.metastorePartitionLimit
     if (limit > -1) {
-      val num = getNumPartitionsByFilterMethod.invoke(hive, table, filter).asInstanceOf[Int]
+      val num = try {
+        getNumPartitionsByFilterMethod.invoke(hive, table, filter).asInstanceOf[Int]
+      } catch {
+        case ex: Exception =>
+          logWarning("Caught Hive MetaException attempting to get partition metadata by " +
+            "filter from Hive", ex)
+          0
+      }
       if (num > limit) {
-        throw new RuntimeException(s"Queried $num partitions of table $table " +
-          s"by filter '$filter', exceeding the limit of $limit")
+        throw new RuntimeException(s"$num partitions of table $table had been queried " +
+          s"by filter '$filter', which had exceeded the limit of $limit")
       }
     }
 
