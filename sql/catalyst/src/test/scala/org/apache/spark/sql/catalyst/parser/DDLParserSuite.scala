@@ -1502,52 +1502,58 @@ class DDLParserSuite extends AnalysisTest {
 
   test("analyze table statistics") {
     comparePlans(parsePlan("analyze table a.b.c compute statistics"),
-      AnalyzeTable(UnresolvedTableOrView(Seq("a", "b", "c")), Map.empty, noScan = false))
+      AnalyzeTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        Map.empty, noScan = false))
     comparePlans(parsePlan("analyze table a.b.c compute statistics noscan"),
-      AnalyzeTable(UnresolvedTableOrView(Seq("a", "b", "c")), Map.empty, noScan = true))
+      AnalyzeTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        Map.empty, noScan = true))
     comparePlans(parsePlan("analyze table a.b.c partition (a) compute statistics nOscAn"),
-      AnalyzeTable(UnresolvedTableOrView(Seq("a", "b", "c")), Map("a" -> None), noScan = true))
+      AnalyzeTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        Map("a" -> None), noScan = true))
 
     // Partitions specified
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c")),
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
         Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = false))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c")),
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
         Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09') COMPUTE STATISTICS noscan"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c")),
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
         Map("ds" -> Some("2008-04-09")), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c")),
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
         Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = false))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS noscan"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c")),
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
         Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr=11) COMPUTE STATISTICS noscan"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c")),
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
         Map("ds" -> None, "hr" -> Some("11")), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr) COMPUTE STATISTICS"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c")),
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
         Map("ds" -> None, "hr" -> None), noScan = false))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr) COMPUTE STATISTICS noscan"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c")),
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
         Map("ds" -> None, "hr" -> None), noScan = true))
 
     intercept("analyze table a.b.c compute statistics xxxx",

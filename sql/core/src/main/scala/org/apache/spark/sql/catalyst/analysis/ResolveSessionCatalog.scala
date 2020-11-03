@@ -410,7 +410,7 @@ class ResolveSessionCatalog(
       }
       ShowTablesCommand(db, Some(pattern), true, partitionsSpec)
 
-    // ANALYZE TABLE works on views if the views are cached.
+    // ANALYZE TABLE works on permanent views if the views are cached.
     case AnalyzeTable(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, noScan) =>
       if (partitionSpec.isEmpty) {
         AnalyzeTableCommand(ident.asTableIdentifier, noScan)

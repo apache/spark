@@ -75,9 +75,6 @@ case class AnalyzePartitionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState = sparkSession.sessionState
-    if (sessionState.catalog.getTempView(tableIdent.identifier).isDefined) {
-      throw new AnalysisException("ANALYZE TABLE is not supported on a temporary view.")
-    }
     val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
     val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
