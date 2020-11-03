@@ -433,7 +433,8 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
     getLogFilesInDirectory(checkpointDirToLogDir(tempDirectory.toString, streamId))
   }
 
-  private def generateBlockId(): StreamBlockId = StreamBlockId(streamId, scala.util.Random.nextLong)
+  private def generateBlockId(): StreamBlockId =
+    StreamBlockId(streamId, scala.util.Random.nextLong())
 }
 
 class ReceivedBlockHandlerSuite extends BaseReceivedBlockHandlerSuite(false)

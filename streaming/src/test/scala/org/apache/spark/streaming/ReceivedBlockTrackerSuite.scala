@@ -387,7 +387,7 @@ class ReceivedBlockTrackerSuite
   /** Generate blocks infos using random ids */
   def generateBlockInfos(blockCount: Int = 5): Seq[ReceivedBlockInfo] = {
     List.fill(blockCount)(ReceivedBlockInfo(streamId, Some(0L), None,
-      BlockManagerBasedStoreResult(StreamBlockId(streamId, math.abs(Random.nextInt)), Some(0L))))
+      BlockManagerBasedStoreResult(StreamBlockId(streamId, math.abs(Random.nextInt())), Some(0L))))
   }
 
   /**

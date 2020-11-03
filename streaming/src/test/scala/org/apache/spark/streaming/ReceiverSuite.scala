@@ -112,7 +112,7 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
     eventually(timeout(10.seconds), interval(10.milliseconds)) {
       // below verification ensures for now receiver is already restarted
       assert(receiver.isStarted())
-      assert(!receiver.isStopped)
+      assert(!receiver.isStopped())
       assert(receiver.receiving)
 
       // both receiver supervisor and receiver should be stopped first, and started

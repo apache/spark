@@ -176,7 +176,7 @@ class StreamingContextSuite
       ssc.start()
     }
     assert(ssc.getState() === StreamingContextState.STOPPED)
-    assert(ssc.scheduler.isStarted === false)
+    assert(ssc.scheduler.isStarted() === false)
   }
 
   test("start should set local properties of streaming jobs correctly") {
@@ -641,7 +641,7 @@ class StreamingContextSuite
     // getActiveOrCreate and getActive should return independently created context after activating
     testGetActiveOrCreate {
       val sc = new SparkContext(conf)
-      ssc = creatingFunc(sc)  // Create
+      ssc = creatingFunc(sc)()  // Create
       assert(StreamingContext.getActive().isEmpty,
         "new initialized context returned before starting")
       ssc.start()
@@ -927,7 +927,7 @@ class TestReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging 
     val thread = new Thread() {
       override def run(): Unit = {
         logInfo("Receiving started")
-        while (!isStopped) {
+        while (!isStopped()) {
           store(TestReceiver.counter.getAndIncrement)
         }
         logInfo("Receiving stopped at count value of " + TestReceiver.counter.get())

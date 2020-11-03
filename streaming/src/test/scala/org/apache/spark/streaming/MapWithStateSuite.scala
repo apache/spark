@@ -71,7 +71,7 @@ class MapWithStateSuite extends SparkFunSuite with LocalStreamingContext
         assert(state.getOption() === expectedData)
         assert(state.getOption().getOrElse(-1) === expectedData.get)
       } else {
-        assert(!state.exists)
+        assert(!state.exists())
         intercept[NoSuchElementException] {
           state.get()
         }
