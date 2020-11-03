@@ -1013,7 +1013,8 @@ class BaseOperator(Operator, LoggingMixin, TaskMixin, metaclass=BaseOperatorMeta
 
     def get_flat_relative_ids(self,
                               upstream: bool = False,
-                              found_descendants: Optional[Set[str]] = None) -> Set[str]:
+                              found_descendants: Optional[Set[str]] = None,
+                              ) -> Set[str]:
         """Get a flat set of relatives' ids, either upstream or downstream."""
         if not self._dag:
             return set()
@@ -1026,8 +1027,7 @@ class BaseOperator(Operator, LoggingMixin, TaskMixin, metaclass=BaseOperatorMeta
             if relative_id not in found_descendants:
                 found_descendants.add(relative_id)
                 relative_task = self._dag.task_dict[relative_id]
-                relative_task.get_flat_relative_ids(upstream,
-                                                    found_descendants)
+                relative_task.get_flat_relative_ids(upstream, found_descendants)
 
         return found_descendants
 

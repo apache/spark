@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 from datetime import datetime
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Iterable, List, NamedTuple, Optional, Tuple, Union
 
 from sqlalchemy import (
     Boolean, Column, DateTime, Index, Integer, PickleType, String, UniqueConstraint, and_, func, or_,
@@ -41,6 +41,16 @@ from airflow.utils.session import provide_session
 from airflow.utils.sqlalchemy import UtcDateTime, nulls_first, skip_locked, with_row_locks
 from airflow.utils.state import State
 from airflow.utils.types import DagRunType
+
+
+class TISchedulingDecision(NamedTuple):
+    """Type of return for DagRun.task_instance_scheduling_decisions"""
+
+    tis: List[TI]
+    schedulable_tis: List[TI]
+    changed_tis: bool
+    unfinished_tasks: List[TI]
+    finished_tasks: List[TI]
 
 
 class DagRun(Base, LoggingMixin):
@@ -380,27 +390,21 @@ class DagRun(Base, LoggingMixin):
         self.last_scheduling_decision = start_dttm
 
         dag = self.get_dag()
-        ready_tis: List[TI] = []
-        tis = list(self.get_task_instances(session=session, state=State.task_states + (State.SHUTDOWN,)))
-        self.log.debug("number of tis tasks for %s: %s task(s)", self, len(tis))
-        for ti in tis:
-            ti.task = dag.get_task(ti.task_id)
+        info = self.task_instance_scheduling_decisions(session)
 
-        unfinished_tasks = [t for t in tis if t.state in State.unfinished]
-        finished_tasks = [t for t in tis if t.state in State.finished]
+        tis = info.tis
+        schedulable_tis = info.schedulable_tis
+        changed_tis = info.changed_tis
+        finished_tasks = info.finished_tasks
+        unfinished_tasks = info.unfinished_tasks
+
         none_depends_on_past = all(not t.task.depends_on_past for t in unfinished_tasks)
         none_task_concurrency = all(t.task.task_concurrency is None for t in unfinished_tasks)
-        if unfinished_tasks:
-            scheduleable_tasks = [ut for ut in unfinished_tasks if ut.state in SCHEDULEABLE_STATES]
-            self.log.debug(
-                "number of scheduleable tasks for %s: %s task(s)",
-                self, len(scheduleable_tasks))
-            ready_tis, changed_tis = self._get_ready_tis(scheduleable_tasks, finished_tasks, session)
-            self.log.debug("ready tis length for %s: %s task(s)", self, len(ready_tis))
-            if none_depends_on_past and none_task_concurrency:
-                # small speed up
-                are_runnable_tasks = ready_tis or self._are_premature_tis(
-                    unfinished_tasks, finished_tasks, session) or changed_tis
+
+        if unfinished_tasks and none_depends_on_past and none_task_concurrency:
+            # small speed up
+            are_runnable_tasks = schedulable_tis or self._are_premature_tis(
+                unfinished_tasks, finished_tasks, session) or changed_tis
 
         duration = (timezone.utcnow() - start_dttm)
         Stats.timing("dagrun.dependency-check.{}".format(self.dag_id), duration)
@@ -466,7 +470,35 @@ class DagRun(Base, LoggingMixin):
 
         session.merge(self)
 
-        return ready_tis, callback
+        return schedulable_tis, callback
+
+    @provide_session
+    def task_instance_scheduling_decisions(self, session: Session = None) -> TISchedulingDecision:
+
+        schedulable_tis: List[TI] = []
+        changed_tis = False
+
+        tis = list(self.get_task_instances(session=session, state=State.task_states + (State.SHUTDOWN,)))
+        self.log.debug("number of tis tasks for %s: %s task(s)", self, len(tis))
+        for ti in tis:
+            ti.task = self.get_dag().get_task(ti.task_id)
+
+        unfinished_tasks = [t for t in tis if t.state in State.unfinished]
+        finished_tasks = [t for t in tis if t.state in State.finished]
+        if unfinished_tasks:
+            scheduleable_tasks = [ut for ut in unfinished_tasks if ut.state in SCHEDULEABLE_STATES]
+            self.log.debug(
+                "number of scheduleable tasks for %s: %s task(s)",
+                self, len(scheduleable_tasks))
+            schedulable_tis, changed_tis = self._get_ready_tis(scheduleable_tasks, finished_tasks, session)
+
+        return TISchedulingDecision(
+            tis=tis,
+            schedulable_tis=schedulable_tis,
+            changed_tis=changed_tis,
+            unfinished_tasks=unfinished_tasks,
+            finished_tasks=finished_tasks,
+        )
 
     def _get_ready_tis(
         self,
@@ -638,3 +670,52 @@ class DagRun(Base, LoggingMixin):
             .all()
         )
         return dagruns
+
+    @provide_session
+    def schedule_tis(self, schedulable_tis: Iterable[TI], session: Session = None) -> int:
+        """
+        Set the given task instances in to the scheduled state.
+
+        Each element of ``schedulable_tis`` should have it's ``task`` attribute already set.
+
+        Any DummyOperator without callbacks is instead set straight to the success state.
+
+        All the TIs should belong to this DagRun, but this code is in the hot-path, this is not checked -- it
+        is the caller's responsibility to call this function only with TIs from a single dag run.
+        """
+        # Get list of TIs that do not need to executed, these are
+        # tasks using DummyOperator and without on_execute_callback / on_success_callback
+        dummy_tis = {
+            ti for ti in schedulable_tis
+            if
+            (
+                ti.task.task_type == "DummyOperator"
+                and not ti.task.on_execute_callback
+                and not ti.task.on_success_callback
+            )
+        }
+
+        schedulable_ti_ids = [ti.task_id for ti in schedulable_tis if ti not in dummy_tis]
+        count = 0
+
+        if schedulable_ti_ids:
+            count += session.query(TI).filter(
+                TI.dag_id == self.dag_id,
+                TI.execution_date == self.execution_date,
+                TI.task_id.in_(schedulable_ti_ids)
+            ).update({TI.state: State.SCHEDULED}, synchronize_session=False)
+
+        # Tasks using DummyOperator should not be executed, mark them as success
+        if dummy_tis:
+            count += session.query(TI).filter(
+                TI.dag_id == self.dag_id,
+                TI.execution_date == self.execution_date,
+                TI.task_id.in_(ti.task_id for ti in dummy_tis)
+            ).update({
+                TI.state: State.SUCCESS,
+                TI.start_date: timezone.utcnow(),
+                TI.end_date: timezone.utcnow(),
+                TI.duration: 0
+            }, synchronize_session=False)
+
+        return count

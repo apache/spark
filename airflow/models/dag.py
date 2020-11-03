@@ -68,6 +68,14 @@ from airflow.utils.types import DagRunType
 if TYPE_CHECKING:
     from airflow.utils.task_group import TaskGroup
 
+
+# Before Py 3.7, there is no re.Pattern class
+try:
+    from re import Pattern as PatternType  # type: ignore
+except ImportError:
+    PatternType = type(re.compile('', 0))
+
+
 log = logging.getLogger(__name__)
 
 ScheduleInterval = Union[str, timedelta, relativedelta]
@@ -1172,7 +1180,7 @@ class DAG(BaseDag, LoggingMixin):
 
         if include_parentdag and self.is_subdag and self.parent_dag is not None:
             p_dag = self.parent_dag.sub_dag(
-                task_regex=r"^{}$".format(self.dag_id.split('.')[1]),
+                task_ids_or_regex=r"^{}$".format(self.dag_id.split('.')[1]),
                 include_upstream=False,
                 include_downstream=True)
 
@@ -1245,7 +1253,7 @@ class DAG(BaseDag, LoggingMixin):
                             if not external_dag:
                                 raise AirflowException("Could not find dag {}".format(tii.dag_id))
                             downstream = external_dag.sub_dag(
-                                task_regex=r"^{}$".format(tii.task_id),
+                                task_ids_or_regex=r"^{}$".format(tii.task_id),
                                 include_upstream=False,
                                 include_downstream=True
                             )
@@ -1394,36 +1402,54 @@ class DAG(BaseDag, LoggingMixin):
         return self.partial_subset(*args, **kwargs)
 
     def partial_subset(
-        self, task_regex, include_downstream=False, include_upstream=True
+        self,
+        task_ids_or_regex: Union[str, PatternType, Iterable[str]],
+        include_downstream=False,
+        include_upstream=True,
+        include_direct_upstream=False,
     ):
         """
         Returns a subset of the current dag as a deep copy of the current dag
         based on a regex that should match one or many tasks, and includes
         upstream and downstream neighbours based on the flag passed.
+
+        :param task_ids_or_regex: Either a list of task_ids, or a regex to
+            match against task ids (as a string, or compiled regex pattern).
+        :type task_ids_or_regex: [str] or str or re.Pattern
+        :param include_downstream: Include all downstream tasks of matched
+            tasks, in addition to matched tasks.
+        :param include_upstream: Include all upstream tasks of matched tasks,
+            in addition to matched tasks.
         """
         # deep-copying self.task_dict and self._task_group takes a long time, and we don't want all
         # the tasks anyway, so we copy the tasks manually later
         task_dict = self.task_dict
         task_group = self._task_group
         self.task_dict = {}
-        self._task_group = None
+        self._task_group = None  # type: ignore
         dag = copy.deepcopy(self)
         self.task_dict = task_dict
         self._task_group = task_group
 
-        regex_match = [
-            t for t in self.tasks if re.findall(task_regex, t.task_id)]
+        if isinstance(task_ids_or_regex, (str, PatternType)):
+            matched_tasks = [
+                t for t in self.tasks if re.findall(task_ids_or_regex, t.task_id)]
+        else:
+            matched_tasks = [t for t in self.tasks if t.task_id in task_ids_or_regex]
+
         also_include = []
-        for t in regex_match:
+        for t in matched_tasks:
             if include_downstream:
                 also_include += t.get_flat_relatives(upstream=False)
             if include_upstream:
                 also_include += t.get_flat_relatives(upstream=True)
+            elif include_direct_upstream:
+                also_include += t.upstream_list
 
         # Compiling the unique list of tasks that made the cut
         # Make sure to not recursively deepcopy the dag while copying the task
-        dag.task_dict = {t.task_id: copy.deepcopy(t, {id(t.dag): dag})
-                         for t in regex_match + also_include}
+        dag.task_dict = {t.task_id: copy.deepcopy(t, {id(t.dag): dag})  # type: ignore
+                         for t in matched_tasks + also_include}
 
         def filter_task_group(group, parent_group):
             """Exclude tasks not included in the subdag from the given TaskGroup."""
