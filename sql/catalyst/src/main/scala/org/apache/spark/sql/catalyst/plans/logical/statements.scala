@@ -343,25 +343,6 @@ case class CreateNamespaceStatement(
 case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends ParsedStatement
 
 /**
- * An ANALYZE TABLE statement, as parsed from SQL.
- */
-case class AnalyzeTableStatement(
-    tableName: Seq[String],
-    partitionSpec: Map[String, Option[String]],
-    noScan: Boolean) extends ParsedStatement
-
-/**
- * An ANALYZE TABLE FOR COLUMNS statement, as parsed from SQL.
- */
-case class AnalyzeColumnStatement(
-    tableName: Seq[String],
-    columnNames: Option[Seq[String]],
-    allColumns: Boolean) extends ParsedStatement {
-  require(columnNames.isDefined ^ allColumns, "Parameter `columnNames` or `allColumns` are " +
-    "mutually exclusive. Only one of them should be specified.")
-}
-
-/**
  * A REPAIR TABLE statement, as parsed from SQL
  */
 case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement

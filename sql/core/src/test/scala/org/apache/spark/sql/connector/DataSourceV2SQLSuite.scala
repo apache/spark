@@ -2010,8 +2010,8 @@ class DataSourceV2SQLSuite
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      testV1Command("ANALYZE TABLE", s"$t COMPUTE STATISTICS")
-      testV1CommandSupportingTempView("ANALYZE TABLE", s"$t COMPUTE STATISTICS FOR ALL COLUMNS")
+      testNotSupportedV2Command("ANALYZE TABLE", s"$t COMPUTE STATISTICS")
+      testNotSupportedV2Command("ANALYZE TABLE", s"$t COMPUTE STATISTICS FOR ALL COLUMNS")
     }
   }
 
@@ -2604,6 +2604,13 @@ class DataSourceV2SQLSuite
         verifyTable(t1, expected)
       }
     }
+  }
+
+  private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
+    val e = intercept[AnalysisException] {
+      sql(s"$sqlCommand $sqlParams")
+    }
+    assert(e.message.contains(s"$sqlCommand is not supported for v2 tables"))
   }
 
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {

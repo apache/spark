@@ -567,3 +567,25 @@ case class ShowFunctions(
     pattern: Option[String]) extends Command {
   override def children: Seq[LogicalPlan] = child.toSeq
 }
+
+/**
+ * The logical plan of the ANALYZE TABLE command that works for v2 catalogs.
+ */
+case class AnalyzeTable(
+    child: LogicalPlan,
+    partitionSpec: Map[String, Option[String]],
+    noScan: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ANALYZE TABLE FOR COLUMNS command that works for v2 catalogs.
+ */
+case class AnalyzeColumn(
+    child: LogicalPlan,
+    columnNames: Option[Seq[String]],
+    allColumns: Boolean) extends Command {
+  require(columnNames.isDefined ^ allColumns, "Parameter `columnNames` or `allColumns` are " +
+    "mutually exclusive. Only one of them should be specified.")
+  override def children: Seq[LogicalPlan] = child :: Nil
+}

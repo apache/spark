@@ -419,17 +419,20 @@ class ResolveSessionCatalog(
       }
       ShowTablesCommand(db, Some(pattern), true, partitionsSpec)
 
-    case AnalyzeTableStatement(tbl, partitionSpec, noScan) =>
-      val v1TableName = parseV1Table(tbl, "ANALYZE TABLE")
+    case AnalyzeTable(r @ ResolvedTable(_, _, _: V1Table), partitionSpec, noScan)
+        if isSessionCatalog(r.catalog) =>
       if (partitionSpec.isEmpty) {
-        AnalyzeTableCommand(v1TableName.asTableIdentifier, noScan)
+        AnalyzeTableCommand(r.identifier.asTableIdentifier, noScan)
       } else {
-        AnalyzePartitionCommand(v1TableName.asTableIdentifier, partitionSpec, noScan)
+        AnalyzePartitionCommand(r.identifier.asTableIdentifier, partitionSpec, noScan)
       }
 
-    case AnalyzeColumnStatement(tbl, columnNames, allColumns) =>
-      val v1TableName = parseTempViewOrV1Table(tbl, "ANALYZE TABLE")
-      AnalyzeColumnCommand(v1TableName.asTableIdentifier, columnNames, allColumns)
+    case AnalyzeColumn(r @ ResolvedTable(_, _, _: V1Table), columnNames, allColumns)
+        if isSessionCatalog(r.catalog) =>
+      AnalyzeColumnCommand(r.identifier.asTableIdentifier, columnNames, allColumns)
+
+    case AnalyzeColumn(r: ResolvedView, columnNames, allColumns) if r.isTemp =>
+      AnalyzeColumnCommand(r.identifier.asTableIdentifier, columnNames, allColumns)
 
     case RepairTableStatement(tbl) =>
       val v1TableName = parseV1Table(tbl, "MSCK REPAIR TABLE")
