@@ -139,72 +139,14 @@ MESOS:
 # Updated
 KUBERNETES:
   - "/resource-managers/kubernetes/**/*"
-# Updated - Should test cmd
+# Updated
 WINDOWS:
   - "**/*.cmd"
   - "/R/pkg/tests/fulltests/test_Windows.R"
-# Updated - first glob needs testing
+# Updated
 WEB UI:
   - "**/ui/**/*"
-  - "**/UI.scala"
+  - "**/*UI.scala"
 # Updated
 DEPLOY:
   - "/sbin/**/*"
-
-
-
-#### TAKEN FROM ICEBERG LABELER AS A REFERENCE
-INFRA:
-  - .asf.yaml
-  - .gitattributes
-  - .gitignore
-  - baseline.gradle
-  - deploy.gradle
-  - jitpack.yml
-  - travis.yml
-  - .baseline/**/*
-  - .github/**/*
-  - dev/**/*
-BUILD:
-  - "**/*gradle*"
-  - versions.props
-DOCS:
-  - site/**/*
-  - "**/*CHANGELOG.md"
-  - "**/*README.md"
-EXAMPLES:
-  - examples/**/*
-COMMON:
-  - common/**/*
-API:
-  - api/**/*
-CORE:
-  - core/**/*
-PYTHON:
-  - python/**/*
-PARQUET:
-  - parquet/**/*
-ARROW:
-  - arrow/**/*
-ORC:
-  - orc/**/*
-HIVE:
-  - hive3/**/*
-  - hive-metastore/**/*
-  - hive-runtime/**/*
-DATA:
-  - data/**/*
-SPARK:
-  - spark-runtime/**/*
-  - spark3-runtime/**/*
-  - spark/**/*
-  - spark2/**/*
-  - spark3/**/*
-FLINK:
-  - flink-runtime/**/*
-  - flink/**/*
-MR:
-  - mr/**/*
-PIG:
-  - pig/**/*
-
