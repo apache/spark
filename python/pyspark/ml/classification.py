@@ -293,7 +293,9 @@ class _ClassificationSummary(JavaWrapper):
         Returns the sequence of labels in ascending order. This order matches the order used
         in metrics which are specified as arrays over labels, e.g., truePositiveRateByLabel.
 
-        Note: In most cases, it will be values {0.0, 1.0, ..., numClasses-1}, However, if the
+        Notes
+        -----
+        In most cases, it will be values {0.0, 1.0, ..., numClasses-1}, However, if the
         training set is missing a label, then all of the arrays over labels
         (e.g., from truePositiveRateByLabel) will be of length numClasses-1 instead of the
         expected numClasses.
@@ -443,8 +445,9 @@ class _BinaryClassificationSummary(_ClassificationSummary):
         which is a Dataframe having two fields (FPR, TPR) with
         (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
 
-        .. seealso:: `Wikipedia reference
-            <http://en.wikipedia.org/wiki/Receiver_operating_characteristic>`_
+        Notes
+        -----
+        `Wikipedia reference <http://en.wikipedia.org/wiki/Receiver_operating_characteristic>`_
         """
         return self._call_java("roc")
 
@@ -527,6 +530,8 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
     This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
     Only supports L2 regularization currently.
 
+    Examples
+    --------
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
     >>> df = sc.parallelize([
@@ -740,9 +745,10 @@ class LinearSVCModel(_JavaClassificationModel, _LinearSVCParams, JavaMLWritable,
         """
         Evaluates the model on a test dataset.
 
-        :param dataset:
-          Test dataset to evaluate model on, where dataset is an
-          instance of :py:class:`pyspark.sql.DataFrame`
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            Test dataset to evaluate model on.
         """
         if not isinstance(dataset, DataFrame):
             raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
@@ -753,6 +759,7 @@ class LinearSVCModel(_JavaClassificationModel, _LinearSVCParams, JavaMLWritable,
 class LinearSVCSummary(_BinaryClassificationSummary):
     """
     Abstraction for LinearSVC Results for a given model.
+
     .. versionadded:: 3.1.0
     """
     pass
@@ -938,6 +945,8 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
     Logistic regression.
     This class supports multinomial logistic (softmax) and binomial logistic regression.
 
+    Examples
+    --------
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
     >>> bdf = sc.parallelize([
@@ -1239,9 +1248,10 @@ class LogisticRegressionModel(_JavaProbabilisticClassificationModel, _LogisticRe
         """
         Evaluates the model on a test dataset.
 
-        :param dataset:
-          Test dataset to evaluate model on, where dataset is an
-          instance of :py:class:`pyspark.sql.DataFrame`
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            Test dataset to evaluate model on.
         """
         if not isinstance(dataset, DataFrame):
             raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
@@ -1332,6 +1342,8 @@ class DecisionTreeClassifier(_JavaProbabilisticClassifier, _DecisionTreeClassifi
     It supports both binary and multiclass labels, as well as both continuous and categorical
     features.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.feature import StringIndexer
     >>> df = spark.createDataFrame([
@@ -1541,9 +1553,11 @@ class DecisionTreeClassificationModel(_DecisionTreeModel, _JavaProbabilisticClas
             where gain is scaled by the number of instances passing through node
           - Normalize importances for tree to sum to 1.
 
-        .. note:: Feature importance for single decision trees can have high variance due to
-            correlated predictor variables. Consider using a :py:class:`RandomForestClassifier`
-            to determine feature importance instead.
+        Notes
+        -----
+        Feature importance for single decision trees can have high variance due to
+        correlated predictor variables. Consider using a :py:class:`RandomForestClassifier`
+        to determine feature importance instead.
         """
         return self._call_java("featureImportances")
 
@@ -1572,6 +1586,8 @@ class RandomForestClassifier(_JavaProbabilisticClassifier, _RandomForestClassifi
     It supports both binary and multiclass labels, as well as both continuous and categorical
     features.
 
+    Examples
+    --------
     >>> import numpy
     >>> from numpy import allclose
     >>> from pyspark.ml.linalg import Vectors
@@ -1790,7 +1806,6 @@ class RandomForestClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClas
     """
 
     @property
-    @since("2.0.0")
     def featureImportances(self):
         """
         Estimate of the importance of each feature.
@@ -1800,7 +1815,11 @@ class RandomForestClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClas
         (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
         and follows the implementation from scikit-learn.
 
-        .. seealso:: :py:attr:`DecisionTreeClassificationModel.featureImportances`
+        .. versionadded:: 2.0.0
+
+        See Also
+        --------
+        DecisionTreeClassificationModel.featureImportances
         """
         return self._call_java("featureImportances")
 
@@ -1833,9 +1852,10 @@ class RandomForestClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClas
         """
         Evaluates the model on a test dataset.
 
-        :param dataset:
-          Test dataset to evaluate model on, where dataset is an
-          instance of :py:class:`pyspark.sql.DataFrame`
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            Test dataset to evaluate model on.
         """
         if not isinstance(dataset, DataFrame):
             raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
@@ -1849,6 +1869,7 @@ class RandomForestClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClas
 class RandomForestClassificationSummary(_ClassificationSummary):
     """
     Abstraction for RandomForestClassification Results for a given model.
+
     .. versionadded:: 3.1.0
     """
     pass
@@ -1859,6 +1880,7 @@ class RandomForestClassificationTrainingSummary(RandomForestClassificationSummar
                                                 _TrainingSummary):
     """
     Abstraction for RandomForestClassificationTraining Training results.
+
     .. versionadded:: 3.1.0
     """
     pass
@@ -1933,8 +1955,8 @@ class GBTClassifier(_JavaProbabilisticClassifier, _GBTClassifierParams,
     - We expect to implement TreeBoost in the future:
     `SPARK-4240 <https://issues.apache.org/jira/browse/SPARK-4240>`_
 
-    .. note:: Multiclass labels are not currently supported.
-
+    Examples
+    --------
     >>> from numpy import allclose
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.feature import StringIndexer
@@ -2013,6 +2035,10 @@ class GBTClassifier(_JavaProbabilisticClassifier, _GBTClassifierParams,
     'validationIndicator'
     >>> gbt.getValidationTol()
     0.01
+
+    Notes
+    -----
+    Multiclass labels are not currently supported.
 
     .. versionadded:: 1.4.0
     """
@@ -2187,7 +2213,6 @@ class GBTClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClassificatio
     """
 
     @property
-    @since("2.0.0")
     def featureImportances(self):
         """
         Estimate of the importance of each feature.
@@ -2197,7 +2222,11 @@ class GBTClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClassificatio
         (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
         and follows the implementation from scikit-learn.
 
-        .. seealso:: :py:attr:`DecisionTreeClassificationModel.featureImportances`
+        .. versionadded:: 2.0.0
+
+        See Also
+        --------
+        DecisionTreeClassificationModel.featureImportances
         """
         return self._call_java("featureImportances")
 
@@ -2207,14 +2236,16 @@ class GBTClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClassificatio
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
-    @since("2.4.0")
     def evaluateEachIteration(self, dataset):
         """
         Method to compute error or loss for every iteration of gradient boosting.
 
-        :param dataset:
-            Test dataset to evaluate model on, where dataset is an
-            instance of :py:class:`pyspark.sql.DataFrame`
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            Test dataset to evaluate model on.
+
+        .. versionadded:: 2.4.0
         """
         return self._call_java("evaluateEachIteration", dataset)
 
@@ -2273,6 +2304,8 @@ class NaiveBayes(_JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds,
     <https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Gaussian_naive_Bayes>`_.
     which can handle continuous data.
 
+    Examples
+    --------
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([
@@ -2476,6 +2509,8 @@ class MultilayerPerceptronClassifier(_JavaProbabilisticClassifier, _MultilayerPe
     Number of inputs has to be equal to the size of feature vectors.
     Number of outputs has to be equal to the total number of labels.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([
     ...     (0.0, Vectors.dense([0.0, 0.0])),
@@ -2667,9 +2702,10 @@ class MultilayerPerceptronClassificationModel(_JavaProbabilisticClassificationMo
         """
         Evaluates the model on a test dataset.
 
-        :param dataset:
-          Test dataset to evaluate model on, where dataset is an
-          instance of :py:class:`pyspark.sql.DataFrame`
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            Test dataset to evaluate model on.
         """
         if not isinstance(dataset, DataFrame):
             raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
@@ -2680,6 +2716,7 @@ class MultilayerPerceptronClassificationModel(_JavaProbabilisticClassificationMo
 class MultilayerPerceptronClassificationSummary(_ClassificationSummary):
     """
     Abstraction for MultilayerPerceptronClassifier Results for a given model.
+
     .. versionadded:: 3.1.0
     """
     pass
@@ -2690,6 +2727,7 @@ class MultilayerPerceptronClassificationTrainingSummary(MultilayerPerceptronClas
                                                         _TrainingSummary):
     """
     Abstraction for MultilayerPerceptronClassifier Training results.
+
     .. versionadded:: 3.1.0
     """
     pass
@@ -2719,6 +2757,8 @@ class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, JavaMLReadable, Jav
     Each example is scored against all k models and the model with highest score
     is picked to label the example.
 
+    Examples
+    --------
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
     >>> data_path = "data/mllib/sample_multiclass_classification_data.txt"
@@ -2874,15 +2914,23 @@ class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, JavaMLReadable, Jav
 
         return self._copyValues(OneVsRestModel(models=models))
 
-    @since("2.0.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
         and some extra params. This creates a deep copy of the embedded paramMap,
         and copies the embedded and extra parameters over.
 
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
+        Examples
+        --------
+        extra : dict, optional
+            Extra parameters to copy to the new instance
+
+        Returns
+        -------
+        :py:class:`OneVsRest`
+            Copy of this instance
+
+        .. versionadded:: 2.0.0
         """
         if extra is None:
             extra = dict()
@@ -2915,7 +2963,10 @@ class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, JavaMLReadable, Jav
         """
         Transfer this instance to a Java OneVsRest. Used for ML persistence.
 
-        :return: Java object equivalent to this instance.
+        Returns
+        -------
+        py4j.java_gateway.JavaObject
+            Java object equivalent to this instance.
         """
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.classification.OneVsRest",
                                              self.uid)
@@ -3081,8 +3132,15 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
         and some extra params. This creates a deep copy of the embedded paramMap,
         and copies the embedded and extra parameters over.
 
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
+        Parameters
+        ----------
+        extra : dict, optional
+            Extra parameters to copy to the new instance
+
+        Returns
+        -------
+        :py:class:`OneVsRestModel`
+            Copy of this instance
         """
         if extra is None:
             extra = dict()
@@ -3114,7 +3172,10 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
         """
         Transfer this instance to a Java OneVsRestModel. Used for ML persistence.
 
-        :return: Java object equivalent to this instance.
+        Returns
+        -------
+        py4j.java_gateway.JavaObject
+            Java object equivalent to this instance.
         """
         sc = SparkContext._active_spark_context
         java_models = [model._to_java() for model in self.models]
@@ -3143,6 +3204,8 @@ class FMClassifier(_JavaProbabilisticClassifier, _FactorizationMachinesParams, J
     * gd (normal mini-batch gradient descent)
     * adamW (default)
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.classification import FMClassifier
     >>> df = spark.createDataFrame([
@@ -3361,9 +3424,10 @@ class FMClassificationModel(_JavaProbabilisticClassificationModel, _Factorizatio
         """
         Evaluates the model on a test dataset.
 
-        :param dataset:
-          Test dataset to evaluate model on, where dataset is an
-          instance of :py:class:`pyspark.sql.DataFrame`
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            Test dataset to evaluate model on.
         """
         if not isinstance(dataset, DataFrame):
             raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
@@ -3374,6 +3438,7 @@ class FMClassificationModel(_JavaProbabilisticClassificationModel, _Factorizatio
 class FMClassificationSummary(_BinaryClassificationSummary):
     """
     Abstraction for FMClassifier Results for a given model.
+
     .. versionadded:: 3.1.0
     """
     pass
@@ -3383,6 +3448,7 @@ class FMClassificationSummary(_BinaryClassificationSummary):
 class FMClassificationTrainingSummary(FMClassificationSummary, _TrainingSummary):
     """
     Abstraction for FMClassifier Training results.
+
     .. versionadded:: 3.1.0
     """
     pass
