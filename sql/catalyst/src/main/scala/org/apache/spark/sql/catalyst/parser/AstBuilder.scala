@@ -3256,7 +3256,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       } else {
         Map.empty[String, Option[String]]
       }
-      AnalyzeTable(UnresolvedTable(tableName), partitionSpec, noScan = ctx.identifier != null)
+      AnalyzeTable(UnresolvedTableOrView(tableName), partitionSpec, noScan = ctx.identifier != null)
     } else {
       checkPartitionSpec()
       AnalyzeColumn(

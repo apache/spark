@@ -427,11 +427,19 @@ class ResolveSessionCatalog(
         AnalyzePartitionCommand(r.identifier.asTableIdentifier, partitionSpec, noScan)
       }
 
+    // ANALYZE TABLE works on views if the views are cached.
+    case AnalyzeTable(r: ResolvedView, partitionSpec, noScan) =>
+      if (partitionSpec.isEmpty) {
+        AnalyzeTableCommand(r.identifier.asTableIdentifier, noScan)
+      } else {
+        AnalyzePartitionCommand(r.identifier.asTableIdentifier, partitionSpec, noScan)
+      }
+
     case AnalyzeColumn(r @ ResolvedTable(_, _, _: V1Table), columnNames, allColumns)
         if isSessionCatalog(r.catalog) =>
       AnalyzeColumnCommand(r.identifier.asTableIdentifier, columnNames, allColumns)
 
-    case AnalyzeColumn(r: ResolvedView, columnNames, allColumns) if r.isTemp =>
+    case AnalyzeColumn(r: ResolvedView, columnNames, allColumns) =>
       AnalyzeColumnCommand(r.identifier.asTableIdentifier, columnNames, allColumns)
 
     case RepairTableStatement(tbl) =>
