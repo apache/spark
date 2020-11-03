@@ -91,7 +91,17 @@ private case object MySQLDialect extends JdbcDialect {
   }
 
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
-  override def getTableCommentQuery(table: String, comment: String): String = {
-    s"ALTER TABLE $table COMMENT = '$comment'"
+  override def createTable(
+      table: String,
+      strSchema: String,
+      createTableOptions: String,
+      tableComment: String): Array[String] = {
+    val createTable = s"CREATE TABLE $table ($strSchema) $createTableOptions"
+    if (!tableComment.isEmpty) {
+      val comment = s"ALTER TABLE $table COMMENT = '$tableComment'"
+      Array(createTable, comment)
+    } else {
+      Array(createTable)
+    }
   }
 }

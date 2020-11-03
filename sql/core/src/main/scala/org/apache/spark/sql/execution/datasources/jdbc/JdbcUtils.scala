@@ -871,12 +871,11 @@ object JdbcUtils extends Logging {
     // To allow certain options to append when create a new table, which can be
     // table_options or partition_options.
     // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
-    val sql = s"CREATE TABLE $tableName ($strSchema) $createTableOptions"
-    executeStatement(conn, options, sql)
-    if (options.tableComment.nonEmpty) {
+    val sql = dialect.createTable(tableName, strSchema, createTableOptions, options.tableComment)
+    executeStatement(conn, options, sql(0))
+    if (sql.length > 1) {
       try {
-        executeStatement(
-          conn, options, dialect.getTableCommentQuery(tableName, options.tableComment))
+        executeStatement(conn, options, sql(1))
       } catch {
         case e: Exception =>
           logWarning("Cannot create JDBC table comment. The table comment will be ignored.")

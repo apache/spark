@@ -125,7 +125,7 @@ class JDBCTableCatalog extends TableCatalog with Logging {
       properties.asScala.map {
         case (k, v) => k match {
           case "comment" => tableComment = v
-          case "provider" | "owner" | "location" => // ignore provider, owner, and location
+          case "provider" | "owner" | "location" => // provider, owner and location can't be set.
           case _ => tableProperties = tableProperties + " " + s"$k=$v"
         }
       }
