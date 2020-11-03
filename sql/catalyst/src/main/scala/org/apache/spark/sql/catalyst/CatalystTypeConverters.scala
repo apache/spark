@@ -291,6 +291,7 @@ object CatalystTypeConverters {
       case str: String => UTF8String.fromString(str)
       case utf8: UTF8String => utf8
       case chr: Char => UTF8String.fromString(chr.toString)
+      case enum if enum.getClass.isEnum => UTF8String.fromString(enum.toString)
       case other => throw new IllegalArgumentException(
         s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
           + s"cannot be converted to the string type")

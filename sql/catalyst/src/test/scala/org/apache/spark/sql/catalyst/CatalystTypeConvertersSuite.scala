@@ -216,4 +216,11 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       }
     }
   }
+
+  test("convert Enum to String") {
+    val value = TestEnum.EXPECTED_VALUE;
+    val converter = CatalystTypeConverters.createToCatalystConverter(StringType)
+    val expected = UTF8String.fromString("EXPECTED_VALUE")
+    assert(converter(value) === expected)
+  }
 }
