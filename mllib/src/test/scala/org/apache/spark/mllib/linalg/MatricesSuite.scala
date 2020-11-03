@@ -511,10 +511,10 @@ class MatricesSuite extends SparkFunSuite {
     mat.toString(0, 0)
     mat.toString(Int.MinValue, Int.MinValue)
     mat.toString(Int.MaxValue, Int.MaxValue)
-    var lines = mat.toString(6, 50).lines.toArray
+    var lines = mat.toString(6, 50).split('\n')
     assert(lines.size == 5 && lines.forall(_.size <= 50))
 
-    lines = mat.toString(5, 100).lines.toArray
+    lines = mat.toString(5, 100).split('\n')
     assert(lines.size == 5 && lines.forall(_.size <= 100))
   }
 
