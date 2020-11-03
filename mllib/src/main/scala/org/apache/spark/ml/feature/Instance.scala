@@ -139,36 +139,34 @@ private[spark] object InstanceBlock {
       maxMemUsage: Long): Iterator[InstanceBlock] = {
     require(maxMemUsage > 0)
 
-    new Iterator[InstanceBlock] {
-      private var numCols = -1L
-      private val buff = mutable.ArrayBuilder.make[Instance]
+    var numCols = -1L
+    val buff = mutable.ArrayBuilder.make[Instance]
+    var buffCnt = 0L
+    var buffNnz = 0L
+    var buffUnitWeight = true
 
-      override def hasNext: Boolean = iterator.hasNext
+    iterator.flatMap { instance =>
+      if (numCols < 0L) numCols = instance.features.size
+      require(numCols == instance.features.size)
+      val nnz = instance.features.numNonzeros
+      buff += instance
+      buffCnt += 1L
+      buffNnz += nnz
+      buffUnitWeight &&= (instance.weight == 1)
 
-      override def next(): InstanceBlock = {
+      if (getBlockMemUsage(numCols, buffCnt, buffNnz, buffUnitWeight) >= maxMemUsage) {
+        val block = InstanceBlock.fromInstances(buff.result())
         buff.clear()
-        var buffCnt = 0L
-        var buffNnz = 0L
-        var buffUnitWeight = true
-        var blockMemUsage = 0L
-
-        while (iterator.hasNext && blockMemUsage < maxMemUsage) {
-          val instance: Instance = iterator.next()
-          if (numCols < 0L) numCols = instance.features.size
-          require(numCols == instance.features.size)
-          val nnz = instance.features.numNonzeros
-
-          buff += instance
-          buffCnt += 1L
-          buffNnz += nnz
-          buffUnitWeight &&= (instance.weight == 1)
-          blockMemUsage = getBlockMemUsage(numCols, buffCnt, buffNnz, buffUnitWeight)
-        }
-
-        // the block mem usage may slightly exceed threshold, not a big issue.
-        // and this ensure even if one row exceed block limit, each block has one row
-        InstanceBlock.fromInstances(buff.result())
-      }
+        buffCnt = 0L
+        buffNnz = 0L
+        buffUnitWeight = true
+        Iterator.single(block)
+      } else Iterator.empty
+    } ++ {
+      if (buffCnt > 0) {
+        val block = InstanceBlock.fromInstances(buff.result())
+        Iterator.single(block)
+      } else Iterator.empty
     }
   }
 
