@@ -19,16 +19,17 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.EnumSet
 import java.util.concurrent.atomic.AtomicBoolean
-
 import javax.servlet.DispatcherType
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
+
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
+
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.internal.{Logging, config}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.DYN_ALLOCATION_MAX_EXECUTORS
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceProfile

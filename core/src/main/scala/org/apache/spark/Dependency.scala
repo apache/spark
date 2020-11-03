@@ -98,7 +98,8 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     shuffleId, this)
 
   // By default, shuffle merge is enabled for ShuffleDependency if push based shuffle is enabled
-  private[spark] var _shuffleMergeEnabled = Utils.isPushBasedShuffleEnabled(rdd.sparkContext.getConf)
+  private[spark] var _shuffleMergeEnabled =
+    Utils.isPushBasedShuffleEnabled(rdd.sparkContext.getConf)
 
   def setShuffleMergeEnabled(shuffleMergeEnabled: Boolean): Unit = {
     _shuffleMergeEnabled = shuffleMergeEnabled
