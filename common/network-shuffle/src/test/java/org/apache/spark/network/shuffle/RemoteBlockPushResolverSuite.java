@@ -26,7 +26,6 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.concurrent.Semaphore;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 
@@ -98,12 +97,11 @@ public class RemoteBlockPushResolverSuite {
 
   @Test
   public void testBasicBlockMerge() throws IOException {
-    PushBlock[] pushBlocks = new PushBlock[] {new PushBlock(0, 0, 0), new PushBlock(0, 1, 0)};
-    ByteBuffer[] blocks = new ByteBuffer[]{
-      ByteBuffer.wrap(new byte[4]),
-      ByteBuffer.wrap(new byte[5])
+    PushBlock[] pushBlocks = new PushBlock[] {
+      new PushBlock(0, 0, 0, ByteBuffer.wrap(new byte[4])),
+      new PushBlock(0, 1, 0, ByteBuffer.wrap(new byte[5]))
     };
-    pushBlockHelper(TEST_APP, pushBlocks, blocks);
+    pushBlockHelper(TEST_APP, pushBlocks);
     MergeStatuses statuses = pushResolver.finalizeShuffleMerge(
       new FinalizeShuffleMerge(TEST_APP, 0));
     validateMergeStatuses(statuses, new int[] {0}, new long[] {9});
@@ -114,18 +112,12 @@ public class RemoteBlockPushResolverSuite {
   @Test
   public void testDividingMergedBlocksIntoChunks() throws IOException {
     PushBlock[] pushBlocks = new PushBlock[] {
-      new PushBlock(0, 0, 0),
-      new PushBlock(0, 1, 0),
-      new PushBlock(0, 2, 0),
-      new PushBlock(0, 3, 0)
+      new PushBlock(0, 0, 0, ByteBuffer.wrap(new byte[2])),
+      new PushBlock(0, 1, 0, ByteBuffer.wrap(new byte[3])),
+      new PushBlock(0, 2, 0, ByteBuffer.wrap(new byte[5])),
+      new PushBlock(0, 3, 0, ByteBuffer.wrap(new byte[3]))
     };
-    ByteBuffer[] buffers = new ByteBuffer[]{
-      ByteBuffer.wrap(new byte[2]),
-      ByteBuffer.wrap(new byte[3]),
-      ByteBuffer.wrap(new byte[5]),
-      ByteBuffer.wrap(new byte[3])
-    };
-    pushBlockHelper(TEST_APP, pushBlocks, buffers);
+    pushBlockHelper(TEST_APP, pushBlocks);
     MergeStatuses statuses = pushResolver.finalizeShuffleMerge(
       new FinalizeShuffleMerge(TEST_APP, 0));
     validateMergeStatuses(statuses, new int[] {0}, new long[] {13});
@@ -136,17 +128,12 @@ public class RemoteBlockPushResolverSuite {
   @Test
   public void testFinalizeWithMultipleReducePartitions() throws IOException {
     PushBlock[] pushBlocks = new PushBlock[] {
-      new PushBlock(0, 0, 0),
-      new PushBlock(0, 1, 0),
-      new PushBlock(0, 0, 1),
-      new PushBlock(0, 1, 1)};
-    ByteBuffer[] buffers = new ByteBuffer[]{
-      ByteBuffer.wrap(new byte[2]),
-      ByteBuffer.wrap(new byte[3]),
-      ByteBuffer.wrap(new byte[5]),
-      ByteBuffer.wrap(new byte[3])
+      new PushBlock(0, 0, 0, ByteBuffer.wrap(new byte[2])),
+      new PushBlock(0, 1, 0, ByteBuffer.wrap(new byte[3])),
+      new PushBlock(0, 0, 1, ByteBuffer.wrap(new byte[5])),
+      new PushBlock(0, 1, 1, ByteBuffer.wrap(new byte[3]))
     };
-    pushBlockHelper(TEST_APP, pushBlocks, buffers);
+    pushBlockHelper(TEST_APP, pushBlocks);
     MergeStatuses statuses = pushResolver.finalizeShuffleMerge(
       new FinalizeShuffleMerge(TEST_APP, 0));
     validateMergeStatuses(statuses, new int[] {0, 1}, new long[] {5, 8});
@@ -332,7 +319,7 @@ public class RemoteBlockPushResolverSuite {
     // Since this stream didn't get any opportunity it will throw couldn't find opportunity error
     RuntimeException failedEx = null;
     try {
-      stream3.onComplete(stream2.getID());
+      stream3.onComplete(stream3.getID());
     } catch (RuntimeException re) {
       assertEquals(
         "Couldn't find an opportunity to write block shufflePush_0_2_0 to merged shuffle",
@@ -389,9 +376,9 @@ public class RemoteBlockPushResolverSuite {
     };
     Path[] activeDirs = createLocalDirs(1);
     registerExecutor(testApp, prepareLocalDirs(activeDirs));
-    PushBlock[] pushBlockIds = new PushBlock[] {new PushBlock(0, 0, 0)};
-    ByteBuffer[] blocks = new ByteBuffer[] {ByteBuffer.wrap(new byte[4])};
-    pushBlockHelper(testApp, pushBlockIds, blocks);
+    PushBlock[] pushBlocks = new PushBlock[] {
+      new PushBlock(0, 0, 0, ByteBuffer.wrap(new byte[4]))};
+    pushBlockHelper(testApp, pushBlocks);
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(testApp, 0, 0);
     validateChunks(testApp, 0, 0, blockMeta, new int[]{4}, new int[][]{{0}});
@@ -466,13 +453,11 @@ public class RemoteBlockPushResolverSuite {
 
   private void pushBlockHelper(
       String appId,
-      PushBlock[] blocks,
-      ByteBuffer[] buffers) throws IOException {
-    Preconditions.checkArgument(blocks.length == buffers.length);
+      PushBlock[] blocks) throws IOException {
     for (int i = 0; i < blocks.length; i++) {
       StreamCallbackWithID stream = pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(appId, blocks[i].shuffleId, blocks[i].mapIndex, blocks[i].reduceId, 0));
-      stream.onData(stream.getID(), buffers[i]);
+      stream.onData(stream.getID(), blocks[i].buffer);
       stream.onComplete(stream.getID());
     }
   }
@@ -481,10 +466,12 @@ public class RemoteBlockPushResolverSuite {
     private final int shuffleId;
     private final int mapIndex;
     private final int reduceId;
-    PushBlock(int shuffleId, int mapIndex, int reduceId) {
+    private final ByteBuffer buffer;
+    PushBlock(int shuffleId, int mapIndex, int reduceId, ByteBuffer buffer) {
       this.shuffleId = shuffleId;
       this.mapIndex = mapIndex;
       this.reduceId = reduceId;
+      this.buffer = buffer;
     }
   }
 }

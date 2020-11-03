@@ -30,7 +30,6 @@ import org.apache.spark.network.protocol.Encoders;
  * The remote shuffle service will also include this message when responding the push requests.
  */
 public class PushBlockStream extends BlockTransferMessage {
-  public static final String SHUFFLE_PUSH_BLOCK_PREFIX = "shufflePush";
   public final String appId;
   public final int shuffleId;
   public final int mapIndex;
@@ -38,7 +37,6 @@ public class PushBlockStream extends BlockTransferMessage {
   // Similar to the chunkIndex in StreamChunkId, indicating the index of a block in a batch of
   // blocks to be pushed.
   public final int index;
-  public final String streamId;
 
   public PushBlockStream(String appId, int shuffleId, int mapIndex, int reduceId, int index) {
     this.appId = appId;
@@ -46,8 +44,6 @@ public class PushBlockStream extends BlockTransferMessage {
     this.mapIndex = mapIndex;
     this.reduceId = reduceId;
     this.index = index;
-    this.streamId = String.format("%s_%d_%d_%d", SHUFFLE_PUSH_BLOCK_PREFIX,
-      shuffleId, mapIndex, reduceId);
   }
 
   @Override
