@@ -200,7 +200,7 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     }
   }
 
-  test("simplify CaseWhen with EqualTo") {
+  test("SPARK-33315: simplify CaseWhen with EqualTo") {
     val e1 = EqualTo(UnresolvedAttribute("a"), Literal(100))
     val e2 = GreaterThan(UnresolvedAttribute("b"), Literal(1000))
     val e3 = IsNotNull(UnresolvedAttribute("c"))
