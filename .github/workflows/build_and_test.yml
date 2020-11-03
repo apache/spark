@@ -123,7 +123,6 @@ jobs:
     - name: Install Python 2.7
       uses: actions/setup-python@v2
       # Yarn has a Python specific test too, for example, YarnClusterSuite.
-      if: contains(matrix.modules, 'yarn') || contains(matrix.modules, 'pyspark') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
       with:
         python-version: 2.7
         architecture: x64
