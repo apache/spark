@@ -22,12 +22,11 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
 
 /**
@@ -255,19 +254,11 @@ class ResolveSessionCatalog(
     case RenameTableStatement(TempViewOrV1Table(oldName), newName, isView) =>
       AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
 
-    case DescribeRelation(r @ ResolvedTable(_, ident, _: V1Table), partitionSpec, isExtended)
-        if isSessionCatalog(r.catalog) =>
-      DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
-
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
-    case DescribeRelation(ResolvedView(ident, _), partitionSpec, isExtended) =>
+    case DescribeRelation(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended) =>
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
-    case DescribeColumn(r @ ResolvedTable(_, _, _: V1Table), colNameParts, isExtended)
-        if isSessionCatalog(r.catalog) =>
-      DescribeColumnCommand(r.identifier.asTableIdentifier, colNameParts, isExtended)
-
-    case DescribeColumn(ResolvedView(ident, _), colNameParts, isExtended) =>
+    case DescribeColumn(ResolvedV1TableOrViewIdentifier(ident), colNameParts, isExtended) =>
       DescribeColumnCommand(ident.asTableIdentifier, colNameParts, isExtended)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
@@ -419,28 +410,16 @@ class ResolveSessionCatalog(
       }
       ShowTablesCommand(db, Some(pattern), true, partitionsSpec)
 
-    case AnalyzeTable(r @ ResolvedTable(_, _, _: V1Table), partitionSpec, noScan)
-        if isSessionCatalog(r.catalog) =>
-      if (partitionSpec.isEmpty) {
-        AnalyzeTableCommand(r.identifier.asTableIdentifier, noScan)
-      } else {
-        AnalyzePartitionCommand(r.identifier.asTableIdentifier, partitionSpec, noScan)
-      }
-
     // ANALYZE TABLE works on views if the views are cached.
-    case AnalyzeTable(r: ResolvedView, partitionSpec, noScan) =>
+    case AnalyzeTable(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, noScan) =>
       if (partitionSpec.isEmpty) {
-        AnalyzeTableCommand(r.identifier.asTableIdentifier, noScan)
+        AnalyzeTableCommand(ident.asTableIdentifier, noScan)
       } else {
-        AnalyzePartitionCommand(r.identifier.asTableIdentifier, partitionSpec, noScan)
+        AnalyzePartitionCommand(ident.asTableIdentifier, partitionSpec, noScan)
       }
 
-    case AnalyzeColumn(r @ ResolvedTable(_, _, _: V1Table), columnNames, allColumns)
-        if isSessionCatalog(r.catalog) =>
-      AnalyzeColumnCommand(r.identifier.asTableIdentifier, columnNames, allColumns)
-
-    case AnalyzeColumn(r: ResolvedView, columnNames, allColumns) =>
-      AnalyzeColumnCommand(r.identifier.asTableIdentifier, columnNames, allColumns)
+    case AnalyzeColumn(ResolvedV1TableOrViewIdentifier(ident), columnNames, allColumns) =>
+      AnalyzeColumnCommand(ident.asTableIdentifier, columnNames, allColumns)
 
     case RepairTableStatement(tbl) =>
       val v1TableName = parseV1Table(tbl, "MSCK REPAIR TABLE")
@@ -715,6 +694,14 @@ class ResolveSessionCatalog(
       } else {
         None
       }
+  }
+
+  object ResolvedV1TableOrViewIdentifier {
+    def unapply(resolved: LogicalPlan): Option[Identifier] = resolved match {
+      case ResolvedTable(catalog, ident, _: V1Table) if isSessionCatalog(catalog) => Some(ident)
+      case ResolvedView(ident, _) => Some(ident)
+      case _ => None
+    }
   }
 
   private def assertTopLevelColumn(colName: Seq[String], command: String): Unit = {
