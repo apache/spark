@@ -61,7 +61,7 @@ class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
         sql(
           s"""
              |CREATE TABLE t(i INT, p0 INT, p1 INT)
-             |USING $format
+             |USING ${format()}
              |PARTITIONED BY (p0, p1)""".stripMargin)
 
         spark.range(0, 10, 1).selectExpr("id as col")

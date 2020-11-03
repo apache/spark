@@ -162,7 +162,7 @@ class HiveSchemaInferenceSuite
   private def testFieldQuery(fields: Seq[String]): Unit = {
     if (!fields.isEmpty) {
       val query = s"SELECT * FROM ${TEST_TABLE_NAME} WHERE ${Random.shuffle(fields).head} >= 0"
-      assert(spark.sql(query).count == NUM_RECORDS)
+      assert(spark.sql(query).count() == NUM_RECORDS)
     }
   }
 
