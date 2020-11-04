@@ -130,6 +130,13 @@ package object config extends Logging {
     .stringConf
     .createOptional
 
+  private[spark] val SPARK_PYSPARK_ARCHIVE = ConfigBuilder("spark.yarn.pyspark.archives")
+    .doc("Location of pyspark.zip and py4j.zip.")
+    .version("3.0.1")
+    .stringConf
+    .toSequence
+    .createOptional
+
   private[spark] val SPARK_JARS = ConfigBuilder("spark.yarn.jars")
     .doc("Location of jars containing Spark classes.")
     .version("2.0.0")

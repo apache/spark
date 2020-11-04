@@ -880,7 +880,7 @@ private[spark] class Client(
     val appId = newAppResponse.getApplicationId
     val pySparkArchives =
       if (sparkConf.get(IS_PYTHON_APP)) {
-        findPySparkArchives()
+        sparkConf.get(SPARK_PYSPARK_ARCHIVE).getOrElse(findPySparkArchives())
       } else {
         Nil
       }

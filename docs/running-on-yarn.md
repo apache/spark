@@ -368,6 +368,14 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>2.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.yarn.pyspark.archives</code></td>
+  <td>(none)</td>
+  <td>
+    An archive containing pyspark.zip and py4j.zip. Like with the previous option, the archive can also be hosted on HDFS to speed up file distribution.
+  </td>
+  <td>3.0.1</td>
+</tr>
+<tr>
   <td><code>spark.yarn.appMasterEnv.[EnvironmentVariableName]</code></td>
   <td>(none)</td>
   <td>
