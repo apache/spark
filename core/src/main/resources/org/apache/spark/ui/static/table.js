@@ -68,12 +68,31 @@ function collapseAllThreadStackTrace(toggleButton) {
 }
 
 
-// inOrOut - true: over, false: out
-function onMouseOverAndOut(threadId) {
-    $("#" + threadId + "_td_id").toggleClass("threaddump-td-mouseover");
-    $("#" + threadId + "_td_name").toggleClass("threaddump-td-mouseover");
-    $("#" + threadId + "_td_state").toggleClass("threaddump-td-mouseover");
-    $("#" + threadId + "_td_locking").toggleClass("threaddump-td-mouseover");
+function redirectByThreadId(e) {
+    e.preventDefault();
+    var targetId = e.target.href.substring(e.target.href.indexOf("#"))
+    if ($(targetId)) {
+        $(targetId)[0].scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+        });
+       $(targetId).mouseover();
+
+    }
+}
+
+function onMouseIn(threadId) {
+    $("#" + threadId + "_td_id").addClass('threaddump-td-mouseover');
+    $("#" + threadId + "_td_name").addClass('threaddump-td-mouseover');
+    $("#" + threadId + "_td_state").addClass('threaddump-td-mouseover');
+    $("#" + threadId + "_td_locking").addClass('threaddump-td-mouseover');
+}
+
+function onMouseOut(threadId) {
+    $("#" + threadId + "_td_id").removeClass('threaddump-td-mouseover');
+    $("#" + threadId + "_td_name").removeClass('threaddump-td-mouseover');
+    $("#" + threadId + "_td_state").removeClass('threaddump-td-mouseover');
+    $("#" + threadId + "_td_locking").removeClass('threaddump-td-mouseover');
 }
 
 function onSearchStringChange() {
