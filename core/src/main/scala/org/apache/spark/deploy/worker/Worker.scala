@@ -276,7 +276,14 @@ private[deploy] class Worker(
     master = Some(masterRef)
     connected = true
     if (reverseProxy) {
-      logInfo(s"WorkerWebUI is available at $activeMasterWebUiUrl/proxy/$workerId")
+      logInfo("WorkerWebUI is available at %s/proxy/%s".format(
+        activeMasterWebUiUrl.stripSuffix("/"), workerId))
+      // if reverseProxyUrl is not set, then we continue to generate relative URLs
+      // starting with "/" throughout the UI and do not use activeMasterWebUiUrl
+      val proxyUrl = conf.get(UI_REVERSE_PROXY_URL.key, "").stripSuffix("/")
+      // In the method `UIUtils.makeHref`, the URL segment "/proxy/$worker_id" will be appended
+      // after `proxyUrl`, so no need to set the worker ID in the `spark.ui.proxyBase` here.
+      System.setProperty("spark.ui.proxyBase", proxyUrl)
     }
     // Cancel any outstanding re-registration attempts because we found a new master
     cancelLastRegistrationRetry()

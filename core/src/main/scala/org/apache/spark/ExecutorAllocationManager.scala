@@ -312,8 +312,8 @@ private[spark] class ExecutorAllocationManager(
 
     if (unschedulableTaskSets > 0) {
       // Request additional executors to account for task sets having tasks that are unschedulable
-      // due to blacklisting when the active executor count has already reached the max needed
-      // which we would normally get.
+      // due to executors excluded for failures when the active executor count has already reached
+      // the max needed which we would normally get.
       val maxNeededForUnschedulables = math.ceil(unschedulableTaskSets * executorAllocationRatio /
         tasksPerExecutor).toInt
       math.max(maxNeededWithSpeculationLocalityOffset,
@@ -662,10 +662,10 @@ private[spark] class ExecutorAllocationManager(
     private val resourceProfileIdToStageAttempt =
       new mutable.HashMap[Int, mutable.Set[StageAttempt]]
 
-    // Keep track of unschedulable task sets due to blacklisting. This is a Set of StageAttempt's
-    // because we'll only take the last unschedulable task in a taskset although there can be more.
-    // This is done in order to avoid costly loops in the scheduling.
-    // Check TaskSetManager#getCompletelyBlacklistedTaskIfAny for more details.
+    // Keep track of unschedulable task sets because of executor/node exclusions from too many task
+    // failures. This is a Set of StageAttempt's because we'll only take the last unschedulable task
+    // in a taskset although there can be more. This is done in order to avoid costly loops in the
+    // scheduling. Check TaskSetManager#getCompletelyExcludedTaskIfAny for more details.
     private val unschedulableTaskSets = new mutable.HashSet[StageAttempt]
 
     // stageAttempt to tuple (the number of task with locality preferences, a map where each pair

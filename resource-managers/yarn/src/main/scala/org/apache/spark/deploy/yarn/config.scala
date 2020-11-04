@@ -379,14 +379,15 @@ package object config extends Logging {
     .stringConf
     .createOptional
 
-  /* YARN allocator-level blacklisting related config entries. */
-  private[spark] val YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED =
-    ConfigBuilder("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
-      .version("2.4.0")
+  /* YARN allocator-level excludeOnFailure related config entries. */
+  private[spark] val YARN_EXECUTOR_LAUNCH_EXCLUDE_ON_FAILURE_ENABLED =
+    ConfigBuilder("spark.yarn.executor.launch.excludeOnFailure.enabled")
+      .version("3.1.0")
+      .withAlternative("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
       .booleanConf
       .createWithDefault(false)
 
-  /* Initially blacklisted YARN nodes. */
+  /* Initially excluded YARN nodes. */
   private[spark] val YARN_EXCLUDE_NODES = ConfigBuilder("spark.yarn.exclude.nodes")
     .version("3.0.0")
     .stringConf

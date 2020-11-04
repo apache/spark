@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
-import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, ProjectExec, RowDataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
@@ -228,8 +228,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DescribeColumn(_: ResolvedTable, _, _) =>
       throw new AnalysisException("Describing columns is not supported for v2 tables.")
 
-    case DropTable(catalog, ident, ifExists) =>
-      DropTableExec(catalog, ident, ifExists) :: Nil
+    case DropTable(r: ResolvedTable, ifExists, _) =>
+      DropTableExec(r.catalog, r.identifier, ifExists) :: Nil
+
+    case _: NoopDropTable =>
+      LocalTableScanExec(Nil, Nil) :: Nil
 
     case AlterTable(catalog, ident, _, changes) =>
       AlterTableExec(catalog, ident, changes) :: Nil
@@ -276,6 +279,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case r @ ShowTableProperties(rt: ResolvedTable, propertyKey) =>
       ShowTablePropertiesExec(r.output, rt.table, propertyKey) :: Nil
+
+    case AnalyzeTable(_: ResolvedTable, _, _) | AnalyzeColumn(_: ResolvedTable, _, _) =>
+      throw new AnalysisException("ANALYZE TABLE is not supported for v2 tables.")
 
     case _ => Nil
   }

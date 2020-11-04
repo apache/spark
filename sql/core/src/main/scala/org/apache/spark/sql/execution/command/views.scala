@@ -110,17 +110,19 @@ case class CreateViewCommand(
     verifyTemporaryObjectsNotExists(catalog)
 
     if (viewType == LocalTempView) {
-      if (replace && catalog.getTempView(name.table).isDefined) {
-        logDebug(s"Try to uncache ${name.quotedString} before replacing.")
+      if (replace && catalog.getTempView(name.table).isDefined &&
+          !catalog.getTempView(name.table).get.sameResult(child)) {
+        logInfo(s"Try to uncache ${name.quotedString} before replacing.")
         CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
       }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       catalog.createTempView(name.table, aliasedPlan, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
-      if (replace && catalog.getGlobalTempView(name.table).isDefined) {
+      if (replace && catalog.getGlobalTempView(name.table).isDefined &&
+          !catalog.getGlobalTempView(name.table).get.sameResult(child)) {
         val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
         val globalTempView = TableIdentifier(name.table, Option(db))
-        logDebug(s"Try to uncache ${globalTempView.quotedString} before replacing.")
+        logInfo(s"Try to uncache ${globalTempView.quotedString} before replacing.")
         CommandUtils.uncacheTableOrView(sparkSession, globalTempView.quotedString)
       }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
