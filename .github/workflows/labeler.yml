@@ -26,10 +26,10 @@ jobs:
     steps:
     # In order to get back the negated matches like in the old config,
     # we need the actinons/labeler concept of `all` and `any` which matches
-    # all of the given constraints / glob patterns 
-    # for either `all` files or `any` file in the change set.
+    # all of the given constraints / glob patterns for either `all`
+    # files or `any` file in the change set.
     #
-    # Issue that mentiones any/all only being available on main branch (previously called master): 
+    # Issue that mentions any/all only being available on main branch (previously called master): 
     #    - https://github.com/actions/labeler/issues/73#issuecomment-639034278
     #
     # However, these are not in a published release and the current `main` branch
