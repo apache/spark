@@ -604,7 +604,7 @@ def main(infile, outfile):
         # reuse.
         TaskContext._setTaskContext(None)
         BarrierTaskContext._setTaskContext(None)
-    except Exception:
+    except BaseException:
         try:
             exc_info = traceback.format_exc()
             if isinstance(exc_info, bytes):
