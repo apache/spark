@@ -63,8 +63,16 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         """
         Set pipeline stages.
 
-        :param value: a list of transformers or estimators
-        :return: the pipeline instance
+        Parameters
+        ----------
+        value : list
+            of :py:class:`pyspark.ml.Transformer`
+            or :py:class:`pyspark.ml.Estimator`
+
+        Returns
+        -------
+        :py:class:`Pipeline`
+            the pipeline instance
         """
         return self._set(stages=value)
 
@@ -115,8 +123,15 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         """
         Creates a copy of this instance.
 
-        :param extra: extra parameters
-        :returns: new instance
+        Parameters
+        ----------
+        extra : dict, optional
+            extra parameters
+
+        Returns
+        -------
+        :py:class:`Pipeline`
+            new instance
         """
         if extra is None:
             extra = dict()
@@ -156,7 +171,10 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         """
         Transfer this instance to a Java Pipeline.  Used for ML persistence.
 
-        :return: Java object equivalent to this instance.
+        Returns
+        -------
+        py4j.java_gateway.JavaObject
+            Java object equivalent to this instance.
         """
 
         gateway = SparkContext._gateway
@@ -410,7 +428,10 @@ class PipelineSharedReadWrite():
         """
         Load metadata and stages for a :py:class:`Pipeline` or :py:class:`PipelineModel`
 
-        :return: (UID, list of stages)
+        Returns
+        -------
+        tuple
+            (UID, list of stages)
         """
         stagesDir = os.path.join(path, "stages")
         stageUids = metadata['paramMap']['stageUids']
