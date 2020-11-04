@@ -149,9 +149,14 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     .. [LI2008] https://doi.org/10.1145/1454008.1454027
     .. [HAN2000] https://doi.org/10.1145/335191.335372
 
-    .. note:: null values in the feature column are ignored during fit().
-    .. note:: Internally `transform` `collects` and `broadcasts` association rules.
+    Notes
+    -----
+    null values in the feature column are ignored during fit().
 
+    Internally `transform` `collects` and `broadcasts` association rules.
+
+    Examples
+    --------
     >>> from pyspark.sql.functions import split
     >>> data = (spark.read
     ...     .text("data/mllib/sample_fpgrowth.txt")
@@ -269,13 +274,17 @@ class PrefixSpan(JavaParams):
     A parallel PrefixSpan algorithm to mine frequent sequential patterns.
     The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
     Efficiently by Prefix-Projected Pattern Growth
-    (see <a href="https://doi.org/10.1109/ICDE.2001.914830">here</a>).
+    (see `here <https://doi.org/10.1109/ICDE.2001.914830">`_).
     This class is not yet an Estimator/Transformer, use :py:func:`findFrequentSequentialPatterns`
     method to run the PrefixSpan algorithm.
 
-    @see <a href="https://en.wikipedia.org/wiki/Sequential_Pattern_Mining">Sequential Pattern Mining
-    (Wikipedia)</a>
+    Notes
+    -----
+    See `Sequential Pattern Mining (Wikipedia) \
+      <https://en.wikipedia.org/wiki/Sequential_Pattern_Mining>`_
 
+    Examples
+    --------
     >>> from pyspark.ml.fpm import PrefixSpan
     >>> from pyspark.sql import Row
     >>> df = sc.parallelize([Row(sequence=[[1, 2], [3]]),
@@ -413,12 +422,20 @@ class PrefixSpan(JavaParams):
         """
         Finds the complete set of frequent sequential patterns in the input sequences of itemsets.
 
-        :param dataset: A dataframe containing a sequence column which is
-                        `ArrayType(ArrayType(T))` type, T is the item type for the input dataset.
-        :return: A `DataFrame` that contains columns of sequence and corresponding frequency.
-                 The schema of it will be:
-                 - `sequence: ArrayType(ArrayType(T))` (T is the item type)
-                 - `freq: Long`
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            A dataframe containing a sequence column which is
+            `ArrayType(ArrayType(T))` type, T is the item type for the input dataset.
+
+        Returns
+        -------
+        pyspark.sql.dataframe.DataFrame
+            A `DataFrame` that contains columns of sequence and corresponding frequency.
+            The schema of it will be:
+
+            - `sequence: ArrayType(ArrayType(T))` (T is the item type)
+            - `freq: Long`
 
         .. versionadded:: 2.4.0
         """
