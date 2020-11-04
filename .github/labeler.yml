@@ -48,6 +48,8 @@ BUILD:
  - "/bin/docker-image-tool.sh"
  - "/bin/find-spark-home*"
  - "scalastyle-config.xml"
+ # These can be added in the above `any` clause (and the /dev/**/* glob removed) when
+ # `any`/`all` support is released
  # - "!/dev/github_jira_sync.py"
  # - "!/dev/merge_spark_pr.py"
  # - "!/dev/run-tests-jenkins*"
@@ -62,6 +64,7 @@ EXAMPLES:
 # CORE needs to be updated when all/any are released upstream.
 CORE:
   # - any: ["/core/**/*", "!**/*UI.scala", "!**/ui/**/*"] # If any file matches all of the globs defined in the list started by `any`, label is applied.
+  - "/core/**/*"
   - "/common/kvstore/**/*"
   - "/common/network-common/**/*"
   - "/common/network-shuffle/**/*"
