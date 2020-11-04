@@ -24,12 +24,20 @@ def vector_to_array(col, dtype="float64"):
     """
     Converts a column of MLlib sparse/dense vectors into a column of dense arrays.
 
-    :param col: A string of the column name or a Column
-    :param dtype: The data type of the output array. Valid values: "float64" or "float32".
-    :return: The converted column of dense arrays.
+    Parameters
+    ----------
+    col : :py:class:`pyspark.sql.Column` or str
+        Input column
+    dtype : str, optional
+        The data type of the output array. Valid values: "float64" or "float32".
 
-    .. versionadded:: 3.0.0
+    Returns
+    -------
+    :py:class:`pyspark.sql.Column`
+        The converted column of dense arrays.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.functions import vector_to_array
     >>> from pyspark.mllib.linalg import Vectors as OldVectors
