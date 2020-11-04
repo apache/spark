@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.File
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -151,15 +151,19 @@ class ContextAwareIterator[IN](iter: Iterator[IN], context: TaskContext) extends
 
   val thread = new AtomicReference[Thread]()
 
+  var failed = new AtomicBoolean(false)
+
+  context.addTaskFailureListener { (_, _) =>
+    failed.set(true)
+  }
+
   context.addTaskCompletionListener[Unit] { _ =>
     var thread = this.thread.get()
 
-    var attempt = 3
-    while (thread == null && attempt > 0) {
+    while (thread == null && !failed.get()) {
       // Wait for a while since the writer thread might not reach to consuming the iterator yet.
       context.wait(10)
       thread = this.thread.get()
-      attempt -= 1
     }
 
     if (thread != null && thread != Thread.currentThread()) {
