@@ -216,7 +216,7 @@ class DataFrameReader(OptionUtils):
              multiLine=None, allowUnquotedControlChars=None, lineSep=None, samplingRatio=None,
              dropFieldIfAllNull=None, encoding=None, locale=None, pathGlobFilter=None,
              recursiveFileLookup=None, modifiedBefore=None, modifiedAfter=None,
-             allowNonNumericNumbers=None):
+             recursiveFileLookup=None, allowNonNumericNumbers=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
@@ -429,7 +429,7 @@ class DataFrameReader(OptionUtils):
             recursively scan a directory for files. Using this option
             disables
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        modifiedBefore : an optional timestamp to only include files with
+
             modification times occurring before the specified time. The provided timestamp
             must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
         modifiedAfter : an optional timestamp to only include files with
@@ -448,12 +448,12 @@ class DataFrameReader(OptionUtils):
         modifiedAfter = options.get('modifiedAfter', None)
         recursiveFileLookup = options.get('recursiveFileLookup', None)
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
-                       recursiveFileLookup=recursiveFileLookup, modifiedBefore=modifiedBefore,
-                       modifiedAfter=modifiedAfter)
+                       recursiveFileLookup=recursiveFileLookup)
+                       modifiedAfter = modifiedAfter)
         return self._df(self._jreader.parquet(_to_seq(self._spark._sc, paths)))
 
-    def text(self, paths, wholetext=False, lineSep=None, pathGlobFilter=None,
-             recursiveFileLookup=None, modifiedBefore=None, modifiedAfter=None):
+    def text(self, paths, wholetext = False, lineSep = None, pathGlobFilter = None,
+             recursiveFileLookup=None):
         """
         Loads text files and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
@@ -481,7 +481,7 @@ class DataFrameReader(OptionUtils):
         recursiveFileLookup : str or bool, optional
             recursively scan a directory for files. Using this option disables
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        modifiedBefore : an optional timestamp to only include files with
+
             modification times occurring before the specified time. The provided timestamp
             must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
         modifiedAfter : an optional timestamp to only include files with
@@ -499,7 +499,7 @@ class DataFrameReader(OptionUtils):
         """
         self._set_opts(
             wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
-            recursiveFileLookup=recursiveFileLookup, modifiedBefore=modifiedBefore,
+            recursiveFileLookup=recursiveFileLookup)
             modifiedAfter=modifiedAfter)
         if isinstance(paths, str):
             paths = [paths]
@@ -512,28 +512,29 @@ class DataFrameReader(OptionUtils):
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
             samplingRatio=None, enforceSchema=None, emptyValue=None, locale=None, lineSep=None,
-            pathGlobFilter=None, recursiveFileLookup=None, modifiedBefore=None, modifiedAfter=None):
+            pathGlobFilter=None, recursiveFileLookup=None):
         r"""Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
         ``inferSchema`` is enabled. To avoid going through the entire data once, disable
         ``inferSchema`` option or specify the schema explicitly using ``schema``.
 
-        :param path: string, or list of strings, for input path(s),
-                     or RDD of Strings storing CSV rows.
-        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
-                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        :param sep: sets a separator (one or more characters) for each field and value. If None is
-                    set, it uses the default value, ``,``.
-        :param encoding: decodes the CSV files by the given encoding type. If None is set,
-                         it uses the default value, ``UTF-8``.
-        :param quote: sets a single character used for escaping quoted values where the
-                      separator can be part of the value. If None is set, it uses the default
-                      value, ``"``. If you would like to turn off quotations, you need to set an
-                      empty string.
-        :param escape: sets a single character used for escaping quotes inside an already
-                       quoted value. If None is set, it uses the default value, ``\``.
-        :param comment: sets a single character used for skipping lines beginning with this
+        .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        path : str or list
+            string, or list of strings, for input path(s),
+            or RDD of Strings storing CSV rows.
+        schema : :class:`pyspark.sql.types.StructType` or str, optional
+            an optional :class:`pyspark.sql.types.StructType` for the input schema
+            or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
+        sep : str, optional
+            sets a separator (one or more characters) for each field and value. If None is
+            set, it uses the default value, ``,``.
+        encoding : str, optional
+            decodes the CSV files by the given encoding type. If None is set,
+            it uses the default value, ``UTF-8``.
         quote : str, optional
             sets a single character used for escaping quoted values where the
             separator can be part of the value. If None is set, it uses the default
@@ -665,7 +666,7 @@ class DataFrameReader(OptionUtils):
         recursiveFileLookup : str or bool, optional
             recursively scan a directory for files. Using this option disables
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        modifiedBefore : an optional timestamp to only include files with
+
             modification times occurring before the specified time. The provided timestamp
             must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
         modifiedAfter : an optional timestamp to only include files with
@@ -689,10 +690,11 @@ class DataFrameReader(OptionUtils):
             nanValue=nanValue, positiveInf=positiveInf, negativeInf=negativeInf,
             dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
             maxCharsPerColumn=maxCharsPerColumn,
+            maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, samplingRatio=samplingRatio,
             enforceSchema=enforceSchema, emptyValue=emptyValue, locale=locale, lineSep=lineSep,
-            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
             modifiedBefore=modifiedBefore, modifiedAfter=modifiedAfter)
         if isinstance(path, str):
             path = [path]
@@ -719,8 +721,8 @@ class DataFrameReader(OptionUtils):
             return self._df(self._jreader.csv(jdataset))
         else:
             raise TypeError("path can be only string, list or RDD")
-        
-    def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None, 
+
+    def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None):
             modifiedBefore=None, modifiedAfter=None):
         """Loads ORC files, returning the result as a :class:`DataFrame`.
 
@@ -742,7 +744,7 @@ class DataFrameReader(OptionUtils):
             recursively scan a directory for files. Using this option
             disables
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        modifiedBefore : an optional timestamp to only include files with
+
             modification times occurring before the specified time. The provided timestamp
             must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
         modifiedAfter : an optional timestamp to only include files with
@@ -756,7 +758,7 @@ class DataFrameReader(OptionUtils):
         [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
         """
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
-                       recursiveFileLookup=recursiveFileLookup, modifiedAfter=modifiedAfter,
+                       recursiveFileLookup=recursiveFileLookup)
                        modifiedBefore=modifiedBefore)
         if isinstance(path, str):
             path = [path]
@@ -833,6 +835,135 @@ class DataFrameReader(OptionUtils):
 
 class DataFrameWriter(OptionUtils):
     """
+    Interface used to write a :class:`DataFrame` to external storage systems
+    (e.g. file systems, key-value stores, etc). Use :attr:`DataFrame.write`
+    to access this.
+
+    .. versionadded:: 1.4
+    """
+    def __init__(self, df):
+        self._df = df
+        self._spark = df.sql_ctx
+        self._jwrite = df._jdf.write()
+
+    def _sq(self, jsq):
+        from pyspark.sql.streaming import StreamingQuery
+        return StreamingQuery(jsq)
+
+    def mode(self, saveMode):
+        """Specifies the behavior when data or table already exists.
+
+        Options include:
+
+        * `append`: Append contents of this :class:`DataFrame` to existing data.
+        * `overwrite`: Overwrite existing data.
+        * `error` or `errorifexists`: Throw an exception if data already exists.
+        * `ignore`: Silently ignore this operation if data already exists.
+
+        .. versionadded:: 1.4.0
+
+        Examples
+        --------
+        >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
+        """
+        # At the JVM side, the default value of mode is already set to "error".
+        # So, if the given saveMode is None, we will not call JVM-side's mode method.
+        if saveMode is not None:
+            self._jwrite = self._jwrite.mode(saveMode)
+        return self
+
+    def format(self, source):
+        """Specifies the underlying output data source.
+
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        source : str
+            string, name of the data source, e.g. 'json', 'parquet'.
+
+        Examples
+        --------
+        >>> df.write.format('json').save(os.path.join(tempfile.mkdtemp(), 'data'))
+        """
+        self._jwrite = self._jwrite.format(source)
+        return self
+
+    @since(1.5)
+    def option(self, key, value):
+        """Adds an output option for the underlying data source.
+
+        You can set the following option(s) for writing files:
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to format
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
+        """
+        self._jwrite = self._jwrite.option(key, to_str(value))
+        return self
+
+    @since(1.4)
+    def options(self, **options):
+        """Adds output options for the underlying data source.
+
+        You can set the following option(s) for writing files:
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to format
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
+        """
+        for k in options:
+            self._jwrite = self._jwrite.option(k, to_str(options[k]))
+        return self
+
+    def partitionBy(self, *cols):
+        """Partitions the output by the given columns on the file system.
+
+        If specified, the output is laid out on the file system similar
+        to Hive's partitioning scheme.
+
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        cols : str or list
+            name of columns
+
+        Examples
+        --------
+        >>> df.write.partitionBy('year', 'month').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
+        """
+        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
+            cols = cols[0]
+        self._jwrite = self._jwrite.partitionBy(_to_seq(self._spark._sc, cols))
+        return self
+
+    def bucketBy(self, numBuckets, col, *cols):
+        """Buckets the output by the given columns.If specified,
+        the output is laid out on the file system similar to Hive's bucketing scheme.
+
+        .. versionadded:: 2.3.0
+
+        Parameters
+        ----------
+        numBuckets : int
+            the number of buckets to save
         col : str, list or tuple
             a name of a column, or a list of names.
         cols : str
@@ -857,6 +988,7 @@ class DataFrameWriter(OptionUtils):
             if cols:
                 raise ValueError("col is a {0} but cols are not empty".format(type(col)))
 
+            col, cols = col[0], col[1:]
 
         if not all(isinstance(c, str) for c in cols) or not(isinstance(col, str)):
             raise TypeError("all names should be `str`")
