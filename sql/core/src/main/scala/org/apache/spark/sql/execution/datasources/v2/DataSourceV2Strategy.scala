@@ -231,7 +231,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DropTable(r: ResolvedTable, ifExists, _) =>
       DropTableExec(r.catalog, r.identifier, ifExists) :: Nil
 
-    case NoopDropTable(multipartIdentifier) =>
+    case _: NoopDropTable =>
       LocalTableScanExec(Nil, Nil) :: Nil
 
     case AlterTable(catalog, ident, _, changes) =>
@@ -279,6 +279,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case r @ ShowTableProperties(rt: ResolvedTable, propertyKey) =>
       ShowTablePropertiesExec(r.output, rt.table, propertyKey) :: Nil
+
+    case AnalyzeTable(_: ResolvedTable, _, _) | AnalyzeColumn(_: ResolvedTable, _, _) =>
+      throw new AnalysisException("ANALYZE TABLE is not supported for v2 tables.")
 
     case _ => Nil
   }
