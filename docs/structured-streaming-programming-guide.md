@@ -1151,10 +1151,10 @@ staticDf <- read.df(...)
 streamingDf <- read.stream(...)
 joined <- merge(streamingDf, staticDf, sort = FALSE)  # inner equi-join with a static DF
 joined <- join(
+            streamingDf,
             staticDf,
-            streamingDf, 
             streamingDf$value == staticDf$value,
-            "right_outer")  # right outer join with a static DF
+            "left_outer")  # left outer join with a static DF
 {% endhighlight %}
 
 </div>
