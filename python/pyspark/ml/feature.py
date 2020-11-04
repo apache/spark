@@ -74,6 +74,8 @@ class Binarizer(JavaTransformer, HasThreshold, HasThresholds, HasInputCol, HasOu
     are set, an Exception will be thrown. The :py:attr:`threshold` parameter is used for
     single column usage, and :py:attr:`thresholds` is for multiple columns.
 
+    Examples
+    --------
     >>> df = spark.createDataFrame([(0.5,)], ["values"])
     >>> binarizer = Binarizer(threshold=1.0, inputCol="values", outputCol="features")
     >>> binarizer.setThreshold(1.0)
@@ -258,15 +260,27 @@ class _LSHModel(JavaModel, _LSHParams):
         transform the data; if the :py:attr:`outputCol` exists, it will use that. This allows
         caching of the transformed data when necessary.
 
-        .. note:: This method is experimental and will likely change behavior in the next release.
+        Notes
+        -----
+        This method is experimental and will likely change behavior in the next release.
 
-        :param dataset: The dataset to search for nearest neighbors of the key.
-        :param key: Feature vector representing the item to search for.
-        :param numNearestNeighbors: The maximum number of nearest neighbors.
-        :param distCol: Output column for storing the distance between each result row and the key.
-                        Use "distCol" as default value if it's not specified.
-        :return: A dataset containing at most k items closest to the key. A column "distCol" is
-                 added to show the distance between each row and the key.
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            The dataset to search for nearest neighbors of the key.
+        key :  :py:class:`pyspark.ml.linalg.Vector`
+            Feature vector representing the item to search for.
+        numNearestNeighbors : int
+            The maximum number of nearest neighbors.
+        distCol : str
+            Output column for storing the distance between each result row and the key.
+            Use "distCol" as default value if it's not specified.
+
+        Returns
+        -------
+        :py:class:`pyspark.sql.DataFrame`
+            A dataset containing at most k items closest to the key. A column "distCol" is
+            added to show the distance between each row and the key.
         """
         return self._call_java("approxNearestNeighbors", dataset, key, numNearestNeighbors,
                                distCol)
@@ -278,14 +292,24 @@ class _LSHModel(JavaModel, _LSHParams):
         if the :py:attr:`outputCol` exists, it will use that. This allows caching of the
         transformed data when necessary.
 
-        :param datasetA: One of the datasets to join.
-        :param datasetB: Another dataset to join.
-        :param threshold: The threshold for the distance of row pairs.
-        :param distCol: Output column for storing the distance between each pair of rows. Use
-                        "distCol" as default value if it's not specified.
-        :return: A joined dataset containing pairs of rows. The original rows are in columns
-                 "datasetA" and "datasetB", and a column "distCol" is added to show the distance
-                 between each pair.
+        Parameters
+        ----------
+        datasetA : :py:class:`pyspark.sql.DataFrame`
+            One of the datasets to join.
+        datasetA : :py:class:`pyspark.sql.DataFrame`
+            Another dataset to join.
+        threshold : float
+            The threshold for the distance of row pairs.
+        distCol : str, optional
+            Output column for storing the distance between each pair of rows. Use
+            "distCol" as default value if it's not specified.
+
+        Returns
+        -------
+        :py:class:`pyspark.sql.DataFrame`
+            A joined dataset containing pairs of rows. The original rows are in columns
+            "datasetA" and "datasetB", and a column "distCol" is added to show the distance
+            between each pair.
         """
         threshold = TypeConverters.toFloat(threshold)
         return self._call_java("approxSimilarityJoin", datasetA, datasetB, threshold, distCol)
@@ -320,10 +344,16 @@ class BucketedRandomProjectionLSH(_LSH, _BucketedRandomProjectionLSHParams,
     distance space. The output will be vectors of configurable dimension. Hash values in the same
     dimension are calculated by the same hash function.
 
-    .. seealso:: `Stable Distributions
-        <https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions>`_
-    .. seealso:: `Hashing for Similarity Search: A Survey <https://arxiv.org/abs/1408.2927>`_
+    Notes
+    -----
 
+    - `Stable Distributions in Wikipedia article on Locality-sensitive_hashing \
+      <https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions>`_
+    - `Hashing for Similarity Search: A Survey <https://arxiv.org/abs/1408.2927>`_
+
+
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.sql.functions import col
     >>> data = [(0, Vectors.dense([-1.0, -1.0 ]),),
@@ -453,6 +483,8 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOu
     are set, an Exception will be thrown. The :py:attr:`splits` parameter is only used for single
     column usage, and :py:attr:`splitsArray` is for multiple columns.
 
+    Examples
+    --------
     >>> values = [(0.1, 0.0), (0.4, 1.0), (1.2, 1.3), (1.5, float("nan")),
     ...     (float("nan"), 1.0), (float("nan"), 0.0)]
     >>> df = spark.createDataFrame(values, ["values1", "values2"])
@@ -707,6 +739,8 @@ class CountVectorizer(JavaEstimator, _CountVectorizerParams, JavaMLReadable, Jav
     """
     Extracts a vocabulary from document collections and generates a :py:attr:`CountVectorizerModel`.
 
+    Examples
+    --------
     >>> df = spark.createDataFrame(
     ...    [(0, ["a", "b", "c"]), (1, ["a", "b", "b", "c", "a"])],
     ...    ["label", "raw"])
@@ -910,9 +944,13 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWrit
     The return vector is scaled such that the transform matrix is
     unitary (aka scaled DCT-II).
 
-    .. seealso:: `More information on Wikipedia
-        <https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia>`_.
+    Notes
+    -----
+    `More information on Wikipedia \
+      <https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia>`_.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df1 = spark.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
     >>> dct = DCT( )
@@ -998,6 +1036,8 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
     with a provided "weight" vector. In other words, it scales each column of the dataset
     by a scalar multiplier.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([2.0, 1.0, 3.0]),)], ["values"])
     >>> ep = ElementwiseProduct()
@@ -1108,6 +1148,8 @@ class FeatureHasher(JavaTransformer, HasInputCols, HasOutputCol, HasNumFeatures,
     it is advisable to use a power of two as the `numFeatures` parameter;
     otherwise the features will not be mapped evenly to the vector indices.
 
+    Examples
+    --------
     >>> data = [(2.0, True, "1", "foo"), (3.0, False, "2", "bar")]
     >>> cols = ["real", "bool", "stringNum", "string"]
     >>> df = spark.createDataFrame(data, cols)
@@ -1204,6 +1246,8 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
     it is advisable to use a power of two as the numFeatures parameter;
     otherwise the features will not be mapped evenly to the columns.
 
+    Examples
+    --------
     >>> df = spark.createDataFrame([(["a", "b", "c"],)], ["words"])
     >>> hashingTF = HashingTF(inputCol="words", outputCol="features")
     >>> hashingTF.setNumFeatures(10)
@@ -1323,6 +1367,8 @@ class IDF(JavaEstimator, _IDFParams, JavaMLReadable, JavaMLWritable):
     """
     Compute the Inverse Document Frequency (IDF) given a collection of documents.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import DenseVector
     >>> df = spark.createDataFrame([(DenseVector([1.0, 2.0]),),
     ...     (DenseVector([0.0, 1.0]),), (DenseVector([3.0, 0.2]),)], ["tf"])
@@ -1501,6 +1547,8 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
     computing median, :py:meth:`pyspark.sql.DataFrame.approxQuantile` is used with a
     relative error of `0.001`.
 
+    Examples
+    --------
     >>> df = spark.createDataFrame([(1.0, float("nan")), (2.0, float("nan")), (float("nan"), 3.0),
     ...                             (4.0, 4.0), (5.0, 5.0)], ["a", "b"])
     >>> imputer = Imputer()
@@ -1735,6 +1783,8 @@ class Interaction(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadable, J
     `Vector(6, 8)` if all input features were numeric. If the first feature was instead nominal
     with four categories, the output would then be `Vector(0, 0, 0, 0, 3, 4, 0, 0)`.
 
+    Examples
+    --------
     >>> df = spark.createDataFrame([(0.0, 1.0), (2.0, 3.0)], ["a", "b"])
     >>> interaction = Interaction()
     >>> interaction.setInputCols(["a", "b"])
@@ -1810,6 +1860,8 @@ class MaxAbsScaler(JavaEstimator, _MaxAbsScalerParams, JavaMLReadable, JavaMLWri
     absolute value in each feature. It does not shift/center the data, and thus does not destroy
     any sparsity.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([1.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> maScaler = MaxAbsScaler(outputCol="scaled")
@@ -1921,8 +1973,12 @@ class MinHashLSH(_LSH, HasInputCol, HasOutputCol, HasSeed, JavaMLReadable, JavaM
     in the space. This set contains elements 2, 3, and 5. Also, any input vector must have at
     least 1 non-zero index, and all non-zero values are treated as binary "1" values.
 
-    .. seealso:: `Wikipedia on MinHash <https://en.wikipedia.org/wiki/MinHash>`_
+    Notes
+    -----
+    See `Wikipedia on MinHash <https://en.wikipedia.org/wiki/MinHash>`_
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.sql.functions import col
     >>> data = [(0, Vectors.sparse(6, [0, 1, 2], [1.0, 1.0, 1.0]),),
@@ -2011,8 +2067,10 @@ class MinHashLSHModel(_LSHModel, JavaMLReadable, JavaMLWritable):
     :math:`h_i(x) = ((x \cdot a_i + b_i) \mod prime)` This hash family is approximately min-wise
     independent according to the reference.
 
-    .. seealso:: Tom Bohman, Colin Cooper, and Alan Frieze. "Min-wise independent linear
-        permutations." Electronic Journal of Combinatorics 7 (2000): R26.
+    Notes
+    -----
+    See Tom Bohman, Colin Cooper, and Alan Frieze. "Min-wise independent linear permutations."
+    Electronic Journal of Combinatorics 7 (2000): R26.
 
     .. versionadded:: 2.2.0
     """
@@ -2060,9 +2118,13 @@ class MinMaxScaler(JavaEstimator, _MinMaxScalerParams, JavaMLReadable, JavaMLWri
 
     For the case E_max == E_min, Rescaled(e_i) = 0.5 * (max + min)
 
-    .. note:: Since zero values will probably be transformed to non-zero values, output of the
-        transformer will be DenseVector even for sparse input.
+    Notes
+    -----
+    Since zero values will probably be transformed to non-zero values, output of the
+    transformer will be DenseVector even for sparse input.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> mmScaler = MinMaxScaler(outputCol="scaled")
@@ -2216,6 +2278,8 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWr
     When the input array length is less than n (number of elements per n-gram), no n-grams are
     returned.
 
+    Examples
+    --------
     >>> df = spark.createDataFrame([Row(inputTokens=["a", "b", "c", "d", "e"])])
     >>> ngram = NGram(n=2)
     >>> ngram.setInputCol("inputTokens")
@@ -2304,6 +2368,8 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     """
      Normalize a vector to have unit norm using the given p-norm.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> svec = Vectors.sparse(4, {1: 4.0, 3: 3.0})
     >>> df = spark.createDataFrame([(Vectors.dense([3.0, -4.0]), svec)], ["dense", "sparse"])
@@ -2422,19 +2488,25 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
     because it makes the vector entries sum up to one, and hence linearly dependent.
     So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
 
-    .. note:: This is different from scikit-learn's OneHotEncoder, which keeps all categories.
-        The output vectors are sparse.
-
     When :py:attr:`handleInvalid` is configured to 'keep', an extra "category" indicating invalid
     values is added as last category. So when :py:attr:`dropLast` is true, invalid values are
     encoded as all-zeros vector.
 
-    .. note:: When encoding multi-column by using :py:attr:`inputCols` and
-        :py:attr:`outputCols` params, input/output cols come in pairs, specified by the order in
-        the arrays, and each pair is treated independently.
+    Notes
+    -----
+    This is different from scikit-learn's OneHotEncoder, which keeps all categories.
+    The output vectors are sparse.
 
-    .. seealso:: :py:class:`StringIndexer` for converting categorical values into category indices
+    When encoding multi-column by using :py:attr:`inputCols` and
+    :py:attr:`outputCols` params, input/output cols come in pairs, specified by the order in
+    the arrays, and each pair is treated independently.
 
+    See Also
+    --------
+    StringIndexer : for converting categorical values into category indices
+
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(0.0,), (1.0,), (2.0,)], ["input"])
     >>> ohe = OneHotEncoder()
@@ -2609,6 +2681,8 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
     multiplication distributes over addition". Take a 2-variable feature vector as an example:
     `(x, y)`, if we want to expand it with degree 2, then we get `(x, x * x, y, x * y, y * y)`.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([0.5, 2.0]),)], ["dense"])
     >>> px = PolynomialExpansion(degree=2)
@@ -2697,6 +2771,9 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
     column, the :py:attr:`numBucketsArray` parameter can be set, or if the number of buckets
     should be the same across columns, :py:attr:`numBuckets` can be set as a convenience.
 
+
+    Notes
+    -----
     NaN handling: Note also that
     :py:class:`QuantileDiscretizer` will raise an error when it finds NaN values in the dataset,
     but the user can also choose to either keep or remove NaN values within the dataset by setting
@@ -2710,6 +2787,8 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
     :py:attr:`relativeError` parameter.
     The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
 
+    Examples
+    --------
     >>> values = [(0.1,), (0.4,), (1.2,), (1.5,), (float("nan"),), (float("nan"),)]
     >>> df1 = spark.createDataFrame(values, ["values"])
     >>> qds1 = QuantileDiscretizer(inputCol="values", outputCol="buckets")
@@ -2968,6 +3047,8 @@ class RobustScaler(JavaEstimator, _RobustScalerParams, JavaMLReadable, JavaMLWri
     stored to be used on later data using the transform method.
     Note that NaN values are ignored in the computation of medians and ranges.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> data = [(0, Vectors.dense([0.0, 0.0]),),
     ...         (1, Vectors.dense([1.0, -1.0]),),
@@ -3134,6 +3215,8 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
     length.
     It returns an array of strings that can be empty.
 
+    Examples
+    --------
     >>> df = spark.createDataFrame([("A B  c",)], ["text"])
     >>> reTokenizer = RegexTokenizer()
     >>> reTokenizer.setInputCol("text")
@@ -3278,6 +3361,8 @@ class SQLTransformer(JavaTransformer, JavaMLReadable, JavaMLWritable):
     Currently we only support SQL syntax like 'SELECT ... FROM __THIS__'
     where '__THIS__' represents the underlying table of the input dataset.
 
+    Examples
+    --------
     >>> df = spark.createDataFrame([(0, 1.0, 3.0), (2, 2.0, 5.0)], ["id", "v1", "v2"])
     >>> sqlTrans = SQLTransformer(
     ...     statement="SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__")
@@ -3373,6 +3458,8 @@ class StandardScaler(JavaEstimator, _StandardScalerParams, JavaMLReadable, JavaM
     <https://en.wikipedia.org/wiki/Standard_deviation#Corrected_sample_standard_deviation>`_,
     which is computed as the square root of the unbiased sample variance.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> standardScaler = StandardScaler()
@@ -3540,6 +3627,8 @@ class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLW
     so the most frequent label gets index 0. The ordering behavior is controlled by
     setting :py:attr:`stringOrderType`. Its default value is 'frequencyDesc'.
 
+    Examples
+    --------
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed",
     ...     stringOrderType="frequencyDesc")
     >>> stringIndexer.setHandleInvalid("error")
@@ -3771,13 +3860,16 @@ class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaML
 @inherit_doc
 class IndexToString(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
-    A :py:class:`Transformer` that maps a column of indices back to a new column of
+    A :py:class:`pyspark.ml.base.Transformer` that maps a column of indices back to a new column of
     corresponding string values.
     The index-string mapping is either from the ML attributes of the input column,
     or from user-supplied labels (which take precedence over ML attributes).
-    See :class:`StringIndexer` for converting strings into indices.
 
     .. versionadded:: 1.6.0
+
+    See Also
+    --------
+    StringIndexer : for converting categorical values into category indices
     """
 
     labels = Param(Params._dummy(), "labels",
@@ -3841,8 +3933,12 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols,
     the :py:attr:`inputCols` parameter. Note that when both the :py:attr:`inputCol` and
     :py:attr:`inputCols` parameters are set, an Exception will be thrown.
 
-    .. note:: null values from input array are preserved unless adding null to stopWords explicitly.
+    Notes
+    -----
+    null values from input array are preserved unless adding null to stopWords explicitly.
 
+    Examples
+    --------
     >>> df = spark.createDataFrame([(["a", "b", "c"],)], ["text"])
     >>> remover = StopWordsRemover(stopWords=["b"])
     >>> remover.setInputCol("text")
@@ -3995,6 +4091,8 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
     A tokenizer that converts the input string to lowercase and then
     splits it by white spaces.
 
+    Examples
+    --------
     >>> df = spark.createDataFrame([("a b c",)], ["text"])
     >>> tokenizer = Tokenizer(outputCol="words")
     >>> tokenizer.setInputCol("text")
@@ -4062,6 +4160,8 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, HasHandleInva
     """
     A feature transformer that merges multiple columns into a vector column.
 
+    Examples
+    --------
     >>> df = spark.createDataFrame([(1, 0, 3)], ["a", "b", "c"])
     >>> vecAssembler = VectorAssembler(outputCol="features")
     >>> vecAssembler.setInputCols(["a", "b", "c"])
@@ -4220,6 +4320,8 @@ class VectorIndexer(JavaEstimator, _VectorIndexerParams, JavaMLReadable, JavaMLW
       - Specify certain features to not index, either via a parameter or via existing metadata.
       - Add warning if a categorical feature has only 1 category.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([-1.0, 0.0]),),
     ...     (Vectors.dense([0.0, 1.0]),), (Vectors.dense([0.0, 2.0]),)], ["a"])
@@ -4382,6 +4484,8 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, J
     The output vector will order features with the selected indices first (in the order given),
     followed by the selected names (in the order given).
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([
     ...     (Vectors.dense([-2.0, 2.3, 0.0, 0.0, 1.0]),),
@@ -4547,6 +4651,8 @@ class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
     Word2Vec trains a model of `Map(String, Vector)`, i.e. transforms a word into a code for further
     natural language processing or machine learning process.
 
+    Examples
+    --------
     >>> sent = ("a b " * 100 + "a c " * 10).split(" ")
     >>> doc = spark.createDataFrame([(sent,), (sent,)], ["sentence"])
     >>> word2Vec = Word2Vec(vectorSize=5, seed=42, inputCol="sentence", outputCol="model")
@@ -4779,6 +4885,8 @@ class PCA(JavaEstimator, _PCAParams, JavaMLReadable, JavaMLWritable):
     PCA trains a model to project vectors to a lower dimensional space of the
     top :py:attr:`k` principal components.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> data = [(Vectors.sparse(5, [(1, 1.0), (3, 7.0)]),),
     ...     (Vectors.dense([2.0, 0.0, 3.0, 4.0, 5.0]),),
@@ -4962,6 +5070,8 @@ class RFormula(JavaEstimator, _RFormulaParams, JavaMLReadable, JavaMLWritable):
     Also see the `R formula docs
     <http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html>`_.
 
+    Examples
+    --------
     >>> df = spark.createDataFrame([
     ...     (1.0, 1.0, "a"),
     ...     (0.0, 2.0, "b"),
@@ -5315,7 +5425,8 @@ class ANOVASelector(_Selector, JavaMLReadable, JavaMLWritable):
     By default, the selection method is `numTopFeatures`, with the default number of top features
     set to 50.
 
-
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame(
     ...    [(Vectors.dense([1.7, 4.4, 7.6, 5.8, 9.6, 2.3]), 3.0),
@@ -5418,6 +5529,8 @@ class ChiSqSelector(_Selector, JavaMLReadable, JavaMLWritable):
     set to 50.
 
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame(
     ...    [(Vectors.dense([0.0, 0.0, 18.0, 1.0]), 1.0),
@@ -5517,7 +5630,8 @@ class FValueSelector(_Selector, JavaMLReadable, JavaMLWritable):
     By default, the selection method is `numTopFeatures`, with the default number of top features
     set to 50.
 
-
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame(
     ...    [(Vectors.dense([6.0, 7.0, 0.0, 7.0, 6.0, 0.0]), 4.6),
@@ -5601,9 +5715,12 @@ class VectorSizeHint(JavaTransformer, HasInputCol, HasHandleInvalid, JavaMLReada
     VectorAssembler needs size information for its input columns and cannot be used on streaming
     dataframes without this metadata.
 
-    .. note:: VectorSizeHint modifies `inputCol` to include size metadata and does not have an
-        outputCol.
+    Notes
+    -----
+    VectorSizeHint modifies `inputCol` to include size metadata and does not have an outputCol.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml import Pipeline, PipelineModel
     >>> data = [(Vectors.dense([1., 2., 3.]), 4.)]
@@ -5711,6 +5828,8 @@ class VarianceThresholdSelector(JavaEstimator, _VarianceThresholdSelectorParams,
     all features with non-zero variance, i.e. remove the features that have the
     same value in all samples.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame(
     ...    [(Vectors.dense([6.0, 7.0, 0.0, 7.0, 6.0, 0.0]),),
