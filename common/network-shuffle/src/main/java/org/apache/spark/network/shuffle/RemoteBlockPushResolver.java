@@ -71,7 +71,6 @@ import org.apache.spark.network.util.TransportConf;
 public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   private static final Logger logger = LoggerFactory.getLogger(RemoteBlockPushResolver.class);
-  private static final String SHUFFLE_PUSH_BLOCK_PREFIX = "shufflePush";
   @VisibleForTesting
   static final String MERGE_MANAGER_DIR = "merge_manager";
 
@@ -322,8 +321,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     final AppShufflePartitionInfo partitionInfo = partitionInfoBeforeCheck != null
       && partitionInfoBeforeCheck.mapTracker.contains(msg.mapIndex) ? null
         : partitionInfoBeforeCheck;
-    final String streamId = String.format("%s_%d_%d_%d", SHUFFLE_PUSH_BLOCK_PREFIX,
-      appShuffleId.shuffleId, msg.mapIndex, msg.reduceId);
+    final String streamId = String.format("%s_%d_%d_%d",
+      OneForOneBlockPusher.SHUFFLE_PUSH_BLOCK_PREFIX, appShuffleId.shuffleId, msg.mapIndex,
+      msg.reduceId);
     if (partitionInfo != null) {
       return new PushBlockStreamCallback(this, streamId, partitionInfo, msg.mapIndex);
     } else {

@@ -39,7 +39,7 @@ import org.apache.spark.network.shuffle.protocol.PushBlockStream;
 public class OneForOneBlockPusher {
   private static final Logger logger = LoggerFactory.getLogger(OneForOneBlockPusher.class);
   private static final ErrorHandler PUSH_ERROR_HANDLER = new ErrorHandler.BlockPushErrorHandler();
-  private static final String SHUFFLE_PUSH_BLOCK_PREFIX = "shufflePush";
+  public static final String SHUFFLE_PUSH_BLOCK_PREFIX = "shufflePush";
 
   private final TransportClient client;
   private final String appId;
