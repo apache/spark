@@ -62,6 +62,7 @@ public class Encoders {
       // RoaringBitmap requires nio ByteBuffer for serde. We expose the netty ByteBuf as a nio
       // ByteBuffer. Here, we need to explicitly manage the index so we can write into the
       // ByteBuffer, and the write is reflected in the underneath ByteBuf.
+      buf.ensureWritable(encodedLength);
       b.serialize(buf.nioBuffer(buf.writerIndex(), encodedLength));
       buf.writerIndex(buf.writerIndex() + encodedLength);
     }

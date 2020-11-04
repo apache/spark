@@ -417,7 +417,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         + "num sub-dirs {}", appId, Arrays.toString(executorInfo.localDirs),
           executorInfo.subDirsPerLocalDir);
     }
-    appsPathInfo.putIfAbsent(appId, new AppPathsInfo(appId, executorInfo.localDirs,
+    appsPathInfo.computeIfAbsent(appId, id -> new AppPathsInfo(appId, executorInfo.localDirs,
       executorInfo.subDirsPerLocalDir));
   }
 
