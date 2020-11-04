@@ -152,14 +152,14 @@ class ContextAwareIterator[IN](iter: Iterator[IN], context: TaskContext) extends
   val thread = new AtomicReference[Thread]()
 
   context.addTaskCompletionListener[Unit] { _ =>
-    var thread: Thread = null
-    while (thread == null) {
+    var thread = this.thread.get()
+    var attempt = 3
+    while (thread == null && attempt > 0) {
+      context.wait(10)
       thread = this.thread.get()
-      if (thread == null) {
-        context.wait(10)
-      }
+      attempt -= 1
     }
-    if (thread != Thread.currentThread()) {
+    if (thread != null && thread != Thread.currentThread()) {
       while (thread.isAlive) {
         context.wait(10)
       }
