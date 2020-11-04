@@ -1085,9 +1085,9 @@ private[spark] class Client(
         // If DEBUG is enabled, log report details every iteration
         // Otherwise, log them every time the application changes state
         if (log.isDebugEnabled) {
-          logDebug(formatReportDetails(report))
+          logDebug(formatReportDetails(report, getDriverLogsLink(report.getApplicationId)))
         } else if (lastState != state) {
-          logInfo(formatReportDetails(report))
+          logInfo(formatReportDetails(report, getDriverLogsLink(report.getApplicationId)))
         }
       }
 
@@ -1157,7 +1157,16 @@ private[spark] class Client(
     appMaster
   }
 
-  private def formatReportDetails(report: ApplicationReport): String = {
+  /**
+   * Format an application report and optionally, links to driver logs, in a human-friendly manner.
+   *
+   * @param report The application report from YARN.
+   * @param driverLogsLinks A tuple of links to driver logs in the format of
+   *                        `(stdOutLink, stdErrLink)`.
+   * @return Human-readable version of the input data.
+   */
+  private def formatReportDetails(report: ApplicationReport,
+    driverLogsLinks: Option[(String, String)]): String = {
     val details = Seq[(String, String)](
       ("client token", getClientToken(report)),
       ("diagnostics", report.getDiagnostics),
@@ -1168,11 +1177,10 @@ private[spark] class Client(
       ("final status", report.getFinalApplicationStatus.toString),
       ("tracking URL", report.getTrackingUrl),
       ("user", report.getUser)
-    ) ++ getDriverLogsLink(report.getApplicationId.toString)
-      .map { case (stdOut, stdErr) => Seq(
-        ("Driver Logs (stdout)", stdOut),
-        ("Driver Logs (stderr)", stdErr)
-      )}.getOrElse(Seq())
+    ) ++ driverLogsLinks.map { case (stdOut, stdErr) => Seq(
+      ("Driver Logs (stdout)", stdOut),
+      ("Driver Logs (stderr)", stdErr)
+    )}.getOrElse(Seq())
 
     // Use more loggable format if value is null or empty
     details.map { case (k, v) =>
@@ -1181,26 +1189,21 @@ private[spark] class Client(
     }.mkString("")
   }
 
-  private def getDriverLogsLink(appId: String): Option[(String, String)] = {
+  /**
+   * Fetch links to the logs of the driver for the given application ID. This requires hitting the
+   * RM REST API. Returns `None` if the links could not be fetched.
+   */
+  private def getDriverLogsLink(appId: ApplicationId): Option[(String, String)] = {
     val baseRmUrl = WebAppUtils.getRMWebAppURLWithScheme(hadoopConf)
     val response = ClientBuilder.newClient()
       .target(baseRmUrl)
-      .path("ws").path("v1").path("cluster").path("apps").path(appId).path("appattempts")
+      .path("ws").path("v1").path("cluster").path("apps").path(appId.toString).path("appattempts")
       .request(MediaType.APPLICATION_JSON)
       .get()
     response.getStatusInfo.getFamily match {
-      case Family.SUCCESSFUL =>
-        val objectMapper = new ObjectMapper()
-        // If JSON response is malformed somewhere along the way, MissingNode will be returned,
-        // which allows for safe continuation of chaining. The `elements()` call will be empty,
-        // and None will get returned.
-        objectMapper.readTree(response.readEntity(classOf[String]))
-            .path("appAttempts").path("appAttempt")
-            .elements().asScala.toList.takeRight(1).headOption
-            .map(_.path("logsLink").asText())
-            .map(baseUrl => (s"$baseUrl/stdout?start=-4096", s"$baseUrl/stderr?start=-4096"))
+      case Family.SUCCESSFUL => parseAppAttemptsJsonResponse(response.readEntity(classOf[String]))
       case _ =>
-        logInfo(s"Unable to fetch app attempts info from $baseRmUrl, got "
+        logWarning(s"Unable to fetch app attempts info from $baseRmUrl, got "
           + s"status code ${response.getStatus}: ${response.getStatusInfo.getReasonPhrase}")
         None
     }
@@ -1220,7 +1223,7 @@ private[spark] class Client(
       val report = getApplicationReport(appId)
       val state = report.getYarnApplicationState
       logInfo(s"Application report for $appId (state: $state)")
-      logInfo(formatReportDetails(report))
+      logInfo(formatReportDetails(report, getDriverLogsLink(report.getApplicationId)))
       if (state == YarnApplicationState.FAILED || state == YarnApplicationState.KILLED) {
         throw new SparkException(s"Application $appId finished with status: $state")
       }
@@ -1610,6 +1613,19 @@ private object Client extends Logging {
     props.store(writer, "Spark configuration.")
     writer.flush()
     out.closeEntry()
+  }
+
+  private[yarn] def parseAppAttemptsJsonResponse(jsonString: String): Option[(String, String)] = {
+    val objectMapper = new ObjectMapper()
+    // If JSON response is malformed somewhere along the way, MissingNode will be returned,
+    // which allows for safe continuation of chaining. The `elements()` call will be empty,
+    // and None will get returned.
+    objectMapper.readTree(jsonString)
+        .path("appAttempts").path("appAttempt")
+        .elements().asScala.toList.takeRight(1).headOption
+        .flatMap(node => Option(node.get("logsLink")))
+        .map(_.asText())
+        .map(baseUrl => (s"$baseUrl/stdout?start=-4096", s"$baseUrl/stderr?start=-4096"))
   }
 }
 
