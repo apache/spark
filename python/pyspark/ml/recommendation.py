@@ -216,13 +216,18 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
     indicated user preferences rather than explicit ratings given to
     items.
 
-    .. note:: the input rating dataframe to the ALS implementation should be deterministic.
-              Nondeterministic data can cause failure during fitting ALS model.
-              For example, an order-sensitive operation like sampling after a repartition makes
-              dataframe output nondeterministic, like `df.repartition(2).sample(False, 0.5, 1618)`.
-              Checkpointing sampled dataframe or adding a sort before sampling can help make the
-              dataframe deterministic.
 
+    Notes
+    -----
+    The input rating dataframe to the ALS implementation should be deterministic.
+    Nondeterministic data can cause failure during fitting ALS model.
+    For example, an order-sensitive operation like sampling after a repartition makes
+    dataframe output nondeterministic, like `df.repartition(2).sample(False, 0.5, 1618)`.
+    Checkpointing sampled dataframe or adding a sort before sampling can help make the
+    dataframe deterministic.
+
+    Examples
+    --------
     >>> df = spark.createDataFrame(
     ...     [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
     ...     ["user", "item", "rating"])
@@ -535,9 +540,16 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
         """
         Returns top `numItems` items recommended for each user, for all users.
 
-        :param numItems: max number of recommendations for each user
-        :return: a DataFrame of (userCol, recommendations), where recommendations are
-                 stored as an array of (itemCol, rating) Rows.
+        Parameters
+        ----------
+        numItems : int
+            max number of recommendations for each user
+
+        Returns
+        -------
+        :py:class:`pyspark.sql.DataFrame`
+            a DataFrame of (userCol, recommendations), where recommendations are
+            stored as an array of (itemCol, rating) Rows.
         """
         return self._call_java("recommendForAllUsers", numItems)
 
@@ -546,9 +558,16 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
         """
         Returns top `numUsers` users recommended for each item, for all items.
 
-        :param numUsers: max number of recommendations for each item
-        :return: a DataFrame of (itemCol, recommendations), where recommendations are
-                 stored as an array of (userCol, rating) Rows.
+        Parameters
+        ----------
+        numUsers : int
+            max number of recommendations for each item
+
+        Returns
+        -------
+        :py:class:`pyspark.sql.DataFrame`
+            a DataFrame of (itemCol, recommendations), where recommendations are
+            stored as an array of (userCol, rating) Rows.
         """
         return self._call_java("recommendForAllItems", numUsers)
 
@@ -559,11 +578,18 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
         if there are duplicate ids in the input dataset, only one set of recommendations per unique
         id will be returned.
 
-        :param dataset: a Dataset containing a column of user ids. The column name must match
-                        `userCol`.
-        :param numItems: max number of recommendations for each user
-        :return: a DataFrame of (userCol, recommendations), where recommendations are
-                 stored as an array of (itemCol, rating) Rows.
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            a DataFrame containing a column of user ids. The column name must match `userCol`.
+        numItems : int
+            max number of recommendations for each user
+
+        Returns
+        -------
+        :py:class:`pyspark.sql.DataFrame`
+            a DataFrame of (userCol, recommendations), where recommendations are
+            stored as an array of (itemCol, rating) Rows.
         """
         return self._call_java("recommendForUserSubset", dataset, numItems)
 
@@ -574,11 +600,18 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
         if there are duplicate ids in the input dataset, only one set of recommendations per unique
         id will be returned.
 
-        :param dataset: a Dataset containing a column of item ids. The column name must match
-                        `itemCol`.
-        :param numUsers: max number of recommendations for each item
-        :return: a DataFrame of (itemCol, recommendations), where recommendations are
-                 stored as an array of (userCol, rating) Rows.
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            a DataFrame containing a column of item ids. The column name must match `itemCol`.
+        numUsers : int
+            max number of recommendations for each item
+
+        Returns
+        -------
+        :py:class:`pyspark.sql.DataFrame`
+            a DataFrame of (itemCol, recommendations), where recommendations are
+            stored as an array of (userCol, rating) Rows.
         """
         return self._call_java("recommendForItemSubset", dataset, numUsers)
 
