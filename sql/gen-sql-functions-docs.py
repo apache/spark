@@ -15,6 +15,11 @@
 # limitations under the License.
 #
 
+#
+# This is only a test of the propesed new GH action based PR labeler for [SPARK-33282].
+# Do not merge.
+#
+
 import itertools
 import os
 import re
