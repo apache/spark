@@ -1191,10 +1191,10 @@ private[spark] class Client(
   /**
    * Fetch links to the logs of the driver for the given application ID. This requires hitting the
    * RM REST API. Returns an empty map if the links could not be fetched. If this feature is
-   * disabled via [[CLIENT_REPORT_INCLUDE_DRIVER_LOGS_LINK]], an empty map is returned immediately.
+   * disabled via [[CLIENT_INCLUDE_DRIVER_LOGS_LINK]], an empty map is returned immediately.
    */
   private def getDriverLogsLink(appId: ApplicationId): IMap[String, String] = {
-    if (!sparkConf.get(CLIENT_REPORT_INCLUDE_DRIVER_LOGS_LINK)) {
+    if (!sparkConf.get(CLIENT_INCLUDE_DRIVER_LOGS_LINK)) {
       return IMap()
     }
     val baseRmUrl = WebAppUtils.getRMWebAppURLWithScheme(hadoopConf)

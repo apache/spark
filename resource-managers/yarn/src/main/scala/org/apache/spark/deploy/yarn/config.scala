@@ -189,10 +189,10 @@ package object config extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("1s")
 
-  private[spark] val CLIENT_REPORT_INCLUDE_DRIVER_LOGS_LINK =
-    ConfigBuilder("spark.yarn.report.includeDriverLogsLink")
-      .doc("In cluster mode, whether print include links to the driver container's logs alongside "
-          + "application reports. This requires polling the ResourceManager's REST API, so it "
+  private[spark] val CLIENT_INCLUDE_DRIVER_LOGS_LINK =
+    ConfigBuilder("spark.yarn.includeDriverLogsLink")
+      .doc("In cluster mode, whether the client application report includes links to the driver "
+          + "container's logs. This requires polling the ResourceManager's REST API, so it "
           + "places some additional load on the RM.")
       .version("3.1.0")
       .booleanConf
