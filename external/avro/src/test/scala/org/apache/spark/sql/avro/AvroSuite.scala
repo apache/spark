@@ -2064,7 +2064,7 @@ class AvroRowReaderSuite
           StructType(new StructField("value", IntegerType, true) :: Nil),
           CORRECTED,
           new NoopFilters)
-        override val stopPosition = 0 + fileSize
+        override val stopPosition = fileSize
 
         override def hasNext: Boolean = hasNextRow
 
