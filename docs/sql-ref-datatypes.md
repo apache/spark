@@ -317,8 +317,7 @@ SELECT COUNT(*), c2 FROM test GROUP BY c2;
 
 ### Type Conversion
 
-In general, an expression can contain different data types and type conversion is the transformation of some data types into others in order to resolve type mismatches. 
-Spark supports both implicit conversions by type coercion and explicit conversions by explicit casting and store assignment casting.
+Type conversion turns the values of one data type to another data type. Spark needs to perform type conversions if users explicitly ask to do so via the CAST operator, or to resolve data type mismatch in operators, functions, and table writing implicitly.
 
 #### Type Coercion in Operations between Different Types 
 
@@ -477,8 +476,9 @@ X: Conversion allowed (cast ByteType in ShortType)
 *: An overflow can occur (cast ShortType in ByteType)   
 $: Lost precision can occur
 
-If an overflow occurs and ANSI compliance is activated (`spark.sql.ansi.enabled` is set to true for casting or `spark.sql.storeAssignmentPolicy=ANSI` for store assignment casting) an exception will be thrown. 
-Otherwise, a truncate value will be used. See more on [Ansi Compliance](sql-ref-ansi-compliance.html#type-conversion).
+If an overflow occurs and ANSI compliance is activated an exception will be thrown. Otherwise, a truncate value will be used. See more on [Ansi Compliance](sql-ref-ansi-compliance.html#type-conversion).
+By default ANSI mode is inactive for explicit casting (`spark.sql.ansi.enabled` is set to false) and is active for store assignment casting (`spark.sql.storeAssignmentPolicy=ANSI`)
+
 
 #### Type Casting Examples
 
