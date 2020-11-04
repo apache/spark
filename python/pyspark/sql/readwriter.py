@@ -771,8 +771,8 @@ class DataFrameReader(OptionUtils):
         >>> df.dtypes
         [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
         """
-        self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter, modifiedBefore=modifiedBefore,
-                       modifiedAfter=modifiedAfter,
+        self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter, 
+                       modifiedBefore=modifiedBefore, modifiedAfter=modifiedAfter,
                        recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, str):
             path = [path]
