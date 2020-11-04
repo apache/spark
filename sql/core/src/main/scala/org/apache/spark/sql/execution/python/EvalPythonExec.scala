@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.File
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -148,8 +149,21 @@ trait EvalPythonExec extends UnaryExecNode {
  */
 class ContextAwareIterator[IN](iter: Iterator[IN], context: TaskContext) extends Iterator[IN] {
 
-  override def hasNext: Boolean =
+  val thread = new AtomicReference[Thread]()
+
+  context.addTaskCompletionListener[Unit] { _ =>
+    val thread = this.thread.get()
+    if (thread != null && thread != Thread.currentThread()) {
+      while (thread.isAlive) {
+        context.wait(10)
+      }
+    }
+  }
+
+  override def hasNext: Boolean = {
+    thread.set(Thread.currentThread())
     !context.isCompleted() && !context.isInterrupted() && iter.hasNext
+  }
 
   override def next(): IN = iter.next()
 }
