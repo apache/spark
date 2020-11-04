@@ -221,8 +221,9 @@ case class RelationConversions(
 
       // CTAS
       case CreateTable(tableDesc, mode, Some(query))
-          if DDLUtils.isHiveTable(tableDesc) && tableDesc.partitionColumnNames.isEmpty &&
-            isConvertible(tableDesc) && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_CTAS) =>
+          if query.resolved && DDLUtils.isHiveTable(tableDesc) &&
+            tableDesc.partitionColumnNames.isEmpty && isConvertible(tableDesc) &&
+            SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_CTAS) =>
         // validation is required to be done here before relation conversion.
         DDLUtils.checkDataColNames(tableDesc.copy(schema = query.schema))
         // This is for CREATE TABLE .. STORED AS PARQUET/ORC AS SELECT null
