@@ -45,9 +45,15 @@ class Evaluator(Params, metaclass=ABCMeta):
         """
         Evaluates the output.
 
-        :param dataset: a dataset that contains labels/observations and
-               predictions
-        :return: metric
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            a dataset that contains labels/observations and predictions
+
+        Returns
+        -------
+        float
+            metric
         """
         raise NotImplementedError()
 
@@ -56,11 +62,17 @@ class Evaluator(Params, metaclass=ABCMeta):
         """
         Evaluates the output with optional parameters.
 
-        :param dataset: a dataset that contains labels/observations and
-                        predictions
-        :param params: an optional param map that overrides embedded
-                       params
-        :return: metric
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            a dataset that contains labels/observations and predictions
+        params : dict, optional
+            an optional param map that overrides embedded params
+
+        Returns
+        -------
+        float
+            metric
         """
         if params is None:
             params = dict()
@@ -92,8 +104,16 @@ class JavaEvaluator(JavaParams, Evaluator, metaclass=ABCMeta):
     def _evaluate(self, dataset):
         """
         Evaluates the output.
-        :param dataset: a dataset that contains labels/observations and predictions.
-        :return: evaluation metric
+
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            a dataset that contains labels/observations and predictions
+
+        Returns
+        -------
+        float
+            evaluation metric
         """
         self._transfer_params_to_java()
         return self._java_obj.evaluate(dataset._jdf)
@@ -112,6 +132,8 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     The rawPrediction column can be of type double (binary 0/1 prediction, or probability of label
     1) or of type vector (length-2 vector of raw predictions, scores, or label probabilities).
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> scoreAndLabels = map(lambda x: (Vectors.dense([1.0 - x[0], x[0]]), x[1]),
     ...    [(0.1, 0.0), (0.1, 1.0), (0.4, 0.0), (0.6, 0.0), (0.6, 1.0), (0.6, 1.0), (0.8, 1.0)])
@@ -235,6 +257,8 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeigh
     Evaluator for Regression, which expects input columns prediction, label
     and an optional weight column.
 
+    Examples
+    --------
     >>> scoreAndLabels = [(-28.98343821, -27.0), (20.21491975, 21.5),
     ...   (-25.98418959, -22.0), (30.69731842, 33.0), (74.69283752, 71.0)]
     >>> dataset = spark.createDataFrame(scoreAndLabels, ["raw", "label"])
@@ -359,6 +383,8 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     Evaluator for Multiclass Classification, which expects input
     columns: prediction, label, weight (optional) and probabilityCol (only for logLoss).
 
+    Examples
+    --------
     >>> scoreAndLabels = [(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)]
     >>> dataset = spark.createDataFrame(scoreAndLabels, ["prediction", "label"])
@@ -544,11 +570,15 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
 class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
                                         JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Evaluator for Multilabel Classification, which expects two input
     columns: prediction and label.
 
+    Notes
+    -----
+    Experimental
+
+    Examples
+    --------
     >>> scoreAndLabels = [([0.0, 1.0], [0.0, 2.0]), ([0.0, 2.0], [0.0, 1.0]),
     ...     ([], [0.0]), ([2.0], [2.0]), ([2.0, 0.0], [2.0, 0.0]),
     ...     ([0.0, 1.0, 2.0], [0.0, 1.0]), ([1.0], [1.0, 2.0])]
@@ -663,6 +693,8 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol, HasWe
     1 means that the points in a cluster are close to the other points
     in the same cluster and far from the points of the other clusters.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> featureAndPredictions = map(lambda x: (Vectors.dense(x[0]), x[1]),
     ...     [([0.0, 0.5], 0.0), ([0.5, 0.0], 0.0), ([10.0, 11.0], 1.0),
@@ -779,11 +811,15 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol, HasWe
 class RankingEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
                        JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Evaluator for Ranking, which expects two input
     columns: prediction and label.
 
+    Notes
+    -----
+    Experimental
+
+    Examples
+    --------
     >>> scoreAndLabels = [([1.0, 6.0, 2.0, 7.0, 8.0, 3.0, 9.0, 10.0, 4.0, 5.0],
     ...     [1.0, 2.0, 3.0, 4.0, 5.0]),
     ...     ([4.0, 1.0, 5.0, 6.0, 2.0, 7.0, 3.0, 8.0, 9.0, 10.0], [1.0, 2.0, 3.0]),
