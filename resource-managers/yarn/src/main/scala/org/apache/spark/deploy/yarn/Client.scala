@@ -1191,9 +1191,13 @@ private[spark] class Client(
 
   /**
    * Fetch links to the logs of the driver for the given application ID. This requires hitting the
-   * RM REST API. Returns `None` if the links could not be fetched.
+   * RM REST API. Returns `None` if the links could not be fetched. If this feature is disabled
+   * via [[CLIENT_REPORT_INCLUDE_DRIVER_LOGS_LINK]], `None` is returned immediately.
    */
   private def getDriverLogsLink(appId: ApplicationId): Option[(String, String)] = {
+    if (!sparkConf.get(CLIENT_REPORT_INCLUDE_DRIVER_LOGS_LINK)) {
+      return None
+    }
     val baseRmUrl = WebAppUtils.getRMWebAppURLWithScheme(hadoopConf)
     val response = ClientBuilder.newClient()
       .target(baseRmUrl)
@@ -1623,8 +1627,8 @@ private object Client extends Logging {
     objectMapper.readTree(jsonString)
       .path("appAttempts").path("appAttempt")
       .elements().asScala.toList.takeRight(1).headOption
-      .flatMap(node => Option(node.get("logsLink")))
-      .map(_.asText())
+      .map(_.path("logsLink").asText(""))
+      .filterNot(_ == "")
       .map(baseUrl => (s"$baseUrl/stdout?start=-4096", s"$baseUrl/stderr?start=-4096"))
   }
 }

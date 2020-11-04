@@ -622,6 +622,11 @@ class ClientSuite extends SparkFunSuite with Matchers {
     // logsLink is missing
     assert(
       Client.parseAppAttemptsJsonResponse("""{"appAttempts":{"appAttempt":[{"id":1}]}}""") === None)
+
+    // logsLink is present but empty
+    assert(
+      Client.parseAppAttemptsJsonResponse("""{"appAttempts":{"appAttempt":[{"logsLink":""}]}}""")
+          === None)
   }
 
   private val matching = Seq(
