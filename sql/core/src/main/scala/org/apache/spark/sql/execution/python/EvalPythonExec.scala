@@ -153,13 +153,17 @@ class ContextAwareIterator[IN](iter: Iterator[IN], context: TaskContext) extends
 
   context.addTaskCompletionListener[Unit] { _ =>
     var thread = this.thread.get()
+
     var attempt = 3
     while (thread == null && attempt > 0) {
+      // Wait for a while since the writer thread might not reach to consuming the iterator yet.
       context.wait(10)
       thread = this.thread.get()
       attempt -= 1
     }
+
     if (thread != null && thread != Thread.currentThread()) {
+      // Wait until the writer thread ends.
       while (thread.isAlive) {
         context.wait(10)
       }
