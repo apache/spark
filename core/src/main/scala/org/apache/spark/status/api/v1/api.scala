@@ -35,10 +35,6 @@ import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, 
 case class ApplicationInfo private[spark](
     id: String,
     name: String,
-    coresGranted: Option[Int],
-    maxCores: Option[Int],
-    coresPerExecutor: Option[Int],
-    memoryPerExecutorMB: Option[Int],
     attempts: Seq[ApplicationAttemptInfo])
 
 @JsonIgnoreProperties(
