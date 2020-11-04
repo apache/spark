@@ -151,25 +151,27 @@ class ContextAwareIterator[IN](iter: Iterator[IN], context: TaskContext) extends
 
   val thread = new AtomicReference[Thread]()
 
-  var failed = new AtomicBoolean(false)
+  if (iter.hasNext) {
+    val failed = new AtomicBoolean(false)
 
-  context.addTaskFailureListener { (_, _) =>
-    failed.set(true)
-  }
-
-  context.addTaskCompletionListener[Unit] { _ =>
-    var thread = this.thread.get()
-
-    while (thread == null && !failed.get()) {
-      // Wait for a while since the writer thread might not reach to consuming the iterator yet.
-      context.wait(10)
-      thread = this.thread.get()
+    context.addTaskFailureListener { (_, _) =>
+      failed.set(true)
     }
 
-    if (thread != null && thread != Thread.currentThread()) {
-      // Wait until the writer thread ends.
-      while (thread.isAlive) {
+    context.addTaskCompletionListener[Unit] { _ =>
+      var thread = this.thread.get()
+
+      while (thread == null && !failed.get()) {
+        // Wait for a while since the writer thread might not reach to consuming the iterator yet.
         context.wait(10)
+        thread = this.thread.get()
+      }
+
+      if (thread != null && thread != Thread.currentThread()) {
+        // Wait until the writer thread ends.
+        while (thread.isAlive) {
+          context.wait(10)
+        }
       }
     }
   }
