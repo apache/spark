@@ -223,7 +223,7 @@ class CustomType1(
   }
 
   override def toString: String = {
-    "CustomType1[key=" + key + ",id=" + id + ",name=" + name + ",num=" + num;
+    "CustomType1[key=" + key + ",id=" + id + ",name=" + name + ",num=" + num
   }
 }
 

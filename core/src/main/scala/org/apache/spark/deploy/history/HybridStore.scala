@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 
-import com.google.common.collect.Lists;
+import com.google.common.collect.Lists
 
 import org.apache.spark.util.kvstore._
 

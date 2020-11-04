@@ -873,7 +873,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
         val fileWithSpecialChars = new File(tempDir, "file name")
         Files.write(UUID.randomUUID().toString(), fileWithSpecialChars, UTF_8)
         val empty = new File(tempDir, "empty")
-        Files.write("", empty, UTF_8);
+        Files.write("", empty, UTF_8)
         val jar = new File(tempDir, "jar")
         Files.write(UUID.randomUUID().toString(), jar, UTF_8)
 

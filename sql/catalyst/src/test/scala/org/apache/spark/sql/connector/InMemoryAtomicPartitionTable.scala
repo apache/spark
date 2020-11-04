@@ -69,7 +69,7 @@ class InMemoryAtomicPartitionTable (
 
   override def dropPartitions(idents: Array[InternalRow]): Boolean = {
     if (!idents.forall(partitionExists)) {
-      return false;
+      return false
     }
     idents.forall(dropPartition)
   }

@@ -50,7 +50,7 @@ private[sql] class OracleConnectionProvider extends SecureConnectionProvider {
     // This prop is needed to turn on kerberos authentication in the JDBC driver.
     // The possible values can be found in AnoServices public interface
     // The value is coming from AUTHENTICATION_KERBEROS5 final String in driver version 19.6.0.0
-    result.put("oracle.net.authentication_services", "(KERBEROS5)");
+    result.put("oracle.net.authentication_services", "(KERBEROS5)")
     result
   }
 

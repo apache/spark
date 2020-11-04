@@ -322,7 +322,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
         // Ignore this partition since it already exists and ignoreIfExists == true
       } else {
         if (location == null && table.isView()) {
-          throw new HiveException("LOCATION clause illegal for view partition");
+          throw new HiveException("LOCATION clause illegal for view partition")
         }
 
         createPartitionMethod.invoke(

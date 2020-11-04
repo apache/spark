@@ -221,7 +221,7 @@ class KafkaTestUtils(
     kdc.createPrincipal(clientKeytabFile, clientUser)
     logDebug(s"Created keytab file: ${clientKeytabFile.getAbsolutePath()}")
 
-    val file = new File(baseDir, "jaas.conf");
+    val file = new File(baseDir, "jaas.conf")
     val realm = kdc.getRealm()
     val content =
       s"""

@@ -289,7 +289,7 @@ class EpochCoordinatorSuite
   }
 
   private def verifyStoppedWithException(msg: String): Unit = {
-    val exceptionCaptor = ArgumentCaptor.forClass(classOf[Throwable]);
+    val exceptionCaptor = ArgumentCaptor.forClass(classOf[Throwable])
     verify(query, atLeastOnce()).stopInNewThread(exceptionCaptor.capture())
 
     import scala.collection.JavaConverters._

@@ -154,7 +154,7 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
             }
           }
         </div>
-      </div>;
+      </div>
     UIUtils.basicSparkPage(request, content, "Spark Worker at %s:%s".format(
       workerState.host, workerState.port))
   }

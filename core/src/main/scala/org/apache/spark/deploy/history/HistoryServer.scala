@@ -59,7 +59,7 @@ class HistoryServer(
   private val retainedApplications = conf.get(History.RETAINED_APPLICATIONS)
 
   // How many applications the summary ui displays
-  private[history] val maxApplications = conf.get(HISTORY_UI_MAX_APPS);
+  private[history] val maxApplications = conf.get(HISTORY_UI_MAX_APPS)
 
   // application
   private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())

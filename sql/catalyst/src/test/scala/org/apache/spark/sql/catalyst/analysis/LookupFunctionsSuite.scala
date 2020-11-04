@@ -81,7 +81,7 @@ class LookupFunctionsSuite extends PlanTest {
 
 class CustomerFunctionRegistry extends SimpleFunctionRegistry {
 
-  private var isRegisteredFunctionCalledTimes: Int = 0;
+  private var isRegisteredFunctionCalledTimes: Int = 0
 
   override def functionExists(funcN: FunctionIdentifier): Boolean = synchronized {
     isRegisteredFunctionCalledTimes = isRegisteredFunctionCalledTimes + 1

@@ -131,7 +131,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
             }
           }
         </div>
-      </div>;
+      </div>
     UIUtils.basicSparkPage(request, content, "Application: " + app.desc.name)
   }
 

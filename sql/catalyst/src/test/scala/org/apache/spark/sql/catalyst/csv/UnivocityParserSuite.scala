@@ -249,7 +249,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       override def deserialize(datum: Any): NameId = datum match {
         case s: String =>
           val split = s.split("\t")
-          if (split.length != 2) throw new RuntimeException(s"Can't parse $s into NameId");
+          if (split.length != 2) throw new RuntimeException(s"Can't parse $s into NameId")
           NameId(split(0), Integer.parseInt(split(1)))
         case _ => throw new RuntimeException(s"Can't parse $datum into NameId");
       }

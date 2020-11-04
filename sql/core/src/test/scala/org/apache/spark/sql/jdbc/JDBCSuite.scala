@@ -996,7 +996,7 @@ class JDBCSuite extends QueryTest
 
   test("Test DataFrame.where for Date and Timestamp") {
     // Regression test for bug SPARK-11788
-    val timestamp = java.sql.Timestamp.valueOf("2001-02-20 11:22:33.543543");
+    val timestamp = java.sql.Timestamp.valueOf("2001-02-20 11:22:33.543543")
     val date = java.sql.Date.valueOf("1995-01-01")
     val jdbcDf = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
     val rows = jdbcDf.where($"B" > date && $"C" > timestamp).collect()

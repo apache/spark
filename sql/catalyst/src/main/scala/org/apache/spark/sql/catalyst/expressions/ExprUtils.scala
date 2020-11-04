@@ -90,7 +90,7 @@ object ExprUtils {
         val pos = new ParsePosition(0)
         val result = decimalFormat.parse(s, pos).asInstanceOf[java.math.BigDecimal]
         if (pos.getIndex() != s.length() || pos.getErrorIndex() != -1) {
-          throw new IllegalArgumentException("Cannot parse any decimal");
+          throw new IllegalArgumentException("Cannot parse any decimal")
         } else {
           result
         }

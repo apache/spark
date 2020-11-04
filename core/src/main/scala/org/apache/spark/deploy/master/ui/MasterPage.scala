@@ -241,7 +241,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
               </div>
             }
           }
-        </div>;
+        </div>
 
     UIUtils.basicSparkPage(request, content, "Spark Master at " + state.uri)
   }

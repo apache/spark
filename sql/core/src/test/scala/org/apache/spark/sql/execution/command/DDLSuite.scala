@@ -2044,7 +2044,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
           val hadoopConf = spark.sessionState.newHadoopConf()
           val fs = tablePath.getFileSystem(hadoopConf)
-          val fileStatus = fs.getFileStatus(tablePath);
+          val fileStatus = fs.getFileStatus(tablePath)
 
           fs.setPermission(tablePath, new FsPermission("777"))
           assert(fileStatus.getPermission().toString() == "rwxrwxrwx")

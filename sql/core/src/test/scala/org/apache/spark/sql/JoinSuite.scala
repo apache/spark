@@ -636,11 +636,11 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
         "select * from (A join B on (A.key = B.key)) join D on (A.key=D.a) join C",
         "select * from ((A join B on (A.key = B.key)) join C) join D on (A.key = D.a)",
         /** Cartesian product involving C, which is not involved in a CROSS join */
-        "select * from ((A join B on (A.key = B.key)) cross join D) join C on (A.key = D.a)");
+        "select * from ((A join B on (A.key = B.key)) cross join D) join C on (A.key = D.a)")
 
       def checkCartesianDetection(query: String): Unit = {
         val e = intercept[Exception] {
-          checkAnswer(sql(query), Nil);
+          checkAnswer(sql(query), Nil)
         }
         assert(e.getMessage.contains("Detected implicit cartesian product"))
       }

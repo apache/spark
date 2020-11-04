@@ -293,7 +293,7 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
   override def children: Seq[Expression] = str :: regex :: limit :: Nil
 
-  def this(exp: Expression, regex: Expression) = this(exp, regex, Literal(-1));
+  def this(exp: Expression, regex: Expression) = this(exp, regex, Literal(-1))
 
   override def nullSafeEval(string: Any, regex: Any, limit: Any): Any = {
     val strings = string.asInstanceOf[UTF8String].split(
