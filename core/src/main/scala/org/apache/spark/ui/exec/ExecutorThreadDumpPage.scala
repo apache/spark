@@ -52,8 +52,8 @@ private[ui] class ExecutorThreadDumpPage(
 
         <tr id={s"thread_${threadId}_tr"} class="accordion-heading"
             onclick={s"toggleThreadStackTrace($threadId, false)"}
-            onmouseover={s"onMouseIn($threadId)"}
-            onmouseout={s"onMouseIn($threadId)"}>
+            onmouseover={s"onMouseOverAndOut($threadId)"}
+            onmouseout={s"onMouseOverAndOut($threadId)"}>
           <td id={s"${threadId}_td_id"}>{threadId}</td>
           <td id={s"${threadId}_td_name"}>{thread.threadName}</td>
           <td id={s"${threadId}_td_state"}>{thread.threadState}</td>
